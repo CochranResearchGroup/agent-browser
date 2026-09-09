@@ -60,7 +60,9 @@ const MCP_TOOL_ALLOWLIST = [
   'service_profile_lease_rejoin', 'service_profile_lease_renew',
   'service_profile_lease_release', 'service_profile_lease_reconcile_plan',
   'service_profile_lease_reconcile_apply', 'service_profile_lease_recover_plan',
-  'service_profile_lease_recover_apply', 'service_trace',
+  'service_profile_lease_recover_apply', 'service_profile_acquire',
+  'service_profile_recovery_plan', 'service_profile_recovery_apply',
+  'service_profile_recovery_status', 'service_trace',
 ];
 
 const MCP_RESOURCE_ALLOWLIST = [

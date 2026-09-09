@@ -39,6 +39,10 @@ use crate::native::service_model::{
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
     ViewStreamProvider, ViewerLease,
 };
+use crate::native::service_profile_access_policy::{
+    effective_profile_permissions, ProfileAccessMode, ProfileIdentityAssurance, ProfilePermission,
+    ServiceProfileAccessPolicy,
+};
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::state;
 use crate::native::stream_runtime::{
@@ -426,6 +430,8 @@ pub(crate) fn launch_command_with_effective_service_defaults(
         service_name: optional_command_string(command, "serviceName"),
         agent_name: optional_command_string(command, "agentName"),
         task_name: optional_command_string(command, "taskName"),
+        client_subject_id: optional_command_string(command, "clientSubjectId"),
+        identity_assurance: optional_command_string(command, "identityAssurance"),
         session_name: optional_command_string(command, "sessionName"),
         target_service_ids: target_service_ids_from_command(command),
         account_ids: account_ids_from_command(command),
@@ -475,6 +481,8 @@ pub(crate) fn apply_planned_launch_defaults(
     let mut object = command.as_object().cloned().unwrap_or_default();
     insert_planned_string_if_missing(&mut object, command, planned_request, "browserBuild");
     if options.runtime_profile.is_none()
+        && options.profile.is_none()
+        && command.get("profile").is_none()
         && command.get("runtimeProfile").is_none()
         && command.get("profileId").is_none()
     {
@@ -689,6 +697,19 @@ pub(crate) fn apply_service_profile_selection(
     Ok(Some(selection.reason))
 }
 
+/// Service custom-profile IDs identify a directory record; they are not named
+/// runtime profiles. Preserve that distinction when resolving an existing owner
+/// so repeated commands keep the original launch identity and profile path.
+fn retained_profile_launch_identity(
+    profile_id: &str,
+    profile: &BrowserProfile,
+) -> (Option<String>, Option<String>) {
+    (
+        (!profile_id.starts_with("custom:")).then(|| profile_id.to_string()),
+        profile.user_data_dir.clone(),
+    )
+}
+
 pub(crate) fn apply_existing_session_profile_selection(
     options: &mut LaunchOptions,
     command: &Value,
@@ -729,6 +750,9 @@ pub(crate) fn apply_existing_session_profile_selection(
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
         }
+        if apply_shared_local_session_profile_continuity(options, command, &session_id, state)? {
+            return Ok(Some(ProfileSelectionReason::ExistingOwner));
+        }
         if apply_authenticated_access_plan_profile_selection(options, command, &session_id, state)?
         {
             return Ok(Some(ProfileSelectionReason::ExplicitProfile));
@@ -751,13 +775,8 @@ pub(crate) fn apply_existing_session_profile_selection(
             Ok(None)
         };
     };
-    if exact_terminal_owner_allows_explicit_profile_relaunch(
-        options,
-        command,
-        &session_id,
-        state,
-        &binding,
-    )? {
+    if exact_terminal_owner_allows_profile_relaunch(options, command, &session_id, state, &binding)?
+    {
         return Ok(None);
     }
     if apply_authenticated_orphaned_owner_recourse(options, command, &session_id, state, &binding)?
@@ -766,6 +785,9 @@ pub(crate) fn apply_existing_session_profile_selection(
     }
     if !binding.effect_capable {
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
+            return Ok(Some(ProfileSelectionReason::ExistingOwner));
+        }
+        if apply_shared_local_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
         }
         return Err("existing_session_profile_identity_unproven".to_string());
@@ -809,44 +831,60 @@ pub(crate) fn apply_existing_session_profile_selection(
         .principal_bindings
         .get(&binding.claim.profile_identity_digest)
     {
+        // Superseding a browser does not promote its predecessor's capability.
+        // A fresh shared-local subject has independent policy authority, so an
+        // older binding cannot veto its exact current-owner profile selection.
+        // Registered callers still require their guarded continuity/rejoin path.
+        let independent_shared_local_use = principal_binding.owner_generation
+            < binding.claim.owner_generation
+            && command
+                .get("servicePrincipalProvenance")
+                .and_then(Value::as_str)
+                != Some("registered_capability")
+            && shared_local_profile_use_allowed(profile, profile_id, command);
         if principal_binding.profile_id != profile_id
-            || !state
+            || (!state
                 .runtime_owner_registry
                 .principal_binding_is_current(Some(principal_binding))
+                && !independent_shared_local_use)
         {
             return Err("existing_session_profile_identity_inconsistent".to_string());
         }
     }
-    let exact_command_profile_overrides_inherited_default = command.get("runtimeProfile").is_none()
-        && command.get("profileId").is_none()
-        && optional_command_or_params_string(command, "profile")
-            .map(|requested_profile| {
-                resolved_service_profile_identity_path(Some(&requested_profile), profile_id)
-                    .and_then(|requested_path| {
-                        crate::runtime_profile::canonical_profile_identity_digest(&requested_path)
-                    })
-                    .is_ok_and(|requested_digest| requested_digest == profile_digest)
-            })
-            .unwrap_or(false);
-    if options
-        .runtime_profile
-        .as_deref()
-        .is_some_and(|requested| requested != profile_id)
-        && !exact_command_profile_overrides_inherited_default
-    {
-        return Err("explicit_profile_conflicts_with_current_owner".to_string());
-    }
-    if let Some(requested_path) = options.profile.as_deref() {
-        let requested_path =
-            resolved_service_profile_identity_path(Some(requested_path), profile_id)?;
-        let requested_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&requested_path)?;
-        if requested_digest != binding.claim.profile_identity_digest {
-            return Err("explicit_profile_conflicts_with_current_owner".to_string());
+    // LaunchOptions also contains host startup defaults. Once the current owner
+    // proves this session's physical profile, only selectors on this request may
+    // conflict with that identity. Validate every field so a matching top-level
+    // selector cannot hide a conflicting nested one.
+    for fields in [Some(command), command.get("params")].into_iter().flatten() {
+        for field in ["runtimeProfile", "profileId", "profile"] {
+            let Some(value) = fields.get(field).filter(|value| !value.is_null()) else {
+                continue;
+            };
+            let matches = value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_some_and(|requested| {
+                    if field == "profile" {
+                        resolved_service_profile_identity_path(Some(requested), profile_id)
+                            .and_then(|path| {
+                                crate::runtime_profile::canonical_profile_identity_digest(&path)
+                            })
+                            .is_ok_and(|digest| digest == profile_digest)
+                    } else {
+                        requested == profile_id
+                            || profile.user_data_dir.as_deref() == Some(requested)
+                    }
+                });
+            if !matches {
+                return Err(format!(
+                    "explicit_profile_conflicts_with_current_owner: field={field}; expected=current_owner_profile; observed=conflicting_or_invalid_selector; source=native/action_runtime/runtime/daemon.rs::apply_existing_session_profile_selection"
+                ));
+            }
         }
     }
-    options.runtime_profile = Some(profile_id.to_string());
-    options.profile = profile.user_data_dir.clone();
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(profile_id, profile);
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {
@@ -1058,7 +1096,7 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
     Ok(true)
 }
 
-fn exact_terminal_owner_allows_explicit_profile_relaunch(
+fn exact_terminal_owner_allows_profile_relaunch(
     options: &mut LaunchOptions,
     command: &Value,
     session_id: &str,
@@ -1074,6 +1112,50 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     let command_profile_id = optional_command_or_params_string(command, "runtimeProfile")
         .or_else(|| optional_command_or_params_string(command, "profileId"));
     let command_profile = optional_command_or_params_string(command, "profile");
+    // Path-backed CLI profiles have no runtime-profile name. Resolve the
+    // retained record by canonical directory, then keep the same exact owner
+    // and terminal cleanup gates used for named profiles. Ambiguous records
+    // must not choose an arbitrary profile policy.
+    let requested_path = command_profile
+        .as_deref()
+        .or(options.profile.as_deref())
+        .filter(|profile| crate::runtime_profile::looks_like_path(profile));
+    let requested_digest = if let Some(path) = requested_path {
+        Some(crate::runtime_profile::canonical_profile_identity_digest(
+            &crate::runtime_profile::resolve_profile(Some(path), None)?.user_data_dir,
+        )?)
+    } else if command_profile_id.is_none()
+        && command_profile.is_none()
+        && options.runtime_profile.is_none()
+        && options.profile.is_none()
+    {
+        // A session-only reopen has no surviving session projection after close.
+        // Recover its directory from exact owner history, then require all the
+        // terminal cleanup checks below before using that identity for admission.
+        Some(binding.claim.profile_identity_digest.clone())
+    } else {
+        None
+    };
+    let path_profile_id = if command_profile_id.is_none() {
+        if let Some(digest) = requested_digest {
+            let mut matches = state.profiles.iter().filter_map(|(id, profile)| {
+                let path =
+                    resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), id)
+                        .ok()?;
+                (crate::runtime_profile::canonical_profile_identity_digest(&path).ok()? == digest)
+                    .then_some(id.as_str())
+            });
+            let matched = matches.next();
+            if matches.next().is_some() {
+                return Ok(false);
+            }
+            matched
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let Some(profile_id) = command_profile_id
         .as_deref()
         .or_else(|| {
@@ -1081,6 +1163,7 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
                 .as_deref()
                 .filter(|profile| !crate::runtime_profile::looks_like_path(profile))
         })
+        .or(path_profile_id)
         .or(options.runtime_profile.as_deref())
         .or_else(|| {
             options
@@ -1172,13 +1255,46 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
                 && session.tab_ids.is_empty()
         }
     };
+    let prepared_remote_display_matches = |display_allocation_id: &str| {
+        matches!(
+            command.get("action").and_then(Value::as_str),
+            Some("remote_view_open" | "launch")
+        )
+            && state
+                .display_allocations
+                .get(display_allocation_id)
+                .is_some_and(|allocation| {
+                    allocation.state == "ready"
+                        && allocation.owner_browser_id.as_deref() == Some(logical_browser_id)
+                        && allocation.owner_session_id.as_deref() == Some(session_id)
+                        && allocation.profile_id.as_deref() == Some(profile_id)
+                        && allocation.route_ids.iter().any(|route_id| {
+                            state.remote_view_acquisition_leases.values().any(|lease| {
+                                crate::native::remote_view::pending_remote_view_acquisition_lease_matches_owner(
+                                    lease,
+                                    logical_browser_id,
+                                    session_id,
+                                    route_id,
+                                    display_allocation_id,
+                                    None,
+                                )
+                            })
+                        })
+                })
+    };
     let browser_projection_inert = state.browsers.iter().all(|(browser_id, browser)| {
         if browser_id == logical_browser_id {
             browser.profile_id.as_deref() == Some(profile_id)
                 && browser.pid.is_none()
                 && browser.cdp_endpoint.is_none()
                 && browser.active_session_ids.is_empty()
-                && browser.display_allocation_id.is_none()
+                // Remote-view acquisition reserves the replacement display before
+                // profile selection. That exact pending lease is preparation for
+                // this relaunch, not evidence that the terminal browser is live.
+                && browser
+                    .display_allocation_id
+                    .as_deref()
+                    .is_none_or(&prepared_remote_display_matches)
                 && browser.tab_handles.iter().all(&inert_handle)
         } else {
             browser.profile_id.as_deref() != Some(profile_id)
@@ -1194,7 +1310,6 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
             || tab.service_tab_handle.as_ref().is_some_and(|handle| {
                 handle.browser_id == logical_browser_id
                     || handle.session_name.as_deref() == Some(session_id)
-                    || handle.profile_id.as_deref() == Some(profile_id)
             });
         !related
             || (tab.lifecycle == crate::native::service_model::TabLifecycle::Closed
@@ -1209,8 +1324,8 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     if !(exact_terminal_owner && owner_projection_inert && principal_projection_absent) {
         return Ok(false);
     }
-    options.runtime_profile = Some(profile_id.to_string());
-    options.profile = profile.user_data_dir.clone();
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(profile_id, profile);
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {
@@ -1471,8 +1586,99 @@ fn apply_registered_session_profile_continuity(
             return Err("explicit_profile_conflicts_with_registered_work_lease".to_string());
         }
     }
-    options.runtime_profile = Some(profile_id.to_string());
-    options.profile = profile.user_data_dir.clone();
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(profile_id, profile);
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && command.get("executablePath").is_none()
+    {
+        options.executable_path = None;
+    }
+    Ok(true)
+}
+
+/// Evaluate only the caller's current shared-local policy permission. This
+/// neither validates a browser identity nor grants capability continuity.
+fn shared_local_profile_use_allowed(
+    profile: &BrowserProfile,
+    profile_id: &str,
+    command: &Value,
+) -> bool {
+    let Some(subject_id) = command
+        .get("clientSubjectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return false;
+    };
+    let assurance = match command.get("identityAssurance").and_then(Value::as_str) {
+        Some("self-declared") => ProfileIdentityAssurance::SelfDeclared,
+        Some("authenticated-ingress") => ProfileIdentityAssurance::AuthenticatedIngress,
+        Some("registered-capability") => ProfileIdentityAssurance::RegisteredCapability,
+        Some("operator") => ProfileIdentityAssurance::Operator,
+        _ => return false,
+    };
+    let policy = profile
+        .access_policy
+        .clone()
+        .unwrap_or_else(|| ServiceProfileAccessPolicy::shared_local_default(profile_id));
+    policy.mode == ProfileAccessMode::SharedLocal
+        && effective_profile_permissions(&policy, Some(subject_id), assurance)
+            .contains(&ProfilePermission::ProfileUse)
+}
+
+fn apply_shared_local_session_profile_continuity(
+    options: &mut LaunchOptions,
+    command: &Value,
+    session_id: &str,
+    state: &ServiceState,
+) -> Result<bool, String> {
+    let Some(session) = state.sessions.get(session_id) else {
+        return Ok(false);
+    };
+    let Some(profile_id) = session.profile_id.as_deref() else {
+        return Ok(false);
+    };
+    let Some(profile) = state.profiles.get(profile_id) else {
+        return Ok(false);
+    };
+    if !shared_local_profile_use_allowed(profile, profile_id, command) {
+        return Ok(false);
+    }
+    if session.browser_ids.iter().any(|browser_id| {
+        state
+            .browsers
+            .get(browser_id)
+            .is_some_and(|browser| browser.profile_id.as_deref() != Some(profile_id))
+    }) {
+        return Err("existing_session_profile_identity_inconsistent".to_string());
+    }
+    if options
+        .runtime_profile
+        .as_deref()
+        .is_some_and(|requested| requested != profile_id)
+    {
+        return Err("explicit_profile_conflicts_with_shared_local_session".to_string());
+    }
+    let user_data_dir = profile
+        .user_data_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
+            profile_id,
+        )?);
+    if let Some(requested_path) = options.profile.as_deref() {
+        let requested_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(requested_path),
+        )?;
+        let profile_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+        if requested_digest != profile_digest {
+            return Err("explicit_profile_conflicts_with_shared_local_session".to_string());
+        }
+    }
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(profile_id, profile);
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {

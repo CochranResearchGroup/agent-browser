@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-access-decision.v1.schema.json",
+  "title": "agent-browser profile access decision",
+  "description": "One authorization decision for one subject, profile resource, and operation. Coordination and runtime proof are reported separately.",
+  "type": "object",
+  "required": [
+    "schemaVersion", "decisionId", "subject", "resource", "operation", "policyRevision",
+    "allowed", "missingPermission", "blockingOccupancy", "nextAction"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.profile-access-decision.v1" },
+    "decisionId": { "type": "string", "minLength": 1 },
+    "subject": {
+      "type": "object",
+      "required": ["subjectId", "assurance", "connectionInstanceId"],
+      "properties": {
+        "subjectId": { "type": ["string", "null"], "minLength": 1 },
+        "assurance": { "enum": ["self-declared", "authenticated-ingress", "registered-capability", "operator", "unknown"] },
+        "connectionInstanceId": { "type": ["string", "null"], "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "resource": {
+      "type": "object",
+      "required": ["profileId", "resourceKey"],
+      "properties": {
+        "profileId": { "type": ["string", "null"], "minLength": 1 },
+        "resourceKey": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "operation": { "type": "string", "minLength": 1 },
+    "policyRevision": { "type": "integer", "minimum": 1 },
+    "allowed": { "type": "boolean" },
+    "missingPermission": { "type": ["string", "null"] },
+    "blockingOccupancy": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "nextAction": {
+      "type": "object",
+      "required": ["action", "executable", "request"],
+      "properties": {
+        "action": { "type": "string", "minLength": 1 },
+        "executable": { "type": "boolean" },
+        "request": { "type": ["object", "null"], "additionalProperties": true }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

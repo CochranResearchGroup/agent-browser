@@ -9,9 +9,11 @@ modules:
   - graph-backed-memory-usage
   - codegraph-usage
   - planning-discipline
+  - model-selection-and-calibration
   - goal-execution-governance
   - parallel-plan-design
   - roadmap-runbook-governance
+  - work-item-traceability
   - runtime-vs-product-boundary
   - runtime-state-governance
   - tenant-isolation-and-operator-state

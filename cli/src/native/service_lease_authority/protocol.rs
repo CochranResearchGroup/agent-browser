@@ -9246,9 +9246,10 @@ mod tests {
         fs::create_dir_all(&profile).unwrap();
         let mut child = std::process::Command::new("sh")
             .arg("-c")
-            .arg("sleep 30 & wait")
+            .arg("read _")
             .arg("agent-browser-process-fixture")
             .arg(format!("--user-data-dir={}", profile.display()))
+            .stdin(std::process::Stdio::piped())
             .spawn()
             .expect("spawn bounded process identity fixture");
         std::os::unix::fs::symlink(

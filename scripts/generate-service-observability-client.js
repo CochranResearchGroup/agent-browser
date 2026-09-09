@@ -44,6 +44,8 @@ const schemas = {
   challenge: readSchema('service-challenge-record.v1.schema.json'),
   challengesResponse: readSchema('service-challenges-response.v1.schema.json'),
   reconcileResponse: readSchema('service-reconcile-response.v1.schema.json'),
+  requestProvenance: readSchema('service-request-provenance.v1.schema.json'),
+  terminalOutcome: readSchema('service-terminal-outcome.v1.schema.json'),
   job: readSchema('service-job-record.v1.schema.json'),
   jobsResponse: readSchema('service-jobs-response.v1.schema.json'),
   incident: readSchema('service-incident-record.v1.schema.json'),
@@ -143,8 +145,8 @@ ${stringUnionType('ServiceIncidentHandlingState', constants.SERVICE_INCIDENT_HAN
 ${stringUnionType('ServiceEventKind', constants.SERVICE_EVENT_KINDS)}
 ${stringUnionType('ServiceBrowserHealthState', constants.SERVICE_BROWSER_HEALTH_STATES)}
 
-export type ServiceFailureAxis = 'service_state' | 'lifecycle_owner' | 'profile_lease' | 'presentation' | 'unknown';
-export type ServiceFailurePhase = 'process_mutex_wait' | 'file_lock_wait' | 'launch_admission' | 'commit' | 'finalize' | 'unknown';
+export type ServiceFailureAxis = 'request' | 'service_state' | 'lifecycle_owner' | 'profile_lease' | 'profile_access' | 'presentation' | 'unknown';
+export type ServiceFailurePhase = 'ingress_validation' | 'process_mutex_wait' | 'file_lock_wait' | 'launch_admission' | 'child_admission' | 'commit' | 'finalize' | 'unknown';
 export type ServiceEffectState = 'no_effect' | 'effect_uncertain' | 'verified_effect';
 export type ServiceRetryDisposition = 'do_not_retry' | 'inspect_before_retry' | 'retry_same_request' | 'refresh_access_plan';
 
@@ -157,6 +159,9 @@ export interface ServiceFailureRecourse {
   retryDisposition: ServiceRetryDisposition;
   recommendedAction: string;
   reuseAllowed: boolean;
+  subject: Record<string, unknown> | null;
+  missingPermission: string | null;
+  executableNextAction: Record<string, unknown> | null;
   waitMs?: number | null;
   holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;
@@ -167,9 +172,63 @@ export interface ServiceFailureRecourse {
   [key: string]: unknown;
 }
 
+export type ServiceIdentityAssurance =
+  | 'self-declared'
+  | 'authenticated-ingress'
+  | 'registered-capability'
+  | 'operator'
+  | 'unknown';
+
+export interface ServiceRequestProvenance {
+  schemaVersion: 'agent-browser.service-request-provenance.v1';
+  requestId: string;
+  jobId: string;
+  traceId: string | null;
+  causedByRequestId: string | null;
+  clientSubjectId: string | null;
+  identityAssurance: ServiceIdentityAssurance;
+  connectionInstanceId: string | null;
+  runtimeEnvironmentId: string | null;
+  runtimeLaneId: string | null;
+  profileId: string | null;
+  profileResourceKey: string | null;
+  browserId: string | null;
+  sessionId: string | null;
+  tabId: string | null;
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  action: string;
+  policyRevision: number | null;
+  accessDecisionId: string | null;
+}
+
+export type ServiceTerminalState = 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'rejected';
+export type ServiceTerminalPhase =
+  | 'ingress'
+  | 'queue_admission'
+  | 'scheduler_admission'
+  | 'dispatch'
+  | 'execution'
+  | 'commit'
+  | 'finalize';
+
+export interface ServiceTerminalOutcome {
+  schemaVersion: 'agent-browser.service-terminal-outcome.v1';
+  state: ServiceTerminalState;
+  phase: ServiceTerminalPhase;
+  effectState: ServiceEffectState;
+  retryDisposition: ServiceRetryDisposition;
+  failure: ServiceFailureRecourse | null;
+  provenance: ServiceRequestProvenance;
+  completedAt: string;
+}
+
 export interface ServiceJobRecord {
   id: string;
   action: string;
+  provenance: ServiceRequestProvenance;
+  terminalOutcome: ServiceTerminalOutcome | null;
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;
@@ -213,6 +272,7 @@ export interface ServiceProfileRecord {
   accountLabels: string[];
   profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
   profileClass: 'default' | 'managed_one_time' | 'durable_named' | 'operator_supplied' | string;
+  accessPolicy: ServiceProfileAccessPolicy | null;
   userDataDir: string | null;
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
   targetServiceIds: string[];
@@ -570,6 +630,17 @@ export interface ServiceTabHandleTraceFilter {
   taskName?: string | null;
 }
 
+export interface ServiceProfileChildAccess {
+  schemaVersion: 'agent-browser.profile-child-access.v1' | string;
+  parentPolicyRevision: number;
+  accessDecisionId: string;
+  subjectId?: string | null;
+  identityAssurance: 'unknown' | 'self-declared' | 'authenticated-ingress' | 'registered-capability' | 'operator' | string;
+  connectionInstanceId?: string | null;
+  connectionState: 'active' | 'disconnected' | string;
+  permissions: Array<'profile_use' | 'policy_read' | 'policy_write' | 'tab_create' | 'tab_observe' | 'tab_control_own' | 'tab_close_own' | 'tab_control_any' | 'tab_close_any' | 'view_open' | 'view_control' | 'drain' | 'evict' | 'lifecycle_manage' | 'full_shutdown' | string>;
+}
+
 export interface ServiceTabHandle {
   browserId: string;
   sessionName?: string | null;
@@ -584,6 +655,7 @@ export interface ServiceTabHandle {
   cleanupPolicy?: 'detach' | 'close_tabs' | 'close_browser' | 'release_only' | string | null;
   leaseHeartbeatExpected: boolean;
   ownerSessionId?: string | null;
+  profileAccess?: ServiceProfileChildAccess | null;
   jobId?: string | null;
   traceFilter: ServiceTabHandleTraceFilter;
   valid: boolean;
@@ -687,6 +759,8 @@ export interface ServiceEventRecord {
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;
+  provenance: ServiceRequestProvenance | null;
+  terminalOutcome: ServiceTerminalOutcome | null;
   previousHealth: ServiceBrowserHealthState | null;
   currentHealth: ServiceBrowserHealthState | null;
   details: unknown;
@@ -910,6 +984,24 @@ export interface ServiceRuntimeLifecycleStatus {
   [key: string]: unknown;
 }
 
+export interface ServiceProfilePolicyMigrationEntry {
+  profileId: string;
+  classification: 'shared-local-default' | 'proven-strict-compatibility' | 'ambiguous-legacy';
+  targetMode: 'shared-local' | 'restricted' | 'exclusive';
+  ambiguity: boolean;
+  blocking: boolean;
+  reason: string;
+}
+
+export interface ServiceProfilePolicyMigrationReport {
+  schemaVersion: 'agent-browser.profile-policy-migration.v1';
+  migrationId: string;
+  sourceRevision: number;
+  targetRevision: number;
+  entries: ServiceProfilePolicyMigrationEntry[];
+  blockingIssueCount: number;
+}
+
 export interface ServiceCrashRegenerationStatus {
   schemaVersion: 'agent-browser.crash-regeneration-status.v1';
   transactionId: string;
@@ -955,7 +1047,9 @@ export interface ServiceStateLockDiagnostics {
 
 export interface ServiceStatusResponse {
   control_plane?: ServiceControlPlaneStatus;
-  service_state: Record<string, unknown>;
+  service_state: Record<string, unknown> & {
+    profilePolicyMigration?: ServiceProfilePolicyMigrationReport | null;
+  };
   profileAllocations: ServiceProfileAllocation[];
   manualBrowsers?: ServiceManualRuntimeBrowser[];
   retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;
@@ -2604,6 +2698,7 @@ export interface ServiceAccessPlanDecision {
   browserHost: string | null;
   launchPosture: ServiceAccessPlanLaunchPosture;
   profileReuse: ServiceAccessPlanProfileReuse;
+  profileAccess: ServiceProfileAccessEvaluation;
   oneTimeProfileRecommendation: ServiceAccessPlanOneTimeProfileRecommendation | null;
   interactionMode: string | null;
   challengePolicy: string | null;
@@ -2623,6 +2718,56 @@ export interface ServiceAccessPlanDecision {
   hasNamingWarning: boolean;
   reasons: string[];
   [key: string]: unknown;
+}
+
+export type ServiceProfileAccessMode = 'shared-local' | 'restricted' | 'exclusive';
+export type ServiceProfileIdentityAssurance =
+  | 'self-declared'
+  | 'authenticated-ingress'
+  | 'registered-capability'
+  | 'operator'
+  | 'unknown';
+
+export interface ServiceProfileAccessPolicy {
+  schemaVersion: 'agent-browser.profile-access-policy.v1';
+  profileId: string;
+  mode: ServiceProfileAccessMode;
+  revision: number;
+  state: 'active' | 'draining';
+  defaultPermissions: string[];
+  grants: Array<{
+    subjectId: string;
+    minimumAssurance: ServiceProfileIdentityAssurance;
+    permissions: string[];
+  }>;
+  drain: Record<string, unknown> | null;
+  updatedAt: string;
+}
+
+export interface ServiceProfileAccessDecision {
+  schemaVersion: 'agent-browser.profile-access-decision.v1';
+  decisionId: string;
+  subject: {
+    subjectId: string | null;
+    assurance: ServiceProfileIdentityAssurance;
+    connectionInstanceId: string | null;
+  };
+  resource: { profileId: string | null; resourceKey: string };
+  operation: string;
+  policyRevision: number;
+  allowed: boolean;
+  missingPermission: string | null;
+  blockingOccupancy: string[];
+  nextAction: {
+    action: string;
+    executable: boolean;
+    request: Record<string, unknown> | null;
+  };
+}
+
+export interface ServiceProfileAccessEvaluation {
+  policy: ServiceProfileAccessPolicy;
+  decision: ServiceProfileAccessDecision;
 }
 
 export interface ServiceAccessPlanProfileReuse {
@@ -2819,6 +2964,10 @@ export interface ServiceProfileIdentityLookupOptions extends ServiceQueryOptions
 export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOptions {
   /** Ephemeral capability proving the principal that owns the selected profile. Sent only as a bearer header. */
   profileCapability?: string;
+  /** Stable caller-selected subject ID used for ordinary shared-local attribution. */
+  clientSubjectId?: string;
+  /** Caller-declared assurance hint. The service derives effective assurance from trusted ingress state. */
+  identityAssurance?: ServiceIdentityAssurance;
   /** Calling agent name for multi-agent traceability. */
   agentName?: string;
   /** Caller task name for queue and trace debugging. */

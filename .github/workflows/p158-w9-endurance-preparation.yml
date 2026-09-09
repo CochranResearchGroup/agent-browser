@@ -1,0 +1,22 @@
+name: P158 passive observation preparation
+on:
+  workflow_dispatch:
+    inputs:
+      case_id:
+        required: true
+        type: choice
+        options: [C04, C05]
+permissions:
+  contents: read
+jobs:
+  validate-passive-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm asynchronous preparation
+        env:
+          CASE_ID: ${{ inputs.case_id }}
+        run: |
+          test "$CASE_ID" = C04 || test "$CASE_ID" = C05
+          echo "Preparation records a passive E3 observation intent only."
+          echo "Installation and repair remain available at segment boundaries."

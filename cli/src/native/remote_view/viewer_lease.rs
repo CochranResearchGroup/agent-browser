@@ -36,6 +36,9 @@ pub(crate) fn mutate_service_viewer_lease(
     let now = service_remote_view_timestamp();
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
+    let profile_policy_before = controller_takeover
+        .then(|| route_profile_policy_snapshot(&snapshot, &route_id))
+        .flatten();
     let _controller_mutation = wants_controller
         .then(|| begin_service_controller_mutation(&snapshot, &route_id))
         .transpose()?;
@@ -241,6 +244,12 @@ pub(crate) fn mutate_service_viewer_lease(
             ),
         );
         refresh_remote_view_attachability(state);
+        let profile_policy_after = controller_takeover
+            .then(|| route_profile_policy_snapshot(state, &route_id))
+            .flatten();
+        if controller_takeover && profile_policy_after != profile_policy_before {
+            return Err("controller_takeover_profile_policy_changed".to_string());
+        }
         let browser_attachability = state
             .browsers
             .get(&browser_id)
@@ -252,10 +261,35 @@ pub(crate) fn mutate_service_viewer_lease(
             controller_lease_id, "previousControllerLeaseId" :
             previous_controller_lease_id, "controllerEpoch" : remote_view_route
             .controller_epoch, "serviceEventId" : service_event_id,
+            "profilePolicyUnchanged" : controller_takeover.then_some(true),
             "viewerLease" : lease, "remoteViewRoute" : remote_view_route,
             "attachability" : browser_attachability, "updatedAt" : now, }
         ))
     })
+}
+
+fn route_profile_policy_snapshot(
+    state: &crate::native::service_model::ServiceState,
+    route_id: &str,
+) -> Option<(
+    String,
+    super::super::service_profile_access_policy::ServiceProfileAccessPolicy,
+)> {
+    let route = state.remote_view_routes.get(route_id)?;
+    let profile_id = route
+        .session_id
+        .as_deref()
+        .and_then(|session_id| state.sessions.get(session_id))
+        .and_then(|session| session.profile_id.as_deref())
+        .or_else(|| {
+            route
+                .browser_id
+                .as_deref()
+                .and_then(|browser_id| state.browsers.get(browser_id))
+                .and_then(|browser| browser.profile_id.as_deref())
+        })?;
+    let policy = state.profiles.get(profile_id)?.access_policy.clone()?;
+    Some((profile_id.to_string(), policy))
 }
 pub(crate) async fn handle_service_viewer_lease_heartbeat(
     cmd: &Value,
@@ -373,4 +407,97 @@ pub(crate) async fn handle_service_viewer_lease_release(
             viewer_lease_id), "updatedAt" : now, }
         ))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::native::service_model::{
+        BrowserProcess, BrowserProfile, BrowserSession, RemoteViewRoute, ServiceState, ViewStream,
+    };
+    use crate::native::service_profile_access_policy::ServiceProfileAccessPolicy;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn human_takeover_changes_only_controller_authority_and_fences_the_old_controller() {
+        let policy = ServiceProfileAccessPolicy::shared_local_default("research-gov");
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "research-gov".to_string(),
+                BrowserProfile {
+                    id: "research-gov".to_string(),
+                    access_policy: Some(policy.clone()),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "research-runtime".to_string(),
+                BrowserSession {
+                    id: "research-runtime".to_string(),
+                    profile_id: Some("research-gov".to_string()),
+                    ..BrowserSession::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route:research".to_string(),
+                RemoteViewRoute {
+                    id: "route:research".to_string(),
+                    browser_id: Some("browser:research".to_string()),
+                    session_id: Some("research-runtime".to_string()),
+                    controller_lease_id: Some("lease:agent".to_string()),
+                    controller_epoch: 7,
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser:research".to_string(),
+                BrowserProcess {
+                    id: "browser:research".to_string(),
+                    profile_id: Some("research-gov".to_string()),
+                    view_streams: vec![ViewStream {
+                        id: "stream:research".to_string(),
+                        route_id: Some("route:research".to_string()),
+                        controller_lease_id: Some("lease:agent".to_string()),
+                        controller_epoch: 7,
+                        ..ViewStream::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let before = route_profile_policy_snapshot(&state, "route:research");
+
+        let epoch = advance_route_controller_authority(
+            &mut state,
+            "route:research",
+            Some("lease:human".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(epoch, 8);
+        assert_eq!(
+            route_profile_policy_snapshot(&state, "route:research"),
+            before
+        );
+        assert_eq!(state.profiles["research-gov"].access_policy, Some(policy));
+        assert!(
+            !crate::native::service_model::controller_authority_fence_matches(
+                &state,
+                "route:research",
+                "stream:research",
+                "lease:agent",
+                7,
+            )
+        );
+        assert!(
+            crate::native::service_model::controller_authority_fence_matches(
+                &state,
+                "route:research",
+                "stream:research",
+                "lease:human",
+                8,
+            )
+        );
+    }
 }

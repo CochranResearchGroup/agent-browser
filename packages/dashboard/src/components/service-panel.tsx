@@ -42,7 +42,14 @@ import {
 } from "lucide-react";
 import { activePortAtom, activeSessionNameAtom } from "@/store/sessions";
 import { cn } from "@/lib/utils";
-import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import {
+  fetchSharedServiceContracts,
+  fetchSharedServiceResources,
+  fetchSharedServiceStatus,
+  SERVICE_API_BASE,
+} from "@/lib/dashboard-api";
+import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
+import { reportDashboardFailure } from "@/lib/failure-observation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -288,6 +295,14 @@ type ServiceProfileRecord = {
   name?: string;
   profileOrigin?: string;
   profileClass?: string;
+  accessPolicy?: {
+    mode?: "shared-local" | "restricted" | "exclusive" | string;
+    revision?: number;
+    state?: string;
+    defaultPermissions?: string[];
+    grants?: Record<string, unknown>[];
+    [key: string]: unknown;
+  } | null;
   userDataDir?: string | null;
   sitePolicyIds?: string[];
   targetServiceIds?: string[];
@@ -486,6 +501,19 @@ type ServiceState = {
   incidents?: ServiceIncident[];
   browsers?: Record<string, ServiceBrowser>;
   profiles?: Record<string, ServiceProfileRecord>;
+  profilePolicyMigration?: {
+    schemaVersion?: string;
+    migrationId?: string;
+    entries?: Array<{
+      profileId?: string;
+      classification?: string;
+      targetMode?: string;
+      ambiguity?: boolean;
+      blocking?: boolean;
+      reason?: string;
+    }>;
+    blockingIssueCount?: number;
+  } | null;
   jobs?: Record<string, ServiceJob>;
   sessions?: Record<string, ServiceSession>;
   tabs?: Record<string, ServiceTab>;
@@ -1191,6 +1219,7 @@ function runtimeProfileConfigPayload(
     name: form.name.trim() || profileId,
     profileOrigin: profile.profileOrigin ?? "agent_browser_owned",
     profileClass: profile.profileClass ?? "durable_named",
+    accessPolicy: profile.accessPolicy ?? null,
     userDataDir: nullableFormValue(form.userDataDir),
     sitePolicyIds: parseCommaList(form.sitePolicyIds),
     targetServiceIds: parseCommaList(form.targetServiceIds),
@@ -2640,6 +2669,16 @@ function ViewStreamCard({
           src={stream.url ?? undefined}
           className="h-[420px] w-full bg-black"
           sandbox="allow-same-origin allow-scripts allow-forms allow-pointer-lock allow-popups"
+          onError={() => void reportDashboardFailure({
+            category: stream.provider === "cdp_screencast" ? "cdp_stream" : "guacamole_load",
+            stage: "service_inspector_iframe",
+            code: "view_stream_iframe_load_failed",
+            summary: "The service inspector iframe failed to load its selected view stream.",
+            action: "remote_view_load",
+            routeId: stream.routeId,
+            displayId: stream.displayAllocationId,
+            streamProvider: stream.provider,
+          })}
         />
       ) : (
         <div className="p-3">
@@ -4713,9 +4752,20 @@ export function ServiceDetailInspector({
     );
   }
 
+  const inspectorResourceId = selection.kind === "browser" ? selection.browser.id
+    : selection.kind === "profile" ? selection.allocation.profileId
+      : selection.kind === "incident" ? selection.incident.id
+        : selection.kind === "session" ? selection.session.id
+          : selection.kind === "tab" ? selection.tab.id
+            : selection.job.id;
+
   return (
     <ScrollArea className="h-full">
-      <div className="service-inspector">
+      <div
+        className="service-inspector"
+        data-inspector-kind={selection.kind}
+        data-inspector-resource-id={inspectorResourceId}
+      >
         {selection.kind === "browser" && (
           <BrowserDetailContent
             browser={selection.browser}
@@ -5193,22 +5243,32 @@ function RuntimeProfileConfigDialog({
   profile,
   allocation,
   saving,
+  policySaving,
   deleting,
   error,
   onSave,
+  onSaveAccessPolicy,
   onDelete,
   onOpenChange,
 }: {
   profile: ServiceProfileRecord | null;
   allocation?: ServiceProfileAllocation;
   saving: boolean;
+  policySaving: boolean;
   deleting: boolean;
   error: string;
   onSave: (profile: ServiceProfileRecord, form: RuntimeProfileConfigFormState) => Promise<void>;
+  onSaveAccessPolicy: (
+    profile: ServiceProfileRecord,
+    mode: "shared-local" | "restricted" | "exclusive",
+    preset: "administrator" | "participant" | "observer",
+  ) => Promise<void>;
   onDelete: (profile: ServiceProfileRecord) => Promise<void>;
   onOpenChange: (open: boolean) => void;
 }) {
   const [form, setForm] = useState<RuntimeProfileConfigFormState | null>(null);
+  const [accessMode, setAccessMode] = useState<"shared-local" | "restricted" | "exclusive">("shared-local");
+  const [accessPreset, setAccessPreset] = useState<"administrator" | "participant" | "observer">("participant");
 
   useEffect(() => {
     if (!profile) {
@@ -5216,6 +5276,9 @@ function RuntimeProfileConfigDialog({
       return;
     }
     setForm(runtimeProfileConfigFormState(profile, allocation));
+    const mode = profile.accessPolicy?.mode;
+    setAccessMode(mode === "restricted" || mode === "exclusive" ? mode : "shared-local");
+    setAccessPreset("participant");
   }, [allocation, profile]);
 
   const profileId = profile ? serviceProfileId(profile, allocation?.profileId ?? "") : "";
@@ -5328,6 +5391,38 @@ function RuntimeProfileConfigDialog({
                   <input value={form.tags} onChange={(event) => updateField("tags", event.target.value)} />
                 </label>
               </div>
+              <div className="service-profile-config-grid">
+                <label>
+                  <span>Access mode</span>
+                  <select value={accessMode} onChange={(event) => setAccessMode(event.target.value as typeof accessMode)}>
+                    <option value="shared-local">Shared local</option>
+                    <option value="restricted">Restricted</option>
+                    <option value="exclusive">Exclusive</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Permission preset</span>
+                  <select value={accessPreset} onChange={(event) => setAccessPreset(event.target.value as typeof accessPreset)}>
+                    <option value="administrator">Administrator</option>
+                    <option value="participant">Participant</option>
+                    <option value="observer">Observer</option>
+                  </select>
+                </label>
+                <div className="service-profile-config-wide service-profile-config-help">
+                  Current revision: {profile.accessPolicy?.revision ?? 1}. Narrowing an occupied profile first fences new admission; existing users must be cleared before the new policy commits.
+                </div>
+                <div className="service-profile-config-wide">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving || deleting || policySaving}
+                    onClick={() => onSaveAccessPolicy(profile, accessMode, accessPreset)}
+                  >
+                    {policySaving ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+                    Apply access policy
+                  </Button>
+                </div>
+              </div>
               <div className="service-profile-config-checks">
                 <label>
                   <input
@@ -5352,7 +5447,7 @@ function RuntimeProfileConfigDialog({
               <div className="service-profile-config-actions">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" disabled={saving || deleting}>
+                    <Button variant="outline" disabled={saving || deleting || policySaving}>
                       <Trash2 className="size-3.5" />
                       Delete
                     </Button>
@@ -5377,7 +5472,7 @@ function RuntimeProfileConfigDialog({
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-                <Button disabled={saving || deleting} onClick={() => onSave(profile, form)}>
+                <Button disabled={saving || deleting || policySaving} onClick={() => onSave(profile, form)}>
                   {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
                   Save config
                 </Button>
@@ -5776,7 +5871,15 @@ function ProfileAllocationDetailContent({
       {(primaryBrowserId || primarySessionId || primaryWaitingJobId || primaryTabId) && (
         <InspectorActionBar>
           {primaryBrowserId && onSelectBrowserId && (
-            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectBrowserId(primaryBrowserId)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 rounded-full"
+              data-action-id="show-browser"
+              data-resource-id={primaryBrowserId}
+              onClick={() => onSelectBrowserId(primaryBrowserId)}
+            >
               <RadioTower className="size-3.5" />
               Show browser
             </Button>
@@ -6974,6 +7077,7 @@ export function ServicePanel({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const serviceFetchInFlightRef = useRef(false);
   const [eventKind, setEventKind] = useState<EventKindFilter>("all");
   const [eventWindow, setEventWindow] = useState<EventWindowFilter>("all");
   const [eventLimit, setEventLimit] = useState<EventLimit>(8);
@@ -7029,6 +7133,7 @@ export function ServicePanel({
   const [profileLeaseActionTarget, setProfileLeaseActionTarget] = useState<ProfileLeaseActionTarget | null>(null);
   const [selectedProfileConfig, setSelectedProfileConfig] = useState<ServiceProfileRecord | null>(null);
   const [profileConfigSaving, setProfileConfigSaving] = useState(false);
+  const [profilePolicySaving, setProfilePolicySaving] = useState(false);
   const [profileConfigDeleting, setProfileConfigDeleting] = useState(false);
   const [profileConfigError, setProfileConfigError] = useState("");
   const [actingBrowserActionId, setActingBrowserActionId] = useState<string | null>(null);
@@ -7080,7 +7185,8 @@ export function ServicePanel({
     (incidentOnly ? 1 : 0);
 
   const fetchService = useCallback(async (showSpinner: boolean) => {
-    if (!canFetch) return;
+    if (!canFetch || serviceFetchInFlightRef.current) return;
+    serviceFetchInFlightRef.current = true;
     if (showSpinner) setLoading(true);
     setError("");
     try {
@@ -7091,13 +7197,13 @@ export function ServicePanel({
       if (windowOption?.milliseconds) {
         params.set("since", new Date(Date.now() - windowOption.milliseconds).toISOString());
       }
-      const contractsPromise = fetch(`${serviceBase(activePort)}/contracts`).catch(() => null);
+      const contractsPromise = fetchSharedServiceContracts().catch(() => null);
       const [statusResp, jobsResp, eventsResp, incidentsResp, resourcesResp, contractsResp, profileLeasesResp] = await Promise.all([
-        fetch(`${serviceBase(activePort)}/status`),
+        fetchSharedServiceStatus(),
         fetch(`${serviceBase(activePort)}/jobs?limit=${jobLimit}`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
         fetch(`${serviceBase(activePort)}/incidents?summary=true&limit=50`),
-        fetch(`${serviceBase(activePort)}/resources`).catch(() => null),
+        fetchSharedServiceResources().catch(() => null),
         contractsPromise,
         fetch(`${serviceBase(activePort)}/profile-leases`).catch(() => null),
       ]);
@@ -7127,6 +7233,7 @@ export function ServicePanel({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service API unavailable");
     } finally {
+      serviceFetchInFlightRef.current = false;
       if (showSpinner) setLoading(false);
     }
   }, [activePort, canFetch, eventBrowserId, eventKind, eventLimit, eventWindow, jobLimit]);
@@ -7142,11 +7249,11 @@ export function ServicePanel({
     setTraceError("");
     setError("");
     if (!canFetch) return;
-    fetchService(true);
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") fetchService(false);
+    let initial = true;
+    return startCompletionDrivenDashboardPoll(async () => {
+      await fetchService(initial);
+      initial = false;
     }, 7000);
-    return () => clearInterval(timer);
   }, [canFetch, fetchService]);
 
   const loadTraceForFilters = useCallback(async (filters: TraceFilters) => {
@@ -7340,6 +7447,44 @@ export function ServicePanel({
       setProfileConfigSaving(false);
     }
   }, [activePort, canFetch, fetchService]);
+
+  const saveRuntimeProfileAccessPolicy = useCallback(async (
+    profile: ServiceProfileRecord,
+    mode: "shared-local" | "restricted" | "exclusive",
+    preset: "administrator" | "participant" | "observer",
+  ) => {
+    const profileId = serviceProfileId(profile);
+    if (!canFetch || !profileId) return;
+    setProfilePolicySaving(true);
+    setProfileConfigError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "service_profile_policy_mutate",
+          serviceName: "agent-browser-dashboard",
+          agentName: operatorIdentity.trim() || activeSession || "operator",
+          taskName: "update-profile-access-policy",
+          clientSubjectId: operatorIdentity.trim() || activeSession || "operator",
+          profileId,
+          params: {
+            expectedRevision: profile.accessPolicy?.revision ?? 1,
+            mode,
+            preset,
+          },
+        }),
+      });
+      const json = (await resp.json()) as ApiResponse<ServiceJobsData>;
+      if (!json.success) throw new Error(json.error || "Profile access-policy request failed");
+      setSelectedProfileConfig(null);
+      await fetchService(false);
+    } catch (err) {
+      setProfileConfigError(err instanceof Error ? err.message : "Profile access-policy request unavailable");
+    } finally {
+      setProfilePolicySaving(false);
+    }
+  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
 
   const deleteRuntimeProfileConfig = useCallback(async (profile: ServiceProfileRecord) => {
     const profileId = serviceProfileId(profile);
@@ -8659,9 +8804,11 @@ export function ServicePanel({
         profile={selectedProfileConfig}
         allocation={selectedProfileConfigAllocation}
         saving={profileConfigSaving}
+        policySaving={profilePolicySaving}
         deleting={profileConfigDeleting}
         error={profileConfigError}
         onSave={saveRuntimeProfileConfig}
+        onSaveAccessPolicy={saveRuntimeProfileAccessPolicy}
         onDelete={deleteRuntimeProfileConfig}
         onOpenChange={(open) => {
           if (!open) {

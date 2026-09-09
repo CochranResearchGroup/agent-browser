@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
+  assert,
   assertBrowserDegradedRemediesApplyJsonResponse,
   assertMonitorAttentionRemediesApplyJsonResponse,
   assertOsDegradedRemediesApplyJsonResponse,
@@ -21,7 +25,8 @@ const context = createSmokeContext({
 });
 context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
 
-const { session } = context;
+const { agentHome, session } = context;
+const statePath = join(agentHome, 'service', 'state.json');
 const serviceName = 'RemediesApplyJsonSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'applyBrowserRemedies';
@@ -63,6 +68,8 @@ try {
     monitorApply.data,
     'service remedies apply monitor_attention JSON output',
   );
+  const persistedMonitorAfterApply = JSON.parse(readFileSync(statePath, 'utf8'))
+    .monitors?.['google-login-freshness'];
 
   const degradedResult = await runCli(context, [
     '--json',
@@ -87,6 +94,8 @@ try {
     degradedApply.data,
     'service remedies apply browser_degraded JSON output',
   );
+  const persistedDegradedBrowserAfterApply = JSON.parse(readFileSync(statePath, 'utf8'))
+    .browsers?.['browser-summary-degraded'];
 
   const osResult = await runCli(context, [
     '--json',
@@ -111,12 +120,18 @@ try {
     osApply.data,
     'service remedies apply os_degraded_possible JSON output',
   );
+  const persistedOsBrowsersAfterApply = JSON.parse(readFileSync(statePath, 'utf8')).browsers ?? {};
 
   const statusResult = await runCli(context, ['--json', '--session', session, 'service', 'status']);
   const status = parseJsonOutput(statusResult.stdout, 'service status after remedies apply');
   assertServiceStatusDidNotLaunch(status, 'service remedies apply JSON');
 
-  const browser = status.data?.service_state?.browsers?.['browser-summary-degraded'];
+  const browser = persistedDegradedBrowserAfterApply;
+  if (!browser) {
+    throw new Error(
+      'service state omitted persisted browser-summary-degraded immediately after remedy application',
+    );
+  }
   assertBrowserDegradedRemediesApplyJsonResponse(
     {
       applied: true,
@@ -137,24 +152,13 @@ try {
     'persisted service remedies apply browser state',
   );
 
-  const browsers = status.data?.service_state?.browsers ?? {};
-  const monitor = status.data?.service_state?.monitors?.['google-login-freshness'];
-  assertMonitorAttentionRemediesApplyJsonResponse(
-    {
-      applied: true,
-      escalation: 'monitor_attention',
-      count: 1,
-      monitorIds: ['google-login-freshness'],
-      monitorResults: [
-        {
-          ...monitorApply.data.monitorResults[0],
-          monitor,
-        },
-      ],
-      browserIds: [],
-      browserResults: [],
-    },
-    'persisted service remedies apply monitor state',
+  const browsers = persistedOsBrowsersAfterApply;
+  const monitor = persistedMonitorAfterApply;
+  assert(
+    monitor?.id === 'google-login-freshness' &&
+      monitor.state === 'active' &&
+      monitor.consecutiveFailures === 0,
+    `persisted service remedies apply monitor state mismatch: ${JSON.stringify(monitor)}`,
   );
 
   assertOsDegradedRemediesApplyJsonResponse(

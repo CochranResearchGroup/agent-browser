@@ -1,11 +1,280 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-01
+Updated: 2026-09-02
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P157 | Profile Permissions And Request Provenance
+
+State: SOURCE COMPLETE; INSTALLED ACCEPTANCE REOPENED
+Current state: Research.gov fieldwork exposed that profile access, coordination
+leases, and runtime ownership proof are conflated, while scheduler rejection
+can bypass structured failure decoration and lose runtime-lane correlation.
+The accepted architecture makes `shared-local` the trusted local default,
+retains strict policy as opt-in, narrows occupied profiles through an explicit
+drain-and-restrict transaction, and carries one immutable causal envelope from
+ingress through response, job, event, trace, and incident records.
+The revised plan first extracts one behavior-preserving deep Profile
+acquisition owner, validates every projection through a semantic contract
+oracle, keeps protected lease exchange behind one cohesive client, and makes
+the Rust install domain the sole owner of convergence truth consumed by the
+dashboard.
+W1 is source complete at `5166dabf`. One typed Profile acquisition owner now
+computes reuse, lifecycle replacement, the dominant blocker, deterministic
+route names, and the executable request. Service Access projects that result,
+recovery coordination is an internal child, and action runtime consumes the
+typed decision. A projection-consistency oracle covers every current Service
+Access fixture without changing permission or public-contract semantics.
+W2 is source complete at `cd0bdb1d`. Six additive v1 schemas freeze profile
+policy, access decisions, request provenance, terminal outcomes, migration, and
+independent dashboard health axes. The service-client gate now carries five
+source-grounded red cases assigned to W3, W4, W5, and W9.
+W3 is source complete at `79bb71f4`. Daemon ingress now generates a stable
+service-owned connection identity per transport, each per-lane control plane
+captures one allowlist-only provenance envelope, and every queued or terminal
+job state preserves the same request, connection, lane, subject, assurance,
+profile, and causal identifiers. Private routing payloads remain outside the
+envelope. The runtime-lane oracle case is green while the four later cases
+remain red.
+W4 is source complete at `2ab08e87`. One typed terminal finalizer now owns
+success, failure, cancellation, timeout, and rejection. The exact structured
+failure and immutable provenance are preserved across response, ServiceJob,
+terminal ServiceEvent, and trace projections. Scheduler rejection now uses
+that path, leaving the three W5 and W9 oracle cases intentionally red.
+W5 is source complete at `f7166030`. One revisioned access-policy evaluator in
+the Profile acquisition owner now makes `shared-local` the frictionless
+default and retains `restricted` and `exclusive` as explicit strict modes.
+Self-identification cannot manufacture trusted assurance, admitted policy and
+decision identities flow into request provenance, and identity denials return
+non-circular typed recourse. The two W5 oracle cases are green, leaving only
+the W9 convergence case red.
+W6 is source complete at `83319369`. Each admitted tab now inherits the current
+Profile access decision and belongs to one service-generated connection
+instance. Compatible clients still share one browser, but their tabs remain
+independently attributable. A disconnected child reconnects frictionlessly for
+the same stable subject, active connections cannot be stolen by repeated
+labels, current parent policy always bounds child permission, and tab release
+closes only the authorized owned resource. Internal child and connection fields
+cannot be forged through request parameters.
+W7 is source complete at `d3c12100`. Profile policy edits now use
+expected-revision compare-and-swap. Widening commits immediately, while
+narrowing occupied Profiles persists a drain that fences new admission and
+later control but preserves exact own-tab release. Incompatible occupancy is
+derived from attributed Service state, restriction commits only at zero, and
+forced eviction requires a separate explicit permission, exact target plan,
+and minimal receipt.
+W8 is source complete at `c46c6d43`. Protected lease-authority exchange now
+has one cohesive client, while the kernel remains the canonical evaluator.
+Human takeover mutates only controller authority and fences the former
+controller without changing Profile policy. Forced lifecycle effects require
+a durable permission authorization plus an exact current policy, daemon,
+browser, tab, and physical CDP-target proof, then persist a minimal idempotency
+receipt. Full-runtime shutdown is similarly bound to Operator assurance, both
+required lifecycle permissions, the reviewed P156 plan digest, and its exact
+managed browser targets.
+W9 is source complete at `d806c74c`. One Rust convergence owner now produces
+the desired state, normalized observations, sealed plan, typed health axes,
+one executable next action, and final receipt. A single current runtime-host
+listener is authoritative without the retired default socket. ACL ambiguity
+remains observable only on the access axis, while the dashboard warns solely
+from typed runtime or convergence blockers. The privileged shell adapter must
+execute the Rust-sealed action set and return verified postconditions.
+W10 is source complete at `2a930e0e`. Missing legacy policies now migrate
+deterministically: proven exclusive ownership remains subject-bound, while
+ambiguous identity becomes nonblocking shared-local access and appears only on
+the access-health axis. HTTP, MCP, generated clients, dashboard, doctor, help,
+README, agent skill, contracts, and docs now expose human presets,
+revision-fenced policy edits, and exact authorized tab eviction.
+W11 recorded a focused acceptance checkpoint at source `cc8510ba` and installed generation
+`0.28.0-ef3cd3921169`. The isolated development runtime has one coherent
+selected executable across its host, backend, dashboard, and supervisor
+manifest. Doctor, three-cycle browser launch, self-declared disposable-profile
+continuity, HTTP and MCP crash recovery, causal recovery logging, supervisor
+takeover, revisioned policy mutation, exact eviction, and digest-bound full
+shutdown gates pass without production effects. That closeout did not execute
+the full historically adversarial matrix in W11's original exit contract.
+Plan 0158 therefore reopens installed acceptance while preserving P157's
+source-complete result. It freezes one candidate and runs diagnostic-only
+agent, external remote-view, handoff, Xvfb, supervisor, dashboard, concurrency,
+performance, soak, and causal-logging stress without repair between failures.
+Plan 0158 W1 is complete. The frozen machine-readable registry contains 11
+historical families, all 49 scenarios and five combined phases, numeric safety
+ceilings, candidate identity requirements, and eight relationship-preserving
+redacted fixture seeds. A read-only production recount confirmed 39 failed or
+timed-out jobs without top-level structured failure or provenance. Existing
+P46 and P67 harnesses are explicitly disqualified from unchanged reuse because
+they repair, reset, retry, reconcile, clean, or permit loopback fallback.
+Plan 0158 W2 is complete. A provider-free monotonic controller now freezes one
+candidate and schedule, rejects opportunistic retries and terminal overwrites,
+propagates only exact lost prerequisites, records environment-scoped safety
+stops, preserves scheduled teardown failure, writes exclusive atomic artifacts
+and a hash-chained typed ledger, and seals only after terminal-count closure.
+Strict schemas validate the actual persisted manifest and every ledger record.
+Plan 0158 W3 is complete. A provider-free causal auditor now reconciles
+requests, responses, jobs, events, traces, incidents, dashboard projections,
+artifacts, and redaction receipts. Thirteen synthetic envelopes prove exact
+detection of 11 missing, duplicate, conflicting, reordered, null, isolated,
+broken-parent, unsafe-retry, capture-gap, and sensitive-leak classes while
+complete and reordered input stays clean.
+Plan 0158 W4 is complete. A provider-free external-handoff oracle rejects
+loopback, private, link-local, `.local`, raw provider, diagnostic-role, and
+non-secure URLs across 13 client-visible roles; requires all eight external
+ingress checks; gates pixels on operator readiness; reconciles eight retained
+identity fields; and detects changed handoffs and duplicate cold launches.
+Thirty-six synthetic sessions exercise all 23 finding classes.
+Plan 0158 W5 is complete. The provider-free dashboard oracle now detects 46
+isolated rail, selection, multi-client, warning, URL, stream, browser-evidence,
+accessibility, latency, and resource-growth defect classes. Fifty-one strict
+fixtures include clean empty, sparse, normal, dense, and typed-convergence
+controls. The dense control materially generates 22,600 resources and 600 rail
+rows for the exact 100 Profile, 500 browser, 2,000 tab, 10,000 job, and 10,000
+event inventory.
+Plan 0158 W6 preflight is complete. The readiness audit rejected the prior
+loopback HTTP operator URL and incomplete freeze manifest before installation.
+The development provider now requires one reviewed public HTTPS origin plus an
+external-ingress revision, and the campaign controller can seal exact E1/E2,
+artifact, calibration, fixture, external-vantage, and zero-start freeze
+evidence. Twenty-six adversarial preparation fixtures are green. W6 remains
+open until a fresh candidate is installed, externally calibrated, and frozen.
+
+### Plan
+
+- `docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md`
+- `docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md`
+
+### Next Recommendation
+
+[Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
+governs the four remaining production readiness items. Current execution,
+acceptance evidence, cumulative effort, and the next bounded action are owned by
+[RUNBOOK.md](RUNBOOK.md). Profile ownership/identity proof and causal error
+diagnosis remain first, followed by the authenticated operator journey,
+maintenance reconciliation and unattended operation. Plan 0159's bounded completion and installed profile repair do
+not establish whole production readiness. P158's historical calibration sequence
+remains paused and its incomplete criteria remain visible.
+
+### Postmortem Disposition Before Successor Authorization
+
+Plan 0158 execution is paused following the operator's interruption. The
+[completed postmortem](docs/dev/notes/0152-2026-09-05-plan-0158-postmortem.md)
+and [finite defect register](docs/dev/notes/0152-2026-09-05-plan-0158-defect-register.json)
+now govern the successor discussion. Plan 0158 remains OPEN and incomplete;
+postmortem completion is not W10 acceptance. Do not resume its historical
+diagnostic, calibration, repair, installation, or reopen sequence automatically.
+
+Discuss Plan 0159 around original authorized-handle recovery with diagnostic
+evidence, ordinary durable remote-view behavior, and a consolidated production
+delivery decision. The final retained restart has 0/2 resumed original handles
+despite surviving Chrome processes and listener readiness. Historical zero
+Service-resource cleanup did not eliminate ancillary process residue. Source,
+installed, production, and user-outcome acceptance remain distinct.
+
+### Historical Priority Checkpoints Before Interruption
+
+Plan 0158 is reconciled around usable authenticated Profile leases/ACLs,
+postmortem-quality logging, and ordinary durable remote-view links. Current
+proof is partial: authenticated own-Profile acquisition and actionable denials
+pass focused checks, while full ACL lifecycle remains open. A controlled
+process-interruption probe disproves journal durability for the in-memory
+delivery interval. Ordinary links still lack external pixel/input acceptance.
+
+The retained-handoff identity rejection repair now passes one installed P158
+verification: failed response/job with actionable recourse, matching event,
+trace and journal, zero missing/duplicate/conflicting captured matches, and
+unchanged browser/session/tab/handoff records. Source is 5803203b; installed
+generation is 0.28.0-75f7d4a2caab. This proves truthful failure, not recovery or
+working links. The bounded verification is complete; do not repeat it.
+
+Two independent registered-capability clients pass focused acquisition of their
+own restricted Profiles, including after a disposable host restart with
+persisted capabilities and closed browsers. The unauthorized cross-profile
+operation now preserves profile_access_denied, the planner's denied decision,
+subject/assurance, missing permission, and policy-inspection recourse. One HTTP
+and one MCP adapter verification each join exactly one journal occurrence with
+zero missing/duplicate/conflicting captured matches and no browser effects.
+The denial repair cycle is complete; installed P158 remains unchanged.
+
+The logging interruption probe now reproduces actual loss: while the disposable
+journal file is locked, a rejection reaches the client; after exact-host
+SIGKILL and restart, its journal has zero matches where one is required. The
+request was not retried. This disproves interruption durability for the
+in-memory delivery interval; it is distinct from calibration harness loss.
+
+Repair 2fae5f5a now persists private pending records before response and recovers
+them on daemon startup without request resubmission. Two disposable-host checks
+pass: pending-before-append and an observer-synced append-before-retirement
+state each yield expected 1, observed 1, missing 0, duplicates 0, conflicts 0.
+This closes the bounded process-interruption repair cycle; the original failed
+epoch remains evidence, and host power-loss durability is not established.
+Authenticated policy revocation and rejoin now pass after 54d1a8f6: closed tab
+history no longer blocks drain completion. Revision 1 drains, revision 2 denies
+the revoked client, and revision 3 permits restored-grant rejoin over a fresh
+connection while the retained peer remains usable. Two denial journal joins
+pass with zero missing/duplicate/code-conflicting records. Three policy mutation
+receipts originally disagreed with terminal provenance about the authenticated
+actor. Repair 062727fb now passes three focused policy operations with 18 matching
+response/job/event/trace provenance projections and zero missing, duplicate, or
+conflicting records. Next reconcile the retained remote-view target and supported
+recovery path, then pursue ordinary external same-URL pixels/input. Preserve P/Q
+failures and the original target. Do not repeat the completed journal, drain, or
+provenance cycles or resume calibration by default.
+Access-plan denial advice is now fixed and authenticated-client verified in
+31a5a348. The failed production host is restored with its existing binary and a
+scoped startup-directory compatibility override; this is not remote-view proof.
+The operator prioritizes remaining client blockers next: retained live-browser
+restart, identity-unproven recovery, stale handles, and timeout uncertainty.
+Full ACL lifecycle, dashboard projection, reboot durability, ordinary external
+pixels/input, W6,
+and W7–W10 remain unmet. The renewed Plan 0158 priorities and original
+acceptance criteria remain in force.
+
+## P156 | Full Runtime Shutdown Replacement
+
+State: SOURCE COMPLETE
+Current state: the installation deadlock exposed by Research.gov fieldwork has
+been separated into a provider-neutral product lane. W1 through W6 are source
+complete. `preserve` remains the default; `full-shutdown` apply requires a
+current reviewed SHA-256 plan digest. The deep replacement module closes only
+digest-bound managed lanes, escalates only through exact process identities,
+preserves profiles and stored credentials, retires the exact source host, and
+resumes forward from durable receipts. The exact candidate is installed in the
+isolated development runtime, doctor is fully green, and the three-cycle launch
+smoke passes. No production shutdown was applied.
+
+### Plan
+
+- `docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md`
+
+### Next Recommendation
+
+Integrate checkpoints `e46d9f75` and `3bfb1c49` through the normal branch flow.
+Any production full shutdown requires a new current plan digest and explicit
+operator review outside this completed source lane.
+
+## P155 | Durable Handoff Resume Intent
+
+State: SOURCE COMPLETE
+Current state: Research.gov fieldwork produced two provider-neutral client
+helpers. A resolved durable handoff now yields the exact retained route,
+managed profile, target, URL, caller attribution, and valid tab handle without
+exposing provider URLs or profile paths. Diagnostics now classify explicitly
+as unavailable, observation-only, or effect-capable; only complete control
+plane attestation admits navigation or input. The source checkpoint is
+`804519f0` and all selected provider-free gates pass.
+
+### Plan
+
+- `docs/dev/plans/0155-2026-09-02-durable-handoff-resume-intent-plan.md`
+
+### Next Recommendation
+
+Integrate the source checkpoint through the normal branch flow. Continue
+Research.gov observation through durable handoff `r580584`; do not navigate or
+enter data until canonical profile-lease proof makes diagnostics
+effect-capable.
 
 ## P153 | Lost Profile Capability Rotation Recovery
 
@@ -71,8 +340,12 @@ legacy daemons.
 
 ### Next Recommendation
 
-Continue Research.gov fieldwork through durable handoff `r580584`. Do not
-cold-launch a replacement browser for route, display, or viewer reconnection.
+Continue Research.gov fieldwork through durable handoff `r580584`. The operator
+must complete the first LastPass credential and passkey flow manually because
+the installed real-prompt desktop workflow is not product-accepted. After the
+authenticated target is visible, run a bounded auth probe and only then record
+profile freshness. Do not cold-launch a replacement browser for route, display,
+or viewer reconnection.
 
 ## P144 | Lease Authority Coordination And Revocation
 

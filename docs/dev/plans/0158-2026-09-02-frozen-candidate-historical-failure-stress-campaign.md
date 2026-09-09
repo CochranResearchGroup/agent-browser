@@ -1,0 +1,6606 @@
+# Plan 0158: Frozen-Candidate Historical Failure Stress Campaign
+
+Date: 2026-09-02
+
+State: OPEN
+
+Execution state: `paused_for_postmortem_and_plan_0159_discussion`
+
+Lane: P157
+
+Role: installed-acceptance successor to Plan 0157
+
+Parent: `docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md`
+
+Branch: plan/profile-permissions-and-request-provenance
+
+Target: main
+
+Source baseline: `e26a6b05c315cfed06a833a5c4d7406803bcc0fb`
+
+Integration: merge
+
+Current authority: postmortem and successor-plan discussion only. The operator
+interrupted execution. Do not resume calibration, diagnostics, repair,
+installation, production changes, or reopening from an automatic continuation
+or the historical next-action text below.
+
+Historical execution authority: PLAN, DIAGNOSTIC HARNESS IMPLEMENTATION, PROVIDER-FREE FIXTURES,
+ISOLATED DEVELOPMENT-RUNTIME STRESS, EXTERNALLY INGRESSED STAGING
+PRESENTATION, DISPOSABLE BROWSER AND PROFILE EFFECTS, AND REDACTED EVIDENCE
+PUBLICATION ARE IN SCOPE. PRODUCTION CREDENTIAL ENTRY, TENANT DATA MUTATION,
+PRODUCTION PROFILE OR ACL MUTATION, PRODUCTION CLIENT EVICTION, AND PRODUCTION
+RUNTIME REPLACEMENT ARE OUT OF SCOPE.
+
+Dependencies: [P46, P97, P101, P125, P134, P142, P147, P148, P150, P155,
+P156, P157]
+
+Overlaps: [P144]
+
+## Current Postmortem Disposition
+
+Subsequent operator instruction authorizes writing and executing
+[Plan 0159](0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md).
+That plan owns successor repair execution. The discussion-only boundary below
+is historical; P158's old campaign/calibration sequence remains paused and its
+unmet criteria remain unchanged.
+
+The [completed postmortem](../notes/0152-2026-09-05-plan-0158-postmortem.md)
+and its [finite defect register](../notes/0152-2026-09-05-plan-0158-defect-register.json)
+record the interrupted effort's causes, evidence limits, and corrective actions
+for Plan 0159 discussion. This is not W10 or full campaign acceptance. State
+remains OPEN; W1–W5 retain their tooling-only scope and all original unmet
+criteria remain unmet. No Plan 0159 execution is authorized by this disposition.
+
+The final retained restart diagnostic, not present in the preceding checkpoint,
+records two surviving Chrome processes, a ready replacement host listener,
+and zero of two successful evaluations through original authorized handles.
+The earlier connection refusal is a separate harness readiness failure.
+Both fixture snapshots end with zero browsers/sessions/tabs and host exit 0,
+but the later retained census records 12 ancillary processes. Cleanup is a
+remaining obligation, not a completed process-cleanup claim. See postmortem
+D01/D02/D11/D13 for evidence and scope. No probe or cleanup was rerun here.
+
+The next action is discussion of the concrete successor approach, starting
+with retained-handle recovery and its diagnostics, ordinary links, and a
+consolidated deployment decision. The historical recommendations below are
+preserved for audit and do not override the current pause.
+
+## Historical Priority Reconciliation Before Interruption
+
+The operator's latest direction makes the remaining client Profile blockers high
+priority. Execute the known access-plan advice correction first, then bounded
+identity-unproven/inconsistent recovery and retained-live-browser restart/crash
+coverage. Keep the existing completed ACL and logging cycles closed. The
+production startup failure has a reproduced cause and existing source repair;
+prepare its scoped operational restoration separately from a formal release or
+promotion of all development changes. The same-URL replacement-target proposal
+remains separately pending explicit reopening confirmation. Calibration stays
+deferred and original full-plan criteria remain in force.
+
+The operator requested handoff reconciliation before execution. Current repo
+checkpoints supersede the handoff's historical runtime snapshot and the older
+next-action sequence below. The reconciliation preceded execution; subsequent
+bounded repairs and their evidence are recorded in the checkpoints below.
+
+| Priority | Recorded outcome evidence | Remaining acceptance gap |
+| --- | --- | --- |
+| Usable authenticated Profile leases and ACLs | Own-Profile acquisition and exact denials have focused proof. After repair 54d1a8f6, two registered-capability clients also pass shared-Profile drain, own release, committed revocation, restored grant, fresh-connection rejoin, and retained-peer control. | Access-plan denial advice is repaired and authenticated-client verified in 31a5a348. Live-browser restart, actual identity-unproven recovery, and full matrix coverage remain open. |
+| Durable postmortem logging | The original interruption probe proves one lost rejection and remains preserved. Repair 2fae5f5a passes both pending-before-append and append-before-retirement restart seams, each with expected 1, observed 1, missing 0, duplicates 0, conflicts 0. | Repair 062727fb resolves the policy actor conflict in three focused authenticated operations with 18 matching provenance projections. Dashboard projection, wider failure coverage, and reboot durability remain open. These focused process checks do not establish power-loss or full campaign acceptance. |
+| Ordinary working remote-view links | Retained-handoff identity rejection now reports a truthful failed response/job and matching failure evidence. | Ordinary external authenticated same-URL pixels, input, reopening, concurrent ownership, and recovery remain unaccepted. Truthful rejection is not a working-link pass; production reliability has not been independently established. |
+
+The bounded product logging repair and its two distinct interruption checks
+are complete; preserve the original failed epoch and do not repeat this cycle.
+Authenticated policy revocation and rejoin now pass after the closed-tab drain
+repair. The policy-mutation actor conflict now passes its bounded repair
+verification. Next reconcile the ordinary retained remote-view target and its
+supported recovery path using current read-only evidence, then select the
+external synthetic same-URL pixel/input probe. Preserve the old target and
+failed P/Q epochs; do not substitute a replacement URL or an anchored pass.
+Do not repeat the completed lifecycle or provenance checks or restart calibration.
+
+Retain live-browser restart and actual identity-unproven recovery as explicit
+remaining lifecycle criteria, and the ordinary external synthetic same-URL
+slice through the protected manual
+lane. Infrastructure recovery is justified only by a selected outcome's actual
+dependency. Calibration measurement-tooling repairs are deferred. Checkpoint
+each outcome or blocker and within 60 minutes; do not expand a failure into an
+automatic readiness or anchor loop.
+
+W1–W5 remain tooling-only complete. W6, W7–W10, missing live producers, original
+acceptance criteria, and the full C01 workload remain outstanding. Calibration
+requires an explicit later sequencing decision. Production mutation, eviction,
+credential entry, and private capture remain outside scope. Current repo
+checkpoints supply this reconciliation; Graphiti returned no relevant recall.
+
+## Historical Renewed Priority Reconciliation At fa78aa99
+
+The operator again requested reconciliation before execution using
+`/tmp/plan-0158-priority-handoff-2026-09-05.md`. That handoff's clean baseline
+4481d8f1 and failed-runtime snapshot are historical: subsequent committed
+checkpoints record focused repairs, verification, and isolated recovery.
+This reconciliation reads those records; it makes no fresh runtime-health or
+production-reliability claim. The earlier reconciliation and all failed epochs
+below remain history. This section controls the next sequence.
+
+| Operator outcome | Evidence now recorded | Still required for acceptance |
+| --- | --- | --- |
+| Usable leases and ACLs | Two independent self-declared clients acquired distinct tabs in a shared synthetic Profile; own release preserved the peer. A foreign release was denied with exact cause and recourse after repair. | Authenticated authorized and unauthorized clients, their own Profiles, actual identity-unproven/inconsistent paths, policy revision, revocation, reconnect, and restart. Self-declared client proof is not authenticated ACL proof. A04/A06/A12 producers remain incomplete. |
+| Postmortem-quality logging | Five pre-dispatch HTTP/MCP rejection joins; child-denial agreement across response, job, event, trace, and journal with zero recorded duplicates/conflicts. | Dashboard and applicable incident projections, timeout/crash/external failure coverage, exact completeness counts, and interruption/reboot durability. Asynchronous journal delivery leaves an unproven crash window. Calibration W's lost local observations remain a separate harness custody defect. |
+| Ordinary durable remote-view links | Isolated stack recovery was recorded. The retained handoff still rejected an unbound browser identity but returned successful retryable convergence, a succeeded job, and no matching failure journal entry. | Same supported URL from an external authenticated client, ready state, matching synthetic pixels, input, reopening, concurrent viewers/controller ownership, and truthful recovery. P/Q frame failures remain unresolved; anchored readiness and host login HTTP 200 do not establish this outcome or production acceptance. |
+
+### Execution Path After Reconciliation
+
+1. **One product and logging repair:** use the existing retained-handoff finding
+   and a red-capable coordinator regression. Preserve the identity guard; make
+   the explicit rejection a failed resolution with safe recovery inspection.
+   Do not infer permanent loss from an absent record or relaunch a replacement.
+   Preserve transient adoption and presentation-receipt convergence separately.
+   Verify once against the same retained handoff with durable response, job,
+   event, trace, and journal joins. Reconcile exact installed ownership before
+   any necessary isolated publication. This is failure-handling acceptance,
+   not working-link acceptance.
+2. **Close the two independent priority gaps:** run a bounded authenticated
+   Profile authorization/revocation/reconnect/restart slice with logging
+   attached; separately prove the response-to-journal interruption boundary
+   with a disposable process. Define expected/observed/missing/duplicate/
+   conflicting counts before either run. Build only missing producers needed
+   for these outcomes. Neither depends on calibration or a successful viewer.
+3. **Prove ordinary links:** use a bounded external synthetic same-URL test
+   through the existing manual protected lane, with current identity/capture
+   bindings and frame-lifecycle evidence that addresses P/Q. Require pixels
+   and interaction, not merely an iframe or ready infrastructure. Preserve a
+   failed attempt and disposition it rather than opening another anchor loop.
+
+The existing two-diagnostic-attempt and one-repair/verification bounds carry
+forward; this revision does not reset them. Checkpoint each outcome/blocker and
+within 60 minutes. Distinguish product repair, logging repair, infrastructure
+recovery, and measurement tooling in every disposition. Infrastructure and
+calibration harness repairs are prerequisites only when the selected outcome
+actually requires them, never an automatic queue.
+
+W1–W5 retain tooling-only completion. W6 and W7–W10, all original acceptance
+criteria, missing producers, frozen-epoch rules, and the full C01 workload
+remain outstanding. Calibration is deferred and requires a later explicit
+sequencing decision. Production mutation, eviction, credential entry, and
+private capture remain outside scope.
+
+Readback found four pre-existing modified files: README.md,
+cli/src/native/remote_view/open/tests.rs, docs/src/app/remote-view/page.mdx,
+and skills/agent-browser/SKILL.md. These are unfinished regression/guidance
+work, not an implemented or verified retained-handoff fix. They are preserved
+without continuation in this reconciliation. No build, runtime restart,
+installation, external dispatch, or calibration is initiated by this revision.
+Graphiti returned only unrelated older-plan facts; current repo checkpoints
+supply the reconciliation evidence. Classification: no new outcome acceptance;
+planning alignment only. Next is the single product/logging slice above.
+
+## September 5 Priority Reconciliation
+
+This revision follows the operator's priority handoff and supersedes historical
+next-action instructions to resume anchored readiness, calibration, reinstall,
+restart, or harness repair automatically. This turn reconciles the plan only;
+it does not start runtime execution. The original objective, case matrix,
+work-unit acceptance criteria, failed epochs, and safety boundaries remain.
+
+The three outcomes now determine the next diagnostic sequence:
+
+| Priority | Current evidence and limit | Required outcome evidence |
+| --- | --- | --- |
+| 1. Usable leases and ACLs | W1–W5 tooling and specialized A02/A03/A05/A08 drivers exist; full installed acceptance remains outstanding. A04/A06/A12 still lack complete live producers. | Independent authorized clients acquire and reuse their own Profile, release only their own tabs, and preserve peers. Unauthorized clients receive exact denials. Revision, revocation, reconnect, restart, and unproven/inconsistent identity paths preserve authority and give actionable recourse. |
+| 2. Postmortem-quality logging | The prior candidate has recorded five-surface journal and malformed-line checks. This is partial proof. Calibration W lost in-memory local observations on termination; that is a harness custody failure, not evidence that the entire product journal failed. | Join response, job, terminal event, trace, applicable incident, dashboard projection, and failure journal. Count expected, observed, missing, duplicate, conflicting, and redaction violations, including pre-dispatch, timeout, crash, and external-only failures. Prove interruption/reboot durability independently of final-write success and event-ring retention. |
+| 3. Working remote-view links | Anchored readiness V passed, but anchor-free P/Q failed. Calibration W subsequently failed on both external clients. Production unreliability is operator-reported; no new production measurement is claimed here. | Ordinary authenticated durable handoff entry from an external client reaches ready with matching browser pixels and usable input; the same URL reopens, supports concurrent viewers/controller ownership, and recovers truthfully or provides an actionable failure. Development evidence does not establish production acceptance. |
+
+### Next Bounded Slice And Dependencies
+
+The primary agent owns this sequence. No calibration prerequisite is added to
+focused diagnostics. These diagnostics are separate preparation evidence, not
+W7/W8 terminal campaign passes or an exception to the unchanged W6 freeze gate.
+
+1. **Read-only diagnosis first:** reconcile current isolated installed identity,
+   ownership and post-reboot state without restarting anything. Inspect retained
+   A-family evidence and current authorized production failure metadata where
+   available. Select one concrete authorized-profile failure and identify the
+   earliest divergence in identity, assurance, policy revision, lease, or
+   retained-browser ownership. Inventory visibility never grants access.
+2. **Lease behavior with logging attached:** define one small isolated,
+   synthetic reproducer using two independent authorized clients and an
+   unauthorized control, own-tab release, and the actual unproven/inconsistent
+   path. Bind it to A02/A03/A05/A08 without claiming their full repetition
+   counts. Audit the same requests against the Logging Completeness Oracle.
+   Account explicitly for missing producers for A04/A06/A12 and generation
+   transitions; build only the seam needed for the selected failure.
+3. **Ordinary remote-view entry:** use the supported `handoffUrl` or durable
+   `externalUrl`, without an artificially retained authenticated anchor as the
+   acceptance fixture. Require `operatorVisible.state=ready`, exact synthetic
+   pixels, input, and reopening the same URL. Preserve anchored results as
+   conditional evidence. External evidence continues through the existing
+   manual workflow and its synthetic-capture and identity gates; production
+   observation remains read-only and cannot capture private pages.
+4. **Repair only an adjudicated blocker:** distinguish product behavior,
+   product logging, infrastructure recovery, and measurement-tool custody.
+   Require a red-capable reproducer and repair at that failing seam. Preserve
+   the old epoch and identify any replacement candidate before installed
+   verification. Infrastructure recovery is a prerequisite, not an acceptance
+   result. Harness report retention, bounded deadlines, partial observation
+   durability, and coordinator terminality are known defects, not an automatic
+   queue to complete before useful diagnosis.
+
+For this priority sequence, allow at most two diagnostic attempts per selected
+failure and one repair/verification cycle before a written disposition. Failure
+to reproduce or verify ends that loop: record the missing evidence, reframe, or
+move to another safe priority unit. Checkpoint at each outcome or blocker and
+at 60 minutes at the latest. Do not reset these bounds by renaming an attempt.
+These bounds supersede the historical unlimited repair traversal for this
+sequence; reaching a bound does not itself create a user approval gate.
+
+The first slice exits with one source-backed lease/identity diagnosis (or an
+explicit evidence gap), its logging counts, and the smallest next repair or
+probe. It does not exit merely because an installer, doctor, or harness passes.
+Production replacement, eviction, Profile/ACL mutation, credential entry, and
+private capture remain outside authority. Reconcile exact isolated ownership
+before any later runtime recovery; stale process IDs are not ownership proof.
+
+### Retained Campaign State And Evidence
+
+W1–W5 remain complete only at their recorded tooling scope. W6 is incomplete;
+W7–W10 execution, teardown, and final analysis remain outstanding. Preserve all
+eleven acceptance criteria and the missing-producer table below. The exact
+20-minute C01 workload and performance budgets remain required for later
+calibration/freeze; they are deferred, not reduced or passed. A future
+calibration requires an explicit sequencing decision and runnable evidence
+producers, not an automatic retry after the next focused repair.
+
+Reconciliation readback matched clean source baseline `4481d8f1`. Sources are
+the operator handoff `/tmp/plan-0158-priority-handoff-2026-09-05.md`, the
+existing plan checkpoints, and retained private campaign records
+`calibration-w-failure-adjudication.json`,
+`w6-handoff-report-custody-gap-w.json`, and
+`w10-prior-failure-index-w.json` under the cleanroom evidence root. The latter
+index explicitly remains partial, not W10 analysis. No raw runtime artifacts
+or credentials are copied into the repo.
+
+Those records report both W clients failed `external_stream_not_embeddable`
+with zero iframes and zero retries before the later anchor SIGTERM. A shared
+infrastructure cause is unproven. Completed local command count is unknown.
+Full client archive verification remains incomplete; selective JSON custody
+does not establish full archive verification. The handoff reports a later
+reboot and unavailable isolated services; current runtime health was not
+measured in this planning turn. Earlier clean calibration claims rejected by
+oracle replay remain rejected.
+
+Checkpoint: execution preparation transitions to priority reconciliation;
+acceptance remains incomplete. Classification: `no_progress` on live outcome
+acceptance, with sequencing corrected. No calibration, install, restart,
+runtime repair, external dispatch, or production probe occurs in this revision.
+Next action is step 1 above, not the older calibration recommendation.
+
+## Incident And Acceptance Correction
+
+Plan 0157's W11 closeout proved valuable focused behavior, but it did not
+satisfy its own adversarial installed-acceptance contract. The completed checks
+did not replay every historically observed identity failure through
+`remote_view_open`, exercise cross-generation Xvfb ownership across systemd
+`PrivateTmp` namespaces, run the full ten-client and same-label concurrency
+matrix as installed effects, or prove complete logging for every historical
+failure path. Production subsequently retained identity, Xvfb, route,
+presentation-proof, and Service-resource timeout failures that focused green
+tests did not reproduce as one frozen campaign.
+
+The older P46 campaign covered many valuable remote-view and dashboard cases,
+but it repaired harnesses and runtimes between failed scenarios. That was a
+valid hardening workflow, not a valid frozen-candidate reliability
+measurement. This successor therefore reopens installed acceptance without
+discarding P157's source-complete result or P46's historical evidence.
+
+The preliminary read-only production review that triggered this successor
+found the following terminal failures in a retained 200-job window beginning
+2026-09-02 at 18:00 UTC. W1 must preserve the redacted source records and
+recompute these counts before they become campaign fixtures:
+
+| Observed signature | Count | Actions represented |
+| --- | ---: | --- |
+| `existing_session_profile_identity_unproven` | 14 | launch, `remote_view_open`, `tab_switch`, `view_focus` |
+| `existing_session_profile_identity_inconsistent` | 3 | launch, `view_focus` |
+| Xvfb `:90` automatic-launch failure | 8 | `tab_new` |
+| Service-resource timeout | 5 | resource/status reads |
+| Route-pool failure | 4 | `remote_view_open` |
+| Presentation-proof failure | 2 | `remote_view_open`, reattach |
+| Other launch or reattach failure | 3 | launch, reattach |
+
+The same review found failed legacy jobs whose durable `failure` and
+`provenance` fields were null. Those rows are mandatory logging-oracle inputs,
+not historical noise.
+
+## Objective
+
+Attempt to reproduce the complete known Agent Browser failure envelope under
+high deterministic pressure, using both agent-only control and human-simulated
+remote desktop control. Human-simulated remote browsing must enter through a
+real external HTTPS ingress from a client outside the service host and its
+network namespace. Durable handoff URLs, dashboard performance, left-rail
+truth, supervisor and install coherence, profile sharing, Xvfb allocation, and
+end-to-end logging are first-class test subjects.
+
+The campaign is diagnostic. Defer repairs to a future plan whenever the
+remaining test sequence can continue safely and still produce representative
+evidence. This preserves a holistic view of the defect surface so related
+failures can be diagnosed and repaired together efficiently. Some defects may
+prevent completion of a test sequence. When that happens, pause the affected
+campaign environment, seal the evidence already collected, diagnose the
+blocking defect, repair and validate it, install and identify a new frozen
+candidate epoch, and resume the blocked sequence with distinct attempt IDs.
+Never rewrite the earlier failure or represent results from different candidate
+epochs as one unchanged run. The final work unit seals all epochs,
+reconstructs causal timelines, evaluates architecture and logging completeness,
+and produces a prioritized remediation ledger. No new product or runtime repair
+occurs inside that final review.
+
+## Frozen-Candidate Contract
+
+1. Select exactly one source commit, built binary digest, dashboard digest,
+   installed generation, browser executable digest, runtime manifest revision,
+   provider configuration revision, and external-ingress deployment revision.
+2. Complete fixture creation, synthetic-site deployment, external runner
+   provisioning, observability checks, and a single clean baseline before the
+   freeze point.
+3. During an active frozen-candidate epoch, prohibit source edits, rebuilds, reinstalls,
+   configuration rewrites, service remedies, incident resolution, garbage
+   collection, retained-state pruning, route repair, profile repair, and
+   unscheduled process termination until that epoch is complete or formally
+   paused and its evidence is sealed. Defer nonblocking repairs for a future
+   plan. If a defect makes the remaining declared sequence impossible, pause
+   the affected environment, diagnose and repair the blocker, validate and
+   install a new candidate, and begin a new immutable epoch before resuming.
+   This prohibition applies to E1 and E2 only. It never blocks a production
+   install, repair, or safety intervention; each production change closes one
+   observation epoch and starts another.
+4. Permit only effects named in the case manifest. Controlled browser crashes,
+   supervisor transitions, route exhaustion, network degradation, policy
+   mutations, eviction, and full shutdown use disposable isolated targets and
+   are test stimuli, not reactions to observed failures.
+5. Never retry a failed attempt opportunistically. Predetermined repetitions
+   have distinct attempt identifiers and execute from their declared starting
+   state. A pass after an earlier failure never erases the first failure.
+6. Continue independent cases after a failure. Mark only cases whose declared
+   prerequisite is lost as `skipped_blocked`, retaining the exact blocking
+   case and state observation. When a blocker prevents completion of the test
+   sequence rather than only one dependent case, invoke the bounded campaign
+   pause, diagnosis, repair, revalidation, and new-epoch resume path.
+7. Do not clean between cases unless that cleanup is itself a scheduled,
+   observed case. State contamination and recovery failure are outcomes to
+   measure.
+8. Run a scheduled disposable teardown and capture its result before the final
+   analysis. Teardown failure is evidence; it does not authorize manual
+   cleanup during the campaign.
+
+The campaign controller has one monotonic state machine:
+
+```text
+prepared -> frozen -> executing -> execution_terminal -> evidence_sealed
+    -> analyzed
+```
+
+There is no transition from `executing` back to `prepared`. `analyzed` is the
+terminal plan state.
+
+## Test Environments And Isolation
+
+### E0: Provider-Free Contract Fixtures
+
+Use deterministic in-memory and file-backed fixtures for exhaustive state,
+fault-boundary, schema, and transport-projection cases. E0 may generate large
+synthetic inventories, histories, and logs without Chrome or provider
+services.
+
+### E1: Isolated Installed Development Runtime
+
+Use the development pseudo-home, one pinned candidate, disposable Profiles,
+real Chrome, real service host and supervisor units, and isolated Service
+State. Do not borrow production profiles, sockets, routes, displays, browser
+processes, or credentials. Candidate publication and installation finish
+before freeze.
+
+### E2: External-Ingress Presentation Staging
+
+Use real Guacamole or RDP presentation behind the configured external HTTPS
+ingress. At least two external clients must run outside the service host and
+outside its container or network namespace. One client acts as an ordinary
+human-paced observer/controller; the other supplies concurrency, reconnect,
+and slow-client pressure. Local dashboard, embed, health, and raw provider URLs
+may be captured as diagnostic fields but can never satisfy an E2 pass.
+
+### E3: Production Read-Only Observation Epochs
+
+Continuously collect privacy-bounded, append-only operational and failure
+records from real production use. Production traffic supplies the eight-hour
+resource-stability and 24-hour handoff-longevity windows when available. The
+campaign does not synthesize production actions or mutate production Profiles,
+ACLs, credentials, tenant data, routes, or browsers. An install, repair,
+restart, or deployment is an explicit epoch boundary, not a reason to suppress
+the work or discard earlier evidence. E3 evidence collection is asynchronous
+and may never delay installation, repair, or emergency intervention.
+
+## External-Ingress And Handoff Oracle
+
+Every E2 operator-visible case must prove all of the following from the
+external client:
+
+- the starting URL is the authenticated, opaque
+  `/remote-view/<handoff-id>` URL returned as `handoffUrl` or the durable
+  `externalUrl` for that same handoff;
+- `operatorVisible.state=ready` was observed before the case claims visibility;
+- DNS, TLS, redirects, cookies, WebSocket upgrades, iframe loads, and reconnect
+  traffic succeed from the external network vantage;
+- the external client never receives a navigable `localhost`, `127.0.0.0/8`,
+  IPv6 loopback, RFC 1918, link-local, `.local`, raw Guacamole,
+  `providerExternalUrl`, `routeBinding`, `localEmbedUrl`, `dashboardEmbedUrl`,
+  or `healthUrl` as its operator handoff;
+- every `Location`, iframe `src`, form action, WebSocket endpoint, reconnect
+  target, and client-visible error action is scanned for internal URL leakage;
+- reopening the same durable handoff after viewer expiry, controller transfer,
+  route change, display change, service-client restart, and browser recovery
+  resolves to the intended retained browser without creating another browser;
+- screen pixels, selected browser, Profile, session, tab target, visible URL,
+  and page marker agree; and
+- dashboard or provider success cannot substitute for missing external-client
+  evidence.
+
+The external client records HAR, console, WebSocket, navigation, TLS, video,
+screenshots, input timing, focus changes, viewport dimensions, and the final
+visible-state marker. Credential characters, passkey assertions, cookies,
+tokens, page bodies, and password-manager vault content must be redacted or
+excluded at capture time.
+
+## Result And Evidence Contract
+
+Each declared case and predetermined repetition ends in exactly one state:
+
+- `passed`
+- `reproduced_historical_failure`
+- `new_product_failure`
+- `harness_failure`
+- `inconclusive`
+- `skipped_blocked`
+- `safety_stopped`
+
+A failure is a successful diagnostic result only when its evidence contract is
+complete. It is never relabeled as a passing product result.
+
+Raw campaign evidence lives outside the product repo under a dedicated
+user-scoped runtime-state root such as
+`$XDG_STATE_HOME/agent-browser/campaigns/p158/<run-id>/`. The repo receives
+only schemas, synthetic fixtures, harness code, and a curated redacted final
+report under `docs/dev/notes/`.
+
+The append-only campaign manifest records:
+
+- run, environment, case, attempt, seed, schedule, candidate, and fixture IDs;
+- wall and monotonic timestamps plus clock-offset observations for every host;
+- request, connection, subject, assurance, Profile, policy revision, lease,
+  runtime lane, browser, process, session, tab, target, view, handoff, route,
+  display, provider, controller, viewer, job, event, trace, and incident IDs;
+- precondition observations, declared stimuli, immediate responses, terminal
+  outcomes, effect state, retry disposition, and downstream projections;
+- command stdout and stderr, HTTP and MCP responses, service snapshots,
+  journal slices, process and listener census, X11 socket and lock census,
+  dashboard API snapshots, external-client telemetry, screenshots, and video;
+- content digests, byte counts, capture gaps, redaction actions, and parent
+  artifact hashes; and
+- first-failure signature plus every later matching or divergent signature.
+
+Artifacts are written atomically where possible, never overwritten, and joined
+by a final manifest with SHA-256 digests. Sensitive-value canaries are injected
+only as synthetic test data. The final auditor must prove that no canary or
+forbidden private field appears in any response, log, report, screenshot
+metadata, or committed artifact.
+
+## Logging Completeness Oracle
+
+For every accepted request, rejected request, timeout, cancellation, crash,
+worker stop, queue-full result, wait reschedule, route failure, presentation
+failure, Xvfb failure, supervisor transition, and dashboard action, the auditor
+expects one causal envelope that can be followed without parsing error prose.
+
+At minimum it must reconcile:
+
+```text
+ingress request
+  -> immediate response
+  -> durable job
+  -> terminal Service event
+  -> trace outcome
+  -> incident when incident policy applies
+  -> dashboard projection when operator-visible
+```
+
+The exact structured failure and immutable provenance must agree across every
+surface that represents the outcome. Pre-dispatch and scheduler rejection are
+not exceptions. The auditor reports missing rows, duplicate terminal rows,
+conflicting IDs, broken parent links, timestamp inversions, terminal jobs with
+null failure or provenance, unredacted private values, and outcomes visible in
+only one transport. Logging completeness is reported as exact expected,
+observed, missing, duplicate, conflicting, and redaction-violation counts, not
+as a qualitative claim.
+
+The bounded Service event ring is not the forensic authority. Every failed
+browser launch, Guacamole or remote-view load, unusable durable handoff,
+connected-but-non-streaming CDP feed, and failed dashboard action must also
+produce an append-only `agent-browser.service-failure-record.v1` occurrence.
+Server-observed failures are written at their authoritative terminal boundary.
+Failures visible only to an authenticated external client use the restricted
+failure-observation contract. Raw handoff IDs, operator URLs, credentials,
+headers, page content, query strings, and bearer material are forbidden.
+Journal write failure is itself counted and emitted to the process log so it
+cannot silently erase the primary error.
+
+## Historical Failure Families
+
+The case registry must map every case to at least one source plan, note,
+incident signature, or production sample. The initial closed-world families
+are:
+
+1. profile identity unproven or inconsistent during launch,
+   `remote_view_open`, `tab_switch`, `view_focus`, retained reuse, and crash
+   recovery;
+2. self-conflicting exclusive or shared profiles, identical caller labels,
+   stale owner generations, missing principal bindings, and legacy ambiguous
+   sessions;
+3. missing runtime-lane or Profile provenance, null structured failures,
+   scheduler early return, duplicate or missing terminal records, and effect
+   uncertainty after persistence timeout;
+4. stale targets, duplicate same-origin tabs, `about:blank` selection, target
+   disappearance, wrong-tab focus, and dashboard URL recovery;
+5. route-pool exhaustion, stale route checkout, route/display crossover,
+   finalization incompleteness, presentation-proof failure, and browser-window
+   visibility failure;
+6. raw provider or loopback URL exposure, external redirect or WebSocket
+   failure, durable-handoff expiry, handoff-to-wrong-browser resolution, and
+   reconnect that launches a duplicate browser;
+7. X11 authorization denial, cross-generation Xvfb orphan collision under
+   `PrivateTmp`, stale lock or socket evidence, concurrent display allocation,
+   display-range exhaustion, PID reuse, and terminal or wrong-window focus;
+8. supervisor non-cooperation, stale owner takeover, split executable
+   generations, dashboard/backend/host mismatch, failed preserve transition,
+   failed full shutdown, and installation convergence warnings on the wrong
+   health axis;
+9. Service State lock timeout, service-resources timeout, command timeout,
+   queue pressure, slow or disconnected clients, cancellation races, worker
+   stop, crash epochs, and stale retained state;
+10. dashboard left-rail omissions, duplicates, stale actionable rows, foreign
+    CDP promotion, wrong selected workspace, status-axis conflation, stream
+    loss, deep-link drift, performance collapse, memory growth, focus loss, and
+    responsive-layout defects; and
+11. password-manager chooser, passkey, consent, secure-desktop, and native
+    prompt visibility or focus failures during human-paced remote control,
+    without capturing or automating secret material.
+
+New families discovered during execution are appended to the registry as
+findings. They do not expand the frozen execution schedule.
+
+## Scenario Arsenal
+
+### A: Agent-Only Browser And Permission Stress
+
+| ID | Scenario | Required pressure and oracle |
+| --- | --- | --- |
+| A01 | Frictionless ephemeral debugger | 100 sequential and 25 concurrent self-declared clients acquire disposable sessions and tabs without principal enrollment, then release only their resources |
+| A02 | Shared authenticated Profile | Ten compatible clients share one retained browser; repeat 20 times with attributable tabs and no Profile-wide self-conflict |
+| A03 | Same-label collision | Ten live clients use the same label but distinct connection instances; cross-client command and tab theft must remain impossible |
+| A04 | Policy-mode matrix | Exhaust administrator, participant, observer, `shared-local`, `restricted`, and `exclusive` operations across allowed and denied subjects |
+| A05 | Revision and drain races | Concurrent widening, narrowing, admission, own-tab release, revision conflict, and drain completion at deterministic barriers |
+| A06 | Revocation and eviction | Revoke during atomic and queued commands; exercise graceful and exact forced eviction against disposable tabs only |
+| A07 | Crash and stale handles | Kill disposable Chrome at every command boundary, then test truthful handle refresh, stale-handle recourse, and retained policy identity |
+| A08 | Ambiguous retained session replay | Recreate unproven and inconsistent identity states through launch, `remote_view_open`, `tab_switch`, and `view_focus` using redacted production-shaped fixtures |
+| A09 | Target pathology | Combine missing targets, dead targets, duplicate same-origin tabs, blank tabs, popup targets, and rapid close/switch/navigation |
+| A10 | Foreign CDP adjacency | Mix owned and non-owned browsers; prove inventory visibility never grants service lifecycle or route authority |
+| A11 | Scheduler terminalization | Inject queue full, wait reschedule, cancellation, worker stop, pre-dispatch denial, and terminal persistence failure at every supported boundary |
+| A12 | State-lock and timeout uncertainty | Induce lock wait, command timeout before effect, timeout after effect, and client disconnect; require exact effect state and recourse |
+| A13 | Retained-session generation change | Transfer or reconnect disposable retained browsers across 25 planned daemon or supervisor generation transitions without cold launch |
+| A14 | Full shutdown boundaries | Reject unauthorized, stale-digest, mismatched-target, and Profile-mutating plans; apply exact authorized shutdown only to a sacrificial runtime |
+| A15 | Browser-history and Service-record parity | Navigate unique synthetic markers through CLI, HTTP, MCP, dashboard, and remote control; reconcile Chrome history and CDP targets with request, job, event, trace, incident, session, and tab records |
+
+### H: Human-Simulated External Remote-View Stress
+
+Human-simulated actions use the external client's ordinary pointer, keyboard,
+focus, scrolling, resize, reload, back/forward, clipboard-safe text, and
+disconnect behavior at human-observable pacing. CDP may observe the target but
+must not perform the action being credited as remote human control.
+
+| ID | Scenario | Required pressure and oracle |
+| --- | --- | --- |
+| H01 | External durable-handoff happy path | Open from two external networks or runners, verify ready pixels and identity, interact, close the client, and reopen the same handoff |
+| H02 | Internal URL leak hunt | Scan every redirect, iframe, form, WebSocket, error action, reconnect target, and copied link; inject external-host and scheme variations |
+| H03 | Route and display rebinding | Reopen one durable handoff after planned viewer expiry, route switch, display replacement, and provider-session replacement without a new browser |
+| H04 | Observer and controller concurrency | Eight observers and two controller contenders exercise lease protection, transfer, stale input fencing, and independent reconnect |
+| H05 | Human takeover | Transfer input from agent to human and back at deterministic barriers; old controller input must be fenced without ACL mutation |
+| H06 | Window, tab, and focus truth | Alternate multiple windows, tabs, popups, native prompts, minimized and obscured states; visible pixels and selected target must agree |
+| H07 | Route exhaustion | Occupy every route with healthy non-parkable controllers, request excess presentation, then observe truthful queued or denied state without fallback |
+| H08 | Presentation failure matrix | Inject route unavailability, proof timeout, finalization interruption, stale checkout, wrong display, and browser-window-not-visible states |
+| H09 | Adverse external network | Apply predetermined latency, jitter, bandwidth, packet loss, WebSocket interruption, TLS reconnect, and long-idle expiry profiles from the external side |
+| H10 | Browser and service disruption | Crash the disposable browser and perform scheduled service-client or supervisor transitions while the same handoff remains bookmarked |
+| H11 | Secure-surface visibility | Exercise synthetic chooser and prompt fixtures, then a bounded operator-assisted non-production LastPass test vault and test passkey relying party without recording secret input or vault content |
+| H12 | Long-lived handoff | Reconnect the same durable URL 500 times across at least 24 hours, including client restarts and expired viewer/controller leases |
+
+### X: Display, Supervisor, And Install-Coherence Stress
+
+| ID | Scenario | Required pressure and oracle |
+| --- | --- | --- |
+| X01 | Cross-generation `PrivateTmp` Xvfb orphan | Leave a sacrificial old-generation Xvfb process on `:90` whose old namespace lock is invisible, start the frozen host, and observe allocator and logging behavior |
+| X02 | Multi-process display race | Start concurrent allocator requests from separate daemon processes at deterministic barriers; no two live browsers may receive one display |
+| X03 | Lock, socket, and PID disagreement | Cover stale lock, live socket without visible lock, abstract socket, dead PID, PID reuse, and owner-generation mismatch combinations |
+| X04 | Display-range exhaustion | Occupy the configured range with owned and foreign fixtures, then request one more display and require bounded typed failure |
+| X05 | X11 authority matrix | Vary cookie, authority file, user, environment, and display ownership while retaining exact diagnostic provenance |
+| X06 | Desktop locator pathology | Exercise terminal-topmost, no browser window, wrong browser, obscured window, transient popup, resize, and focus races |
+| X07 | Supervisor takeover | Run 25 planned stale-owner, unresponsive-owner, delayed-exit, duplicate-listener, and generation-replacement transitions |
+| X08 | Preserve and full-shutdown install paths | In sacrificial homes, test coherent transfer, refused transfer, sealed full shutdown, interrupted effect, resume, and rollback evidence without rebuilding |
+| X09 | Generation mismatch taxonomy | Inject host, backend, dashboard, manifest, helper, and browser digest mismatches one axis at a time and in combinations |
+| X10 | Restart and crash epochs | Exercise boot ID, process epoch, socket epoch, route, handoff, and retained-browser identity across scheduled service and host restarts |
+
+### D: Dashboard Performance And Left-Rail Truth
+
+For every D case, compare the rendered dashboard to an independently captured
+authoritative Service snapshot at the same correlation barrier. DOM text alone
+is not sufficient; use screenshots, accessibility snapshots, network and
+console logs, browser performance traces, and selected-record API readback.
+
+| ID | Scenario | Required pressure and oracle |
+| --- | --- | --- |
+| D01 | Left-rail bijection | For empty, sparse, normal, and dense states, every actionable rail row maps to exactly one current controllable resource and every such resource has exactly one row |
+| D02 | Churn accuracy | Create, update, crash, recover, transfer, close, evict, and expire resources while asserting row identity, label, count, ordering, badges, and action eligibility at barriers |
+| D03 | Same-label and cross-Profile ambiguity | Render duplicate labels, many tabs, two windows, foreign CDP, historical rows, and access ambiguity without selecting or acting on the wrong resource |
+| D04 | Multi-operator selection | Ten external dashboard clients navigate, refresh, back/forward, deep-link, and swap selections without cross-client selection leakage |
+| D05 | Stale URL recovery | Exercise missing browser, session, tab, target, view, and handoff deep links; recover only to a semantically valid current target and explain the change |
+| D06 | Warning-axis truth | Access ambiguity remains on the access axis; acquisition denial is request-scoped; only typed convergence failure produces runtime-out-of-sync messaging and one executable action |
+| D07 | Event loss and reordering | Delay, duplicate, drop, and reorder snapshot and stream responses; the rail must converge or explicitly show stale state, never fabricate readiness |
+| D08 | External handoff hygiene | Every dashboard copy/open action returns only the durable external handoff and never exposes loopback or provider internals |
+| D09 | Dense-state performance | Test 100 Profiles, 500 browsers or historical rows, 2,000 tabs, 10,000 jobs, 10,000 events, and active stream churn through synthetic fixtures |
+| D10 | Interaction performance | Measure initial load, rail update, selection, filtering, inspector open, viewport ready, and action feedback at p50, p95, p99, and worst case |
+| D11 | Browser resource stability | Run an eight-hour dashboard session with churn, route video, selection changes, and reconnect; record heap, DOM nodes, listeners, CPU, network, and long tasks |
+| D12 | Responsive, keyboard, and focus behavior | Cover small, typical, and wide viewports, keyboard-only operation, visible focus, modal focus return, reduced motion, loading, error, and overflow states |
+
+External D03, D04, and supported D05 observations run only through the manually
+dispatched `p158-w8-dashboard-external.yml` workflow. The workflow binds one
+frozen action manifest to an exact action-specific public HTTPS route digest,
+runs Chromium on a GitHub-hosted runner, and uploads an immutable terminal
+result even when capture fails. It has no automatic trigger or retry. D05 tab
+and target recovery are executable because the dashboard itself replaces the
+stale tab selection and renders the recovery explanation. Browser, session,
+view, and handoff target classes remain `skipped_blocked` until an equivalent
+semantic product recovery route exists. The service-host handshake starts and
+selects only the frozen action root, writes an append-only digest-only
+dispatch-ready checkpoint plus a separate workflow manifest, and resumes only
+when every process, port, root, candidate, and ingress identity is unchanged.
+It consumes exactly one downloaded workflow terminal receipt bound to the
+action, commit, workflow run, and attempt before exact teardown. A missing
+terminal receipt pauses without dispatching or retrying. Lost claimed identity
+becomes `effect_uncertain` and is never restarted. The workflow itself still
+does not start or stop the service-host runtime, and this implementation has
+not performed a live dispatch.
+
+The action-route selector is frozen to cooper-webservices commit
+`e70368ddbb2e61ae26a25072975c2953754b7479` and selector source SHA-256
+`53a7ab94b7d40dc620b39bdae90b4429b2043e08776ca195dab8e5306bdd6f3e`.
+W6 preparation seals both the reviewed selector source and executable digests.
+The host then submits only the exact `/p158/<run>/<action>` identity and
+digest-only process, root, and port bindings. Selection is an explicit
+apply-gated pre-dispatch operation. Resume uses the read-only observation
+operation, which independently rerenders and reads back the deployed route.
+Neither operation returns a raw public origin, provider URL, internal URL, or
+loopback URL. No selector apply, deployment, or restart was performed while
+adding this contract.
+
+### C: Combined Deterministic Pressure
+
+Run the combined phases only after their declared prerequisites have terminal
+results. They consume the state left by earlier cases rather than repairing it.
+
+| Phase | Fixed workload |
+| --- | --- |
+| C01 calibration | 20 minutes, 25 agent clients, two external viewers, one controller, 500 service commands, 50 dashboard actions, and ten handoff reconnects |
+| C02 burst | 100 agent clients, ten dashboard clients, maximum route occupancy, 2,000 service commands, 500 dashboard actions, 100 reconnects, and 20 controlled browser crashes |
+| C03 generation churn | 25 scheduled supervisor transitions interleaved with retained-browser commands, dashboard use, and durable-handoff reopen attempts |
+| C04 eight-hour production observation | Observe at least eight continuous hours of real production telemetry, split into explicit runtime epochs when installs or repairs occur; never generate tenant effects or delay intervention |
+| C05 24-hour production handoff observation | Observe durable-handoff health across at least 24 elapsed hours of real use and idle periods; repairs and deployments remain allowed and create analyzable epoch boundaries |
+
+Counts are minimum execution bounds, not success metrics. A safety stop may end
+a phase early, but every unexecuted case must become `safety_stopped` or
+`skipped_blocked` with exact evidence rather than disappearing from totals.
+
+## Performance Budgets
+
+Freeze numeric budgets from a clean calibration run before campaign execution.
+The final report must show both the frozen environment-relative thresholds and
+these absolute ceilings:
+
+- external handoff first usable pixels: p95 at most 10 seconds, with no sample
+  above 30 seconds;
+- dashboard initial interactive state for the normal inventory: p95 at most 3
+  seconds;
+- left-rail authoritative update after a committed Service change: p95 at most
+  1 second and no silent miss;
+- selected-record action feedback: p95 at most 500 milliseconds before visible
+  pending or terminal feedback;
+- ordinary agent-only command excluding navigation: p95 at most 1 second;
+- no unbounded upward trend in dashboard heap, DOM nodes, browser processes,
+  Xvfb processes, route allocations, Profile leases, retained sessions, or
+  unresolved jobs during steady portions of the soak; and
+- zero wrong-resource actions, internal handoff URL leaks, duplicate physical
+  ownership, missing terminal outcomes, or sensitive-value leaks.
+
+A threshold miss is recorded. It does not trigger tuning during the campaign.
+
+## Safety Stops
+
+The controller stops the affected environment, captures one final read-only
+census, and marks remaining dependent work when any predefined guard fires:
+
+- host memory or swap reserve falls below the repository's configured safe
+  runtime floor for two consecutive samples;
+- artifact storage exceeds its reserved quota or the filesystem reaches 90
+  percent utilization;
+- process, display, route, or connection counts exceed the manifest's hard
+  ceiling;
+- production identity, Profile, route, credential, or tenant state appears in
+  the isolated environment;
+- synthetic secret canaries appear in an external response or unredacted log;
+- external traffic escapes the allowlisted ingress and synthetic target set;
+- the campaign cannot distinguish its disposable target from foreign or
+  production state; or
+- continued execution risks corrupting evidence already collected.
+
+The stop action itself may terminate the campaign load generator. It may not
+silently repair the tested runtime inside the same frozen epoch. A blocking
+repair begins only after the controller seals the partial epoch and records the
+pause reason. Emergency host protection outside the controller is reported as
+an external intervention and invalidates subsequent frozen-state comparisons
+until a new epoch is established.
+
+## Work Units And Dependencies
+
+| Unit | Scope | Depends on | Exit condition |
+| --- | --- | --- | --- |
+| W1 | Freeze the historical failure registry, production-shaped redacted fixtures, candidate manifest, resource ceilings, and case dependency graph | none | Every known failure family maps to cases and evidence sources; no open-ended discovery remains in execution |
+| W2 | Build the append-only controller, deterministic scheduler, artifact manifest, fault injectors, safety monitor, and result schema | W1 | Provider-free self-tests prove no overwrite, no opportunistic retry, correct blocked propagation, and reproducible seeds |
+| W3 | Build the cross-surface logging auditor, durable failure journal, authenticated external-observation intake, and synthetic sensitive-value scanner | W1, W2 | Deliberately missing, duplicate, conflicting, reordered, null, leaking, launch, Guacamole, handoff, CDP-stall, and dashboard-action records are all detected |
+| W4 | Build the external-ingress runner and durable-handoff oracle | W1, W2 | A synthetic good path passes and loopback, private, raw provider, wrong-browser, and duplicate-launch fixtures fail |
+| W5 | Build dashboard truth and performance probes plus large synthetic fixtures | W1, W2, W3 | Left-rail bijection, warning-axis, deep-link, multi-client, accessibility, and performance probes detect seeded defects |
+| W6 | Publish and install one isolated candidate, prepare E1 and E2, verify the failure journal, capture calibration, then freeze | W2, W3, W4, W5 | Candidate and environment digests are sealed; the journal survives malformed lines and captures all five named failure surfaces; no test case has started |
+| W7 | Execute A and X scenarios without repair | W6 | Every scheduled A and X attempt is terminal and raw evidence is append-only |
+| W8 | Execute H and D scenarios exclusively through external ingress where operator-visible | W6 | Every scheduled H and D attempt is terminal; every visibility pass has external proof |
+| W9 | Execute C01 through C03, schedule asynchronous C04 and C05 production observation epochs, perform isolated teardown, and seal deterministic evidence | W7, W8 | Every deterministic case is terminal, production observers are independently durable, teardown is recorded, raw artifacts are hashed, and no further isolated execution is permitted |
+| W10 | Deeply analyze deterministic findings and completed production observation epochs, then publish the redacted review | W9 | Causal clusters, logging gaps, performance distributions, historical reproduction rates, epoch-aware architecture implications, and a bounded remediation backlog are independently checked and source-backed; incomplete endurance windows remain explicit evidence gaps and never block installation or repair |
+
+Critical path:
+`W1 -> W2 -> (W3, W4, W5) -> W6 -> (W7, W8) -> W9 -> W10`.
+W7 and W8 may execute concurrently only when their disposable Profile,
+display, route, and external-client ownership is disjoint. The campaign
+controller, evidence writer, safety monitor, and final analysis each have one
+owner. Nonblocking defects have no repair edge in this campaign and enter the
+W10 remediation ledger. A sequence-blocking defect adds one bounded edge from
+the affected work unit to `pause -> seal partial epoch -> diagnose -> repair ->
+validate -> install new candidate -> resume blocked sequence`. The campaign
+controller owns that edge. Each traversal preserves the failed epoch and uses
+new candidate, environment, case-attempt, and evidence identities. Blocking
+repair traversals are not consumable approval tokens and have no arbitrary
+numeric stop. Continue sequential diagnosis, red-green repair, validation,
+installation, and new-epoch retry while the blocker has a deterministic,
+safe, in-scope repair seam. Stop only when continued work would cross a safety,
+scope, authority, or resource ceiling; evidence can no longer be preserved; or
+the blocker cannot be made deterministic after the bounded diagnosis loop.
+That stop proceeds to W10 with the missing cases explicit rather than hiding
+the incomplete sequence or repairing indefinitely without a pass/fail signal.
+
+## Final Deep Review Protocol
+
+W10 is the last step and may not begin until the sealed manifest proves that
+every scheduled case is terminal. It performs no new browser, dashboard,
+runtime, provider, Profile, route, or repair effects.
+
+The review must:
+
+1. verify artifact hashes, candidate identity, clock alignment, case counts,
+   exclusions, external vantage, and freeze-policy compliance;
+2. independently recompute logging completeness and sensitive-value leakage
+   from raw indexes rather than trusting harness summaries;
+3. group failures by observable signature and causal chain, separating product,
+   infrastructure, harness, safety-stop, and inconclusive outcomes;
+4. build event timelines for every reproduced historical failure and every
+   high-severity new failure, including the earliest divergence from expected
+   state;
+5. compare reproduction frequency across seeds, concurrency, transports,
+   Profiles, runtime generations, route states, network profiles, and time;
+6. reconcile dashboard pixels and left-rail state with authoritative Service
+   snapshots, including every wrong, missing, duplicate, stale, or late row;
+7. analyze p50, p95, p99, worst case, long tasks, resource slopes, timeout
+   distributions, and correlations between pressure and failure;
+8. assess whether findings support or contradict the architecture review's
+   Profile acquisition owner, cohesive lease client, Rust convergence owner,
+   contract-aware output renderer, and semantic contract oracle boundaries;
+9. identify failures a focused green suite could not observe and assign each
+   to the cheapest durable regression seam that can protect it;
+10. classify each finding as `blocking`, `nonblocking_backlog`,
+    `needs_evidence`, or `rejected`, with criterion, evidence, consequence,
+    reproducer, confidence, and recommended owner;
+11. produce a remediation dependency graph that keeps product defects,
+    infrastructure defects, logging defects, and harness defects distinct;
+    and
+12. state exactly which P157 acceptance criteria are proven, disproven, or
+    still untested. Test volume or a lack of crashes cannot substitute for this
+    criterion-by-criterion judgment.
+
+One fresh-context evidence review checks the primary analysis against the
+sealed artifacts. Disagreements are recorded, not optimized away. Remediation
+for nonblocking findings begins in successor work after W10 closes. A repair
+performed earlier under the explicit sequence-blocking pause path remains part
+of the campaign history and must be analyzed as a separate candidate epoch.
+
+## Acceptance Criteria
+
+1. The registry demonstrates closed-world coverage of every historical failure
+   family named in this plan and links each family to executed or explicitly
+   blocked cases.
+2. Every active candidate epoch is immutable while it runs. Nonblocking defects
+   are deferred. A sequence-blocking defect may pause and seal the current
+   epoch, receive a diagnosed and validated repair, and resume only under a new
+   frozen candidate identity without erasing or combining the prior evidence.
+3. Agent-only, human-simulated external remote-view, display/supervisor,
+   dashboard, and combined deterministic tiers reach terminal evidence states.
+   Eight-hour and 24-hour production observations are epoch-aware and may
+   remain explicit evidence gaps without blocking installation or repair.
+4. Every human-visible success is proven through external ingress and the
+   durable handoff URL. Zero internal, loopback, private, raw provider, embed,
+   health, or route-binding URL is accepted as an operator handoff.
+5. The same durable handoff is tested across route, display, viewer,
+   controller, client, browser, and scheduled supervisor transitions without
+   accidental cold launch.
+6. Dashboard performance is quantified, and left-rail rows, selected state,
+   actions, warnings, and visible browser pixels are reconciled against
+   authoritative Service truth under churn and dense load.
+7. Every scheduled failure path has complete or explicitly missing causal
+   logging measurements across response, job, event, trace, incident, and
+   dashboard projections.
+8. First failures, flakes, harness failures, inconclusive cases, safety stops,
+   blocked cases, and external interventions remain visible in totals and raw
+   evidence.
+9. No production mutation, credential capture, private page-body capture,
+   bearer-material capture, or cross-environment resource use occurs.
+10. W10 produces a source-backed final report, a machine-readable result set,
+    and a prioritized remediation graph without performing repairs.
+11. Every failed launch, Guacamole load, handoff use, CDP stream, and dashboard
+    action is either joined to a durable failure-journal occurrence or reported
+    as an exact logging gap. Journal retention never depends on the bounded
+    Service event ring or successful `state.json` reconciliation.
+
+## Initial Checkpoint
+
+State transition: `unregistered -> planned`.
+
+Acceptance state: P157 source behavior remains complete, but adversarial
+installed acceptance is reopened under this frozen-candidate campaign.
+
+Progress classification: `outcome_progress`.
+
+Evidence: P157's original W11 exit contract required multi-client sharing,
+live policy edits, eviction, crash recovery, logging completeness, warning
+taxonomy, and disposable shutdown. Focused installed validation passed, while
+historical production records still contain identity, Xvfb, route,
+presentation, and resource-timeout failure signatures. P46 also documents
+dashboard, target, route, display, and external-viewer defects that were
+repaired between attempts rather than measured against one frozen candidate.
+
+Material blocker: the existing scenario harnesses do not provide one
+append-only, no-repair controller, external-ingress handoff oracle, or complete
+causal-log auditor for this closed-world matrix.
+
+Next action: execute W1 only. Freeze the case registry and evidence sources,
+including an exact mapping from each historical report to one or more case IDs,
+before implementing load generators or touching an installed runtime.
+
+## W1 Checkpoint: Historical Registry Frozen
+
+State transition: `planned -> registry_frozen`.
+
+Acceptance state: W1 complete. Installed acceptance remains open and no
+candidate or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `docs/dev/contracts/p158-historical-failure-registry.v1.json` freezes 11
+  source-backed historical families, all 54 scheduled case or phase IDs,
+  deterministic execution bounds, case dependencies, evidence profiles,
+  candidate identity fields, and numeric resource and performance ceilings;
+- `docs/dev/fixtures/p158/historical-failure-seeds.v1.json` preserves seven
+  redacted production signatures plus the null terminal-envelope defect using
+  synthetic relationship-preserving values;
+- the read-only 200-job production comparison recomputed 34 failed and five
+  timed-out jobs, with all 39 lacking top-level structured failure and
+  provenance; and
+- `pnpm test:p158-historical-failure-registry` validates registry closure,
+  source existence, bidirectional family mappings, the complete case arsenal,
+  dependencies, no-repair rules, and fixture redaction.
+
+Historical harness adjudication: P46 and P67 fixtures and evidence mechanics
+may be adapted, but their reset, repair, retry, reconcile, cleanup, mutable
+summary, and loopback-fallback behaviors may not cross the P158 freeze point.
+P67 rail persistence is not rendered-dashboard proof, and local Chromium is
+not an E2 external-network vantage.
+
+Material blocker: no append-only campaign controller or deterministic
+scheduler exists yet. W1 intentionally produced no runtime or provider effect.
+
+Next action: execute W2 only. Build the monotonic controller, deterministic
+scheduler, atomic artifact manifest, fault-injector interface, safety monitor,
+and terminal result schema against provider-free fixtures.
+
+## W2 Checkpoint: Append-Only Controller Complete
+
+State transition: `registry_frozen -> controller_complete`.
+
+Acceptance state: W2 complete. Installed acceptance remains open and no
+candidate or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `scripts/lib/p158-campaign-controller.js` provides the provider-free
+  monotonic controller, deterministic scheduler, exclusive atomic store,
+  append-only typed ledger, safety monitor, teardown gate, evidence seal, and
+  integrity verifier;
+- `docs/dev/contracts/p158-campaign-manifest.v1.schema.json` and
+  `docs/dev/contracts/p158-campaign-result.v1.schema.json` define the frozen
+  manifest and every persisted ledger record;
+- `scripts/test-p158-campaign-controller.js` performs 11 adversarial behavior
+  tests and strict Ajv validation of the actual manifest and every emitted
+  ledger record; and
+- `pnpm test:p158-campaign` passes the registry and controller batteries.
+
+Integration review rejected the initial parallel drafts until actual
+controller output conformed to the schemas. It also corrected an in-memory-only
+terminal-count mutation, removed the incorrect assumption that every non-pass
+loses downstream prerequisites, rejected unknown evidence artifact IDs, and
+aligned the campaign-process safety metric.
+
+Material blocker: the controller preserves evidence but W3's cross-surface
+logging completeness and sensitive-value scanner do not exist yet.
+
+Next action: execute W3 only. Build the logging auditor and synthetic leakage
+scanner against intentionally missing, duplicate, conflicting, reordered,
+null, and leaking fixtures.
+
+## W3 Checkpoint: Logging Completeness Auditor Complete
+
+State transition: `controller_complete -> logging_auditor_complete`.
+
+Acceptance state: W3 complete. Installed acceptance remains open and no
+candidate or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `scripts/lib/p158-logging-auditor.js` reconstructs causal envelopes across
+  requests, immediate responses, durable jobs, events, traces, incidents,
+  dashboard projections, artifacts, and redaction receipts;
+- the two P158 logging schemas define the synthetic input and exact audit
+  report contracts;
+- the 13-fixture corpus isolates all 11 required defect classes plus complete
+  and reordered-clean controls; and
+- `pnpm test:p158-logging-auditor` performs strict schema, deterministic,
+  no-mutation, exact-count, per-envelope, surface-correlation, and clean-control
+  checks.
+
+Integration review required report-schema conformance and fixture correlation,
+then expanded terminal inspection to immediate responses, durable jobs, events,
+traces, and dashboard projections. The production-shaped null fixtures now
+prove missing failure and provenance on terminal durable jobs specifically.
+
+Material blocker: no external-ingress runner or durable-handoff URL oracle
+exists yet.
+
+Next action: execute W4 only. Build the provider-free external-ingress and
+durable-handoff oracle, including hard rejection of loopback fallback.
+
+## W4 Checkpoint: External Handoff Oracle Complete
+
+State transition: `logging_auditor_complete -> external_oracle_complete`.
+
+Acceptance state: W4 complete. Installed acceptance remains open and no
+candidate or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `scripts/lib/p158-external-handoff-oracle.js` classifies external vantage,
+  public HTTPS and WSS, forbidden hosts and URL roles, ingress checks,
+  ready-before-pixels, retained identity, durable continuity, and cold launch;
+- the two P158 external-handoff schemas define synthetic inputs and exact
+  reports;
+- the 36-session corpus covers all 23 finding codes, 13 URL roles, nine host
+  classes, six identity axes, and one clean full-ingress path; and
+- `pnpm test:p158-external-handoff-oracle` performs strict schema,
+  classification, no-fallback, ingress, visibility, identity, continuity,
+  deterministic, no-mutation, and no-repair checks.
+
+Integration review changed the ingress checks from optional-by-absence to the
+full eight-check fail-closed default. Isolated unit fixtures can suppress
+unrelated gates; later E2 execution cannot.
+
+Material blocker: correlated rendered-dashboard truth and performance probes
+do not exist yet.
+
+Next action: execute W5 only. Build provider-free dashboard rail, selection,
+warning-axis, external URL hygiene, accessibility, and performance probes over
+dense immutable fixtures.
+
+## W5 Checkpoint: Dashboard Truth And Performance Oracle Complete
+
+State transition: `external_oracle_complete -> dashboard_oracle_complete`.
+
+Acceptance state: W5 complete. Installed acceptance remains open and no
+candidate, browser, provider, or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `scripts/lib/p158-dashboard-oracle.js` materializes immutable dashboard
+  fixtures and audits rail bijection, stable identity, selection, inspector and
+  action targeting, multi-client isolation, warning axes, handoff URL hygiene,
+  stream convergence, browser evidence, timing distributions, and resource
+  slopes;
+- the two P158 dashboard schemas require strict synthetic inputs, all 46 exact
+  finding counters, deterministic reports, and explicit no-repair evidence;
+- the 51-case corpus includes four clean inventory densities, one clean typed
+  convergence control, and one isolated seed for every finding class; and
+- `pnpm test:p158-dashboard-oracle` proves the exact dense inventory of 100
+  Profiles, 500 browsers, 2,000 tabs, 10,000 jobs, and 10,000 events is
+  materially generated as 22,600 resources and audits cleanly with 600 rail
+  rows.
+
+Integration review corrected false zero resource budgets, dense ordering,
+duplicate-row cascade findings, absent same-label semantics, incomplete
+viewport controls, and missing explicit multi-client leakage coverage. The
+primary agent independently reran W1 through W5 provider-free batteries.
+
+Material blocker: no candidate or isolated E1 and E2 environment has been
+published, calibrated, or frozen. W5 intentionally performed no live effects.
+
+Next action: execute W6 only. Publish and install one isolated development
+candidate, prepare distinct E1 and E2 environments, prove genuinely external
+ingress, capture calibration, and seal candidate and environment digests before
+any campaign case starts.
+
+## W6 Preflight Checkpoint: Preparation And External-Ingress Contract Complete
+
+State transition: `dashboard_oracle_complete -> w6_preflight_complete`.
+
+Acceptance state: W6 remains open. No new candidate has been installed and the
+campaign is not frozen or executing.
+
+Progress classification: `outcome_progress`.
+
+The first W6 readiness audit found that the prior development provider called
+a loopback HTTP address its public operator URL. It also found that the
+campaign manifest could not seal E1 and E2 identities, calibration, artifact
+receipts, or an actual zero-start freeze instant. Executing W6 against those
+contracts would have produced ambiguous evidence.
+
+The prerequisite repair now provides:
+
+- a reviewed public HTTPS operator origin and external-ingress revision as one
+  atomic, fail-closed development-provider binding;
+- a v2 provider manifest that retains loopback only as a local diagnostic URL
+  and carries the external binding into route authority;
+- manifest-bound installation, runtime, provider, ingress, external-vantage,
+  handoff, calibration, and fixture artifacts;
+- exact E1 and E2 environment seals, including two distinct off-host client
+  identities and all eight external ingress observation classes;
+- a canonical candidate digest and aggregate fixture digest;
+- an immutable `campaign-freeze.json` receipt with the actual wall and
+  monotonic freeze time and zero started case and attempt counts; and
+- a no-repair preparation orchestrator with 26 isolated fail-closed fixtures.
+
+`pnpm test:p158-campaign-preparation` passes all exact classifications, strict
+schemas, persisted bytes and hashes, nested W4 validation, freeze ordering,
+calibration chronology, deterministic output, input immutability, and the
+zero-start gate.
+
+The provisional binary built before these source corrections was not installed
+and is not a candidate. W6 still requires one fresh build and isolated install,
+external runner evidence, the exact 20-minute C01 calibration, environment
+sealing, and controller freeze.
+
+Next action: rebuild from the clean checkpoint, install only into the
+development pseudo-home, configure the reviewed public HTTPS binding, prove E1
+and E2 including two off-host clients, calibrate, and freeze without starting a
+campaign case.
+
+## W6 Preflight Revision: Durable Failure Journal And Nonblocking Endurance
+
+State transition: `w6_preflight_complete -> w6_failure_journal_candidate`.
+
+Acceptance state: W6 remains open. No candidate was installed and no live
+campaign, production mutation, or external dispatch occurred in this revision.
+
+The operator rejected a campaign design in which an eight-hour or 24-hour wait
+could delay installation or repair. C04 and C05 now consume passive,
+privacy-bounded production observation epochs. Deterministic destructive and
+concurrency stimuli remain confined to C01 through C03 in E1 and E2. A
+production install or repair closes the current observation epoch and starts a
+new one without invalidating prior records or blocking the intervention.
+
+The source candidate now adds a forensic journal independent of the bounded
+Service event ring and `state.json`. It records browser-launch and terminal
+service-action failures at server boundaries. Authenticated dashboard clients
+can submit only the four externally observable categories through a strict
+allowlist contract. Dashboard fetch failures, unusable handoffs, Guacamole
+iframe failures, and CDP streams that connect without frames are wired to that
+intake. Handoff IDs are accepted only as SHA-256 identifiers, summaries are
+redacted and bounded, details are capped, records carry boot and runtime
+environment identity, concurrent appends are locked and synced, and malformed
+journal lines do not prevent later readback.
+
+Focused validation at this checkpoint:
+
+- four Rust journal tests pass, covering append behavior, URL and secret
+  redaction, malformed-line recovery, latest-record reads, oversized details,
+  raw-handoff rejection, and client-category confinement; and
+- the optimized dashboard production build passes with the fetch observer,
+  Guacamole observations, durable-handoff observation, and CDP frame watchdog.
+
+Material blocker: the journal changes have not yet passed the full Rust,
+clippy, dashboard contract, documentation, installed-development, and live
+five-surface fault-injection gates. Root filesystem utilization also remains a
+W6 safety input and must be measured before candidate publication.
+
+Next action: finish contract and documentation parity, add exact source and
+live journal coverage to the P158 logging auditor, run the selected validation
+matrix, then reassess W6 publication safety without waiting for C04 or C05.
+
+## W6 Preflight Revision: Last30Days Route-Acquisition Regressions
+
+State transition: `w6_failure_journal_candidate ->
+w6_preparation_contract_complete_last30days_regressions_integrated_w6_publication_blocked`;
+the campaign has not crossed the freeze point.
+
+Acceptance state: the provider-free Last30Days regressions are integrated into
+the P158 harness. Candidate publication, installed development validation, and
+live campaign execution remain open.
+
+The source observation is the committed Last30Days handoff note at commit
+`cc0cd29c` on branch `docs/reddit-handoff-errors-20260902`. It describes five
+bounded Reddit acquisition attempts without contributing credentials, cookies,
+page bodies, raw handoff URLs, or provider data to this repository state. The
+findings map to existing P158 cases and do not add attempts or expand the
+frozen 54-case schedule:
+
+| Finding | Provider-free regression | Existing live case obligations |
+| --- | --- | --- |
+| Route-bearing `tab_new` accepted but launched an unrelated private display | Reject route and display intent before job creation and build a privacy-bounded pre-job failure record | A11 must correlate the rejected ingress with the failure journal; X03 must prove no unrelated display is allocated |
+| A released display-number key described another display and blocked a healthy route | Seed `remote-view-display:10` for released `:11`, request a route targeting `:10`, and require a distinct route-derived allocation identity | X03 must replay the contradiction in E1; H08 must prove planning and route-open failure truth without manual repair |
+| Successful `remote_view_open` did not give the caller an automation capability | Require the valid nested handle to be projected as top-level `serviceTabHandle` | H01 must immediately run one handle-scoped read after external route open; A15 must preserve that handle identity across request, job, trace, target, and release evidence |
+| Direct CLI and authenticated Service authority were confused | Documentation directs protected route acquisition through authenticated `service_request` | A08 and H08 must record explicit Service-required recourse when the direct CLI cannot satisfy protected-profile authority |
+| Pre-job rejection had no durable Service job to inspect | HTTP and MCP normalization failures build an append-only failure-journal occurrence without retaining request bodies | A11 and the W3 logging auditor must count the record, preserve the exact error code, and report a missing journal append as a logging defect |
+
+`scripts/test-p158-last30days-regressions.sh` is now a first-class E0 battery.
+It runs the six exact Rust regressions for route-intent rejection, collision-
+resistant allocation, route-bound dry-run planning, rollback identity, and
+route-open handle projection, then runs the generated-client and remote-view
+documentation contracts. `pnpm test:p158-last30days-regressions` runs that
+battery directly, and `pnpm test:p158-harness` includes it before the logging
+auditor and live-driver contract suites.
+
+This regression battery does not claim the corresponding live cases are
+executable. Current source readiness remains:
+
+| Work unit | Concrete source-bound cases | Still missing or explicitly blocked before execution |
+| --- | --- | --- |
+| W6 | Provider-free preparation, logging, external-ingress, dashboard, evidence, and analysis contracts | Fresh optimized candidate build, isolated development install, five-surface live journal injection, two off-host external clients, 20-minute C01 calibration, exact environment seals, and zero-start freeze receipt |
+| W7 | A01, A02, A03, A05, A08, and A13 have specialized concrete driver bundles | A04, A06, A07, A09, A10, A11, A12, A14, A15, X01 through X05, and X07 through X10 still require complete effect-time materializers or product seams; X06 is exercised with human-visible W8 work |
+| W8 | H01, H03, D01, D03, and D04 have receipt-bound external driver paths | H02 and H04 through H12 plus D02 and D05 through D12 remain explicit-blocked until their external producers and exact oracles exist |
+| W9 | C01 through C05 orchestration, conditional concrete drivers, endurance epoch contracts, teardown, and evidence sealing exist | No W9 phase is executable until W7 and W8 are terminal and its exact distributed, external-receipt, declared-transition, observation-window, and teardown inputs are sealed |
+| W10 | Deterministic analyzer, descriptor, runner, schemas, and provider-free tests exist | It cannot run until W9 seals every scheduled result and the available C04 and C05 production epochs; incomplete endurance epochs remain explicit gaps rather than repair blockers |
+
+The exact retained-allocation quarantine or rekey operation and a general
+retained-target handle-adoption action remain product gaps. They stay visible
+as blocked assertions under X03 and A15 instead of being treated as completed
+by the collision-resistant allocator and route-open handle projection.
+
+Validation at this checkpoint:
+
+- the new E0 regression command passes all six exact Rust tests plus the
+  client and documentation contracts;
+- the complete 1,934-test parallel-safe Rust partition and every serial
+  environment-mutating partition pass across the combined current worktree;
+- clippy with warnings denied, generated Service client checks, the full
+  Service client suite, docs production build, formatting, and diff checks
+  pass; and
+- the user-scoped failure journal remains absent after provider-free tests,
+  proving the tests did not contaminate production evidence.
+
+Resolved blocker: the operator raised the frozen W6 filesystem safety ceiling
+from 85 percent to 90 percent. Root filesystem utilization was 87 percent at
+the revision point, which is inside the revised ceiling. Publication still
+requires a fresh read-only preflight; the prior storage reading no longer
+blocks the isolated candidate.
+
+Next action: implement the remaining A11 live scheduler-rejection and journal
+correlation seam, because it directly exercises the new pre-job failure path.
+Then finish the five-surface live journal calibration, satisfy the W6 storage
+preflight, publish one candidate, and freeze E1 and E2.
+
+## W6 Live Checkpoint: Candidate Installed, External Provider Ready, A11 Partial
+
+State transition: `w6_preparation_contract_complete_last30days_regressions_integrated_w6_publication_blocked ->
+w6_candidate_installed_provider_ready_a11_predispatch_live_passed_freeze_open`.
+
+Acceptance state: W6 remains open. The candidate and external presentation
+provider are installed and ready, but E1 and E2 are not sealed, the 20-minute
+calibration has not run, and the campaign has not crossed the zero-start freeze.
+
+The fresh filesystem preflight measured 73 percent utilization against the
+operator-approved 90 percent ceiling. Development generation
+`0.28.0-2f9d25956e27` is selected with executable SHA-256
+`2f9d25956e274af52dd439c4c37e27b22a83a014504d5abc25ee398f737474e2`.
+Three disposable browser-launch smoke iterations passed, and each development
+installation reported production unchanged.
+
+Live A11 pre-dispatch evidence now proves that one route-bearing `tab_new`
+request is rejected before a correlated job exists and produces exactly one
+failure-journal record with the request identity and expected normalization
+classification. Its receipt SHA-256 is
+`8524ec79173663e65e83aaa1add0681fac3540bfd839e51257383b47ed6523d6`.
+This is a partial A11 probe only. Queue-full, wait-reschedule, cancellation,
+worker-stop, and terminal-persistence-failure boundaries remain unexecuted.
+
+The live probe also exposed a dashboard routing defect: the authenticated
+frontend forwarded `/api/service/request` to a backend-only dashboard that
+could not rediscover itself and returned HTTP 503 before normalization or
+journaling. The candidate now honors the configured backend port and maps all
+authenticated dashboard Service requests to the backend command route. The
+same A11 probe then passed against the installed candidate.
+
+Provider staging exposed a second pre-freeze defect. The reviewed v2 external
+binding correctly rejected the installed v1 loopback authority as drift, but
+offered no exact migration path. Staging and explicit apply now admit only the
+exact additive v1-to-v2 authority upgrade: the old loopback public URL must
+equal the new local diagnostic URL and every remaining provider identity must
+match. Status remains drifted until explicit apply writes v2 authority.
+
+The upgraded provider is ready and binds public operator origin
+`https://agent-browser-dev.ecochran.dyndns.org` to reviewed Cooper revision
+`e70368ddbb2e61ae26a25072975c2953754b7479` with binding SHA-256
+`4f24eefcac1008871c90c8e41804029aff8747c9ee0bc13ad7ebe58ad0539c4d`.
+The provider manifest and route inventory SHA-256 values are respectively
+`177a90339506a8f6bbb44873968923e65e0cac33f3bcbf387a893e50e5d58dd8`
+and `3dc7955d8b8fa7c03ff5eb77b88dc45810f1cc19c3f69467c0b7605220367448`.
+The apply receipt SHA-256 is
+`35971c562177ffef2b02c785afabe87af4f749bbed4db8fd78ac081dd3f560c4`,
+and the apply reported production unchanged.
+
+The Cooper inventory, raw dashboard, local Traefik route, bastion host-header
+route, and public HTTPS root all validated. Public HTML and response headers
+contained no loopback or raw development-port leakage. Unauthenticated public
+`/guacamole/` returned a same-origin login redirect. The bastion publication
+added the reviewed Guacamole path router and restarted only bastion Traefik;
+the bastion operations log records the change. This host-local and bastion
+evidence does not satisfy the two-client off-host W6 requirement.
+
+Validation at this checkpoint includes the full P158 harness after the final
+dashboard routing and provider migration changes, the exact A11
+module tests, the exact Rust pre-dispatch and dashboard backend-port tests,
+clippy with warnings denied, formatting, diff checks, development provider
+fixtures, live provider staging and preflight, provider apply, provider-required
+doctor, route readbacks, and the three-iteration development browser smoke.
+The full 1,934-test Rust partition predates the final dashboard routing repair;
+the exact affected Rust tests, full P158 harness, and clippy passed afterward.
+
+A post-install route-confusion gate and independent CDP streaming smoke then
+found a live host-capacity failure before their product assertions. Two Cargo
+attempts, at eight and four build jobs, failed to spawn Rust or Tokio workers.
+The CDP smoke independently exhausted all three built-in Chrome launch attempts
+with `pthread_create` and zygote fork `EAGAIN`. Kernel evidence identifies the
+Cargo aggregate cgroup's 1,024-task controller as the direct Cargo rejection:
+six completed test or build scopes remained active with 945 tasks, including
+five test scopes retaining Chrome process trees. The user session had about
+6,200 threads at observation time despite ample available memory. The test
+attempts did not kill, garbage collect, restart, or repair those residues.
+This is a new recorded failure and a W6 freeze blocker. The Service action
+failure returned `effect_uncertain` with `blind_retry` prohibited, but the
+temporary smoke root was removed and no durable failure-journal occurrence was
+available afterward. That cleanup behavior is itself a logging-evidence gap.
+
+Next action: preserve this pre-freeze state and diagnose the retained Cargo
+scope and temporary-root evidence-loss findings without broad cleanup. Then
+commit and publish the current source checkpoint so the immutable external
+workflow can execute it, run the two-client off-host readiness and frozen
+20-minute calibration receipts, finish the five-surface live journal
+calibration, and seal exact E1 and E2 identities. Only then may the controller
+write the zero-start freeze receipt.
+
+### W6 External Handoff Admission and Checkout Finding
+
+The immutable source checkpoint is commit
+`0070fb0d3c70c364166f3cc6f9a396ab45fed041`, published to
+`origin/plan/profile-permissions-and-request-provenance`. A fresh development
+Service status read found four warm idle presentation slots and no retained
+development browser or durable handoff that could be reused for the external
+fixture.
+
+One explicit unknown durable profile reproduced
+`existing_session_profile_identity_unproven` before browser launch as job
+`r925418`. The failure journal retained the typed profile-lease axis, no-effect
+classification, `inspect_before_retry` disposition, and hard stops against a
+blind retry or duplicate profile lane. The broker-first access plan for the
+same synthetic request then selected deterministic disposable profile
+`managed-ephemeral-55469e27a903`, admitted the self-declared client under the
+shared-local policy, and required no lease choreography. This demonstrates
+that the new promiscuous default works when clients follow the access plan,
+while an explicit unknown durable identity still enters the strict legacy
+path.
+
+Two route-bound launches using that managed-one-time profile successfully
+started headed stealth Chromium, navigated to the loopback-only synthetic
+fixture, and retained launch, tab, stderr-path, and polite-close events. Both
+then failed during route checkout. Automatic Route 1 job `r729795` and explicit
+Route 2 job `r156356` each changed the selected route to `pending` during
+acquisition and then rejected that same route as
+`route_pool_entry_unavailable`. In both cases the newly launched browser was
+closed politely and the acquisition rollback reported the route and pool entry
+restored. The repeated failure is therefore a deterministic
+acquisition-to-checkout state-transition defect, not Chrome launch pressure or
+a lack of provider capacity.
+
+Code-level diagnosis confirms the transaction-ordering defect. The coordinator
+calls `begin_route_bound_handoff_plan_acquisition()` before browser launch and
+later calls `runtime.checkout_route()` with the original checkout command.
+Checkout rebuilds the acquisition plan from the newly persisted state. At that
+point the selected entry is `state=pending`, its readiness component is
+`remote_view_open_acquisition`, and its route is not yet bound to the new
+browser. `service_remote_view_acquisition_plan_from_state()` accepts pending
+only when `checked_out_route_matches_owner()` already succeeds, while the
+separate `ensure_route_pool_entry_ready_for_checkout()` helper explicitly
+allows this acquisition-owned pending state. The planner therefore rejects the
+coordinator's own reservation before checkout can create the owner binding.
+The repair must make those two readiness gates agree without admitting foreign
+or stale pending acquisitions.
+
+The two checkout failures are durably present in Service jobs and correlated
+terminal events, and the browser launch, synthetic URL navigation, stderr log
+path, and cleanup are present in Service events. Their generic failure objects
+degrade to `service_operation_failed`, `axis=unknown`, and
+`effectState=effect_uncertain` even though the appended error text reports a
+completed rollback and closed browser. That mismatch is an additional failure
+normalization defect. No third route was attempted, no route repair or broad
+cleanup was applied, and no durable public handoff was minted. The protected
+GitHub environment for `.github/workflows/p158-external-vantage.yml` is also not
+currently available through the authenticated repository API, so the off-host
+readiness workflow remains undispatched rather than producing a predictable
+missing-secret failure.
+
+The normalization mismatch also has a direct code cause. The rollback payload
+is appended to the legacy error text, but `attach_service_failure_recourse()`
+has no typed branch for `route_pool_entry_unavailable` or a parsed completed
+rollback. It falls through to the default `ServiceFailureRecourse`, whose
+unknown axis and effect-uncertain defaults override the stronger compensation
+evidence. The repair must derive no-effect or compensated-effect state from a
+structured coordinator result, not by reparsing arbitrary diagnostic text.
+
+Revised next action: keep the campaign unfrozen and preserve all current
+records. Treat the route acquisition and checkout transition as a
+sequence-blocking pre-freeze defect. Repair the planner and checkout readiness
+disagreement plus the incorrect effect-uncertain normalization, add exact
+regression coverage for jobs `r729795` and `r156356`, validate and install a
+new candidate, and retry readiness under new evidence identities. Do not
+dispatch the external workflow until one durable `/remote-view/<handoff-id>`
+URL has `operatorVisible.state=ready` and the protected environment contains
+the exact synthetic identity, marker region, attestation, and dashboard
+credentials. The 20-minute calibration and E1/E2 seal remain downstream of
+that readiness gate.
+
+Direct journal readback confirms one `guacamole_load` occurrence for each of
+jobs `r925418`, `r729795`, and `r156356`. Each record retains the exact job,
+request, runtime lane, profile, and session correlation without a raw handoff
+URL. The latter two also faithfully retain the current, incorrect
+`service_operation_failed` and `effect_uncertain` normalization, so the
+postmortem can compare the journal projection with the stronger rollback and
+shutdown evidence in the Service trace.
+
+### W6 Bounded Blocking-Repair Traversals
+
+The first blocking repair is source commit `0cfd2a54`. A deterministic
+regression reproduced the live Route 1 and Route 2 state shape: provider
+observation had refreshed the physical route projection while the pool row and
+current-boot acquisition lease still proved the coordinator's exact pending
+browser, session, route, display, and pool ownership. The planner now accepts
+only that fully matching lease and continues to reject a foreign lease. The
+same repair carries the typed route-bound blocker and compensation state across
+the legacy compatibility error seam. Installed development generation
+`0.28.0-588ac9f49ffe` passed three disposable browser launches and the
+provider-required development doctor.
+
+Fresh epoch `Plan158Epoch2` then advanced beyond
+`route_pool_entry_unavailable` and failed as job `r411067` at the next checkout
+guard with `route_pool_contention`. The warm provider route was `ready` with no
+browser or session owner, but the guard rendered the missing owner as
+`unknown` and treated the physical provider display identity as a foreign
+active checkout. Rollback closed the new browser and restored the acquisition.
+The repaired journal correctly recorded `code=checkout_failed`,
+`axis=presentation`, `phase=finalize`, and `effectState=no_effect`; it no longer
+degraded completed compensation to `service_operation_failed` and
+`effect_uncertain`.
+
+The second blocking repair is source commit `1e7089d0`. A new red-green
+regression proves that an ownerless warm provider route may be claimed only
+when the requested allocation and a current-boot pending acquisition lease
+both match the exact browser, session, route, and display. Foreign lease
+contention remains fail-closed. Installed development generation
+`0.28.0-762a1be44f18` passed three disposable browser launches and the complete
+provider-required development doctor.
+
+Fresh epoch `Plan158Epoch3` advanced beyond both prior checkout defects and
+failed as job `r570050` with the third distinct sequence blocker,
+`presentation_bound_slot_missing`. Its newly launched browser was closed and
+the route, pool entry, and acquisition lease were restored. The Service job
+and terminal outcome again retain `checkout_failed`, `presentation`,
+`finalize`, and `no_effect` plus exact request, subject, connection, profile,
+runtime-lane, and session provenance. No durable handoff URL was minted and no
+external workflow was dispatched.
+
+The third blocker localizes the remaining identity disagreement. Checkout asks
+`PresentationCapacityAuthority::activate_bound_browser()` for route
+`development-route-1` plus logical acquisition display
+`remote-view-display:development-route-1`, while the warm presentation slot is
+bound to the provider inventory display `development-display-1`. The current
+Service route pool contains both legacy route-id rows such as
+`development-route-1`, whose target carries no provider display-allocation
+identity, and canonical slot rows such as `development-slot-1`, whose target is
+bound to `development-display-1`. Deterministic B-tree selection chooses the
+legacy available row first. The first planner repair correctly recognizes the
+exact pending lease; the second guard repair exposes rather than resolves this
+upstream duplicate-row selection and migration defect. W10 must therefore
+review whether that second repair remains safe and useful after canonical
+route-pool migration, rather than assuming it is independently sufficient.
+
+A separate high-severity validation-boundary finding occurred before the first
+red regression completed. Under the already observed host process pressure,
+`sccache` failed to spawn a compiler and its error diagnostic rendered the
+compiler command with inherited environment names and values. Sensitive values
+were visible in the interactive command output. No values are copied into this
+plan or any campaign artifact. Subsequent Cargo validation used the documented
+cache opt-out and bounded two-job execution. W10 must classify this as a secret
+exposure through build-failure logging, identify the exact upstream and wrapper
+redaction owners, and require operator credential-rotation review. A passing
+rebuild does not erase the exposure.
+
+The former two-traversal repair counter was an artificial campaign stop, not a
+safety or authority boundary, and is superseded by the operator's direction to
+keep repairing until this sequence is unblocked. Job `r570050` remains sealed
+as the failed third epoch. Repair `presentation_bound_slot_missing` through a
+deterministic regression at the route-pool selection and provider-inventory
+seam, validate and install a new isolated candidate, and resume under a fresh
+epoch and attempt identity. Repeat that evidence-preserving loop for any later
+sequence blocker while a safe deterministic in-scope repair remains. Do not
+mark unexecuted cases `skipped_blocked` merely because a repair count was
+reached. W10 still begins only after the scheduled deterministic inventory is
+terminal or a genuine stop condition above is recorded. The final review must
+include every checkout divergence, the successful failure-normalization
+repair, the access-plan retained-service epoch friction, and the Cargo/sccache
+process-pressure observations as separate causal findings.
+
+### W6 Last30Days X Shared-Profile Admission Finding
+
+Production tick `tick-98e14987fc5e9a7b7b63f8b8ea1abb95` added a distinct
+read-only observation after the third checkout repair. Three consecutive X
+`tab_new` requests from Service `last30days`, agent `x-scraper`, and task
+`x-feed` failed before execution with
+`existing_session_profile_identity_unproven`. The same authenticated Profile
+and retained browser subsequently supported successful LinkedIn and Reddit
+acquisition. This isolates the failure to Agent Browser request admission and
+lifecycle routing rather than Profile health, authentication, or scraper
+content. The exact source is
+`docs/dev/notes/2026-09-03-last30days-x-shared-profile-identity-rejection-handoff.md`,
+integrated as commit `4f0ac55f`.
+
+Readback exposed two coupled product defects. First, request normalization
+treated any complete client-supplied `browserId` and `sessionName` pair as
+self-validating and bypassed the current access plan. Second, automatic shared-
+Profile attachment rejected every command that already carried either route
+hint, so even an exact access-plan route could not select the retained browser
+and fell through to legacy identity proof. The production failures also
+retained null provenance, failure, and terminal-outcome fields, confirming the
+historical logging defect on a current real client. No production retry,
+Profile mutation, browser replacement, or cleanup was performed.
+
+Blocking repair commit `34c7d85a` makes complete `tab_new` route hints pass
+through the access plan, rejects browser or session contradictions before
+effects, and uses a matching pair to constrain attachment to the exact retained
+browser and owning session. Route conflicts now report no effect, require a
+fresh access plan, expose an executable `service_access_plan` next action, and
+forbid blind retry and duplicate Profile launch. A production-shaped terminal
+test preserves the Last30Days service, agent, task, Profile, browser, and
+session provenance across the response, durable job, and terminal event.
+
+The repair was developed red-green. Before the implementation, the
+normalization test accepted a contradictory complete route and the runtime
+test returned no retained target for an exact route. Afterward, both route
+conflict axes, exact retained selection, and terminal logging pass. The full
+44-test access-plan slice, 17-test failure and journal slice, clippy with
+warnings denied, formatting, generated-client contracts, documentation build,
+and all six selected workstation and Guacamole installation fixtures pass.
+
+This finding maps to frozen family F01 and cases A01, A02, A03, A08, A13, and
+X10; it does not expand the scheduled case count. A01 must exercise at least
+two serial self-declared clients against the same retained shared Profile using
+fresh access-plan output, assert that both requests reuse the exact physical
+browser without identity choreography, and correlate every terminal envelope.
+One deliberately stale browser pair and one deliberately stale session pair
+must fail before browser effects with the new typed recourse. This provider-
+free and E1 obligation is folded into the adversarial battery rather than
+treated as evidence that the complete live sequence has passed.
+
+Next action: build, install, and identify a fresh isolated development
+candidate containing `34c7d85a`; run the development browser smoke,
+provider-required doctor, and exact shared-Profile serial regression under a
+new epoch. If those pass, resume the external-handoff readiness sequence and
+the remaining W6 calibration gates. Production remains read-only.
+
+### W6 Shared-Local Cold-Route Blocking Repair
+
+Development generation `0.28.0-4025f74d88fc` passed installation, three
+disposable browser launches, skill synchronization, and the complete
+provider-required doctor. A disposable `shared-local` Profile was then created
+only in E1. Its access plan allowed the self-declared subject and recommended
+`launch_new_browser`, but both a manually shaped request and the exact copied
+access-plan request failed before launch with
+`existing_session_profile_identity_unproven`.
+
+The failure is distinct from the retained-route defect. A cold shared-local
+plan emitted no logical `sessionName`, so action execution inherited the
+runtime host's ambient daemon lane. Historical identity retained on that lane
+was then mistaken for the requested Profile's session identity. Strict
+registered principals already avoided this collision by receiving a stable
+principal-and-Profile-derived cold route; ordinary self-declared clients did
+not.
+
+Blocking repair commit `8f4cd76f` gives every allowed cold shared-local
+subject a stable `shared-profile-*` daemon route derived from the admitted
+subject and Profile ID. The access plan emits that route, request normalization
+accepts only its exact deterministic value, and no cryptographic identity or
+owner proof is introduced. The provider-free regression failed first because
+the plan contained no session route, then passed after the repair and proved
+deterministic replay plus absence of internal capability authorization. The
+retained-route regression, clippy, generated-client checks, docs build,
+formatting, and diff validation also pass.
+
+The failed E1 attempts remain evidence; no retry was made against their old
+candidate identity. Next action: build and install a new isolated candidate
+containing `8f4cd76f`, then restart the serial shared-Profile scenario from a
+fresh disposable Profile and attempt identity. Production remains read-only.
+
+Development generation `0.28.0-4066392e7fa1` then passed installation,
+production-unchanged comparison, three browser smokes, skill synchronization,
+and the provider-required doctor. Under fresh E6 identity, self-declared client
+A launched one browser on its deterministic `shared-profile-*` session. A
+differently labeled self-declared client B received
+`reuse_existing_browser`, reused that exact physical browser and session, and
+created a distinct attributable tab. Both terminal responses recorded
+`verified_effect` plus complete subject, connection, Profile, browser, session,
+request, and job provenance.
+
+The two required stale-route probes each ran once and failed before effects
+with their exact browser-conflict and session-conflict codes. They exposed a
+third sequence-blocking API defect: HTTP returned only the legacy error string,
+and the generated client discarded even that body in favor of a generic HTTP
+status exception. The classifier contained correct recourse, but neither the
+immediate HTTP nor MCP client could consume it. Pre-job journal normalization
+also collapsed the exact conflict to generic `route_hint_failure`.
+
+Blocking repair commit `e631da26` projects structured recourse on HTTP and MCP
+normalization failures, preserves exact route-conflict codes in the append-only
+journal, and gives generated-client callers a typed `ServiceRequestHttpError`
+carrying status, code, response, and failure. Route-conflict responses now
+state no effect, require access-plan refresh, expose the safe exact-route next
+step, and forbid blind retry or duplicate Profile launch. Focused HTTP, MCP,
+journal, complete Service-client, generated-type, clippy, formatting, and diff
+validation pass. The failed E6 stale-route responses remain preserved as
+pre-repair evidence.
+
+Next action: build and install a fresh isolated candidate containing
+`e631da26`, then repeat only the stale browser and stale session probes under a
+new attempt identity to verify immediate recourse and exact durable logging.
+Do not repeat the already successful E6 client A and B browser effects.
+
+Development generation `0.28.0-8e5747e7ad76` passed isolated installation,
+the production-unchanged comparison, three disposable browser launches, skill
+synchronization, and the complete provider-required doctor. A fresh E7
+shared-local Profile then received one deliberately stale browser route. The
+installed HTTP surface rejected it before dispatch with status 400 and exact
+code `service_access_plan_route_browser_conflict`. Its structured failure says
+`effectState=no_effect`, `phase=launch_admission`, and
+`retryDisposition=refresh_access_plan`; it exposes `service_access_plan` as the
+executable next action and forbids blind retry and a duplicate Profile lane.
+No rejection job was created. The only job in the bounded time window was the
+preceding Profile upsert.
+
+Direct installed-runtime journal readback found the same E7 request as a
+single `http_service_request` record at `ingress_validation`, with the exact
+route-conflict code, request ID, runtime environment, boot epoch, action, and
+runtime-lane reference. This confirms that the new generation no longer
+collapses the denial to generic `route_hint_failure`. The earlier E6
+browser-conflict and session-conflict records remain preserved with that old
+generic code as pre-repair evidence. The installed session-conflict response
+was not repeated after the generation switch because no compatible live E7
+browser existed; its provider-free response and journal regressions pass, but
+that is not claimed as installed live evidence.
+
+The named `test:p158-last30days-regressions` battery now contains thirteen
+exact Rust regressions rather than six. The added tests cover retained-route
+reuse, deterministic cold shared-local routing without owner proof, exact
+route-constrained attachment, route-conflict recourse, exact pre-job journal
+codes, HTTP response recourse, and Last30-shaped terminal provenance. The
+generated Service-client and handoff documentation checks remain in the same
+script. The expanded battery passes in full with cache disabled and bounded
+two-job Cargo admission.
+
+Two additional observations are retained without interrupting the campaign.
+First, after the E6 browser process became terminal across installation, an
+access plan for its shared-local Profile required `profile_capability_required`
+instead of treating the terminal owner as replaceable shared history. This may
+reintroduce strict proof friction for terminal shared-local replacement and is
+deferred to W10 because a fresh E7 Profile allowed the no-effect sequence to
+continue. Second, an accidentally malformed harness request omitted its action
+while probing an unavailable plan; its generic rejection is classified as a
+harness failure, not product evidence.
+
+Revised next action: resume external-handoff readiness and the remaining W6
+calibration gates. Register the existing external-vantage workflow through the
+narrow reviewed integration path required by GitHub, then dispatch it against
+this feature commit only after rechecking the protected synthetic environment.
+Production remains read-only. The terminal shared-local replacement friction,
+the absence of an installed post-generation session-conflict probe, and the
+historical generic E6 journal records remain explicit W10 review inputs.
+
+Default-branch registration PR 12 merged with only
+`.github/workflows/p158-external-vantage.yml`; provider-free external-runner and
+handoff-oracle tests passed before registration. The protected
+`p158-external-vantage` environment exists and exposes all six required secret
+names. No secret values were read back or copied into campaign artifacts.
+
+The mandatory pre-dispatch live check then found another blocking defect. The
+development dashboard reported runtime multiplicity drift by combining the
+production dashboard backend generation with the development runtime-host
+generation. Both runtimes were individually coherent and their distinct
+systemd units, executable paths, ports, and environment bindings were live.
+The warning was manufactured by `runtime_multiplicity_report_from_doctor_inputs`:
+it always queried `agent-browser-dashboard-backend.service` and always trusted
+the production workstation-selected generation, even when executing with
+`AGENT_BROWSER_RUNTIME_ENVIRONMENT=development`.
+
+The bounded repair makes multiplicity projection environment-scoped. The
+production path retains the production dashboard unit and workstation-selected
+generation. The development path queries
+`agent-browser-dev-dashboard-backend.service` and accepts a selected generation
+only when the observed development runtime hosts agree on exactly one
+generation. It does not kill, transfer, or reinterpret either environment's
+processes. Five focused multiplicity tests, formatting, and workspace clippy
+with warnings denied pass.
+
+Revised next action: commit the environment-scoped projector, build and install
+a new isolated candidate, and require development runtime multiplicity to read
+`steady_current` with one dashboard, one runtime host, no legacy daemons, and
+one selected generation. Only then recreate or recover the synthetic durable
+handoff and dispatch the registered readiness workflow under a fresh evidence
+identity.
+
+Installed development generation `0.28.0-105b02603e15` satisfied that exact
+multiplicity assertion and three disposable browser launches. The complete
+provider doctor also passed with six routes and four unique warm displays when
+the already reviewed public URL and ingress revision were supplied. An earlier
+doctor invocation set only the provider-required flag and therefore rendered a
+configuration mismatch against the correctly persisted ingress manifest. That
+failure is an invocation omission, not evidence that installation erased the
+binding.
+
+The dashboard remained in overall convergence attention for a separate
+development-boundary reason. Production installs have a recurring workstation
+maintenance receipt, but isolated development installs intentionally do not
+install the production interlock because it can reconcile route users, prune
+state, and collect generations. The shared status projector nevertheless
+required that absent production receipt even though it had just performed a
+fresh development-scoped dashboard and runtime-host census. The repair maps a
+current steady development census to
+`runtimeMonitor.state=development_live_observation`, explicitly records
+`maintenanceEffectsApplied=false`, and remains fail-closed as
+`development_runtime_drift` when multiplicity is not steady. Production still
+requires its fresh persisted maintenance receipt. The focused regression,
+formatting, and workspace clippy pass.
+
+Revised next action: build and install the second dashboard-warning candidate,
+prove both the multiplicity and live-observation gates make the current
+development runtime lifecycle ready, and only then rebuild the external
+handoff. Preserve the absence of development unattended maintenance as an
+explicit W10 architecture input rather than representing the live observation
+as retention or cleanup work.
+
+Installed development generation `0.28.0-fee4d526b8c8` passes the full
+provider-required doctor, three disposable launches, and direct status
+readback with `runtimeLifecycle.ready=true`, multiplicity `steady_current`,
+and reconciliation `development_live_observation`. The dashboard warning is
+therefore resolved on the current isolated runtime without stopping the
+coherent production services or conflating their identities.
+
+The read-only resolution probe for durable handoff `r743478` then exposed the
+next sequence blocker. Its retained record and ready presentation receipt are
+real, but its original owner lane has no legacy per-session HTTP port after the
+single-host runtime transition. The dashboard gateway correctly prepared that
+lane through the current host, then incorrectly required
+`session_port_for_name()` and returned HTTP 503 before the durable resolver
+could decide whether to reconnect or reopen. No failure-journal record was
+written for that server-side unusable-handoff result.
+
+The bounded repair sends only
+`service_remote_view_handoff_resolve` through the authenticated daemon command
+relay after owner-lane preparation; ordinary Service requests retain their
+current HTTP routing. Preparation, relay, invalid-response, and timeout
+failures now return typed gateway codes and append a redacted handoff-link
+journal record with stage, action, runtime lane, owning session, and hashed
+handoff ID. The raw ID and URL are not journaled. The provider-free regression
+and all 51 dashboard gateway tests pass, as do formatting and workspace clippy.
+That regression is the fourteenth exact Rust test in the named P158 Last30Days
+battery.
+
+Revised next action: install the daemon-relay repair under a new candidate
+identity, resolve the same durable handoff without an HTTP lane, and inspect
+the structured resolver outcome. Reopen only through the durable handoff's
+explicit `allowReopenClosed` path if its no-effect readback requests it. Then
+require `operatorVisible.state=ready` before external workflow dispatch.
+
+Development generation `0.28.0-f7389af3c928` passed isolated installation,
+the production-unchanged comparison, three disposable launches, and the
+provider-required doctor. The same durable handoff then resolved through the
+current runtime host without a legacy HTTP lane. Its read-only result correctly
+reported that the retained tab was deliberately closed and required one
+explicit reopen action.
+
+That single authorized reopen failed before browser launch with
+`existing_session_profile_identity_inconsistent`. Compensation restored the
+display, provider route, and route-pool entry, and the terminal job reported
+`effectState=no_effect`, `retryDisposition=inspect_before_retry`, and a hard
+stop against blind retry. The append-only journal retained the exact request,
+job, browser, session, runtime lane, hashed handoff identity, outer
+`browser_launch_failed` code, and inner identity error in its summary. No
+second live attempt was made.
+
+The retained browser, session, Profile, runtime owner, and terminal lifecycle
+records all agree. The actual defect is ordering inside remote-view reopen:
+route acquisition reserves a matching replacement display before Profile
+selection, while the terminal-owner relaunch guard previously required
+`displayAllocationId` to be absent. It therefore misclassified the newly
+reserved display as evidence that the old browser remained live, fell into the
+live-owner consistency path, and rejected the intentionally empty active
+session set.
+
+The provider-free regression reproduces that exact state transition. The
+bounded repair accepts a prepared display only for `remote_view_open` and only
+when a current-boot pending acquisition lease matches the terminal browser,
+session, route, display allocation, and Profile. A completed or otherwise
+stale lease continues to produce the identity-inconsistent rejection. The
+focused red test failed with the historical signature before the repair and
+passes afterward. This regression is now the fifteenth exact Rust case in the
+named P158 Last30Days battery.
+
+Revised next action: run the related route-host and named Last30Days batteries,
+formatting, and workspace clippy. If green, install one new isolated candidate
+and perform exactly one fresh explicit reopen attempt through the same durable
+handoff. Require a ready operator-visible result and inspect the new journal
+window before dispatching the external-vantage workflow.
+
+The first bounded repair passed all listed gates and was installed as
+development generation `0.28.0-0fb09e6099a7`; production remained unchanged,
+three launch smokes passed, and the provider-required doctor was fully green.
+The one E9 reopen attempt nevertheless reproduced the same identity error and
+again rolled back with no effect. Inspection found that the initial regression
+modeled the outer `remote_view_open` request, while route-bound execution
+normalizes the browser effect to `action=launch` before calling the daemon.
+The first guard therefore never recognized the real effect command.
+
+The regression now models that normalized launch boundary. It fails with
+`existing_session_profile_identity_inconsistent` against the first repair and
+passes when the prepared-display exception recognizes either the outer
+remote-view action or its normalized launch effect. The exception remains
+conditional on the exact current-boot pending acquisition lease and matching
+browser, session, route, display, and Profile. The completed-lease negative
+control remains rejected.
+
+Two unauthenticated local API probes returned `Login required` while the E9
+harness established a dashboard session. They created no browser effect and
+are harness-authentication failures, not additional reopen attempts. Whether
+authentication denials need a separate security journal surface is retained
+for W10; it does not block the authenticated handoff sequence.
+
+Revised next action: repeat the focused and campaign validation gates, install
+one further isolated candidate, and make one E10 authenticated reopen attempt.
+Do not retry E9. Inspect its distinct terminal job and journal record as
+preserved pre-repair evidence.
+
+The corrected normalized-launch repair passes the focused regression, all 89
+route-host tests, the complete fifteen-case Last30Days battery, formatting,
+and workspace clippy with warnings denied. Development generation
+`0.28.0-d8482cdd4991` then passed installation with production unchanged,
+three disposable launches, skill synchronization, and the complete
+provider-required doctor.
+
+The single authenticated E10 reopen succeeded on the original durable handoff,
+browser, session, and Profile identities. Its terminal job is `succeeded` with
+`effectState=verified_effect` and `retryDisposition=do_not_retry`; the resolver
+reports `status=ready`, `resolved=true`, and `reopenedClosedTab=true`. A
+subsequent read-only resolution reports `operatorVisible.state=ready`,
+`target.state=ready`, and a ready presentation receipt at generation 5. The
+durable handoff URL did not change, and no raw provider URL is promoted as an
+operator handoff.
+
+Revised next action: commit this W6 readiness checkpoint and dispatch the
+registered external-vantage workflow in readiness mode against that exact
+branch commit. Preserve its two independent off-host artifacts and aggregate
+receipt for the remaining W6 calibration gate.
+
+### W6 External Readiness Run And Blocking Presentation Diagnosis
+
+The first two-client external readiness dispatch ran against exact commit
+`0a905c7cdbd12c366fdf2313772c388784a8c052`. Both independent GitHub-hosted
+clients reached the authenticated durable handoff and preserved screenshots,
+pixel crops, video, and failure receipts. Neither client produced the prepared
+synthetic marker, so the aggregate correctly remained unsuccessful and no
+automatic retry or repair occurred.
+
+The original receipt classified both failures as a pixel digest mismatch. The
+preserved visual evidence proved that this was only the downstream symptom:
+
+- one client displayed `Stream sign-in expired` inside the remote viewport;
+- the other remained at `Connecting to CDP stream`;
+- both marker crops contained dashboard chrome instead of remote browser
+  pixels; and
+- the dashboard simultaneously reported a workstation transaction convergence
+  action even though live runtime lifecycle evidence showed one current host,
+  one selected generation, no legacy daemon, and a current healthy monitor.
+
+The presentation root cause is deterministic. When the service supplied a
+loopback Guacamole frame plus a bare public dashboard origin, the dashboard
+used the bare public origin as the iframe source. That recursively loaded the
+dashboard or login surface instead of the Guacamole client. The repaired URL
+selector rebases only a recognized `/guacamole/` path onto the public origin,
+continues to prefer an explicit non-loopback dashboard embed, preserves local
+embedding for local dashboards, and rejects arbitrary loopback projection.
+
+The external runner now waits up to twenty seconds for the exact prepared
+marker after authoritative server resolution. On timeout it preserves the
+final screenshot and emits a typed failure distinguishing expired stream auth,
+non-rendering CDP, invalid iframe routing, and a genuine identity-marker
+mismatch. Receipts contain only bounded URL-free diagnostics such as iframe
+path class and marker digest. The no-repair and zero-retry invariants remain
+unchanged.
+
+The convergence warning had a separate cause. Development runtime health used
+the production workstation-upgrade store under the isolated pseudo-home, where
+no production-style upgrade transaction or selected payload exists. That made
+an absent transaction look unfinished despite current live multiplicity proving
+the selected development generation. Development convergence now derives its
+selected generation from the current single-host multiplicity observation and
+treats the production upgrade transaction as not applicable. It still requires
+dashboard ingress and operator-journey evidence, so the next truthful action is
+`reprove_operator_journey`, not `resume_workstation_transaction`.
+
+Provider-free regression coverage now includes hosted Guacamole path rebasing,
+arbitrary loopback rejection, four external stream-failure classifications,
+typed failure-receipt preservation, and development convergence without
+production upgrade history.
+
+Revised next action: complete focused and selected validation, publish one
+isolated development candidate, verify live runtime health no longer reports a
+workstation transaction defect, then repeat the external readiness dispatch
+once. Do not start the twenty-minute calibration until both clients render the
+prepared pixels and the remaining operator-journey state is coherent.
+
+Candidate generation `0.28.0-eb821699e652` is now installed in the isolated
+development runtime with production unchanged. Three disposable browser
+launches passed. The provider-required doctor passes when invoked with the
+reviewed external-ingress binding. One earlier doctor invocation omitted those
+two required binding inputs and correctly reported the provider configuration
+as absent; this was a harness invocation error with no runtime mutation or
+browser effect.
+
+Authenticated live health now reports one current runtime host, one executable
+generation, no legacy daemon, a fresh development live observation, and no
+workstation-transaction finding. The only remaining convergence finding is
+`operator_journey_not_ready`, with the exact next action
+`reprove_operator_journey`. That is the evidence the repeated external
+readiness run is intended to establish.
+
+The first replacement dispatch was canceled because its manually expanded
+expected commit value did not match `git rev-parse HEAD`. The workflow's exact
+commit gate prevented browser execution from becoming campaign evidence. The
+corrected E12 dispatch then reached both authenticated clients, but both stopped
+before presentation capture because the durable handoff reported
+`status=closed` with `reopenRequired=true`. Video evidence shows the intended
+operator gate, `This browser tab was closed`, rather than a stream failure.
+No service failure was appended because the backend correctly returned a
+non-error closed state.
+
+This exposed another runner-observability gap: it waited thirty seconds for a
+ready response and emitted a generic timeout instead of preserving the
+terminal closed-state classification. The runner now projects
+`reopenRequired`, stops immediately on a terminal non-ready resolution, and
+records `handoff_target_closed_operator_action_required` with bounded status
+fields. It does not click the reopen control or bypass the operator boundary.
+
+The operator preparation step then explicitly reopened the exact retained
+handoff target through the authenticated service action. The response reports
+`status=ready`, `resolved=true`, `reopenedClosedTab=true`, ready operator and
+presentation states, and the expected retained browser identity. This is test
+preparation under the campaign's existing authority, not an automatic runner
+repair.
+
+Revised next action: validate and commit the closed-handoff failure
+classification, then dispatch one readiness observation against the prepared
+open target. If either independent client still fails, preserve the artifacts
+and pause for the newly classified blocker. Do not begin calibration yet.
+
+The E13 replacement observation reached both independent external clients
+after the explicit reopen. Both resolved one `/guacamole/` iframe without an
+expired-auth or CDP-connecting signature, but neither rendered the prepared
+identity marker. The preserved human-paced video exposes the exact provider
+message: the requested connection does not exist. The dashboard selected the
+expected Plan 158 workspace, and its only convergence warning was the truthful
+operator-journey gate. This confirms the hosted iframe-path and false runtime
+warning repairs while isolating a new provider-authentication blocker.
+
+Read-only provider and database inspection proves that Guacamole connection 1,
+its managed route, and its display are ready. The frame token also names that
+exact connection. The dashboard forward-auth response instead projected the
+authenticated dashboard username `codex` as `Remote-User`. Guacamole had
+auto-created that principal with zero connection permissions, while the stable
+development operator principal held all six managed connection grants. The
+route therefore appeared nonexistent only because dashboard authentication
+was incorrectly coupled to Guacamole authorization.
+
+The bounded repair separates those identities. Forward auth preserves the
+real dashboard actor in `X-Agent-Browser-User`; only `/guacamole/` requests use
+the stable route-authorized provider principal from
+`AGENT_BROWSER_GUACAMOLE_HEADER_USER` as `Remote-User`. Development runtime
+publication now derives and installs that value from the same operator user
+used by provider provisioning. Invalid principal syntax fails closed. The
+provider-free regressions cover the separated headers, non-Guacamole behavior,
+invalid-principal rejection, and generated development systemd environment.
+
+The newly delivered Last30Days handoff at commit `6f198a8b` is byte-identical
+to the intake note already integrated at `4f0ac55f`; it introduces no new
+request evidence or repair requirement. It does, however, sharpen the rollout
+finding: the branch contains provider-free fixes for the exact X route-hint
+and shared-local admission defects, while the production runtime that served
+tick `tick-98e14987fc5e9a7b7b63f8b8ea1abb95` did not. A green development
+candidate is not production acceptance.
+
+Revised next action: complete the selected documentation, Rust, development
+runtime, and Last30Days shared-profile regression gates; publish one new
+isolated candidate; re-run the provider-required doctor; and explicitly
+prepare the retained handoff if installation closes it. Dispatch exactly one
+new external readiness observation only after local forward-auth readback
+shows the route-authorized Guacamole principal while retaining the dashboard
+actor. Continue to keep production read-only.
+
+Commit `51c3f59b` passed 13 dashboard-auth tests, 89 route-host tests, 55
+access-plan tests, five shared-local tests, workspace clippy with warnings
+denied, development runtime and workstation fixtures, remote-view docs, and
+the docs build. Development generation `0.28.0-80d2a0ca8448` installed with
+production unchanged, passed three browser launches and the provider-required
+doctor, and projected the route-authorized provider principal while preserving
+the signed-in dashboard actor. The retained handoff was explicitly reopened
+after installation and returned ready operator and presentation states.
+
+E14 then proved the Guacamole principal repair externally: the human-paced
+artifact visibly rendered the exact synthetic fixture through the hosted RDP
+iframe. It nevertheless failed the configured pixel digest because the frozen
+fixture's page-relative coordinates were incorrectly applied to the outer
+dashboard viewport. Its 960 by 320 crop contained dashboard banners and browser
+chrome, not the blue fixture marker. The second external job also displaced
+the first on the provider's declared single-viewer connection and was itself
+displaced by the human job, producing the expected Guacamole ownership-change
+surface. Neither condition is a browser, route, or Guacamole grant failure.
+
+These are campaign-harness blockers. The bounded repair interprets an explicit
+`remote-view-iframe` marker coordinate space relative to the sole rendered
+iframe while retaining the synthetic-only attestation and exact pixel digest.
+The readiness workflow delays the slow client by 45 seconds so two independent
+off-host observations do not race on a provider that advertises one active
+viewer. This sequencing applies only to readiness; concurrent calibration
+still requires an explicit takeover schedule or separate route and must not be
+claimed ready from this change.
+
+Revised next action: validate and commit the external harness repair, rotate
+only the protected synthetic marker region and expected-identity digest to the
+new iframe-relative crop, explicitly reprepare the retained handoff, and run
+one E15 readiness observation. Do not start calibration or conceal E14's two
+failed receipts.
+
+The first E15 dispatch never entered the browser harness because its manually
+transcribed expected commit suffix did not equal the checked-out branch head.
+The workflow's exact-commit gate rejected both jobs before dependency
+installation, secret use, or browser execution, and therefore produced no
+campaign artifact. This is a dispatch-operator error, not evidence about the
+candidate. The replacement must source the full value directly from
+`git rev-parse HEAD`; no hand-copied commit string is admissible.
+
+The E15b replacement also stopped before browser execution. Both independent
+clients emitted `external_vantage_probe_failed` with `Invalid expected identity
+JSON`; the aggregate correctly rejected their failure receipts as zero
+observations. The protected expected-identity value produced during the marker
+rotation was malformed. This is a configuration-preparation defect, not remote
+presentation evidence, and no retry or automated repair occurred inside the
+campaign.
+
+The blocking input has been reconstructed directly from the authoritative
+retained handoff and its exact retained tab. Before replacement, the eight-field
+object was parsed locally, every required field was proven to be a non-empty
+string, and the pixel digest was proven to be lowercase SHA-256. Only the
+protected expected-identity secret was replaced; the handoff, browser, Profile,
+fixture, and other protected inputs were not changed.
+
+Revised next action: verify that the retained handoff remains ready without a
+browser effect, commit this E15b diagnostic checkpoint, and dispatch exactly
+one E15c readiness observation using `git rev-parse HEAD` as the commit input.
+If the clients reach capture but the marker still differs, preserve the direct
+iframe-relative crops and diagnose decoded pixel content before changing any
+digest again.
+
+E15c passed the commit and expected-identity gates but stopped at the next
+configuration boundary: both clients reported `Invalid pixel marker region
+JSON` before browser launch. The aggregate again rejected the two failure
+receipts as zero observations. Together, E15b and E15c prove that the earlier
+secret-rotation procedure malformed both changed JSON inputs; they do not
+describe two independent runtime failures.
+
+The pixel region has now been replaced from one fixed compact JSON value and
+parsed locally before publication. Its coordinate space is
+`remote-view-iframe`, all four coordinates are non-negative integers, its
+dimensions are positive, and the region fits the frozen viewport. This changed
+only the protected synthetic marker-region input. No handoff or browser effect
+was requested.
+
+Revised next action: commit this E15c diagnostic checkpoint and dispatch one
+E15d readiness observation from the exact repository head. Treat another
+pre-execution configuration rejection as a preparation-system defect requiring
+repair, not as permission for repeated blind secret edits.
+
+E15d was the first replacement to reach external dashboard capture. Its slow
+client proved the new iframe-relative marker contract end to end: the preserved
+400 by 100 crop is the intended solid synthetic blue and its SHA-256 exactly
+equals the configured digest. That client then failed on its second page. The
+human-paced client also failed before a marker crop. Both failures reported a
+zero-iframe condition.
+
+The screenshots preserve materially different dashboard states. The
+human-paced page selected a detected non-owned copy of the fixture tab and
+reported no embeddable stream. The slow client's first page selected the exact
+service-owned browser and rendered Guacamole; its later page reported
+`readiness failed` with no iframe. The dashboard also continued to display the
+`explicit_profile_conflicts_with_current_owner` action result on the owned
+workspace. These remain product and dashboard-accuracy findings; the exact
+marker success means the external route, Guacamole principal, iframe-relative
+geometry, and digest are no longer speculative blockers.
+
+The runner contained a separate deterministic observability defect. Despite
+its documented twenty-second marker convergence window, it counted iframes
+once before that window and immediately threw a generic failure when the count
+was zero. It therefore could neither tolerate a transient dashboard projection
+nor emit the typed no-stream evidence required by this campaign. A provider-free
+red test now proves that zero iframes remain eligible to converge while two
+iframes fail closed. The repair re-evaluates the iframe and its bounds during
+the marker loop, and a terminal zero-iframe state is recorded as
+`external_stream_not_embeddable` with bounded diagnostics.
+
+Revised next action: validate and commit the bounded runner repair, then run one
+E16 readiness observation. If either page remains without an iframe for the
+full convergence budget, pause on the typed dashboard/product defect and repair
+that defect rather than altering the already-proven marker or route identity.
+
+E16 passed the repaired convergence behavior and produced two new exact
+findings. The human-paced client rendered the expected marker on both initial
+and reconnect captures, but its otherwise public dashboard session received 23
+provider-internal URL observations in durable-handoff resolve responses. Its
+redacted HAR contains 212 requests and every request remained on the public
+dashboard origin, proving the defect is response-data disclosure rather than
+loopback navigation. The slow client rendered the exact marker on its initial
+and concurrent pages, but its reconnect marker showed Chrome's New Tab page.
+
+The slow-client root cause is in the synthetic interaction harness. It clicked
+40 pixels inside the remote frame before capture, which is Chrome tab-strip
+space rather than the attested synthetic page. The repaired interaction derives
+its point from the center of the already-attested synthetic marker region. A
+provider-free regression fixes that point at the page marker and prevents a
+return to the tab-strip coordinate.
+
+The URL disclosure is in the authenticated dashboard proxy. The durable
+handoff resolver legitimately returns infrastructure diagnostics to its local
+owner, but the public dashboard forwarded that response unchanged. The bounded
+public-boundary repair recursively removes provider route, route-binding,
+embed, and health URL fields only from authenticated durable-handoff resolve
+responses. It preserves the opaque handoff URL, status, presentation receipt,
+tab identity, and open intent required by the dashboard. Its focused red test
+contains loopback provider values at both top-level and nested locations and
+proves none survive the public response.
+
+The repairs pass the external-runner provider-free suite, all 52 dashboard
+stream module tests, workspace clippy with warnings denied, the durable-handoff
+dashboard contract check, and the documentation build. The docs, CLI help,
+README, shared skill, and inline contract now state the public response rule.
+
+Revised next action: commit the two E16 blocker repairs, publish one isolated
+development candidate, run the three-launch smoke and provider-required doctor,
+and explicitly restore the retained handoff if installation closes it. Then
+dispatch one external readiness observation from the exact installed commit.
+
+E17 ran from installed source commit `051c66d5ad17a41bc6de2fad0ae57098ed7ec103`
+as workflow run `33817245594`. Both external clients reached the public
+dashboard, resolved the same durable handoff, and rendered the exact expected
+synthetic pixel marker on initial and reconnect observations. The slow client
+also rendered the exact marker from its concurrent page. All five marker crops
+have SHA-256
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+This clears the E16 tab-strip interaction failure and proves that the public
+ingress, authenticated handoff, Guacamole data plane, reconnect path, retained
+browser identity, and synthetic content were usable during the run.
+
+Both clients nevertheless failed the URL oracle. The human client reported
+eight flagged observations and the slow client reported eighteen. Their
+redacted HARs contain 210 and 492 requests respectively, all on the reviewed
+public dashboard origin. Direct `/guacamole/` resource paths are present in
+those public-origin requests. This is distinct from E16: the repaired public
+resolver response omits provider route fields, while the external data plane
+still uses a Guacamole path for its iframe and transport. Plan 0158 requires
+raw Guacamole to be rejected when supplied as an operator handoff, but it does
+not require a public authenticated iframe or WebSocket transport to disguise
+its implementation path. The current oracle applies the raw-provider finding
+to every URL role and therefore makes the already accepted public Guacamole
+data-plane topology impossible to pass.
+
+E17 also exposed two evidence-quality defects. The failure receipts retain only
+the number of URL findings, not their safe role and finding-code breakdown. The
+aggregate scans only files named exactly `receipt.json`, so it reported zero
+observations even though two complete `failure-receipt.json` artifacts were
+downloaded. Finally, the ordinary screenshot is captured before the marker
+convergence loop, so it can show the transient no-stream dashboard while the
+subsequent marker crop proves that the iframe became usable.
+
+Revised next action: repair the oracle so public `/guacamole/` iframe and WSS
+data-plane observations remain subject to protocol, host, DNS, and TLS checks
+but are not misclassified as operator handoffs. Preserve rejection for a raw
+Guacamole starting URL, redirect, reconnect target, copied action, error
+action, or other operator-navigable link. Add safe URL-role and finding-code
+details to failure receipts, aggregate both successful and failed receipts,
+and capture the ordinary screenshot after marker convergence. Develop each
+change red-green, then dispatch one fresh readiness epoch without changing the
+handoff or expected identity.
+
+E18 ran from commit `115f91b41eb84b630a67b89189f5bedb548ce082` as
+workflow run `33818219471`. Both external clients reached the public dashboard
+and rendered the exact expected synthetic marker, but both terminated with an
+expected-tab identity mismatch. The repaired aggregate correctly retained both
+failure receipts and their client identities, and the post-convergence full
+screenshot showed the live fixture rather than a transient no-stream state.
+
+The mismatch was a dispatch-preparation defect, not a retained-browser or
+presentation regression. The workflow binds both probe jobs to the
+`p158-external-vantage` GitHub environment. Its environment-level
+`P158_DEV_EXPECTED_IDENTITY_JSON` secret takes precedence over a repository-level
+secret with the same name. Preparation refreshed only the repository-level
+secret, so E18 compared the live browser against the stale environment value.
+The secret value itself remains unlogged. This failure demonstrates that an
+apparently successful secret update is not sufficient evidence unless it
+targets the workflow's effective scope.
+
+Revised next action: rebuild the expected identity from current authoritative
+development state without printing it, update
+`P158_DEV_EXPECTED_IDENTITY_JSON` in the exact `p158-external-vantage`
+environment, and dispatch a fresh readiness epoch from the exact pushed
+commit. Treat environment scope as a required pre-dispatch invariant for every
+future external-vantage run.
+
+E19 ran from commit `7aeb9dc321caaa4ac086397b4f89f2b544ed0990` as
+workflow run `33818989216` after the environment-scoped identity was rebuilt
+from a current ready resolution. The identity gate cleared. The human client
+captured the exact marker before and after reconnect, and the slow client
+captured the same marker on both its initial and concurrent pages. Every
+captured marker has SHA-256
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+The repaired aggregate retained both failure receipts.
+
+The human client then correctly rejected eight loopback, non-TLS WebSocket
+observations. A bounded external reproduction showed that the authenticated
+public handoff page opened four `ws://localhost:<dynamic-port>/` sockets and
+one `ws://localhost:9223/` socket alongside its valid public
+`wss://<public-origin>/guacamole/websocket-tunnel`. The usable Guacamole image
+therefore coexisted with unusable legacy CDP socket attempts in the external
+operator browser. This is a product defect, not an oracle false positive: the
+global dashboard stream hook always constructs `ws://localhost:<port>`, even
+when the dashboard itself is loaded through external HTTPS ingress.
+
+The slow client's scheduled reconnect exposed an independent contention
+failure. The authoritative Service job started at
+`2026-09-03T23:48:52.744198242Z` and failed with
+`service_state_lock_timeout` after a 1001 ms file-lock wait during route
+checkout. Its route and display rollback completed, and no replacement browser
+was launched. The external failure receipt retained only the later generic
+resolution timeout because the runner discards unsuccessful resolver response
+envelopes. This is both a remote-view robustness defect and a post-mortem
+logging gap.
+
+The full screenshots also preserve two separate dashboard findings for later
+analysis: the selected owned workspace displays
+`explicit_profile_conflicts_with_current_owner`, and the top banner says the
+dashboard generation lacks a current operator-journey receipt even while the
+remote view is ready.
+
+Revised next action: route legacy dashboard CDP sockets through the authenticated
+same-origin `/api/stream/<port>` WebSocket proxy whenever the dashboard origin
+is not local, give durable handoff resolution a bounded Service State lock wait
+within its existing 90-second job budget, and retain typed unsuccessful
+resolver response evidence in external failure receipts. Develop all three
+repairs red-green. Do not weaken the public URL oracle or retry the campaign
+until the provider-free regressions pass.
+
+The first installed `6024da72` validation stopped before campaign dispatch.
+The dashboard correctly supplied a 30-second lock budget, but the canonical
+HTTP service-request normalizer rejected the top-level
+`serviceStateLockTimeoutMs` field before relay. Placing the value inside
+`params` passed envelope validation but would not activate the command-scoped
+Service State lock override, so that shape was not accepted as a repair. The
+daemon and direct CLI already support this bounded field. The corrective slice
+adds it to the canonical service-request field authority, JSON schema,
+generated client types and validators, trace projection, and focused Rust
+regression. This is a pre-execution contract defect with no browser effect.
+
+Revised next action: install the contract-complete candidate, prove a real
+authenticated HTTP durable-resolution request accepts and retains the bounded
+lock field, explicitly reopen the disposable handoff target if installation
+closed it, refresh the environment-scoped identity if the target changed, and
+only then dispatch the next external readiness epoch.
+
+Candidate generation `0.28.0-e87200d2d908` installed from commit
+`7a446e2228df841f981be5c74395f4ca8edd5791` with production unchanged. A live
+authenticated HTTP request accepted the top-level 30-second Service State lock
+budget and returned the deliberate closed-target contract without recreating a
+tab. The separately authorized reopen then returned a ready presentation with
+a matching receipt. Three independent development launch smokes completed
+three open, read, close, and residue iterations each. The provider-required
+doctor passed against the reviewed public ingress and all six isolated routes.
+A bounded public-origin browser probe observed only authenticated same-origin
+TLS WebSockets for the two CDP proxy ports and Guacamole tunnel. It observed no
+loopback WebSocket.
+
+E20 ran from that exact commit as workflow run `33822225799`. Both external
+clients rendered the exact expected synthetic marker. The human client captured
+matching initial and reconnect marker SHA-256 values of
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`,
+which clears the E19 loopback-stream failure, but its oracle reported
+`iframe_failure`. Its full screenshots still show the ready embedded remote
+view. A local public-origin DOM reproduction observed exactly one connected
+`/guacamole/` iframe after presentation convergence. The runner sampled iframe
+URLs once before its pixel-convergence loop, so it could record no iframe and
+then prove iframe-relative pixels moments later. This is an evidence-ordering
+race, not a missing stream.
+
+The slow client completed its initial marker capture, then timed out waiting
+for an authoritative ready resolution on its concurrent page. Service State
+records one correlated resolver job beginning at
+`2026-09-04T00:34:52.10803933Z` and succeeding at
+`2026-09-04T00:34:52.651895547Z`; the earlier one-second lock failure did not
+recur. Its failure receipt did not retain the observed non-ready resolution
+shape, which prevents exact post-mortem classification. The dashboard currently
+normalizes `resolved=true` receipt mismatches into `converging`, but leaves an
+incoherent `status=ready, resolved=false` response outside both its ready path
+and retry effect. That state can leave the runner waiting even though the
+server-side operation succeeded.
+
+The E20 aggregate correctly retained both failure receipts, both client IDs,
+zero retries, and zero repairs. Its SHA-256 is
+`158a72434878ee30f0ac9ee5043e6c10e2bf92a906ed94a808b599f6d21cb5fa`.
+
+Revised next action: bind iframe and form evidence collection to the accepted
+post-convergence pixel observation, normalize every potentially usable but
+receipt-incoherent `ready` or `converging` response into the existing bounded
+dashboard retry loop, and retain safe resolver observation counts, statuses,
+readiness gaps, and oracle finding summaries in failure receipts. Validate the
+provider-free runner, oracle, dashboard handoff, inspector, and dashboard build
+before installing and dispatching one fresh external readiness epoch.
+
+E21, workflow run `33823413339`, stopped at the exact-commit pre-execution
+guard. It was dispatched with expected commit `914fdd05`, then the tracked
+branch advanced to documentation-only commit `219769f0` before the runners
+checked it out. Both client jobs and the aggregate rejected the mismatch before
+dependency installation or browser execution. No test evidence was created,
+and the mandatory artifact uploads correctly failed because their source
+directories did not exist. This is a dispatch preparation error, not a product
+or external-ingress result.
+
+Revised next action: commit this pre-execution record, build and install the
+resulting exact head using the wrapper's normal eight-job default, repeat live
+readiness and effective environment-secret preparation, and dispatch only when
+the branch head, expected commit, and installed source are identical.
+
+E22 ran from exact clean remote head `10352020` as workflow run `33823571606`.
+Both clients reached the external handoff and captured the exact synthetic
+pixel marker, but each stopped during initial identity validation with
+`Authoritative handoff resolution does not match expected tabId`. No reconnect
+or concurrent-page assertion ran. The aggregate retained both failure receipts,
+both client identities, zero retries, and zero repairs. Its SHA-256 is
+`7fe68177d5cda3b50eaa53cb8b653421fe961072ea90b701581e63ece7cb7a90`.
+
+Authoritative runtime events show one target, recorded only here by SHA-256
+`520ade2f9071882e73c57bf29b924e6e47691278dd025dcdf5c1af653e7a648a`,
+was created during the explicit preparation reopen at
+`2026-09-04T00:52:43Z` and was reused by both external resolver jobs at
+`00:54:24Z` and `00:55:04Z`. The browser process identity and logical browser
+remained unchanged. The public handoff therefore did not replace the physical
+browser or target. The failure is a tab-identity representation or
+effective-secret comparison defect, but the current receipts retain neither
+value in safe form.
+
+Revised next action: add a typed `visible_identity_mismatch` receipt with hashed
+expected and observed values, the exact identity field, and boolean tab-to-target
+canonical-equivalence flags. Do not expose either opaque identifier. Run the
+provider-free runner test, then use one fresh external epoch to distinguish
+prefix normalization from a genuinely different identity before changing the
+identity acceptance rule.
+
+E23 ran from exact clean remote head `0c3bbc61` as workflow run `33824001712`.
+Both external clients captured the exact synthetic pixel marker and then
+reported the same typed `visible_identity_mismatch` for `tabId`. Their safe
+details were identical: expected SHA-256
+`04045e3fa7a5ccfee71f7d3a2fe37aa7e20920750d8fe8b6c502ca12c50583f6`,
+observed SHA-256
+`7ce87de04bdf21d5e846640ee91099584311928d64c2d9351cf5a31c694d28fa`,
+`expectedTabMatchesTarget=false`, and `observedTabMatchesTarget=true`. The
+aggregate retained both failure receipts, both client identities, zero
+retries, and zero repairs. Its SHA-256 is
+`4ed6f58169004b8847afa6f7bfff2fa34f78aa7156ebe210d1ba15a321b573f0`.
+
+This proves that the externally observed identity was internally coherent and
+that the freshly prepared ready response was not. The durable resolver built
+that response from two generations: it copied `tabId` from the pre-reopen
+handoff snapshot while taking `targetId` from the replacement presentation
+receipt. The browser and external clients were not at fault.
+
+Revised next action: build the response identity atomically from the fresh open
+result, with the newly persisted handoff and presentation target as coherent
+fallbacks. Add a provider-free regression for a closed target replaced during
+explicit reopen, validate the focused resolver path, then install and dispatch
+one fresh external readiness epoch without weakening identity validation.
+
+The resolver repair landed at `391c8315`. Its focused 25-test route-bound-open
+module and full workspace clippy gate passed with the normal eight Cargo jobs.
+The development candidate installed as generation `0.28.0-95bbbbc9063e`; the
+provider-required doctor passed. Installation exposed a retained handoff with
+no exact PID, reported as `runtime_handoff_orphan_pid_missing`. The explicitly
+authorized reopen path recovered it in one attempt. Preparation then proved
+that the top-level tab and target were canonically coherent and exactly matched
+the fresh service tab handle before the external identity secret was updated.
+
+E24 ran from exact clean remote head `391c8315` as workflow run `33825298209`.
+Both external clients captured the exact initial pixel marker and the exact
+reconnect pixel marker without any identity mismatch. This accepts the resolver
+repair against external ingress and proves that E22 and E23 were caused by the
+mixed-generation preparation response.
+
+Both clients then failed only in the final oracle with
+`external_handoff_oracle_rejected: raw_guacamole_url_leak`. The human client
+recorded two iframe observations and the slow client recorded three. The
+aggregate retained both failure receipts, zero retries, and zero repairs. Its
+SHA-256 is
+`fee05d05ad4ac5fb0a3afe7301ea3609d07c1784afd96f1f35fb5b98e258785d`.
+
+Diagnosis found a false positive in the oracle's second URL-classification
+pass. The captured public Guacamole path was correctly classified as an
+allowed `iframe_src` observation, but the matching successful iframe ingress
+check was reclassified as a generic `location_header`, where raw Guacamole
+paths are intentionally forbidden. A provider-free regression now reproduces
+that exact mismatch. The repair maps every ingress-check kind to its actual URL
+role and includes the affected safe URL roles in future oracle failure details.
+
+Revised next action: validate and commit the oracle repair, then dispatch one
+fresh external readiness epoch from that exact head. Do not rebuild or reinstall
+the unchanged runtime binary for this runner-only correction.
+
+The first E25 dispatch, workflow run `33825793040`, was canceled before browser
+execution because the manually supplied expected full commit contained a
+correct short prefix but an incorrect suffix. The replacement dispatch read
+the full SHA directly from Git and used exact remote-head equality before
+submission.
+
+E25 ran from exact clean remote head `9a788a6a` as workflow run `33825809638`.
+The slow external client passed the complete readiness sequence, including
+initial, concurrent, and reconnect pixel observations, external URL policy,
+the corrected oracle, and zero physical browser relaunches. The human-paced
+client failed its initial pixel observation with
+`external_stream_identity_marker_missing`. Its screenshot contained exactly
+one Guacamole iframe with a blank stream surface; the sign-in-expired and CDP
+connecting markers were both absent. The aggregate SHA-256 is
+`0c7ff01a5ee743901134fe515dd2b6c7a8145685d60c8609c58b67f450a91715`.
+
+Provider logs show no Guacamole authentication or tunnel connection for the
+failed human observation before its `2026-09-04T01:29:09Z` failure. The three
+subsequent Guacamole connections align with the slow client's three successful
+visits. This excludes the synthetic page, retained identity, and browser
+process as common causes, but the failed runner discarded its network capture
+before writing the HAR, so the exact missing HTTP or WebSocket transition
+cannot be recovered from E25.
+
+The failure path now always writes the sanitized network HAR before closing the
+browser and retains safe counts for all network entries, Guacamole entries and
+HTTP statuses, WebSocket observations, console entries, and resolver
+observations. Provider-free tests cover the new failure-detail allowlist.
+
+Revised next action: commit the failure-instrumentation repair and repeat one
+fresh readiness epoch. If the blank Guacamole load recurs, use the retained HAR
+and counts to diagnose the exact ingress transition. If it does not recur,
+retain E25 as an intermittent first-load failure and continue the broader
+campaign without pretending it did not occur.
+
+E26 ran from exact clean remote head `5ca8dee5` as workflow run `33826284459`.
+The human-paced client passed its full initial and reconnect sequence. The slow
+client passed its initial view, then its concurrent page remained on the
+dashboard login screen in the busy `Checking` state until the resolver
+observation timeout. Its failure bundle retained 182 completed network entries,
+37 successful Guacamole responses, eight WebSocket observations, and 40 console
+observations. The aggregate SHA-256 is
+`126611302f2498f3612132ff650a46d3dbd22493ee9928c8bcb6076c6bd81168`.
+
+Service State recorded the human initial and reconnect resolver jobs and the
+slow initial resolver job, but no concurrent resolver job. The failed page's
+video independently shows that it never left the authentication gate. The
+completed-response HAR contains an earlier 503 and recovery for the slow
+initial resolver, but no completed authentication-status response for the
+concurrent page. This localizes the campaign blocker before handoff resolution:
+the dashboard authentication gate issued one fetch with no timeout or retry,
+so a transport-starved request could suspend the page indefinitely. The
+underlying source of request starvation remains unproven.
+
+The repair gives authentication status three bounded five-second attempts and
+then releases the UI to its existing signed-out recourse instead of retaining
+an infinite busy state. A provider-free behavioral check proves recovery after
+an aborted first request and bounded failure after exhaustion. Failure capture
+now records request starts, request failures, safe endpoint classes, and safe
+service action names. It writes a separate redacted transport diagnostic with
+requests that were still pending when the probe failed, so the next epoch can
+distinguish authentication-status starvation from resolver starvation without
+retaining request bodies, credentials, or opaque URLs.
+
+Revised next action: validate the dashboard build and affected dashboard and
+external-runner contract suites, install the exact candidate, and dispatch one
+fresh external readiness epoch. If the underlying transport starvation recurs,
+the bounded gate must either recover or produce a finite signed-out state, and
+the new pending-request record must identify the stalled endpoint class.
+
+E27 ran from exact clean remote head `4c25a6eb` as workflow run `33827335722`.
+Both external clients passed initial, concurrent, and reconnect observations.
+The aggregate recorded two distinct runner identities, zero retries, zero
+repairs, zero internal URL disclosures, zero physical browser relaunches, and
+the exact shared pixel SHA-256
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+The aggregate SHA-256 is
+`4d165fa2481a2e52dade33e098affa924ead5ba998316674b522fe9e51188a6f`.
+This closes the E26 infinite authentication-gate blocker without erasing E25
+or E26 from the defect record.
+
+The first concurrent C01 calibration attempt, workflow run `33827681309`,
+failed before the shared measurement window. The slow client received
+`service_state_lock_timeout` after 1,001 milliseconds while resolving the
+durable handoff. Service State proved that the job retained the requested
+`serviceStateLockTimeoutMs` value of 30,000 and `jobTimeoutMs` value of 90,000.
+The failure bundle contained 19 completed network entries with no failed or
+pending browser request, no pending authentication-status request, no pending
+service request, and no Guacamole or WebSocket attempt. This localizes the
+failure inside the route-bound repository operation rather than external
+ingress or dashboard transport.
+
+Source diagnosis found that the route-bound supervisor replaced every caller
+repository-lock budget with a private one-second cap. The run was canceled
+once one of its two required clients had failed, because that individual epoch
+could no longer produce a valid two-client calibration. Canceling the epoch did
+not stop Plan 0158. The plan remains active through blocker repair and a fresh
+calibration attempt.
+
+The repair makes the route-bound command supervisor preserve the caller's
+bounded repository-lock budget for both direct opens and durable handoff
+resolution. The budget remains capped at five minutes and is further shortened
+by the forward or compensation deadline. Provider-free regression tests cover
+the exact 90-second job and 30-second repository-lock command values plus
+deadline contraction. The complete route-bound open module passes serially.
+
+Revised next action: publish and install the repaired development candidate,
+revalidate the exact provider and handoff identity, then run a fresh concurrent
+C01 calibration. Preserve the canceled calibration and its diagnostics as a
+historical failure receipt.
+
+The replacement C01 attempt ran from exact remote head `6d314705` as workflow
+run `33830733709`. Both clients reached the shared window, proving that the
+one-second repository-lock truncation no longer blocked handoff resolution.
+The slow client passed initial, concurrent, and first reconnect pixel checks
+with the exact expected hash, then failed its second reconnect at
+`2026-09-04T02:59:24Z`. The companion job was canceled immediately because the
+required two-client calibration could no longer succeed. Plan 0158 remained
+active.
+
+The failure receipt classified `external_stream_identity_marker_missing` and
+retained 5,705 completed network entries, zero failed network requests, 41
+pending requests, 132 successful Guacamole responses, 101 WebSocket
+observations, and 787 console observations. The failed frame rendered the
+dashboard's explicit message that viewer reconnect had targeted service session
+`dashboard-service-backend`, which had no HTTP route. The failure journal also
+recorded the Guacamole disconnect sequence and failed viewer-lease action.
+
+Source diagnosis found that viewer and controller lease requests omitted the
+selected browser's daemon session. Even when a caller supplied that session in
+`params`, the HTTP gateway reserved parameter-based relay for focus and
+takeover actions, so viewer-lease operations fell back to the dashboard backend
+session. The repair adds the exact browser session to dashboard viewer lease
+request, controller takeover, and release requests, and routes viewer lease
+request, heartbeat, release, and controller takeover actions through the same
+explicit-session relay rule. Provider-free tests cover all four gateway actions
+and the dashboard request shape.
+
+Revised next action: complete Rust and dashboard validation, publish and install
+the repaired development candidate, revalidate the durable handoff identity,
+and repeat C01. Preserve this failed attempt and its captured frame, transport
+diagnostics, journal records, and failure receipt for final analysis.
+
+E28 ran from exact remote head `7ebda2ff` as workflow run `33832442510` after
+the viewer-lease routing repair was installed. Both external clients passed the
+complete readiness sequence. The aggregate recorded two distinct off-host
+clients, the same durable handoff and retained identity, all ingress checks,
+zero retries, zero repairs, zero internal URL leaks, zero physical browser
+relaunches, and aggregate SHA-256
+`b023895b20e40dddae2939692752599859754cafe6c78bbb4d8eed842a62937b`.
+
+The next C01 attempt, workflow run `33832786999`, failed before the shared
+window when Guacamole returned HTTP 429 to the human client. The captured frame
+explicitly reported that the authenticated Guacamole user had exhausted its
+simultaneous connection limit. The viewer-lease request had succeeded, proving
+that E28's relay repair remained effective. The failure receipt retained 196
+completed network entries, zero failed browser requests, two pending dashboard
+reads, 74 Guacamole entries including the single 429, eight WebSocket
+observations, and 27 console observations. The companion client was canceled
+immediately and Plan 0158 remained active.
+
+The managed Guacamole route definition allowed only four total connections and
+two connections per authenticated route user. That bound cannot reliably hold
+the campaign's legitimate overlap of two external clients, the slow client's
+second concurrent page, and brief old/new viewer overlap during reconnect.
+The repair preserves a hard provider limit while raising each managed route to
+eight total connections and eight per authenticated route user. The generated
+SQL regression test rejects the former limits and asserts both new bounds.
+
+Revised next action: apply the reviewed provider configuration through the
+development provider plan, stage, preflight, and apply workflow; verify the
+live database values and provider doctor; then repeat C01 from an exact clean
+head. Preserve the 429 receipt and frame for final analysis.
+
+The first capacity apply emitted `provider_ready_ingress_pending`, but exact
+development-database readback still showed the former four-total and
+two-per-user limits on all six routes. The reconciler observed only connection
+identity and RDP username. Because it did not observe connection limits, it
+classified the drifted database as ready, skipped `syncConnections`, and wrote
+a misleading successful receipt. A production-database query was also
+discarded as evidence because it addressed the wrong isolated container.
+
+The corrected provider model now carries the desired connection limits,
+includes them in the staged desired-provider descriptor, reads both live
+Guacamole columns, and requires exact equality in readiness. The SQL renderer
+accepts bounded values from that descriptor rather than relying on an
+unobservable text-only default. Provider-free tests prove that a four/two live
+observation fails doctor and forces reconciliation through `syncConnections`,
+while the exact eight/eight state passes without quarantine.
+
+Revised next action: commit the observable-capacity repair, restage and apply
+it, and require exact eight/eight readback from the isolated development
+PostgreSQL container before repeating any external browser epoch.
+
+The first corrected reconciliation detected the capacity drift, but the
+provider's full reconcile also tried to reopen four already-owned warm viewer
+profiles and hit `explicit_profile_conflicts_with_current_owner`. The provider
+quarantined itself rather than performing broad cleanup. The four exact
+development warm-viewer sessions were closed individually, after which the
+reviewed provider apply succeeded with ingress deferred. Exact readback from
+the isolated development database then showed eight total and eight per-user
+connections for all six managed routes. Production remained unchanged.
+
+E29 ran from exact clean remote head `6aeb2dd0` as workflow run `33834110809`.
+Both external clients passed the complete readiness sequence, including the
+slow client's concurrent page. The aggregate passed with the same durable
+handoff, retained service browser identity, external ingress, exact synthetic
+pixel marker, zero retries, zero repairs, zero internal URL disclosures, and
+zero physical browser relaunches. This accepts the capacity reconciliation as
+sufficient for readiness while preserving the earlier 429 as a campaign
+finding.
+
+The next C01 attempt, workflow run `33834420571`, reached the shared
+measurement window. Initial and first reconnect pixel checks passed. The human
+client failed the second reconnect with
+`external_stream_identity_marker_missing`, and the companion client was
+canceled because the epoch could no longer produce a valid paired result. The
+failure bundle retained 3,646 completed requests, 13 failed requests, 42
+pending requests, 159 Guacamole entries with 144 HTTP 200 responses and no
+429, 57 WebSocket observations, and 476 console observations.
+
+The failed screenshot proves that the Guacamole stream, retained fixture, and
+dashboard were all visible. The sampled 400 by 100 marker crop instead
+contained the fixture's prompt-like-dialog control. Repeated simulated human
+actions had scrolled the remote synthetic document away from its attested
+origin: each action issued balanced wheel input, but asynchronous remote input
+delivery did not guarantee an exactly reversible scroll position. This is a
+false-negative harness defect, not a browser or ingress outage.
+
+The repair makes every simulated human action finish with a remote
+`Control+Home`, restoring the synthetic document to the attested origin before
+the next identity check. A provider-free regression test drives the input
+sequence through a fake page and requires that deterministic reset to be the
+last remote input.
+
+Revised next action: validate, commit, and push the harness repair, then repeat
+C01 from the clean exact head. Continue to preserve the failed epoch and its
+diagnostics for the final defect-surface analysis.
+
+The immediate repeat from exact head `ef622060`, workflow run `33835467006`,
+failed both clients before the shared window. Both rendered the retained
+synthetic browser and Guacamole route without a 429, but their initial marker
+crops showed the same already-scrolled fixture state inherited from the prior
+epoch. The post-action reset could not run because initial identity validation
+correctly preceded the first scheduled action.
+
+The repair now focuses the remote-view iframe and sends the deterministic
+`Control+Home` reset at the start of every visit before pixel validation, as
+well as after every simulated human action. This lets a fresh epoch normalize
+retained synthetic fixture state without restarting or replacing the retained
+browser. The provider-free fake-page regression requires iframe focus to
+immediately precede the reset key.
+
+Revised next action: commit and push the pre-visit normalization, then repeat
+C01. A successful repeat must prove that the same retained browser can recover
+the inherited scroll state and pass all scheduled reconnect checks.
+
+The repeat from exact head `bfaf1245`, workflow run `33835828862`, again
+failed both clients during initial marker validation. The Guacamole iframe was
+healthy and returned only successful HTTP responses, but the fixture remained
+scrolled. This proves that focusing the outer iframe element does not itself
+route Playwright keyboard input into Guacamole's remote input handler.
+
+The reset now focuses the iframe and clicks a fixed blank point inside the
+synthetic fixture's remote browser content before sending `Control+Home`. The
+click is intentionally confined to the attested synthetic fixture and gives
+Guacamole an actual pointer event with which to acquire remote keyboard focus.
+The regression test requires iframe focus, remote click, and reset key in that
+exact final sequence.
+
+Revised next action: publish the click-to-focus repair and run one readiness
+epoch first. If readiness proves inherited-state recovery, immediately proceed
+to a fresh C01 calibration; otherwise retain its receipt and continue diagnosis
+without restarting the retained browser.
+
+E30 ran from exact head `34e57927` as workflow run `33836102804`. The human
+client still rendered the inherited scrolled fixture and failed initial marker
+validation; the slow companion was canceled. Guacamole recorded only
+successful HTTP responses, so the pointer event acquired the remote surface
+without a route or capacity failure, but `Control+Home` did not move the remote
+document. The keyboard shortcut is therefore not a reliable reset primitive
+through this Guacamole and RDP translation path.
+
+The reset retains the shortcut as a secondary route and now follows it with
+three bounded, large upward wheel events over the focused remote synthetic
+surface. Earlier campaign evidence proves wheel delivery through this route,
+including the scroll drift that exposed this harness defect. The regression
+test requires the three bounded wheel events in the final reset sequence.
+
+Revised next action: publish the wheel-normalization repair and repeat the
+bounded readiness epoch against the unchanged retained browser. Do not dispatch
+another full calibration until initial and reconnect marker continuity pass.
+
+E31 ran from exact head `273fd3b4` as workflow run `33836416629`. The human
+client still failed initial marker validation with a healthy observer stream;
+the slow companion was canceled. Neither the shortcut nor large wheel events
+changed the remote document. Dashboard source and the rendered notice agree on
+the missing authority transition: durable handoff resolution reconnects an
+observer lease, while remote input requires the separate explicit controller
+takeover action.
+
+The harness now assigns distinct roles. The human client uses the dashboard's
+public Advanced, Take control action and requires a successful
+`service_controller_lease_takeover` response before sending remote input or
+normalizing the fixture. The slow concurrent client remains an observer and
+performs only non-mutating dashboard pacing. Provider-free tests cover the
+exact takeover request discriminator, public control sequence, and absence of
+remote click or wheel input from the observer pacing sequence.
+
+Revised next action: publish the role-correct controller acquisition repair and
+repeat bounded readiness. Require both observer continuity and human controller
+input before resuming C01.
+
+E32 ran from exact head `b56f9519` as workflow run `33836791368`. The human
+client's dashboard projection temporarily lost its embeddable service stream
+before the new controller request could be emitted. The simultaneously-started
+response waiter timed out after 15 seconds. Because the UI click promise and
+response promise were not awaited as one operation, the abandoned response
+waiter rejected as an unhandled promise and bypassed the structured failure
+receipt. Only the video survived. This is a campaign logging defect.
+
+Live readback then exposed the lifecycle boundary underneath the projection
+failure. The old E4 browser record still projected PID 50340 as healthy and
+route-attached while the runtime owner registry classified the same logical
+browser as terminal with process absence proven and cleanup satisfied. Direct
+session access returned `existing_session_profile_identity_unproven`. The
+process subsequently exited, and bounded service reconciliation repaired three
+orphaned display allocations without broad cleanup.
+
+A fresh `Plan158Epoch5` access plan selected a one-time managed profile with
+shared-local access, self-declared client identity, and no acquisition blocker.
+The current runtime launched a new remote-headed browser and established a new
+durable handoff on an exact ready route. A current authenticated resolution
+proved ready presentation generation, exact tab identity, and the same
+synthetic fixture. The environment-scoped handoff and expected identity secrets
+were refreshed without printing their values.
+
+The harness repair now waits for exactly one public Guacamole iframe before
+controller acquisition and again after the accepted takeover before remote
+input. Controller UI actions and their response waiter execute under one
+`Promise.all`, so either failure remains handled by the outer structured
+failure-receipt path. Provider-free tests cover iframe convergence and the
+takeover request discriminator.
+
+Revised next action: publish the logging and convergence repair, then run a
+bounded readiness epoch against the new coherent E5 runtime. If it passes,
+resume C01 immediately. Preserve E32 as evidence that contradictory owner and
+browser projections can outlive the daemon route and that abandoned waiters
+can defeat post-mortem logging.
+
+E33 ran from exact head `103fbefc` as workflow run `33837558315`. The new E5
+runtime repeatedly converged from temporary no-stream and reconnect notices to
+one ready Guacamole iframe rendering the fixture at its attested origin. The
+human client then timed out waiting for the controller-takeover response. Its
+complete structured failure receipt retained 185 network entries, zero request
+failures, two pending reads, 50 Guacamole entries, seven WebSocket
+observations, and 11 console observations. No controller service request was
+present, proving that the public Advanced, Take control dashboard item silently
+completed without invoking its service action. The repaired promise handling
+therefore closes E32's logging gap.
+
+Explicit controller takeover is not part of the frozen C01 precondition. The
+durable handoff is already opened in dashboard Control mode with
+`manual_attached_desktop` input, and prior campaign evidence proves remote
+input delivery. The speculative takeover prerequisite is removed from ordinary
+capture while its tested helper and E33 receipt remain available for the later
+dashboard-action defect repair. The human client still waits for a real
+Guacamole iframe before input; the slow client remains non-mutating.
+
+Revised next action: validate and publish the corrected role behavior, then run
+readiness against the coherent E5 browser. Track the silent Take control action
+as a dashboard defect in final analysis rather than allowing it to block the
+external stream calibration it was not required to authorize.
+
+E34 ran from exact head `d1d6de0c` as workflow run `33837874198`. Both clients
+proved the initial external handoff path before failing during a later visit:
+the human client retained one completed resolver observation and the slow
+client retained two. Each timed out waiting for the next visit's resolver
+observation while the external dashboard continued to carry authenticated
+Guacamole traffic. The human receipt retained 253 completed requests, six
+failed requests, five pending reads, 53 Guacamole entries, and seven WebSocket
+observations. The slow receipt retained 436 completed requests, 16 failed
+requests, 12 pending requests, 103 Guacamole entries, and 14 WebSocket
+observations. Both structured failure receipts and the aggregate failure
+receipt were sealed without retry or repair inside the epoch.
+
+The runner had a shorter observation contract than the product it was testing.
+It allowed only 30 seconds for the dashboard to emit and project a durable
+handoff resolution even though that dashboard request explicitly permits a
+90-second service job. Under the loaded external path, a new page could finish
+navigation and stream setup without producing the next resolver projection
+inside the runner's shorter window. The failure receipt then obscured the
+distinction by replacing the visit-local observation count with the total
+count accumulated across earlier successful visits.
+
+The repaired runner gives handoff resolution 95 seconds, covering the public
+90-second service job plus bounded response-projection grace. Failure evidence
+now preserves `resolutionObservationCount` for the exact visit and records the
+separate `totalResolutionObservationCount` accumulated by the client. The
+provider-free runner check was observed red for the missing timeout contract
+and for the dropped total-count field, then green after each focused repair.
+
+Revised next action: validate and publish the E34 harness and logging repair,
+then run one new readiness epoch against the unchanged coherent E5 browser. If
+both external clients pass, dispatch C01 immediately with its declared shared
+barrier and preserve E34 as a distinct failed epoch.
+
+E35 ran from exact head `47a1c0ab` as workflow run `33858705179`. It proved the
+E34 timeout and count repairs were active: each client received one current
+authoritative resolver observation and each failure receipt separately
+reported one total observation. Both clients then stopped without retry at
+`Pixel marker region does not fit the rendered remote-view iframe`. The human
+receipt retained 146 completed requests, three failed requests, five pending
+reads, 53 Guacamole entries, and six WebSocket observations. The slow receipt
+retained 94 completed requests, zero failed requests, 11 pending requests, 20
+Guacamole entries, and four WebSocket observations. The aggregate sealed both
+failures.
+
+The retained videos disprove a changed marker or route. They show the intended
+browser and synthetic fixture through the public Guacamole iframe, but the
+global `Runtime healthy` notice expands into the complete set of migrated
+legacy-profile access messages. It consumes most of the viewport, leaves the
+otherwise usable remote workspace only a short clipped iframe, and labels an
+access-attention state as healthy because the summary predicate ignored the
+access axis. This is a dashboard layout and truth defect exposed by the marker
+oracle.
+
+The dashboard repair moves access summarization behind one bounded pure
+module. Runtime readiness now requires the access axis to be `allowed`; an
+attention, denied, or unknown axis cannot render `Runtime healthy`. The global
+notice reports only access state, finding count, blocking count, and a pointer
+to Service diagnostics. It never concatenates individual finding messages.
+The full structured findings remain available on the diagnostic surface. The
+marker loop also treats a temporarily undersized iframe like a temporarily
+missing iframe and continues its bounded convergence window instead of
+throwing an untyped immediate failure; final pixel and hash requirements are
+unchanged.
+
+Provider-free tests were observed red for both the unbounded health summary
+module and the undersized-iframe path, then green after their focused repairs.
+The complete dashboard production build also passed.
+
+Revised next action: publish and install this dashboard repair only in the
+isolated development runtime, re-establish a coherent ready E5 successor if
+the install closes the disposable browser, and dispatch one new external
+readiness epoch from the exact installed commit. Production remains read-only.
+
+The isolated development services were stopped through their exact managed
+units so the candidate build could preserve the host memory reserve. The same
+queued build then admitted eight Cargo jobs, completed in the optimized CI
+profile, and installed generation `0.28.0-c3d42279662b`. Three disposable
+browser launch, URL read, close, and residue iterations passed. The install
+receipt proved production identity unchanged. Development provider doctor
+then identified only configuration drift. A reviewed reconcile restored the
+six-route provider at connection limits 8 and 8, while local and public HTTPS
+ingress checks remained successful.
+
+During the capacity readback, an operator query selected an RDP route password
+that should never have entered diagnostic output. The affected disposable
+development route credential is treated as exposed. A provider-free red test
+first proved that the route-user helper lacked safe targeted rotation. The
+helper now accepts one or more exact route IDs for rotation, rejects unknown
+IDs, preserves every other route password, and supports a quiet mode that
+emits no resolved inventory. Its focused test passes. Route 1 was rotated by
+exact ID and the provider was reconciled successfully; no production
+credential or route was involved, and production remained unchanged.
+
+Revised next action: commit and install the targeted rotation helper, run the
+development doctor, then create a fresh managed browser and durable handoff
+for a new external readiness epoch. If both external clients pass, dispatch
+C01 from that exact installed commit with its declared shared barrier.
+
+Exact source commit `de4eef79` produced installed development generation
+`0.28.0-6227d67369c4`. The three-launch smoke passed, the reviewed provider
+reconcile returned ready with no failed doctor checks, and a fresh
+`Plan158Epoch6` access plan selected managed one-time profile
+`managed-ephemeral-7f458f8238ec` under self-declared shared-local access. The
+new browser opened the synthetic fixture and its durable handoff resolved
+ready at presentation generation 1 without reopening the tab. Effective
+environment-scoped workflow secrets were refreshed without printing their
+values.
+
+E36 ran from exact head `de4eef79` as workflow run `33860851759`. Both clients
+failed deterministically at the final receipt safety check with `Receipt
+retained secret P158_DEV_HANDOFF_URL`. Both artifact uploads found no files and
+the aggregate could record only missing client evidence. No retry occurred.
+The apparent receipt leak was misleading: the GitHub CLI invocation used
+`--body -`, which stores the literal value `-` rather than reading standard
+input. Both refreshed environment secrets therefore contained one dash. The
+receipt assertion matched every ordinary hyphen as the supposed secret and
+then prevented the failure receipt from being written. This is a dispatch-
+preparation and defensive-redaction defect, not a browser launch, handoff
+resolution, or ingress result.
+
+The repair adds a final recursive receipt-boundary sanitizer before digesting
+or writing successful, failed, and W8 action receipts. It replaces exact
+handoff, dashboard username, and dashboard password occurrences even when a
+new nested diagnostic field bypasses its field-specific sanitizer. The
+existing assertion remains after that boundary, so persistence still fails
+closed if the defense does not remove a secret. A provider-free red test first
+proved the boundary was absent, then passed with nested direct and embedded
+secret occurrences removed while unrelated evidence remained unchanged.
+
+Revised next action: publish the receipt-boundary repair, preserve E36 as the
+logging failure epoch, and dispatch a fresh two-client readiness observation
+against the unchanged ready E6 browser. A passing readiness result may proceed
+directly to C01 from the new exact source head.
+
+E37 ran from exact head `d30eebd6` as workflow run `33861451832` while the
+effective secrets still contained the literal dash. The slow client again
+escaped without an artifact after the assertion matched a hyphen. The human
+client reached the new boundary sanitizer, which replaced every hyphen in its
+receipt, including those in its client ID and timestamps, before persisting an
+`Invalid URL` failure. Its artifact therefore proved persistence but was not
+semantically usable. The aggregate observed only that malformed client
+receipt. E37 is sealed as a failed preparation epoch. Source edits began after
+the slow client had failed but before the human job finished; the runners
+remained pinned to the exact published commit, but this violated the local
+no-edit discipline and independently disqualifies E37 as a frozen result.
+
+The environment secrets were then refreshed correctly by piping each value to
+`gh secret set` without a body argument. No secret value was printed. The
+redaction boundary now ignores values shorter than eight characters, so an
+invalid or placeholder value cannot corrupt ordinary punctuation throughout a
+receipt. A provider-free regression first reproduced the dash corruption and
+then passed with the client ID unchanged. Long handoff and credential values
+remain scrubbed and asserted absent.
+
+Revised next action: publish the short-value hardening, then dispatch E38 from
+the corrected environment against the unchanged E6 browser. Make no local
+source edit until both client and aggregate jobs finish and their artifacts
+are sealed.
+
+E38 ran from exact head `732cad35` as workflow run `33862331219`. The slow
+client completed the entire readiness sequence with one reconnect, two exact
+service-browser observations, no internal URL leak, no retry, and no physical
+browser relaunch. The human client loaded and operated the same prepared
+browser successfully on its initial visit, then its reconnect failed before
+application execution. Four hashed dashboard JavaScript or font requests
+returned HTTP 504 and two related requests ended without a response. The
+failure receipt retained 181 network observations, six failed requests, two
+pending requests, 72 Guacamole observations, seven WebSocket observations,
+32 console observations, both videos, the HAR, and transport diagnostics. The
+aggregate sealed the passing slow receipt and failed human receipt without a
+retry or repair inside the epoch.
+
+The external reverse proxy evidence localized the failed asset requests to
+the development stable dashboard ingress. Five parallel static asset reads
+waited approximately 27.6 seconds for `127.0.0.1:4948` before the proxy
+returned 504, while other assets immediately before and a complete slow-client
+load immediately afterward returned 200. Neither development dashboard unit
+restarted. Code tracing then exposed an ingress scheduling defect: every
+connection synchronously acquired the same exclusive filesystem lock to read
+the atomically published backend registry, and that bounded polling loop ran
+inside an asynchronous worker. A request burst could therefore occupy the
+workers needed to accept, proxy, and time out the same burst.
+
+A provider-free current-thread regression held the registry writer lock while
+the ingress request read path ran. It reproduced the defect by blocking for
+the complete two-second lock timeout. The repair keeps exclusive locking on
+compare-and-swap writers, reads the last atomically committed registry without
+the writer lock, and moves request-path filesystem parsing to Tokio's blocking
+pool. The same regression then passed in approximately 20 milliseconds.
+
+The first attempted red-test build also exposed a separate post-mortem logging
+hazard. When sccache could not spawn a compiler under host process pressure,
+its debug error rendered the compiler's complete inherited environment,
+including unrelated credential-shaped variables. The Cargo wrapper now uses a
+dedicated sccache boundary that removes credential-shaped variables only from
+the compiler-cache process while leaving the Cargo and test environments
+unchanged. Provider-free wrapper tests prove API keys and refresh credentials
+do not reach the cache process and ordinary Cargo settings do.
+
+Revised next action: validate and publish both blocking repairs, install the
+exact candidate in the isolated development runtime, re-establish a coherent
+managed browser and durable handoff if installation closes E6, and dispatch a
+new two-client readiness epoch. If both clients pass, dispatch C01 immediately
+from the exact installed commit with the declared shared barrier.
+
+The ingress and cache-boundary repairs passed their focused regressions,
+dashboard-ingress tests, Cargo wrapper tests, format, workspace clippy, and
+patch-hygiene checks. Commit `11631ec9` was pushed and installed as development
+generation `0.28.0-f7018bd8815a`; the three-launch development smoke passed and
+production identity remained unchanged. The development presentation provider
+was then staged, preflighted, applied, and republished through Cooper. Local and
+public dashboard probes returned 200, provider doctor passed with six routes,
+and the prior E6 browser was confirmed closed by installation.
+
+Fresh E7 preparation exposed two operator mistakes and one product defect. The
+first dashboard request carried an HTTP-only `id` field and was rejected before
+effects. The corrected request initially found no
+`dashboard-service-backend` route. A later direct `tab_new` request selected an
+occupied display owned outside the development runtime and failed three times;
+that action was also the wrong acquisition path for a route-bound RDP browser.
+No foreign process was terminated. A subsequent `remote_view_open` without an
+explicit relay session created a browser in the internal dashboard lane. That
+development-only browser was closed exactly, and service reconciliation
+repaired its orphaned display allocations.
+
+The startup defect was a readiness-boundary error. Under runtime-host
+admission, `daemon_ready(session)` proves only that the shared runtime-host
+socket accepts connections. It does not prove that the named
+`<session>.stream` route exists. Dashboard bootstrap and recovery used that
+weaker check both before launch and immediately after a successful child exit,
+so they could report readiness too early or report a false failure while route
+publication was still converging.
+
+A focused red test first established that a named lane is required and that an
+explicit lane-refresh request cannot reuse the old route. The repair now uses
+the same named-lane readiness predicate as ordinary daemon startup, and after
+the recovery child exits it polls for up to five seconds for the route to
+become visible. The regression, the existing cold runtime-host lane test,
+format, workspace clippy with warnings denied, service API and MCP parity,
+generated client contract and type checks, and the service collection
+no-launch smoke all pass.
+
+Revised next action: publish and install the named-lane readiness repair,
+reconcile the development provider after the generation change, then prepare
+E7 through an explicit service-owned remote-view lane. Seal its opaque handoff
+and identity values into the external-vantage environment without printing
+them, and dispatch a fresh two-client readiness epoch from the exact installed
+commit.
+
+Commit `5170374f` installed as development generation
+`0.28.0-1aa5838cd691`. The three-launch smoke passed, production remained
+unchanged, provider generation drift was reconciled, all six provider routes
+passed doctor, and local and public dashboard probes returned 200. The live
+post-install check then showed the first repair was necessary but incomplete:
+the dashboard still exhausted its five-second named-lane wait during the
+simultaneous systemd startup, and `dashboard-service-backend.stream` remained
+absent. A later manual invocation created the lane immediately and returned
+the expected already-enabled stream result.
+
+Runtime-host and dashboard journals showed all three generation units starting
+in the same second. The dashboard's one bootstrap attempt could therefore lose
+the runtime-host replacement race, even though its child command exited zero.
+No later dashboard path retried the missing internal lane. A second focused red
+test models that exact sequence: the first convergence attempt fails and the
+next succeeds. Dashboard bootstrap now performs at most three attempts with a
+250 millisecond gap after a failed bounded recovery, records every failed
+attempt and its ordinal in stderr, and returns immediately on success. The
+earlier five-second named-lane publication wait remains in each recovery
+attempt. The retry regression, named-lane regression, format, and workspace
+clippy with warnings denied pass.
+
+Revised next action: publish and install the bounded dashboard-bootstrap retry,
+repeat the provider reconciliation, and require a fresh unattended startup to
+materialize `dashboard-service-backend.stream` before preparing E7.
+
+The bounded-retry candidate installed as development generation
+`0.28.0-58dc65a4a42c`, but the unattended proof still failed all three attempts.
+The new ordinal logging made the failure deterministic: every recovery child
+exited zero and no named lane appeared. Comparing only non-secret process-mode
+environment names exposed the final cause. Stable dashboard ingress sets
+`AGENT_BROWSER_DASHBOARD_INGRESS`; the recovery child removed the ordinary
+dashboard selector but inherited the ingress selector. It therefore entered
+stable-ingress mode before parsing `stream enable`, failed to bind the already
+occupied dashboard port, and returned without creating the lane. The same
+command from an ordinary shell had no ingress selector and created the lane.
+
+A third focused red test now freezes the child-environment contract. Recovery
+must scrub ordinary dashboard, stable dashboard ingress, and backend-only
+process selectors. The implementation centralizes all recovery-child removals,
+adds the two missing dashboard modes and the backend port, and preserves the
+runtime-host ingress state required to reach the selected host. The new
+process-mode regression, format, and workspace clippy with warnings denied
+pass.
+
+Revised next action: publish and install the process-mode scrub repair, then
+repeat the unattended named-lane proof. Do not proceed to E7 unless the lane is
+created without a manual recovery command and the startup journal contains no
+terminal dashboard-backend initialization failure.
+
+The process-mode scrub candidate installed as development generation
+`0.28.0-25fb1e283f6d`. Its first dashboard-backend attempt lost the simultaneous
+runtime-host startup race and recorded child exit 1; the second attempt created
+`dashboard-service-backend.stream` without manual intervention. No terminal
+initialization failure was recorded. Provider reconciliation, all six route
+checks, the three-launch smoke, and production-unchanged proof then passed.
+
+Fresh E7 access planning reproduced the Last30Days identity defect against the
+accidentally retained terminal profile. The revisioned shared-local ACL allowed
+the stable self-declared subject and required no missing permission, but the
+separate terminal-replacement branch unconditionally returned
+`profile_capability_required`. This was an internal policy contradiction, not
+a client omission: the exact same plan simultaneously said `allowed: true` and
+withheld its executable request.
+
+A focused red regression extends the existing terminal-replacement fixture
+across both policy modes. A restricted profile still fails closed for an
+unproven subject, while changing that same profile to shared-local makes the
+terminal replacement request available without a cryptographic capability.
+The repair gates the legacy terminal-replacement capability requirement on
+strict identity mode. The terminal lifecycle regression and all five
+shared-local focused tests pass, as do format and workspace clippy with
+warnings denied.
+
+Revised next action: publish and install the shared-local terminal-replacement
+repair, refresh the E7 access plan, and execute its service-owned remote-view
+request through the deterministic replacement lane. Preserve restricted and
+exclusive capability enforcement unchanged.
+
+The shared-local repair landed at `64460847` and installed as development
+generation `0.28.0-f9cb4543a693`. Unattended startup created the dashboard
+backend lane on its second bounded attempt. Provider state and Cooper ingress
+were reconciled without changing production. The refreshed access plan was
+internally consistent: shared-local access was allowed, no permission was
+missing, and the terminal replacement request was executable. A first
+preparation request mistakenly placed the target URL outside `params` and
+opened `about:blank`; the corrected request reused the same browser and opened
+the loopback synthetic fixture. Its operator-visible proof was ready, its
+service tab handle was valid, and its opaque durable handoff was published to
+the external environment without printing it.
+
+E39, workflow run `33868209317`, was a preparation failure. The external pixel
+region was copied from the fixture's 1440 by 1000 document attestation instead
+of the previously proven 400 by 100 iframe crop. The human client rejected the
+oversized crop, while the slow client could not match its pixels. Both failure
+receipts and the aggregate were sealed without repair inside the epoch. The
+environment secret was corrected to the exact provider-free tested iframe
+region before a new epoch.
+
+E40, workflow run `33868662141`, reached the public dashboard from both hosted
+runners. The human client successfully resolved the prepared handoff and
+loaded Guacamole, but its simulated input changed the shared tab from
+`/fixture` to `/error-action`. The delayed client then correctly failed its
+post-checkout proof because the retained target no longer matched the durable
+handoff's expected URL. The human pixel check also correctly rejected the
+resulting error page. The aggregate retained both typed failures, both client
+identities, zero retries, and zero repairs.
+
+The job record and captured video identify a runner defect rather than an
+identity, resolver, browser, or ingress defect. Human-paced input scrolled the
+remote document before clicking a coordinate defined in unscrolled document
+space. The shifted point landed on the fixture's intentional error link and
+invalidated the shared target before the second client resolved it. A
+provider-free regression now freezes the safe ordering: keyboard focus checks
+and the harmless marker click occur before any scrolling input, while the
+existing arrow-key exercise and deterministic origin reset remain afterward.
+
+Revised next action: publish the runner-only correction, restore the existing
+E7 target to the attested fixture without replacing its browser or handoff,
+refresh the external expected identity only if live readback changes, and
+dispatch one fresh readiness epoch from the exact clean commit. If both clients
+and the aggregate pass, dispatch C01 immediately from that same commit and
+freeze source and runtime state through the shared calibration barrier.
+
+E41 ran the first input-order correction from exact head `bbf5fb78` as workflow
+run `33869354975`. The E7 target was restored to `/fixture` before dispatch and
+the first external resolver again succeeded. The human client nevertheless
+navigated the shared tab to `/error-action` immediately after the first good
+fixture frame. The delayed client then reported the same truthful wrong-tab
+proof failure. Both receipts and the aggregate sealed without retry or repair.
+
+Frame-by-frame review shows the remaining unsafe operation is the blind remote
+coordinate click itself, including the click used to focus the Guacamole
+surface before reset. A visible pixel location is not yet a proven input
+location across the Guacamole coordinate transform. The generic human-paced
+probe must therefore use iframe focus, keyboard traversal, arrow-key scrolling,
+and deterministic reset without any coordinate click. Target-located W8 action
+cases retain click coverage after their own locator proof. The provider-free
+runner test now rejects any mouse click in generic human pacing and proves the
+focused keyboard and reset sequence.
+
+Revised next action: publish this stricter runner correction, restore the same
+E7 tab once more, and dispatch a fresh exact-commit readiness epoch. A further
+self-induced navigation is a blocking test-harness defect and must be diagnosed
+before C01; a clean two-client aggregate permits immediate C01 dispatch.
+
+E42 ran from exact head `3e2adf17` as workflow run `33869785636`. Eliminating
+blind clicks fixed the destructive symptom: both clients resolved the durable
+handoff, both reached Guacamole, both observed the same non-marker pixel hash,
+and live CDP readback after the epoch proved the shared target remained on
+`/fixture`. The human crop showed fixture controls where the solid marker
+should have been, while the slow crop showed the same displaced viewport state
+later in the sequence. This proves the focused arrow and reset keystrokes still
+mutated shared scroll state and that iframe focus did not provide a reliable
+remote `Control+Home` reset boundary.
+
+Generic readiness observation does not need to mutate the remote document.
+Human pacing is now limited to dashboard keyboard traversal and a mouse move
+over a blank part of the remote view. It performs no click, wheel, focused
+remote key, or other shared-browser mutation. Explicit locator-proven action
+cases remain responsible for state-changing remote input and its postcondition
+proof. The provider-free regression freezes this passive event sequence and
+rejects coordinate clicks.
+
+Revised next action: publish the passive-readiness correction and dispatch a
+fresh exact-commit readiness epoch against the still-correct E7 target. If its
+two clients and aggregate pass, begin C01 immediately from that same commit.
+
+E43 ran from exact head `c348d2d498da7484474e64d50b46b3a669744715`
+as workflow run `33870248318`. The human client rendered the expected synthetic
+marker. The slow client initially rendered it alone, but its concurrent view
+became black when the human view connected. Existing provider live tests had
+classified simultaneous viewing from frame presence alone and therefore
+missed the content loss.
+
+The route used one direct Guacamole connection for each dashboard iframe.
+Each iframe consequently opened an independent RDP login, and xrdp logged off
+the earlier desktop when the later client arrived. The provider repair now
+creates one stable managed Guacamole sharing profile for every route. The
+dashboard authenticates to Guacamole, finds the current active connection and
+its exact route sharing profile, requests a transient share credential, and
+uses that credential only inside the iframe. It does not expose the credential
+through the Agent Browser service API or durable operator handoff. Provider
+schema drift is now visible to readiness probes. Focused sharing, provider,
+workstation, dashboard, fixture, release-asset, format, clippy, build, install,
+doctor, launch-smoke, and external-ingress checks passed. Commit `1d061647`
+was pushed and installed as development generation
+`0.28.0-bd846cd12ea0`; production remained unchanged.
+
+E44 ran from exact head `1d061647d18ec61cc10796c12aefabaa8b95bcd3`
+as workflow run `33873479843`. Both clients received
+`handoff_target_closed_operator_action_required` before Guacamole access. The
+development installation had closed the E7 browser, but preparation had
+incorrectly assumed the retained identity and handoff remained live. Both
+failure receipts and the aggregate were sealed before repair. This was a
+campaign preparation defect, not evidence about connection sharing.
+
+The profile was then opened through a fresh service-owned remote-view lane.
+The request returned a verified terminal effect, a valid service tab, and
+`operatorVisible.state=ready`. The new opaque durable handoff and exact browser,
+profile, session, tab, and target identity were sealed in the protected GitHub
+environment without logging their values.
+
+E45 ran from the same exact head as workflow run `33874034647`. Both clients
+resolved the new handoff and successfully reached the Guacamole authentication
+and active-connection APIs, but neither retained an iframe long enough to
+render the marker. The dashboard remained at “Checking stream.” Network
+evidence showed repeated successful token requests interleaved with aborted
+tunnels. The sharing effect depended on the whole projected stream object.
+Routine projection refreshes recreated that object, aborted the current
+effect, cleared the iframe, generated another one-time share credential, and
+started the cycle again. The failure journal recorded the aborted Guacamole
+loads, while the external receipts supplied the missing higher-level context.
+
+A focused red regression now requires the component to memoize the five
+semantic Guacamole route fields and forbids whole-projection object churn from
+invalidating the sharing effect. The repair passes that regression and the
+dashboard production build.
+
+Revised next action: publish and install the stable-sharing-effect repair,
+reconcile the development provider and external ingress if the generation
+changes, reopen and reseal a synthetic handoff if installation closes it, then
+dispatch a fresh two-client readiness epoch. Do not begin C01 until both
+external clients retain the exact marker through concurrent viewing and the
+aggregate seals successfully.
+
+E46 ran from exact head `97c054eb0ce01f6bf9269dd150c128ae00af0e9a` as
+workflow run `33874989172`. The human client passed initial load, concurrent
+marker observation, reconnect, exact browser identity, and exact marker pixels.
+The delayed client failed before handoff resolution because three required
+hashed dashboard JavaScript chunks returned HTTP 504 after approximately 27.2
+seconds. The aggregate sealed the passing human receipt and the failed delayed
+receipt without retry or repair inside the epoch. This result proves the stable
+Guacamole sharing mount works through concurrent use, while disproving that the
+earlier dashboard-ingress repair eliminated the complete external-load failure
+class.
+
+A local external-ingress reproducer then kept one authenticated durable handoff
+viewer connected while opening fresh clients through the public origin. Twelve
+fresh clients produced ten failures. The scenario remained red after reduction
+to the historical shape of one established client plus two fresh clients: the
+fourth bounded repetition produced one client that never acquired an iframe.
+That client observed repeated service-resource 503 responses, a service-request
+502, a service-status 504, a failed Guacamole sharing-credential request, and
+multiple API reads pending for 5 to 17 seconds. A separate 30-way comparison
+kept the generation backend below 6 milliseconds, stable ingress below 8
+milliseconds, and settled public static reads predominantly below 750
+milliseconds. The defect therefore depends on fresh dashboard convergence and
+is not ordinary static-file throughput saturation.
+
+The durable failure journal exposed the causal amplification. Every newly
+opened control viewport automatically submitted `view_focus`. The runtime host
+had committed its lane configuration before the retained managed browser was
+attached. It consequently injected the lane's obsolete `lease-fail-open`
+runtime-profile default into each later profile-omitting focus command. The
+active browser correctly rejected that invented profile mismatch. Repeated
+clients accumulated failed and timed-out focus jobs, then contended on the
+Service State lock needed by viewer-lease acquisition. The journal recorded the
+dashboard and Guacamole failures visible after application startup, but a 503
+emitted by stable ingress itself had no durable record. That omission explains
+why the E46 bundle-load failure depended on external HAR evidence for its first
+post-mortem signal.
+
+Two focused red-to-green regressions now freeze the repaired invariants.
+`view_focus` is an exact operation on the already-selected runtime lane and no
+longer accepts an implicit lane-initialization profile default. An explicitly
+supplied profile remains in the command and therefore still reaches the
+existing mismatch guard. Separately, every stable-ingress unavailable response
+constructs and appends a privacy-bounded `dashboard_action` failure record with
+source `dashboard_ingress`, stage `request_proxy`, the exact typed ingress code,
+and action `dashboard_load`. The record deliberately excludes raw request URLs,
+headers, backend messages, and credentials. Nine runtime-host tests, 28
+dashboard-ingress tests, Rust format, and workspace clippy with warnings denied
+pass. The first focused build encountered a transient sccache daemon fork
+failure under host process pressure; the preserved cache-sanitized diagnostics
+contained no credential values, and the same tests passed with only the cache
+disabled while retaining the wrapper's admitted eight Cargo jobs.
+
+Revised next action: commit and publish this bounded runtime-host and ingress
+logging repair, install its exact candidate only into the development runtime,
+and prepare a fresh synthetic handoff because installation may close the current
+browser. Verify that one direct focus request against the installed retained
+browser does not inherit an obsolete lane profile, verify an induced stable-
+ingress unavailable response appears in the development failure journal without
+private request material, and rerun the reduced public two-client load loop.
+Only after that loop and a fresh externally hosted two-client E47 aggregate pass
+may the campaign dispatch C01 from the same frozen commit.
+
+The first installed-candidate focus proof exposed one remaining layer of the
+same blocker before E47 was dispatched. A fresh service-owned remote-view open
+returned a valid shared tab on the selected managed profile, a visible browser
+window, and `operatorVisible.state=ready`. The direct `view_focus` request then
+failed with `explicit_profile_conflicts_with_current_owner`. Inspection before
+retry proved that the browser, session, profile, CDP endpoint, and active
+fixture tab were live and mutually consistent, that the tab was already
+focused, and that the failure journal contained no new `lease-fail-open` or
+`existing_session_profile_identity` signature. The failed job retained an
+`effect_uncertain` terminal outcome, while readback showed no changed tab
+effect.
+
+The runtime-host repair had stopped writing the obsolete lane profile into the
+command, but daemon launch options still inherited the process environment's
+runtime-profile default before retained-browser recovery. Existing-owner
+selection could not distinguish that inherited default from a caller-authored
+profile and rejected it. A focused regression reproduced the exact
+profile-omitting `view_focus` case against a proven current owner and failed
+before the correction. The bounded correction lets only a profile-omitting
+`view_focus` use the current retained owner's profile. Caller-authored
+`runtimeProfile`, `profileId`, or `profile` values continue through the strict
+conflict checks. The focused existing-session group now passes all five tests,
+including the explicit-conflict and inconsistent-owner guards.
+
+Revised next action: complete Rust format, clippy, and affected focused tests;
+publish and install the exact corrected development candidate; reopen and
+reseal the synthetic handoff; then repeat the direct focus, durable ingress-
+failure logging, reduced public-load loop, and external E47 gates. E47 remains
+undispatched, so no epoch freeze was violated.
+
+The next installed proof showed why command-level provenance was also
+required. The daemon accepted current-owner selection, but the final active-
+browser guard still received `runtimeProfile=lease-fail-open-...` and rejected
+it against the correct managed profile. The failure occurred through both
+stable ingress and the generation backend, ruling out proxy mutation. Exact
+job and tab readback again showed an effect-uncertain failure with the fixture
+tab still active. The service request body omitted all profile fields; the
+stale value came from cached lane routing between normalization and final
+dispatch.
+
+The completed repair records one internal, caller-non-forgeable boolean during
+service-request normalization stating whether `runtimeProfile`, `profileId`,
+or `profile` was actually caller-authored. At the shared runtime-host boundary,
+a normalized `view_focus` marked profile-omitting discards any cached profile
+fields before dispatch. Explicitly profiled service requests and direct daemon
+commands retain their fields and the existing fail-closed mismatch guard. The
+runtime host removes the internal marker before daemon action dispatch. A new
+red-to-green regression covers inherited, explicit, and direct-command cases;
+the seven focused view-focus, HTTP-routing, dashboard-routing, and service-
+normalization tests pass.
+
+Revised next action: validate, publish, and install this provenance-backed
+repair, then repeat the same installed direct-focus gate before any load or
+external epoch. Preserve both failed installed proofs as pre-repair evidence.
+
+The provenance-backed candidate was installed as development generation
+`0.28.0-8cf35c42e39b`; required-provider doctor, local ingress, and public
+ingress all passed while production remained unchanged. A fresh synthetic
+remote-view acquisition returned a verified effect, a valid fixture tab, and
+`operatorVisible.state=ready`. The exact profile-omitting direct `view_focus`
+proof then passed with `verified_effect`, brought the retained browser forward,
+and requested maximize. A deliberately incomplete ingress request added
+exactly one `dashboard_ingress` record with stage `request_proxy`, code
+`invalid_ingress_request`, and action `dashboard_load`; the record contained no
+raw URL, headers, message, credential, or token fields.
+
+The first reduced-load harness attempt then found two more seams before E47.
+It also incorrectly accumulated a new anchor and two fresh clients on every
+round instead of retaining one anchor and closing each round's two fresh
+clients. That excess occupancy is preserved as an out-of-schedule finding, but
+it is not the acceptance shape for this gate. Even the first intended
+three-client slice proved two product defects. The dashboard's special
+owner-session focus proxy bypassed normal service-request normalization, so it
+did not attach the internal profile-omission marker and four automatic focus
+requests failed or timed out with the stale-profile mismatch. In parallel,
+each viewport polled `/api/service/resources` every seven seconds. Status reads
+were coalesced and cached, but resource reads were not. Duplicate process-table
+scans exceeded the ordinary two-second proxy budget, left queued and running
+resource jobs, caused one viewer-lease Service State lock timeout, and made the
+stable ingress emit and journal `selected_backend_unavailable`. The failure
+journal also captured repeated Guacamole disconnect observations, three focus
+HTTP 502s, and the viewer-lease application failure.
+
+Focused red regressions now require the special focus proxy to attach the
+non-forgeable profile-omission marker it constructs from an allowlisted request,
+and require authenticated status and resource reads to share the existing
+path-keyed single-flight cache and ten-second read budget. The repair keeps
+mutating requests outside that cache. All 53 dashboard gateway tests, Rust
+format, workspace clippy with warnings denied, and the focused single-flight
+test pass. An initial eight-job compile could not spawn a rustc work thread
+because old Cargo scopes contained hundreds of retained Chrome descendants and
+were near their aggregate task limit; a one-job compile passed without
+discarding those ownership-sensitive processes. This is retained as a separate
+resource-admission and test-residue finding for later campaign analysis.
+
+Revised next action: commit and publish the focus-proxy and resource-read
+coalescing repair, install its exact development candidate, recreate the
+synthetic handoff, and rerun one retained authenticated anchor plus two fresh
+clients for five bounded rounds, closing the fresh clients after each round.
+Require focus success, usable Guacamole pixels, no resource backlog, no ingress
+503 or 504, and no new stale-profile mismatch before dispatching E47.
+
+The installed focus-proxy proof then isolated a later mutation boundary. The
+dashboard proxy and shared runtime host both removed the inherited profile as
+designed, but the control-plane scheduler subsequently applied the legacy
+profile-acquisition gate to `view_focus`. Under the configured
+`fail_open_ephemeral` escape hatch, a lease conflict caused that gate to write a
+new `lease-fail-open-*` runtime profile into the already routed focus command.
+The final active-browser guard correctly rejected that rewritten profile
+against the retained managed browser. A uniquely tagged diagnostic response
+proved that `runtimeProfile`, `profileId`, and `profile` were all absent after
+runtime-host reconciliation; all temporary diagnostic response fields were
+then removed.
+
+A focused scheduler regression reproduced the historical control-path failure
+and failed with `existing_session_profile_identity_unproven` before the repair.
+The bounded correction exempts only commands already classified as retained
+browser focus or bounded desktop control from profile-acquisition admission.
+Those commands do not acquire or launch a profile. Explicit profile fields are
+still preserved for the final active-browser mismatch guard, and ordinary
+browser acquisition commands retain the enforced, fail-open, and unsafe-claim
+lease behavior. The new regression, both neighboring lease-admission tests,
+and the inherited-profile runtime-host regression pass.
+
+The same installed investigation found a separate development display residue:
+an Xvfb process on display `:90` had survived since September 2 without any
+client carrying `DISPLAY=:90`. It caused three logged remote-headed launch
+attempts to fail before the display became ready. The exact process was closed,
+the display socket disappeared, and the same access-plan launch then succeeded
+without a profile, identity, or Xvfb failure. This residue and the discarded
+runtime-host stderr channel remain campaign findings for the final holistic
+analysis; the browser-launch failure itself was present in the durable failure
+journal.
+
+Revised next action: complete format, clippy, and focused validation; commit and
+publish the scheduler repair; install its exact development candidate; recreate
+one coherent managed browser and prove the dashboard-routed `view_focus` no
+longer receives a fail-open profile. Then rerun the corrected five-round public
+load gate and dispatch E47 only if its failure-journal delta remains clean.
+
+The exact scheduler repair was committed, published, installed as development
+generation `0.28.0-31868282c605`, and re-proved through the dashboard route. A
+fresh remote-view acquisition reached `operatorVisible.state=ready`, and the
+same retained handoff browser accepted dashboard-routed `view_focus` without a
+profile mismatch or identity rejection. Production remained unchanged.
+
+The corrected external-ingress load gate then stopped on its anchor because one
+`GET /api/service/resources` returned HTTP 503 after roughly two seconds. The
+durable failure journal recorded two nearby `selected_backend_unavailable`
+events while direct readback showed the service worker ready with queue depth
+zero. The defect was a split timeout contract: the inner dashboard proxy had
+already been widened to ten seconds for both status and resources, but the
+outer stable ingress granted ten seconds only to status and still terminated
+all resource reads after two seconds. The backend subsequently returned HTTP
+200, explaining the observed 503 followed by 200 sequence. This was a campaign
+sequence blocker, so the campaign paused for diagnosis and repair while the
+Plan 0158 goal remained active.
+
+A red regression proved that `/api/service/resources` received only the
+ordinary two-second ingress allowance. The bounded repair gives status and
+resources the same ten-second outer-ingress allowance, matching their shared
+single-flight inner proxy contract. Focused red-to-green validation passes.
+Ingress failures now also journal a redacted request route, request method,
+route-specific action, retry safety, selected generation, fallback attempt,
+failure phase, and first-response timeout. Handoff identifiers, Guacamole
+session paths, query strings, cookies, and tokens remain excluded. Focused
+tests cover both the richer resource-failure record and path redaction.
+
+Revised next action: finish workspace format and clippy validation, publish and
+install the exact timeout-alignment candidate in development, then recreate the
+handoff and rerun the corrected external five-round load gate from its anchor.
+Only dispatch E47 if that gate has no 502, 503, or 504 response, no unusable
+handoff or stream, no resource backlog, and no new identity rejection.
+
+The timeout-alignment candidate was committed and published as `85a8be6c`,
+installed as development generation `0.28.0-eccfb7c03455`, and passed the
+three-launch smoke plus the required six-route provider doctor. Local and
+bastion ingress were republished from the reviewed Cooper inventory while its
+pre-existing unrelated worktree changes remained untouched. A new access plan
+selected the intended managed profile, and a fresh remote-view request reached
+`operatorVisible.state=ready` with a verified terminal effect.
+
+The next corrected five-round public run kept one anchor and created ten fresh
+clients, closing each round's two fresh contexts. The anchor and two clients
+passed, while eight clients failed. Crucially, no resource endpoint returned
+503, confirming the first timeout repair. The next pressure surface was broader:
+browser-capability-registry reads and same-session tab reads remained
+uncoalesced and retained two-second response budgets. The public clients saw
+503 responses for those reads while the new structured ingress records proved
+`first_response_timeout`, `retrySafe=true`, and `firstResponseTimeoutMs=2000`.
+Several `view_focus` calls returned client-visible HTTP 502, but authoritative
+job readback showed every completed focus job succeeded with
+`verified_effect`; the special focus proxy had abandoned those results after
+two seconds. One focus job remained queued at readback and is retained for the
+campaign analysis.
+
+Three red regressions reproduced the cache-membership, focus-budget, and outer
+ingress-budget gaps. The bounded repair adds service contracts,
+browser-capability registry, and per-session `/api/tabs` reads to the existing
+five-second path-keyed single-flight cache; the tab key remains isolated by
+browser port. These pressure-sensitive reads receive matching ten-second inner
+and outer budgets. The special dashboard focus route now receives the existing
+fifteen-second remote-view action budget, so a successful queued effect is not
+reported as a client failure. The ingress journal now recognizes the new exact
+read routes while continuing to redact queries and dynamic handoff or
+Guacamole paths. All three regressions pass green.
+
+Revised next action: run the complete dashboard and ingress module tests,
+format, clippy, and patch checks; commit and publish the bounded read and focus
+repair; install its exact development candidate; then repeat the same external
+anchor plus ten-fresh-client gate without changing the harness.
+
+The bounded read and focus repair was committed and published as `dcb1eb29`,
+installed as development generation `0.28.0-a26c9bd8af0c`, and passed the
+three-launch smoke plus all 59 required provider checks. The launch smoke
+recorded one transient one-second Service State lock wait but completed all
+three iterations. A new managed browser and durable handoff again reached
+`operatorVisible.state=ready` with a verified effect.
+
+The unchanged public gate improved from two to nine passing fresh clients out
+of ten, while its retained anchor also passed. There were no client-visible
+focus 502s and no 503s from resources or browser-capability registry. One
+first-round client failed after a 504 from `/api/session-tabs`; its Guacamole
+iframe never appeared. Isolated external probes then showed all 15 current
+session-tab reads returning HTTP 200 in at most 0.717 seconds, so the endpoint
+was not intrinsically slow. The pressure source was the dashboard's polling
+amplification. Its current service-status payload is 4.36 MB, dominated by
+historical remote-view acquisition leases, runtime-owner history, jobs,
+profiles, and events. One client took about 2.6 seconds to fetch it, while an
+eleven-client coalesced wave took about ten seconds. Three independent
+seven-second UI pollers and an overlap-prone five-second session poller could
+start new cycles while earlier cycles remained unresolved, repeatedly sending
+that projection and every live session's tabs to each client.
+
+The next bounded repair prevents overlapping cycles independently in session
+synchronization, the workspace navigator, selected-workspace context, and the
+service panel. It preserves polling and left-rail coverage but refuses to start
+a second cycle while the same component's first cycle is in flight. Because
+backend stalls affect static and lightweight reads as well as the explicitly
+heavy routes, stable ingress now gives every idempotent GET, HEAD, or OPTIONS
+request the same ten-second first-response budget. Mutation requests retain
+their separate delivery-aware budgets and no-replay rules. Expanded structured
+logging recognizes sessions, models, runtime health, dashboard auth, and chat
+status routes without storing query strings or dynamic route identifiers. A
+red regression proved generic GET and HEAD requests previously retained only
+two seconds; it now passes. The dashboard production build, non-overlap source
+contract, selected-workspace, navigator, inspector-action tests, all 29 ingress
+tests, Rust format, and workspace clippy pass.
+
+Revised next action: commit and publish the non-overlap and generalized
+idempotent-read repair, install its exact development candidate, and rerun the
+same public gate. If it passes, inspect its full anchor and failure-journal
+delta before dispatching E47; the current harness validates the anchor only at
+startup and therefore needs an end-of-run anchor health assertion before the
+campaign can treat a green client count as acceptance.
+
+The selected live CDP streaming check initially failed because Chrome could
+not create threads or fork its utility process. Direct capacity readback found
+the shared Cargo validation slice at 945 of its 1,024-task ceiling. Five Rust
+test scopes had remained active since September 2 or 3, and one command scope
+was stranded by the failed smoke. This was not a browser, dashboard, memory, or
+per-service limit failure. Stopping those six exact stale validation scopes
+reduced the slice to nine tasks without disturbing either installed runtime.
+The unchanged live CDP streaming check then passed. Retain this as campaign
+evidence that abandoned validation scopes can starve browser launches and that
+the current admission surface does not reclaim or clearly report stale task
+claims.
+
+The exact `5433b4e5` candidate installed as development generation
+`0.28.0-44a4e6ae02e5` with production unchanged. Its immediate launch smoke
+then failed on a one-second Service State file-lock wait while the freshly
+restarted development services were reconciling. The services remained ready
+and no crashed holder existed. The smoke had omitted the repository's existing
+per-command lock-timeout escape hatch. It now supplies a bounded ten-second
+budget to each open, read, and close operation, retaining a finite failure for
+a wedged holder. The unchanged three-iteration launch and residue sequence
+passes with that contract.
+
+After provider reconciliation, reviewed Cooper ingress publication, and all
+59 required provider checks, the fresh external handoff reached
+`operatorVisible.state=ready` with a verified effect. The corrected load gate
+again passed nine of ten fresh clients, but its new final anchor assertion
+found two session-tabs 504s, one Service Status 504, and one runtime-health
+504 accumulated after startup. The retained iframe still pointed to the
+Guacamole route and showed no disconnect text. One fresh client also failed to
+render its iframe after a session-tabs 504 and a Guacamole token failure. No
+matching application-ingress 5xx record existed, locating the 504 boundary
+outside the Agent Browser journal.
+
+The first non-overlap repair was necessary but insufficient. The retained
+client still recorded 51 successful Service Status reads and 188 successful
+session-tabs reads during the five-round run. Three independent dashboard
+components each downloaded the same 4.36 MB status projection, and the
+five-second backend cache expired before their seven-second poll cycles. The
+next bounded repair provides one module-level ten-second Service Status flight
+and ready response shared by all dashboard components. The backend cache now
+uses the same ten-second freshness bound for status, resources, contracts,
+browser-capability registry, and per-session tab reads. This keeps the left
+rail bounded to ten-second freshness while coalescing both component-local and
+cross-client load. The dashboard build, source contracts, all 53 dashboard
+backend tests, format, and workspace clippy pass.
+
+The `9c7ff9cb` candidate installed as development generation
+`0.28.0-a9259486b184` with production unchanged. The immediate launch smoke
+again exposed the one-second pre-command file-lock boundary. A read-only
+preflight was added so the smoke never retries an `open` effect. Its first
+implementation then misclassified a 1 MB `spawnSync` buffer overflow as live
+lock contention because the partial 4.36 MB status payload contained a
+historical lock-timeout string. The corrected preflight uses a bounded 16 MB
+buffer and classifies only the top-level structured error. It and all three
+launch cycles pass.
+
+The next external gate loaded all ten fresh clients and reduced retained-anchor
+Service Status reads from 51 to 10. No status, runtime-health, resource,
+registry, focus, handoff, Guacamole, or fresh-client failure occurred. The
+final anchor check alone retained two session-tabs 504s. A follow-up external
+per-port probe issued 110 requests across all ten retained session ports with
+zero failures and a maximum latency below 0.8 seconds, proving no session route
+was intrinsically slow. The remaining load exists only where the five-second
+all-session tab walk overlaps full dashboard startup. Session and tab polling
+now uses the same ten-second freshness bound as Service Status, cutting that
+background volume approximately in half without sacrificing the left rail's
+bounded accuracy.
+
+The polling-cadence candidate was committed and published as `e3ab4677`,
+installed as development generation `0.28.0-aa2dccdc3a41`, and left production
+unchanged. The stricter local public-ingress harness now requires the exact
+synthetic fixture marker from every client and rechecks the retained anchor at
+the end of the run. That harness exposed periodic whole-environment stalls:
+realtime and monotonic observations moved backwards by approximately 2.4 to
+2.7 seconds every 27 to 30 seconds while the WSL journal independently recorded
+backwards time jumps. Stopping timesyncd, testing each available Hyper-V clock
+source, disabling implicit Hyper-V time synchronization, unbinding the exact
+Hyper-V time device, and relieving memory fragmentation did not remove the
+jumps. Each diagnostic change was restored. No userspace clock adjustment was
+observed. This is retained as a host-runtime defect and does not stop the
+campaign or authorize a production restart.
+
+External run `33903748862` exercised both clients and uploaded the restricted
+artifacts, but both rendered `about:blank`. The preparation request itself had
+asked for a blank page. Top-level URL normalization was not defective: the
+service normalizer supports that form, and the generated client deliberately
+moves it into request parameters. The campaign corrected the fixture request
+to the canonical synthetic target instead of changing valid product behavior.
+
+External run `33905363192` then proved the human-simulated client, the initial
+slow client view, the browser target, the RDP route, and the first shared view.
+The second concurrent slow-client join received successful active-connection,
+sharing-profile, credential, and token responses but rendered the Guacamole
+connection-list home instead of the shared browser. Guacamole may report the
+primary connection and one or more shared child connections with the same
+connection identifier. The dashboard selected the first matching row without
+distinguishing its role, so ordering could make it create a share from an
+already shared child.
+
+The bounded repair selects only a matching active connection whose sharing
+profile identifier is absent, which identifies the primary owner. If no rows
+match, the existing direct connection fallback remains available. If matching
+shared children exist but the primary is unavailable, the resolver now returns
+an explicit diagnostic error instead of initiating a direct connection that
+could displace the existing viewer. A regression supplies the shared child
+first and proves that credentials are created from the later primary row. A
+second regression proves the shared-child-only state fails diagnostically.
+The focused connection-sharing test, dashboard inspector-action contract, and
+production dashboard build pass.
+
+Revised next action: commit and publish this exact primary-owner selection
+repair, install it only in the development runtime, recreate the canonical
+synthetic handoff, and rerun the exact two-client external oracle. A green
+result advances directly to the frozen campaign sequence; another failure is
+diagnosed and recorded under the same still-active Plan 0158 goal.
+
+The primary-owner selection repair was committed and published as `c59405b3`,
+installed as development generation `0.28.0-9f7c26412225`, and passed the
+three-launch smoke. The six-route provider was reconciled to that exact
+generation, all required provider checks passed, public HTTPS returned 200,
+and production remained unchanged.
+
+External run `33906793894` did not exercise the sharing repair because the
+durable handoff's browser had been deliberately closed during candidate
+replacement. Both clients returned
+`handoff_target_closed_operator_action_required`; each recorded 18 successful
+HTTP requests with no failed or pending transport. The campaign then used the
+explicit operator-confirmed reopen path. Route preparation rolled back cleanly
+when launch failed with `existing_session_profile_identity_inconsistent`.
+
+The retained owner, lifecycle, profile, session, browser, and tab evidence
+identified an overbroad terminal-relaunch guard. The exact owner lifecycle was
+terminal with satisfied cleanup, process absence and profile-lock release were
+proven, the session lease was released, and its two tab handles were closed and
+inert. However, the tab projection also classified every historical closed tab
+that happened to reference the same profile as related to the current browser.
+Those older tabs correctly named different terminal browser and session IDs,
+so they could never satisfy the current browser's inert-handle predicate. The
+result was a false profile-identity inconsistency despite the access plan
+correctly reporting `replacementEligible=true` and
+`requiredAction=supersede_terminal_owner`.
+
+The bounded repair defines terminal-relaunch tab ownership by the exact browser
+or session identity only. A closed tab from another terminal owner no longer
+blocks the current exact replacement merely because both used the same shared
+profile. The existing profile-wide browser occupancy guard remains intact, so
+a live or retained browser projection for the same profile still prevents an
+unsafe relaunch. The focused regression recreates the historical closed-tab
+shape and passes.
+
+Revised next action: complete Rust format and clippy validation, publish and
+install the exact terminal-relaunch repair in development, explicitly reopen
+the same durable handoff, then rerun the two-client external oracle so the
+primary Guacamole share-owner repair is finally exercised.
+
+The terminal-relaunch repair was committed and published as `9047dd8d`, then
+installed as development generation `0.28.0-9682c30f056f`. The three-launch
+smoke passed and production remained unchanged. Explicit reopen still found 34
+inert browser projections and 42 closed tabs from older attempts on the shared
+profile. The first-class guarded prune escape hatch removed exactly those 34
+browsers and 42 tabs plus 27 stale session browser references; it removed no
+profiles, displays, or sessions. The same durable handoff then reopened with a
+verified terminal effect and `operatorVisible.state=ready`. This unblocked the
+sequence while retaining the broader accumulation defect for final campaign
+analysis rather than hiding it with ad hoc cleanup.
+
+External run `33908153792` then exercised the intended sharing path. The
+human-paced client passed. The slow client initially rendered the prepared
+marker, but its concurrent second context rendered Guacamole's connection-list
+home instead. Its preserved network evidence shows successful active
+connection, sharing-profile, sharing-credential, and token responses before
+the wrong page appeared. The earlier primary-owner selection repair therefore
+worked as designed but was not sufficient.
+
+The remaining cause is identity aggregation at the ingress boundary. The
+transient sharing key authenticates the second viewer as intended, while the
+normal `/guacamole/` route also injects the stable full-operator `Remote-User`
+header. Guacamole accepts both identities and resolves the full operator home
+instead of entering only the shared connection. This is not a timing wait or
+an epoch problem.
+
+The bounded repair gives transient shared-view traffic a separate
+`/guacamole-share/` capability path. Cooper ingress rewrites that prefix to the
+existing Guacamole servlet path but deliberately omits the dashboard
+forward-auth middleware on that one route. The one-time sharing key remains
+required. The ordinary `/guacamole/` path retains stable operator
+authentication. Renderer validation and a regression prove the rewrite is
+attached to both local and external Cooper routers. Local and external no-key
+probes return only the Guacamole shell and expose no connection names, while
+the ordinary route continues to require authentication. The focused dashboard
+sharing test and production dashboard build pass.
+
+Revised next action: commit the isolated Cooper route and dashboard URL repair,
+install the exact development candidate, preserve the current handoff identity,
+and rerun the unchanged two-client external oracle. Treat a no-key route that
+can enumerate or open any connection as a security failure. A green concurrent
+marker and reconnect sequence advances to the frozen campaign; any new failure
+is preserved, diagnosed, and repaired under this still-active goal.
+
+The path-isolation attempt was committed as Agent Browser `81a43e70` and Cooper
+`46a70b0`, installed as development generation `0.28.0-013bcece3d17`, and
+passed three browser launches, all provider checks, local ingress, public
+ingress, and no-key connection-name checks. The original durable handoff was
+explicitly reopened without rotating its identifier or URL. E52 ran as external
+workflow `33910218160`; the human client passed, while the slow client's
+concurrent view again rendered Guacamole's full connection home.
+
+E52's preserved HAR proves the new path carried 36 successful Guacamole
+requests, so this was not stale code or route selection. It also recorded 79
+requests on the ordinary Guacamole path and a header-authenticated user resource
+inside the nominal share path. The path removed ingress header injection but
+did not isolate Guacamole's origin-scoped browser authentication state. The
+dashboard's primary-owner API calls and prior iframe share cookies and storage
+remain available to another path on the same origin. The visible full operator
+home is therefore the same symptom with a narrower, now-proven cause.
+
+Revised repair: move the capability-only Guacamole client to a distinct sibling
+origin with no stable operator header. Keep primary-owner discovery and
+credential creation on the authenticated dashboard origin, then navigate the
+iframe to the sibling origin with only the one-time sharing key. This separates
+both ingress authentication and browser storage. Remove the now-insufficient
+same-origin capability route. The next external oracle must prove the sibling
+origin was used, the concurrent marker remained correct, and a no-key client
+cannot enumerate or open connections.
+
+The sibling-origin repair was committed as Agent Browser `781967a4` and Cooper
+`dbbb423`, installed as development generation `0.28.0-f9b8f97789db`, and
+passed the three-launch smoke, provider doctor, trusted public TLS, and a fresh
+no-key browser probe that exposed only the login surface. The original durable
+handoff reopened directly through its explicit repair action and retained its
+identifier and URL.
+
+E53 ran as external workflow `33911361222`. The human client passed. The slow
+client reached the sibling origin but rendered a blank iframe. Its HAR recorded
+one successful sibling-origin document response and no sibling assets; direct
+header readback found `X-Frame-Options: DENY`. The generic external
+`security-headers` middleware was therefore blocking the deliberate cross-origin
+embed before Guacamole could consume the sharing key. This differs from E51 and
+E52: the full operator connection home did not reappear.
+
+Revised next action: remove only that generic middleware from the capability
+origin, leaving the authenticated dashboard origin unchanged. Republish and
+prove the sibling document is embeddable, while a fresh no-key browser still
+shows only login and no operator identity or connection list. Then rerun the
+same two-client external oracle against the already-installed exact candidate;
+no Agent Browser rebuild is required for this ingress-only correction.
+
+Cooper commit `ffbe065` removed the frame-denial middleware only from the
+capability origin. A fresh browser embedded that public origin successfully,
+while its no-key view still exposed only login and no operator identity or
+connection list. E54 ran as external workflow `33911906623`. Both distinct
+off-host clients passed initial marker capture, concurrent viewing, exact
+identity comparison, and durable-handoff reconnect. The aggregate sealed both
+receipts with `success=true`, zero retries, and no repair inside the run. This
+clears the E51 through E53 simultaneous-view blocker.
+
+The first C01 calibration dispatch, workflow `33912440452`, then exposed a
+harness-only timing defect before browser access. The shared start was three
+minutes after dispatch, but the slow runner entered the probe with 104 seconds
+remaining and failed a redundant requirement that two full minutes must still
+remain after runner setup. The companion job was canceled immediately because
+a valid two-client aggregate had become impossible; no 20-minute failed run was
+allowed to continue.
+
+The dispatch contract already requires the shared start to be at least two
+minutes in the future. The calibration loop separately records readiness,
+waits at the shared start, and rejects arrivals more than 30 seconds late. The
+bounded repair removes only the duplicate post-setup two-minute check and keeps
+the actual shared-barrier late-arrival rejection. A red source regression
+reproduced the false rejection and now passes.
+
+Revised next action: commit the timing-harness repair and redispatch C01 against
+the unchanged ready handoff and installed candidate. Preserve both 20-minute
+client action streams and their aggregate without retry or repair inside the
+run; if either client reaches the shared barrier more than 30 seconds late, stop
+and diagnose that distinct failure.
+
+The corrected C01 dispatch, workflow `33913357430`, passed checkout, dependency
+setup, external ingress, dashboard authentication, durable-handoff resolution,
+and the first visible pixel capture on both clients. The slow client then opened
+its second simultaneous viewer and received Guacamole's disconnected overlay
+instead of the prepared marker. The human client's preserved initial screenshot
+remained correct. Guacamole and guacd logs show that all four viewers were
+admitted to the same underlying RDP connection, ruling out the configured
+eight-viewer route limit. They then record a background viewer as not responding
+and close its WebSocket session. This is a distinct long-lived concurrency
+failure that E54's short readiness probe did not expose.
+
+The slow runner models independent clients with two pages in one headless
+Chromium process. Chromium can throttle timers and rendering in the page that
+becomes backgrounded, which prevents that page from acknowledging Guacamole
+protocol updates. The bounded harness repair disables background timer,
+occluded-window, and renderer throttling for this external runner. It preserves
+the product failure oracle and the true simultaneous viewer load; it does not
+add retries or weaken marker comparison. The provider-free external-runner
+regression now fixes the exact launch contract.
+
+Revised next action: commit and push the external-client scheduling repair,
+then redispatch C01 with the same durable handoff and unchanged installed
+candidate. A further disconnect remains a campaign blocker and must be
+diagnosed from the preserved screenshots, HAR, transport receipt, and provider
+logs before another attempt.
+
+Workflow `33914568752` proved that the background-throttling repair worked:
+initial and concurrent marker captures passed, three viewers remained attached,
+and the earlier not-responding disconnect did not recur. The slow client failed
+later at the first synchronized reconnect. Both external clients closed their
+current dashboard pages at the same scheduled instant. The primary Guacamole
+connection disappeared between active-connection discovery and sharing-key
+creation, which returned HTTP 404. The dashboard treated that expected
+stale-primary race as terminal and removed the iframe, producing the preserved
+`external_stream_not_embeddable` receipt and visible Stream unavailable state.
+
+The product repair now treats two precise states as primary re-election points:
+only shared children remain after discovery, or sharing-credential creation
+returns 404 because the discovered primary vanished. In either case the
+dashboard uses the already authorized direct frame URL to establish a new
+primary. Other credential failures remain terminal. Red tests reproduced both
+states before the repair; the focused dashboard sharing suite and production
+dashboard build now pass without weakening the external marker oracle.
+
+Development generation `0.28.0-faf7a6687342` contains the repair. The isolated
+provider was restaged and applied after exact ingress preflight, the reviewed
+dashboard and capability origins were republished, provider doctor passed, and
+the three-launch smoke passed with production unchanged. The original durable
+handoff was explicitly resolved after installation, returned to ready, and its
+protected expected-identity binding was refreshed without disclosing operator
+or provider URLs.
+
+Revised next action: commit and push the stale-primary recovery, then redispatch
+C01. Preserve the exact simultaneous reconnect schedule. If it fails again,
+classify the next failure from the retained client and provider records rather
+than adding a retry inside the run.
+
+Workflow `33916185995` did not exercise the product repair. Both clients stopped
+before page access with `handoff_target_closed_operator_action_required`. The
+post-install recovery had selected the oldest handoff sharing the expected
+browser and profile, but historical execution left several such handoffs. The
+protected external URL names a different exact handoff. This was an operator
+selection error in campaign preparation, not a product or ingress regression.
+
+The exact handoff was recovered without exposing its identifier or URL by
+matching the SHA-256 of each retained handoff URL against the hash sealed in
+E54's green external receipt. Explicit reopen then returned `status=ready`,
+`resolved=true`, `reopenedClosedTab=true`, and
+`operatorVisible.state=ready`. The protected expected-identity secret was
+refreshed from that exact retained record. Future campaign recovery must select
+the sealed handoff hash, never infer identity from a browser/profile pair that
+can legitimately own multiple historical handoffs.
+
+Revised next action: redispatch C01 at the current exact commit and unchanged
+installed candidate. The external URL hash remains the E54-sealed identity.
+
+Workflow `33916458742` reached the exact sealed handoff but exposed a product
+race before the shared barrier. With no active Guacamole primary, both external
+clients independently selected the direct route. The second direct RDP
+connection displaced the first, whose preserved screenshot showed the correct
+fixture beneath Guacamole's disconnected overlay and the dashboard's viewer
+ownership warning. Provider logs independently recorded the first RDP client
+disconnect, a new direct client, the prior session's manual logoff, and a later
+sharing join. The run was canceled because a valid paired calibration was no
+longer possible.
+
+Stale-primary recovery alone cannot arbitrate simultaneous primary creation.
+The bounded repair adds an authenticated dashboard-local, ten-second primary
+claim keyed by the provider route and connection. Claim mutation is atomic in
+the dashboard server. When no primary exists, exactly one client receives the
+direct route; contenders poll for its active Guacamole connection and then
+request sharing credentials. An abandoned claim expires so a later contender
+can recover. A disappearing primary during credential creation returns to the
+same election loop instead of allowing two direct reconnects. Focused tests
+cover claim exclusion and expiry, plus a simultaneous two-client resolution
+that must yield exactly one direct and one shared result.
+
+Revised next action: finish the Rust and dashboard validation gates, publish
+and install the repaired development candidate, reconcile provider ingress if
+the generation changes, resolve the exact sealed handoff, and redispatch C01
+without staggering or weakening its shared-start schedule.
+
+The primary-election repair was committed and published as `4e9e287d` after
+the focused Rust exclusion/expiry test, dashboard sharing test, production
+dashboard build, workspace clippy, Rust formatting, and the complete Plan 0158
+provider-free aggregate harness passed. Development generation
+`0.28.0-9c8935eb95b0` was installed, the exact reviewed provider binding was
+restaged and applied, both Cooper ingress routes were republished, provider
+doctor passed, and three disposable browser launches passed with production
+unchanged. The exact E54 handoff was recovered by its sealed URL hash and
+returned ready at a new presentation generation.
+
+Workflow `33918919898` and the first follow-up readiness workflow
+`33919334254` stopped before useful product execution because campaign setup
+updated the repository-level `P158_DEV_EXPECTED_IDENTITY_JSON`, while the
+workflow consumes the same-named secret from the `p158-external-vantage`
+environment. The environment binding correctly took precedence and both
+clients rejected the stale expected tab ID. This was a confirmed pre-effect
+campaign-configuration error. The environment-scoped secret was then refreshed
+from the current exact handoff resolution without exposing its contents.
+
+Readiness workflow `33919582358` proved the corrected identity binding: the
+human-paced external client passed. Its deliberately delayed companion then
+rendered the correct retained browser through Guacamole but lost the shared
+tunnel after the first client's primary connection closed. The dashboard
+classified this simultaneous-view disconnect as a single-viewer takeover,
+retained a visually stale iframe briefly, and then removed the iframe instead
+of invoking primary election. The preserved failure is
+`external_stream_not_embeddable`; its redacted HAR contains one Guacamole 404
+and no leaked operator URL.
+
+The bounded follow-up repair gives simultaneous-view disconnects a separate
+three-attempt recovery budget and re-runs the existing server-arbitrated
+connection resolver. A surviving primary is joined with a fresh share key; a
+departed primary causes one contender to claim and recreate it. Single-viewer
+takeover behavior is unchanged, and the recovery budget does not reset on each
+iframe load.
+
+Revised next action: validate, commit, rebuild, and install the bounded
+disconnect recovery. Re-run the two-client readiness probe before redispatching
+C01 so a departing first viewer and delayed second viewer are both proven.
+
+The disconnect recovery was committed as `928b38bb`, built into development
+generation `0.28.0-cb0e442bd453`, and installed without changing production.
+The reviewed provider binding was restaged and applied, both external ingress
+routes were republished, provider doctor passed, and the three-launch browser
+smoke passed. Readiness workflow `33920592707` then passed both clients and its
+aggregate: the first client could leave, the delayed shared viewer recovered,
+and the same durable handoff remained usable.
+
+C01 workflow `33920919559` completed the full synchronized 20-minute external
+component of the calibration window at the exact frozen commit `928b38bb`.
+Both distinct
+off-host clients passed all 30 actions, including five durable-handoff
+reconnects each. The aggregate receipt is `success=true`; both clients used
+zero retries and attempted no repair inside the run. The evidence records zero
+internal URL leaks, zero duplicate server browser launches, correct retained
+identity, successful DNS, TLS, cookie, WebSocket, iframe, and reconnect checks,
+and a passing visual oracle with no finding codes. This is retained as
+successful external many-to-many and identity-continuity evidence, not a
+complete C01 result: the simultaneous local half of 500 one-shot Service reads
+across 25 agent identities did not run and cannot be reconstructed after the
+shared window.
+
+The passing oracle did not suppress diagnostic noise. The human-paced client
+recorded 2,286 network entries, 159 console entries, four HTTP 404 responses,
+one HTTP 403 response, and 21 HTTP 504 responses. The slow client recorded
+4,269 network entries, 230 console entries, five HTTP 404 responses, two HTTP
+403 responses, four status-zero requests, and 36 HTTP 504 responses. All 60
+scripted actions still passed. Preserve these redacted records for W10 causal
+classification; do not infer that the response codes are harmless merely
+because C01 passed, and do not repair them during the frozen campaign unless a
+later sequence cannot complete.
+
+Artifact correlation classifies the four status-zero requests as canceled
+page and reconnect work and all nine HTTP 404 responses as stale Guacamole
+active-connection observations around setup, reconnect, or teardown. Three
+Guacamole token HTTP 403 responses recovered without losing identity. The 57
+HTTP 504 responses are different: they span session-tab, runtime-health,
+legacy-session, Service status and resource, Service contract, and browser
+capability-registry reads throughout the 20-minute window. All but one URL
+identity later returned success, but this remains actionable dashboard
+reliability degradation.
+
+The receipt also contains 316 console errors. Four otherwise unexplained
+message hashes account for 247 of them, but the redacted evidence cannot
+classify their causes. Captured console and network arrays were not passed into
+the external handoff oracle, and the captured console shape differs from the
+dashboard oracle's input contract. The oracle therefore returned clean despite
+the error traffic. Classify this workflow `complete_degraded` and repair the
+oracle and evidence shape before repeating the synchronized full C01.
+
+Revised next action: add the missing source-owned five-surface live journal
+calibrator, W6 evidence projection and live-adapter assembler, and authenticated
+E2 calibration preparation seam. Repair the external oracle's console and
+network evidence wiring. After provider-free validation and development-only
+installation, run one fresh synchronized C01 with both the external clients and
+the 500-command local half, finalize its calibration artifacts, seal exact E1
+and E2 identities, and write the zero-start campaign freeze. Only after that
+checkpoint may W7 execution begin.
+
+### W6 Calibration Evidence And Harness Repair
+
+State transition: `w6_external_component_complete_degraded ->
+w6_repaired_candidate_ready_for_publication`.
+
+Acceptance state: W6 remains open. No replacement development candidate has
+yet been installed from this source state, no fresh synchronized C01 has run,
+and no zero-start campaign freeze exists.
+
+The external runner now normalizes its console and network captures into the
+dashboard oracle contract and writes a redacted oracle artifact. Unexplained
+console errors, HTTP failures, and transport failures fail the oracle. Narrow
+Guacamole setup, reconnect, and teardown noise remains recorded under explicit
+classifications. Replaying workflow `33920919559` now rejects both client
+receipts and preserves the exact 316 console errors and 57 HTTP 504 responses
+that the earlier oracle omitted.
+
+The new five-surface journal calibrator no longer treats a request-parser
+rejection as a browser launch failure. Its live inducer invokes the exact
+installed development generation with a deliberately unsupported engine. This
+reaches `BrowserManager::launch` and fails before any browser process spawn.
+The calibrator then requires two stable readbacks of exactly one matching
+`browser_manager` failure followed by exactly one authenticated observation
+for each of the other four named surfaces. The malformed-line check remains
+isolated from the live journal and is candidate-bound.
+
+The W6 evidence assembler now supplies exactly 54 source-bound case adapters
+and 24 hook bindings. Cases without a separately frozen phase-specific live
+bundle remain honest `explicit_blocked` zero-effect adapters. It also projects
+two downloaded external receipts and their complete oracle reports into the
+W6 external-vantage contract. The distributed C01 driver can authenticate E2
+from ephemeral environment material or a private nonsymlink file without
+serializing credentials or its session cookie.
+
+The W9 provider-free harness delay was an implementation defect, not an epoch
+wait. The 835-attempt run cloned its growing controller graph 842 times and
+rescanned 15,955 logging expectations for every attempt. Indexed lookups and
+four bounded snapshots reduce the focused run from about 200 seconds to about
+20 seconds while preserving interruption, safety-stop, blocker propagation,
+receipt, harvest, and evidence-sealing behavior.
+
+Validation at this checkpoint is green:
+
+- the full `pnpm test:p158-harness` suite passes under a directly observed
+  process;
+- the W9 focused test passes with exactly four controller snapshots;
+- release fixture, Service API and MCP parity, generated client contract, and
+  client type gates pass; and
+- `git diff --check` passes.
+
+Next action: commit this repaired source state, build and install a fresh
+development candidate, run development doctor and launch smoke, and execute the
+candidate-bound five-surface live journal calibration. Then schedule a fresh
+synchronized C01 far enough ahead to start the 500-command local half and both
+external viewers inside the same 20-minute window. Finalize those artifacts,
+seal E1 and E2, and write the zero-start campaign freeze before W7.
+
+### W6 Live Journal Calibration Unblocked
+
+State transition: `w6_repaired_candidate_ready_for_publication ->
+w6_live_journal_calibration_passed`.
+
+The repaired source was committed as `4ee8534c`. Because the Rust executable
+was unchanged, development publication retained generation
+`0.28.0-cb0e442bd453` while installing the new dashboard assets. Exact-bound
+development doctor and all three disposable browser-launch smoke iterations
+passed with production unchanged.
+
+The first live five-surface attempt exposed two harness defects. The induced
+invalid-engine command correctly produced one exact `browser_launch` record,
+but the Service control plane also wrote a legitimate companion
+`service_action` failure. The harness incorrectly required the entire live
+journal delta to contain only the target record. It now requires exactly one
+stable engine-bound BrowserManager record, rejects missing or duplicate target
+records, and retains other concurrent records as redacted background evidence.
+
+The next attempt exposed a shared-profile dependency in the live inducer. A
+client using the development pseudo-home inherited its default profile and was
+rejected with `existing_session_profile_identity_unproven` before reaching
+BrowserManager. The inducer now gives each one-shot client a disposable home,
+removes inherited profile selectors, preserves the exact development socket
+and ingress binding, and removes that home after the command. This reaches the
+unsupported-engine failure without opening Chrome or disturbing a retained
+profile. Provider-free tests prove both isolation and cleanup.
+
+The live calibration then passed against the exact E2 development candidate.
+It observed one correlated record for each of `browser_launch`,
+`guacamole_load`, `handoff_link`, `cdp_stream`, and `dashboard_action`, with two
+stable BrowserManager readbacks. It also retained the companion
+`service_action` record as background evidence. The isolated malformed-line
+seam used the same installed candidate for writing and readback while proving
+that neither the production nor live development journal changed.
+
+Revised next action: finish aggregate validation and commit this calibration
+repair. Then schedule a fresh synchronized C01 far enough ahead to start the
+500-command local half and both external viewers inside the same 20-minute
+window. Finalize those artifacts, seal E1 and E2, and write the zero-start
+campaign freeze before W7.
+
+### C01 Predispatch Integration Defects
+
+State transition: `w6_live_journal_calibration_passed ->
+c01_predispatch_repair_active`.
+
+The first synchronized replacement dispatch, workflow `33927882151`, stopped
+before the shared start and before any campaign browsing action. Both external
+clients retained `handoff_target_closed_operator_action_required`, zero
+retries, and no in-workflow repair. The exact hash-selected durable handoff
+still exists, but its browser target requires the already authorized explicit
+operator reopen before the next dispatch.
+
+Local distributed preparation independently stopped before writing its
+preparation envelope. It first rejected an authenticated dashboard port used
+as the unauthenticated E1 Service target. The correct E1 agent endpoint is the
+development runtime lane, while E2 remains the authenticated public ingress.
+
+After that configuration correction, preparation exposed a source-level
+integration defect. The external workflow schedules 25 actions strictly
+inside the 20-minute window by dividing it into 26 intervals. The distributed
+validator independently reconstructed offsets with 25 intervals, placing its
+last expected action at the window boundary. Both implementations passed
+isolated tests while rejecting each other in the live seam. The validator now
+uses the same 26-interval contract, and the external-runner test directly
+passes a real workflow descriptor through distributed preparation so this
+drift cannot recur unnoticed.
+
+Revised next action: validate and commit the schedule-contract repair, then
+explicitly reopen the one handoff selected by its sealed URL digest. Dispatch a
+new exact-commit workflow with a fresh shared start, prepare E1 on the runtime
+lane and E2 on external ingress, and start all 500 local reads at the same
+barrier as both external viewers.
+
+### C01 External Readiness Stream Defect
+
+State transition: `c01_predispatch_repair_active ->
+c01_external_readiness_repair_validated`.
+
+The next readiness workflow reached the exact retained browser through both
+external clients and rendered the expected browser pixels. Its strict oracle
+correctly rejected the run because the dashboard also made repeated CDP stream
+WebSocket requests that returned HTTP 200 and 502 instead of upgrading. The
+visible RDP route itself was healthy. This was a dashboard defect, not
+Guacamole unavailability and not harmless oracle noise.
+
+The root cause was the global legacy stream synchronizer. It connected the
+active daemon session's CDP stream on every dashboard page even when a durable
+workspace route had selected and rendered an RDP or snapshot stream. The hook
+now accepts an explicit enablement decision, tears down when disabled, and is
+disabled whenever the durable workspace route owns the viewport. Native
+fallback pages retain the existing CDP behavior. A source-level dashboard
+regression binds the handoff route to this exclusion.
+
+The same external receipts contained status-zero Guacamole asset requests
+cancelled during page replacement and then successfully fetched milliseconds
+later. The oracle now classifies such a request as expected lifecycle noise
+only when the request is in the Guacamole transport class and a later 2xx or
+3xx response for the exact URL digest and method proves recovery. Console
+capture also records a safe message class and location digest. A matching
+resource-load console error inherits lifecycle classification only from that
+exact recovered network record. Unrecovered Guacamole transport failures and
+all CDP WebSocket handshake failures remain actionable.
+
+Focused durable-handoff, external-vantage, dashboard production-build, and
+whitespace checks pass. Revised next action: commit and publish these dashboard
+assets into the development candidate, rerun exact candidate doctor and the
+external readiness workflow, then proceed directly into synchronized C01 only
+if both external oracles are clean.
+
+The first post-publication readiness dispatch stopped before page access
+because activation had closed the retained tab. Explicitly reopening the same
+sealed handoff succeeded and required refreshing only its tab and target
+identity fields. The replacement human-paced probe passed. The slow probe had
+no actionable network failures and no CDP handshake errors, but its dashboard
+oracle still reported two Guacamole resource-load console errors. Inspection
+showed that the first normalization had correctly linked both console records
+to expected lifecycle network records. The audit's second normalization then
+discarded those explicit classifications. Normalization now preserves an
+existing classification and applies inference only to raw records. A direct
+double-normalization regression proves the recovered lifecycle classification
+survives the oracle boundary while an unclassified CDP handshake remains
+actionable.
+
+The next slow-client readiness pass then exposed a distinct simultaneous-view
+reconnect race. Initial and concurrent captures both rendered the exact fixture,
+but reconnect found a Guacamole active-primary row whose sharing credentials
+already returned 404. The resolver treated any active row as proof of a live
+primary and never asked the server-side primary lease whether the stale owner
+could be replaced. It remained without an iframe until the pixel deadline.
+An initial repair asked the bounded primary-claim endpoint after a sharing
+credential 404, but adversarial review rejected it before acceptance. The claim
+registry is only a ten-second in-memory mutex and is not fenced to a provider
+connection or live owner. At expiry it could authorize a second direct viewer
+while the original primary still existed. The external run against that build
+was canceled, the development runtime was restored to the preceding safe
+generation, and the unsafe 404 claim path was removed. Reclaiming this case now
+requires owner and provider evidence strong enough to prevent split-brain; a
+credential 404 alone is explicitly insufficient.
+
+### Persisted Ingress Doctor Consistency And Safe Reconnect Design
+
+State transition: `w6_external_readiness_reconstruction_active ->
+w6_safe_reconnect_repair_active`.
+
+The development provider doctor also exposed an installation-coherence defect.
+After a v2 provider had durably recorded its reviewed external ingress binding,
+an ordinary read-only status or doctor invocation without the two staging
+environment variables reconstructed an unconfigured expectation and reported
+false manifest drift. Read-only status and doctor now reuse the persisted
+binding only when both variables are absent and only after recomputing and
+validating its public HTTPS URL, reviewed revision, deterministic digest, and
+whole-manifest equality. Explicit empty, partial, changed, invalid, or tampered
+values continue to fail closed. Provider staging and mutation still require the
+explicit pair. Provider-focused, development-runtime, handoff-documentation,
+docs-build, and whitespace validation pass for this repair.
+
+The reconnect blocker now has a bounded safe design. Guacamole's active
+connection representation does not expose a sharing-profile identifier, so the
+dashboard cannot classify one arbitrary matching row as the primary. It must
+enumerate every row for the configured connection, order candidates
+deterministically, and request the configured restricted sharing credentials
+from each. A candidate-specific 404 means only that candidate is stale and may
+be skipped; the first valid restricted key wins. Authentication, server, and
+malformed-success responses remain terminal. If rows remain but all return 404,
+the resolver must relist and wait without opening a new direct connection.
+Primary election is allowed only after two consecutive provider snapshots show
+no matching row. The unrestricted connectable-active-connection route is
+prohibited because it would bypass the configured sharing-profile limits.
+
+Revised next action: implement and validate the multi-candidate restricted
+sharing resolver, commit both coherent repair slices, publish a new development
+candidate, and rerun exact-candidate doctor, three-launch smoke, and both
+external readiness clients. Proceed to synchronized C01 only if both external
+oracles are clean.
+
+### Safe Multi-Candidate Reconnect Validated
+
+State transition: `w6_safe_reconnect_repair_active ->
+w6_candidate_publication_active`.
+
+The dashboard resolver now enumerates every active Guacamole row for the exact
+connection and tries the configured restricted sharing profile in deterministic
+newest-start-time and identifier order. A 404 skips only that candidate. The
+first valid restricted key wins; authentication errors, provider errors, and
+malformed successful responses remain terminal. When matching rows persist but
+all credentials return 404, the resolver relists until its bounded deadline and
+never asks for direct-primary ownership. Direct election requires two
+consecutive provider snapshots containing no matching row.
+
+Focused regression coverage proves stale-former-primary followed by a live
+shared child, shared-child-only reconnect, deterministic ordering, persistent
+all-404 fail-closed behavior, terminal error handling, vanished-row recovery,
+two-empty-snapshot election, and concurrent one-direct plus one-restricted-share
+behavior. The focused test and production dashboard build pass. A separate
+closed-world safety review found no split-brain or sharing-policy bypass in the
+two-file repair.
+
+Revised next action: commit and publish the repair, build and install the exact
+development candidate, run provider doctor and the three-launch smoke, reopen
+the sealed handoff if candidate activation closes its target, refresh only its
+candidate-bound expected identity, and dispatch both external readiness clients.
+
+### External Reconnect Passed And Console Oracle Repaired
+
+State transition: `w6_candidate_publication_active ->
+w6_oracle_candidate_publication_active`.
+
+Development generation `0.28.0-79ea57179d52` passed the provider-required
+development doctor and all three disposable browser-launch smoke iterations.
+The sealed handoff reopened with a current ready presentation receipt. The
+first external dispatch, workflow `33932182021`, terminated before page access
+because the operator's secret-update command stored a literal stdin marker
+instead of the eight-field JSON payload. Both clients retained redacted failure
+receipts with zero retries and no repair attempt. The environment-scoped secret
+was corrected through actual stdin input and a distinct workflow was dispatched.
+
+In workflow `33932413878`, the human-paced client passed. The slow concurrent
+client reached the exact initial, concurrent, and reconnect pixel markers, so
+the safe multi-candidate resolver repaired the blocking stale-row plus
+surviving-shared-child visibility sequence. Its final dashboard oracle
+nevertheless rejected one console record. The same redacted
+evidence had already classified that resource-load error as expected Guacamole
+lifecycle noise and linked it to the exact accepted 404 network observation.
+The final oracle ignored all console lifecycle classifications even though it
+validated their network counterparts.
+
+The repaired oracle accepts only the exact recovered Guacamole console tuple:
+the expected lifecycle disposition and code, resource-load message class,
+Guacamole transport location, and unique recovery identifiers that resolve to
+network entries independently accepted by the oracle. Generic canceled
+Guacamole requests additionally require a strictly later 2xx or 3xx record
+with the same URL digest and method and no error. Missing, wrong, duplicate, or
+unresolved recovery identifiers; unclassified console errors; CDP errors; and
+wrong message, path, or classification codes remain actionable.
+
+The regression was red before the repair. The dashboard-oracle and
+external-vantage suites pass afterward, as does the complete provider-free
+Plan 0158 harness through all historical, logging, dashboard, schedule,
+calibration, W7, W8, W9, teardown, and W10 analyzer layers.
+
+Revised next action: commit and publish the oracle repair, reinstall the exact
+candidate checkpoint, rerun development doctor and the three-launch smoke,
+reopen and refresh the sealed handoff identity if activation changes it, and
+repeat external readiness under a distinct attempt. Proceed to synchronized
+C01 only after both external jobs and their aggregate are clean.
+
+### Clean Readiness And First Full C01 Findings
+
+State transition: `w6_oracle_candidate_publication_active ->
+c01_starvation_repair_active`.
+
+The oracle repair was committed as `73348c6e` and installed as development
+generation `0.28.0-79ea57179d52`. Provider-required development doctor and all
+three disposable launch-smoke iterations passed. After explicitly reopening
+the existing sealed handoff and refreshing its candidate-bound identity, both
+off-host readiness clients and their aggregate passed in workflow
+`33933314994`. The accepted receipts recorded zero retries, zero repairs, zero
+duplicate server browser launches, and zero internal URL leaks.
+
+A fresh distributed C01 was then prepared against the exact E1 loopback lane,
+E2 public ingress, candidate commit `73348c6e`, installed generation, and a
+shared start at `2026-09-05T01:15:14Z`. Workflow `33933739849` and the original
+local controller remained attached through the barrier. No campaign action,
+retry, or repair occurred before the shared start.
+
+The attempt completed as an honest diagnostic failure:
+
+- the local half spanned exactly `01:15:14.025Z` through `01:35:14.000Z` and
+  retained all 500 one-shot observations with no retry or repair;
+- 497 live transport results passed, while three E2 reads retained plain
+  non-JSON Gateway Timeout responses around 30 seconds, including two observed
+  HTTP 504 statuses;
+- the original calibration validator additionally mislabeled ten successful
+  HTTP 200 responses as `service_effect_contract_mismatch` after backward wall
+  clock corrections placed their completion timestamps 147 to 1,687
+  milliseconds before the nominal plan while monotonic durations remained
+  valid;
+- the human external client rendered the initial fixture but its first
+  reconnect displayed the Apache Guacamole login page. Two iframe token
+  exchanges returned HTTP 403 after the resolver minted a key from the newest,
+  asynchronously closing active row;
+- the slow external client rendered the initial, concurrent, and all five
+  reconnect fixtures, then its strict oracle rejected 63 captured HTTP 504s,
+  two HTTP 502s, one Guacamole HTTP 500, and their console projections; and
+- the aggregate retained both failed client identities, zero retries, zero
+  repairs, and refused to claim calibration success.
+
+Every declared downloaded artifact passed byte-count and SHA-256 validation:
+eight human-client artifacts and 24 slow-client artifacts. The aggregate and
+local run envelopes remain outside the product repository under the governed
+temporary campaign root. Raw URLs, credentials, profile paths, and browser
+artifacts remain outside tracked source.
+
+The reconnect root cause is a fresh-key closing-row race, not key reuse. A new
+page requests a fresh restricted sharing key. The old resolver preferred the
+newest row and returned immediately after minting; Guacamole can then
+invalidate the key when asynchronous closure of that row completes. The
+bounded repair considers only connectable candidates, prefers the oldest
+stable row, requires two exact no-store post-mint liveness snapshots, discards
+keys from changed or vanished rows, and preserves the existing no-split-brain
+election rules. A provider-free fake token endpoint made the old behavior red
+with an actual 403 redemption before the repair. A residual non-atomic interval
+between the final liveness read and cross-origin iframe redemption remains an
+explicit architectural risk; eliminating it requires a server/provider-bound
+redemption seam.
+
+The local clock defect was in the harness. It scheduled with an unrelated
+global wall clock, measured request duration monotonically, then treated a
+fresh wall timestamp as monotonic. The repair couples the scheduler to the
+evidence clock, keeps nanoseconds lossless, correlates transport start,
+completion, and claimed latency exactly, and records signed clock-adjustment
+evidence. True early release, precision loss, forged latency, pre-admission
+transport, forward end-window overrun, and real transport failure remain
+actionable.
+
+The broad external failure is dashboard-origin starvation amplified by
+polling, not an ingress outage. Across both mounted pages and the local window,
+the wire evidence contains 89 matching 504s, two session-tabs 502s, and one
+Guacamole 500. During the full mounted-page interval, session-tabs made 7,045
+requests. Service status made 638 requests, transferred about 3.42 GB, and
+returned payloads as large as 5.45 MB. Resources made 1,216 requests and
+transferred about 584 MB. Each local 30-second failure aligns with a multi-route
+external timeout burst. Traefik continued serving thousands of fast responses
+through the same route, while failed upstream requests expired uniformly near
+27.6 seconds. Independent page consumers, N+1 tab reads, repeated large
+status/resource bundles, synchronous inventory and reconciliation work, and
+incomplete cache coverage amplify backend scheduler, CPU, I/O, cloning, and
+serialization pressure.
+
+The same attempt proved a logging gap. The runtime host, dashboard backend,
+and stable dashboard ingress wrote zero systemd journal lines during the
+failure window. Read-only GET failures are excluded from the current client
+failure observer, the backend lacks request-stage and starvation timings, and
+the live C01 transport attempted JSON decoding before safely preserving an
+upstream non-JSON status/body class. The external HAR made this attempt
+diagnosable, but runtime-native postmortem coverage remains insufficient.
+
+Revised next action: finish integrated validation and commit the reconnect and
+dual-clock repairs as separate reviewable slices. Before tuning capacity, add
+redacted request-stage spans, inflight/response-byte/event-loop and expensive
+projection timings, failure journaling for HTTP 5xx/proxy failures, bounded
+post-recovery delivery for same-origin read failures, and non-JSON gateway
+status/body-class retention in the C01 harness. Then consolidate dashboard
+polling across consumers and pages, suspend hidden-page reads, batch or limit
+session-tab projection, make static contracts and registry conditional, replace
+the multi-megabyte status feed with a bounded summary plus on-demand detail,
+and move blocking inventory/reconciliation work off async workers or onto
+maintained snapshots. A provider-free two-page plus 500-read stress test must
+prove bounded requests, bytes, event-loop lag, complete failure logging, and no
+timeouts before another exact-candidate readiness and synchronized C01 attempt.
+
+### C01 Capacity, Logging, And Campaign-Sequencing Repair
+
+State transition: `c01_starvation_repair_active ->
+c01_repaired_candidate_ready_for_publication`.
+
+The C01 failure surface was repaired as one bounded cross-layer slice. The
+ordinary service-status contract remains lossless. The dashboard now requests
+an additive summary projection that caps growth-prone collections, retains
+current identity and actionability fields, reports omitted counts and detail
+routes, and fails closed above 2 MiB. Status and resource preparation move
+blocking state, process, authority, and serialization work off async workers.
+Dashboard consumers share completion-driven reads, suppress hidden-page
+polling, retain bounded monotonic caches, invalidate generation-scoped static
+data, and fetch session tabs in a selected-first bounded round robin instead of
+one request per session on every cycle.
+
+The failure journal now uses a dedicated bounded writer. Accepted writes
+backpressure instead of disappearing under queue pressure; readback exposes
+distinct overload, worker, and sink failures and flushes pending writes before
+inspection. Exactly one backend-flight occurrence is recorded for a failed
+shared request, while each affected client retains its own logical failure.
+The dashboard records privacy-bounded failures from status, resources,
+session-tabs, and runtime-health reads without retrying them, retains up to
+4,096 occurrences per document, and submits them after a later valid response.
+Overflow becomes an explicit delivery-gap occurrence. The C01 transport hashes
+and counts the exact response bytes before decoding, classifies non-JSON
+gateway responses without retaining raw bodies, and fails closed above an
+8 MiB response cap.
+
+A real two-worker Tokio stress oracle now serves dense projected state through
+the actual proxy, cache, and single-flight path to two independent clients. It
+performs exactly 500 reads, requires exactly two backend requests, enforces the
+summary byte ceiling and a 250 millisecond heartbeat ceiling, and performs no
+retry or repair. Its fault half injects one shared JSON 502 and one non-JSON
+504 and requires exactly two backend-flight records, four logical-client
+records, six journal records, complete correlation, and redaction. Both stress
+tests pass.
+
+The campaign sequence was also corrected before another live dispatch. C04 and
+C05 are passive asynchronous observations and cannot delay installation or
+repair. Dependency loss is checked before a dependent action adapter can run;
+blocked work records `skipped_blocked`, `not_started`, exact prerequisite IDs,
+and zero actions or effects. W10 preparation now receives hash and byte-count
+verified manifest, freeze, schedule, registry, logging-gap, and terminal
+artifact inputs from the live assembly. It prepares only after execution is
+terminal, evidence seals next, and finalization runs only after sealing. An
+empty logging-gap inventory produces an explicit sealed zero-entry artifact.
+
+Integrated provider-free evidence is green: the complete Plan 0158 harness
+passes through all 54 cases, 894 scheduled attempts, five logging surfaces,
+Last30Days shared-profile regressions, external handoff and dashboard oracles,
+W7, W8, W9, teardown, and W10 analysis. The dashboard build and documentation
+build pass. Workspace clippy passes with warnings denied. The broad Rust main
+partition passes 1,973 tests. It first exposed two stale Plan 0137 expectations
+that still required a capability for a shared-local terminal replacement; the
+tests now preserve the intended frictionless shared-local admission while
+requiring a fresh isolated route. A later serial control-plane test exposed an
+empty-object versus missing-state sentinel regression. The daemon now uses
+`null` as the sole repository-reload sentinel, while an explicit empty snapshot
+remains read-only. The complete 47-test control-plane partition passes after
+that repair.
+
+Revised next action: commit and publish the reviewed source slices, build and
+install one exact development candidate while production remains untouched,
+run provider-required doctor and the three disposable launch smokes, calibrate
+all five journal surfaces, refresh only candidate-bound sealed handoff identity
+if activation changes it, and require both external readiness clients plus
+their aggregate to pass. Only then dispatch one fresh synchronized C01 against
+that exact installed commit.
+
+### Repaired Candidate Installed And Journal-Calibrated
+
+State transition: `c01_repaired_candidate_ready_for_publication ->
+c01_repaired_candidate_external_readiness_active`.
+
+The four reviewed repair commits were published through `8c7e68cb`. The exact
+optimized executable was installed as development generation
+`0.28.0-d207ba36a77c`; the installer reported production unchanged. Filesystem
+use was 70 percent against the campaign's 90 percent stop threshold.
+Provider-required development doctor passed with all three services bound to
+the selected generation, six distinct presentation routes, four distinct warm
+displays, private secrets, protected lease authority, and configured external
+ingress. All three disposable open, URL-read, close, and residue smoke
+iterations passed.
+
+A fresh candidate-bound malformed-line proof passed in an isolated temporary
+runtime without changing the live development or production journals. The
+live five-surface journal calibration then observed exactly five requested
+failures: `browser_launch`, `guacamole_load`, `handoff_link`, `cdp_stream`, and
+`dashboard_action`. It retained one legitimate `service_action` companion as
+background evidence, reached two stable BrowserManager readbacks, started no
+browser process, attempted no retry or repair, and allowed no production
+access. Provider-required doctor remained green afterward. The first package
+alias invocation failed before effects because the live runner requires its
+four explicit path arguments; this was an operator invocation error rather
+than a product or calibration failure, and the successful attempt supplied the
+exact candidate-bound configuration and off-repository outputs.
+
+Revised next action: verify or reopen the existing sealed development handoff
+without publishing its URL, refresh only its candidate-bound expected identity
+if the installed generation changed the target, and dispatch a fresh pair of
+external readiness clients. Proceed to synchronized C01 only if both clients
+and their aggregate are clean for this exact candidate.
+
+### External Readiness Exposes Stale Internal Service Lane
+
+State transition: `c01_repaired_candidate_external_readiness_active ->
+c01_stale_service_lane_repair_ready_for_publication`.
+
+The exact sealed handoff was recovered by its durable URL digest without
+printing its ID or URL. Its retained row still said ready, but an ordinary
+resolution correctly reported that the previous tab had been explicitly
+closed and required operator reopening. The supported
+`allowReopenClosed=true` resolution preserved the browser, profile, session,
+and durable handoff while creating only replacement tab and target identities.
+It returned a ready authenticated presentation receipt at presentation
+generation 129. The environment-scoped handoff and expected-identity secrets
+were refreshed from that exact ready resolution without logging their values.
+
+External readiness workflow `33942453313` ran from exact commit
+`4581d93bb1cb5b6a5cd4b4e8c2734aed0625075b`. The human-paced client passed
+with exact initial and reconnect identity, zero internal URL leaks, zero
+physical browser launches, zero retries, and zero repairs. The delayed client
+rendered the expected fixture but its oracle rejected one dashboard API HTTP
+502 and the matching console error. Two Guacamole observation 404s were
+correctly classified as expected lifecycle noise. The aggregate retained both
+client identities and failed closed with zero retry or repair.
+
+The runtime journal recorded the actionable failure at the same epoch as a
+connect-stage `backend_unavailable` failure for the dashboard API and its CDP
+target-list companion. All three development services remained active with
+zero systemd restarts. Diagnosis found that the shared runtime host remained
+reachable after its logical `dashboard-service-backend` lane exited, while the
+lane's `.stream` discovery record remained. The old readiness predicate tested
+the shared host socket and the existence of the stream file, so it accepted the
+stale lane and immediately proxied to a dead port.
+
+The bounded repair now requires the named lane's published HTTP port to accept
+a loopback connection before `ensure_service_daemon_session` may reuse it.
+Missing, malformed, zero, or non-listening stream ports enter the existing
+exact-lane recovery path; the five-second post-start convergence loop applies
+the same predicate. It neither restarts the shared host nor launches a browser.
+A focused stale-versus-live port regression passes, all 82 HTTP stream tests
+pass serially, formatting passes, and workspace clippy passes with warnings
+denied.
+
+Revised next action: publish and install this exact development candidate,
+reopen the same sealed handoff if installation closes its tab, refresh only the
+environment-scoped expected identity, and rerun both external readiness
+clients. Dispatch synchronized C01 only after the human, delayed, and aggregate
+readiness results are all clean.
+
+The repair was published as `fe1218c0` and installed as development generation
+`0.28.0-6a28e573b3a5`. Provider-required doctor, the 90 percent filesystem
+threshold, and all three disposable browser launch smokes remained green. The
+same sealed handoff was reopened and its environment-scoped identity refreshed.
+Workflow `33943129378` then proved the original repair: the delayed client that
+previously observed the stale-lane 502 passed completely, with exact identity,
+no internal URL leak, no physical browser launch, and no retry or repair.
+
+The human client independently failed on one Guacamole sharing-profile
+observation canceled with Chromium's exact `net::ERR_ABORTED` lifecycle signal.
+Its identity and visual evidence completed, the provider returned no HTTP error,
+and the delayed client subsequently exercised the same presentation
+successfully. The oracle already treated an aborted Guacamole tunnel as page or
+reconnect lifecycle noise, but required same-URL recovery for every other
+Guacamole transport. That could never validate a tunnel-specific
+`activeConnection/.../sharingProfiles` observation because the next viewer has
+a different opaque tunnel identifier.
+
+The bounded oracle repair accepts only that exact sharing-profile endpoint with
+the SHA-256 of `net::ERR_ABORTED` as page or reconnect lifecycle noise. A generic
+`net::ERR_FAILED`, any other endpoint, an HTTP failure, and unexplained transport
+failure remain blocking. Provider-free runner and complete dashboard-oracle
+tests pass with both the positive cancellation case and negative generic-failure
+case.
+
+Revised next action: publish the exact oracle repair and rerun the two-client
+external readiness workflow without reinstalling the unchanged product
+candidate. If all three readiness results pass, freeze the installed identity
+and dispatch synchronized C01.
+
+### External Readiness Exposes Selective Cooper Bridge Blackholes
+
+State transition: `c01_stale_service_lane_repair_ready_for_publication ->
+c01_external_ingress_bridge_diagnosis_active`.
+
+The oracle-only repair was published as `fd28ca23`; the unchanged installed
+product candidate remained generation `0.28.0-6a28e573b3a5`. External readiness
+workflow `33943421780` preserved a second failed epoch. The human client reached
+the expected identity and visual state but retained one additional exact
+Guacamole tunnel-protocol observation canceled with Chromium's
+`net::ERR_ABORTED` page-transition signal. The delayed client failed on two
+dashboard JavaScript responses and one `/api/sessions` response that each
+returned HTTP 504 after approximately 27.6 seconds. It performed no retry or
+repair.
+
+Cross-layer reconciliation disproved a process crash and a dashboard-wide
+event-loop stall. Bastion access records prove that the 504 responses originated
+from Cooper's local Traefik. Cooper access records prove that exactly those
+three requests spent approximately 27.6 seconds waiting on
+`host.docker.internal:4948`. Other static assets and dashboard API requests to
+the same listener completed before, during, and after the three failures. The
+development dashboard ingress, backend, and runtime host remained active with
+zero restarts. A fresh 1,000-request, 50-way probe from the Traefik container to
+the same upstream completed without a failure. The defect is therefore an
+intermittent selective connection blackhole across the Docker Desktop host
+bridge, not a fixed URL, browser, handoff, or application routing error.
+
+The same investigation exposed a separate logging defect. Bastion Traefik's
+container-local access log had reached 62.7 GiB without rotation and retained
+request metadata broader than the campaign's privacy-bounded evidence model.
+Bastion filesystem use remained 36 percent, but the unbounded sink and rich
+metadata are not acceptable post-mortem design. The Cooper repository already
+contains unrelated active edits in the Docker Desktop WSL proxy lane, so this
+campaign must not overwrite that worktree. Preserve this finding for coordinated
+ingress repair and keep private access records outside the product repository.
+
+The external oracle now recognizes only the exact tunnel-specific `/protocol`
+endpoint with the exact SHA-256 of `net::ERR_ABORTED` as page-transition
+lifecycle noise, matching the already bounded sharing-profile rule. Generic
+transport errors, HTTP failures, and every other endpoint remain actionable.
+Positive and negative provider-free regressions cover both dispositions.
+
+Revised next action: validate the narrowed Guacamole classification, then add
+privacy-bounded acceptance-stage telemetry to the stable dashboard ingress so a
+future bridge failure proves whether the request reached the Agent Browser
+listener. Do not weaken the external 504 gate and do not add an implicit retry.
+Coordinate any Docker bridge or bastion log-retention repair with the active
+Cooper worktree before another readiness epoch. Synchronized C01 remains gated
+on a clean human, delayed, and aggregate readiness result.
+
+### Simultaneous Viewer Setup Exposes Ephemeral Guacamole Share Keys
+
+State transition: `c01_external_ingress_bridge_diagnosis_active ->
+c01_simultaneous_viewer_repair_ready_for_external_acceptance`.
+
+The narrowed oracle repair was published as `7a270c53`. External readiness
+workflow `33944315936` then passed on that exact commit. Both off-host clients
+used the same durable handoff, preserved exact retained identity, leaked no
+internal URL, caused zero additional physical browser launches, and attempted
+no retry or repair. The aggregate proved all ingress, identity, and
+single-browser checks.
+
+The first synchronized C01 dispatch, workflow `33944758681`, exposed a new
+blocking setup defect before the declared calibration epoch. The slow client
+successfully created a Guacamole sharing credential from a connectable active
+row and observed that exact row survive two post-mint relists. The sibling
+viewer origin rejected the key twice with HTTP 403 less than one second later
+and rendered Guacamole's login form. There was no request-level transport
+failure, campaign action, repair, or retry. The local 20-minute leg was never
+started. The invalid human leg was cancelled before the epoch, while the slow
+client screenshot, redacted network record, transport diagnostics, and failure
+receipt were retained.
+
+The readiness workflow's deliberate 45-second second-client delay had hidden
+this simultaneous setup race. The installed Guacamole 1.5.5 API reports new
+active rows as connectable before their credential-donating lifetime is proven.
+It may also omit `sharingProfileIdentifier` from both direct and shared active
+rows, so role discrimination alone cannot close the defect. A bounded live
+two-viewer diagnostic confirmed that a key minted from a stable primary
+rendered successfully; its shared child was non-connectable. The product must
+therefore combine all available evidence: connectable state, exclusion of an
+explicit shared-child role, a three-second minimum primary age when `startDate`
+is present, and two exact post-mint identity and role relists. It waits inside
+the existing 15-second election deadline and never reloads a rejected key.
+
+Provider-free regressions now prove that an identifiable shared child never
+donates another key, a just-created primary cannot donate before the maturity
+window, a row that becomes a shared child during validation is rejected, and a
+stable direct row remains usable. The external failure collector now inspects
+the cross-origin iframe through Playwright and classifies the concrete Apache
+Guacamole username and password form as `external_stream_auth_failed`; it
+retains only the boolean observation and never the iframe text or credential.
+The focused connection-sharing suite, external-runner suite, complete Plan 158
+dashboard oracle, dashboard production build, and diff checks pass.
+
+The repaired dashboard was embedded in development generation
+`0.28.0-4ccc6f42a631` with executable digest prefix `4ccc6f42a631` and dashboard
+digest prefix `9a9d453d0d0c`. Development doctor, authenticated dashboard smoke, and
+three disposable browser launch iterations pass. The installer reports
+production unchanged.
+
+Revised next action: publish this exact source revision, run one short
+simultaneous-start external acceptance against the installed generation, and
+require both clients plus the aggregate to pass without retry or repair. Then
+dispatch one fresh synchronized C01 using a new run ID, workflow identity, and
+shared epoch. Preserve the failed pre-epoch attempt as diagnostic evidence and
+do not reuse its descriptor.
+
+The external workflow's readiness-only 45-second second-client delay is
+removed. Readiness and calibration now exercise the same simultaneous viewer
+setup boundary; readiness remains shorter only because it omits the 20-minute
+scheduled action loop. This prevents the admission gate from masking the exact
+race that blocked C01.
+
+### Sibling-Origin Share Rejection Becomes Recoverable
+
+State transition: `c01_simultaneous_viewer_repair_ready_for_external_acceptance
+-> c01_simultaneous_share_signal_candidate_ready_for_publication`.
+
+The first simultaneous-start acceptance at workflow `33945807852` failed
+before Guacamole because installation had closed the sealed handoff target and
+the operator dispatch preceded the supported reopen step. Both clients
+reported `handoff_target_closed_operator_action_required`; no browser or
+campaign action ran. The same durable handoff was then reopened through
+`allowReopenClosed=true`, reached presentation generation 153, and had only its
+candidate-bound environment identity refreshed.
+
+Workflow `33945994974` then reached the actual simultaneous-view boundary on
+exact commit `31afdbb0`. Both clients rendered their initial and reconnect
+artifacts, but the human-paced client lost its identity marker and the delayed
+client's oracle retained a sibling-origin `/guacamole/api/tokens` HTTP 403.
+The delayed client later recovered through a dashboard-origin direct token,
+while the human client remained stranded. Neither client retried or repaired
+the campaign. The aggregate failed closed.
+
+The failure proves that post-mint row stability alone cannot close the final
+interval between credential creation and sibling-frame redemption. The
+ten-second dashboard primary claim is only an election mutex; it does not own
+or preserve a Guacamole tunnel. When the viewer that supplied the primary row
+closes during reconnect, Guacamole invalidates its restricted sharing keys.
+The sibling frame can observe the token rejection, but the dashboard cannot
+inspect that frame's DOM or network response across origins.
+
+The bounded product repair adds an installed Guacamole extension signal. A
+shared frame receives a fresh opaque attempt ID in its browsing-context name.
+For only its own token POST, the extension sends the exact parent origin one
+allowlisted message containing the attempt ID and `ready` or
+`share_key_rejected`. It sends no key, token, URL, response body, credential,
+or provider detail. The parent accepts the signal only from the exact expected
+origin, iframe window, and current attempt. A rejection immediately removes
+the iframe, records `guacamole_share_key_rejected`, and consumes the existing
+three-attempt fresh-election budget. The dead key is never reloaded.
+
+Election remains fail-closed while any matching provider row lingers,
+including a nonconnectable or explicitly shared row. Direct ownership still
+requires two completely empty snapshots. The server-side claim lease now lasts
+30 seconds, twice the resolver's complete 15-second election window, so a
+delayed provider row cannot let a second resolver become another direct
+primary during the same admission interval.
+
+Provider-free coverage now executes the extension under both XHR and fetch,
+proves the privacy allowlist and exact origin derivation, rejects untrusted or
+irrelevant messages, and exercises two simultaneous reconnectors across a
+closing primary. The focused resolver suite, workstation Guacamole asset
+suite, dashboard production build, and whitespace gate pass.
+
+The recovery is an operational product escape hatch, not permission for the
+campaign to erase a failed attempt. Plan 158 external evidence treats any
+fresh election after an observed key rejection as a retry, preserves the first
+failure, and refuses a clean readiness aggregate for that epoch. A clean C01
+admission therefore still requires a stable retained authenticated anchor so
+both external clients can disconnect and reopen without invalidating their
+credential donor.
+
+Revised next action: publish and install this exact candidate, ensure the
+development Guacamole service loads the revised extension, run provider doctor
+and disposable launch smokes, reopen the same sealed handoff if needed, retain
+one authenticated anchor through the complete two-client epoch, and repeat
+simultaneous external readiness. C01 remains gated on clean human, delayed,
+anchor-final, and aggregate results with no retry and no additional physical
+browser launch.
+
+### Retained Authenticated Anchor Coordination Contract
+
+The retained anchor is campaign infrastructure, not a product runtime owner or
+another direct Guacamole primary. Start it with
+`pnpm p158:retained-authenticated-anchor` using the same secret-backed durable
+handoff, dashboard authentication, expected identity, marker region, run ID,
+and a unique anchor ID used by the external dispatch. The process opens the
+external durable handoff once, emits `1-ready-receipt.json`, and remains alive
+until an explicit signal. Raw handoff URLs, authentication inputs, and captured
+pixels are never campaign receipt fields.
+
+The live caller imports `coordinateRetainedAnchorExternalCampaign` from
+`scripts/lib/p158-retained-anchor-coordinator.js`. Its injected callbacks start
+or supply the anchor child, wait for receipt files, dispatch the two external
+clients, persist the returned aggregate, and optionally wait for child exit.
+The coordinator has no GitHub CLI or provider coupling. It dispatches only
+after exactly one self-hash-valid passed ready receipt matches the run, anchor,
+and durable-handoff digest. After the external dispatch returns or fails, it
+sends exactly one `SIGTERM`, waits for exactly one matching passed final receipt,
+and writes a digest-only campaign aggregate.
+
+Acceptance requires all five bound evidence units to pass: human client, slow
+client, external aggregate, anchor-ready receipt, and anchor-final receipt. It
+also requires distinct external clients, the same durable handoff digest, zero
+product retry, zero runner retry, no repair, no duplicate physical browser
+launch, and clean ingress and URL-leak checks. A missing, duplicate, malformed,
+failed, cross-run, cross-anchor, or digest-mismatched receipt fails closed. An
+invalid ready receipt prevents external dispatch but still closes the anchor;
+an external dispatch failure still closes and terminally observes the anchor.
+Neither path retries or repairs the failed campaign epoch.
+
+The first complete provider-free umbrella run correctly rejected one older W8
+fixture because it represented a clean external receipt without the newly
+mandatory explicit `runnerRetryCount: 0`. The contract was not weakened. Every
+provider-free external receipt and aggregate fixture now carries explicit
+runner-retry evidence, and the successful runtime receipt and aggregate do the
+same. The affected W6, distributed calibration, W8, external runner, anchor,
+coordinator, and evidence-collector suites pass after that migration. A fresh
+`pnpm test:p158-harness` then passed end to end, including all 54 cases, 894
+scheduled attempts, the retained-anchor lifecycle, exact source sealing, W7,
+W8, W9, teardown contracts, and W10 analysis.
+
+A subsequent closed-world review found that three downstream admission paths
+could still accept compliant-looking fixtures without proving current values.
+Distributed C01 finalization now requires and safely projects explicit
+`repairAttempted: false`, `retryCount: 0`, and `runnerRetryCount: 0` on both
+external receipts, and requires the same values on the external aggregate. The
+W6 external-evidence projector enforces those fields on its aggregate and both
+clients. Missing-field and nonzero-field mutations with recomputed hashes prove
+that neither boundary can infer a clean default. The retained anchor also
+rechecks the live dashboard authentication status and exact secure HttpOnly
+session cookie during every observation, including its terminal sample; a
+session that expires while the anchor is held now produces a failed final
+receipt without another login, navigation, retry, repair, or reconnect. A new
+complete `pnpm test:p158-harness` passes after all three corrections.
+
+The simultaneous-view product repair is committed and pushed as `ca85f967`.
+That commit identifies the product checkpoint only. The final campaign
+candidate source head must be the later commit that also contains the retained
+anchor and live-adapter infrastructure, and the dispatched workflow must bind
+that exact 40-character head through `expected_commit`.
+
+Run the complete retained-anchor external command with
+`pnpm p158:retained-anchor-live`. Before invocation, supply the existing
+secret-backed dashboard and handoff environment, `P158_RUN_ID`, a unique
+`P158_ANCHOR_ID`, the exact current `P158_CANDIDATE_COMMIT`, a canonical UTC
+`P158_CALIBRATION_START_AT`, and `P158_PROBE_MODE` set to `readiness` or
+`calibration`. The current checked-out branch must point at that exact head.
+Optional bounded settings control artifact retention and observation timeouts;
+they do not authorize retry or repair.
+
+The command starts the local authenticated anchor, waits for its unique passed
+ready receipt, and dispatches `p158-external-vantage.yml` at the current branch.
+The workflow run name binds the campaign run ID and expected commit. The caller
+accepts exactly one post-dispatch run matching that name, head, branch, event,
+and a bounded creation-time window. It observes the run until terminal, then
+downloads the human, slow, and aggregate artifacts exactly once, including
+failure artifacts. It always requests graceful anchor shutdown after workflow
+terminality, requires the final anchor receipt and child exit, and writes
+`p158-retained-anchor-external-aggregate.json`. A non-successful workflow,
+ambiguous run identity, timeout, interruption, missing or duplicate artifact,
+failed receipt, retry, repair, or forced anchor shutdown makes the command exit
+nonzero. Forced process closure is a bounded cleanup fallback and never changes
+the failed campaign epoch into a retry.
+
+### September 5 Resumption And Anchor Disposition
+
+The user renewed the objective to complete this Plan. Source and remote HEAD
+both resolve to `ca85f96705a55d6964c57f14b2278bdef84fb182`; the pre-existing
+campaign changes and note 0151 were preserved. The installed development
+generation at resumption was `0.28.0-4ccc6f42a631`. This checkpoint is
+`blocker_reduction`, not live acceptance progress.
+
+The anchor is admitted as an explicitly declared stable-primary calibration
+fixture. An anchored result proves only that fixture configuration. It cannot
+prove ordinary anchor-free reconnect reliability, replace the previously
+failed anchor-free attempts, or add a persistent viewer to the product's user
+requirements. W10 must report this limitation alongside those failures.
+
+Primary-owned continuation: finish the existing adapter verification, publish
+and identify the development candidate, calibrate and freeze W6, execute the
+available concrete cases with exact blockers for unsupported cases, and seal
+the complete terminal schedule before W10. Dashboard measurements and durable
+handoff transitions remain substantive acceptance requirements. Missing
+drivers cannot be converted into fabricated execution evidence.
+
+The bounded `/root/anchor_adapter` lane reproduced loss of workflow identity
+on timeout and repaired that path, independent failure-artifact collection,
+reused output admission, child startup and exit observation, and actual source
+binding. The primary inspected the changed paths and accepted the focused
+test evidence. `P158_LIVE_OUTPUT_DIR` is now mandatory, absolute, outside the
+repository after symlink resolution, and empty. Campaign scripts, workflow,
+package metadata, and lockfile must match the committed candidate before
+dispatch. Failed aggregates retain the identified workflow and safe per-artifact
+download/read diagnostics.
+
+The read-only `/root/live_case_ledger` lane reconciled current integration:
+W7 has complete drivers for A01, A02, A03, A05, A08, and A13; W8 has conditional
+complete drivers for H01, H03, D01, D03, and D04. A11 predispatch and D05
+tab/target implementations remain partial coverage. The assembly preparer
+requires fresh ownership inputs and does not yet have a retained live assembly
+descriptor. Concrete preparation of those inputs can proceed during the
+external calibration scheduling interval.
+
+The complete `pnpm test:p158-harness` passed on the resumed tree, including
+the repaired adapter. The optimized candidate built successfully with eight
+Cargo jobs and installed as development generation `0.28.0-7565e73806cf`.
+Provider-required doctor and all three disposable launch smokes passed;
+installation reported production unchanged. Selected release-asset fixtures
+and diff checks passed.
+
+Provider staging exposed a loaded-asset discrepancy: the mounted extension
+was current but Guacamole's startup copy was old. Repeat provider apply only
+reconciled authority. Restart then exposed a stale Docker Desktop bind mount;
+an exact recreation of the development Guacamole service from its reviewed
+compose and protected environment files restored it. The loaded extension
+now hashes to `a67200cff9a90110ebfcd7c24fc5a5064767a6929d96d0b111d8e2268fc3db3d`,
+matching the staged source. The same durable synthetic handoff reopened and
+resolved ready; its candidate-bound expected identity was refreshed in the
+protected workflow environment. These preparation effects precede freeze.
+
+The W7 input investigation also found a topology prerequisite conflict: A13
+requires a retained legacy per-session daemon, while the current CLI rejects
+new legacy daemon launches. Its source bundle alone is not proof of current
+executability. If no positively owned legacy daemon exists, retain that exact
+blocker rather than substituting a shared runtime-host session.
+
+### Resumed Readiness Prerequisites And Actual Extension Loading
+
+The campaign infrastructure checkpoint was published as `317f8c2b`. Two local
+anchor admission attempts ended before external dispatch. Attempt A could not
+launch the pinned Playwright browser because its binary was absent; the exact
+pinned browser was subsequently installed. Attempt B authenticated and reached
+the iframe but retained a marker mismatch plus gateway/console observations.
+Both failed aggregates remain immutable under the user-scoped campaign root.
+
+Bounded follow-up isolated the marker mismatch: the declared synthetic fixture
+server was absent, and the retained browser displayed its connection-refused
+page. The existing reviewed fixture executable was started as a user service,
+its health endpoint returned ready, and the exact retained synthetic tab
+reloaded successfully. A no-effect journal invocation with an overlong time
+window was rejected; the corrected bounded invocation passed. The fresh
+malformed-line artifact and five-surface journal artifact hashes are
+`602ee950ae8265992ad2c9803c7256424321f5f137941d1dc32b41533012d7cb`
+and `b73f1bf0ad3dd13a0e9cb30f9797481cce9a61873582d44669eb48d39d57c1ea`.
+
+The earlier startup-copy digest check did not establish extension activation.
+Guacamole's loader log showed only the header and PostgreSQL extensions.
+Development staging copied the source manifest and JavaScript without the JAR
+that the workstation installer already produces. The bounded
+`/root/anchor_adapter` remediation added deterministic two-entry JAR packaging
+and its stage-receipt hash. The new archive-content regression first failed on
+the missing JAR, then passed archive integrity, exact source bytes,
+reproducibility, and changed-source refresh checks. Primary-run development
+provider and workstation asset tests passed.
+
+After fresh provider plan, stage, preflight, apply, and exact development
+Guacamole recreation, its loader explicitly reported
+`Extension "agent-browser workstation defaults" (agent-browser-defaults) loaded`
+at 14:20:34 UTC. This is the first verified activation in this resumption.
+The next attempt must bind this provider revision and preserve the two earlier
+admission failures. No external workflow has yet been dispatched during this
+resumption, and W6 remains incomplete.
+
+### Resumed External Readiness C And Bounded Harness Repairs
+
+Readiness C at source `2b1990184a694ec7c0fae42cb98f4a50077484cf`
+passed retained-anchor admission and dispatched manual workflow
+`33971756471`. Both external jobs failed and the aggregate failed. The human
+client retained the expected marker before and after reconnect, but the
+dashboard oracle rejected two console errors. The slow client retained the
+initial and concurrent markers, then failed its reconnect marker. These are
+actual external observations, not provider-free execution.
+
+The coordinator also failed artifact download and final anchor observation.
+Artifacts existed in GitHub and were recovered separately, without replacing
+the failed coordinator aggregate
+`c4a4d22be72d6ba4ed22e000551b3c5a1410d7bdd0e4b79e88b0bc44f0bb2b29`.
+Node rejected `signal: null` before starting the download subprocess. The
+adapter now omits absent signals while preserving real cancellation signals.
+Playwright's default signal handlers could close the anchor browser before
+its owned final observation; the anchor disables those handlers and retains
+explicit sample, receipt, and cleanup ordering. Focused red-green regressions
+and primary-run adapter and anchor suites passed.
+
+The slow-client marker crop contains the synthetic fixture's controls rather
+than the solid marker. It is a marker mismatch, not proof of an error page.
+Both pacing helpers sent Tab and Shift+Tab without establishing dashboard
+focus. A disposable Chromium DOM regression reproduced delivery into a
+focused iframe. The repaired helper selects the actual dashboard toolbar,
+verifies each focus transition, and fails before further input if focus
+escapes. The same regression proves zero iframe keys and detects forced focus
+escape. Attribution of the particular external scroll remains an inference.
+The primary ran both the provider-free runner suite and its optional local
+DOM regression successfully. The stale test description was corrected to the
+existing 30-minute dispatch minimum; the workflow requirement was not lowered.
+
+A bounded two-viewer local diagnostic reproduced the exact external console
+digest `a7f769c222a04040bdb3a82b03a50ada0798d7e5cee1ebae17d5a9d164463d66`:
+Chromium blocked textarea autofocus in a cross-origin subframe. The served
+Guacamole text-input template contains declarative autofocus. This finding is
+not waived by the marker success; an embedded-input repair is in progress.
+The diagnostic helper reused its earlier standalone marker image path, so that
+diagnostic image is not immutable prior-epoch evidence. The downloaded external
+artifacts and failed campaign aggregates were not overwritten.
+
+W7 assembly no longer requires missing specialized ownership manifests.
+Omission retains explicit blocked cases; supplied references still require
+exact bytes and valid ownership. It also no longer constructs unpromoted
+reviewed A07, A13, or X06 effects merely to declare them blocked. Unsupported
+cases expose zero implemented actions, zero effects, and named missing
+prerequisites. The standalone reviewed dispatcher remains strict. Focused
+assembly and entrypoint tests passed, including a target without fabricated
+PIDs or displays. These changed source identities and classifications belong
+in the next freeze and cannot be substituted into an existing one.
+
+Progress is `blocker_reduction`, not W6 acceptance. No calibration or new
+external attempt followed Readiness C during this diagnostic slice. The next
+gate is a validated embedded-input repair, exact development publication and
+provider readback, then a distinct readiness identity before synchronized C01.
+
+### Embedded Input Validation And Visual Scope Stop
+
+The embedded-input repair now changes only the existing Guacamole text-input
+template after its template-cache population and before Angular compiles it.
+Standalone autofocus, manual focus and typing, and persisted input-method
+preferences remain unchanged. A disposable cross-origin Chromium test using
+the actual served Angular source observed one blocked-autofocus diagnostic
+with the original template, zero with the repaired embedded template, and
+working manual input in all variants. The packaged asset digest and all five
+documentation surfaces were updated. Primary-run asset and provider-packaging
+tests passed, the full campaign harness passed, and the optimized development
+candidate built. These are repair-validation results, not live acceptance.
+
+A further concrete failure prevents another visual dispatch: Readiness C's
+full dashboard capture includes detected non-owned host browser rows outside
+the synthetic fixture. The runner starts full-viewport video before scene
+validation and captures full viewport screenshots on success and timeout.
+Its declared synthetic-only attestation did not enforce that boundary. No new
+external capture is permitted on the unchanged path. Existing external
+artifacts remain preserved with this defect explicit; their visual boundary
+cannot be accepted. No private row content is copied into this plan.
+
+The bounded privacy review confirmed that deferred dashboard filtering is not
+an ownership boundary. Masking rows or cropping after recording cannot repair
+the original capture. Full-frame acceptance needs a genuinely synthetic-only
+inventory and presentation source. A region-only lane would need an explicit
+capture contract and would retain full-frame and video evidence gaps; it is
+not silently equivalent. The next read-only check is whether current isolated
+runtime configuration can exclude foreign inventory at the source.
+
+Before any new epoch, an exact synthetic-identity-checked evaluation restored
+the retained fixture's scroll position from y=454 to y=0 and blurred its
+active element. The receipt is separate from Readiness C. This confirms the
+displaced scroll state but does not identify which client caused it. No
+production browser or profile was changed.
+
+### Source-Bound Discovery Isolation Repair
+
+Checkpoint `f953fc45` published the repaired anchor lifecycle, artifact
+download, dashboard keyboard guard, optional W7 assembly, and embedded
+Guacamole autofocus correction. Development generation
+`0.28.0-d0d59b4daf72` installed with production unchanged. Fresh provider plan,
+stage, preflight, apply, and exact development Guacamole recreation succeeded.
+The loader reported the defaults extension active at 15:32:34 UTC, and the
+served application contains the exact repaired extension bytes with SHA-256
+`a797939077bb5fb438ca5956cce8156d0f2c3744526a3d103b3bd1b2e98c02e5`.
+
+Read-only inventory reconciliation found seven foreign-discovery rows in
+addition to three runtime-owned socket rows. Existing session discovery
+unconditionally enumerated host processes and probed discovered CDP endpoints;
+there was no configuration-only isolation switch. The bounded repair adds
+`AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY`: absent or `enabled` preserves
+ordinary behavior; `disabled` and invalid explicit values skip external
+discovery before enumeration or probing. Runtime-owned socket discovery stays
+unchanged. The new callback regression first failed, then all ten discovery
+tests passed through the safe Cargo wrapper.
+
+Development publication pins the policy to disabled in its launcher, all three
+service units, and generation metadata. Status and doctor read only the policy
+from each attached MainPID's bounded process environment. Missing, enabled,
+invalid, duplicate, or unavailable live evidence fails readiness. Tests use
+real disposable subprocess environments and prove inherited caller settings
+cannot re-enable development discovery. Primary-run development runtime tests,
+focused Rust tests, format, clippy, remote-view documentation tests, and docs
+site build passed. Production configuration is unchanged.
+
+This repair does not establish a synthetic-only inventory. The retained
+development Service State also contains non-campaign profiles and an older
+local tab outside the declared fixture origin. Those remain untouched. Their
+ownership and possible appearance during full-frame recording require
+separate reconciliation. No external capture or calibration has resumed, and
+the prior protected visual attestation must not be treated as current proof.
+
+The source-bound isolation repair was published as `0829d9a0` and installed
+as development generation `0.28.0-f472f3bc9cbe`. Provider-required doctor and
+all three disposable browser-launch smokes passed; production was unchanged.
+All three attached MainPID environments prove discovery disabled. A fresh
+authenticated session-inventory readback returned three owned socket rows and
+zero foreign rows. The doctor receipt hashes to
+`97fe25c5c39da3e45df4e08a4d3238a1a2b3ff3c46086a228a57c7bd47710fa9`;
+the status receipt hashes to
+`73374edb6737e9d9c4005447137cbb724a21a284d454901eea66548c0c2f2bb0`.
+
+The remaining gate is not a failing build or discovery leak: full-frame
+capture cannot be attested synthetic-only while retained non-campaign
+inventory and presentation may enter the scene. The proposed next boundary
+is a clean campaign-only runtime and presentation with a reviewed ingress
+binding, leaving current development state intact. Do not infer permission to
+delete or rehome non-campaign records, borrow their routes, or weaken the
+capture contract. Resolve that environment and resource boundary before the
+next external run. Plan acceptance remains incomplete.
+
+### Clean-Room Namespace Readiness Check
+
+The next read-only check evaluated the current descriptor factories with
+separate proposed home, install, socket, provider paths, and non-default ports.
+It performed no installation, provider effect, browser launch, or capture.
+The proposed descriptor still collided with the current stable executable,
+all three development service-unit names, local ingress service and host,
+Compose project, all three container names, six route IDs, and six RDP users.
+Therefore a different home and port set alone is not a parallel isolated
+runtime. Applying that descriptor would risk changing existing development
+resources rather than preserving them.
+
+Graphiti discovery in `agent_browser_main` returned three older isolation and
+route facts, not a current clean-room decision. The cited Plan 0125 acceptance
+note confirms one dedicated development lane; it does not authorize treating
+that lane's resource names as independently owned by a second environment.
+Current descriptor source and the no-effect collision calculation are the
+authority for this checkpoint.
+
+Progress classification: `blocker_reduction`, through excluding an unsafe
+configuration-only shortcut. Provisioning remains pending operator direction
+on a separately namespaced campaign runtime and reviewed ingress binding.
+No non-campaign state was modified and the visual capture stop remains active.
+
+### Elevated Authority: Separately Namespaced Campaign Environment
+
+The user authorized continuation with elevated authority after the explicit
+request to provision a separately namespaced synthetic-only campaign runtime
+and reviewed ingress while preserving existing development resources. This
+supersedes the provisioning approval wait, not the synthetic-only capture,
+production non-interference, shared-XRDP no-restart, or frozen-epoch boundaries.
+
+The primary owns integration, new ingress, private configuration, and runtime
+effects. Two bounded reused specialist lanes own disjoint implementation:
+`/root/anchor_adapter` owns runtime descriptor/publication/readback/tests;
+`/root/live_case_ledger` owns provider descriptor/effect-name propagation/tests.
+Each has a 15-minute implementation bound with partial-evidence return. This is
+remediation of the demonstrated namespace collision, not a new broad review.
+
+The candidate namespace is `p158`. All seven ports are explicitly pinned and
+were observed unbound before preparation: dashboard 5148, backend 5149,
+shadow 5150, lane 5151, Guacamole 8193, guacd 4923, PostgreSQL 56433.
+Resource names, home, sockets, units, executable, provider database, containers,
+route users, and ingress must all be disjoint from default development and
+production. The original four-warm/six-maximum provider shape remains the
+intended per-environment campaign capacity; existing displays are not borrowed.
+No namespace may activate on default-lane or production ports.
+
+Before capture: validate namespace regressions, publish the exact candidate,
+prove both existing environments unchanged, complete provider readiness before
+publishing ingress, verify fresh authenticated inventory and synthetic desktop
+content, then seal a new visual attestation and candidate identity. Previous
+failed artifacts remain unchanged. W6 and later acceptance are still unproven.
+
+The two specialist lanes completed the namespaced runtime and provider source.
+Primary reconciliation inspected resource identities and non-interference
+guards. Default launcher and unit bytes remain unchanged, namespaced runtime
+and provider roots are disjoint, and fixture tests cover missing/duplicate/
+baseline ports plus direct and symlink aliases into protected roots. One
+accepted closed-world gap in provider symlink resolution received a red-green
+repair before any live effect. Namespace provider effects require both
+production and default-development identity guards, including lifecycle paths.
+Shared XRDP and privileged-helper constraints are unchanged.
+
+Primary-run runtime and provider fixtures, Guacamole asset validation,
+remote-view docs checks, docs build, Rust format and strict clippy passed.
+The optimized candidate built successfully. One requested lifecycle package
+script name did not exist; lifecycle fixtures are part of the passing provider
+suite, not a separate successful command. The new environment has not yet
+been installed or exposed at this checkpoint.
+
+### First isolated installation and startup admission failure
+
+Source commit `02b3307d` was pushed before installation. The isolated candidate
+`0.28.0-7c7150b01efd` installed successfully, with both production and default
+development unchanged. The private `cleanroom-20260905/install-a.json` receipt
+has SHA-256 `9bd5fac933f3b9269197d68c2be210f6a9952ddd4c5e006ffff7d900b8e42873`.
+This is installation evidence, not healthy-runtime or campaign acceptance.
+
+The first doctor failed exact runtime-host ownership: a dashboard-unit child
+owned the new lane endpoint while the dedicated runtime-host unit failed with
+`port_conflict`. Process cgroup readback establishes dashboard ownership.
+The installer enables and restarts all three simple units without waiting for
+host readiness. A bounded specialist repair is adding ordered host activation
+and exact ownership admission before dashboard startup. The original doctor
+failure remains retained; no provider apply, ingress publication, visual
+capture, or external dispatch has followed it.
+
+Cooper source revision `1592a784d87bf9f34b472f575c666971845532d3` stages the
+separate dashboard and authenticated Guacamole path inventory. Its pinned-port
+inventory validation passed and raw dashboard port 5148 responded. This is
+reviewed source preparation only: generated routing and bastion publication
+remain deferred until the new provider-ready gate. The cleanroom configuration
+binds this exact revision and its separate public origin.
+
+The startup repair passed primary-run focused runtime fixtures. Both install
+and rollback now stop exact dashboard units, reset and start the exact host,
+and require matching process start token, executable, host manifests, listener,
+and systemd cgroup before publishing ingress or starting dashboard clients.
+The pre-fix activation reproduced early dashboard startup under injected
+effects; wrong-owner and timeout regressions now reject it. Unit rendering is
+unchanged. Provider staging and non-mutating preflight also passed, including
+exact unused resources and non-interactive helper readiness. Provider apply
+still awaits installed startup repair readback.
+
+### Installed host repair and isolated provider quarantine
+
+Source `415fb421` was pushed before the second installation. `install-b.json`
+passed both environment non-interference guards; its SHA-256 is
+`edfdef1f0541d16513c8262b1e37b0f26cfebf8652e51cef0d43003993db8339`.
+Doctor B passed exact host ingress, all three unit identities and discovery
+policies, and all ports. Only the deliberately unpublished local ingress was
+red. The full provider-free P158 harness passed in the primary workspace;
+these fixture counts are not live campaign execution.
+
+The first isolated provider apply quarantined before opening warm routes.
+Its receipt records volume/database creation, six exact route users, connection
+sync, provider startup and operator grants, then the missing-connection error
+for `development-p158-route-1`. The resource guard passed. Quarantine stopped
+all three exact namespaced containers; direct Docker readback confirmed their
+stopped state and namespace project labels. Their volume, database and route
+users remain owned cleanup obligations, not permission for broad cleanup.
+
+The database probe still filters the legacy development connection-name
+prefix, while the descriptor emits namespace-qualified names. A bounded
+closed-world repair is testing that exact SQL seam before a new preflight and
+materially changed apply. No blind retry, provider-ready claim, public ingress
+publication, full-scene capture, or external dispatch has occurred.
+
+The exact-name SQL repair in `93042cde` passed the primary provider suite and
+was pushed before preflight B, which passed exact retained-resource admission.
+Apply B progressed through connection discovery, then quarantined on the
+missing provider inventory required by the first warm-route viewer. The file
+is normally written only after warm routes are ready. This is a separate
+first-install bootstrap dependency, not recurrence of the SQL lookup failure.
+Both failed apply receipts remain immutable in the new provider receipts
+directory. Fresh `baselines-b.json` readback again passed production and
+default-development non-interference after quarantine.
+
+The bounded repair must initialize only an explicitly unready, valid inventory
+for first bootstrap, never a ready route or configured provider manifest.
+Existing inventory authority must not be overwritten. This preserves the
+missing-file fail-closed contract while allowing the provider-owned bootstrap
+viewer to initialize its own new routes. No public publication or visual
+workflow is authorized by a bootstrap inventory alone.
+
+### Isolated provider-ready and public-ingress checkpoint
+
+Bootstrap source `ce38228e` passed the primary provider suite and was pushed
+before preflight C. Apply C succeeded as `provider_ready_ingress_pending`;
+its private receipt SHA-256 is
+`93341335521c7f1d694cdc9cffb8363d2411b2ff60fbe30342d1b11bb7ba6f3a`.
+The two failed apply receipts are retained unchanged. The new provider has
+four distinct warm displays and six configured routes. The original shared
+XRDP service and existing provider resources were not restarted or replaced.
+
+Cooper revision `b58221b` adds the separate capability-only sharing inventory
+and renders the two new ingress routes after provider readiness. Public and
+local checks returned dashboard 200, unauthenticated Service API 401,
+authenticated Guacamole path 302 to login, and sharing shell 200. Bastion's
+Traefik process identity and start time stayed unchanged across hot reload.
+Its two new snippets remain untracked operational files; `CODEX_LOG.md` was
+appended with a checked original-byte prefix and retains its prior dirty state.
+Existing route snippets and unrelated Cooper edits were preserved.
+
+Provider-required doctor passed every check, receipt SHA-256
+`d0166b7edddb9e2ad9272379ba685d116b545691c8fcc84b2b26d80612cfa59f`.
+Three disposable browser launch, URL-read, close and residue checks passed,
+receipt SHA-256
+`e4480b53a0040c48bb3ecd54ed5c43074f294c4991c41c7f575e765a7ab8501b`.
+Repeated post-apply and post-smoke baseline checks confirm production and
+default development unchanged. Authenticated public Service Status has
+non-null presentation capacity: four slots, hard maximum six, with no binding
+warnings. Provider readiness is therefore projected into Service, not merely
+reported by the provider doctor.
+
+The service operating guide and access plan were read before registration and
+route acquisition. The broker selected the new owned durable synthetic profile,
+and route-bound open returned `operatorVisible.state=ready` on its new private
+display. The durable handoff uses the separate authenticated public origin.
+The scene custody check accounts for every profile, browser and tab: four owned
+provider viewers, three closed disposable smoke profiles, one campaign fixture
+profile, five live browsers, six synthetic/provider/blank tabs, and zero manual
+browsers. This admits owned scene inspection, not visual attestation or W6
+acceptance. Fresh marker proof, protected secret rebinding, external readiness,
+shared-schedule calibration, actual freeze and W7 through W10 remain pending.
+
+### Fresh visual gate: connection-sharing failure, no capture
+
+The first DOM diagnostic resolved the same public durable handoff successfully,
+with one connected Guacamole frame and matching presentation generation one.
+The later fresh visual attempt, 17:27:17 through 17:28:07 UTC, revalidated exact
+synthetic inventory but received HTTP 500 and timed out waiting for its frame.
+It produced no screenshot, pixel proof, or visual attestation. Its private
+`visual-a/receipt.json` and bounded backend, host, ingress and failure journals
+are retained. No external workflow was dispatched.
+
+Current service job readback reports the 17:27:25 handoff resolver succeeded.
+The durable failure journal then records `guacamole_load` / `http_500` and
+`guacamole_connection_sharing_failed` at 17:27:58, bound to the exact new
+campaign browser/profile/session/route/display. Thus the observed failure is
+the view's connection-sharing load after successful durable resolution, not
+evidence that provisioning failed or that the resolver job failed. Backend
+status reads around the attempt took approximately 5.6 seconds; causation is
+not established. The earlier successful frame does not satisfy this failed
+attempt. Next is bounded connection-sharing diagnosis and repair before any
+new attestation or external readiness epoch. Preserve the retained browser and
+use the same durable handoff rather than opening a replacement.
+
+Graphiti checkpoint ingestion job
+`84e9d84d-1361-471b-8bbf-cdd680605738` failed with `TimeoutError`; no episode
+visibility was claimed and no automatic requeue was attempted. Repo checkpoints
+and the updated Note 0151 remain the verified continuation authorities.
+
+### Repair investigation: original 500 localized to forward authentication
+
+The user's repair request authorized bounded diagnosis of the preserved
+cleanroom failure. The original local Traefik records show a timeout calling
+the isolated dashboard's `/api/dashboard-auth/verify`. The affected request
+was Guacamole active-connection discovery, following a successful token POST.
+It returned empty HTTP 500 after 27,649 ms without selecting a Guacamole
+upstream. Thus the immediate failure is forward authentication, not a
+Guacamole sharing-credential exception. The reason the verification request
+stalled has not been established. Concurrent ordinary dashboard reads
+continued succeeding, so general backend unavailability is not proven.
+
+The sanitized private proxy extract has SHA-256
+`19708257c901b227752e1b72ffa48ace64e17af9ec768bb92fae09dd124832ad`.
+Two instrumented same-handoff diagnostics were performed without capture or
+replacement acquisition. Both reached a frame. The first failed its HTTP
+assertion on a distinct shared-tunnel sharing-profile 404; the second, with
+the original inventory-read prelude restored, had no failed HTTP response
+during its bounded observation. Neither result erases `visual-a` or proves
+visual acceptance. The transient 404 is separate unresolved evidence.
+
+A bounded read-only path comparison then passed 64 sequential checks across
+the direct backend, stable ingress, public verification endpoint and
+forward-auth-protected Guacamole language endpoint, maximum 323 ms. A separate
+32-request, four-concurrent forward-auth diagnostic passed, maximum 566 ms.
+Receipt SHA-256 values are respectively
+`21156f7ff5f03ac570c958d72ca78c29bfd4ca987a2aa152108cda3bd0362c63` and
+`26b2811f824ce13e0aed7e562812b19de1173cdd8efa32616a3af2574658cb1b`.
+These diagnostic checks do not exercise campaign acceptance cases and are not
+an unchanged retry promoted to success. They failed to reproduce the original
+authentication timeout and therefore provide no validated repair seam.
+
+State remains diagnosis-blocked, with `no_progress` on campaign acceptance:
+causal localization improved, but no verified blocker was removed. No product
+source, provider configuration, installed generation, timeout or retry policy
+changed. No service or retained browser was restarted. No screenshot,
+attestation, secret rebinding or external workflow was attempted. Production
+and default-development guards passed again in `baselines-repair-f.json`.
+Diagnostic scripts and receipts are preserved privately under the existing
+cleanroom root. The next bounded tactic is request-stage transport tracing of
+the verification hop, not repeating the same green probes or speculatively
+modifying sharing logic. A deterministic red-capable seam is still required
+before source repair; the approval for in-scope repair remains valid.
+
+### Shared-view capability repair: source and prototype gate
+
+A bounded syscall trace was admitted by starting only the owned cleanroom
+dashboard ingress under its tracer after direct attachment was denied. Buffer
+contents were not traced. The tracer was detached and the temporary override
+removed; ingress remains active, and the runtime host, backend and retained
+browser were not restarted. Non-interference guards passed. The original
+forward-auth timeout was not reproduced or declared repaired.
+
+The traced same-handoff diagnostic instead reproduced the separate 404 from
+the shared tunnel's re-sharing-profile request. Guacamole 1.5.5's
+[tunnel resource](https://github.com/apache/guacamole-client/blob/1.5.5/guacamole/src/main/java/org/apache/guacamole/rest/tunnel/TunnelResource.java)
+rejects that lookup when the tunnel has no readable active connection. The
+observed anonymous PostgreSQL sharing identity has that restricted capability.
+The extension now declares an empty re-sharing capability before request
+dispatch, gated on the named embedded sibling-origin viewer and its current
+anonymous `postgresql-shared` authentication. Other identities retain the
+original method, arguments, receiver and rejection. No general HTTP errors are
+suppressed and no authentication or retry policy changes.
+
+The real service-method regression failed with the recorded error before the
+fix, then passed. A disposable response-substitution prototype used the actual
+Guacamole client, reached the shared frame, verified the installed-in-document
+guard and anonymous identity, and observed no failed HTTP response. Its private
+receipt is `sharing-candidate-prototype-d/receipt.json`; it is explicitly not
+an installed or visual acceptance receipt. Extension source SHA-256 is
+`3ea4fb484771361ec08ba1293d66be991c16843bf8ee4c5eb8ab15f86f4fb6c6`.
+
+Primary validation passed asset, development-provider, connection-sharing,
+exact-candidate workstation-install, host-provision, fresh-VM-harness,
+database-durability and route-sync checks. The optimized candidate build
+passed. An accidentally selected historical debug-binary fixture was stopped
+at its exact disposable child and excluded; the exact new candidate fixture
+was then run successfully. This checkpoint is hardening pending installed
+proof, not W6 acceptance. Next is guarded candidate and extension publication
+to the existing isolated namespace, preserving the retained browser and all
+failed evidence, then same-handoff installed validation.
+
+### Publication regression: retained baseline lost, provider quarantined
+
+Publication of `69bd75fb` installed isolated generation
+`0.28.0-d778e92eab61`, but the runtime-host restart closed the retained
+synthetic browser and four provider viewers. The earlier preservation plan
+did not succeed. The original browser PID and target cannot be reused as
+acceptance identity. Retain the failed epoch and its evidence.
+
+The direct provider container restart failed because staging replaced a
+Docker Desktop bind-mounted file. A governed provider apply subsequently
+recreated the containers and opened routes 1 and 2, then stopped on route 3
+with `existing_session_profile_identity_unproven`. Quarantine closed those
+new viewers and stopped all three isolated provider containers. A non-null
+capacity projection or old ready manifest does not supersede that readback.
+
+The failed route has matching terminal process-exit and profile-lock-release
+evidence, but its degraded browser row is profile-less and references an
+absent session. A focused provider-free regression reproduced how a late
+close-health callback recreates that malformed operational row after cleanup.
+The original strict relaunch guard remains unchanged. The bounded repair
+retains late failure events without recreating an already removed browser
+only when the current exact terminal owner and cleanup proofs match. This
+prevents recurrence; it does not itself repair an existing malformed row or
+restore the lost synthetic browser. Source validation passed all 85
+service-health tests, the exact terminal-owner relaunch regression, formatting
+and workspace Clippy. The new regression went red before the fix and now
+includes six fail-closed counterexamples. An intermediate patch also failed
+the event-retention assertion; the final patch explicitly preserves the late
+failure event. No second publication has been attempted.
+
+Private receipts under the cleanroom evidence root include
+`install-share-repair-d.json`, `provider-extension-restart-d.json`,
+`provider-apply-share-repair-e.json`, `scene-after-quarantine-e.json` and
+`baselines-quarantine-f.json`. Production and default-development guards pass.
+No screenshot, pixel attestation, protected-secret rebinding or external
+workflow dispatch occurred. W6 and the terminal live campaign remain
+incomplete. The distinct shared-view 404 repair is source/prototype-verified
+only; the original intermittent forward-auth 500 is not declared repaired.
+
+A read-only governed prune preview in `terminal-row-prune-preview-f.json`
+lists exactly three terminal browser rows and no profiles, tabs, sessions or
+displays. No cleanup was applied. The next recovery slice must first reconcile
+ancillary profile-reclaim resumption against namespace isolation, back up
+private state, and revalidate the exact candidate set. Restoring the provider
+and establishing a new synthetic baseline epoch remain separate installed
+gates; source green does not satisfy them.
+
+### Restored isolated runtime and terminal external readiness failure
+
+The governed recovery removed exactly three terminal browser rows after fresh
+ownership and lifecycle-sidecar reconciliation and a private backup. No profiles
+or owner/lifecycle history changed and no profile reclaim resumed. Source
+`836e46ab` was installed as isolated generation `0.28.0-902cc9a7fb74`; provider
+plan, stage, preflight, apply, required doctor and three disposable browser
+smokes passed. The broker selected a new synthetic browser on the existing
+owned profile. This is a new evidence epoch, not preservation of the lost one.
+The installed shared-view 404 repair passed without response substitution.
+
+Manual external readiness run
+[33984650458](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33984650458)
+finished with both clients and the aggregate failed. Both clients matched the
+independently prepared synthetic transport pixel hash, with 41 Guacamole HTTP
+200 responses and no request failures each, then rejected the same page-marker
+mismatch. All failure receipts remain intact. This is blocker reduction through
+runtime restoration and sharper failure evidence, not W6 acceptance. The
+original intermittent forward-auth 500 is not declared repaired.
+
+The same-target live readback reproduces an old resolution title despite the
+correct current document title. A focused regression reproduces cached
+page-list title precedence in retained-target reacquisition. The bounded source
+repair prefers the live title only for the exact active target, without changing
+the prepared identity or weakening acceptance. All 28 focused coordinator tests,
+formatting, workspace Clippy and the optimized candidate build pass. Installed
+proof remains a separate gate.
+Preserve the retained scene while planning guarded
+publication; the earlier publication killed its predecessor. See Note 0151 for
+the current checkpoint and private evidence locators. The full 20-minute
+calibration, W6 freeze, terminal live cases and W10 remain incomplete.
+
+### Installed title repair and controlled new preparation epoch
+
+Source `5b0257c3` is installed as `0.28.0-296b61993e8b`. Before publication,
+the exact five campaign-owned browsers were deliberately closed through their
+sessions, with profiles and evidence preserved. This unfrozen epoch ended
+intentionally; no continuity claim is made. The publisher's control-group
+restart is not a browser-preserving hot-handoff path. Provider restoration,
+required doctor and three disposable smokes passed. The fresh broker-selected
+synthetic target now returns the correct title through both live document
+readback and durable resolution. Isolation guards pass.
+
+Preparation retains a 504/no-iframe failure and failed extra frame-role
+diagnostics. Their loop is stopped. A fresh owned-scene capture has zero HTTP,
+console and page errors and the exact independently reviewed transport-pixel
+hash. The visual custody attestation explicitly does not claim current sharing
+checker acceptance. Next is one manual two-client external readiness attempt
+against the newly bound scene. This is blocker reduction through installed
+title proof, not external acceptance, calibration, freeze or final analysis.
+
+### External K terminal failure and current-candidate logging evidence
+
+Manual run
+[33985964435](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33985964435)
+is terminal against source `7cf0f5fc`: slow client passed both external oracles
+with stable initial/concurrent/reconnect identity, exact pixels, zero browser
+launch delta and no retry. Human initial pixels passed, but reconnect failed
+with `external_stream_not_embeddable`, zero iframes and a Stream unavailable
+surface. All 96 human Guacamole HTTP responses were 200 and no request failed.
+The aggregate correctly rejected the partial success. Seven human and eleven
+slow-client artifacts passed hash and byte-count verification.
+
+Private `external-readiness-k-summary-v2.json` preserves a redacted provider
+timeline: an unresponsive remaining viewer and connection removal occur during
+the failed reconnect window. This is correlation, not a proven mapping of
+external clients to provider users or an established acknowledgment failure
+cause. No unchanged external retry or timeout relaxation was applied.
+
+Fresh `malformed-line-k.json` and `five-surface-journal-k.json` pass against
+the installed candidate; earlier default-development receipts are not reused.
+Isolation guards pass and the synthetic browser is retained. Classification:
+`blocker_reduction` for installed title proof and new-candidate logging evidence,
+with external readiness still failed. Next is bounded diagnosis of the captured
+stream-loss path. Calibration, W6 freeze, terminal live cases and W10 remain
+incomplete; a passing slow client does not satisfy their prerequisites.
+
+### Reproduced startup-reservation blocker and fenced retirement repair
+
+The bounded local replay `reconnect-diagnostic-o/receipt.json` reproduces the
+missing-iframe reconnect after primary closure. Empty provider snapshots cannot
+admit a replacement while the old 30-second startup reservation outlives the
+15-second election. The earlier diagnostic stopped at authentication timeout;
+the minimized replay reused authenticated local contexts. Both receipts remain
+private and neither is external-vantage acceptance or a complete attribution of
+run K's provider timeline.
+
+The source repair retires only the exact rendered direct frame's reservation
+after Guacamole reports managed `CONNECTED`. Revision fencing requires fresh
+empty provider observations after a denied claim and prevents late owner
+confirmation from retiring a replacement. Unconfirmed reservations retain
+their TTL. Election timeouts, campaign deadlines, identity and pixel acceptance
+remain unchanged. Focused owner and client checks, a red/green snapshot-fencing
+mutation, dashboard/docs builds and the optimized candidate build pass.
+Classification is `hardening` pending installed proof. Next is guarded isolated
+publication with controlled synthetic-browser closure and a fresh unfrozen
+scene, followed by installed reconnect verification. The admitted anchor remains
+a separate calibration fixture, not proof of ordinary reconnect reliability.
+
+### Installed reservation confirmation, remaining frame-lifecycle gate
+
+Source `ad4269c2` is installed in p158 as `0.28.0-379320bc82d5` after one
+controlled synthetic-browser close with preserved profile and private backup.
+Provider restoration, required doctor, three disposable smokes and isolated
+skill sync pass. Candidate and exact public asset receipts bind the revision
+fence and current generation. The new broker-selected scene is unfrozen;
+external protected secrets still bind the old K scene and must not be reused.
+
+The installed diagnostic confirms exact primary-reservation retirement and
+matches the prepared pixels on primary and shared views. Its reconnect obtains
+an iframe but does not reach managed `CONNECTED` within the unchanged check.
+A second, tighter instrumented diagnostic stops at initial frame detachment.
+Private `reconnect-installed-p/` and `reconnect-installed-q/` preserve both
+failures. Stop that bounded loop and adjudicate the remaining frame-lifecycle
+gate rather than claiming a complete reconnect repair or another clean epoch.
+Production/default-development isolation remains intact. Classification remains
+`hardening` with installed reservation proof, not W6 or live-case acceptance.
+No external dispatch, calibration, freeze or final analysis occurred.
+
+### Resume admitted stable-primary calibration fixture
+
+The earlier September 5 Anchor Disposition remains authoritative. The failed
+anchor-free P/Q diagnostics do not revoke the admitted stable-primary anchor
+fixture and must remain explicit limitations in W10. Continue through the
+existing retained-anchor coordinator rather than expanding the repair loop.
+Fresh title/isolation checks and independent synthetic pixel/source review
+pass; the R preparation binds the current P scene in all six protected
+environment secrets. Focused anchor, coordinator, adapter and external-runner
+checks pass. One anchored readiness attempt is next, with all five evidence
+units required and no retry, timeout relaxation or substituted acceptance.
+
+### Anchored R failure and embedded text-input focus repair
+
+Run `33988373995` is terminal failed: anchor-ready, human and anchor-final pass,
+but slow-client keyboard focus escapes the toolbar. Its 41 Guacamole responses
+are HTTP 200 and no request fails. Independent verification accepts eight human
+and three slow artifact hashes/byte counts, not the aggregate outcome.
+
+The local replay captures correct Advanced and next-button focus followed by
+iframe focus during the 900 ms observation. The installed Guacamole 1.5.5
+controller's synchronous `target.focus()` remains active despite template
+autofocus removal. The bounded repair suppresses only that embedded controller
+initialization call and restores the original per-element focus property even
+on failure. It does not refocus the dashboard after input escapes, weaken the
+oracle, extend a timeout, or change standalone/explicit remote input.
+
+Private `focus-upstream-red-green-u.json` binds the actual installed-image
+controller and old/new extension hashes. Network-blocked browser replay fails
+with the old extension and passes with the repair; explicit input remains
+functional. Asset regression, external-runner, anchor, Rust format/clippy, docs
+build and optimized candidate checks pass. The other live focus replay has
+gateway errors and is preserved, not accepted as a clean outcome.
+
+Classification is `blocker_reduction` with installed proof. Controlled closure
+of the one verified synthetic browser preserves its profile and backup before
+p158-only publication as `0.28.0-8884c5fa8980`. Candidate U binds digest
+`d7bf569412961c4e405cccf6e3b277141990ebf5b957e731694ef4670a9cccea`.
+Provider-required doctor, three disposable launch smokes, isolated skill sync
+and production/default-development guards pass. Exact Guacamole recreation
+loads the repaired extension while guacd and PostgreSQL remain unchanged; the
+initial command's missing protected environment file fails before mutation and
+its receipt is preserved.
+
+`focus-installed-u/receipt.json` proves all eight toolbar assertions, exact
+synthetic pixels, the actual served extension and clean ready/final anchor
+samples. The synthetic-only screenshot retains runtime-convergence/inventory
+advisories; this focused proof is not whole-dashboard acceptance. Workstation,
+host-provision, fresh-VM, durability, route-user and handoff-doc fixtures pass.
+New external preparation remains required: the prior P scene's protected
+binding is no longer valid for dispatch. No external workflow, W6 freeze,
+live-case acceptance, retry or final analysis is claimed in this repair slice.
+
+### Anchored readiness V and current-candidate journal acceptance
+
+Readiness run `33989772927`, source `e2f50e42`, completes successfully with both
+external clients and their aggregate accepted. The coordinator exits zero and
+seals passing ready/final anchor receipts, aggregate digest
+`48c3968ed9cbbead7662db05fe4ba9a8111f4485e1f0f2912e4232f417006945`.
+Independent artifact verification covers eight human and eleven slow files.
+Both clients have zero handoff/dashboard findings, zero retries, no repair and
+zero physical-browser launch delta. Protected V preparation binds current U.
+The prior anchor-free failures and anchored R focus failure remain immutable.
+
+After readiness terminality, `malformed-line-w.json` and
+`five-surface-journal-w.json` pass against candidate U. The malformed test does
+not mutate the live journal; declared five-surface synthetic failure stimuli
+remain p158-only. This is `outcome_progress` toward W6, not its freeze gate.
+Next is the full shared 20-minute C01 calibration with 25 logical agents,
+500 Service commands, two external viewers, 50 dashboard actions and ten
+reconnects. E1's local endpoints and E2's external ingress bind the same
+isolated installation and auth store, with separate vantage requirements.
+All case execution and W10 remain outstanding.
+
+### Priority Diagnosis: Startup, Request Framing, And Logging Gaps
+
+The September 5 priority reconciliation now governs execution. Read-only
+systemd observation confirms the isolated host failed and both dashboard units
+are inactive. The selected isolated binary remains `0.28.0-8884c5fa8980`.
+No installed service was restarted or replaced in this slice.
+
+The reboot removed the isolated volatile socket directory. Direct supervisor
+startup wrote its auth token before creating that directory, unlike the normal
+daemon startup path. The existing supervisor smoke had precreated it and hid
+the defect. Removing that fixture setup reproduces the exact installed error
+in under a second. Token writing now ensures the private socket directory
+exists. The optimized candidate passes initial startup and a restart after
+deleting only the stopped fixture's socket directory, including directory and
+token permission checks. This is source/built-binary repair evidence, not
+installed P158 recovery or Profile acceptance.
+
+Two separate synthetic client diagnostics used the original installed candidate
+with independent pinned HTTP clients, isolated homes and socket namespaces,
+and external browser discovery disabled. Every request and response was
+fsynced as observed. Both stopped before browser acquisition:
+
+1. The pinned W7 transport omitted Content-Length; native ingress therefore
+   read no action. Its Node test server accepted chunked requests and masked
+   this incompatibility. A regression that requires native-compatible framing
+   fails before the repair and passes after sending the exact body byte count.
+2. With framing repaired, native normalization rejects the driver's
+   `runtimeEnvironmentId` field. This field is not in the Service request
+   schema. The driver also expects an E1 provenance value that has not been
+   reconciled with server-derived runtime identity. Do not add client-selected
+   environment authority to make that oracle pass.
+
+The two-attempt bound is exhausted for this acquisition probe. No third live
+acquisition attempt follows automatically. Zero browser records were created;
+both exact synthetic host children exited. The supported request contract must
+be reconciled at a no-launch normalization seam before another acquisition
+probe is declared. This is a closed-world reframe of an observed blocker, not
+a calibration restart or a new broad repair campaign.
+
+Logging evidence distinguishes old production records from current synthetic
+failures. The retained production 200-job snapshot contains four identity-
+unproven failures, three for remote-view open and one for tab listing. All four
+lack structured failure and provenance fields; exact retained event, incident,
+and failure-journal joins are zero. Effect-time client authority cannot be
+reconstructed from this snapshot. Original responses, traces, dashboard
+projection, incident applicability, and retention losses remain unmeasured.
+These facts do not establish that an authorized client was wrongly denied.
+
+The two synthetic pre-dispatch failures have two durable journal occurrences,
+zero duplicates, and zero jobs/events/incidents. Journal codes are
+`missing_action` and `unknown_field`, but both immediate responses report
+`service_operation_failed` and `effect_uncertain`, without the journal request
+ID. Retention worked for these two failures; response/journal correlation and
+effect certainty remain explicit product logging gaps. This does not prove
+interruption or reboot durability, complete causal logging, or ACL behavior.
+
+Private evidence is retained under the P158 campaign's
+`priority-diagnosis-20260905T225521Z` directory: `readonly-diagnosis.json`,
+both append-only client attempt ledgers, terminal synthetic state/journal
+copies, and `checkpoint.json` with seven artifact hashes and built-candidate
+identity. Temporary synthetic runtime roots are diagnostic residues, not
+operator links or production resources.
+
+Validation: optimized candidate build, strengthened supervisor smoke, Rust
+format and workspace clippy with warnings denied, docs production build,
+remote-view handoff docs check, W7 A01–A03 provider-free regression, and logging
+auditor self-tests pass. The 670 provider-free client terminals are tooling
+validation only. No shared installed skill was overwritten.
+
+Classification: `blocker_reduction` for startup and request framing; priority
+acceptance remains incomplete. Next: reconcile W7 requests and provenance
+expectations with native normalization, then repair the demonstrated
+pre-dispatch response/journal mismatch at its actual ingress seam. Retain the
+remaining A-family producers and ordinary external handoff evidence as unmet.
+Calibration, W6 freeze, W7–W10 acceptance, and production mutation remain absent.
+
+### Priority Repair: Native Rejection Correlation
+
+The request-contract blocker now has a source repair. W7 omits the unsupported
+client-authored runtimeEnvironmentId field, and its mock server checks request
+fields against the canonical schema. Provenance takes runtime environment from
+deployment configuration. Campaign E0/E1 identifiers remain campaign metadata,
+not client-selected deployment authority.
+
+Native HTTP and MCP rejection responses now preserve the typed issue code,
+ingress_validation phase, no_effect certainty, and journal request identity.
+Dashboard normalization uses the same rejection representation. Malformed HTTP
+JSON now reaches the journal instead of returning before evidence creation.
+The new actual-process no-launch smoke reproduces the original generic HTTP
+error before repair and verifies five HTTP/MCP rejection-to-journal joins on
+the built candidate after repair, without jobs or browsers.
+
+An immediate MCP journal read initially found zero matching records. Source
+inspection established asynchronous delivery; bounded observation then joined
+all five responses exactly once. This proves normal-operation correlation,
+not interruption durability. The response can precede durable journal delivery;
+that crash window remains an explicit logging acceptance gap. Do not hide it
+behind the passing correlation smoke or claim reboot durability.
+
+The focused Rust request selection initially passed 59 of 60 checks. The one
+failure expected the old effect_uncertain envelope for rejected MCP input; its
+expectation now requires no_effect. All 60 focused request/provenance checks
+pass on repeat. Generated client checks, API/MCP parity, docs build, handoff
+documentation checks, logging auditor self-tests, Rust format, and workspace
+clippy with warnings denied pass. The optimized development candidate builds
+and the actual-process rejection smoke passes. These are focused checks, not
+the comprehensive or live campaign. No installed runtime was replaced, no acquisition was retried, and no
+calibration was dispatched.
+
+Classification: blocker_reduction at request normalization and response/journal
+correlation; all three priority outcomes remain incomplete. Focused validation
+is complete. Next record the disposition
+of the exhausted acquisition probe and run one isolated verification of the
+repaired client request path, with durable observations and explicit failure
+exit. Preserve the async-delivery crash window for the interruption oracle and
+ordinary anchor-free remote-view evidence as separate unmet requirements.
+
+### Priority Verification: Shared Clients And Child Denial
+
+One isolated verification ran after disposition of the two failed acquisition
+attempts. The disposition retains both failures and permits exactly one repair
+verification, not a reset of the diagnostic bound. Source b6ee48f2 and candidate
+SHA-256 5b1b930e0b9be1988a61bbceaabfdc77f7eafb85ada73ac826856b77ee4e2f0e
+bind this observation. No installed service was replaced or restarted.
+
+Two independent self-declared clients with identical display labels acquired
+distinct tabs in the same synthetic shared Profile browser. A foreign client's
+release was denied. The owner's release physically closed its own tab,
+preserved the browser, and left the peer tab live in Service state. This is
+outcome_progress for focused shared-client usability. It is not authenticated
+Profile ACL acceptance, the full A-family workload, or frozen W7 acceptance.
+
+The foreign release exposes a new concrete recourse defect. Its message is
+profile child access denied: subject_mismatch, but the structured response,
+terminal job, event and journal classify it as service_operation_failed with
+effect_uncertain. The response joins exactly one durable job, one terminal
+event, one journal occurrence, and one incident through its event ID. There
+are no duplicate matches on those captured surfaces. Trace and dashboard
+projections were not captured, so the complete logging oracle remains unmet.
+
+CodeGraph and focused source inspection locate the loss at
+`authorize_profile_child_access_in_state`: the policy evaluator's exact reason
+is flattened into a String. `handle_tab_handle_release` validates authority
+before calling `release_physical_tab_for_handle`; the observed subject mismatch
+returns before physical release and before child reconnect mutation. The
+generic failure classifier does not retain this cause or known no-effect
+ordering. This is actionable-denial/logging work, not evidence that the foreign
+release should have been allowed. Do not bypass authority or widen grants.
+
+Private evidence is under campaign directory
+`priority-verification-20260905T232407Z`: disposition, append-only fsynced
+request/response ledger, terminal state and journal copies, and a checkpoint
+with artifact hashes. Exact owned-lane close succeeded; host exit was zero.
+Terminal state contains zero browsers, sessions, and tabs. Process readback
+found no exact synthetic-root process. Retained evidence is not an operator
+handoff or installed runtime.
+
+Next: repair the diagnosed child-authority rejection representation and recourse
+at its real guard, with a regression that proves subject mismatch before
+physical effects and preserves the same denial across response, job, event,
+and journal. Bound this distinct failure to one repair/verification cycle;
+do not rerun the completed acquisition verification merely to reconfirm it.
+Authenticated ACL/revocation/restart, interruption durability, missing A-family
+producers, ordinary external remote-view links, W6, and W7–W10 remain open.
+Calibration and production mutation remain absent.
+
+### Priority Repair Verification: Actionable Child Denials
+
+The subject-mismatch regression failed against d0596ad3 with the generic
+service_operation_failed code while confirming child state was unchanged.
+The compatibility classifier now maps the four exact child-authority guard
+messages to distinct profile_child_* causes, profile_access axis,
+child_admission phase, no_effect, and concrete recourse. Unknown or wrapped
+messages remain conservative. The authority decision, inherited permissions,
+connection ownership, and physical-release ordering are unchanged.
+
+One isolated repair verification uses built candidate SHA-256
+22f36d5ada2c8b5571a236d5a38c285eab9f7d46d6873f3960dd315467d37ac3.
+Two disposable tabs provide the denial fixture; this is not a repeat of the
+acquisition campaign. The foreign release reports profile_child_subject_mismatch
+and use_own_service_tab_handle. Response, durable job, terminal event, and trace
+contain matching structured failures. One journal occurrence preserves the
+same code and no-effect certainty. Counts are one on each of these five
+surfaces, zero duplicate matches, and zero failure conflicts. Both tabs remain
+open after the denial. Own-tab release still preserves the peer.
+
+Evidence is in private campaign directory
+`child-denial-verification-20260905T233224Z`: one-run disposition, fsynced
+ledger, terminal state/journal copies, and hashed checkpoint. Exact fixture
+cleanup succeeds with host exit zero, zero retained browsers/sessions/tabs,
+and no matching synthetic-root process at readback. No installed runtime or
+production state was changed. Dashboard projection and interruption/reboot
+durability remain explicitly unproven.
+
+The optimized build, clippy with warnings denied, format, generated client
+checks, API/MCP parity, docs build, handoff docs, and logging-auditor self-tests
+pass. The 10-test child selection and the strengthened authority-guard
+regression also pass. This is focused validation, not the full Rust suite. This is outcome_progress for actionable shared-client
+denials and their normal-operation evidence, not full Profile ACL or logging
+acceptance. The repair's one live verification is consumed and passed.
+
+The next priority slice is ordinary durable
+remote-view entry: reconcile current isolated service ownership and retained
+anchor-free failure evidence, then identify one bounded synthetic external
+handoff probe through the supported durable contract. Do not restore the
+anchored calibration loop as a prerequisite. Authenticated Profile ACLs,
+revocation/restart, interruption durability, missing A-family producers,
+ordinary link reliability, W6, and W7–W10 remain outstanding.
+
+### Priority Remote-View Recovery: Current Isolated Stack
+
+Read-only reconciliation found the P158 host failed and both dashboards
+inactive. The selected old generation remained 0.28.0-8884c5fa8980. Its retained
+Service state marked one synthetic browser ready although the recorded process
+was absent. No executable from the isolated generation tree was live. Provider
+containers, schema, route users, and connections were present; only the four
+required warm displays and their uniqueness check failed.
+
+Retained P/Q receipts remain failures. P elected a replacement primary after
+closing the first viewer and rendered an iframe, but did not reach managed
+CONNECTED. Q lost the first frame before connection. These receipts establish
+neither a complete frame-lifecycle cause nor ordinary link acceptance. The
+prior loop stays stopped; no unchanged external retry or anchored calibration
+was used to mask it.
+
+After backing up isolated Service state, ingress records, and unit definitions,
+one scoped recovery installed source abc784c5 as 0.28.0-22f36d5ada2c. All three
+P158 units are active on the new generation. The supported installer verified
+production and default-development custody remained unchanged. Three disposable
+browser-launch smoke iterations passed. Required provider doctor initially
+still failed on missing warm displays, as expected from the read-only baseline.
+
+Provider plan, stage, and preflight passed using the existing reviewed namespace
+and paired external-ingress binding. One explicit apply with deferred ingress
+restored the warm displays and ended provider_ready_ingress_pending. It did not
+publish ingress. The exact required doctor then passed, and Service Status
+projected four warm_idle slots, hard/pressure maximum six, and zero binding
+warnings. A host-vantage read of the existing public login path returned HTTP
+200. That is not a viewer, pixel, interaction, or external-vantage pass. Final
+production/default-development snapshot comparisons also passed.
+
+Private recovery evidence lives in campaign directory
+`remote-view-priority-20260905T233828Z`, including the preserved pre-recovery
+state, one-attempt disposition, installed identity, provider receipts, final
+doctor/capacity readbacks, isolation checks, and a checkpoint hashing 26
+artifacts. No raw credentials, provider links, or runtime state enter the repo.
+
+Classification: blocker_reduction through verified isolated runtime recovery.
+Next capture the ordinary durable handoff's resolution and frame lifecycle
+with durable observations. First determine whether a retained synthetic handoff
+can recover its exact target; do not silently replace its URL or target. Any
+new external probe must explicitly address P/Q's missing causal observations,
+use the manual protected external-vantage lane and current synthetic identity
+binding, and retain its failure without an automatic retry. Old protected
+scene bindings cannot be reused after the reboot without current validation.
+Calibration, W6 freeze, W7–W10, authenticated ACL/revocation/restart, and full
+logging and ordinary remote-view acceptance remain incomplete.
+
+### Priority Retained Handoff: False Convergence Evidence
+
+One supported service_remote_view_handoff_resolve request targeted the latest
+retained P158 synthetic handoff on installed 0.28.0-22f36d5ada2c. It did not
+set allowReopenClosed, substitute a provider, or create a new operator URL.
+The response is HTTP 200 / success true with resolved false, status converging,
+and retryable true. Its message reports
+runtime_handoff_orphan_browser_hint_mismatch: the original source session is
+not bound to the recorded logical browser. The exact target browser record
+is absent in the retained state, and the handoff identity remains unchanged.
+Browser/session/tab collection counts do not change. No current target,
+operatorVisible ready state, pixels, or interaction is proven.
+
+The resolver job is recorded succeeded with one terminal event and zero
+failure-journal matches for its request ID. A separate stream_enable job failed
+because streaming was already enabled; that is not the resolver's failure
+record. The request and before/after snapshots are preserved under private
+campaign directory `retained-handoff-20260905T234513414Z`, with a hashed
+checkpoint and exact journal-match readback. This is service-host diagnostic
+evidence, not external-vantage acceptance.
+
+Code inspection identifies the conversion in execute_durable_resolution:
+every EffectFailed from adopt_retained_browser or validate_retained_browser
+becomes Converging with retryable true. The underlying orphan identity guard
+correctly refuses an unbound browser. Do not weaken that guard or automatically
+reopen a replacement target to make this handoff appear resolved.
+
+Classification: blocker_reduction through an actual ordinary-handoff failure
+and its logging gap. Next establish a red-capable coordinator regression that
+distinguishes confirmed lost process/identity from a transient ownership
+transition, then preserve terminal unavailability and actionable recourse into
+response, job, event, and failure journal. Absence from one state snapshot
+alone must not classify an in-flight owner as permanently lost. Keep the
+presentation-receipt convergence case separate. Allow one repair/verification
+cycle for this finding; no automatic repeat of this unresolved link probe.
+The P/Q frame-lifecycle failures, external pixels and interaction, authenticated
+ACLs, logging durability, W6, and W7–W10 remain open. Calibration stays deferred.
+
+### Priority Retained Handoff: Source Repair
+
+The existing coordinator regression now includes the observed explicit orphan
+identity rejection. Before repair it fails because the result is Converging
+with retryable true. The coordinator now propagates that exact adoption guard
+failure instead. Service recourse preserves its cause, lifecycle_owner axis,
+launch_admission phase, no_effect certainty, inspect_before_retry, and
+inspect_profile_recovery_plan. The guard runs before orphan adoption's first
+state mutation; it remains unchanged. No permanent-loss conclusion or automatic
+replacement is introduced. Transient adoption and incomplete presentation
+receipts retain their separate convergence paths.
+
+After repair, all 28 focused remote-view coordinator tests pass, including
+unchanged retained state on rejection and subsequent valid adoption. All 13
+failure-recourse tests, workspace clippy with warnings denied, generated-client
+checks, API/MCP parity, docs build, and handoff guidance checks pass. These are
+focused source checks, not installed or comprehensive acceptance. User guidance
+and CLI help describe the rejection and recourse. Candidate build and the one
+same-handoff installed verification remain pending at this source checkpoint.
+
+Current read-only P158 inspection identifies all three service processes on
+the preceding 22f36d5ada2c generation and four live provider browser processes
+whose command lines are P158-scoped. This is preparation for exact ownership
+reconciliation, not target recovery or provider visibility proof. No install,
+restart, external dispatch, or calibration has occurred in this source slice.
+Classification: blocker_reduction. The next step remains one installed
+response/job/event/trace/journal verification, preserving the original handoff.
+Authenticated ACL lifecycle, interruption durability, ordinary external pixels
+and input, P/Q frame behavior, W6, and W7–W10 remain unmet.
+
+### Priority Retained Handoff: One Installed Verification Passed
+
+Source 5803203b builds and installs in P158 as generation
+0.28.0-75f7d4a2caab. All three service processes read back from that exact
+binary. Required provider doctor and the three disposable open/read/close/
+residue checks pass. Production and default-development isolation comparisons
+pass both during installation and after verification. No provider apply or
+external dispatch occurs.
+
+Exactly one supported resolution request reuses the prior retained handoff
+without allowReopenClosed or identity replacement. It returns HTTP 200 with
+success false, the exact runtime_handoff_orphan_browser_hint_mismatch cause,
+lifecycle_owner / launch_admission / no_effect, and inspect_before_retry with
+inspect_profile_recovery_plan recourse. Transport HTTP 200 is not operation
+success. The job is failed, replacing the prior misleading succeeded result.
+
+Response, one durable job, one terminal event, one matching trace job/event,
+and one journal occurrence agree on the structured failure. Expected counts
+are one for each captured projection; missing, duplicate, and conflict counts
+are all zero. Browser, session, tab, and durable-handoff collections compare
+identically before and after the request. Dashboard projection and interruption
+durability were not verified. The exact target remains unavailable; there is
+no ready/pixel/input or recovery claim.
+
+Private evidence is retained under campaign directory
+retained-handoff-repair-20260906T000247Z: pre-install and verification state,
+source/candidate disposition, install/doctor/smoke receipts, fsynced one-request
+ledger, job/event/trace/journal readbacks, final isolation comparison, and a
+SHA-256 artifact checkpoint. Raw runtime state and links stay outside the repo.
+The source regression was red before repair and green afterward; 28 focused
+coordinator tests, 13 failure-recourse tests, format, clippy with warnings denied,
+client generation/parity, docs build, and handoff guidance checks pass. This is
+focused plus one installed verification, not comprehensive campaign acceptance.
+
+Classification: outcome_progress for truthful ordinary-handoff failure and
+normal-operation postmortem evidence. The one repair/verification cycle for
+this finding is consumed and passed; do not rerun it as a calibration pretext.
+Next follow the renewed reconciliation's second step: select the actual
+identity-unproven/inconsistent authenticated Profile path, inventory its live
+producer gap, and prove authorized access plus exact unauthorized denial with
+logging attached. Keep the independent interruption-durability slice explicit.
+Ordinary external same-URL pixels/input, P/Q frame failures, authenticated ACL
+lifecycle, full logging durability, W6, and W7–W10 remain unmet. Calibration
+stays deferred and production mutation remains outside scope.
+
+### Priority Authenticated Profiles: Live Access And Denial Diagnosis
+
+Two disposable restricted Profiles grant permissions only to their own
+registered principal. Two independent HTTP connections authenticate with
+capabilities registered through the supported Service leases command. Using
+candidate 0.28.0-75f7d4a2caab (source 5803203b), both clients obtain the access
+plan and successfully open their own Profile. Durable job provenance contains
+the distinct expected principal IDs and registered-capability assurance.
+This improves on the earlier self-declared shared-client proof.
+
+The first isolated host is closed after exact Profile browser cleanup. A
+second bounded episode starts a new host against the same persisted Profile
+and capability registry, with a fresh isolated socket directory. Both
+capabilities again authorize their own Profile acquisition. This proves
+persistence across host restart with closed browsers; it does not prove
+retained live-browser restart, connection rejoin, policy revocation, or the
+full A04/A06 matrix.
+
+The second episode first submits client A's capability against Profile B as an
+explicit unauthorized control. HTTP 400 rejects the request before browser or
+tab creation. Expected durable jobs are zero and observed jobs are zero. One
+expected rejection journal entry is observed with zero duplicates and zero
+response/journal code conflicts. The response correctly reports no_effect.
+The access-plan decision also denies tab_create and records the authenticated
+subject, policy revision, and missing permission.
+
+A concrete recourse defect remains: the operation's underlying
+service_access_plan_request_unavailable:profile_access_denied message becomes
+route_hint_failure on the request axis, with correct_service_request and
+inspect_service_request_schema advice. Subject and missingPermission are null.
+ServiceRequestIssue::code handles this as generic RouteHintFailure, and
+ServiceRequestRejection::response supplies generic schema-repair recourse.
+The access-plan top-level recommendedAction instead points to freshness while
+its nested access decision denies permission. Do not interpret that freshness
+recommendation as permission to seed or bypass authorization.
+
+Private evidence directories auth-profile-uxSCKX and auth-profile-oLdl8G under
+the P158 campaign root retain fsynced ledgers, exact scratch probe sources,
+registration receipts, before/after state, traces, journal copies, and hashed
+checkpoints. Raw capabilities remain private and are excluded from checkpoint
+artifact hashing. Both episodes finish with zero browsers/sessions/tabs, exact
+host exit zero, and no matching fixture process at readback. The installed
+P158 services, provider, production and default-development runtimes were not
+replaced or restarted by these disposable-host tests. No calibration or external
+viewer workflow was dispatched.
+
+Classification: outcome_progress for authenticated own-Profile access and
+capability persistence, plus blocker_reduction for the actual denial-recourse
+failure. The selected diagnostic is sealed; no unchanged retry is needed.
+Next use the existing request-admission regression seam to preserve the denied
+access decision and actionable recourse across response and journal, without
+weakening grants or inventing authority from caller labels. Bound that finding
+to one repair/verification cycle. Distinguish the top-level access-plan advice
+from the operation-rejection repair when adjudicating scope. Interruption
+logging durability remains a separate ready unit. Missing A-family producers,
+revocation/rejoin/live-browser restart, identity-unproven recovery, ordinary
+external pixels/input, P/Q frame behavior, W6 and W7–W10 remain outstanding.
+
+### Priority Profile Denial: Decision Custody Repair Verified
+
+The existing authenticated request-admission regression reproduces the defect:
+profile_access_denied is expected, but route_hint_failure is returned. The
+acquisition owner now retains the exact typed access decision, and the shared
+route-admission error carries it through normalization without re-evaluating
+policy or trusting caller-supplied authority. Compatibility callers retain the
+same error text. Permission, principal, and route decisions are unchanged.
+
+The rejection response exposes profile_access_denied on profile_access with
+no_effect, the subject and assurance, missing permission, and the planner's
+policy-inspection action. Its profileAccessDecision retains decision ID,
+resource, operation, policy revision, and denied outcome. The bounded journal
+retains the same decision and profile reference. If it cannot fit, details
+explicitly report profileAccessDecisionOmitted: record_size_limit rather than
+silently suggesting complete decision custody. Oversized runtime cases remain
+unverified. MCP forwards the decision alongside its JSON-RPC failure envelope;
+generated client response types and all required guidance surfaces are updated.
+
+One HTTP verification against the existing disposable restricted-Profile
+fixture returns the corrected denial. Following its read-only policy-inspection
+recourse with the same capability returns the same decision. Exactly one
+journal occurrence matches the response decision, code, and no-effect result;
+missing, duplicate, and conflicting counts are zero. Expected/observed denial
+jobs are zero. No browser, session, or tab is created; host exit and fixture
+process absence are verified. This episode uses candidate SHA-256
+9a316b1886f05c9363a9f638673bf903e8913a9fcab0f36a9d0dd5a7de57b906.
+
+The final adapter check found MCP's envelope initially omitted the new
+profileAccessDecision field. That projection is corrected. One separate MCP
+adapter verification on final candidate SHA-256
+5c86c5e2f23f436bf316494f3269b89e71e981cd8f88f484c95f8e408f048a0f
+returns the typed denied decision and exactly one matching journal occurrence,
+with zero missing/duplicate/conflicting matches, jobs, or browser effects.
+This is one repair cycle with two explicit adapter checks, not a repeated failed
+HTTP operation or a combined frozen epoch.
+
+Private evidence directories auth-profile-6eZQ5n and mcp-denial-IscpID contain
+fsynced request/response ledgers, journal and state readbacks, exact scratch
+sources, source-patch/candidate hashes, and checkpoints. Credentials remain
+private. No installed P158, provider, production, or default-development runtime
+is replaced or restarted. The candidate runs only in disposable processes.
+
+Validation: the red-capable regression is green within 27 request-normalization
+tests; all 65 focused service-access tests pass. These precede the final narrow
+MCP envelope addition, which passes final workspace clippy and actual-process
+MCP verification. Final format, optimized candidate build, generated-client
+checks/types, API/MCP parity, docs build, handoff guidance checks, and the five
+normal HTTP/MCP pre-dispatch journal joins pass. This is focused and bounded
+live validation, not the comprehensive suite or full ACL acceptance.
+
+Classification: outcome_progress for actionable authenticated ACL denial and
+normal-operation evidence custody. The bounded repair cycle is complete. Next
+prove the response-to-journal interruption boundary using a disposable process
+and durable observations, without retrying the already-verified ACL denial or
+starting calibration. The top-level access-plan freshness recommendation
+remains a separate known usability gap; it never overrides a denied access
+decision. Full revocation/rejoin/live-browser restart, identity-unproven
+recovery, missing A-family producers, dashboard logging projection,
+interruption/reboot durability, ordinary external pixels/input, P/Q frame
+behavior, W6, and W7–W10 remain outstanding.
+
+### Priority Logging: Interruption Loss Reproduced
+
+One deterministic disposable-host experiment uses source 644c8a48 and candidate
+SHA-256 5c86c5e2f23f436bf316494f3269b89e71e981cd8f88f484c95f8e408f048a0f.
+The observer holds an exclusive advisory lock on the fixture's empty journal
+file, then sends one malformed Service request. The client receives HTTP 400,
+missing_action, no_effect, and an assigned request ID. The journal remains
+empty. The failure-journal worker is directly observed waiting in
+locks_lock_inode_wait while the observer retains the exact file lock.
+
+The observer fsyncs the response ledger, rechecks the spawned host executable
+and process start identity, then SIGKILLs only that exact disposable host.
+Exit is -9. After releasing the test lock, it starts a fresh host against the
+same fixture home with a fresh isolated socket directory. Service Status
+answers HTTP 200. The original request is never resubmitted. Journal readback
+still contains zero matching occurrences where one is expected: missing 1,
+duplicates 0, conflicts 0. Pre-dispatch jobs are correctly expected 0 and
+observed 0. Browser/session/tab counts are all zero. Exact restart-host cleanup
+exits zero and no fixture process remains.
+
+This is a measured product logging durability failure, not the earlier
+calibration harness custody failure. The original async-delivery crash window
+is no longer merely unproven. It is a process-interruption test with controlled
+journal contention, not a host power-loss or reboot test. The failing evidence
+must remain visible; no successful normal-delivery check can supersede it.
+
+The source explains the result: append_service_failure_best_effort returns
+after enqueueing an in-memory record. The worker obtains the journal file lock
+before append and sync_data. No durable pending record exists between response
+and append. Delivery/write-failure counters are process-local atomics, and the
+process log's observation line does not replace the missing causal envelope.
+Existing dispatcher tests prove delivery when the sink eventually completes,
+backpressure accounting, and explicit write-failure accounting; they do not
+prove survival of this interval.
+
+Evidence is under private P158 campaign directory
+journal-interruption-7sqtcob8: fsynced request/response/lock/process ledgers,
+pre-kill worker-wait observation, empty after-kill and after-restart journals,
+restart state, exact probe source, and hashed checkpoint. No installed P158,
+provider, production, or default-development runtime was changed, and no
+browser or external workflow was started.
+
+Classification: blocker_reduction through a verified counterexample and exact
+failing boundary. Next implement durable pending failure custody before the
+response, with idempotent restart recovery into the existing journal and
+explicit delivery-failure accounting. The failure-journal owner should own any
+pending-record storage under the same private runtime boundary; the final
+journal must remain compatible with its existing record/readback contracts.
+Do not convert this into an indefinitely blocking synchronous append: bound
+contention waits and distinguish pending durable custody from final projection.
+Replay must neither lose nor duplicate an occurrence after interruption between
+append and pending-record retirement. Preserve partial-line handling, private
+permissions, redaction, and queue-pressure evidence. Do not claim durable
+custody when the persistence operation itself fails.
+
+Use this exact lock/interruption seam as the repair regression, plus a focused
+append-before-retirement interruption check. One diagnostic is consumed; allow
+one bounded repair/verification cycle for this finding. Keep separate candidate
+identities and expected/observed counts. No automatic repetition of this failed
+request or calibration is authorized by the result. Full ACL lifecycle,
+identity-unproven recovery, top-level access-plan advice, missing A-family
+producers, dashboard logging projection, reboot durability, ordinary external
+pixels/input, P/Q frame behavior, W6, and W7–W10 remain open.
+
+
+### Priority Logging: Pending Custody And Restart Recovery Verified
+
+Source 2fae5f5a repairs the reproduced in-memory delivery interval. The journal
+owner now stages private record files, syncs their contents and directory entry
+on Unix, and only then returns to response construction. Journal projection
+uses one nonblocking lock attempt and a bounded batch; queue pressure retains
+disk custody. Daemon startup and background ticks recover pending records
+without resubmitting the failed operation. Recovery checks occurrence identity
+and content under the journal lock, syncs the journal before retiring pending
+files, and separates torn tails from later valid rows. Corrupt or conflicting
+pending evidence is retained with an explicit recovery failure. Readback adds
+pendingRecordCount; write and delivery counters remain process-local. A custody
+persistence failure is explicitly logged and never establishes durable custody.
+
+Two disposable-host checks use candidate SHA-256
+5063b91aac03f5f7a8c63dd72d19a54e2bed2ffb1243204fc71114095f1c5ce2:
+
+1. With an observer-held journal lock, one HTTP missing_action rejection reaches
+   the client and its exact pending record is already present. The observer
+   fsyncs its ledger, verifies the spawned process executable and start identity,
+   and SIGKILLs that host. After lock release, a fresh host using the same fixture
+   home and a fresh socket directory recovers the original occurrence without
+   another request. Expected 1, observed 1, missing 0, duplicates 0, conflicts 0;
+   pending publications are retired.
+2. A distinct fixture stages the same response-before-projection state. While
+   retaining the journal lock, the observer appends and fsyncs the exact pending
+   record to model the append-before-retirement cut. It then kills the exact
+   host. Restart preserves exactly one identical journal occurrence and retires
+   pending custody. Expected 1, observed 1, missing 0, duplicates 0, conflicts 0.
+   This is an observer-constructed filesystem seam, not a claim that a timed kill
+   intercepted the product worker between its append and retirement instructions.
+
+Both episodes have expected/observed jobs 0, browsers/sessions/tabs 0, SIGKILL
+exit -9, restart-host cleanup exit 0, and no remaining fixture processes at
+readback. Private campaign directories journal-custody-bj175178 and
+journal-custody-6x48t_o7 retain exact sources, fsynced ledgers, copied journal and
+state readbacks, and verified artifact hashes. The original failed directory
+journal-interruption-7sqtcob8 remains intact. No installed P158, provider,
+production, or default-development runtime was replaced, restarted, or cleaned;
+no browser or external workflow was started.
+
+Validation: 11 focused Rust journal tests pass, including actual filesystem
+contention, pending recovery, duplicate prevention, torn-line preservation,
+conflict retention, permissions, and explicit staging failure. Existing bounded
+dispatcher tests remain green. Workspace clippy with denied warnings, format
+check, journal/dashboard contract checks, optimized candidate build, and docs
+build pass. The contract check's old literal assertion requiring a blocking
+read lock was removed in favor of the Rust contention behavior test. The docs
+build reports the existing multiple-lockfile workspace-root warning. No full
+Rust suite, full campaign, host reboot, power-loss, or non-Unix runtime proof
+is claimed.
+
+Classification: outcome_progress for durable custody across the reproduced
+process-interruption boundary. The one repair/verification cycle is complete.
+Next is a bounded authenticated policy-revocation and rejoin diagnostic with
+logging attached. Full ACL lifecycle, live-browser restart, identity-unproven
+recovery, top-level access-plan advice, missing A-family producers, dashboard
+projection, reboot durability, ordinary external pixels/input, P/Q behavior,
+W6 and W7–W10 remain open. Calibration remains deferred.
+
+
+### Priority ACL Lifecycle: Closed History Blocks Policy Drain
+
+Two bounded diagnostics use source 2fae5f5a and candidate SHA-256
+5063b91aac03f5f7a8c63dd72d19a54e2bed2ffb1243204fc71114095f1c5ce2.
+Both independent registered-capability clients acquire distinct tabs in one
+restricted synthetic Profile. The first diagnostic then fails before policy
+mutation: the probe passes profileCapability to a helper whose declared options
+do not support it. The server rejects that body field. Existing A05 transport
+composition supplies capability authentication separately; the corrected probe
+uses authenticated transport. Preserve auth-revocation-Nux9gB as a measurement
+construction failure, not an ACL product failure or a successful lifecycle run.
+
+The second diagnostic, auth-revocation-5MZLk0, begins revocation of B while A
+remains authorized. Policy revision 1 enters draining with B's exact target as
+blocking occupancy. B's attempted control is denied with
+profile_child_permission_not_inherited and no_effect, and its own-tab release
+succeeds. State retains B's historical tab as closed while A remains ready.
+The next revision-fenced policy operation still reports that same closed B tab
+as blocking, returns drain_updated, and remains revision 1 rather than committing
+revision 2. Restoration and rejoin are not reached. The product defect is in
+mutate_profile_policy_in_repository: it counts retained closed tab ACL rows as
+occupancy without checking lifecycle.
+
+The existing repository regression previously removed the tab outright before
+completing the drain. Retaining it as closed reproduces the failure: revision 7
+remains 7 where 8 is expected. Source 54d1a8f6 excludes only closed rows from
+occupancy and preserves them as history. Disconnected and other nonterminal
+rows still fence narrowing. All 22 focused service-configuration tests pass,
+including the repaired regression; workspace clippy, format, and docs build pass.
+One bounded live repair verification follows on a separately hashed candidate.
+
+Both diagnostic fixtures clean up to zero browsers/sessions/tabs, host exit 0,
+and zero remaining fixture processes. Exact source, fsynced ledgers, state
+readbacks, journal copies, and hashed checkpoints are retained privately.
+The control denial has one expected and one matching journal occurrence and a
+failed durable job. Policy mutation logging has a separate concrete conflict:
+both mutation receipts report registered-capability assurance for principal A,
+but terminal provenance reports self-declared assurance and the label-derived
+subject. Preserve those two conflicts for a focused provenance repair; no
+comprehensive logging pass is claimed. Shared acquisition also records a
+stream-already-enabled failure, which remains an additional unadjudicated
+occurrence rather than being silently omitted from the evidence.
+
+No installed runtime, provider, production, or default-development environment
+is changed. No forced eviction, private page access, external workflow, or
+calibration occurs. The two diagnostic attempts are consumed; one bounded
+repair verification is available for the closed-history finding. Full Plan 0158
+acceptance remains open.
+
+
+### Priority ACL Lifecycle: Revocation And Rejoin Verified
+
+One bounded repair verification uses source 54d1a8f6 and candidate SHA-256
+61f5b31b3208c2329debcd2e39f07753cbd684a038f3335197f66ccc55866ba4.
+Independent registered-capability clients A and B open distinct tabs in one
+restricted synthetic Profile. Removing B's grant begins drain at revision 1.
+B's control attempt is denied without effects, and B releases its own tab while
+A's original tab remains ready. The next revision-fenced policy mutation now
+commits revision 2 with active state. B's access plan denies tab_create at that
+revision; a direct authenticated request independently confirms
+profile_access_denied and no_effect. The direct request is intentional negative
+coverage because the client correctly refuses to execute an unavailable plan.
+
+Restoring B's grant commits revision 3. B uses the same capability over a fresh
+transport, obtains an allowed revision-3 access plan, and acquires a valid new
+tab handle. A evaluates the synthetic expression 1+1 through its original
+retained handle and receives 2. No forced eviction is used. This proves the
+selected authenticated revocation/rejoin lifecycle, not live-browser restart,
+capability revocation, or every A-family cell.
+
+Private directory auth-revocation-verification-ibXc66 retains the exact probe,
+fsynced ledger, initial/pre-cleanup/final state, trace, journal, and hashed
+checkpoint. Both expected denial journal joins have observed 1, missing 0,
+duplicates 0, and code conflicts 0. The child-control denial has one failed
+job; the pre-dispatch revoked-admission denial correctly has zero jobs. The
+journal also retains one stream-already-enabled failure. Three policy mutations
+still have receipt/provenance identity conflicts: the receipt names the
+registered-capability principal, while terminal provenance names a self-declared
+label subject. These three conflicts prevent a complete logging acceptance
+claim despite the selected denial joins passing. No capability bytes appear in
+the retained evidence artifacts checked against the two fixture capabilities.
+
+Cleanup closes only the fixture's browser sessions, finishes with zero browsers,
+sessions, and tabs, then exits the exact host with code 0. A separate process
+readback finds zero fixture processes. Production, installed P158, default
+development, and provider services remain untouched. No external workflow or
+calibration is dispatched. The candidate build, 22 focused configuration tests,
+workspace clippy, format check, and docs build pass; no full-suite claim is made.
+
+Classification: outcome_progress for authenticated shared-Profile revocation,
+restored-grant rejoin, and peer preservation. The closed-history repair cycle
+is complete; preserve both failed diagnostics and do not repeat it. Next fix
+the narrowly identified policy-mutation provenance conflict using these retained
+receipts and a request-to-job regression. Ordinary external handoff pixels/input,
+P/Q behavior, live-browser restart, actual identity-unproven recovery, remaining
+logging coverage, missing producers, W6, and W7–W10 remain open.
+
+
+### Priority Logging: Authenticated Policy Actor Verified
+
+Source 062727fb binds public job provenance to the validated principal during
+Service request normalization. Previously, policy authorization used the
+registered capability while queue provenance fell back to caller labels.
+The fix retains service, agent, and task attribution but overrides public
+subject and assurance hints with the validated actor before queue capture.
+The existing normalization regression fails before the repair and passes
+afterward. All 27 focused request tests, workspace clippy with warnings denied,
+format check, docs build, and optimized candidate build pass.
+
+One disposable host runs three authenticated policy operations: restrict,
+restore, and unchanged. For each, the response terminal outcome, durable job,
+job terminal outcome, terminal event, trace job, and trace terminal event agree
+with the policy receipt's registered-capability subject and assurance. Expected
+18 projections, observed 18, missing 0, duplicates 0, conflicts 0. Caller labels
+remain intact. This targets the three retained actor conflicts without repeating
+the completed browser revocation/rejoin campaign. Other authentication modes,
+full logging coverage, and dashboard projection are not established by this
+focused check.
+
+Candidate SHA-256:
+8a039d6bd15dea42f9debd842d4d37875759d661d457f13d8ccbeb3cec2ac909.
+Private campaign directory policy-provenance-f66DTO retains the fsynced ledger,
+three operation traces, final trace/state, exact probe source, and artifact
+hash checkpoint bound to the source commit and candidate. A scan against both
+fixture capabilities finds zero leaks in the checked evidence. Final state has
+zero browsers, sessions, and tabs; the exact host exits 0 and process readback
+finds zero fixture processes. No browser is opened and no installed runtime,
+provider, production, or default-development environment is changed.
+
+Classification: outcome_progress for authenticated postmortem actor agreement.
+The bounded repair verification is consumed and passed; retain the original
+conflicting lifecycle receipts. Next pursue ordinary remote-view links. Initial
+read-only readback shows all three P158 units active, which is not pixel or
+recovery evidence. The retained target's earlier identity rejection and P/Q
+frame failures remain unresolved. Reconcile exact target ownership and the
+supported recovery surface before external observation; refresh synthetic
+identity/capture bindings only for the selected authorized probe. Calibration
+remains deferred, and all original incomplete Plan 0158 criteria remain open.
+
+
+### Priority Remote-View: Retained Target Read-Only Reconciliation
+
+The next slice begins with the exact handoff ID from the retained repair's
+one-request ledger. Current readback finds that handoff still stored as ready,
+but its referenced browser ID is absent from current Service state. No browser
+process identity can be inferred from that absent row. This is not evidence of
+permanent process loss, current visibility, or permission to replace the target.
+All three isolated P158 units are active, with executable and process-start
+identity retained privately in remote-view-current-rxergfag/readback.json.
+
+The source distinguishes profile recovery planning from lease recovery:
+service_profile_recovery_plan authenticates an exact Profile capability and
+calls terminal-owner planning; the separate lease recover plan/apply adapter
+fails closed pending its protected authority surface. Do not misclassify that
+lease adapter restriction as a blanket absence of Profile recovery planning.
+Next reconcile the retained Profile's owner, lifecycle, process identity, and
+available capability binding, then use the supported Profile recovery plan if
+its authentication preconditions hold. No recovery apply, browser launch,
+replacement URL, provider mutation, external workflow, or calibration ran in
+this read-only reconciliation. Original working-link acceptance remains open.
+
+
+### Priority Remote-View: Recovery Eligibility And Explicit Reopen Proposal
+
+The authoritative repository load overlays runtime-owner-registry.json and
+runtime-lifecycle-registry.json onto state.json. An initial raw state.json read
+omitted lifecycle evidence; the corrected sidecar readback supersedes that
+incomplete observation. The exact retained owner is generation 5, its lifecycle
+is terminal, and cleanup is satisfied. Its recorded boot differs from the
+current boot. Evidence names process-group absence, stale profile-lock PID
+absence, and absent browser projection. A current exact user-data-directory
+process scan finds no matching process. Dangling lock symlinks remain and were
+not deleted. No principal binding was found in the owner registry.
+
+The supported installed no-launch access plan independently reports
+processAbsenceProven=true, replacementEligible=true,
+requiredAction=supersede_terminal_owner, and zero active Profile lease sessions.
+That eligibility permits a separately authorized replacement; it does not turn
+ordinary retained-target adoption into a working link or authorize substitution
+silently. The profile recovery planner's literal terminal-evidence preconditions
+are distinct from this access-plan replacement decision; no capability was
+registered merely to invoke it.
+
+The original synthetic target is the reviewed loopback fixture, whose listener
+is currently absent. The existing synthetic fixture source and generated
+attestation match that target endpoint. A private reopen-proposal.json in
+remote-view-current-rxergfag fixes one service_remote_view_handoff_resolve request
+with allowReopenClosed=true, the retained handoff, exact Profile, fixture source
+and document hashes, fresh ownership preconditions, and one attempt. It keeps
+the durable URL but may create a replacement browser/target. It requires explicit
+operator reopening confirmation under the public remote-view contract in
+cli/src/output.rs and docs/src/app/remote-view/page.mdx. The prior repair was
+expressly retained-target-only and did not supply that confirmation.
+
+The proposal remains unexecuted. No fixture service, browser, provider, external
+workflow, or calibration was started. After confirmation, restore the reviewed
+synthetic fixture, revalidate exact terminal eligibility, execute once with
+durable evidence, and bind any subsequent protected external readiness probe
+to the resulting new identity. Preserve every previous target and failed P/Q
+receipt as history; new-target visibility cannot count as preservation of the
+old process. Full Plan 0158 remains open.
+
+
+### Priority Remote-View: Guarded Reopen Execution Prepared
+
+The explicit reopening question remains pending. Automatic goal continuation
+is not operator confirmation. Independent execution preparation adds the private
+execute-reopen-once.mjs beside the frozen proposal. Syntax validation and its
+read-only prepare mode pass against installed candidate SHA-256
+75f7d4a2caab01870057c3f82bd8e14b9cec976a4d103f524cb21c0337a66604,
+retained owner generation 5, and current replacementEligible=true.
+
+The script binds the proposal hash, durable URL hash, Profile, owner/lifecycle
+identity and generation, exact installed namespace, and synthetic source/document.
+It requires a fresh supported access plan and the restored fixture's matching
+body before dispatch. Exclusive ledger creation and directory/file fsync precede
+the sole request; a transport failure records uncertain effects and never retries.
+Before/after state, owner, lifecycle, handoff, presentation, and journal snapshots
+support subsequent response and logging adjudication. Prepare mode makes no
+request mutation and the execution ledger does not exist. No fixture service,
+browser reopen, external workflow, or calibration has run. Source/hash and
+prepare receipts remain private in execution-preparation.json. This is execution
+preparation, not a remote-view acceptance pass; explicit confirmation is still
+required for the proposed replacement-target effect.
+
+
+### Priority Client Blockers: Advice Fixed And Production Host Restored
+
+The operator explicitly prioritized fixing the remaining client blockers.
+Source 31a5a348 corrects access-plan guidance: a denied Profile decision now
+selects its policy or occupancy inspection action before freshness/seeding
+advice, with blocking attention. Site-policy denial retains precedence, and
+permission enforcement is unchanged. The extended existing regression fails
+before repair with freshness advice versus expected policy inspection. All 55
+focused service-access tests, workspace clippy, format, docs build, and the
+optimized candidate build pass.
+
+One disposable authenticated-client verification uses candidate SHA-256
+1f93af7a797aaf3115a50ae349b384bfcebb914c1a0eb3adb30f6a0c1724595e.
+A valid registered capability lacking a grant receives denied access, unavailable
+acquisition, matching top-level and nested policy-inspection recourse, and
+blocking attention. The separately authorized capability retains allowed access
+and available acquisition. No browsers are opened. The exact host exits 0;
+final state has zero browsers, sessions, and tabs. Private directory
+access-advice-nBgVPq retains source, fsynced evidence, and a hashed checkpoint;
+capability scans find zero leaks. This verifies permission advice through the
+real HTTP client; it does not claim the full remaining ACL matrix.
+
+Independent production read-only diagnosis found the installed runtime host
+failed after the September 5 reboot, while dashboards remained active. The
+startup error is failure to write its daemon auth token because a directory is
+missing. The installed binary reproduces that exact failure in a disposable
+no-browser supervisor smoke. The current candidate passes the same supervisor
+smoke, including socket-directory removal between starts; existing source repair
+8164eac9 supplies the fix. Production metadata also contains 63 historical ready
+handoffs, 62 without their referenced browser row, including 45 terminal
+lifecycles. These historical counts are not an external link-failure rate.
+
+Under the operator's subsequent fix instruction, scoped operational restoration
+recreates only the selected production socket directory with mode 0700 and
+starts the previously failed host using unchanged binary SHA-256
+4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7.
+Service Status succeeds; the exact host remains active with zero restarts.
+A generation-scoped systemd override ensures that same private directory before
+future starts. Unit verification and effective configuration readback pass;
+no second production restart or machine reboot is performed. Review/remove the
+override on future runtime replacement; promoting the startup source fix is
+preferable to keeping a pinned-path compatibility override indefinitely.
+
+An initial preparation guard incorrectly included root-owned /run/user in the
+per-user ownership check and stopped before effects. The corrected boundary
+checks /run/user/1000 and descendants, preserving that pre-effect disposition.
+Private production-readonly-1cf6invy and production-host-restoration-1xndokxt
+retain diagnosis, unchanged-binary proof, start/status readbacks, validated
+service override, and rollback instructions. This restores host availability;
+it does not establish working remote links or deploy the development ACL fixes.
+No production browser request, credential entry, client eviction, Profile/ACL
+mutation, runtime replacement, release, or calibration is performed.
+
+Next bounded verification targets authenticated original-tab use across an
+unexpected isolated host stop while retaining the exact Chrome processes. Keep
+actual identity-unproven/inconsistent recovery, stale handles, and timeout
+uncertainty open until their corresponding client outcomes are verified.

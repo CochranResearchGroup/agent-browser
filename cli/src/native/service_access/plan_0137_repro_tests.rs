@@ -194,14 +194,15 @@ fn p137_generation_55_transferred_terminal_owner_plans_without_mutating_state() 
         fixture.daemon_session_route
     );
     assert_eq!(
-        plan["decision"]["serviceRequest"]["available"], false,
-        "an unauthenticated plan must not advertise an executor-inadmissible replacement"
+        plan["decision"]["serviceRequest"]["available"], true,
+        "a shared-local profile must admit the self-declared subject"
     );
-    assert_eq!(
-        plan["decision"]["serviceRequest"]["acquisitionBlocker"],
-        "profile_capability_required"
-    );
-    assert!(plan["decision"]["serviceRequest"]["request"].is_null());
+    assert!(plan["decision"]["serviceRequest"]["acquisitionBlocker"].is_null());
+    let launch_session = plan["decision"]["serviceRequest"]["request"]["sessionName"]
+        .as_str()
+        .expect("terminal replacement must select a fresh isolated route");
+    assert_ne!(launch_session, fixture.daemon_session_route);
+    assert!(launch_session.starts_with("terminal-profile-"));
     assert_eq!(fixture.principal_id, "principal:last30days");
 }
 
@@ -265,7 +266,10 @@ fn p137_terminal_history_without_current_owner_cannot_emit_a_replacement_route()
     assert!(plan["decision"]["lifecycleReplacement"]["replacementSessionName"].is_null());
     assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
     assert!(plan["decision"]["serviceRequest"]["acquisitionBlocker"].is_null());
-    assert!(plan["decision"]["serviceRequest"]["request"]["sessionName"].is_null());
+    let launch_session = plan["decision"]["serviceRequest"]["request"]["sessionName"]
+        .as_str()
+        .expect("shared-local cold acquisition must select an isolated route");
+    assert!(launch_session.starts_with("shared-profile-"));
 }
 
 #[test]

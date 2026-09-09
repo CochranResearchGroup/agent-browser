@@ -11,21 +11,31 @@ use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::service_contracts::SERVICE_REQUEST_ACTIONS;
-use super::service_lease_authority::{ActiveLeaseClaim, LeaseResourceKey};
 use super::service_lease_mode::{profile_lease_mode_from_env, ProfileLeaseMode};
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
     browser_profile_compatibility_matches, builtin_site_policy, service_profile_seeding_handoff,
-    service_site_policy_id_for_url, BrowserBuild, BrowserHealth, BrowserHost, BrowserProcess,
-    BrowserProfile, BrowserSession, Challenge, ChallengeKind, ChallengePolicy, ChallengeState,
-    ControlInputProvider, InteractionMode, LeaseState, ProfileOrigin, ProfileSelectionReason,
-    ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState,
-    ServiceProvider, ServiceState, SitePolicy, ViewStreamProvider,
+    service_site_policy_id_for_url, BrowserBuild, BrowserHost, BrowserProfile, Challenge,
+    ChallengeKind, ChallengePolicy, ChallengeState, ControlInputProvider, InteractionMode,
+    ProfileSelectionReason, ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation,
+    ServiceIncidentState, ServiceProvider, ServiceState, SitePolicy, ViewStreamProvider,
     SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
     SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
+#[cfg(test)]
+use super::service_model::{BrowserHealth, BrowserProcess, BrowserSession, LeaseState};
 use super::service_principal::AuthenticatedServicePrincipal;
+#[cfg(test)]
+use super::service_profile_acquisition::ProfileAcquisitionDisposition;
+use super::service_profile_acquisition::{
+    decide_profile_acquisition, ProfileAcquisitionDecision, ProfileAcquisitionInput,
+};
+
+#[derive(Debug, Clone)]
+struct ServiceAccessPlanArtifact {
+    public_plan: Value,
+    acquisition: ProfileAcquisitionDecision,
+}
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -33,6 +43,8 @@ pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) service_name: Option<String>,
     pub(crate) agent_name: Option<String>,
     pub(crate) task_name: Option<String>,
+    pub(crate) client_subject_id: Option<String>,
+    pub(crate) identity_assurance: Option<String>,
     /// Explicit daemon lane that must survive planning into the executable request.
     pub(crate) session_name: Option<String>,
     pub(crate) target_service_ids: Vec<String>,
@@ -75,6 +87,12 @@ pub(crate) fn parse_service_access_plan_query(
             }
             "agentName" | "agent_name" | "agent-name" => request.agent_name = non_empty(value),
             "taskName" | "task_name" | "task-name" => request.task_name = non_empty(value),
+            "clientSubjectId" | "client_subject_id" | "client-subject-id" => {
+                request.client_subject_id = non_empty(value)
+            }
+            "identityAssurance" | "identity_assurance" | "identity-assurance" => {
+                request.identity_assurance = non_empty(value)
+            }
             "sessionName" | "session_name" | "session-name" => {
                 request.session_name = non_empty(value)
             }
@@ -158,14 +176,27 @@ pub(crate) fn service_access_plan_for_state(
     service_state: &ServiceState,
     request: ServiceAccessPlanRequest,
 ) -> Value {
-    service_access_plan_for_state_with_principal(service_state, request, None)
+    service_access_plan_artifact_for_state_with_principal(service_state, request, None).public_plan
 }
 
 pub(crate) fn service_access_plan_for_state_with_principal(
     service_state: &ServiceState,
-    mut request: ServiceAccessPlanRequest,
+    request: ServiceAccessPlanRequest,
     authenticated_principal: Option<&AuthenticatedServicePrincipal>,
 ) -> Value {
+    service_access_plan_artifact_for_state_with_principal(
+        service_state,
+        request,
+        authenticated_principal,
+    )
+    .public_plan
+}
+
+fn service_access_plan_artifact_for_state_with_principal(
+    service_state: &ServiceState,
+    mut request: ServiceAccessPlanRequest,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
+) -> ServiceAccessPlanArtifact {
     let original_state = service_state;
     let mut effective_state = original_state.clone();
     effective_state.refresh_profile_readiness();
@@ -183,7 +214,15 @@ pub(crate) fn service_access_plan_for_state_with_principal(
         request.browser_build = browser_build_for_access_request(service_state, &request);
     }
     let profile_request = request.profile_selection_request();
-    let selection = select_service_profile_for_request(service_state, &profile_request);
+    // Automatic catalog ranking must never substitute a different profile for
+    // an explicit named-profile intent, including a name not yet in the catalog.
+    let selection =
+        select_service_profile_for_request(service_state, &profile_request).filter(|selection| {
+            request
+                .runtime_profile
+                .as_deref()
+                .is_none_or(|requested| selection.profile_id == requested)
+        });
     let selected_profile = request
         .runtime_profile
         .as_deref()
@@ -195,11 +234,15 @@ pub(crate) fn service_access_plan_for_state_with_principal(
                 .and_then(|selection| service_state.profiles.get(&selection.profile_id))
                 .cloned()
         });
-    let readiness_id = request.readiness_profile_id.clone().or_else(|| {
-        selection
-            .as_ref()
-            .map(|selection| selection.profile_id.clone())
-    });
+    let readiness_id = request
+        .readiness_profile_id
+        .clone()
+        .or_else(|| request.runtime_profile.clone())
+        .or_else(|| {
+            selection
+                .as_ref()
+                .map(|selection| selection.profile_id.clone())
+        });
     let readiness_profile = readiness_id
         .as_deref()
         .and_then(|profile_id| service_state.profiles.get(profile_id));
@@ -242,7 +285,10 @@ pub(crate) fn service_access_plan_for_state_with_principal(
     );
     let naming_warnings = access_plan_naming_warnings(&request);
     let has_naming_warning = !naming_warnings.is_empty();
-    let decision = access_plan_decision(AccessPlanDecisionInput {
+    let AccessPlanDecisionArtifact {
+        public_decision: decision,
+        acquisition,
+    } = access_plan_decision(AccessPlanDecisionInput {
         request: &request,
         selected_profile: selected_profile.as_ref(),
         service_state,
@@ -258,11 +304,13 @@ pub(crate) fn service_access_plan_for_state_with_principal(
         authenticated_principal,
     });
 
-    json!({
+    let public_plan = json!({
         "query": {
             "serviceName": request.service_name,
             "agentName": request.agent_name,
             "taskName": request.task_name,
+            "clientSubjectId": request.client_subject_id,
+            "identityAssurance": request.identity_assurance,
             "sessionName": request.session_name,
             "targetServiceIds": request.target_service_ids,
             "accountIds": request.account_ids,
@@ -280,8 +328,8 @@ pub(crate) fn service_access_plan_for_state_with_principal(
             "hasNamingWarning": has_naming_warning,
         },
         "selectedProfile": selected_profile.clone(),
-        "selectedProfileSource": selection.as_ref().map(|selection| {
-            profile_source_value(service_state, &selection.profile_id)
+        "selectedProfileSource": selected_profile.as_ref().map(|profile| {
+            profile_source_value(service_state, &profile.id)
         }),
         "selectedProfileMatch": selection.as_ref().map(|selection| {
             let (matched_field, matched_identity) = selected_profile
@@ -306,7 +354,13 @@ pub(crate) fn service_access_plan_for_state_with_principal(
         "challenges": challenges,
         "browserCapabilityEvidence": browser_capability_evidence,
         "decision": decision,
-    })
+    });
+    #[cfg(test)]
+    acquisition.assert_public_projection(&public_plan["decision"]);
+    ServiceAccessPlanArtifact {
+        public_plan,
+        acquisition,
+    }
 }
 
 fn access_plan_naming_warnings(request: &ServiceAccessPlanRequest) -> Vec<&'static str> {
@@ -823,7 +877,12 @@ struct AccessPlanDecisionInput<'a> {
     authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
 }
 
-fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
+struct AccessPlanDecisionArtifact {
+    public_decision: Value,
+    acquisition: ProfileAcquisitionDecision,
+}
+
+fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisionArtifact {
     let request = input.request;
     let selected_profile = input.selected_profile;
     let service_state = input.service_state;
@@ -871,40 +930,32 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         manual_seeding_required,
         browser_capability_evidence,
     );
-    let lifecycle_replacement = lifecycle_replacement_decision(selected_profile, service_state);
-    let profile_reuse = profile_reuse_decision(
+    let one_time_profile_recommendation = access_plan_one_time_profile_recommendation(
         request,
         selected_profile,
         service_state,
-        &launch_posture.value,
-        manual_seeding_required,
-        &lifecycle_replacement,
-        input.authenticated_principal,
+        profile_required,
     );
+    let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
+    let acquisition_plan = decide_profile_acquisition(ProfileAcquisitionInput {
+        request,
+        selected_profile,
+        service_state,
+        denied: policy_denies || denied_challenge,
+        manual_seeding_required,
+        manual_action_required,
+        launch_posture: &launch_posture.value,
+        one_time_profile_recommendation: &one_time_profile_recommendation,
+        authenticated_principal: input.authenticated_principal,
+    });
+    let access_policy = acquisition_plan.access_policy;
+    let access_decision = acquisition_plan.access_decision;
+    let profile_reuse = acquisition_plan.profile_reuse;
+    let lifecycle_replacement = acquisition_plan.lifecycle_replacement;
+    let service_request = acquisition_plan.service_request;
+    let acquisition = acquisition_plan.decision;
     let acquisition_blocked_by_explicit_session =
         profile_reuse["recommendedAction"].as_str() == Some("blocked_by_explicit_session_route");
-    let terminal_replacement_requires_capability = input.authenticated_principal.is_none()
-        && profile_reuse["recommendedAction"].as_str() == Some("launch_new_browser")
-        && lifecycle_replacement["replacementEligible"].as_bool() == Some(true)
-        && lifecycle_replacement["reason"].as_str() == Some("terminal_cleanup_satisfied");
-    let acquisition_blocker = if acquisition_blocked_by_explicit_session {
-        Some("explicit_session_route_invalid")
-    } else if profile_reuse["recommendedAction"].as_str() == Some("wait_for_foreign_principal") {
-        Some("foreign_principal_profile_lease")
-    } else if profile_reuse["recommendedAction"].as_str() == Some("authenticate_for_profile_reuse")
-        || terminal_replacement_requires_capability
-    {
-        Some("profile_capability_required")
-    } else if profile_reuse["recommendedAction"].as_str()
-        == Some("lifecycle_profile_identity_inconsistent")
-    {
-        Some("lifecycle_profile_identity_inconsistent")
-    } else {
-        None
-    };
-    let one_time_profile_recommendation =
-        access_plan_one_time_profile_recommendation(request, selected_profile, service_state);
-    let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
     let freshness_update = freshness_update_decision(
         selected_profile,
         target_service_ids,
@@ -976,6 +1027,10 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
 
     let recommended_action = if policy_denies || denied_challenge {
         "deny_request_by_site_policy"
+    } else if !acquisition.access_decision().allowed {
+        // An ACL or occupancy denial must direct the client to its actual blocker
+        // before freshness advice can suggest probing or seeding this Profile.
+        acquisition.access_decision().next_action.action.as_str()
     } else if manual_seeding_required {
         readiness_recommended_action(readiness, target_service_ids)
             .unwrap_or("seed_profile_before_authenticated_work")
@@ -1002,19 +1057,6 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     } else {
         "use_selected_profile"
     };
-    let service_request = service_request_decision(ServiceRequestDecisionInput {
-        request: input.request,
-        selected_profile,
-        denied: policy_denies || denied_challenge,
-        manual_seeding_required,
-        manual_action_required,
-        launch_posture: &launch_posture.value,
-        profile_reuse: &profile_reuse,
-        lifecycle_replacement: &lifecycle_replacement,
-        one_time_profile_recommendation: &one_time_profile_recommendation,
-        acquisition_blocker,
-        authenticated_principal: input.authenticated_principal,
-    });
     let post_seeding_probe = post_seeding_probe_decision(
         input.request,
         selected_profile,
@@ -1031,12 +1073,16 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     );
     let attention = attention_decision(recommended_action);
 
-    json!({
+    let public_decision = json!({
         "recommendedAction": recommended_action,
         "attention": attention,
         "browserHost": launch_posture.browser_host,
         "launchPosture": launch_posture.value,
         "profileReuse": profile_reuse,
+        "profileAccess": {
+            "policy": access_policy,
+            "decision": access_decision,
+        },
         "lifecycleReplacement": lifecycle_replacement,
         "oneTimeProfileRecommendation": one_time_profile_recommendation,
         "interactionMode": site_policy.map(|policy| policy.interaction_mode),
@@ -1062,151 +1108,11 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "namingWarnings": naming_warnings,
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
-    })
-}
-
-/// Project replacement authority and the exact collision-free daemon route
-/// that can supersede one cleanup-satisfied terminal owner.
-fn lifecycle_replacement_decision(
-    selected_profile: Option<&BrowserProfile>,
-    service_state: &ServiceState,
-) -> Value {
-    let Some(profile) = selected_profile else {
-        return json!({
-            "available": false,
-            "replacementEligible": false,
-            "reason": "no_selected_profile",
-        });
-    };
-    let profile_path = profile
-        .user_data_dir
-        .as_deref()
-        .map(std::path::PathBuf::from)
-        .or_else(|| crate::runtime_profile::runtime_profile_user_data_dir(&profile.id).ok());
-    let Some(profile_identity_digest) = profile_path
-        .as_deref()
-        .and_then(|path| crate::runtime_profile::canonical_profile_identity_digest(path).ok())
-    else {
-        return json!({
-            "available": false,
-            "profileId": profile.id,
-            "replacementEligible": false,
-            "reason": "profile_identity_unavailable",
-        });
-    };
-    let owner = service_state
-        .runtime_owner_registry
-        .owners
-        .get(&profile_identity_digest);
-    let mut records = service_state
-        .runtime_owner_registry
-        .lifecycle_records
-        .values()
-        .filter(|record| record.profile_identity_digest == profile_identity_digest)
-        .collect::<Vec<_>>();
-    records.sort_by_key(|record| record.owner_generation);
-    let owner_lifecycle = owner.and_then(|owner| {
-        records.iter().copied().find(|record| {
-            record.logical_browser_id == owner.browser_id
-                && record.owner_generation == owner.owner_generation
-        })
     });
-    // Lifecycle history is observational. Only the record joined to the exact
-    // current owner generation may participate in an operational decision.
-    let lifecycle = owner_lifecycle;
-    let terminal_cleanup_satisfied = lifecycle.is_some_and(|record| {
-        record.lifecycle_state == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
-            && record.cleanup_obligation_state
-                == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
-    });
-    let terminal_process_exit_recorded = lifecycle.is_some_and(|record| {
-        record.terminal_evidence.iter().any(|evidence| {
-            evidence == "exact_process_exited"
-                || evidence.starts_with("service_reconcile_process_group_absent:")
-        })
-    });
-    let terminal_profile_lock_release_recorded = lifecycle.is_some_and(|record| {
-        record.terminal_evidence.iter().any(|evidence| {
-            evidence == "profile_lock_released"
-                || evidence == "service_reconcile_profile_lock_absent"
-                || evidence.starts_with("service_reconcile_profile_lock_stale_pid_absent:")
-        })
-    });
-    let current_process_proven = owner.is_some_and(|owner| {
-        service_state
-            .browsers
-            .get(&owner.browser_id)
-            .is_some_and(|browser| browser.pid.is_some())
-    });
-    let terminal_process_absence_proven = terminal_process_exit_recorded
-        && terminal_profile_lock_release_recorded
-        && !current_process_proven;
-    let active_profile_lease_session_ids = service_state
-        .sessions
-        .values()
-        .filter(|session| {
-            session.profile_id.as_deref() == Some(profile.id.as_str())
-                && matches!(
-                    session.lease,
-                    LeaseState::Shared | LeaseState::Exclusive | LeaseState::HumanTakeover
-                )
-        })
-        .map(|session| session.id.clone())
-        .collect::<Vec<_>>();
-    let replacement_route = owner.zip(owner_lifecycle).and_then(|(owner, record)| {
-        (terminal_cleanup_satisfied
-            && terminal_process_absence_proven
-            && active_profile_lease_session_ids.is_empty()
-            && record.logical_browser_id == owner.browser_id
-            && record.owner_generation == owner.owner_generation)
-            .then(|| (owner.browser_id.clone(), owner.daemon_session_route.clone()))
-    });
-    let replacement_eligible = match (owner, lifecycle) {
-        (None, None) => true,
-        (Some(_), Some(_)) => replacement_route.is_some(),
-        _ => false,
-    };
-    let reason = match lifecycle {
-        None if owner.is_none() => "no_lifecycle_owner",
-        None => "lifecycle_owner_record_missing",
-        Some(_) if replacement_route.is_some() => "terminal_cleanup_satisfied",
-        Some(_) if current_process_proven => "terminal_process_still_live",
-        Some(_) if !active_profile_lease_session_ids.is_empty() => "terminal_profile_lease_active",
-        Some(_) if terminal_cleanup_satisfied => "terminal_replacement_route_inconsistent",
-        Some(record)
-            if record.lifecycle_state
-                == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing =>
-        {
-            "closing_lifecycle_requires_reconciliation"
-        }
-        Some(_) => "lifecycle_observation_not_replacement_eligible",
-    };
-    let required_action = match reason {
-        "no_lifecycle_owner" => "launch_new_browser",
-        "terminal_cleanup_satisfied" => "supersede_terminal_owner",
-        "closing_lifecycle_requires_reconciliation" => "reconcile_lifecycle_owner",
-        _ => "inspect_lifecycle_owner",
-    };
-
-    json!({
-        "available": true,
-        "profileId": profile.id,
-        "registryRevision": service_state.runtime_owner_registry.revision,
-        "ownerId": owner.map(|owner| owner.owner_id.clone()),
-        "ownerState": owner.map(|owner| owner.state),
-        "replacementBrowserId": replacement_route.as_ref().map(|(browser_id, _)| browser_id.clone()),
-        "replacementSessionName": replacement_route.as_ref().map(|(_, session_name)| session_name.clone()),
-        "logicalBrowserId": lifecycle.map(|record| record.logical_browser_id.clone()),
-        "ownerGeneration": lifecycle.map(|record| record.owner_generation),
-        "lifecycleState": lifecycle.map(|record| record.lifecycle_state),
-        "cleanupObligationState": lifecycle.map(|record| record.cleanup_obligation_state),
-        "processAbsenceProven": terminal_process_absence_proven,
-        "activeProfileLeaseSessionIds": active_profile_lease_session_ids,
-        "terminalEvidence": lifecycle.map(|record| record.terminal_evidence.clone()).unwrap_or_default(),
-        "replacementEligible": replacement_eligible,
-        "reason": reason,
-        "requiredAction": required_action,
-    })
+    AccessPlanDecisionArtifact {
+        public_decision,
+        acquisition,
+    }
 }
 
 /// Apply access-plan shared-profile route hints to tab-opening service requests.
@@ -1217,6 +1123,8 @@ pub(crate) const SERVICE_REQUEST_ACCESS_PLAN_ROUTING_FIELDS: &[&str] = &[
     "serviceName",
     "agentName",
     "taskName",
+    "clientSubjectId",
+    "identityAssurance",
     "sessionName",
     "targetServiceId",
     "targetService",
@@ -1248,11 +1156,39 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request(
     )
 }
 
+/// Admission failure with the planner-owned denied decision, when applicable.
+#[derive(Debug)]
+pub(crate) struct ProfileRouteHintFailure {
+    pub(crate) message: String,
+    pub(crate) access_decision:
+        Option<Box<super::service_profile_access_policy::ServiceProfileAccessDecision>>,
+}
+
+impl From<String> for ProfileRouteHintFailure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            access_decision: None,
+        }
+    }
+}
+
+/// Compatibility entry point for callers that only consume the error text.
 pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principal(
     service_state: &ServiceState,
     command: &mut Value,
     authenticated_principal: Option<&AuthenticatedServicePrincipal>,
 ) -> Result<(), String> {
+    apply_shared_profile_route_hints_with_decision(service_state, command, authenticated_principal)
+        .map_err(|failure| failure.message)
+}
+
+/// Retain denied policy evidence through normalization without a second evaluation.
+pub(crate) fn apply_shared_profile_route_hints_with_decision(
+    service_state: &ServiceState,
+    command: &mut Value,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
+) -> Result<(), ProfileRouteHintFailure> {
     if !matches!(
         command.get("action").and_then(Value::as_str),
         Some("tab_new" | "remote_view_open")
@@ -1265,145 +1201,55 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
         apply_unsafe_claim_any_route(service_state, command)?;
         return Ok(());
     }
-    if service_request_has_complete_route_hints(command)
-        || command
-            .get("allowDuplicateProfileLane")
-            .and_then(Value::as_bool)
-            == Some(true)
+    if command
+        .get("allowDuplicateProfileLane")
+        .and_then(Value::as_bool)
+        == Some(true)
     {
         return Ok(());
     }
+    if service_request_has_complete_route_hints(command)
+        && command.get("action").and_then(Value::as_str) == Some("remote_view_open")
+    {
+        // The retained-handoff stage owns remote-view route validation and may
+        // have just supplied these exact route hints.
+        return Ok(());
+    }
     if service_request_has_browser_hint(command) && !service_request_has_session_hint(command) {
-        return Err("service_access_plan_incomplete_route_hints".to_string());
+        return Err("service_access_plan_incomplete_route_hints"
+            .to_string()
+            .into());
     }
 
     let request = service_access_plan_request_from_service_command(command)?;
-    let plan = service_access_plan_for_state_with_principal(
+    let artifact = service_access_plan_artifact_for_state_with_principal(
         service_state,
         request,
         authenticated_principal,
     );
-    if plan["decision"]["serviceRequest"]["available"].as_bool() != Some(true) {
-        let blocker = plan["decision"]["serviceRequest"]["acquisitionBlocker"]
-            .as_str()
-            .unwrap_or("service_request_unavailable");
-        return Err(format!("service_access_plan_request_unavailable:{blocker}"));
+    if service_request_has_complete_route_hints(command) {
+        let requested_browser = command.get("browserId").and_then(Value::as_str);
+        let requested_session = command.get("sessionName").and_then(Value::as_str);
+        if artifact.acquisition.browser_id() != requested_browser {
+            return Err("service_access_plan_route_browser_conflict"
+                .to_string()
+                .into());
+        }
+        if artifact.acquisition.session_name() != requested_session {
+            return Err("service_access_plan_route_session_conflict"
+                .to_string()
+                .into());
+        }
     }
-    let profile_reuse = &plan["decision"]["profileReuse"];
-    if profile_reuse
-        .get("recommendedAction")
-        .and_then(Value::as_str)
-        != Some("reuse_existing_browser")
-    {
-        if service_request_has_partial_route_hints(command) {
-            let planned_terminal_session = plan["decision"]["lifecycleReplacement"]
-                .get("replacementSessionName")
-                .and_then(Value::as_str);
-            let requested_session = command.get("sessionName").and_then(Value::as_str);
-            let exact_terminal_replacement = !service_request_has_browser_hint(command)
-                && plan["decision"]["lifecycleReplacement"]["replacementEligible"].as_bool()
-                    == Some(true)
-                && requested_session == planned_terminal_session;
-            let planned_cold_session = plan["decision"]["serviceRequest"]["request"]
-                .get("sessionName")
-                .and_then(Value::as_str);
-            let exact_authenticated_cold_route = !service_request_has_browser_hint(command)
-                && profile_reuse
-                    .get("recommendedAction")
-                    .and_then(Value::as_str)
-                    == Some("launch_new_browser")
-                && profile_reuse
-                    .get("reasons")
-                    .and_then(Value::as_array)
-                    .is_some_and(|reasons| {
-                        reasons
-                            .iter()
-                            .any(|reason| reason == "explicit_authenticated_cold_route_selected")
-                    })
-                && requested_session == planned_cold_session;
-            let exact_terminal_launch_route = !service_request_has_browser_hint(command)
-                && plan["decision"]["lifecycleReplacement"]["replacementEligible"].as_bool()
-                    == Some(true)
-                && profile_reuse
-                    .get("reasons")
-                    .and_then(Value::as_array)
-                    .is_some_and(|reasons| {
-                        reasons
-                            .iter()
-                            .any(|reason| reason == "explicit_session_terminal_launch_selected")
-                    })
-                && requested_session == planned_cold_session
-                && requested_session != planned_terminal_session;
-            if !exact_terminal_replacement
-                && !exact_authenticated_cold_route
-                && !exact_terminal_launch_route
-            {
-                return Err("service_access_plan_incomplete_route_hints".to_string());
-            }
-            if let Some(authority) = authenticated_principal {
-                attach_profile_launch_route_authorization(
-                    command,
-                    &plan,
-                    authority,
-                    if exact_terminal_replacement {
-                        "terminal_replacement"
-                    } else {
-                        "authenticated_cold"
-                    },
-                );
-            }
-            return Ok(());
-        }
-        if !service_request_has_session_hint(command) {
-            if let Some(session_name) = plan["decision"]["serviceRequest"]["request"]
-                .get("sessionName")
-                .and_then(Value::as_str)
-                .filter(|value| !value.trim().is_empty())
-            {
-                command["sessionName"] = json!(session_name);
-            }
-        }
-        if let Some(authority) = authenticated_principal {
-            let planned_session = command.get("sessionName").and_then(Value::as_str);
-            let terminal_session = plan["decision"]["lifecycleReplacement"]
-                .get("replacementSessionName")
-                .and_then(Value::as_str);
-            attach_profile_launch_route_authorization(
-                command,
-                &plan,
-                authority,
-                if plan["decision"]["lifecycleReplacement"]["replacementEligible"].as_bool()
-                    == Some(true)
-                    && planned_session == terminal_session
-                    && terminal_session.is_some()
-                {
-                    "terminal_replacement"
-                } else {
-                    "authenticated_cold"
-                },
-            );
-        }
-        return Ok(());
-    }
-
-    let Some(browser_id) = profile_reuse
-        .get("reusableBrowserId")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-    else {
-        return Err("service_access_plan_reuse_missing_browser_id".to_string());
-    };
-    let Some(session_name) = profile_reuse
-        .get("reusableSessionName")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-    else {
-        return Err("service_access_plan_reuse_missing_session_name".to_string());
-    };
-
-    command["browserId"] = json!(browser_id);
-    command["sessionName"] = json!(session_name);
-    Ok(())
+    artifact
+        .acquisition
+        .apply_to_service_command(command, authenticated_principal)
+        .map_err(|message| ProfileRouteHintFailure {
+            message,
+            access_decision: (artifact.acquisition.acquisition_blocker()
+                == Some("profile_access_denied"))
+            .then(|| Box::new(artifact.acquisition.access_decision().clone())),
+        })
 }
 
 /// Preserve an explicitly selected daemon lane while recording that normal
@@ -1447,35 +1293,6 @@ fn apply_unsafe_claim_any_route(
         "warning": "UNSAFE: caller-selected session/profile route bypassed principal continuity and lease ownership planning",
     });
     Ok(())
-}
-
-/// Attach a transport-internal receipt for the exact authenticated launch route
-/// selected from the current access plan. Public request normalization rejects
-/// this field when caller-authored, so the daemon can distinguish a copied plan
-/// from an unverified session label and revalidate its identities before launch.
-fn attach_profile_launch_route_authorization(
-    command: &mut Value,
-    plan: &Value,
-    authority: &AuthenticatedServicePrincipal,
-    route_kind: &str,
-) {
-    let session_name = command.get("sessionName").and_then(Value::as_str);
-    let profile_id = plan["selectedProfile"].get("id").and_then(Value::as_str);
-    if session_name.is_none() || profile_id != Some(authority.profile_id.as_str()) {
-        return;
-    }
-    command["serviceProfileRouteAuthorization"] = json!({
-        "schemaVersion": "agent-browser.profile-launch-route-authorization.v1",
-        "kind": route_kind,
-        "sessionName": session_name,
-        "profileId": profile_id,
-        "principalId": authority.principal_id,
-        "capabilityId": authority.capability_id,
-        "capabilityRevision": authority.capability_revision,
-        "runtimeOwnerRegistryRevision": plan["decision"]["lifecycleReplacement"]["registryRevision"],
-        "ownerId": plan["decision"]["lifecycleReplacement"]["ownerId"],
-        "ownerGeneration": plan["decision"]["lifecycleReplacement"]["ownerGeneration"],
-    });
 }
 
 fn service_request_route_hint_count(command: &Value) -> usize {
@@ -1554,16 +1371,15 @@ fn access_plan_one_time_profile_recommendation(
     request: &ServiceAccessPlanRequest,
     selected_profile: Option<&BrowserProfile>,
     service_state: &ServiceState,
+    profile_required: bool,
 ) -> Value {
-    if !access_plan_looks_like_one_time_operator_handoff(request) {
-        return Value::Null;
-    }
     if selected_profile.is_some() {
         return Value::Null;
     }
+    let one_time_handoff = access_plan_looks_like_one_time_operator_handoff(request);
     let recommended_profile_id = access_plan_managed_one_time_profile_id(request);
     if let Some(runtime_profile) = request.runtime_profile.as_deref() {
-        if service_state.profiles.contains_key(runtime_profile) {
+        if service_state.profiles.contains_key(runtime_profile) || !one_time_handoff {
             return Value::Null;
         }
         return json!({
@@ -1575,6 +1391,22 @@ fn access_plan_one_time_profile_recommendation(
             "recommendedProfileId": recommended_profile_id,
             "runtimeProfile": runtime_profile,
             "message": "This access plan looks like a one-time operator handoff but it supplied an unknown runtime profile. Prefer the managed one-time task profile so retries reuse one lane and cleanup can remove abandoned task state safely.",
+        });
+    }
+    if !one_time_handoff {
+        if profile_required {
+            return Value::Null;
+        }
+        let runtime_profile = access_plan_managed_ephemeral_profile_id(request);
+        return json!({
+            "state": "planned",
+            "code": "managed_ephemeral_profile_planned",
+            "profileClass": "managed_one_time",
+            "profileOrigin": "agent_browser_owned",
+            "recommendedProfileId": runtime_profile,
+            "runtimeProfile": runtime_profile,
+            "persistent": false,
+            "message": "No durable profile was selected, so this self-identified client receives a deterministic disposable runtime profile without lease choreography.",
         });
     }
     json!({
@@ -1646,469 +1478,29 @@ fn access_plan_managed_one_time_profile_id(request: &ServiceAccessPlanRequest) -
     format!("managed-one-time-{suffix}")
 }
 
-fn profile_reuse_decision(
-    request: &ServiceAccessPlanRequest,
-    selected_profile: Option<&BrowserProfile>,
-    service_state: &ServiceState,
-    launch_posture: &Value,
-    manual_seeding_required: bool,
-    lifecycle_replacement: &Value,
-    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
-) -> Value {
-    let Some(profile) = selected_profile else {
-        return json!({
-            "recommendedAction": "register_or_select_profile",
-            "selectedProfileId": null,
-            "reusableBrowserId": null,
-            "reusableSessionName": null,
-            "reusableBrowserIds": [],
-            "compatibleLiveBrowserCount": 0,
-            "sameProfileLiveBrowserCount": 0,
-            "sameProfileLiveBrowserIds": [],
-            "activeLeaseSessionIds": [],
-            "activeLeaseCount": 0,
-            "duplicatePressure": false,
-            "profileLeasePolicy": "wait",
-            "reasons": ["no_selected_profile"],
-        });
-    };
-    let terminal_replacement_session_name = lifecycle_replacement
-        .get("replacementSessionName")
-        .and_then(Value::as_str);
-    let terminal_replacement_launch_session_name =
-        terminal_replacement_launch_session_name(profile, lifecycle_replacement);
-
-    if profile.profile_origin == ProfileOrigin::ExternalObserved {
-        let mut same_profile_live_browser_ids = service_state
-            .browsers
-            .iter()
-            .filter(|(_id, browser)| {
-                browser.profile_id.as_deref() == Some(profile.id.as_str())
-                    && browser_has_live_health(browser)
-            })
-            .map(|(id, _browser)| id.clone())
-            .collect::<Vec<_>>();
-        same_profile_live_browser_ids.sort();
-        same_profile_live_browser_ids.dedup();
-
-        return json!({
-            "recommendedAction": "launch_new_browser",
-            "selectedProfileId": profile.id,
-            "reusableBrowserId": null,
-            "reusableSessionName": null,
-            "reusableBrowserIds": [],
-            "compatibleLiveBrowserCount": 0,
-            "sameProfileLiveBrowserCount": same_profile_live_browser_ids.len(),
-            "sameProfileLiveBrowserIds": same_profile_live_browser_ids,
-            "activeLeaseSessionIds": [],
-            "activeLeaseCount": 0,
-            "duplicatePressure": false,
-            "profileLeasePolicy": "wait",
-            "reasons": ["external_observed_not_reusable"],
-        });
-    }
-
-    let observed_at = Utc::now().to_rfc3339();
-    let active_claim = service_state
-        .lease_authority()
-        .current_claim(&LeaseResourceKey::profile(&profile.id), &observed_at);
-    let active_claim_requires_authentication =
-        active_claim.is_some() && authenticated_principal.is_none();
-    let active_claim_is_foreign = active_claim
-        .zip(authenticated_principal)
-        .is_some_and(|(claim, authority)| claim.principal_id() != authority.principal_id);
-
-    let browser_host = launch_posture
-        .get("browserHost")
-        .and_then(|value| serde_json::from_value::<BrowserHost>(value.clone()).ok());
-    let view_stream_provider: Option<ViewStreamProvider> = launch_posture
-        .get("viewStreamProvider")
-        .and_then(|value| serde_json::from_value(value.clone()).ok());
-    let control_input_provider: Option<ControlInputProvider> = launch_posture
-        .get("controlInputProvider")
-        .and_then(|value| serde_json::from_value(value.clone()).ok());
-    let display_isolation = launch_posture
-        .get("displayIsolation")
-        .and_then(Value::as_str);
-    // Launch posture defaults describe how to create a replacement browser. They
-    // must not make an already-running browser ineligible for tab acquisition.
-    // Only caller-supplied constraints narrow reuse of an existing owner.
-    let reusable_browser_host = request.browser_host;
-    let reusable_view_stream_provider = request.view_stream_provider;
-    let reusable_control_input_provider = request.control_input_provider;
-    let reusable_display_isolation = request.display_isolation.as_deref();
-
-    let mut reusable_browser_ids = service_state
-        .browsers
+fn access_plan_managed_ephemeral_profile_id(request: &ServiceAccessPlanRequest) -> String {
+    let target_services = request.target_service_ids.join(",");
+    let seed = [
+        request
+            .client_subject_id
+            .as_deref()
+            .unwrap_or("self-declared"),
+        request.service_name.as_deref().unwrap_or("service"),
+        request.agent_name.as_deref().unwrap_or("agent"),
+        request.task_name.as_deref().unwrap_or("task"),
+        target_services.as_str(),
+    ]
+    .join("|")
+    .to_ascii_lowercase();
+    let mut hasher = Sha256::new();
+    hasher.update(seed.as_bytes());
+    let suffix = hasher
+        .finalize()
         .iter()
-        .filter(|(_id, browser)| {
-            browser.profile_id.as_deref() == Some(profile.id.as_str())
-                && browser_is_reusable_for_posture(
-                    browser,
-                    reusable_browser_host,
-                    reusable_view_stream_provider,
-                    reusable_control_input_provider,
-                    reusable_display_isolation,
-                )
-        })
-        .map(|(id, _browser)| id.clone())
-        .collect::<Vec<_>>();
-    reusable_browser_ids.sort();
-    reusable_browser_ids.dedup();
-
-    let mut foreign_principal_session_ids = Vec::new();
-    let mut principal_bound_session_ids = service_state
-        .sessions
-        .iter()
-        .filter(|(_id, session)| {
-            session_blocks_profile_reuse(session, &profile.id) && session.principal_id.is_some()
-        })
-        .map(|(id, _session)| id.clone())
-        .collect::<Vec<_>>();
-    principal_bound_session_ids.sort();
-    principal_bound_session_ids.dedup();
-    let mut same_principal_profile_mismatch_browser_ids = Vec::new();
-    let mut capability_profile_mismatch = false;
-    if let Some(authority) = authenticated_principal {
-        foreign_principal_session_ids = service_state
-            .sessions
-            .iter()
-            .filter(|(_id, session)| {
-                session_blocks_profile_reuse(session, &profile.id)
-                    && session
-                        .principal_id
-                        .as_deref()
-                        .is_some_and(|principal_id| principal_id != authority.principal_id)
-            })
-            .map(|(id, _session)| id.clone())
-            .collect();
-        foreign_principal_session_ids.sort();
-        foreign_principal_session_ids.dedup();
-        same_principal_profile_mismatch_browser_ids = service_state
-            .sessions
-            .values()
-            .filter(|session| {
-                session_blocks_profile_reuse(session, &profile.id)
-                    && session.principal_id.as_deref() == Some(authority.principal_id.as_str())
-            })
-            .flat_map(|session| session.browser_ids.iter())
-            .filter(|browser_id| {
-                service_state
-                    .browsers
-                    .get(*browser_id)
-                    .is_some_and(|browser| {
-                        browser.profile_id.as_deref() != Some(profile.id.as_str())
-                    })
-            })
-            .cloned()
-            .collect();
-        same_principal_profile_mismatch_browser_ids.sort();
-        same_principal_profile_mismatch_browser_ids.dedup();
-        capability_profile_mismatch = authority.profile_id != profile.id;
-        if !foreign_principal_session_ids.is_empty()
-            || capability_profile_mismatch
-            || active_claim_is_foreign
-        {
-            reusable_browser_ids.clear();
-        }
-    } else if !principal_bound_session_ids.is_empty() || active_claim_requires_authentication {
-        reusable_browser_ids.clear();
-    }
-
-    let mut explicit_session_route_error = None;
-    let mut explicit_session_route = None;
-    let mut explicit_terminal_replacement_route = false;
-    let mut explicit_terminal_launch_route = false;
-    let mut explicit_authenticated_cold_route = false;
-    if let Some(session_name) = request.session_name.as_deref() {
-        match service_state.sessions.get(session_name) {
-            None if terminal_replacement_session_name == Some(session_name) => {
-                explicit_terminal_replacement_route = true;
-            }
-            None if terminal_replacement_launch_session_name.as_deref() == Some(session_name) => {
-                explicit_terminal_launch_route = true;
-            }
-            None if authenticated_principal
-                .and_then(|authority| authenticated_cold_session_name(authority, profile))
-                .as_deref()
-                == Some(session_name) =>
-            {
-                explicit_authenticated_cold_route = true;
-            }
-            None => explicit_session_route_error = Some("explicit_session_not_found"),
-            Some(session) if session.browser_ids.len() != 1 => {
-                explicit_session_route_error = Some("explicit_session_browser_mapping_ambiguous");
-            }
-            Some(session) => {
-                let browser_id = &session.browser_ids[0];
-                if reusable_browser_ids.iter().any(|id| id == browser_id) {
-                    reusable_browser_ids.retain(|id| id == browser_id);
-                    explicit_session_route = Some((browser_id.clone(), session_name.to_string()));
-                } else {
-                    explicit_session_route_error = Some("explicit_session_browser_not_compatible");
-                    reusable_browser_ids.clear();
-                }
-            }
-        }
-    }
-
-    let mut same_profile_live_browser_ids = service_state
-        .browsers
-        .iter()
-        .filter(|(_id, browser)| {
-            browser.profile_id.as_deref() == Some(profile.id.as_str())
-                && browser_has_live_health(browser)
-        })
-        .map(|(id, _browser)| id.clone())
-        .collect::<Vec<_>>();
-    same_profile_live_browser_ids.sort();
-    same_profile_live_browser_ids.dedup();
-
-    let mut active_lease_session_ids = service_state
-        .sessions
-        .iter()
-        .filter(|(_id, session)| {
-            session_blocks_profile_reuse(session, &profile.id)
-                && !session
-                    .browser_ids
-                    .iter()
-                    .any(|browser_id| reusable_browser_ids.contains(browser_id))
-        })
-        .map(|(id, _session)| id.clone())
-        .collect::<Vec<_>>();
-    active_lease_session_ids.extend(foreign_principal_session_ids.iter().cloned());
-    active_lease_session_ids.sort();
-    active_lease_session_ids.dedup();
-
-    let mut reasons = Vec::new();
-    if manual_seeding_required {
-        reasons.push("manual_seeding_required");
-    }
-    if reusable_browser_ids.is_empty() {
-        reasons.push("no_compatible_live_browser");
-    } else {
-        reasons.push("compatible_live_browser_available");
-    }
-    if active_lease_session_ids.is_empty() {
-        reasons.push("no_active_profile_lease_conflict");
-    } else {
-        reasons.push("active_profile_lease_conflict");
-    }
-    if !foreign_principal_session_ids.is_empty() {
-        reasons.push("foreign_principal_profile_lease");
-    }
-    if active_claim.is_some() {
-        reasons.push("canonical_active_profile_claim");
-    }
-    if active_claim_is_foreign {
-        reasons.push("foreign_principal_active_claim");
-    }
-    if authenticated_principal.is_none()
-        && (!principal_bound_session_ids.is_empty() || active_claim_requires_authentication)
-    {
-        reasons.push("profile_capability_required");
-    }
-    let profile_identity_inconsistent =
-        capability_profile_mismatch || !same_principal_profile_mismatch_browser_ids.is_empty();
-    if profile_identity_inconsistent {
-        reasons.push("lifecycle_profile_identity_inconsistent");
-    }
-    if capability_profile_mismatch {
-        reasons.push("profile_capability_profile_mismatch");
-    }
-    if same_profile_live_browser_ids.len() > 1 {
-        reasons.push("duplicate_live_browsers_for_profile");
-    }
-    if active_lease_session_ids.len() > 1 {
-        reasons.push("duplicate_active_leases_for_profile");
-    }
-    if request.browser_host.is_some() {
-        reasons.push("browser_host_constrained_by_request");
-    } else if profile.profile_origin == ProfileOrigin::ExternalByop && browser_host.is_some() {
-        reasons.push("external_byop_browser_host_unconstrained");
-    }
-    if request.view_stream_provider.is_some() {
-        reasons.push("view_stream_constrained_by_request");
-    }
-    if request.control_input_provider.is_some() {
-        reasons.push("control_input_constrained_by_request");
-    }
-    if request.display_isolation.is_some() {
-        reasons.push("display_isolation_constrained_by_request");
-    }
-    if let Some(reason) = explicit_session_route_error {
-        reasons.push(reason);
-    } else if explicit_session_route.is_some() {
-        reasons.push("explicit_session_route_selected");
-    } else if explicit_terminal_replacement_route {
-        reasons.push("explicit_session_terminal_replacement_selected");
-    } else if explicit_terminal_launch_route {
-        reasons.push("explicit_session_terminal_launch_selected");
-    } else if explicit_authenticated_cold_route {
-        reasons.push("explicit_authenticated_cold_route_selected");
-    }
-    reasons.sort();
-    reasons.dedup();
-
-    let recommended_action = if manual_seeding_required {
-        "seed_profile_before_reuse"
-    } else if explicit_session_route_error.is_some() {
-        "blocked_by_explicit_session_route"
-    } else if !foreign_principal_session_ids.is_empty() || active_claim_is_foreign {
-        "wait_for_foreign_principal"
-    } else if authenticated_principal.is_none()
-        && (!principal_bound_session_ids.is_empty() || active_claim_requires_authentication)
-    {
-        "authenticate_for_profile_reuse"
-    } else if profile_identity_inconsistent {
-        "lifecycle_profile_identity_inconsistent"
-    } else if !reusable_browser_ids.is_empty() {
-        "reuse_existing_browser"
-    } else if !active_lease_session_ids.is_empty() {
-        "wait_for_profile_lease"
-    } else {
-        "launch_new_browser"
-    };
-    let reusable_browser_id = reusable_browser_ids.first().cloned();
-    let reusable_session_name = explicit_session_route
-        .map(|(_browser_id, session_name)| session_name)
-        .or_else(|| {
-            reusable_browser_id
-                .as_deref()
-                .and_then(|browser_id| reusable_session_name_for_browser(service_state, browser_id))
-        });
-
-    let active_lease_count = if active_claim.is_some() {
-        1
-    } else {
-        active_lease_session_ids.len()
-    };
-    json!({
-        "recommendedAction": recommended_action,
-        "selectedProfileId": profile.id,
-        "profileProcessPolicy": "exclusive_process",
-        "clientSharingPolicy": "shared_browser_tabs",
-        "defaultAcquisition": if recommended_action == "reuse_existing_browser" { "tab_new" } else { "launch_new_browser" },
-        "sharedAcquisition": {
-            "policy": "shared_browser_tabs",
-            "mode": if recommended_action == "reuse_existing_browser" { json!("tab_new") } else { Value::Null },
-            "browserId": reusable_browser_id.clone(),
-            "sessionName": reusable_session_name.clone(),
-            "requiresRouteHints": recommended_action == "reuse_existing_browser",
-            "routeHintFields": if recommended_action == "reuse_existing_browser" { json!(["browserId", "sessionName"]) } else { json!([]) },
-            "controlSerialization": "service_queue",
-            "cleanupPolicy": "close_tabs",
-            "duplicateProcessAllowed": false,
-        },
-        "maxConcurrentTabs": Value::Null,
-        "maxConcurrentWindows": Value::Null,
-        "reusableBrowserId": reusable_browser_id,
-        "reusableSessionName": reusable_session_name,
-        "reusableBrowserIds": reusable_browser_ids,
-        "compatibleLiveBrowserCount": reusable_browser_ids.len(),
-        "sameProfileLiveBrowserCount": same_profile_live_browser_ids.len(),
-        "sameProfileLiveBrowserIds": same_profile_live_browser_ids,
-        "activeLeaseSessionIds": active_lease_session_ids,
-        "activeLeaseCount": active_lease_count,
-        "activeClaimId": active_claim.map(ActiveLeaseClaim::claim_id),
-        "activeClaimRevision": active_claim.map(ActiveLeaseClaim::revision),
-        "activeClaimFencingToken": active_claim.map(ActiveLeaseClaim::fencing_token),
-        "activeClaimPrincipalId": active_claim.map(ActiveLeaseClaim::principal_id),
-        "foreignPrincipalSessionIds": foreign_principal_session_ids,
-        "principalBoundSessionIds": principal_bound_session_ids,
-        "profileMismatchBrowserIds": same_principal_profile_mismatch_browser_ids,
-        "blockingIdentityAxes": if profile_identity_inconsistent { json!(["profile"]) } else { json!([]) },
-        "duplicatePressure": same_profile_live_browser_ids.len() > 1 || active_lease_session_ids.len() > 1,
-        "profileLeasePolicy": "wait",
-        "browserHost": browser_host,
-        "viewStreamProvider": view_stream_provider,
-        "controlInputProvider": control_input_provider,
-        "displayIsolation": display_isolation,
-        "reasons": reasons,
-    })
-}
-
-fn reusable_session_name_for_browser(
-    service_state: &ServiceState,
-    browser_id: &str,
-) -> Option<String> {
-    service_state
-        .browsers
-        .get(browser_id)
-        .and_then(|browser| browser.active_session_ids.first().cloned())
-        .or_else(|| {
-            service_state
-                .sessions
-                .iter()
-                .find_map(|(session_id, session)| {
-                    session
-                        .browser_ids
-                        .iter()
-                        .any(|id| id == browser_id)
-                        .then_some(session_id.clone())
-                })
-        })
-        .or_else(|| browser_id.strip_prefix("session:").map(str::to_string))
-}
-
-fn browser_is_reusable_for_posture(
-    browser: &BrowserProcess,
-    browser_host: Option<BrowserHost>,
-    view_stream_provider: Option<ViewStreamProvider>,
-    control_input_provider: Option<ControlInputProvider>,
-    display_isolation: Option<&str>,
-) -> bool {
-    if !browser_has_live_health(browser) {
-        return false;
-    }
-    if browser_host.is_some_and(|expected| browser.host != expected) {
-        return false;
-    }
-    if display_isolation.is_some() && browser.display_isolation.as_deref() != display_isolation {
-        return false;
-    }
-    if let Some(expected_provider) = view_stream_provider {
-        if !browser
-            .view_streams
-            .iter()
-            .any(|stream| stream.provider == expected_provider)
-        {
-            return false;
-        }
-    }
-    if let Some(expected_input) = control_input_provider {
-        if !browser.view_streams.iter().any(|stream| {
-            stream
-                .control_input
-                .is_some_and(|control_input| control_input == expected_input)
-        }) {
-            return false;
-        }
-    }
-    true
-}
-
-fn browser_has_live_health(browser: &BrowserProcess) -> bool {
-    matches!(
-        browser.health,
-        BrowserHealth::Ready | BrowserHealth::Launching | BrowserHealth::Reconnecting
-    ) && boot_epoch_is_not_prior(browser.boot_epoch.as_deref())
-}
-
-fn session_blocks_profile_reuse(session: &BrowserSession, profile_id: &str) -> bool {
-    session.profile_id.as_deref() == Some(profile_id)
-        && boot_epoch_is_not_prior(session.boot_epoch.as_deref())
-        && matches!(
-            session.lease,
-            LeaseState::Exclusive | LeaseState::HumanTakeover
-        )
-}
-
-fn boot_epoch_is_not_prior(recorded_boot_epoch: Option<&str>) -> bool {
-    crate::process_identity::boot_epoch_status(
-        recorded_boot_epoch,
-        crate::process_identity::current_boot_epoch().as_deref(),
-    ) != crate::process_identity::BootEpochStatus::Prior
+        .take(6)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("managed-ephemeral-{suffix}")
 }
 
 /// Summarize who should act next without prescribing a UI presentation.
@@ -2121,6 +1513,22 @@ fn attention_decision(recommended_action: &str) -> Value {
             "Request denied by site policy",
             "The selected site policy or retained challenge denies this browser request.",
             vec!["review_site_policy", "resolve_or_acknowledge_challenge"],
+        ),
+        "inspect_profile_access_policy" => (
+            true,
+            "client",
+            "blocking",
+            "Profile permission required",
+            "Inspect the denied Profile access decision and required permission before using this Profile.",
+            vec!["inspect_profile_access_policy"],
+        ),
+        "inspect_profile_occupancy" => (
+            true,
+            "client",
+            "blocking",
+            "Profile occupancy blocks access",
+            "Inspect the Profile's drain or exclusive occupancy before requesting access again.",
+            vec!["inspect_profile_occupancy"],
         ),
         "seed_profile_before_authenticated_work"
         | "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable" => (
@@ -2574,378 +1982,6 @@ fn shell_arg(value: &str) -> String {
     } else {
         format!("'{}'", value.replace('\'', "'\\''"))
     }
-}
-
-/// Describe the queued browser-control handoff clients should use after planning.
-struct ServiceRequestDecisionInput<'a> {
-    request: &'a ServiceAccessPlanRequest,
-    selected_profile: Option<&'a BrowserProfile>,
-    denied: bool,
-    manual_seeding_required: bool,
-    manual_action_required: bool,
-    launch_posture: &'a Value,
-    profile_reuse: &'a Value,
-    lifecycle_replacement: &'a Value,
-    one_time_profile_recommendation: &'a Value,
-    acquisition_blocker: Option<&'a str>,
-    authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
-}
-
-/// Return the stable daemon route for a registered principal's first browser.
-///
-/// Cold authenticated requests must not inherit the transport's ambient
-/// `default` session because that route can retain another profile's identity.
-/// The route uses only public principal/profile identity and never includes
-/// raw capability material.
-pub(crate) fn authenticated_cold_session_name(
-    authority: &AuthenticatedServicePrincipal,
-    selected_profile: &BrowserProfile,
-) -> Option<String> {
-    if authority.profile_id != selected_profile.id {
-        return None;
-    }
-    let mut hasher = Sha256::new();
-    hasher.update(authority.principal_id.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(selected_profile.id.as_bytes());
-    let suffix = hasher
-        .finalize()
-        .iter()
-        .take(12)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    Some(format!("principal-profile-{suffix}"))
-}
-
-/// Return a fresh daemon route for replacing one exact terminal owner.
-///
-/// The retained daemon route remains lifecycle evidence for the owner being
-/// superseded. Reusing it for the next launch would make the executor classify
-/// the request as existing-session work before the replacement can register
-/// its new owner generation.
-fn terminal_replacement_launch_session_name(
-    selected_profile: &BrowserProfile,
-    lifecycle_replacement: &Value,
-) -> Option<String> {
-    if lifecycle_replacement
-        .get("replacementEligible")
-        .and_then(Value::as_bool)
-        != Some(true)
-    {
-        return None;
-    }
-    let logical_browser_id = lifecycle_replacement
-        .get("logicalBrowserId")
-        .and_then(Value::as_str)?;
-    let owner_generation = lifecycle_replacement
-        .get("ownerGeneration")
-        .and_then(Value::as_u64)?;
-    let mut hasher = Sha256::new();
-    hasher.update(selected_profile.id.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(logical_browser_id.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(owner_generation.to_le_bytes());
-    let suffix = hasher
-        .finalize()
-        .iter()
-        .take(12)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    Some(format!("terminal-profile-{suffix}"))
-}
-
-fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
-    let request = input.request;
-    let selected_profile = input.selected_profile;
-    let launch_posture = input.launch_posture;
-    let profile_reuse = input.profile_reuse;
-    let lifecycle_replacement = input.lifecycle_replacement;
-    let one_time_profile_recommendation = input.one_time_profile_recommendation;
-    let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
-    let recommended_runtime_profile = one_time_profile_recommendation
-        .get("runtimeProfile")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let effective_runtime_profile = selected_profile_id
-        .clone()
-        .or_else(|| request.runtime_profile.clone())
-        .or(recommended_runtime_profile);
-    let effective_profile_class = selected_profile
-        .map(|profile| json!(profile.profile_class))
-        .or_else(|| one_time_profile_recommendation.get("profileClass").cloned())
-        .or_else(|| {
-            request
-                .runtime_profile
-                .as_ref()
-                .map(|_| json!("operator_supplied"))
-        });
-    let requires_cdp_free = launch_posture
-        .get("requiresCdpFree")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let cdp_attachment_allowed = launch_posture
-        .get("cdpAttachmentAllowed")
-        .and_then(Value::as_bool)
-        .unwrap_or(!requires_cdp_free);
-    let blocked_by_cdp_free = requires_cdp_free && !cdp_attachment_allowed;
-    let has_profile_lane = effective_runtime_profile.is_some();
-    let available = has_profile_lane
-        && !input.denied
-        && !input.manual_action_required
-        && !blocked_by_cdp_free
-        && input.acquisition_blocker.is_none();
-    let recommended_after_manual_action =
-        has_profile_lane && !input.denied && input.manual_action_required && !blocked_by_cdp_free;
-    let mut service_request = Map::new();
-    service_request.insert("action".to_string(), json!("tab_new"));
-    if let Some(service_name) = request.service_name.as_ref() {
-        service_request.insert("serviceName".to_string(), json!(service_name));
-    }
-    if let Some(agent_name) = request.agent_name.as_ref() {
-        service_request.insert("agentName".to_string(), json!(agent_name));
-    }
-    if let Some(task_name) = request.task_name.as_ref() {
-        service_request.insert("taskName".to_string(), json!(task_name));
-    }
-    let replacement_session_name = (profile_reuse
-        .get("recommendedAction")
-        .and_then(Value::as_str)
-        == Some("launch_new_browser")
-        && lifecycle_replacement
-            .get("replacementEligible")
-            .and_then(Value::as_bool)
-            == Some(true))
-    .then(|| {
-        lifecycle_replacement
-            .get("replacementSessionName")
-            .and_then(Value::as_str)
-    })
-    .flatten();
-    let authenticated_cold_session_name = (available
-        && profile_reuse
-            .get("recommendedAction")
-            .and_then(Value::as_str)
-            == Some("launch_new_browser"))
-    .then(|| {
-        input
-            .authenticated_principal
-            .zip(selected_profile)
-            .and_then(|(authority, profile)| authenticated_cold_session_name(authority, profile))
-    })
-    .flatten();
-    let terminal_replacement_launch_session_name = (available
-        && profile_reuse
-            .get("recommendedAction")
-            .and_then(Value::as_str)
-            == Some("launch_new_browser"))
-    .then(|| {
-        selected_profile.and_then(|profile| {
-            terminal_replacement_launch_session_name(profile, lifecycle_replacement)
-        })
-    })
-    .flatten();
-    if let Some(session_name) = request
-        .session_name
-        .as_deref()
-        .or(terminal_replacement_launch_session_name.as_deref())
-        .or(authenticated_cold_session_name.as_deref())
-        .or(replacement_session_name)
-    {
-        service_request.insert("sessionName".to_string(), json!(session_name));
-    }
-    if !request.target_service_ids.is_empty() {
-        service_request.insert(
-            "targetServiceIds".to_string(),
-            json!(request.target_service_ids),
-        );
-    }
-    if !request.account_ids.is_empty() {
-        service_request.insert("accountIds".to_string(), json!(request.account_ids));
-    }
-    if let Some(target_url) = request.target_url.as_ref() {
-        service_request.insert("url".to_string(), json!(target_url));
-    }
-    if let Some(browser_build) = launch_posture.get("browserBuild") {
-        service_request.insert("browserBuild".to_string(), browser_build.clone());
-    }
-    if let Some(runtime_profile) = effective_runtime_profile.as_deref() {
-        service_request.insert("runtimeProfile".to_string(), json!(runtime_profile));
-    }
-    if let Some(profile_class) = effective_profile_class.clone() {
-        service_request.insert("profileClass".to_string(), profile_class);
-    }
-    if let Some(selected_profile) = selected_profile {
-        if let Some(user_data_dir) = selected_profile
-            .user_data_dir
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            service_request.insert("profile".to_string(), json!(user_data_dir));
-        }
-    }
-    if profile_reuse
-        .get("recommendedAction")
-        .and_then(Value::as_str)
-        == Some("reuse_existing_browser")
-    {
-        if let Some(browser_id) = profile_reuse
-            .get("reusableBrowserId")
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-        {
-            service_request.insert("browserId".to_string(), json!(browser_id));
-        }
-        if let Some(session_name) = profile_reuse
-            .get("reusableSessionName")
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-        {
-            service_request.insert("sessionName".to_string(), json!(session_name));
-        }
-    }
-    if input.manual_action_required {
-        service_request.insert("blockedByManualAction".to_string(), json!(true));
-    }
-    if input.manual_seeding_required {
-        service_request.insert("manualSeedingRequired".to_string(), json!(true));
-    }
-    if requires_cdp_free {
-        service_request.insert("requiresCdpFree".to_string(), json!(true));
-    }
-    let headed = launch_posture
-        .get("headed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let browser_host = launch_posture.get("browserHost").cloned();
-    let view_stream_provider = launch_posture.get("viewStreamProvider").cloned();
-    let control_input_provider = launch_posture.get("controlInputProvider").cloned();
-    let display_isolation = launch_posture
-        .get("displayIsolation")
-        .and_then(Value::as_str)
-        .map(|value| json!(value));
-    let mut request_params = Map::new();
-    if headed {
-        request_params.insert("headless".to_string(), json!(false));
-    }
-    if let Some(browser_host) = browser_host {
-        request_params.insert("browserHost".to_string(), browser_host);
-    }
-    if let Some(view_stream_provider) = view_stream_provider {
-        request_params.insert("viewStreamProvider".to_string(), view_stream_provider);
-    }
-    if let Some(control_input_provider) = control_input_provider {
-        request_params.insert("controlInputProvider".to_string(), control_input_provider);
-    }
-    if let Some(display_isolation) = display_isolation {
-        request_params.insert("displayIsolation".to_string(), display_isolation);
-    }
-    if !request_params.is_empty() {
-        service_request.insert("params".to_string(), Value::Object(request_params));
-    }
-    service_request.insert(
-        "cdpAttachmentAllowed".to_string(),
-        json!(cdp_attachment_allowed),
-    );
-    service_request.insert("profileLeasePolicy".to_string(), json!("wait"));
-
-    json!({
-        "available": available,
-        "recommendedAfterManualAction": recommended_after_manual_action,
-        "blockedByManualAction": input.manual_action_required,
-        "blockedByCdpFree": blocked_by_cdp_free,
-        "blockedByPolicy": input.denied,
-        "blockedByAcquisition": input.acquisition_blocker.is_some(),
-        "blockedByLifecycleOwner": input.acquisition_blocker == Some("lifecycle_owner_blocks_replacement"),
-        "acquisitionBlocker": input.acquisition_blocker,
-        "requiresCdpFree": requires_cdp_free,
-        "cdpAttachmentAllowed": cdp_attachment_allowed,
-        "action": "tab_new",
-        "selectedProfileId": selected_profile_id,
-        "runtimeProfile": effective_runtime_profile,
-        "profileClass": effective_profile_class,
-        "profileLeasePolicy": "wait",
-        "oneTimeProfileRecommendation": one_time_profile_recommendation,
-        "cdpFreeAvailability": cdp_free_command_availability(blocked_by_cdp_free),
-        "request": if input.acquisition_blocker.is_some() {
-            Value::Null
-        } else {
-            Value::Object(service_request)
-        },
-        "http": {
-            "method": "POST",
-            "route": "/api/service/request",
-        },
-        "mcp": {
-            "tool": "service_request",
-        },
-        "client": {
-            "package": "@agent-browser/client/service-request",
-            "helper": "requestServiceTab",
-        },
-        "requestFields": [
-            "serviceName",
-            "agentName",
-            "taskName",
-            "targetServiceIds",
-            "accountIds",
-            "browserBuild",
-            "runtimeProfile",
-            "browserId",
-            "sessionName",
-            "profile",
-            "displayIsolation",
-            "profileLeasePolicy",
-            "requiresCdpFree",
-            "cdpAttachmentAllowed",
-            "url",
-            "params",
-        ],
-    })
-}
-
-/// No-launch command availability for clients preparing CDP-free lifecycle-only work.
-fn cdp_free_command_availability(applies: bool) -> Value {
-    let unsupported_commands: Vec<&str> = if applies {
-        SERVICE_REQUEST_ACTIONS
-            .iter()
-            .copied()
-            .filter(|action| *action != "cdp_free_launch")
-            .collect()
-    } else {
-        Vec::new()
-    };
-    let available_commands: Vec<&str> = if applies {
-        vec!["cdp_free_launch"]
-    } else {
-        Vec::new()
-    };
-
-    json!({
-        "applies": applies,
-        "controlPlaneMode": "cdp_free",
-        "lifecycleOnly": applies,
-        "cdpAttachmentAllowed": !applies,
-        "supportedOperations": if applies {
-            vec!["process_lifecycle", "profile_lease", "service_state"]
-        } else {
-            Vec::<&str>::new()
-        },
-        "unsupportedOperations": if applies {
-            vec!["cdp_commands", "snapshot", "screenshot", "dom_interaction"]
-        } else {
-            Vec::<&str>::new()
-        },
-        "unsupportedCommands": unsupported_commands,
-        "availableCommands": available_commands,
-        "hasUnsupportedCommandList": applies,
-        "client": {
-            "package": "@agent-browser/client/service-request",
-            "summaryHelper": "summarizeServiceCdpFreeLaunchAvailability",
-            "predicateHelper": "isServiceCdpFreeActionAvailable",
-        },
-    })
 }
 
 /// Describe the serialized service-owned write path for bounded auth probes.
@@ -4040,7 +3076,19 @@ mod tests {
         ProfileTargetReadiness, ProviderCapability, ProviderKind, RateLimitPolicy, ServiceIncident,
         ServiceProvider, SiteMonitor, SitePolicy, ViewStream,
     };
+    use crate::native::service_profile_access_policy::{
+        ProfileAccessMode, ProfilePermission, ServiceProfileAccessPolicy,
+    };
     use serde_json::json;
+
+    fn restricted_profile_policy(profile_id: &str) -> ServiceProfileAccessPolicy {
+        ServiceProfileAccessPolicy {
+            profile_id: profile_id.to_string(),
+            mode: ProfileAccessMode::Restricted,
+            default_permissions: vec![ProfilePermission::TabCreate],
+            ..ServiceProfileAccessPolicy::default()
+        }
+    }
 
     #[test]
     fn service_access_plan_recommends_google_manual_seeding_before_attachable_work() {
@@ -4377,6 +3425,38 @@ mod tests {
     }
 
     #[test]
+    fn self_declared_ephemeral_client_receives_an_executable_disposable_profile() {
+        let request = ServiceAccessPlanRequest {
+            service_name: Some("browser-debugger".to_string()),
+            agent_name: Some("codex".to_string()),
+            task_name: Some("inspect-page".to_string()),
+            client_subject_id: Some("client:debugger".to_string()),
+            target_service_ids: vec!["example-site".to_string()],
+            ..ServiceAccessPlanRequest::default()
+        };
+        let first = service_access_plan_for_state(&ServiceState::default(), request.clone());
+        let second = service_access_plan_for_state(&ServiceState::default(), request);
+        let runtime_profile = first["decision"]["serviceRequest"]["request"]["runtimeProfile"]
+            .as_str()
+            .expect("managed ephemeral profile");
+
+        assert!(runtime_profile.starts_with("managed-ephemeral-"));
+        assert_eq!(
+            first["decision"]["oneTimeProfileRecommendation"]["code"],
+            "managed_ephemeral_profile_planned"
+        );
+        assert_eq!(first["decision"]["serviceRequest"]["available"], true);
+        assert_eq!(
+            first["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+        assert_eq!(
+            second["decision"]["serviceRequest"]["request"]["runtimeProfile"],
+            runtime_profile
+        );
+    }
+
+    #[test]
     fn service_access_plan_warns_on_arbitrary_one_time_runtime_profile() {
         let plan = service_access_plan_for_state(
             &ServiceState::default(),
@@ -4428,6 +3508,7 @@ mod tests {
                 BrowserProfile {
                     id: "known-temp".to_string(),
                     name: "Known temp".to_string(),
+                    target_service_ids: vec!["fixture-site".to_string()],
                     user_data_dir: Some("/tmp/known-temp-profile".to_string()),
                     ..BrowserProfile::default()
                 },
@@ -4462,6 +3543,26 @@ mod tests {
             "/tmp/known-temp-profile"
         );
         assert!(plan["decision"]["oneTimeProfileRecommendation"].is_null());
+        let unknown = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                runtime_profile: Some("requested-new-profile".to_string()),
+                target_service_ids: vec!["fixture-site".to_string()],
+                target_url: Some("about:blank".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        assert!(
+            unknown["selectedProfile"].is_null(),
+            "an explicit unknown profile must not select another catalog profile"
+        );
+        assert_eq!(
+            unknown["decision"]["serviceRequest"]["request"]["runtimeProfile"],
+            "requested-new-profile"
+        );
+        assert!(unknown["decision"]["serviceRequest"]["request"]["profile"].is_null());
+        assert!(unknown["selectedProfileSource"].is_null());
+        assert!(unknown["selectedProfileMatch"].is_null());
     }
 
     #[test]
@@ -5351,10 +4452,79 @@ mod tests {
             "sessionName": "operator-x",
         });
 
+        let request = service_access_plan_request_from_service_command(&command).unwrap();
+        let artifact = service_access_plan_artifact_for_state_with_principal(&state, request, None);
+        assert_eq!(
+            artifact.acquisition.disposition(),
+            ProfileAcquisitionDisposition::ReuseExistingBrowser
+        );
+        assert_eq!(artifact.acquisition.browser_id(), Some("browser-x"));
+        assert_eq!(artifact.acquisition.session_name(), Some("operator-x"));
+        assert_eq!(
+            artifact.public_plan["decision"]["serviceRequest"]["request"]["browserId"],
+            "browser-x"
+        );
+        assert_eq!(
+            artifact.public_plan["decision"]["serviceRequest"]["request"]["sessionName"],
+            "operator-x"
+        );
+
         apply_shared_profile_route_hints_for_service_request(&state, &mut command).unwrap();
 
         assert_eq!(command["browserId"], "browser-x");
         assert_eq!(command["sessionName"], "operator-x");
+        apply_shared_profile_route_hints_for_service_request(&state, &mut command)
+            .expect("an exact planned route should remain idempotently valid");
+
+        let mut retained = state.clone();
+        retained.browsers.get_mut("browser-x").unwrap().host = BrowserHost::AttachedExisting;
+        retained
+            .profiles
+            .get_mut("x-social")
+            .unwrap()
+            .default_browser_host = Some(BrowserHost::RemoteHeaded);
+        let request = ServiceAccessPlanRequest {
+            runtime_profile: Some("x-social".to_string()),
+            service_name: Some("reuse-service".to_string()),
+            agent_name: Some("reuse-agent".to_string()),
+            task_name: Some("reuse-task".to_string()),
+            ..ServiceAccessPlanRequest::default()
+        };
+        let planned = service_access_plan_for_state(&retained, request);
+        let mut generated = planned["decision"]["serviceRequest"]["request"].clone();
+        assert_eq!(generated["browserId"], "browser-x");
+        assert!(generated["params"]["browserHost"].is_null());
+        assert!(generated["params"]["displayIsolation"].is_null());
+        apply_shared_profile_route_hints_for_service_request(&retained, &mut generated)
+            .expect("replacement defaults must not contradict the selected reusable browser");
+
+        let mut contradictory_complete_route = json!({
+            "action": "tab_new",
+            "runtimeProfile": "x-social",
+            "siteId": "x",
+            "browserId": "browser-other",
+            "sessionName": "operator-x",
+        });
+        let error = apply_shared_profile_route_hints_for_service_request(
+            &state,
+            &mut contradictory_complete_route,
+        )
+        .unwrap_err();
+        assert_eq!(error, "service_access_plan_route_browser_conflict");
+
+        let mut contradictory_session_route = json!({
+            "action": "tab_new",
+            "runtimeProfile": "x-social",
+            "siteId": "x",
+            "browserId": "browser-x",
+            "sessionName": "operator-other",
+        });
+        let error = apply_shared_profile_route_hints_for_service_request(
+            &state,
+            &mut contradictory_session_route,
+        )
+        .unwrap_err();
+        assert_eq!(error, "service_access_plan_route_session_conflict");
 
         let mut invalid_command = json!({
             "action": "tab_new",
@@ -5581,6 +4751,7 @@ mod tests {
                     id: "odollo-fedex".to_string(),
                     target_service_ids: vec!["fedex".to_string()],
                     authenticated_service_ids: vec!["fedex".to_string()],
+                    access_policy: Some(restricted_profile_policy("odollo-fedex")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -5663,6 +4834,49 @@ mod tests {
             command["serviceProfileRouteAuthorization"]["sessionName"],
             expected_session
         );
+    }
+
+    #[test]
+    fn shared_local_cold_profile_session_round_trips_without_owner_proof() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "p158-shared".to_string(),
+                BrowserProfile {
+                    id: "p158-shared".to_string(),
+                    access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(
+                        "p158-shared",
+                    )),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let request = ServiceAccessPlanRequest {
+            runtime_profile: Some("p158-shared".to_string()),
+            service_name: Some("Last30Days".to_string()),
+            agent_name: Some("x-scraper".to_string()),
+            task_name: Some("x-feed".to_string()),
+            ..ServiceAccessPlanRequest::default()
+        };
+        let first_plan = service_access_plan_for_state(&state, request.clone());
+        let second_plan = service_access_plan_for_state(&state, request);
+        let mut command = first_plan["decision"]["serviceRequest"]["request"].clone();
+        let expected_session = command["sessionName"]
+            .as_str()
+            .expect("shared-local cold acquisition should carry a session route")
+            .to_string();
+
+        assert_ne!(expected_session, "default");
+        assert!(expected_session.starts_with("shared-profile-"));
+        assert_eq!(
+            second_plan["decision"]["serviceRequest"]["request"]["sessionName"],
+            expected_session
+        );
+        apply_shared_profile_route_hints_for_service_request(&state, &mut command).unwrap();
+
+        assert_eq!(command["sessionName"], expected_session);
+        assert!(command.get("browserId").is_none());
+        assert!(command.get("serviceProfileRouteAuthorization").is_none());
     }
 
     #[test]
@@ -5757,6 +4971,7 @@ mod tests {
                     id: "odollo-fedex".to_string(),
                     target_service_ids: vec!["fedex".to_string()],
                     authenticated_service_ids: vec!["fedex".to_string()],
+                    access_policy: Some(restricted_profile_policy("odollo-fedex")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -5823,6 +5038,7 @@ mod tests {
                 "odollo-fedex".to_string(),
                 BrowserProfile {
                     id: "odollo-fedex".to_string(),
+                    access_policy: Some(restricted_profile_policy("odollo-fedex")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -5870,6 +5086,7 @@ mod tests {
                     id: "odollo-fedex".to_string(),
                     target_service_ids: vec!["fedex".to_string()],
                     authenticated_service_ids: vec!["fedex".to_string()],
+                    access_policy: Some(restricted_profile_policy("odollo-fedex")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -5929,6 +5146,7 @@ mod tests {
                     id: "books-bank".to_string(),
                     target_service_ids: vec!["bank".to_string()],
                     authenticated_service_ids: vec!["bank".to_string()],
+                    access_policy: Some(restricted_profile_policy("books-bank")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -5973,6 +5191,136 @@ mod tests {
     }
 
     #[test]
+    fn shared_local_self_declared_client_reuses_principal_bound_browser() {
+        use crate::native::service_principal::ServicePrincipalProvenance;
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "research-gov".to_string(),
+                BrowserProfile {
+                    id: "research-gov".to_string(),
+                    target_service_ids: vec!["research-gov".to_string()],
+                    authenticated_service_ids: vec!["research-gov".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-research-gov".to_string(),
+                BrowserProcess {
+                    id: "browser-research-gov".to_string(),
+                    profile_id: Some("research-gov".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-research-gov".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-research-gov".to_string(),
+                BrowserSession {
+                    id: "session-research-gov".to_string(),
+                    principal_id: Some("principal:prior-client".to_string()),
+                    principal_provenance: Some(ServicePrincipalProvenance::RegisteredCapability),
+                    profile_id: Some("research-gov".to_string()),
+                    browser_ids: vec!["browser-research-gov".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                client_subject_id: Some("client:fieldwork".to_string()),
+                identity_assurance: Some("self-declared".to_string()),
+                target_service_ids: vec!["research-gov".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileAccess"]["policy"]["mode"],
+            "shared-local"
+        );
+        assert_eq!(
+            plan["decision"]["profileAccess"]["decision"]["allowed"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["profileAccess"]["decision"]["subject"]["assurance"],
+            "self-declared"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "reuse_existing_browser"
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["clientSubjectId"],
+            "client:fieldwork"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["policyRevision"],
+            1
+        );
+        assert!(
+            plan["decision"]["serviceRequest"]["request"]["accessDecisionId"]
+                .as_str()
+                .is_some_and(|value| value.starts_with("profile-access-decision:"))
+        );
+    }
+
+    #[test]
+    fn caller_cannot_self_promote_identity_assurance_for_restricted_profile() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "research-gov".to_string(),
+                BrowserProfile {
+                    id: "research-gov".to_string(),
+                    target_service_ids: vec!["research-gov".to_string()],
+                    access_policy: Some(restricted_profile_policy("research-gov")),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                client_subject_id: Some("client:fieldwork".to_string()),
+                identity_assurance: Some("operator".to_string()),
+                target_service_ids: vec!["research-gov".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileAccess"]["decision"]["subject"]["assurance"],
+            "self-declared"
+        );
+        assert_eq!(
+            plan["decision"]["profileAccess"]["decision"]["allowed"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["acquisitionBlocker"],
+            "profile_access_denied"
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            plan["decision"]["profileAccess"]["decision"]["nextAction"]["action"]
+        );
+        assert_eq!(plan["decision"]["attention"]["severity"], "blocking");
+        assert_eq!(
+            plan["decision"]["attention"]["suggestedActions"],
+            json!(["inspect_profile_access_policy"])
+        );
+    }
+
+    #[test]
     fn same_principal_profile_contradiction_is_not_reported_as_lease_wait() {
         use crate::native::service_principal::{
             AuthenticatedServicePrincipal, ServicePrincipalProvenance,
@@ -5992,6 +5340,7 @@ mod tests {
                     id: "last30days-social".to_string(),
                     target_service_ids: vec!["social".to_string()],
                     authenticated_service_ids: vec!["social".to_string()],
+                    access_policy: Some(restricted_profile_policy("last30days-social")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -6178,6 +5527,7 @@ mod tests {
                     id: "last30days-social".to_string(),
                     target_service_ids: vec!["social".to_string()],
                     authenticated_service_ids: vec!["social".to_string()],
+                    access_policy: Some(restricted_profile_policy("last30days-social")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -6248,7 +5598,7 @@ mod tests {
             capability_id: "capability:foreign".to_string(),
             ..same_principal
         };
-        let foreign = service_access_plan_for_state_with_principal(
+        let foreign = service_access_plan_artifact_for_state_with_principal(
             &state,
             ServiceAccessPlanRequest {
                 target_service_ids: vec!["social".to_string()],
@@ -6257,8 +5607,16 @@ mod tests {
             Some(&foreign_principal),
         );
         assert_eq!(
-            foreign["decision"]["profileReuse"]["recommendedAction"],
+            foreign.public_plan["decision"]["profileReuse"]["recommendedAction"],
             "wait_for_foreign_principal"
+        );
+        assert_eq!(
+            foreign.acquisition.disposition(),
+            ProfileAcquisitionDisposition::Blocked
+        );
+        assert_eq!(
+            foreign.acquisition.acquisition_blocker(),
+            Some("foreign_principal_profile_lease")
         );
     }
 
@@ -6288,7 +5646,7 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let plan = service_access_plan_for_state(
+        let artifact = service_access_plan_artifact_for_state_with_principal(
             &state,
             ServiceAccessPlanRequest {
                 target_service_ids: vec!["acs".to_string()],
@@ -6298,7 +5656,14 @@ mod tests {
                 display_isolation: Some("private_virtual_display".to_string()),
                 ..ServiceAccessPlanRequest::default()
             },
+            None,
         );
+        assert_eq!(
+            artifact.acquisition.disposition(),
+            ProfileAcquisitionDisposition::LaunchNewBrowser
+        );
+        assert_eq!(artifact.acquisition.browser_id(), None);
+        let plan = artifact.public_plan;
 
         assert_eq!(
             plan["decision"]["profileReuse"]["recommendedAction"],
@@ -6323,6 +5688,65 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("no_compatible_live_browser")));
+    }
+
+    #[test]
+    fn occupied_profile_explains_unavailable_browser_identity_cause() {
+        let mut state = ServiceState::default();
+        state.profiles.insert(
+            "synthetic-profile".into(),
+            BrowserProfile {
+                id: "synthetic-profile".into(),
+                ..BrowserProfile::default()
+            },
+        );
+        let mut browser = BrowserProcess {
+            id: "synthetic-browser".into(),
+            profile_id: Some("synthetic-profile".into()),
+            health: BrowserHealth::Degraded,
+            ..BrowserProcess::default()
+        };
+        crate::native::service_health::apply_browser_health_observation(
+            &mut browser,
+            Some(&json!({
+                "failureClass": "browser_process_identity_ambiguous",
+                "processIdentityAssessmentReason": "process_observation_failed",
+                "processObservationFailure": "linux_proc_exe_permission_denied; process_observer_timeout"
+            })),
+        );
+        state.browsers.insert(browser.id.clone(), browser);
+        state.sessions.insert(
+            "synthetic-session".into(),
+            BrowserSession {
+                id: "synthetic-session".into(),
+                profile_id: Some("synthetic-profile".into()),
+                browser_ids: vec!["synthetic-browser".into()],
+                lease: LeaseState::Exclusive,
+                ..BrowserSession::default()
+            },
+        );
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                runtime_profile: Some("synthetic-profile".into()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        let reuse = &plan["decision"]["profileReuse"];
+        assert_eq!(reuse["recommendedAction"], "wait_for_profile_lease");
+        assert_eq!(
+            reuse["unavailableBrowsers"][0]["browserId"],
+            "synthetic-browser"
+        );
+        assert_eq!(
+            reuse["unavailableBrowsers"][0]["processIdentityAssessmentReason"],
+            "process_observation_failed"
+        );
+        assert_eq!(
+            reuse["unavailableBrowsers"][0]["processObservationFailure"],
+            "linux_proc_exe_permission_denied; process_observer_timeout"
+        );
+        assert!(reuse["reusableBrowserId"].is_null());
     }
 
     #[test]
@@ -6354,7 +5778,7 @@ mod tests {
             pending_transfer: None,
             last_transition: None,
         };
-        let state = ServiceState {
+        let mut state = ServiceState {
             profiles: BTreeMap::from([(
                 "bill-soylei".to_string(),
                 BrowserProfile {
@@ -6363,6 +5787,10 @@ mod tests {
                     user_data_dir: Some(profile_path.to_string()),
                     target_service_ids: vec!["bill".to_string()],
                     authenticated_service_ids: vec!["bill".to_string()],
+                    access_policy: Some(ServiceProfileAccessPolicy {
+                        mode: ProfileAccessMode::Restricted,
+                        ..ServiceProfileAccessPolicy::shared_local_default("bill-soylei")
+                    }),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -6449,7 +5877,7 @@ mod tests {
         );
         assert_eq!(
             explicit_plan["decision"]["serviceRequest"]["acquisitionBlocker"],
-            "profile_capability_required"
+            "profile_access_denied"
         );
         assert!(explicit_plan["decision"]["serviceRequest"]["request"].is_null());
 
@@ -6483,7 +5911,7 @@ mod tests {
         );
         assert_eq!(
             unattributed_plan["decision"]["serviceRequest"]["acquisitionBlocker"],
-            "profile_capability_required"
+            "profile_access_denied"
         );
         assert!(unattributed_plan["decision"]["serviceRequest"]["request"].is_null());
 
@@ -6500,7 +5928,7 @@ mod tests {
         .expect_err("the unauthenticated terminal launch must fail before daemon relay");
         assert_eq!(
             error,
-            "service_access_plan_request_unavailable:profile_capability_required"
+            "service_access_plan_request_unavailable:profile_access_denied"
         );
 
         let mut exact_explicit_request = json!({
@@ -6516,9 +5944,33 @@ mod tests {
         .expect_err("the historical terminal route cannot bypass principal authentication");
         assert_eq!(
             error,
-            "service_access_plan_request_unavailable:profile_capability_required"
+            "service_access_plan_request_unavailable:profile_access_denied"
         );
         assert!(exact_explicit_request.get("browserId").is_none());
+
+        state.profiles.get_mut("bill-soylei").unwrap().access_policy = Some(
+            ServiceProfileAccessPolicy::shared_local_default("bill-soylei"),
+        );
+        let shared_local_plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("Last30Days".to_string()),
+                agent_name: Some("x-scraper".to_string()),
+                task_name: Some("x-feed".to_string()),
+                target_service_ids: vec!["bill".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        assert_eq!(
+            shared_local_plan["decision"]["profileAccess"]["decision"]["allowed"],
+            true
+        );
+        assert_eq!(
+            shared_local_plan["decision"]["serviceRequest"]["available"],
+            true
+        );
+        assert!(shared_local_plan["decision"]["serviceRequest"]["acquisitionBlocker"].is_null());
+        assert!(shared_local_plan["decision"]["serviceRequest"]["request"].is_object());
     }
 
     #[test]

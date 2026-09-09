@@ -146,6 +146,7 @@ pub(crate) enum CapacityLimitingResource {
     DurableHandoff,
     QueueBound,
     InvalidRequest,
+    InventoryAdmission,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -260,6 +261,9 @@ pub(crate) struct PresentationCapacityProjection {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub(crate) struct PresentationCapacityAuthority {
+    /// Failed inventory admission disables new presentation effects, not state reads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) admission_error: Option<String>,
     pub(crate) config: PresentationCapacityConfig,
     pub(crate) slots: Vec<PresentationSlot>,
     pub(crate) queued_requests: Vec<PresentationRequest>,
@@ -269,6 +273,7 @@ pub(crate) struct PresentationCapacityAuthority {
 impl Default for PresentationCapacityAuthority {
     fn default() -> Self {
         Self {
+            admission_error: None,
             config: PresentationCapacityConfig {
                 warm_minimum: 0,
                 hard_maximum: 0,
@@ -347,6 +352,7 @@ impl PresentationCapacityAuthority {
             }
         }
         Ok(Self {
+            admission_error: None,
             config,
             slots,
             queued_requests: Vec::new(),
@@ -417,7 +423,11 @@ impl PresentationCapacityAuthority {
             total_slots: self.slots.len(),
             slot_ids: self.slots.iter().map(|slot| slot.id.clone()).collect(),
             configured_hard_maximum: self.config.hard_maximum,
-            pressure_admitted_maximum: pressure.admitted_maximum.min(self.config.hard_maximum),
+            pressure_admitted_maximum: if self.admission_error.is_some() {
+                0
+            } else {
+                pressure.admitted_maximum.min(self.config.hard_maximum)
+            },
             slot_counts,
             human_protected_capacity: self.config.human_priority_reserve,
             recovery_reserved_capacity: self.config.recovery_reserve,
@@ -430,7 +440,7 @@ impl PresentationCapacityAuthority {
                 .map(|queued_at| self.queue_clock.saturating_sub(queued_at)),
             binding_warnings: service_state
                 .map(|state| self.binding_warnings(state))
-                .unwrap_or_default(),
+                .unwrap_or_else(|| self.admission_error.iter().cloned().collect()),
         }
     }
 
@@ -448,6 +458,13 @@ impl PresentationCapacityAuthority {
         pressure: PressureAdmission,
         service_state: Option<&ServiceState>,
     ) -> CapacityDecision {
+        if self.admission_error.is_some() {
+            return CapacityDecision::Rejected {
+                request_id: request.id,
+                limiting_resource: CapacityLimitingResource::InventoryAdmission,
+                next_safe_action: CapacityNextSafeAction::PreserveCurrentPresentation,
+            };
+        }
         self.queue_clock = self.queue_clock.saturating_add(1);
         if request.id.trim().is_empty()
             || self
@@ -599,6 +616,13 @@ impl PresentationCapacityAuthority {
         route_switch: bool,
     ) -> CapacityDecision {
         let (route_id, display_allocation_id) = binding;
+        if self.admission_error.is_some() {
+            return CapacityDecision::Rejected {
+                request_id: request.id,
+                limiting_resource: CapacityLimitingResource::InventoryAdmission,
+                next_safe_action: CapacityNextSafeAction::PreserveCurrentPresentation,
+            };
+        }
         self.queue_clock = self.queue_clock.saturating_add(1);
         let browser_id = request.browser_id.as_deref();
         if request.id.trim().is_empty()
@@ -752,6 +776,7 @@ impl PresentationCapacityAuthority {
 
     pub(crate) fn binding_warnings(&self, state: &ServiceState) -> Vec<String> {
         let mut warnings = BTreeSet::new();
+        warnings.extend(self.admission_error.iter().cloned());
         for slot in &self.slots {
             if let Some(route_id) = slot.route_id.as_deref() {
                 if !state.remote_view_routes.contains_key(route_id)
@@ -786,6 +811,9 @@ impl PresentationCapacityAuthority {
         display_allocation_id: &str,
         browser_id: &str,
     ) -> Result<(), String> {
+        if let Some(error) = &self.admission_error {
+            return Err(format!("presentation_inventory_not_admitted: {error}"));
+        }
         let slot = self
             .slots
             .iter_mut()
@@ -879,6 +907,9 @@ impl PresentationCapacityAuthority {
     /// ownership. In-flight leases remain untouched so reconciliation cannot
     /// steal presentation authority from an active episode or recovery.
     pub(crate) fn reconcile_authoritative_bindings(&mut self, state: &ServiceState) -> usize {
+        if self.admission_error.is_some() {
+            return 0;
+        }
         let mut repaired = 0;
         for slot in &mut self.slots {
             if slot.lease_request_id.is_some()
@@ -896,6 +927,36 @@ impl PresentationCapacityAuthority {
                 .zip(slot.display_allocation_id.as_deref())
                 .and_then(|(route_id, display_allocation_id)| {
                     let route = state.remote_view_routes.get(route_id)?;
+                    let pending_acquisition =
+                        super::presentation_inventory::has_current_acquisition_binding(
+                            state, route,
+                        );
+                    // An unavailable presentation does not release its incumbent.
+                    // Preserve an already admitted binding when all durable owners
+                    // still agree; this does not promote route/display readiness.
+                    if (route.state == "orphaned" || pending_acquisition)
+                        && slot.state == PresentationSlotState::Active
+                        && slot.browser_id.is_some()
+                        && slot.browser_id == route.browser_id
+                        && route.display_allocation_id.as_deref() == Some(display_allocation_id)
+                    {
+                        let browser_id = route.browser_id.as_deref()?;
+                        let browser = state.browsers.get(browser_id)?;
+                        let display = state.display_allocations.get(display_allocation_id)?;
+                        return (browser.display_allocation_id.as_deref()
+                            == Some(display_allocation_id)
+                            && display.owner_browser_id == route.browser_id
+                            && display.owner_session_id == route.session_id
+                            && route.session_id.as_ref().is_some_and(|session| {
+                                browser.active_session_ids.contains(session)
+                            })
+                            && display.route_ids.contains(&route.id)
+                            && (matches!(
+                                display.state.as_str(),
+                                "ready" | "active" | "orphaned"
+                            ) || pending_acquisition))
+                            .then_some(browser_id);
+                    }
                     if !matches!(
                         route.state.as_str(),
                         "ready" | "reconnecting" | "allocating"
@@ -945,6 +1006,9 @@ impl PresentationCapacityAuthority {
         next: PresentationSlotState,
         service_state: Option<&ServiceState>,
     ) -> Result<SlotTransitionReceipt, String> {
+        if let Some(error) = &self.admission_error {
+            return Err(format!("presentation_inventory_not_admitted: {error}"));
+        }
         let slot = self
             .slots
             .iter_mut()
@@ -1082,6 +1146,9 @@ impl PresentationCapacityAuthority {
         slot.lease_priority = None;
         slot.browser_id = None;
 
+        if self.admission_error.is_some() {
+            return None;
+        }
         let admitted_maximum = pressure.admitted_maximum.min(self.config.hard_maximum);
         let eligible_slots = self.slots.len().min(admitted_maximum);
         let free_slots = self
@@ -1262,6 +1329,7 @@ fn limiting_resource_name(resource: CapacityLimitingResource) -> &'static str {
         CapacityLimitingResource::DurableHandoff => "durable_handoff",
         CapacityLimitingResource::QueueBound => "queue_bound",
         CapacityLimitingResource::InvalidRequest => "invalid_request",
+        CapacityLimitingResource::InventoryAdmission => "inventory_admission",
     }
 }
 

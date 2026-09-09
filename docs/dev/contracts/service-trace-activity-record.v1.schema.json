@@ -56,6 +56,7 @@
         "reconciliation_error",
         "incident_acknowledged",
         "incident_resolved",
+        "job_terminal",
         "service_job_timeout",
         "service_job_cancelled",
         "service_job"

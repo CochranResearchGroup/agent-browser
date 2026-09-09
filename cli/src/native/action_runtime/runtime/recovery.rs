@@ -1343,6 +1343,9 @@ pub(crate) fn managed_runtime_attach_target(
 pub(crate) fn can_attach_managed_runtime_for_launch(options: &LaunchOptions) -> bool {
     options.headless && !options.remote_headed
 }
+/// Resolve a compatible retained shared-profile browser. Complete service
+/// route hints constrain selection to that exact browser and owning session;
+/// they do not force a second profile launch.
 pub(crate) fn shared_profile_attach_target_for_auto_launch(
     metadata: &ServiceLaunchMetadata,
     command: &Value,
@@ -1352,7 +1355,9 @@ pub(crate) fn shared_profile_attach_target_for_auto_launch(
     if !matches!(action, "open" | "navigate" | "tab_new") {
         return None;
     }
-    if command.get("browserId").is_some() || command.get("sessionName").is_some() {
+    let requested_browser_id = optional_command_string(command, "browserId");
+    let requested_session_name = optional_command_string(command, "sessionName");
+    if requested_browser_id.is_some() != requested_session_name.is_some() {
         return None;
     }
     if allow_duplicate_profile_lane_from_command(command) {
@@ -1369,6 +1374,29 @@ pub(crate) fn shared_profile_attach_target_for_auto_launch(
         .values()
         .filter(|browser| browser.profile_id.as_deref() == Some(profile_id))
         .filter(|browser| service_browser_health_counts_as_live(browser.health))
+        .filter(|browser| {
+            requested_browser_id
+                .as_deref()
+                .is_none_or(|requested| requested == browser.id)
+        })
+        .filter(|browser| {
+            requested_session_name.as_deref().is_none_or(|requested| {
+                browser
+                    .active_session_ids
+                    .iter()
+                    .any(|session_id| session_id == requested)
+                    || service_state
+                        .sessions
+                        .get(requested)
+                        .is_some_and(|session| {
+                            session.profile_id.as_deref() == Some(profile_id)
+                                && session
+                                    .browser_ids
+                                    .iter()
+                                    .any(|browser_id| browser_id == &browser.id)
+                        })
+            })
+        })
         .filter(|browser| {
             requested_host.is_none_or(|host| {
                 host == browser.host || host == ServiceBrowserHost::AttachedExisting

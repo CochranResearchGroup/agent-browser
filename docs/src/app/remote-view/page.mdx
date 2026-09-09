@@ -5,6 +5,15 @@ Guacamole and preserve one durable link across route changes. The operator
 opens an authenticated `/remote-view/<handoff-id>` URL. Provider URLs remain
 diagnostic evidence and must not become handoff links.
 
+Authenticated ready handoff resolution also records operator-journey acceptance for the already-selected dashboard generation after validating its live runtime manifest and current owner, route, display, target and provider evidence. This does not select a staged candidate or change fallback and rollback custody. Stale dashboard generations cannot refresh acceptance. An ordinary dashboard without an explicit deployment-generation setting identifies itself by matching its own executable-bound runtime manifest to the selected backend; it cannot borrow a newer backend identity.
+
+Guacamole viewer failures and unusable durable handoff links are appended to
+the privacy-bounded Service failure journal. Records contain route and display
+correlation identifiers plus a hash of the handoff identifier. They never
+contain the operator URL, provider URL, credentials, page content, or request
+headers. Reopening the same durable handoff remains the correct reconnect
+operation and does not create a replacement handoff solely for diagnostics.
+
 > **Important:** Share only `handoffUrl` from a successful remote-view open.
 > Never share or bookmark `providerExternalUrl`, a raw Guacamole URL, or a URL
 > under `routeBinding`.
@@ -15,6 +24,31 @@ Browser does not rewrite a provider or Guacamole origin into the dashboard-only
 `/remote-view/<handoff-id>` route.
 
 ## Before you begin
+
+When a selected tab is temporarily absent from a dashboard inventory refresh,
+the dashboard preserves that tab's identity and waits for it to reappear before
+enabling its view or controls. It does not rewrite the selection to another tab
+based only on an incomplete inventory.
+
+When opening through `requestServiceRemoteViewOpen()`, pass the access plan's
+`browserId` and `sessionName` at the top level. The helper preserves daemon
+routing alongside matching handoff metadata. Nested action parameters alone
+do not select the daemon session.
+Reopening the durable URL preserves the original tab's client access record.
+`profile_child_access_record_missing` means a handle operation stopped at child
+admission before browser effects. Inspect the Service trace; a returned handle
+does not authorize reconstruction of a missing grant.
+
+On Linux, staged workstation migration can discard a process identity from a validated prior boot only when its browser row is missing and no browser projection or runtime-owner reference remains. A reused numeric PID is never signalled. Current-boot mismatches and uncertain boot evidence retain the existing migration checks.
+
+Workstation upgrades bind the packaged Guacamole defaults extension hash to the web container configuration. Changed extension code therefore schedules recreation of that container during Compose reconciliation. This content change leaves the PostgreSQL and guacd service configurations unchanged; verify the served extension after applying an upgrade.
+
+The packaged Guacamole extension preserves text-input preferences but removes
+both declarative and controller-startup text-field focus in embedded viewers.
+Focus the remote text field
+explicitly before typing. This avoids blocked cross-origin autofocus and
+keeps dashboard keyboard navigation separate from remote input. Standalone
+Guacamole retains its normal autofocus behavior.
 
 You need a configured runtime profile and a ready RDP route. Check the intended
 subject without changing it:
@@ -51,6 +85,51 @@ Do not close another browser, release another viewer, take over a controller,
 or run runtime cleanup to free a route. Add route capacity only after measured
 demand shows that the configured pool cannot serve the required number of
 simultaneous non-preemptible operator desktops.
+
+For a managed Guacamole route with `providerMode="simultaneous_view"`, the
+dashboard backend owns the primary connection for the exact browser, process,
+owner generation and display binding. Every viewer uses a restricted sharing
+key from that primary's exact tunnel UUID. Closing or reopening a viewer does
+not transfer primary ownership. Keys remain transient and must never be saved
+or sent as operator handoffs; use the same durable remote-view URL.
+During same-handoff revalidation, an existing primary can remain connected only
+when the active acquisition proves its previous ready route and exact browser,
+owner, process and display binding. A pending route cannot start a new primary.
+Provider inventory refresh preserves a current acquisition reservation and its
+pending state; provider availability alone does not make it ready.
+The same browser keeps its existing capacity slot through revalidation, including
+its scene generation and recovery lease. Missing capacity is not created.
+A primary guard failure retains a specific safe code: state or authority read
+timeout/unavailability is distinct from owner or binding change. A lock timeout
+pauses provider writes while the guard tries fresh ownership proof at most three
+times, separated by 100 ms. No successful proof is cached. Changed ownership or
+other read failures end the primary immediately; exhausted contention ends it
+with the original typed cause. Explicit Retry remains available after repair.
+
+A rejected key is discarded and reported through the existing bounded recovery
+flow. Automatic recovery may request a fresh key from the same healthy primary;
+it cannot restart a failed backend owner or elect a viewer as primary.
+The explicit **Retry connection** action can replace a terminated backend primary
+once after fresh verification of the same browser, owner, process and display.
+It names the exact terminal occurrence; duplicate retries share a starting or
+live connection, and an old retry cannot restart a later failed attempt.
+Changed or unproven ownership is refused. Retry requests a fresh restricted key
+while preserving the browser and durable URL. Binding invalidation closes the
+owned tunnel.
+The backend records primary termination in the private failure journal with its
+typed cause, elapsed lifetime and route/session/display references, even when
+no viewer remains to report the failure. Failed primary requests return an
+`occurrenceId` for their authenticated journal record and, when known, a
+`terminalOccurrenceId` referencing the owner event. They retain `retrySafe=false`.
+Backend startup requires the installed provider's trusted header principal and
+literal loopback Guacamole origin. Dashboard ingress allows up to 21 seconds
+for the bounded primary-start response. An uncertain startup outcome requires
+reconciliation before another attempt. Connection readiness does not establish
+visible pixels or successful input; those require separate outcome evidence.
+
+Observer-lease acknowledgement preserves the current embedded desktop frame,
+including a frame that is still connecting. Use **Reload view** under Advanced
+connection controls for an explicit reload.
 
 ## Open the browser and copy the durable link
 
@@ -102,6 +181,48 @@ The lower-level `requestServiceRemoteViewOpen()` helper also requires a durable
 handoff URL for real opens. Do not set `allowRawProviderUrl: true` outside an
 explicit infrastructure diagnostic.
 
+For software automation, read the valid `serviceTabHandle` directly from the
+successful open response with `getServiceTabHandle(response)`. It is returned
+at the top level and under `tab.serviceTabHandle`; no additional `tab_new` is
+needed. Generic `tab_new` rejects route and display selectors before creating a
+job. Route-bound callers must use authenticated `remote_view_open`. Derived
+display-allocation identity follows the stable route identity, not an X11
+display number that may later be reused by another route.
+
+A retained-browser identity rejection such as
+`runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a
+successful retryable convergence response. Inspect the profile recovery plan
+before retrying; do not change the handoff's browser identity or automatically
+reopen a replacement. This rejection reports no effect and does not establish
+that the browser is permanently lost. Transient adoption and incomplete
+presentation receipts retain their separate convergence behavior.
+
+## Resume software automation from a handoff
+
+Resolve the stored handoff ID first. Then derive the exact retained route and
+caller attribution from that response instead of reconstructing them from
+processes or provider URLs:
+
+```js
+import {
+  classifyServiceControlPlaneAuthority,
+  deriveServiceRemoteViewHandoffResumeIntent,
+  getServiceTabDiagnostics,
+} from "@agent-browser/client/service-request";
+
+const intent = deriveServiceRemoteViewHandoffResumeIntent(resolveResponse);
+const diagnostics = await getServiceTabDiagnostics({
+  baseUrl: "http://127.0.0.1:4849",
+  serviceTabHandle: intent.serviceTabHandle,
+});
+const authority = classifyServiceControlPlaneAuthority(diagnostics);
+```
+
+An `observation_only` result permits bounded reads such as diagnostics, probes,
+and evaluate calls. Navigation and input require `effect_capable`. An
+`unavailable` result means the handoff did not yield a current usable handle.
+The derived intent excludes raw provider URLs and local profile paths.
+
 ## Reconnect without opening another browser
 
 Open the same `handoffUrl` again. The authenticated dashboard resolves the
@@ -112,6 +233,10 @@ matches the recorded intent. Normal resolution does not navigate, open a
 replacement target, relaunch the browser, change providers, or redirect to a
 raw provider URL.
 
+Recovery retains the known route and display when current-boot browser ownership
+matches, even if presentation records are pending or orphaned. Physical display
+ownership and visibility are verified before the view becomes ready.
+
 The dashboard waits for a ready presentation receipt whose generation,
 dashboard deployment, logical browser, daemon owner generation, process
 identity, target, and requested provider match the current resolution. A
@@ -119,6 +244,12 @@ missing or stale receipt returns a retryable `converging` state, and the
 dashboard retries on the same durable URL. A missing retained target fails
 closed unless the exact retained browser has a current tab that still matches
 the recorded URL intent.
+
+When the dashboard is opened through a non-local origin, CDP screen sockets
+use the authenticated same-origin <code>/api/stream/&lt;port&gt;</code> WebSocket
+proxy. The external browser is never told to connect to its own loopback
+interface. Durable resolution reserves up to 30 seconds for serialized Service
+State contention within the existing 90-second job budget.
 
 The durable handoff sidecar preserves the highest recorded presentation
 generation when an older service writer saves stale state. Concurrent runtime
@@ -209,6 +340,73 @@ Use each URL only for its documented audience.
   </tbody>
 </table>
 
+When the dashboard itself is hosted, a loopback Guacamole iframe is made
+browser-reachable by rebasing only its recognized <code>/guacamole/</code> path
+onto the configured public origin. The dashboard never embeds its own bare root
+as a fallback and never publishes that internal iframe URL as the operator
+handoff.
+
+Dashboard users and Guacamole provider users are intentionally distinct. The
+forward-auth response retains the authenticated dashboard actor in
+<code>X-Agent-Browser-User</code>, while requests under
+<code>/guacamole/</code> receive the stable route-authorized principal from
+<code>AGENT_BROWSER_GUACAMOLE_HEADER_USER</code> as
+<code>Remote-User</code>. Development publication derives that value from the
+same operator identity used to provision Guacamole route grants. A healthy
+connection row can otherwise appear as “does not exist” when the dashboard
+username has no provider permissions.
+
+Remote-headed launches suppress Chrome's crash-restore bubble so an unclean Profile exit cannot cover the control surface; this does not rewrite Profile exit state or restore old tabs.
+
+In embedded Guacamole text-input mode, clicking the remote display directs subsequent keyboard input into the browser. Opening the view leaves dashboard focus unchanged; synthetic mouse events cannot claim keyboard focus.
+
+Development provider readiness verifies that Guacamole serves the exact staged extension source. A stale loaded extension requires provider reconciliation even when containers are healthy.
+
+## Validate from two external clients
+
+Plan 0158 uses the manually dispatched **Plan 0158 External Vantage** GitHub
+Actions workflow for off-host evidence. Configure its protected
+<code>p158-external-vantage</code> environment with the durable handoff,
+dashboard username and password, expected retained identity JSON, a prepared
+synthetic pixel-marker screenshot region, and a synthetic-only visual capture
+attestation as secrets. The attestation binds a reviewed redaction receipt and
+proves forbidden private fields were excluded before capture. The expected
+pixel hash binds the exact crop of externally rendered remote pixels. Marker
+coordinates with <code>coordinateSpace: remote-view-iframe</code> use iframe CSS
+pixels. For a scaled desktop, use <code>remote-view-display</code> and declare
+the marker rectangle in native desktop pixels, including browser chrome.
+Supply fixed CSS <code>sampleWidth</code> and <code>sampleHeight</code>; capture
+and input center that sample within the marker using observed Guacamole display
+geometry. An undersized rendered marker cannot pass by shrinking the sample.
+Preserve the independent expected PNG hash across geometry changes.
+A readiness probe paces its two
+independent clients to respect a single-viewer provider; it does not mistake
+expected viewer displacement for stream failure. Dispatch it with the frozen
+campaign run ID, exact full candidate commit SHA, and one
+shared RFC3339 UTC calibration start at least 30 minutes in the future.
+
+The workflow starts two separate GitHub-hosted Ubuntu clients. One performs
+human-paced pointer, keyboard, focus, and scroll observations. The other uses
+slower pacing and, during calibration, holds a second page concurrently. Both authenticate without
+printing credentials, open and reconnect the same durable URL,
+and collect DNS, TLS, redirects, cookie metadata, WebSocket, iframe, form
+action, reconnect, console, network, performance, screenshot, and timing
+evidence. The aggregate receipt fails closed on an internal URL, identity
+change, duplicate server browser launch, missing evidence, retry, or repair.
+Calibration mode lasts at least 20 minutes and records exactly 25 dashboard
+actions plus five reconnects per client against the same hash-bound start and
+end. Receipts retain each runner's readiness and lateness relative to that
+barrier. The shorter readiness mode does not
+satisfy C01.
+Artifacts have a selectable one to three day retention. A failed client may
+leave diagnostic artifacts. The aggregation job always emits a failed
+diagnostic receipt when either client result or receipt is missing; partial
+output is not acceptance evidence.
+The runner constructs a sanitized HAR 1.2 artifact directly from filtered
+request metadata. It never creates a raw HAR, and headers, cookies, query
+strings, and response bodies are excluded at capture. Screenshots and videos
+are permitted only for the attested synthetic fixture.
+
 ## Troubleshoot an RDP handoff
 
 Use the returned state to choose the next action:
@@ -255,3 +453,44 @@ Do not substitute one handoff type for another.
 - Review [Dashboard](/dashboard) for login, runtime drift, and operator UI
   behavior.
 - Review [Commands](/commands) for remote-view doctor and open syntax.
+
+
+For `view_focus`, an explicit `targetId` must still exist when focus executes.
+A supplied index never substitutes for a missing explicit target, including a
+target that closes after admission. Refresh the intended target identity before
+issuing a new focus request.
+
+
+Authenticated dashboard operator focus uses the account's current controller
+lease and the profile's `view_open` permission. The viewport requests focus only
+after explicit controller takeover succeeds. The broker binds that request to
+the exact browser, session, profile, target, controller epoch and policy revision;
+the daemon rechecks it while holding the route effect fence. Agent tab ownership
+stays unchanged. Observer accounts cannot acquire controller authority. For
+`operator_focus_*` failures, inspect the request's Service trace, current profile
+policy and controller lease before requesting focus again.
+
+Operator focus refuses an existing desktop interaction instead of cancelling it.
+A refused authority check releases its temporary focus guards and preserves the
+agent's tab ownership and interaction authority.
+
+Operator-focus request provenance records the authenticated dashboard account as
+`clientSubjectId` with `authenticated-ingress` assurance, while retaining the
+caller-provided service, agent and task labels separately. The signed focus token
+is not a provenance field.
+
+The dashboard sends operator focus through its authenticated request path.
+A current controller lease may have no expiry; it remains valid until release
+or controller replacement. Each signed focus request still has its own short
+expiry and must match the current controller epoch.
+
+After a runtime-host restart, durable-handoff resolution prepares the exact
+retained owner lane before using its saved HTTP port. A failed preparation
+returns `durable_handoff_owner_prepare_failed` without sending the resolve
+command to a stale listener.
+
+A retained browser with a current Ready owner reconnects to the exact handoff
+target after profile, process, endpoint and owner checks. This preserves the
+existing ownership generation and does not create a replacement browser or tab.
+An ownership refusal remains a failed resolution with its original cause and
+inspection recourse; it must not be treated as an automatic convergence retry.

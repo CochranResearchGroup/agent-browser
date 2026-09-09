@@ -1,0 +1,290 @@
+# Plan 0159 production delivery proposal
+
+Date: 2026-09-06. Decision: operator approved the exact production delivery
+proposal with “ok go”, then explicitly directed full production runtime shutdown.
+Production is stopped; the candidate is not activated. Whole-branch promotion
+and formal release remain outside this delivery.
+
+## Exact proposed composition
+
+Source commit: `b3c6b6119a805ff87723c4c6701e83516f27dec9`.
+Release binary SHA-256:
+`367c1006318811324faa64a2bbf0c3e016a76902971fadde677ab39d9452337e`.
+Expected production support manifest SHA-256:
+`27306db23f455e196d1700b550f7478ea9e3b2266009632ea28198c044408c9b`.
+Expected generation: `0.28.0-367c10063188-27306db23f45`.
+Dashboard: 80 freshly built embedded assets; asset-list SHA-256
+`8cf26fe2f06796cb046a6c0abfa7b7fdf40c454fe7cef53145ae9bddadafdf0b`.
+
+The binary and materialized support bundle are private under
+`~/.local/state/agent-browser/campaigns/p159/production-candidate-v2/`.
+`expected-production-support/` contains the reviewed production-path unit files
+and manifest. Its identity was derived from the isolated materialization after
+verifying exact manifest serialization; the real installer transaction must
+match it. It is not an installed production generation.
+
+Deliver the runtime, embedded dashboard, controller support, pinned Guacamole
+bundle and units together. The [repair inventory](0153-2026-09-06-plan-0159-repair-delivery-inventory.md)
+names the coupled client/backend/provider repairs and their proof boundaries.
+The takeover helper correction is included in source; JavaScript clients using
+that helper must consume the corrected client source separately from the CLI.
+The extension source hash is
+`afe1387803908700c2fa90420c67ed592a6f4560ce145d6d43bc4a48619ab009`.
+Its Compose label changes the Guacamole web configuration so changed extension
+code is reloaded. PostgreSQL and guacd configuration hashes were unchanged by
+that correction. Web-container recreation can interrupt viewers; retain browser
+identity and reconnect through the same durable URL.
+
+## Migration review and decision boundary
+
+The supported production dry run completed without mutation. The earlier orphan
+reader rejection is cleared. A second review staged a private copy of current
+Service State through the exact binary and deliberately stopped at the isolated
+migration-validation checkpoint. The original copied state remained unchanged;
+no production service or state was mutated.
+
+The actual staged diff contains:
+
+| Change | Disposition |
+| --- | --- |
+| 71 browser placeholders, all `not_started`, with no PID or CDP endpoint | Inert historical reference repair; no browser launch or new control authority proved by these rows. |
+| 72 session rows, all released | Inert reference preservation. |
+| Two browser `tabHandles` fields and nine tab `serviceTabHandle` fields | Handle serialization; include in retained-handle outcome checks. |
+| 77 profile `accessPolicy` fields, previously absent | Requires an explicit profile-policy delivery decision; see below. |
+| Principal registry, profile capabilities and runtime-owner registry | Preserved in the reviewed class diff. |
+| Existing displays, routes, handoffs and viewer/acquisition leases | Preserved in the reviewed class diff; no protected record removals. |
+
+Each new policy uses `shared-local`, active state, revision 1 and no explicit
+grants. Default permissions are `profile_use`, `policy_read`, `policy_write`,
+`tab_create`, `tab_observe`, `tab_control_own`, `tab_close_own`, `view_open`, and
+`drain`. The candidate intentionally materializes this legacy default. This
+review does not establish equivalence to every production caller's effective
+permissions. Plan 0159 excludes production ACL mutation, so these writes must
+not be silently included in an ordinary repair deployment. This is a bounded
+P157 policy-migration decision, not a newly authorized remediation campaign.
+The schema-level `not_required` label does not mean the staged bytes are unchanged.
+
+Private before/candidate snapshots, transaction and field review are retained
+under `production-candidate-v2/migration-review/` and
+`migration-field-review.json`. Fresh runtime census, state snapshot and exact
+diff review remain mandatory at any later approved apply.
+
+## Proposed guarded update, conditional on the decision
+
+After authority explicitly covers the proposed composition and profile-policy
+materialization, invoke the frozen candidate:
+
+```sh
+~/.local/state/agent-browser/campaigns/p159/production-candidate-v2/agent-browser install workstation --apply --json --dashboard-port 4848 --guacamole-port 8092
+```
+
+Use the default preserve-runtime policy. Do not add a full-shutdown or
+browserless override, evict clients, enter credentials, mutate tenant ACLs beyond
+a separately approved exact policy packet, or run a formal release. Stop on a
+changed composition, ambiguous census, pending effect, failed state backup,
+failed retained presentation proof, or transaction identity mismatch. Preserve
+the transaction evidence before any recovery action. The dry run found one
+eligible retained handoff; bootstrap readiness still requires the candidate's
+post-staging presentation proof and does not authorize capture of private pages.
+
+## Compatibility override and rollback
+
+Retain production generation `0.28.0-4a92c42517e1-6121fd69672b`, binary SHA-256
+`4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7`, and support
+manifest SHA-256 `6121fd69672bd18e7fa66bd3ea1abe3594aa0679d214b579992d4b0b4068d5c8`.
+Private `production-rollback-custody/retained-generation-copy/` independently
+matches all 32 generation files. The installed metadata omits its source commit;
+no exact source diff from production is claimed.
+
+Preserve the exact bytes of
+`50-current-generation-socket-directory.conf`, SHA-256
+`aba367de7198cc1f284caee7bf93c9712ff019e0d9c7d517a6a0a02e26c29509`.
+It pins an old generation's socket directory. Retire or supersede it only after
+new-generation host startup proves the source directory-creation fix and the
+supported transaction can retain original client handles. Retain the old file
+for restoration with rollback. Until those checks and authority exist, leave it
+in place. Source tests alone do not authorize its removal.
+
+For a failed approved update, inspect the exact transaction using
+`install transactions inspect --transaction-id <recorded-id> --json`.
+Use that readback's current revision, candidate generation and census digest with
+`install transactions rollback`. Never invent those arguments, flip the selector
+manually, or copy an old state snapshot over newer effects. The transaction owns
+state restoration and admission reconciliation. Recheck old-generation identity,
+its compatibility drop-in, original handles and retained presentations afterward.
+
+## Installed outcome gates and retained findings
+
+After an approved update, verify selected binary/support identity and
+`agent-browser install doctor`; verify current attached clients and runtime hosts,
+not only future launch configuration. Confirm original authorized handles remain
+usable and selected denial/actor/journal joins retain their exact evidence.
+Verify the served Guacamole extension, then confirm a prepared synthetic durable
+URL has `operatorVisible.state=ready`, correct external pixels, trusted mouse and
+keyboard acknowledgment, same-URL reopen and retained identity under the selected
+concurrent view. Use the protected manual external lane only with its exact
+synthetic capture bindings and no unchanged retry. Existing P159 outcomes do not
+prove these future production outcomes.
+
+The accepted external screenshots still show runtime-convergence notices and a
+workspace attention message. Disposition: retained delivery caveat requiring
+current status reconciliation during an approved update; the bounded functional
+view passed despite these notices. They neither prove a clean dashboard nor
+start a general diagnosis queue. P158 endurance and untested transitions remain
+unaccepted.
+
+Retain the P158 synthetic browser, fixture server and owned warm provider for the
+pending delivery review, with their exact private receipts. Close only the owned
+fixture through Service after that review or before a new P158 install, then
+verify each captured PID/start identity separately. If its PID is reused, do not
+signal it. Isolated materialization and migration-review roots are private
+rollback/review evidence and launch no browser. Earlier cleanup receipts remain
+part of the acceptance audit; no foreign cleanup is authorized.
+
+## Authorized delivery execution: shutdown checkpoint (superseded below)
+
+The fresh preflight matched the reviewed 77-policy diff and exact candidate,
+rollback copy and compatibility drop-in. The preserve-runtime installer stopped
+at `blocked_ambiguous_runtime` before activation, with two prior-boot browser
+records lacking current identity evidence. Both recorded browser PIDs were
+absent. The subsequent full-shutdown planner also depended on stale host and
+supervisor evidence. No unchanged installer retry was performed.
+
+The operator explicitly directed full production shutdown. Actual production
+systemd ownership was used to stop the runtime host, dashboard ingress/backend,
+and reconciliation service/timer. The exact production Guacamole, guacd and
+PostgreSQL containers were stopped cleanly. Readback proves those units inactive,
+containers stopped, zero production-generation executable processes and zero
+browser processes under the production runtime-profile root. Profile directories
+and database volumes were preserved. The isolated P158 units remain active.
+
+Private `production-delivery-approved/` retains the plans, blocked transaction,
+shutdown intent, before/after ownership and final readback. Candidate payload
+staging occurred, but the production generation selector was not switched and
+profile-policy migration was not committed. A cold activation of the approved
+candidate remains unfinished; do not claim deployment from shutdown alone.
+
+
+## Cold installation and installed validation
+
+The operator clarified that shutdown was intended to bypass faulty upgrade
+machinery and explicitly directed candidate installation and testing. This
+superseded the proposal's transaction-only activation procedure for this cold
+installation. The candidate generation `0.28.0-367c10063188-27306db23f45` is now
+selected in production. Direct process readback verifies the runtime host,
+dashboard backend and dashboard ingress all execute binary SHA-256
+`367c1006318811324faa64a2bbf0c3e016a76902971fadde677ab39d9452337e`.
+
+The cold procedure preserved rollback custody, reconciled stale Service browser
+records with the candidate, rebound the production supervisor manifest, removed
+the obsolete socket-directory compatibility drop-in, and rebuilt ingress routing
+from observed current process identities. Supported browserless activation also
+failed because it demanded old-host identity after shutdown; those failures remain
+in transaction history. Routing repair does not constitute operator acceptance.
+
+Production Guacamole, guacd and PostgreSQL are running. Recreating Guacamole
+through the mutable selector still mounted the old extension. Recreating it using
+the immutable candidate Compose path corrected that binding. The served app now
+contains the exact candidate extension bytes, SHA-256
+`afe1387803908700c2fa90420c67ed592a6f4560ce145d6d43bc4a48619ab009`.
+
+Installed validation is incomplete and has a failing browser smoke. Initial
+synthetic navigation succeeded. The next explicit-profile command failed with
+`explicit_profile_conflicts_with_current_owner`. After cleanup, an ordered
+reopen/read/interaction attempt failed with
+`existing_session_profile_identity_unproven`. Close succeeded and the disposable
+supervisor lane was removed. These results do not prove working retained control.
+
+Doctor confirms payload, selected generation, runtime convergence, dashboard
+ingress and rollback readiness. It remains nonzero: authenticated operator-journey
+proof is missing, and historical profile-lease warnings remain. No production
+external visual acceptance was performed and no acceptance receipt was fabricated.
+The production reconciliation timer remains stopped pending validation; isolated
+P158 resources and retained rollback data remain preserved.
+
+Private evidence under `production-delivery-approved/` includes
+`direct-cold-install/`, `installed-process-identity-final.json`,
+`installed-extension-check-current.json`, `installed-doctor-current.json`,
+`browser-smoke/installed-test/ordered-smoke.json` and the immutable-mount Compose
+log. Installation is achieved; full production acceptance is not achieved.
+
+
+## Profile usability remediation in progress
+
+The operator made profile errors the highest priority. The prior bounded W1
+acceptance remains historical evidence on its tested binary; it does not accept
+profile usability on the final installed candidate. An isolated supervisor with
+an explicit custom profile path reproduces both production errors: successful
+open, `explicit_profile_conflicts_with_current_owner` on the next URL read,
+and `existing_session_profile_identity_unproven` after successful close. The
+persisted terminal lifecycle proves exact process exit and profile lock release.
+A named-profile control avoided the first failure. Current work targets these
+reproduced paths, preserves ownership and authorization guards, and requires
+installed outcome verification before declaring resolution.
+
+
+Diagnosis: the default planner attached a generated managed-ephemeral runtime
+profile to an explicitly selected custom directory. The rightful owner was then
+rejected as conflicting. Terminal recovery additionally required a named
+profile and could not resolve a path-only request despite satisfied cleanup.
+After correcting those seams, the live test exposed a third mapping error:
+internal `custom:` Service record IDs were passed as named runtime profiles,
+causing name validation failure and attempted relaunch. The repair preserves
+path-backed launch identity, suppresses conflicting defaults, and resolves an
+exact terminal custom profile by canonical path without relaxing owner gates.
+The initial live failures and focused terminal-regression failure remain
+preserved. Validation of the combined repair is in progress.
+
+
+Combined repair verification: the isolated custom-profile regression now passes
+open, URL read, click, asserted text change, close, reopen and another URL read.
+The live browser PID, profile ID and tab set remain unchanged during control.
+The original authenticated W1 probe also passes on the repaired optimized binary:
+two original handles resume after disposable host interruption, both Chrome
+processes remain original, foreign-handle control is denied, and final Service
+browsers/sessions/tabs are zero. Evidence is in private
+`retained-repair-NaKZpp/` and the custom-profile smoke receipts. Rust presubmit and
+production publication are still pending at this checkpoint.
+
+
+## Profile repair installed and verified
+
+Source `8bd7f58a` is installed as production generation
+`0.28.0-e4243235af0c-072303ae3e67`, binary SHA-256
+`e4243235af0cfe007ef09c7c10ab55c1142deea43bfaecfafe0386f286cbb3eb`.
+The runtime host and both dashboard processes match that exact binary. The
+previous generation remains available for rollback. Bundled provider/controller
+assets and unit templates were unchanged and hash-verified; the direct package
+publication changed the binary binding and generation metadata. No synthetic
+acceptance receipt substitutes for the still-missing operator journey.
+
+Production verification through the normal installed CLI passed explicit
+custom-profile and session-only control, click and asserted text readback,
+conflicting-profile rejection followed by continued original-profile use, and
+headless close/reopen. PID, profile and tab identity stayed unchanged during live
+control. The exact disposable supervisor was removed after successful close;
+its browser and session records are absent. The preexisting independently owned
+browser retained its exact process start identity throughout publication.
+
+The initial production attempt used ambient remote-headed defaults. Profile
+control passed, but reopening failed at Xvfb display `:91` startup. Its failed
+receipt is preserved. Repeating the same profile workflow with explicitly
+requested `local_headless` passed. This proves profile continuity and does not
+accept remote-headed display allocation or conceal the failed attempt.
+
+The final release binary also passed the isolated original W1 test: both
+independently authenticated clients resumed their original handles and Chrome
+processes after host interruption, and foreign-client control was denied.
+Private evidence is `retained-repair-AuAeMW/`; its final Service browser/session/
+tab counts are zero and six exact ancillary helpers were terminated by pidfd.
+The optimized candidate's corresponding evidence is `retained-repair-NaKZpp/`.
+The focused runtime suite passed 93 tests; workspace clippy, formatting, docs
+build, handoff docs, and the source-free release installer fixture passed.
+
+Private `profile-continuity-repair/evidence-manifest.json` binds deployment,
+validation and cleanup receipts. The repaired profile paths are verified on
+production. Whole-runtime acceptance remains incomplete: doctor still reports
+operator-journey and selected-generation acceptance bookkeeping, historical
+profile-lease/ownership findings and the stopped runtime monitor. The production
+reconciliation timer remains stopped. Remote-headed Xvfb startup is a separate
+remaining operational failure.

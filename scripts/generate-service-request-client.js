@@ -475,6 +475,15 @@ export interface ServiceDiagnosticsHandoffReceiptAttestation {
   [key: string]: unknown;
 }
 
+export interface ServiceDiagnosticsOwnerCustodyAttestation {
+  verified: boolean;
+  basis: "owner_transfer" | "managed_launch" | "unproven";
+  launchRecordMatches: boolean;
+  handoffAccepted: boolean;
+  source: string;
+  [key: string]: unknown;
+}
+
 export interface ServiceControlPlaneAttestation {
   schemaVersion: "agent-browser.service-control-plane-attestation.v1";
   observedAt: string;
@@ -483,12 +492,14 @@ export interface ServiceControlPlaneAttestation {
   processIdentity?: ServiceDiagnosticsProcessIdentityAttestation | null;
   profileLease?: ServiceDiagnosticsProfileLeaseAttestation | null;
   handoffReceipt?: ServiceDiagnosticsHandoffReceiptAttestation | null;
+  ownerCustody?: ServiceDiagnosticsOwnerCustodyAttestation | null;
   missingProofs: Array<
     | "service_state"
     | "browser_owner"
     | "process_identity"
     | "profile_lease"
     | "handoff_receipt"
+    | "owner_custody"
     | string
   >;
   [key: string]: unknown;
@@ -789,6 +800,17 @@ export interface ServiceTabHandleTraceFilter {
   taskName?: string | null;
 }
 
+export interface ServiceProfileChildAccess {
+  schemaVersion: 'agent-browser.profile-child-access.v1' | string;
+  parentPolicyRevision: number;
+  accessDecisionId: string;
+  subjectId?: string | null;
+  identityAssurance: 'unknown' | 'self-declared' | 'authenticated-ingress' | 'registered-capability' | 'operator' | string;
+  connectionInstanceId?: string | null;
+  connectionState: 'active' | 'disconnected' | string;
+  permissions: Array<'profile_use' | 'policy_read' | 'policy_write' | 'tab_create' | 'tab_observe' | 'tab_control_own' | 'tab_close_own' | 'tab_control_any' | 'tab_close_any' | 'view_open' | 'view_control' | 'drain' | 'evict' | 'lifecycle_manage' | 'full_shutdown' | string>;
+}
+
 export interface ServiceTabHandle {
   browserId: string;
   sessionName?: string | null;
@@ -803,6 +825,7 @@ export interface ServiceTabHandle {
   cleanupPolicy?: 'detach' | 'close_tabs' | 'close_browser' | 'release_only' | string | null;
   leaseHeartbeatExpected: boolean;
   ownerSessionId?: string | null;
+  profileAccess?: ServiceProfileChildAccess | null;
   jobId?: string | null;
   traceFilter: ServiceTabHandleTraceFilter;
   valid: boolean;
@@ -873,6 +896,8 @@ export interface ServiceRemoteViewRouteMutationData {
   newRoutePoolEntryId?: string | null;
   browserId?: string;
   sessionName?: string;
+  serviceTabHandle?: ServiceTabHandle | null;
+  tab?: Record<string, unknown> | null;
   frameUrl?: string | null;
   externalUrl?: string | null;
   providerMode?: string;
@@ -892,6 +917,27 @@ export interface ServiceRemoteViewHandoffLink {
   handoffUrl: string;
 }
 
+export interface ServiceRemoteViewHandoffResumeIntent {
+  serviceName: string;
+  agentName: string;
+  taskName: string;
+  browserId: string;
+  sessionName: string;
+  runtimeProfile: string;
+  targetId: string;
+  url: string;
+  serviceTabHandle: ServiceTabHandle;
+}
+
+export interface ServiceControlPlaneAuthoritySummary {
+  mode: "unavailable" | "observation_only" | "effect_capable";
+  observationCapable: boolean;
+  effectCapable: boolean;
+  missingProofs: string[];
+  reason: string | null;
+  serviceTabHandle: ServiceTabHandle | null;
+}
+
 export interface ServiceRemoteViewOpenProofSummary {
   ready: boolean;
   state: string | null;
@@ -902,6 +948,7 @@ export interface ServiceRemoteViewOpenProofSummary {
   sessionName: string | null;
   tabId: string | null;
   profileId: string | null;
+  serviceTabHandle: ServiceTabHandle | null;
   visualProof: string | null;
   browserBuildState: string | null;
   requestedBrowserBuild: string | null;
@@ -975,6 +1022,26 @@ export interface ServiceManualSeedingCloseData {
   lifecycle: Record<string, unknown>;
   attachableRelaunch: Record<string, unknown>;
   authenticationProbe: Record<string, unknown>;
+}
+
+export type ServiceProfileAccessMode = 'shared-local' | 'restricted' | 'exclusive';
+export type ServiceProfileAccessPreset = 'administrator' | 'participant' | 'observer';
+
+export interface ServiceProfilePolicyMutationData {
+  profileId: string;
+  outcome: 'committed' | 'drain_started' | string;
+  policy: Record<string, unknown>;
+  blockingOccupancy: unknown[];
+  evictionPlan: Record<string, unknown> | null;
+  evictionReceipt: Record<string, unknown> | null;
+  receipt: Record<string, unknown>;
+}
+
+export interface ServiceProfileTabEvictionData {
+  profileLifecycleProof: Record<string, unknown> | null;
+  physicalTabClose: Record<string, unknown> | null;
+  receipt: Record<string, unknown>;
+  replayed: boolean;
 }
 
 export interface ServiceBrowserContaminationReportData {
@@ -1382,6 +1449,8 @@ export interface ServiceRequestActionDataMap {
   service_route_pool_repair: ServiceRoutePoolRepairData;
   service_profile_manual_seeding_acquire: ServiceManualSeedingAcquireData;
   service_profile_manual_seeding_close: ServiceManualSeedingCloseData;
+  service_profile_policy_mutate: ServiceProfilePolicyMutationData;
+  service_profile_tab_evict: ServiceProfileTabEvictionData;
   service_browser_contamination_report: ServiceBrowserContaminationReportData;
   service_browser_retirement_plan: ServiceBrowserRetirementPlanData;
   service_browser_retirement_apply: ServiceBrowserRetirementApplyData;
@@ -1457,8 +1526,8 @@ export interface ServiceRequestActionDataMap {
 export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =
   TAction extends keyof ServiceRequestActionDataMap ? ServiceRequestActionDataMap[TAction] : unknown;
 
-export type ServiceFailureAxis = 'service_state' | 'lifecycle_owner' | 'profile_lease' | 'presentation' | 'unknown';
-export type ServiceFailurePhase = 'process_mutex_wait' | 'file_lock_wait' | 'launch_admission' | 'commit' | 'finalize' | 'unknown';
+export type ServiceFailureAxis = 'request' | 'service_state' | 'lifecycle_owner' | 'profile_lease' | 'profile_access' | 'presentation' | 'unknown';
+export type ServiceFailurePhase = 'ingress_validation' | 'process_mutex_wait' | 'file_lock_wait' | 'launch_admission' | 'child_admission' | 'commit' | 'finalize' | 'unknown';
 export type ServiceEffectState = 'no_effect' | 'effect_uncertain' | 'verified_effect';
 export type ServiceRetryDisposition = 'do_not_retry' | 'inspect_before_retry' | 'retry_same_request' | 'refresh_access_plan';
 
@@ -1471,6 +1540,9 @@ export interface ServiceFailureRecourse {
   retryDisposition: ServiceRetryDisposition;
   recommendedAction: string;
   reuseAllowed: boolean;
+  subject: Record<string, unknown> | null;
+  missingPermission: string | null;
+  executableNextAction: Record<string, unknown> | null;
   waitMs?: number | null;
   holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;
@@ -1481,6 +1553,19 @@ export interface ServiceFailureRecourse {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileAccessDecision {
+  schemaVersion: string;
+  decisionId: string;
+  subject: { subjectId: string | null; assurance: string; connectionInstanceId: string | null };
+  resource: { profileId: string | null; resourceKey: string };
+  operation: string;
+  policyRevision: number;
+  allowed: boolean;
+  missingPermission: string | null;
+  blockingOccupancy: string[];
+  nextAction: { action: string; executable: boolean; request: Record<string, unknown> | null };
+}
+
 export interface ServiceRequestResponse<TData = unknown> {
   id?: string;
   success: boolean;
@@ -1488,6 +1573,7 @@ export interface ServiceRequestResponse<TData = unknown> {
   error?: unknown;
   warning?: unknown;
   failure?: ServiceFailureRecourse;
+  profileAccessDecision?: ServiceProfileAccessDecision;
   [key: string]: unknown;
 }
 
@@ -1883,6 +1969,23 @@ export interface ServiceManualSeedingCloseOptions extends ServiceManualSeedingAc
   pid: number;
 }
 
+export interface ServiceProfilePolicyMutationOptions extends Omit<ServiceRequest, "action" | "params"> {
+  profileId: string;
+  expectedRevision: number;
+  mode?: ServiceProfileAccessMode;
+  preset?: ServiceProfileAccessPreset;
+  targetPolicy?: Record<string, unknown>;
+  evictionMode?: 'graceful_only' | 'force_immediate' | 'force_after_grace';
+  graceDeadline?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceProfileTabEvictionOptions extends Omit<ServiceRequest, "action" | "params"> {
+  authorizationId: string;
+  tabId: string;
+  params?: Record<string, unknown>;
+}
+
 export interface ServiceBrowserContaminationReportOptions extends Omit<ServiceRequest, "action" | "params"> {
   params?: Record<string, unknown>;
 }
@@ -1905,6 +2008,18 @@ export interface ServiceManualSeedingAcquireHttpOptions extends ServiceManualSee
 }
 
 export interface ServiceManualSeedingCloseHttpOptions extends ServiceManualSeedingCloseOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceProfilePolicyMutationHttpOptions extends ServiceProfilePolicyMutationOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceProfileTabEvictionHttpOptions extends ServiceProfileTabEvictionOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -2016,6 +2131,13 @@ export declare function createServiceRequestMcpToolCall(input: ServiceRequest): 
 export declare function postServiceRequest<TRequest extends ServiceRequest>(
   options: ServiceRequestHttpOptions<TRequest>,
 ): Promise<ServiceRequestResponse<ServiceRequestDataForAction<TRequest["action"]>>>;
+export declare class ServiceRequestHttpError extends Error {
+  constructor(status: number, response: ServiceRequestResponse);
+  status: number;
+  code: string;
+  response: ServiceRequestResponse;
+  failure: ServiceFailureRecourse | null;
+}
 export declare class ServiceOperationError extends Error {
   constructor(response: ServiceRequestResponse);
   response: ServiceRequestResponse;
@@ -2108,6 +2230,12 @@ export declare function createServiceManualSeedingAcquireRequest(
 export declare function createServiceManualSeedingCloseRequest(
   input: ServiceManualSeedingCloseOptions,
 ): ServiceRequestForAction<"service_profile_manual_seeding_close">;
+export declare function createServiceProfilePolicyMutationRequest(
+  input: ServiceProfilePolicyMutationOptions,
+): ServiceRequestForAction<"service_profile_policy_mutate">;
+export declare function createServiceProfileTabEvictionRequest(
+  input: ServiceProfileTabEvictionOptions,
+): ServiceRequestForAction<"service_profile_tab_evict">;
 export declare function createServiceBrowserContaminationReportRequest(
   input?: ServiceBrowserContaminationReportOptions,
 ): ServiceRequestForAction<"service_browser_contamination_report">;
@@ -2236,6 +2364,12 @@ export declare function requestServiceRemoteViewOpen(
 export declare function requestServiceRemoteViewHandoff(
   options: ServiceRemoteViewOpenHttpOptions,
 ): Promise<ServiceRemoteViewHandoffLink>;
+export declare function deriveServiceRemoteViewHandoffResumeIntent(
+  response: unknown,
+): ServiceRemoteViewHandoffResumeIntent;
+export declare function classifyServiceControlPlaneAuthority(
+  response: unknown,
+): ServiceControlPlaneAuthoritySummary;
 export declare function requestServiceRemoteViewBrowserReattach(
   options: ServiceRemoteViewBrowserReattachHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
@@ -2269,6 +2403,12 @@ export declare function requestServiceManualSeedingAcquire(
 export declare function requestServiceManualSeedingClose(
   options: ServiceManualSeedingCloseHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceManualSeedingCloseData>>;
+export declare function requestServiceProfilePolicyMutation(
+  options: ServiceProfilePolicyMutationHttpOptions,
+): Promise<ServiceRequestResponse<ServiceProfilePolicyMutationData>>;
+export declare function requestServiceProfileTabEviction(
+  options: ServiceProfileTabEvictionHttpOptions,
+): Promise<ServiceRequestResponse<ServiceProfileTabEvictionData>>;
 export declare function requestServiceBrowserContaminationReport(
   options: ServiceBrowserContaminationReportHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceBrowserContaminationReportData>>;

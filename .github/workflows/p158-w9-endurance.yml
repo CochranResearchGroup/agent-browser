@@ -1,0 +1,22 @@
+name: P158 passive production observation
+on:
+  workflow_dispatch:
+    inputs:
+      case_id:
+        required: true
+        type: choice
+        options: [C04, C05]
+permissions:
+  contents: read
+jobs:
+  schedule-passive-observation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Record nonblocking observation contract
+        env:
+          CASE_ID: ${{ inputs.case_id }}
+        run: |
+          test "$CASE_ID" = C04 || test "$CASE_ID" = C05
+          echo "Passive E3 observation is segmented at install, repair, restart, and deployment boundaries."
+          echo "This dispatch generates no production action and performs no elapsed-time wait."

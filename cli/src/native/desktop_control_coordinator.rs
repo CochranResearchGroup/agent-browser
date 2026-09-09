@@ -1,7 +1,7 @@
 //! Process-owned, route-scoped serialization for desktop controller mutation.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -61,6 +61,43 @@ pub(crate) fn begin_service_controller_mutation(
     state: &ServiceState,
     route_id: &str,
 ) -> Result<DesktopControllerMutationGuard, String> {
+    let (runtime_state_root, identity) = service_route_fence_scope(state, route_id)?;
+    global_desktop_control_coordinator().begin_fenced_controller_mutation(
+        route_id,
+        &runtime_state_root,
+        &identity,
+        CONTROLLER_MUTATION_FENCE_DEADLINE,
+    )
+}
+
+/// Focus does not transfer controller authority or cancel an existing claim.
+/// Holding the event and external fence serializes focus with desktop effects;
+/// the caller must revalidate its operator proof before performing any effect.
+#[derive(Debug)]
+pub(crate) struct OperatorFocusGuard {
+    _external_fence: RouteEffectFence,
+    _event: DesktopControlEventGuard,
+    _claim: DesktopInteractionClaim,
+}
+
+pub(crate) fn begin_service_operator_focus(
+    state: &ServiceState,
+    route_id: &str,
+    request_id: &str,
+) -> Result<OperatorFocusGuard, String> {
+    let (runtime_state_root, identity) = service_route_fence_scope(state, route_id)?;
+    global_desktop_control_coordinator().begin_fenced_focus(
+        route_id,
+        request_id,
+        &runtime_state_root,
+        &identity,
+    )
+}
+
+fn service_route_fence_scope(
+    state: &ServiceState,
+    route_id: &str,
+) -> Result<(PathBuf, RouteEffectFenceIdentity), String> {
     let route = state
         .remote_view_routes
         .get(route_id)
@@ -80,12 +117,7 @@ pub(crate) fn begin_service_controller_mutation(
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "production".to_string());
     let identity = RouteEffectFenceIdentity::new(environment_id, route_id, display_allocation_id);
-    global_desktop_control_coordinator().begin_fenced_controller_mutation(
-        route_id,
-        runtime_state_root,
-        &identity,
-        CONTROLLER_MUTATION_FENCE_DEADLINE,
-    )
+    Ok((runtime_state_root.to_path_buf(), identity))
 }
 
 impl DesktopControlCoordinator {
@@ -113,6 +145,28 @@ impl DesktopControlCoordinator {
             route_id: route_id.to_string(),
             claim_id: claim_id.to_string(),
             route,
+        })
+    }
+
+    fn begin_fenced_focus(
+        &self,
+        route_id: &str,
+        request_id: &str,
+        runtime_state_root: &Path,
+        identity: &RouteEffectFenceIdentity,
+    ) -> Result<OperatorFocusGuard, String> {
+        let claim = self.claim(route_id, request_id)?;
+        let event = claim.begin_event()?;
+        let external_fence = RouteEffectFence::acquire(
+            runtime_state_root,
+            identity,
+            CONTROLLER_MUTATION_FENCE_DEADLINE,
+        )
+        .map_err(|error| error.code().to_string())?;
+        Ok(OperatorFocusGuard {
+            _external_fence: external_fence,
+            _event: event,
+            _claim: claim,
         })
     }
 
@@ -275,6 +329,41 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
+
+    #[test]
+    fn rejected_focus_preserves_existing_claim_and_releases_its_own_fences() {
+        use crate::native::desktop_input_provider::{RouteEffectFence, RouteEffectFenceIdentity};
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-operator-focus-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let identity = RouteEffectFenceIdentity::new("development", "route-a", "display-a");
+        let coordinator = DesktopControlCoordinator::new();
+        let original = coordinator.claim("route-a", "original-agent").unwrap();
+        assert_eq!(
+            coordinator
+                .begin_fenced_focus("route-a", "focus", &root, &identity)
+                .unwrap_err(),
+            "desktop_interaction_conflict"
+        );
+        // Unlike controller mutation, refused focus does not cancel the agent.
+        drop(original.begin_event().unwrap());
+        assert!(!root.exists());
+        drop(original);
+
+        let focus = coordinator
+            .begin_fenced_focus("route-a", "focus", &root, &identity)
+            .unwrap();
+        assert!(coordinator.claim("route-a", "other").is_err());
+        assert!(RouteEffectFence::acquire(&root, &identity, Duration::ZERO).is_err());
+        // A failed post-lock proof check drops this guard without any effect.
+        drop(focus);
+        let resumed = coordinator.claim("route-a", "resumed").unwrap();
+        drop(resumed.begin_event().unwrap());
+        drop(RouteEffectFence::acquire(&root, &identity, Duration::ZERO).unwrap());
+        drop(resumed);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn controller_mutation_cancels_and_drains_the_current_event() {

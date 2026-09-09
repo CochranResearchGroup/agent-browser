@@ -2007,6 +2007,40 @@ async fn handle_close_with_context(
     state: &mut DaemonState,
     preserve_registered_work: bool,
 ) -> Result<Value, String> {
+    // A recovered manager borrows CDP and has no Child to reap. Pin its exact
+    // process before Browser.close can make PID-based discovery disappear.
+    let retained_close = if let Some(binding) = state.runtime_owner_binding.as_ref().filter(|_| {
+        state.close_behavior == CloseBehavior::CloseBrowser
+            && state
+                .browser
+                .as_ref()
+                .is_some_and(|browser| !browser.owns_launched_browser_process())
+    }) {
+        let pid = state
+            .attached_browser_pid
+            .ok_or("retained_browser_close_identity_unproven: attached PID is missing")?;
+        let identity = crate::process_identity::capture_process_identity(pid, None, None)
+            .ok_or("retained_browser_close_identity_unproven: process identity is missing")?;
+        let profile = state
+            .browser
+            .as_ref()
+            .and_then(|browser| browser.browser_user_data_dir())
+            .ok_or("retained_browser_close_identity_unproven: physical profile is missing")?
+            .to_path_buf();
+        if crate::native::runtime_lifecycle::digest_json(&identity)?
+            != binding.claim.process_instance_digest
+            || crate::runtime_profile::canonical_profile_identity_digest(&profile)?
+                != binding.claim.profile_identity_digest
+        {
+            return Err("retained_browser_close_identity_unproven: process or physical profile differs from current owner".into());
+        }
+        let process = crate::process_identity::VerifiedProcessTermination::open(&identity)?.ok_or(
+            "retained_browser_close_identity_unproven: process exited before close admission",
+        )?;
+        Some((process, profile))
+    } else {
+        None
+    };
     let attached_runtime_profile = state.attached_runtime_profile.take();
     let attached_browser_pid = state.attached_browser_pid.take();
     let close_behavior = std::mem::take(&mut state.close_behavior);
@@ -2126,6 +2160,35 @@ async fn handle_close_with_context(
             shutdown_outcome.errors.extend(outcome.errors);
         }
     }
+    if let Some((process, profile)) = retained_close {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            shutdown_outcome.exact_process_exited = match process.is_running() {
+                Ok(running) => !running,
+                Err(error) => {
+                    shutdown_outcome.errors.push(error);
+                    break;
+                }
+            };
+            shutdown_outcome.profile_lock_released =
+                match std::fs::symlink_metadata(profile.join("SingletonLock")) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+                    Ok(_) => false,
+                    Err(error) => {
+                        shutdown_outcome.errors.push(format!(
+                            "retained_browser_close_lock_observation_failed: {error}"
+                        ));
+                        break;
+                    }
+                };
+            if shutdown_outcome.exact_process_exited && shutdown_outcome.profile_lock_released
+                || tokio::time::Instant::now() >= deadline
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+    }
     state.browser = None;
     if close_behavior == CloseBehavior::CloseBrowser
         && !browser_shutdown_confirmed(&shutdown_outcome)
@@ -2167,6 +2230,12 @@ async fn handle_close_with_context(
         server.shutdown();
     }
     state.ref_map.clear();
+    if managed_close_claim.is_some()
+        && close_behavior == CloseBehavior::CloseBrowser
+        && browser_terminal_evidence(&shutdown_outcome).is_none()
+    {
+        return Err(format!("browser_terminal_close_unproven: expected=exact_process_exit_and_profile_lock_release; observed=process_exited:{},profile_lock_released:{}; source=runtime/navigation.rs::handle_close_with_context", shutdown_outcome.exact_process_exited, shutdown_outcome.profile_lock_released));
+    }
     if close_behavior == CloseBehavior::CloseBrowser {
         if let (Some(claim), Some(terminal_evidence)) = (
             managed_close_claim,

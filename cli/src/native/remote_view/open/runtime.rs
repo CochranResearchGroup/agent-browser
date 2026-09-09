@@ -65,6 +65,7 @@ pub(crate) struct LaunchBrowserRequest {
 }
 #[derive(Debug, Clone)]
 pub(crate) struct AdoptRetainedBrowserRequest {
+    pub(crate) handoff_id: String,
     pub(crate) source_session: String,
     pub(crate) logical_browser_id: String,
 }
@@ -343,6 +344,46 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
         request: AdoptRetainedBrowserRequest,
     ) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
         Box::pin(async move {
+            // A restarted lane retains its Ready owner. Reconnect that exact
+            // handoff target without attempting an orphan ownership transfer.
+            let repository = LockedServiceStateRepository::default_json().map_err(|message| {
+                route_bound_runtime_issue("adopt_retained_browser", message, None)
+            })?;
+            let snapshot = repository.load_snapshot().map_err(|message| {
+                route_bound_runtime_issue("adopt_retained_browser", message, None)
+            })?;
+            if let Some(handoff) = snapshot.remote_view_handoffs.get(&request.handoff_id) {
+                if remote_view_handoff_ready_owner_session(&snapshot, handoff).as_deref()
+                    == Some(self.state.session_id.as_str())
+                    && request.source_session == self.state.session_id
+                    && handoff.browser_id.as_deref() == Some(request.logical_browser_id.as_str())
+                    && !remote_view_handoff_was_explicitly_closed(&snapshot, handoff)
+                {
+                    let browser = &snapshot.browsers[&request.logical_browser_id];
+                    let profile = browser.profile_id.as_deref().ok_or_else(|| {
+                        route_bound_runtime_issue(
+                            "adopt_retained_browser",
+                            "service_tab_recovery_identity_mismatch: profile record missing".into(),
+                            None,
+                        )
+                    })?;
+                    let target = handoff
+                        .target_id
+                        .as_deref()
+                        .expect("Ready handoff has exact target");
+                    crate::native::service_probe::reattach_verified_retained_target(
+                        &request.logical_browser_id,
+                        profile,
+                        target,
+                        self.state,
+                    )
+                    .await
+                    .map_err(|message| {
+                        route_bound_runtime_issue("adopt_retained_browser", message, None)
+                    })?;
+                    return observe_daemon_browser(self.state).await;
+                }
+            }
             handle_runtime_handoff_resume(
                 &json!({
                     "sourceSession": request.source_session,

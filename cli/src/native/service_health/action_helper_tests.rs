@@ -287,6 +287,104 @@ fn test_persist_service_browser_record_clears_stale_view_streams_when_metadata_i
     let _ = fs::remove_dir_all(&home);
 }
 #[test]
+fn retained_attachment_preserves_launch_identity_but_replacement_does_not() {
+    let home = unique_socket_dir("retained-browser-launch-identity");
+    fs::create_dir_all(&home).unwrap();
+    let store = JsonServiceStateStore::new(home.join("state.json"));
+    let repository = LockedServiceStateRepository::new(store.clone());
+    let identity = ServiceBrowserProcessIdentity {
+        process_identity: crate::process_identity::RecordedProcessIdentity {
+            pid: 1234,
+            start_token: "original-instance".to_string(),
+            executable_path: Some("/opt/chrome".to_string()),
+            browser_family: Some("chrome".to_string()),
+        },
+        user_data_dir: Some("/tmp/retained-profile".to_string()),
+        runtime_profile: Some("retained-profile".to_string()),
+    };
+    persist_service_browser_record_in_repository(
+        &repository,
+        "retained-session",
+        ServiceBrowserHost::RemoteHeaded,
+        ServiceBrowserHealth::Ready,
+        Some(1234),
+        Some("http://127.0.0.1:9222".to_string()),
+        None,
+        Some(ServiceLaunchMetadata {
+            profile_id: Some("retained-profile".to_string()),
+            display_isolation: Some("private_virtual_display".to_string()),
+            display_name: Some(":93".to_string()),
+            browser_capability_launch: Some(json!({ "browserBuild": "stock_chrome" })),
+            ..ServiceLaunchMetadata::default()
+        }),
+        Some(identity.clone()),
+    )
+    .unwrap();
+    let before = store.load().unwrap();
+    let browser_id = "session:retained-session";
+    assert!(before.browsers[browser_id].display_allocation_id.is_some());
+    let mut attached_identity = identity.clone();
+    // CDP managers do not own the launch process or supply its profile path.
+    attached_identity.user_data_dir = None;
+    attached_identity.runtime_profile = None;
+    for _ in 0..2 {
+        persist_service_browser_record_in_repository(
+            &repository,
+            "retained-session",
+            ServiceBrowserHost::AttachedExisting,
+            ServiceBrowserHealth::Ready,
+            Some(1234),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                profile_id: Some("retained-profile".to_string()),
+                ..ServiceLaunchMetadata::default()
+            }),
+            Some(attached_identity.clone()),
+        )
+        .unwrap();
+        let after = store.load().unwrap();
+        assert_eq!(
+            after.browsers[browser_id].host,
+            ServiceBrowserHost::RemoteHeaded
+        );
+        assert_eq!(
+            after.browsers[browser_id].display_name,
+            before.browsers[browser_id].display_name
+        );
+        assert_eq!(
+            after.browsers[browser_id].display_allocation_id,
+            before.browsers[browser_id].display_allocation_id
+        );
+        assert_eq!(after.display_allocations, before.display_allocations);
+        assert_eq!(after.sessions, before.sessions);
+        assert_eq!(after.browser_process_identities[browser_id], identity);
+    }
+    attached_identity.process_identity.start_token = "replacement-instance".to_string();
+    persist_service_browser_record_in_repository(
+        &repository,
+        "retained-session",
+        ServiceBrowserHost::AttachedExisting,
+        ServiceBrowserHealth::Ready,
+        Some(1234),
+        Some("http://127.0.0.1:9222".to_string()),
+        None,
+        Some(ServiceLaunchMetadata::default()),
+        Some(attached_identity),
+    )
+    .unwrap();
+    let replaced = store.load().unwrap();
+    assert_eq!(
+        replaced.browsers[browser_id].host,
+        ServiceBrowserHost::AttachedExisting
+    );
+    assert!(replaced.browsers[browser_id].display_name.is_none());
+    assert!(replaced.browsers[browser_id]
+        .display_allocation_id
+        .is_none());
+    fs::remove_dir_all(home).unwrap();
+}
+#[test]
 fn test_recovery_policy_counts_attempts_since_ready() {
     let browser_id = "session:budget-session";
     let state = ServiceState {
@@ -648,6 +746,118 @@ fn test_current_stale_health_in_repository_records_recovery_started() {
             && event.browser_id.as_deref() == Some(browser_id)
     }));
     let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn late_close_health_does_not_resurrect_removed_terminal_browser() {
+    use crate::runtime_owner_transfer::{
+        CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
+        RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+    };
+    let home = unique_socket_dir("late-terminal-close");
+    fs::create_dir_all(&home).unwrap();
+    let store = JsonServiceStateStore::new(home.join("state.json"));
+    let repository = LockedServiceStateRepository::new(store.clone());
+    let session_id = "late-close";
+    let browser_id = "session:late-close";
+    let owner = ProfileOwner {
+        owner_id: "synthetic-owner".into(),
+        profile_identity_digest: "1".repeat(64),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 1,
+        browser_id: browser_id.into(),
+        daemon_session_route: session_id.into(),
+        process_instance_digest: "2".repeat(64),
+        browser_family: "chrome".into(),
+        cdp_endpoint_identity_digest: "3".repeat(64),
+        target_set_digest: "4".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut registry = RuntimeOwnerRegistry::from_owner(owner);
+    registry.lifecycle_records.insert(
+        browser_id.into(),
+        RuntimeLifecycleRecord {
+            logical_browser_id: browser_id.into(),
+            profile_identity_digest: "1".repeat(64),
+            owner_generation: 1,
+            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state: CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".into(),
+                "profile_lock_released".into(),
+            ],
+            ..RuntimeLifecycleRecord::default()
+        },
+    );
+    // Cleanup already removed the operational browser and session. A late CDP
+    // close failure must remain evidence, not recreate an ownerless active row.
+    for case in 0..7 {
+        let mut state = ServiceState {
+            runtime_owner_registry: registry.clone(),
+            ..ServiceState::default()
+        };
+        if case == 1 {
+            state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut(browser_id)
+                .unwrap()
+                .lifecycle_state = RuntimeLaneLifecycleState::Ready;
+        }
+        if case == 3 {
+            state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut(browser_id)
+                .unwrap()
+                .owner_generation = 2;
+        }
+        if case == 4 {
+            state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut(browser_id)
+                .unwrap()
+                .terminal_evidence
+                .pop();
+        }
+        if case == 6 {
+            state.runtime_owner_registry.owners.clear();
+        }
+        store.save(&state).unwrap();
+        persist_closed_browser_health_in_repository(
+            &repository,
+            session_id,
+            Some(&BrowserShutdownOutcome {
+                polite_close_attempted: true,
+                polite_close_failed: true,
+                force_kill_failed: case == 2,
+                pid: (case == 5).then_some(99999),
+                errors: vec!["CDP connection already closed".into()],
+                ..BrowserShutdownOutcome::default()
+            }),
+        )
+        .unwrap();
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers.contains_key(browser_id),
+            case != 0,
+            "late close must not resurrect an exactly terminal removed browser: case {case}"
+        );
+        if case == 0 {
+            assert!(persisted
+                .events
+                .iter()
+                .any(|event| event.browser_id.as_deref() == Some(browser_id)
+                    && event.kind == ServiceEventKind::BrowserHealthChanged));
+        }
+        assert_eq!(
+            persisted.runtime_owner_registry,
+            state.runtime_owner_registry
+        );
+    }
+    fs::remove_dir_all(&home).unwrap();
 }
 
 #[test]

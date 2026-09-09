@@ -8,6 +8,7 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -15,11 +16,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   assertProductionUnchanged,
+  activateDevelopmentRuntime,
+  evaluateDevelopmentRuntimeHostReadiness,
+  assertDefaultDevelopmentUnchanged,
   developmentCandidateBinary,
   developmentRuntimeDescriptor,
+  defaultDevelopmentSnapshot,
+  developmentExternalDiscoveryChecks,
+  observeDevelopmentExternalDiscovery,
   evaluateProtectedLeaseAuthorityStatus,
   garbageCollectDevelopmentRuntime,
   installDevelopmentRuntime,
+  publishDevelopmentRuntimeIngress,
   renderDevelopmentUnits,
 } from './lib/development-runtime.js';
 
@@ -33,7 +41,7 @@ writeFileSync(
 if [ "\${1:-}" = "--version" ]; then
   echo "agent-browser 0.28.0-fixture"
 else
-  printf '%s|%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR" "$AGENT_BROWSER_EXECUTABLE_PATH"
+  printf '%s|%s|%s|%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR" "$AGENT_BROWSER_EXECUTABLE_PATH" "$AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY"
 fi
 `,
   { mode: 0o755 },
@@ -43,6 +51,7 @@ const env = {
   AGENT_BROWSER_DEV_USER_HOME: join(fixture, 'user'),
   AGENT_BROWSER_DEV_RUNTIME_DIR: join(fixture, 'run', 'agent-browser-dev'),
   AGENT_BROWSER_DEV_BROWSER_EXECUTABLE: fakeBrowser,
+  AGENT_BROWSER_DEV_OPERATOR_USER: 'fixture-provider-operator',
   AGENT_BROWSER_DEV_SKIP_SYSTEMD: '1',
 };
 
@@ -121,6 +130,105 @@ try {
     ['socket_path_not_unix_socket'],
   );
   const descriptor = developmentRuntimeDescriptor(env);
+  const hostEvidence = {
+    unit: { activeState: 'active', mainPid: 4242, executable: '/candidate/agent-browser' },
+    host: { pid: 4242, executableGeneration: 'candidate-sha', socketIdentity: 'unix:fixture' },
+    identity: { pid: 4242, executablePath: '/candidate/agent-browser', startToken: 'linux:fixture:123' },
+    listenerPid: 4242,
+    listenerCgroup: `0::/user.slice/app.slice/${descriptor.unitNames.runtimeHost}`,
+    startToken: 'linux:fixture:123', expectedUnit: descriptor.unitNames.runtimeHost,
+    generationBinary: '/candidate/agent-browser', sha256: 'candidate-sha',
+  };
+  assert.deepEqual(evaluateDevelopmentRuntimeHostReadiness(hostEvidence), { state: 'ready' });
+  assert.deepEqual(evaluateDevelopmentRuntimeHostReadiness({ ...hostEvidence,
+    listenerCgroup: `0::/user.slice/app.slice/${descriptor.unitNames.dashboard}`,
+  }), { state: 'wrong_owner' }, 'a dashboard-owned runtime host is not the systemd host');
+  assert.deepEqual(evaluateDevelopmentRuntimeHostReadiness({ ...hostEvidence, listenerPid: 9999 }),
+    { state: 'wrong_owner' });
+  assert.deepEqual(evaluateDevelopmentRuntimeHostReadiness({ ...hostEvidence, startToken: 'linux:fixture:124' }),
+    { state: 'pending' }, 'a reused PID must not satisfy retained host identity');
+  function activationFixture(observations) {
+    const events = [];
+    let clock = 0;
+    const run = () => activateDevelopmentRuntime({
+      descriptor, generationId: 'candidate', generationBinary: '/candidate/agent-browser', sha256: 'candidate-sha',
+      env: { AGENT_BROWSER_DEV_START_TIMEOUT_MS: '2' },
+      runSystemctl: (args) => {
+        assert(!args.includes('--now'), 'enable must not start dashboard clients before host readiness');
+        events.push(args.join(' '));
+      },
+      observeHost: () => { const state = observations.shift() || 'pending'; events.push(`observe:${state}`); return { state }; },
+      publishIngress: () => events.push('publish-ingress'),
+      waitForManifest: () => events.push('dashboard-ready'),
+      now: () => clock,
+      wait: () => { clock += 1; events.push('wait'); },
+    });
+    return { run, events };
+  }
+  const activation = activationFixture(['pending', 'ready']);
+  activation.run();
+  assert.deepEqual(activation.events, [
+    'daemon-reload', `enable ${descriptor.units.join(' ')}`,
+    `stop ${descriptor.unitNames.dashboard} ${descriptor.unitNames.backend}`,
+    `reset-failed ${descriptor.unitNames.runtimeHost}`,
+    `restart ${descriptor.unitNames.runtimeHost}`,
+    'observe:pending', 'wait', 'observe:ready', 'publish-ingress',
+    `start ${descriptor.unitNames.backend} ${descriptor.unitNames.dashboard}`, 'dashboard-ready',
+  ]);
+  const wrongOwnerActivation = activationFixture(['wrong_owner']);
+  assert.throws(wrongOwnerActivation.run, /wrong systemd unit/);
+  assert(!wrongOwnerActivation.events.includes('publish-ingress'));
+  assert(!wrongOwnerActivation.events.some((event) => event.startsWith('start ')));
+  const timeoutActivation = activationFixture(['pending']);
+  assert.throws(timeoutActivation.run, /exact owned readiness/);
+  assert(!timeoutActivation.events.some((event) => event.startsWith('start ')));
+  const namespacedEnv = {
+    ...env,
+    AGENT_BROWSER_DEV_NAMESPACE: 'p158',
+    AGENT_BROWSER_DEV_RUNTIME_DIR: undefined,
+    XDG_RUNTIME_DIR: join(fixture, 'parallel-run'),
+    AGENT_BROWSER_DEV_DASHBOARD_PORT: '5948',
+    AGENT_BROWSER_DEV_BACKEND_PORT: '5949',
+    AGENT_BROWSER_DEV_SHADOW_PORT: '5950',
+    AGENT_BROWSER_DEV_LANE_STREAM_PORT: '5951',
+    AGENT_BROWSER_DEV_GUACAMOLE_PORT: '9093',
+    AGENT_BROWSER_DEV_GUACD_PORT: '5823',
+    AGENT_BROWSER_DEV_POSTGRES_PORT: '55434',
+  };
+  for (const namespace of ['', '../escape', 'with-dash', 'toolongname', '1number', 'UPPER']) {
+    assert.throws(() => developmentRuntimeDescriptor({ ...namespacedEnv, AGENT_BROWSER_DEV_NAMESPACE: namespace }),
+      /AGENT_BROWSER_DEV_NAMESPACE/);
+  }
+  for (const changed of [
+    { AGENT_BROWSER_DEV_DASHBOARD_PORT: undefined },
+    { AGENT_BROWSER_DEV_DASHBOARD_PORT: '4948' },
+    { AGENT_BROWSER_DEV_BACKEND_PORT: '5948' },
+    { AGENT_BROWSER_DEV_SHADOW_PORT: 'not-a-port' },
+  ]) {
+    assert.throws(() => developmentRuntimeDescriptor({ ...namespacedEnv, ...changed }), /unique port/);
+  }
+  const parallelDescriptor = developmentRuntimeDescriptor(namespacedEnv);
+  assert.equal(parallelDescriptor.namespace, 'p158');
+  assert.equal(parallelDescriptor.laneSession, 'development-default-p158');
+  for (const key of ['executable', 'installRoot', 'pseudoHome', 'stateDir', 'authDir', 'socketDir',
+    'laneManifest', 'runtimeHostIngressState', 'localHost', 'ingressService']) {
+    assert.notEqual(parallelDescriptor[key], descriptor[key], `namespace isolates ${key}`);
+  }
+  assert(parallelDescriptor.units.every((name) => !descriptor.units.includes(name)));
+  const parallelUnits = renderDevelopmentUnits(parallelDescriptor, '/candidate/bin/agent-browser');
+  assert.deepEqual(Object.keys(parallelUnits), parallelDescriptor.units);
+  for (const source of Object.values(parallelUnits)) {
+    assert.match(source, /Environment=AGENT_BROWSER_DEV_NAMESPACE=p158/);
+    assert.doesNotMatch(source, /agent-browser-dev-(?:runtime-host|dashboard-backend|dashboard)\.service/);
+  }
+  for (const changed of [
+    { AGENT_BROWSER_DEV_INSTALL_ROOT: descriptor.installRoot },
+    { AGENT_BROWSER_DEV_HOME: descriptor.pseudoHome },
+    { AGENT_BROWSER_DEV_BIN: descriptor.executable },
+    { AGENT_BROWSER_DEV_RUNTIME_DIR: join(namespacedEnv.XDG_RUNTIME_DIR, 'agent-browser-dev') },
+  ]) {
+    assert.throws(() => developmentRuntimeDescriptor({ ...namespacedEnv, ...changed }), /overlaps/);
+  }
   assert.equal(descriptor.dashboardPort, 4948);
   assert.equal(descriptor.backendPort, 4949);
   assert.equal(descriptor.laneStreamPort, 4951);
@@ -128,31 +236,69 @@ try {
   assert.equal(descriptor.presentationProvider.ports.guacamole, 8093);
   assert.equal(descriptor.presentationProvider.warmSlots, 4);
   assert.equal(descriptor.presentationProvider.hardMaxSlots, 6);
+  assert.equal(descriptor.guacamoleHeaderUser, 'fixture-provider-operator');
   assert.equal(descriptor.browserExecutable, fakeBrowser);
+  assert.equal(descriptor.externalBrowserDiscovery, 'disabled');
+  assert.equal(developmentRuntimeDescriptor({ ...env, AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY: 'enabled' })
+    .externalBrowserDiscovery, 'disabled');
   const units = renderDevelopmentUnits(descriptor, '/candidate/bin/agent-browser');
   for (const source of Object.values(units)) {
     assert.match(source, /AGENT_BROWSER_RUNTIME_ENVIRONMENT=development/);
+    assert.match(source, /^Environment=AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled$/m);
     assert.match(source, /AGENT_BROWSER_RUNTIME_HOST=1/);
     assert.match(source, /AGENT_BROWSER_SOCKET_DIR=/);
+    assert.match(source, /AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=/);
     assert.match(source, new RegExp(`AGENT_BROWSER_EXECUTABLE_PATH=${fakeBrowser}`));
     assert.match(source, /AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=/);
     assert.match(source, /AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=4/);
     assert.match(source, /AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=6/);
     assert.match(source, /AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1/);
     assert.match(source, /AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE=1/);
+    assert.match(source, /AGENT_BROWSER_GUACAMOLE_HEADER_USER=fixture-provider-operator/);
     assert.doesNotMatch(source, /\.local\/bin\/agent-browser\n/);
   }
   assert.match(units['agent-browser-dev-dashboard.service'], /AGENT_BROWSER_DASHBOARD_PORT=4948/);
   assert.doesNotMatch(JSON.stringify(units), /4848|4849|agent-browser-dashboard\.service/);
 
   const installed = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
+  assert.deepEqual(JSON.parse(readFileSync(descriptor.presentationProvider.inventoryPath, 'utf8')), {
+    schemaVersion: 'agent-browser.development-presentation-inventory.v1',
+    environment: 'development',
+    routes: [],
+  }, 'an unconfigured optional provider must expose zero routes without blocking headless work');
   assert.equal(installed.success, true);
   assert.equal(installed.production.unchanged, true);
+  const defaultBefore = defaultDevelopmentSnapshot(namespacedEnv);
+  const parallelInstalled = installDevelopmentRuntime({ binary: fakeBinary, env: namespacedEnv, activate: false });
+  assert.equal(parallelInstalled.defaultDevelopment.unchanged, true);
+  assert.deepEqual(defaultDevelopmentSnapshot(namespacedEnv), defaultBefore);
+  assert.notEqual(parallelInstalled.generation.path, installed.generation.path);
+  assert.equal(JSON.parse(readFileSync(join(parallelInstalled.generation.path, 'generation.json'), 'utf8')).namespace, 'p158');
+  assert.throws(() => assertDefaultDevelopmentUnchanged(defaultBefore,
+    { ...defaultBefore, selectedGeneration: '/different-generation' }), /custody changed/);
+  const collisionLink = join(fixture, 'default-home-alias');
+  symlinkSync(descriptor.pseudoHome, collisionLink);
+  assert.throws(() => developmentRuntimeDescriptor({ ...namespacedEnv, AGENT_BROWSER_DEV_HOME: collisionLink }), /overlaps/);
+  const unknownGeneration = join(parallelDescriptor.generations, 'unknown-generation');
+  const foreignGeneration = join(parallelDescriptor.generations, 'foreign-generation');
+  const ownedGeneration = join(parallelDescriptor.generations, 'old-owned-generation');
+  for (const path of [unknownGeneration, foreignGeneration, ownedGeneration]) mkdirSync(path);
+  writeFileSync(join(foreignGeneration, 'generation.json'), JSON.stringify({ namespace: 'other' }));
+  writeFileSync(join(ownedGeneration, 'generation.json'), JSON.stringify({ namespace: 'p158' }));
+  const namespaceGc = garbageCollectDevelopmentRuntime({ env: namespacedEnv, retain: 0 });
+  assert.deepEqual(namespaceGc.removed, [ownedGeneration]);
+  assert(namespaceGc.retained.includes(unknownGeneration));
+  assert(namespaceGc.retained.includes(foreignGeneration));
+  assert(namespaceGc.retained.includes(parallelInstalled.generation.path));
+  assert.deepEqual(defaultDevelopmentSnapshot(namespacedEnv), defaultBefore);
   assert.equal(installed.generation.version, '0.28.0-fixture');
   assert.equal(readFileSync(installed.generation.binary, 'utf8'), readFileSync(fakeBinary, 'utf8'));
   const generationManifest = JSON.parse(
     readFileSync(join(installed.generation.path, 'generation.json'), 'utf8'),
   );
+  assert.equal(generationManifest.externalBrowserDiscovery, 'disabled');
+  assert.equal(installed.status.externalBrowserDiscovery, 'disabled');
+  assert.equal(installed.status.generationMetadata.externalBrowserDiscovery, 'disabled');
   assert.deepEqual(generationManifest.desktopInputProvider, {
     enabled: true,
     providerId: 'controlled-x11-xtest',
@@ -164,7 +310,7 @@ try {
   }).trim();
   assert.equal(
     launcherEnvironment,
-    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.authDir}|${fakeBrowser}`,
+    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${fakeBrowser}|disabled`,
   );
   const diagnosticBrowser = join(fixture, 'diagnostic-chrome');
   const overriddenLauncherEnvironment = execFileSync(descriptor.executable, ['print-env'], {
@@ -173,7 +319,58 @@ try {
   }).trim();
   assert.equal(
     overriddenLauncherEnvironment,
-    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.authDir}|${diagnosticBrowser}`,
+    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${diagnosticBrowser}|disabled`,
+  );
+  for (const inherited of ['enabled', 'invalid-value']) {
+    const actual = execFileSync(descriptor.executable, ['print-env'], {
+      encoding: 'utf8', env: { ...env, AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY: inherited },
+    }).trim();
+    assert.equal(actual.split('|').at(-1), 'disabled', 'caller cannot enable development host discovery');
+  }
+  assert.deepEqual(observeDevelopmentExternalDiscovery(null), { state: 'unavailable', policy: null });
+  for (const [value, state, policy, accepted] of [
+    ['disabled', 'observed', 'disabled', true],
+    ['enabled', 'observed', 'enabled', false],
+    [undefined, 'missing', null, false],
+    ['invalid-private-value', 'invalid', null, false],
+  ]) {
+    const childEnv = { ...env };
+    if (value === undefined) delete childEnv.AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY;
+    else childEnv.AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY = value;
+    const source = `import {observeDevelopmentExternalDiscovery} from ${JSON.stringify(
+      new URL('./lib/development-runtime.js', import.meta.url).href)};
+      console.log(JSON.stringify(observeDevelopmentExternalDiscovery(process.pid)));`;
+    const observed = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', source], {
+      env: childEnv, encoding: 'utf8',
+    }));
+    assert.deepEqual(observed, { state, policy });
+    assert.equal(developmentExternalDiscoveryChecks({ fixture: { externalBrowserDiscovery: observed } })[0].ok,
+      accepted, 'doctor must reject missing, wrong, or invalid live policy');
+    assert(!JSON.stringify(observed).includes('invalid-private-value'));
+  }
+  writeFileSync(join(descriptor.socketDir, 'runtime-host.json'), `${JSON.stringify({
+    schemaVersion: 'agent-browser.runtime-host.v1',
+    hostId: 'runtime-host:4242',
+    pid: 4242,
+    executableGeneration: installed.generation.sha256,
+    socketIdentity: 'unix:fixture',
+  })}\n`);
+  writeFileSync(join(descriptor.socketDir, 'runtime-host.identity.json'), `${JSON.stringify({
+    pid: 4242,
+    startToken: 'linux:fixture-boot:100',
+    executablePath: installed.generation.binary,
+  })}\n`);
+  const runtimeHostIngress = publishDevelopmentRuntimeIngress({
+    descriptor,
+    generationId: installed.generation.generationId,
+    generationBinary: installed.generation.binary,
+    sha256: installed.generation.sha256,
+  });
+  assert.equal(runtimeHostIngress.selectedBackend.pid, 4242);
+  assert.equal(runtimeHostIngress.selectedBackend.generationId, installed.generation.generationId);
+  assert.equal(
+    JSON.parse(readFileSync(descriptor.runtimeHostIngressState, 'utf8')).bootEpoch,
+    'linux:fixture-boot',
   );
   assert.throws(
     () => installDevelopmentRuntime({

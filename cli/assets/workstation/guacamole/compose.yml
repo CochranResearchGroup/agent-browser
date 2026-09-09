@@ -51,6 +51,9 @@ services:
     image: guacamole/guacamole:1.5.5@sha256:0f62f6d17ab379e46aa66874b2ff564dab856a6ef5e754a69cbb34c32d3e588a
     platform: linux/amd64
     container_name: agent-browser-guacamole
+    # Reload changed extension code even when the installation symlink is stable.
+    labels:
+      org.agent-browser.defaults-sha256: "afe1387803908700c2fa90420c67ed592a6f4560ce145d6d43bc4a48619ab009"
     restart: unless-stopped
     entrypoint: ["/bin/bash", "/opt/agent-browser/start-guacamole.sh"]
     depends_on:

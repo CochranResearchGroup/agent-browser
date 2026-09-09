@@ -13,7 +13,9 @@ pub(crate) mod action_commands {
         should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo,
         ProcessExitObservation, WaitUntil,
     };
-    use crate::native::browser_lifecycle::persist_service_owned_tab_new;
+    use crate::native::browser_lifecycle::{
+        persist_service_owned_tab_new, profile_child_access_from_command,
+    };
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
     use crate::native::webdriver::backend::BrowserBackend;
@@ -50,7 +52,8 @@ pub(crate) mod action_commands {
             "tabId" : tab_id, "targetId" : target_id, "url" : url, "title" : title,
             "profileId" : profile_id.clone(), "profileOrigin" : "agent_browser_owned",
             "leaseId" : session_id, "leaseState" : "shared", "cleanupPolicy" : "close_tabs",
-            "leaseHeartbeatExpected" : true, "ownerSessionId" : session_id, "jobId" :
+            "leaseHeartbeatExpected" : true, "ownerSessionId" : session_id,
+            "profileAccess" : profile_child_access_from_command(cmd), "jobId" :
             Value::Null, "traceFilter" : { "browserId" : service_browser_id(session_id),
             "profileId" : profile_id, "sessionId" : session_id, "serviceName" :
             optional_command_string(cmd, "serviceName"), "agentName" :

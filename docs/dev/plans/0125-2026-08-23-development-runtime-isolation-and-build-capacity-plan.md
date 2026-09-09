@@ -179,6 +179,14 @@ environment overrides remain available for controlled validation. Stale build
 claims are reclaimed only after their recorded process identity is no longer
 live.
 
+Current-policy clarification: the four-job value above records this plan's
+initial baseline and is not current operator guidance. The implemented wrapper
+now defaults each admitted invocation to eight Cargo build jobs. Its limit of
+two concurrent repository Cargo invocations is a separate admission dimension;
+it does not imply two build jobs per invocation. Do not set
+`AGENT_BROWSER_CARGO_BUILD_JOBS=2` solely because two invocations may run at
+once. Use an explicit job override only for a diagnosed build-specific need.
+
 ### 6. Environment-Bound Acceptance
 
 Every installed validation receipt binds:

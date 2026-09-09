@@ -15,6 +15,49 @@ use std::time::Duration;
 
 const PROTECTED_LEASE_AUTHORITY_CLIENT_TIMEOUT: Duration = Duration::from_secs(2);
 
+trait ProtectedLeaseAuthorityExchange {
+    fn exchange(&self, encoded: &[u8]) -> Result<Vec<u8>, String>;
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct UnixProtectedLeaseAuthorityExchange;
+
+impl ProtectedLeaseAuthorityExchange for UnixProtectedLeaseAuthorityExchange {
+    fn exchange(&self, encoded: &[u8]) -> Result<Vec<u8>, String> {
+        exchange_with_protected_lease_authority(encoded)
+    }
+}
+
+/// Cohesive client boundary for the protected lease-authority protocol.
+///
+/// Operation-specific code owns only typed request encoding and response
+/// validation. Endpoint custody, framed exchange, and transport error
+/// translation remain behind this client and are never reimplemented by an
+/// individual operation.
+struct ProtectedLeaseAuthorityClient<E = UnixProtectedLeaseAuthorityExchange> {
+    exchange: E,
+}
+
+impl Default for ProtectedLeaseAuthorityClient<UnixProtectedLeaseAuthorityExchange> {
+    fn default() -> Self {
+        Self {
+            exchange: UnixProtectedLeaseAuthorityExchange,
+        }
+    }
+}
+
+impl<E: ProtectedLeaseAuthorityExchange> ProtectedLeaseAuthorityClient<E> {
+    fn request<T>(
+        &self,
+        encoded: Result<Vec<u8>, String>,
+        decode: impl FnOnce(&[u8]) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let encoded = encoded?;
+        let response = self.exchange.exchange(&encoded)?;
+        decode(&response)
+    }
+}
+
 pub(crate) struct ProtectedProfileEnrollmentRequest {
     pub(crate) raw_capability: String,
     pub(crate) profile_id: String,
@@ -272,25 +315,28 @@ pub(crate) struct ProtectedProfileAuthorityInspection {
 pub(crate) fn enroll_protected_profile(
     request: &ProtectedProfileEnrollmentRequest,
 ) -> Result<ProtectedProfileEnrollment, String> {
-    let encoded = encode_protected_profile_enrollment_request(request)?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_profile_enrollment_response(&response, request)
+    ProtectedLeaseAuthorityClient::default().request(
+        encode_protected_profile_enrollment_request(request),
+        |response| decode_protected_profile_enrollment_response(response, request),
+    )
 }
 
 pub(crate) fn acquire_protected_ephemeral_profile_claim(
     request: &ProtectedEphemeralProfileClaimRequest,
 ) -> Result<ProtectedEphemeralProfileClaim, String> {
-    let encoded = encode_protected_ephemeral_profile_claim_request(request)?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_ephemeral_profile_claim_response(&response, request)
+    ProtectedLeaseAuthorityClient::default().request(
+        encode_protected_ephemeral_profile_claim_request(request),
+        |response| decode_protected_ephemeral_profile_claim_response(response, request),
+    )
 }
 
 pub(crate) fn authorize_protected_browser_launch(
     request: &ProtectedBrowserLaunchRequest,
 ) -> Result<ProtectedBrowserLaunchPermit, String> {
-    let encoded = encode_protected_browser_launch_request(request)?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_browser_launch_response(&response, request)
+    ProtectedLeaseAuthorityClient::default().request(
+        encode_protected_browser_launch_request(request),
+        |response| decode_protected_browser_launch_response(response, request),
+    )
 }
 
 pub(crate) fn mark_protected_browser_launch_uncertain(
@@ -315,13 +361,14 @@ pub(crate) fn mark_protected_browser_launch_uncertain(
         }
     }))
     .map_err(|_| "lease_authority_effect_completion_encode_failed".to_string())?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_browser_launch_uncertainty(
-        &response,
-        permit,
-        completion_evidence_digest,
-        completion_idempotency_key,
-    )
+    ProtectedLeaseAuthorityClient::default().request(Ok(encoded), |response| {
+        decode_protected_browser_launch_uncertainty(
+            response,
+            permit,
+            completion_evidence_digest,
+            completion_idempotency_key,
+        )
+    })
 }
 
 pub(crate) fn complete_protected_browser_launch_success(
@@ -348,33 +395,37 @@ pub(crate) fn complete_protected_browser_launch_success(
         }
     }))
     .map_err(|_| "lease_authority_browser_launch_completion_encode_failed".to_string())?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_browser_launch_success(&response, permit, browser_pid)
+    ProtectedLeaseAuthorityClient::default().request(Ok(encoded), |response| {
+        decode_protected_browser_launch_success(response, permit, browser_pid)
+    })
 }
 
 pub(crate) fn reconcile_protected_browser_owner(
     request: &ProtectedBrowserOwnerReconciliationRequest,
 ) -> Result<ProtectedBrowserOwnerReconciliation, String> {
-    let encoded = encode_protected_browser_owner_reconciliation_request(request)?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_browser_owner_reconciliation_response(&response, request)
+    ProtectedLeaseAuthorityClient::default().request(
+        encode_protected_browser_owner_reconciliation_request(request),
+        |response| decode_protected_browser_owner_reconciliation_response(response, request),
+    )
 }
 
 pub(crate) fn prepare_protected_browser_adoption(
     request: &ProtectedBrowserAdoptionRequest,
 ) -> Result<ProtectedBrowserAdoptionPreparation, String> {
-    let encoded = encode_protected_browser_adoption_request(request)?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_browser_adoption_preparation(&response, request)
+    ProtectedLeaseAuthorityClient::default().request(
+        encode_protected_browser_adoption_request(request),
+        |response| decode_protected_browser_adoption_preparation(response, request),
+    )
 }
 
 pub(crate) fn inspect_protected_profile_authority(
     raw_capability: &str,
     profile_id: &str,
 ) -> Result<ProtectedProfileAuthorityInspection, String> {
-    let encoded = encode_protected_profile_authority_inspection(raw_capability, profile_id)?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_profile_authority_inspection(&response, profile_id)
+    ProtectedLeaseAuthorityClient::default().request(
+        encode_protected_profile_authority_inspection(raw_capability, profile_id),
+        |response| decode_protected_profile_authority_inspection(response, profile_id),
+    )
 }
 
 pub(crate) fn complete_protected_browser_adoption_success(
@@ -609,8 +660,9 @@ fn complete_protected_browser_adoption(
         }
     }))
     .map_err(|_| "lease_authority_browser_adoption_completion_encode_failed".to_string())?;
-    let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_browser_adoption_completion(&response, preparation, expected_outcome)
+    ProtectedLeaseAuthorityClient::default().request(Ok(encoded), |response| {
+        decode_protected_browser_adoption_completion(response, preparation, expected_outcome)
+    })
 }
 
 fn decode_protected_browser_adoption_completion(
@@ -1263,6 +1315,41 @@ fn decode_protected_browser_owner_reconciliation_response(
 mod tests {
     use super::*;
     use crate::native::service_lease_authority::LeaseResourceKey;
+    use std::cell::Cell;
+
+    struct FixtureExchange {
+        calls: Cell<usize>,
+        response: Vec<u8>,
+    }
+
+    impl ProtectedLeaseAuthorityExchange for FixtureExchange {
+        fn exchange(&self, encoded: &[u8]) -> Result<Vec<u8>, String> {
+            assert_eq!(encoded, b"encoded-request");
+            self.calls.set(self.calls.get() + 1);
+            Ok(self.response.clone())
+        }
+    }
+
+    #[test]
+    fn cohesive_client_owns_exchange_and_typed_response_validation() {
+        let client = ProtectedLeaseAuthorityClient {
+            exchange: FixtureExchange {
+                calls: Cell::new(0),
+                response: b"encoded-response".to_vec(),
+            },
+        };
+
+        let decoded = client
+            .request(Ok(b"encoded-request".to_vec()), |response| {
+                (response == b"encoded-response")
+                    .then_some("validated")
+                    .ok_or_else(|| "typed_response_mismatch".to_string())
+            })
+            .unwrap();
+
+        assert_eq!(decoded, "validated");
+        assert_eq!(client.exchange.calls.get(), 1);
+    }
 
     fn request() -> ProtectedBrowserLaunchRequest {
         ProtectedBrowserLaunchRequest {

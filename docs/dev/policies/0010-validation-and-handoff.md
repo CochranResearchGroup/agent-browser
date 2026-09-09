@@ -2,7 +2,10 @@
 
 ## Policy
 
-- Run the relevant validation for the touched surface before commit, handoff, or merge preparation.
+- Run focused validation for the touched surface before custody commits. Run
+  required integration gates for the completed repair batch before merge
+  readiness or governed execution, following `0042-code-testing-discipline.md`.
+  Intermediate custody commits must identify pending gates.
 - Prefer targeted verification that matches the changed area, and widen to broader suites when the impact is user-visible or cross-cutting.
 - Include concrete pass/fail evidence in the handoff or closeout note.
 - Keep handoff notes concise, explicit about remaining risk, and clear about the next recommended action.
@@ -48,12 +51,29 @@
   nonblocking concerns in backlog without silently expanding the active plan.
 - A review or rework bound ending triggers primary-agent disposition, local
   reframe, or a scoped block. It does not consume goal authority or require user
-  approval when another safe in-scope action remains.
+  approval when another safe in-scope action can advance acceptance within
+  the cumulative bounds in `0028-goal-execution-governance.md`.
 - Validate the resulting outcome and current external state, not only the
   transcript, diff shape, test count, or agent's narrative of progress.
 - Treat fail-closed gates as successful policy execution when they prevent an
   unsafe or disproven change from integrating. Report the blocked outcome and
   evidence instead of grading effectiveness only by shipped changes.
+
+- A safe refusal preserves a safety boundary; it is not outcome progress or
+  justification for another costly experiment.
+
+## Consolidated Evidence
+
+- Maintain one requirement-to-evidence table for a delivery batch in its
+  designated current-status surface. Track implemented, qualified, installed or
+  integrated, and user-verified states separately; use incomplete or not
+  applicable explicitly. Each incomplete requirement names the missing proof,
+  dependency and next action. Link artifacts and exact identities without
+  duplicating the same status in multiple documents.
+- Reconcile the table against the complete objective before final qualification
+  and closeout. A passing subset, worker completion, clean doctor or time spent
+  cannot support a whole-plan completion claim. Reuse old evidence only within
+  its stated scope and impact rationale under policy 0042.
 
 ## Adoption Notes
 

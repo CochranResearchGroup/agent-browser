@@ -89,6 +89,10 @@ try {
   assert.match(sql, /BEGIN;/, 'route migration must be transactional');
   assert.match(sql, /COMMIT;/, 'route migration must commit only after postconditions');
   assert.match(sql, /Agent Browser RDP Existing User Route A/);
+  assert.match(sql, /guacamole_sharing_profile/);
+  assert.match(sql, /Agent Browser Shared Session legacy-route-a/);
+  assert.match(sql, /guacamole_sharing_profile_permission/);
+  assert.match(sql, /sharing_profile_count/);
   assert.match(sql, /Agent Browser RDP Existing User Route B/);
   assert.match(sql, /Agent Browser RDP Route A/);
   assert.match(sql, /Agent Browser RDP Route B/);

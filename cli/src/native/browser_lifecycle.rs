@@ -75,21 +75,35 @@ pub(crate) mod action_commands {
         let agent_name = optional_command_string(cmd, "agentName");
         let task_name = optional_command_string(cmd, "taskName");
         repository.mutate(|state| {
-            state.tabs.insert(
-                tab_id.clone(),
-                BrowserTab {
-                    id: tab_id.clone(),
-                    browser_id: browser_id.clone(),
-                    target_id: Some(target_id.to_string()),
-                    session_id: Some(session_id.to_string()),
-                    lifecycle: TabLifecycle::Ready,
-                    url: url.map(str::to_string),
-                    title: title.filter(|value| !value.is_empty()).map(str::to_string),
-                    owner_session_id: Some(session_id.to_string()),
-                    service_tab_handle: Some(handle.clone()),
-                    ..BrowserTab::default()
-                },
-            );
+            if cmd.get("action").and_then(Value::as_str) == Some("navigate")
+                && state.tabs.contains_key(&tab_id)
+            {
+                // Navigation observes an existing child; it does not issue a
+                // new grant. Preserve the current custody and lease metadata.
+                let tab = state.tabs.get_mut(&tab_id).expect("existing tab");
+                if tab.browser_id != browser_id || tab.target_id.as_deref() != Some(target_id) {
+                    return Err("service_navigation_tab_identity_conflict".to_string());
+                }
+                tab.url = url.map(str::to_string);
+                tab.title = title.filter(|value| !value.is_empty()).map(str::to_string);
+            } else {
+                state.tabs.insert(
+                    tab_id.clone(),
+                    BrowserTab {
+                        id: tab_id.clone(),
+                        browser_id: browser_id.clone(),
+                        target_id: Some(target_id.to_string()),
+                        session_id: Some(session_id.to_string()),
+                        lifecycle: TabLifecycle::Ready,
+                        url: url.map(str::to_string),
+                        title: title.filter(|value| !value.is_empty()).map(str::to_string),
+                        owner_session_id: Some(session_id.to_string()),
+                        profile_access: handle.profile_access.clone(),
+                        service_tab_handle: Some(handle.clone()),
+                        ..BrowserTab::default()
+                    },
+                );
+            }
             if let Some(session) = state.sessions.get_mut(session_id) {
                 if !session.tab_ids.contains(&tab_id) {
                     session.tab_ids.push(tab_id.clone());
@@ -127,6 +141,12 @@ pub(crate) mod action_commands {
             }
             Ok(())
         })
+    }
+
+    pub(crate) fn profile_child_access_from_command(cmd: &Value) -> Value {
+        cmd.get("profileChildAccess")
+            .cloned()
+            .unwrap_or(Value::Null)
     }
     pub(crate) fn tab_new_shared_acquisition_evidence(
         cmd: &Value,
@@ -219,19 +239,179 @@ pub(crate) mod action_commands {
         }
         Ok(result)
     }
+    fn record_tab_cleanup_failure(cmd: &Value, state: &DaemonState, error: &str) {
+        use crate::native::service_failure_journal::{
+            opaque_identifier_hash, ServiceFailureCategory, ServiceFailureRecord,
+            ServiceFailureReferences,
+        };
+        let recourse = crate::native::service_failure::classify_service_failure(error);
+        let request_id = optional_command_string(cmd, "requestId")
+            .or_else(|| optional_command_string(cmd, "id"));
+        let record = ServiceFailureRecord::new(ServiceFailureCategory::ServiceAction,
+            "browser_lifecycle", "target_cleanup", &recourse.code, error)
+            .with_action(cmd.get("action").and_then(Value::as_str).unwrap_or("unknown"))
+            .with_references(ServiceFailureReferences {
+                request_id: request_id.clone(), job_id: request_id,
+                session_id: Some(state.session_id.clone()),
+                browser_id: optional_command_string(cmd, "browserId"),
+                profile_id: optional_command_string(cmd, "runtimeProfile"),
+                ..ServiceFailureReferences::default()
+            }).with_details(json!({
+                "sourceFile":file!(), "sourceLine":line!(),
+                "packageVersion":env!("CARGO_PKG_VERSION"),
+                "binaryIdentityUnavailable":"resolve installed generation using runtime process identity",
+                "runtimePid":std::process::id(),
+                "effectState":recourse.effect_state,
+                "retryDisposition":recourse.retry_disposition,
+                "expected":"one authorized target removed; all observed peers preserved",
+                "requestedTargetHash":cmd.get("targetId")
+                    .or_else(|| cmd.get("serviceTabHandle").and_then(|h| h.get("targetId")))
+                    .and_then(Value::as_str).map(opaque_identifier_hash),
+                "safeNextAction":"inspect this request's service trace before retrying exact cleanup"
+            }));
+        #[cfg(not(test))]
+        crate::native::service_failure_journal::append_service_failure_best_effort(&record);
+        #[cfg(test)]
+        let _ = record;
+    }
+
+    /// Resolve every supplied selector before effects; contradictory or malformed
+    /// selectors must never fall back to the active tab.
+    pub(crate) fn tab_close_target(
+        cmd: &Value,
+        mgr: Option<&BrowserManager>,
+    ) -> Result<String, String> {
+        let mut targets = Vec::new();
+        for (key, prefix) in [("targetId", ""), ("tabId", "target:")] {
+            if let Some(value) = cmd.get(key) {
+                let value = value
+                    .as_str()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| format!("tab_close_invalid_selector: {key} must be nonempty"))?;
+                let target = value
+                    .strip_prefix(prefix)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        format!("tab_close_invalid_selector: {key} must identify a target")
+                    })?;
+                targets.push(target.to_string());
+            }
+        }
+        if let Some(handle) = cmd.get("serviceTabHandle") {
+            let target = handle
+                .get("targetId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    "tab_close_invalid_selector: serviceTabHandle.targetId is required".to_string()
+                })?;
+            targets.push(target.to_string());
+        }
+        if let Some(index) = cmd.get("index") {
+            let index = index
+                .as_u64()
+                .and_then(|index| usize::try_from(index).ok())
+                .ok_or_else(|| {
+                    "tab_close_invalid_selector: index must be a nonnegative integer".to_string()
+                })?;
+            let mgr = mgr.ok_or("tab_close_target_unproven: no attached index inventory")?;
+            targets.push(
+                mgr.pages_list()
+                    .get(index)
+                    .ok_or("tab_close_invalid_selector: index out of range")?
+                    .target_id
+                    .clone(),
+            );
+        }
+        if targets.is_empty() {
+            return mgr
+                .ok_or("tab_close_target_unproven: no attached active target")?
+                .active_target_id()
+                .map(str::to_string);
+        }
+        if targets.iter().any(|target| target != &targets[0]) {
+            return Err(
+                "tab_close_selector_conflict: explicit selectors name different targets"
+                    .to_string(),
+            );
+        }
+        Ok(targets.remove(0))
+    }
+
     pub(crate) async fn handle_tab_close(
         cmd: &Value,
         state: &mut DaemonState,
     ) -> Result<Value, String> {
-        let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
-        let index = cmd
-            .get("index")
-            .and_then(|v| v.as_u64())
-            .map(|i| i as usize);
+        let result = handle_tab_close_inner(cmd, state).await;
+        if let Err(error) = &result {
+            record_tab_cleanup_failure(cmd, state, error);
+        }
+        result
+    }
+
+    async fn handle_tab_close_inner(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+        let target_id = tab_close_target(cmd, state.browser.as_ref())?;
+        let mut effective = cmd.clone();
+        let service_owned =
+            cmd.get("connectionInstanceId").is_some() || cmd.get("serviceTabHandle").is_some();
+        if service_owned {
+            if let Some(handle) = cmd.get("serviceTabHandle").and_then(Value::as_object) {
+                validate_service_tab_handle_for_daemon(handle, cmd, state)?;
+            }
+            let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+            let browser_id =
+                crate::native::action_runtime::runtime::service_tab_handle_browser_id(state);
+            let tab = snapshot
+                .tabs
+                .get(&format!("target:{target_id}"))
+                .filter(|tab| {
+                    tab.browser_id == browser_id && tab.target_id.as_deref() == Some(&target_id)
+                })
+                .ok_or("tab_close_target_unproven: no matching owned target record")?;
+            if cmd.get("connectionInstanceId").is_some() && tab.profile_access.is_none() {
+                return Err(
+                    "tab_close_target_unproven: current target has no attributed child ownership"
+                        .to_string(),
+                );
+            }
+            let handle = tab
+                .service_tab_handle
+                .as_ref()
+                .ok_or("tab_close_target_unproven: current service handle is unavailable")?;
+            effective["serviceTabHandle"] =
+                serde_json::to_value(handle).map_err(|error| error.to_string())?;
+            // Current child ownership and close permission apply even when the
+            // caller supplied only a target selector, or an obsolete handle.
+            crate::native::service_probe::ensure_retained_service_tab_browser(&effective, state)
+                .await?;
+        }
+        let result = state
+            .browser
+            .as_mut()
+            .ok_or("Browser not launched")?
+            .tab_close_target_id_for_release(&target_id)
+            .await?;
         state.ref_map.clear();
         state.iframe_sessions.clear();
         state.active_frame_id = None;
-        mgr.tab_close(index).await
+        if service_owned {
+            let handle = effective["serviceTabHandle"]
+                .as_object()
+                .expect("validated handle");
+            let released_at = OffsetDateTime::now_utc()
+                .format(&Rfc3339)
+                .map_err(|error| error.to_string())?;
+            LockedServiceStateRepository::default_json()?.mutate(|snapshot| {
+                release_service_tab_handle_record(
+                    snapshot,
+                    handle,
+                    &state.session_id,
+                    &released_at,
+                    &json!({"attempted":true,"closed":true,"skippedReason":null,"result":result}),
+                )
+            })?;
+        }
+        Ok(result)
     }
     pub(crate) async fn handle_tab_handle_refresh(
         cmd: &Value,
@@ -271,9 +451,22 @@ pub(crate) mod action_commands {
             });
         let desired_origin = requested_url.as_deref().and_then(origin_for_url);
         let mut candidates = retained_tab_handle_candidates(handle, requested_url.as_deref());
-        let old_handle_valid = validate_service_tab_handle_for_daemon(handle, state)
-            .map(|_| true)
-            .unwrap_or(false);
+        let authorized_profile_access =
+            match validate_service_tab_handle_for_daemon(handle, cmd, state) {
+                Ok(access) => access,
+                Err(error) if error.contains("profile child access") => return Err(error),
+                Err(_) => None,
+            };
+        let old_handle_valid = handle.get("valid").and_then(Value::as_bool) == Some(true);
+        let mut authorized_handle = handle.clone();
+        if let Some(access) = authorized_profile_access {
+            authorized_handle.insert(
+                "profileAccess".to_string(),
+                serde_json::to_value(access)
+                    .map_err(|error| format!("Invalid profile child access: {error}"))?,
+            );
+        }
+        let handle = &authorized_handle;
         let mgr = state.browser.as_mut().ok_or_else(|| {
             "Cannot refresh service tab handle: routed browser session is not running".to_string()
         })?;
@@ -474,11 +667,30 @@ pub(crate) mod action_commands {
         cmd: &Value,
         state: &mut DaemonState,
     ) -> Result<Value, String> {
+        let result = handle_tab_handle_release_inner(cmd, state).await;
+        if let Err(error) = &result {
+            record_tab_cleanup_failure(cmd, state, error);
+        }
+        result
+    }
+
+    async fn handle_tab_handle_release_inner(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
         let handle = cmd
             .get("serviceTabHandle")
             .and_then(Value::as_object)
             .ok_or_else(|| "tab_handle_release requires serviceTabHandle".to_string())?;
-        validate_service_tab_handle_route_for_daemon(handle, state)?;
+        validate_service_tab_handle_for_daemon(handle, cmd, state)?;
+        if cmd
+            .get("closePhysicalTab")
+            .and_then(Value::as_bool)
+            .unwrap_or(true)
+            && handle.get("cleanupPolicy").and_then(Value::as_str) != Some("release_only")
+        {
+            crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await?;
+        }
         let physical_tab_close =
             release_physical_tab_for_handle(handle, state, cmd.get("closePhysicalTab")).await;
         let released_at = OffsetDateTime::now_utc()
@@ -562,6 +774,26 @@ pub(crate) mod action_commands {
         released_at: &str,
         physical_tab_close: &Value,
     ) -> Result<Value, String> {
+        // A requested physical cleanup is not a successful logical release when
+        // closure is unverified. Preserve the handle and tab for exact recovery.
+        let skip = physical_tab_close
+            .get("skippedReason")
+            .and_then(Value::as_str);
+        if physical_tab_close.get("closed").and_then(Value::as_bool) != Some(true)
+            && !matches!(
+                skip,
+                Some("request_disabled_physical_close" | "cleanup_policy_release_only")
+            )
+        {
+            return Err(format!(
+                "tab_cleanup_pending: {}; {}",
+                skip.unwrap_or("physical_close_unverified"),
+                physical_tab_close
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("inspect the exact target before retrying")
+            ));
+        }
         let tab_id = handle
             .get("tabId")
             .and_then(Value::as_str)
@@ -694,7 +926,8 @@ pub(crate) mod action_commands {
             json!("detach")), "leaseHeartbeatExpected" : previous
             .get("leaseHeartbeatExpected").and_then(Value::as_bool).unwrap_or(true),
             "ownerSessionId" : previous.get("ownerSessionId").cloned().unwrap_or_else(||
-            json!(session_id)), "jobId" : previous.get("jobId").cloned()
+            json!(session_id)), "profileAccess" : previous.get("profileAccess").cloned()
+            .unwrap_or(Value::Null), "jobId" : previous.get("jobId").cloned()
             .unwrap_or(Value::Null), "traceFilter" : { "browserId" :
             service_browser_id(session_id), "profileId" : profile_id, "sessionId" :
             session_id, }, "valid" : true, "staleReason" : Value::Null, }
@@ -951,6 +1184,28 @@ pub(crate) mod action_commands {
         cmd: &Value,
         state: &mut DaemonState,
     ) -> Result<Value, String> {
+        let operator_repository = (cmd.get("operatorFocus").and_then(Value::as_bool) == Some(true))
+            .then(LockedServiceStateRepository::default_json)
+            .transpose()?;
+        let _operator_fence = if let Some(repository) = operator_repository.as_ref() {
+            let snapshot = repository.load_snapshot()?;
+            let route_id = cmd
+                .get("routeId")
+                .and_then(Value::as_str)
+                .ok_or("operator_focus_binding_required: missing routeId")?;
+            crate::native::stream::verify_operator_focus(&snapshot, cmd)?;
+            let request_id = cmd
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or("operator_focus_binding_required: missing id")?;
+            let guard = crate::native::desktop_control_coordinator::begin_service_operator_focus(
+                &snapshot, route_id, request_id,
+            )?;
+            crate::native::stream::verify_operator_focus(&repository.load_snapshot()?, cmd)?;
+            Some(guard)
+        } else {
+            None
+        };
         let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
         state.ref_map.clear();
         state.iframe_sessions.clear();
@@ -970,19 +1225,10 @@ pub(crate) mod action_commands {
             if mgr.active_target_id().ok() == Some(target_id) {
                 tab_switched = Some(json!({ "targetId" : target_id, "state" : "already_active", }));
             } else {
-                match mgr.tab_switch_target_id(target_id).await {
-                    Ok(value) => tab_switched = Some(value),
-                    Err(target_err) => {
-                        if let Some(index) = fallback_index {
-                            let mut fallback = mgr.tab_switch(index).await?;
-                            fallback["fallbackFromTargetId"] = json!(target_id);
-                            fallback["fallbackReason"] = json!(target_err);
-                            tab_switched = Some(fallback);
-                        } else {
-                            return Err(target_err);
-                        }
-                    }
-                }
+                // Admission can precede target closure. An explicit target
+                // remains authoritative at execution; its former index may
+                // now identify a different caller's tab.
+                tab_switched = Some(mgr.tab_switch_target_id(target_id).await?);
             }
         } else if let Some(index) = fallback_index {
             tab_switched = Some(mgr.tab_switch(index).await?);

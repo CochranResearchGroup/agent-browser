@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
+mod production;
+
 use super::presentation_capacity::{PresentationCapacityAuthority, PresentationCapacityConfig};
 use super::service_model::{
     ControlInputProvider, DisplayAllocation, RemoteViewRoute, RoutePoolEntry, ServiceState,
@@ -257,7 +259,7 @@ impl PresentationProviderInventory {
             .remote_view_routes
             .iter()
             .filter(|(_, route)| {
-                route.state == "ready"
+                (route.state == "ready" || has_current_acquisition_reservation(state, route))
                     && route
                         .browser_id
                         .as_ref()
@@ -280,19 +282,39 @@ impl PresentationProviderInventory {
             .route_pool
             .iter()
             .filter(|(_, entry)| {
-                entry.state == "checked_out" && checked_out_routes.contains_key(&entry.route_id)
+                matches!(entry.state.as_str(), "checked_out" | "pending")
+                    && checked_out_routes.contains_key(&entry.route_id)
             })
             .map(|(id, entry)| (id.clone(), entry.clone()))
             .collect::<BTreeMap<_, _>>();
+        let mut checked_out_slots_by_route = BTreeMap::new();
+        for entry in checked_out_slots.values() {
+            if checked_out_slots_by_route
+                .insert(entry.route_id.clone(), entry.clone())
+                .is_some()
+            {
+                return Err(format!(
+                    "presentation_provider_checked_out_route_ambiguous:{}",
+                    entry.route_id
+                ));
+            }
+        }
+        let provider_route_ids = self
+            .routes
+            .iter()
+            .filter(|route| route.state == "ready")
+            .map(|route| route.route_id.as_str())
+            .collect::<BTreeSet<_>>();
         state
             .remote_view_routes
             .retain(|_, route| route.route_source != "provider_inventory");
         state
             .display_allocations
             .retain(|_, display| !has_provider_inventory_readiness(display.readiness.as_ref()));
-        state
-            .route_pool
-            .retain(|_, entry| !has_provider_inventory_readiness(entry.readiness.as_ref()));
+        state.route_pool.retain(|_, entry| {
+            !has_provider_inventory_readiness(entry.readiness.as_ref())
+                && !provider_route_ids.contains(entry.route_id.as_str())
+        });
         for provider_route in self.routes.iter().filter(|route| route.state == "ready") {
             let display_name = provider_route.display_name.clone().ok_or_else(|| {
                 format!(
@@ -313,6 +335,7 @@ impl PresentationProviderInventory {
                 ..DisplayAllocation::default()
             };
             if let Some(existing) = checked_out_displays.get(&display_id) {
+                display.state = existing.state.clone();
                 display.owner_browser_id = existing.owner_browser_id.clone();
                 display.owner_session_id = existing.owner_session_id.clone();
                 display.profile_id = existing.profile_id.clone();
@@ -347,6 +370,7 @@ impl PresentationProviderInventory {
                 ..RemoteViewRoute::default()
             };
             if let Some(existing) = checked_out_routes.get(&route_id) {
+                route.state = existing.state.clone();
                 route.browser_id = existing.browser_id.clone();
                 route.session_id = existing.session_id.clone();
                 route.route_source = existing.route_source.clone();
@@ -376,11 +400,14 @@ impl PresentationProviderInventory {
                 }),
                 provider_mode: "simultaneous_view".to_string(),
                 state: "available".to_string(),
-                current_route_allocation_id: Some(route_id),
+                current_route_allocation_id: Some(route_id.clone()),
                 readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
                 ..RoutePoolEntry::default()
             };
-            if let Some(existing) = checked_out_slots.get(&provider_route.slot_id) {
+            if let Some(existing) = checked_out_slots
+                .get(&provider_route.slot_id)
+                .or_else(|| checked_out_slots_by_route.get(&route_id))
+            {
                 slot.state = existing.state.clone();
                 slot.current_route_allocation_id = existing.current_route_allocation_id.clone();
                 slot.readiness = existing.readiness.clone();
@@ -403,10 +430,126 @@ impl PresentationProviderInventory {
                     *slot = previous_slot.clone();
                 }
             }
+            // Pending rows are deliberately excluded from new capacity
+            // derivation. Preserve an already owned slot across its exact
+            // acquisition, so route checkout can reactivate that same slot.
+            for slot in previous.slots {
+                if capacity.slots.iter().any(|current| current.id == slot.id) {
+                    continue;
+                }
+                let retained = self.routes.iter().any(|provider| {
+                    provider.state == "ready"
+                        && slot.id == format!("slot:{}", provider.slot_id)
+                        && slot.route_id.as_ref() == Some(&provider.route_id)
+                        && slot.display_allocation_id.as_ref()
+                            == Some(&provider.display_reservation_id)
+                        && state
+                            .remote_view_routes
+                            .get(&provider.route_id)
+                            .is_some_and(|route| {
+                                has_current_acquisition_reservation(state, route)
+                                    && slot.browser_id.is_some()
+                                    && slot.browser_id == route.browser_id
+                            })
+                });
+                if retained {
+                    capacity.slots.push(slot);
+                }
+            }
+            capacity.slots.sort_by(|left, right| left.id.cmp(&right.id));
+            capacity.slots = PresentationCapacityAuthority::new(
+                capacity.config,
+                std::mem::take(&mut capacity.slots),
+            )?
+            .slots;
         }
         state.presentation_capacity = Some(capacity);
         Ok(())
     }
+}
+
+/// Inventory describes provider availability; it must not erase an active
+/// Service reservation or promote that reservation to ready on a read.
+fn has_current_acquisition_reservation(state: &ServiceState, route: &RemoteViewRoute) -> bool {
+    if route.state != "pending"
+        || route.last_provider_event.as_deref() != Some("remote_view_open_acquisition_pending")
+    {
+        return false;
+    }
+    let Some(lease_id) = route
+        .readiness
+        .as_ref()
+        .filter(|value| value["component"] == "remote_view_open_acquisition")
+        .and_then(|value| value["leaseId"].as_str())
+    else {
+        return false;
+    };
+    state
+        .remote_view_acquisition_leases
+        .get(lease_id)
+        .is_some_and(|lease| {
+            lease.id == lease_id
+                && lease.state == "pending"
+                && matches!(
+                    lease.phase.as_str(),
+                    "reserved"
+                        | "display_ready"
+                        | "browser_attached"
+                        | "tab_acquired"
+                        | "proof_ready"
+                )
+                && lease.boot_epoch.is_some()
+                && lease.boot_epoch == crate::process_identity::current_boot_epoch()
+                && lease.route_id == route.id
+                && Some(&lease.browser_id) == route.browser_id.as_ref()
+                && Some(&lease.session_id) == route.session_id.as_ref()
+                && Some(&lease.display_allocation_id) == route.display_allocation_id.as_ref()
+                && lease.completed_at.is_none()
+                && lease.failed_at.is_none()
+        })
+}
+
+/// Recognize the exact in-flight acquisition across all three custody records.
+/// Pending provider records alone are never permission to admit capacity.
+pub(crate) fn has_current_acquisition_binding(
+    state: &ServiceState,
+    route: &RemoteViewRoute,
+) -> bool {
+    if !has_current_acquisition_reservation(state, route) {
+        return false;
+    }
+    let lease_id = route
+        .readiness
+        .as_ref()
+        .and_then(|value| value["leaseId"].as_str())
+        .unwrap();
+    let lease = &state.remote_view_acquisition_leases[lease_id];
+    let Some(entry) = lease
+        .route_pool_entry_id
+        .as_ref()
+        .and_then(|id| state.route_pool.get(id))
+    else {
+        return false;
+    };
+    let Some(display) = state.display_allocations.get(&lease.display_allocation_id) else {
+        return false;
+    };
+    let matches_lease = |readiness: Option<&serde_json::Value>| {
+        readiness.is_some_and(|value| {
+            value["component"] == "remote_view_open_acquisition" && value["leaseId"] == lease_id
+        })
+    };
+    Some(&entry.id) == lease.route_pool_entry_id.as_ref()
+        && entry.route_id == route.id
+        && entry.current_route_allocation_id.as_ref() == Some(&route.id)
+        && entry.state == "pending"
+        && matches_lease(entry.readiness.as_ref())
+        && display.owner_browser_id == route.browser_id
+        && display.owner_session_id == route.session_id
+        && display.boot_epoch == lease.boot_epoch
+        && display.route_ids.contains(&route.id)
+        && (matches!(display.state.as_str(), "ready" | "active")
+            || (display.state == "pending" && matches_lease(display.readiness.as_ref())))
 }
 
 fn has_provider_inventory_readiness(readiness: Option<&serde_json::Value>) -> bool {
@@ -437,7 +580,22 @@ fn validate_provider_identities<'a>(
 pub(crate) fn overlay_provider_inventory_from_environment(
     state: &mut ServiceState,
 ) -> Result<(), String> {
-    let path = match std::env::var("AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH") {
+    let production_path =
+        match std::env::var("AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH") {
+            Ok(path) if !path.trim().is_empty() => Some(path),
+            Err(std::env::VarError::NotPresent) => None,
+            _ => return Err("production_presentation_inventory_path_invalid".into()),
+        };
+    if production_path.is_some()
+        && std::env::var_os("AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH").is_some()
+    {
+        return Err("presentation_provider_inventory_environment_conflict".into());
+    }
+    let path = match production_path
+        .clone()
+        .map(Ok)
+        .unwrap_or_else(|| std::env::var("AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH"))
+    {
         Ok(path) if !path.trim().is_empty() => path,
         Ok(_) | Err(std::env::VarError::NotPresent) => return Ok(()),
         Err(std::env::VarError::NotUnicode(_)) => {
@@ -460,7 +618,12 @@ pub(crate) fn overlay_provider_inventory_from_environment(
         recovery_reserve: usize_env("AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE", 1)?,
         max_queue_depth: usize_env("AGENT_BROWSER_PRESENTATION_MAX_QUEUE_DEPTH", 64)?,
     };
-    PresentationProviderInventory::from_path(Path::new(&path))?.overlay_service_state(state, config)
+    if production_path.is_some() {
+        production::ProductionInventory::apply(Path::new(&path), state, config)
+    } else {
+        PresentationProviderInventory::from_path(Path::new(&path))?
+            .overlay_service_state(state, config)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -755,6 +918,11 @@ mod tests {
             .get_mut("development-slot-1")
             .unwrap()
             .state = "checked_out".to_string();
+        let mut legacy_slot = state.route_pool.remove("development-slot-1").unwrap();
+        legacy_slot.id = "development-route-1".to_string();
+        state
+            .route_pool
+            .insert("development-route-1".to_string(), legacy_slot);
 
         inventory
             .overlay_service_state(&mut state, config.clone())
@@ -797,6 +965,63 @@ mod tests {
             None
         );
         assert_eq!(state.route_pool["development-slot-1"].state, "available");
+    }
+
+    #[test]
+    fn provider_inventory_replaces_legacy_pool_row_for_same_route() {
+        let inventory = PresentationProviderInventory::from_json(
+            &serde_json::json!({
+                "schemaVersion": "agent-browser.development-presentation-inventory.v1",
+                "environment": "development",
+                "routes": [{
+                    "routeId": "development-route-1",
+                    "slotId": "development-slot-1",
+                    "user": "agent-browser-rdp-dev-1",
+                    "connectionId": "41",
+                    "connectionName": "Agent Browser Dev RDP Route 1",
+                    "displayReservationId": "development-display-1",
+                    "displayName": ":21",
+                    "lifecycle": "warm",
+                    "state": "ready"
+                }]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let mut state = ServiceState {
+            route_pool: BTreeMap::from([(
+                "development-route-1".to_string(),
+                RoutePoolEntry {
+                    id: "development-route-1".to_string(),
+                    route_id: "development-route-1".to_string(),
+                    state: "available".to_string(),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        inventory
+            .overlay_service_state(
+                &mut state,
+                PresentationCapacityConfig {
+                    warm_minimum: 1,
+                    hard_maximum: 2,
+                    human_priority_reserve: 1,
+                    recovery_reserve: 1,
+                    max_queue_depth: 64,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            state.route_pool.keys().cloned().collect::<Vec<_>>(),
+            vec!["development-slot-1"]
+        );
+        assert_eq!(
+            state.route_pool["development-slot-1"].target["displayAllocationId"],
+            "development-display-1"
+        );
     }
 
     #[test]

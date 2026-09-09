@@ -8,14 +8,42 @@
 use super::service_model::{
     BrowserProcess, BrowserProfile, BrowserSession, LeaseState, ServiceState,
 };
+use super::service_profile_access_policy::{
+    ProfileAccessGrant, ProfileAccessMode, ProfileAccessPreset, ProfileIdentityAssurance,
+    ServiceProfileAccessPolicy,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 pub(crate) const SERVICE_STATE_SCHEMA_VERSION: &str = "agent-browser.service-state.v2";
 pub(crate) const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str =
     "agent-browser.service-state.unversioned";
+const PROFILE_POLICY_MIGRATION_SCHEMA_VERSION: &str = "agent-browser.profile-policy-migration.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ProfilePolicyMigrationEntry {
+    pub(crate) profile_id: String,
+    pub(crate) classification: String,
+    pub(crate) target_mode: ProfileAccessMode,
+    pub(crate) ambiguity: bool,
+    pub(crate) blocking: bool,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ProfilePolicyMigrationReport {
+    pub(crate) schema_version: String,
+    pub(crate) migration_id: String,
+    pub(crate) source_revision: u64,
+    pub(crate) target_revision: u64,
+    pub(crate) entries: Vec<ProfilePolicyMigrationEntry>,
+    pub(crate) blocking_issue_count: usize,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -121,6 +149,7 @@ pub(crate) fn read_service_state(raw: &str) -> Result<ServiceState, serde_json::
         }
     }
     let mut state: ServiceState = serde_json::from_value(value)?;
+    materialize_legacy_profile_access_policies(&mut state);
     stamp_current_versions(&mut state);
     Ok(state)
 }
@@ -128,8 +157,107 @@ pub(crate) fn read_service_state(raw: &str) -> Result<ServiceState, serde_json::
 pub(crate) fn prepare_service_state_for_persistence(
     state: &mut ServiceState,
 ) -> Result<(), String> {
+    materialize_legacy_profile_access_policies(state);
     stamp_current_versions(state);
     Ok(())
+}
+
+fn materialize_legacy_profile_access_policies(state: &mut ServiceState) {
+    let source_revision = state.state_revision;
+    let profile_ids = state
+        .profiles
+        .iter()
+        .filter_map(|(profile_id, profile)| profile.access_policy.is_none().then_some(profile_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if profile_ids.is_empty() {
+        return;
+    }
+
+    let mut entries = Vec::new();
+    for profile_id in profile_ids {
+        let matching_sessions = state
+            .sessions
+            .values()
+            .filter(|session| session.profile_id.as_deref() == Some(profile_id.as_str()))
+            .collect::<Vec<_>>();
+        let proven_principal = matching_sessions
+            .first()
+            .and_then(|session| session.principal_id.as_deref())
+            .filter(|principal| {
+                !matching_sessions.is_empty()
+                    && matching_sessions.iter().all(|session| {
+                        session.lease == LeaseState::Exclusive
+                            && session.principal_id.as_deref() == Some(principal)
+                            && session.principal_provenance.is_some()
+                    })
+            })
+            .map(str::to_string);
+
+        let (policy, entry) = if let Some(principal_id) = proven_principal {
+            let mut policy = ServiceProfileAccessPolicy::shared_local_default(&profile_id);
+            policy.mode = ProfileAccessMode::Exclusive;
+            policy.default_permissions.clear();
+            policy.grants = vec![ProfileAccessGrant {
+                subject_id: principal_id,
+                minimum_assurance: ProfileIdentityAssurance::RegisteredCapability,
+                permissions: ProfileAccessPreset::Administrator.permissions(),
+            }];
+            (
+                policy,
+                ProfilePolicyMigrationEntry {
+                    profile_id: profile_id.clone(),
+                    classification: "proven-strict-compatibility".to_string(),
+                    target_mode: ProfileAccessMode::Exclusive,
+                    ambiguity: false,
+                    blocking: false,
+                    reason: "One provenance-backed principal held every exclusive legacy session."
+                        .to_string(),
+                },
+            )
+        } else {
+            let profile = &state.profiles[&profile_id];
+            let ordinary_shared = matching_sessions.is_empty()
+                && (profile.shared_service_ids.len() > 1
+                    || profile.allocation
+                        == super::service_model::ProfileAllocationPolicy::SharedService);
+            let classification = if ordinary_shared {
+                "shared-local-default"
+            } else {
+                "ambiguous-legacy"
+            };
+            let reason = if ordinary_shared {
+                "Legacy sharing configuration maps to the trusted local participant preset."
+            } else {
+                "Legacy identity evidence is insufficient for strict access and remains a nonblocking observation."
+            };
+            (
+                ServiceProfileAccessPolicy::shared_local_default(&profile_id),
+                ProfilePolicyMigrationEntry {
+                    profile_id: profile_id.clone(),
+                    classification: classification.to_string(),
+                    target_mode: ProfileAccessMode::SharedLocal,
+                    ambiguity: !ordinary_shared,
+                    blocking: false,
+                    reason: reason.to_string(),
+                },
+            )
+        };
+        if let Some(profile) = state.profiles.get_mut(&profile_id) {
+            profile.access_policy = Some(policy);
+        }
+        entries.push(entry);
+    }
+    let material = serde_json::to_vec(&(source_revision, &entries)).unwrap_or_default();
+    let migration_id = format!("profile-policy-migration-{:x}", Sha256::digest(material));
+    state.profile_policy_migration = Some(ProfilePolicyMigrationReport {
+        schema_version: PROFILE_POLICY_MIGRATION_SCHEMA_VERSION.to_string(),
+        migration_id,
+        source_revision,
+        target_revision: source_revision.saturating_add(1),
+        entries,
+        blocking_issue_count: 0,
+    });
 }
 
 pub(crate) fn plan_service_state_migration(raw: &str) -> Result<ServiceStateMigrationPlan, String> {
@@ -286,8 +414,8 @@ pub(crate) fn read_recovery_artifact_compatibility(
         "unknown_recovery_artifact"
     };
     let known_current_schemas = [
-        super::service_profile_recovery::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
-        super::service_profile_recovery::PROFILE_RECOVERY_RECEIPT_SCHEMA_V1,
+        super::service_profile_acquisition::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
+        super::service_profile_acquisition::PROFILE_RECOVERY_RECEIPT_SCHEMA_V1,
         super::service_browser_retirement::BROWSER_RETIREMENT_PLAN_SCHEMA_V1,
         super::service_browser_retirement::BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
     ];
@@ -545,7 +673,8 @@ fn merge_unknown_object_fields(source: &Value, migrated: &mut Value) {
 
 /// Remove ephemeral process evidence only when it has no retained browser
 /// projection or authority edge and the current host positively reports the
-/// exact recorded process as absent. A live or indeterminate observation stays
+/// exact recorded process as absent, including a validated prior Linux boot.
+/// A current-boot live or indeterminate observation stays
 /// in place and fails invariant validation.
 fn discard_confirmed_dead_unreferenced_process_identities(state: &mut ServiceState) {
     let discard = state
@@ -554,18 +683,44 @@ fn discard_confirmed_dead_unreferenced_process_identities(state: &mut ServiceSta
         .filter(|(browser_id, identity)| {
             !state.browsers.contains_key(*browser_id)
                 && !retained_browser_reference_exists(state, browser_id)
-                && matches!(
-                    crate::process_identity::recorded_process_is_running(
-                        &identity.process_identity
-                    ),
-                    Ok(false)
-                )
+                && orphan_process_is_confirmed_dead(&identity.process_identity)
         })
         .map(|(browser_id, _)| browser_id.clone())
         .collect::<Vec<_>>();
     for browser_id in discard {
         state.browser_process_identities.remove(&browser_id);
     }
+}
+
+/// Migration-only absence proof; this never authorizes signalling a reused PID.
+/// A well-formed Linux identity from another boot cannot still be running.
+/// Other platforms and uncertain tokens retain the ordinary observation gate.
+fn orphan_process_is_confirmed_dead(
+    identity: &crate::process_identity::RecordedProcessIdentity,
+) -> bool {
+    #[cfg(target_os = "linux")]
+    if let Some(current_epoch) = crate::process_identity::current_boot_epoch() {
+        let prior_boot = identity
+            .start_token
+            .strip_prefix("linux:")
+            .and_then(|token| {
+                let (boot, ticks) = token.split_once(':')?;
+                let boot = uuid::Uuid::parse_str(boot).ok()?;
+                let ticks = ticks.parse::<u64>().ok()?;
+                (!boot.is_nil() && ticks > 0).then_some(boot)
+            });
+        let current_boot = current_epoch
+            .strip_prefix("linux:")
+            .and_then(|boot| uuid::Uuid::parse_str(boot).ok())
+            .filter(|boot| !boot.is_nil());
+        if matches!((prior_boot, current_boot), (Some(prior), Some(current)) if prior != current) {
+            return true;
+        }
+    }
+    matches!(
+        crate::process_identity::recorded_process_is_running(identity),
+        Ok(false)
+    )
 }
 
 fn retained_browser_reference_exists(state: &ServiceState, browser_id: &str) -> bool {
@@ -1057,7 +1212,9 @@ fn stamp_current_versions(state: &mut ServiceState) {
         super::service_profile_lease::PROFILE_LEASE_SCHEMA_VERSION.to_string();
 }
 
-fn validate_service_state_invariants(state: &ServiceState) -> Result<(), String> {
+/// Validate the cross-record relationships required by a persisted Service
+/// State document without modifying the decoded snapshot or durable storage.
+pub(crate) fn validate_service_state_invariants(state: &ServiceState) -> Result<(), String> {
     for (key, profile) in &state.profiles {
         if profile.id.trim().is_empty() || profile.id != *key {
             return Err(format!("service_state_profile_key_mismatch:{key}"));
@@ -1288,6 +1445,122 @@ fn custom_json_error(message: String) -> serde_json::Error {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn missing_shared_profile_policy_materializes_as_nonblocking_shared_local() {
+        let raw = json!({
+            "stateRevision": 9,
+            "profiles": {
+                "research-gov": {
+                    "id": "research-gov",
+                    "name": "Research.gov"
+                }
+            }
+        })
+        .to_string();
+
+        let first = read_service_state(&raw).unwrap();
+        let second = read_service_state(&raw).unwrap();
+        let policy = first.profiles["research-gov"]
+            .access_policy
+            .as_ref()
+            .unwrap();
+        assert_eq!(policy.mode, ProfileAccessMode::SharedLocal);
+        assert_eq!(policy.revision, 1);
+        let report = first.profile_policy_migration.as_ref().unwrap();
+        assert_eq!(report.source_revision, 9);
+        assert_eq!(report.target_revision, 10);
+        assert_eq!(report.blocking_issue_count, 0);
+        assert_eq!(report.entries[0].classification, "shared-local-default");
+        assert!(!report.entries[0].ambiguity);
+        assert!(!report.entries[0].blocking);
+        assert_eq!(
+            report.migration_id,
+            second.profile_policy_migration.unwrap().migration_id
+        );
+    }
+
+    #[test]
+    fn ambiguous_legacy_occupancy_is_observable_but_does_not_block() {
+        let raw = json!({
+            "profiles": {
+                "research-gov": {
+                    "id": "research-gov",
+                    "name": "Research.gov"
+                }
+            },
+            "sessions": {
+                "fieldwork": {
+                    "id": "fieldwork",
+                    "profileId": "research-gov",
+                    "lease": "shared"
+                }
+            }
+        })
+        .to_string();
+
+        let state = read_service_state(&raw).unwrap();
+        let report = state.profile_policy_migration.unwrap();
+        assert_eq!(report.blocking_issue_count, 0);
+        assert_eq!(report.entries[0].classification, "ambiguous-legacy");
+        assert!(report.entries[0].ambiguity);
+        assert!(!report.entries[0].blocking);
+        assert_eq!(
+            state.profiles["research-gov"]
+                .access_policy
+                .as_ref()
+                .unwrap()
+                .mode,
+            ProfileAccessMode::SharedLocal
+        );
+    }
+
+    #[test]
+    fn proven_exclusive_legacy_occupancy_migrates_to_subject_bound_administration() {
+        let raw = json!({
+            "stateRevision": 4,
+            "profiles": {
+                "research-gov": {
+                    "id": "research-gov",
+                    "name": "Research.gov"
+                }
+            },
+            "sessions": {
+                "fieldwork": {
+                    "id": "fieldwork",
+                    "profileId": "research-gov",
+                    "lease": "exclusive",
+                    "principalId": "principal:fieldwork",
+                    "principalProvenance": "registered_capability"
+                }
+            }
+        })
+        .to_string();
+
+        let state = read_service_state(&raw).unwrap();
+        let policy = state.profiles["research-gov"]
+            .access_policy
+            .as_ref()
+            .unwrap();
+        assert_eq!(policy.mode, ProfileAccessMode::Exclusive);
+        assert!(policy.default_permissions.is_empty());
+        assert_eq!(policy.grants.len(), 1);
+        assert_eq!(policy.grants[0].subject_id, "principal:fieldwork");
+        assert_eq!(
+            policy.grants[0].minimum_assurance,
+            ProfileIdentityAssurance::RegisteredCapability
+        );
+        assert!(policy.grants[0].permissions.contains(
+            &super::super::service_profile_access_policy::ProfilePermission::FullShutdown
+        ));
+        let report = state.profile_policy_migration.as_ref().unwrap();
+        assert_eq!(
+            report.entries[0].classification,
+            "proven-strict-compatibility"
+        );
+        assert!(!report.entries[0].ambiguity);
+        assert_eq!(report.target_revision, 5);
+    }
 
     #[test]
     fn legacy_labels_remain_unproven_and_stage_without_effects() {
@@ -1560,6 +1833,54 @@ mod tests {
             .get("session:stale")
             .is_none());
         assert!(migrated["browsers"].as_object().unwrap().is_empty());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn unreferenced_prior_boot_identity_with_reused_pid_is_discarded() {
+        let current = crate::process_identity::current_boot_epoch().unwrap();
+        let prior = if current == "linux:11111111-1111-4111-8111-111111111111" {
+            "linux:22222222-2222-4222-8222-222222222222"
+        } else {
+            "linux:11111111-1111-4111-8111-111111111111"
+        };
+        let raw = json!({
+            "browserProcessIdentities": {
+                "session:stale": {
+                    "processIdentity": {
+                        "pid": std::process::id(),
+                        "startToken": format!("{prior}:1")
+                    },
+                    "runtimeProfile": "stale"
+                }
+            }
+        });
+        let staged = stage_service_state_migration(&raw.to_string()).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert!(migrated["browserProcessIdentities"]
+            .get("session:stale")
+            .is_none());
+        assert!(migrated["browsers"].as_object().unwrap().is_empty());
+
+        for token in [
+            format!("{current}:1"),
+            "linux:unknown:1".into(),
+            format!("{prior}:invalid"),
+            format!("{prior}:1:extra"),
+        ] {
+            let mut uncertain = raw.clone();
+            uncertain["browserProcessIdentities"]["session:stale"]["processIdentity"]
+                ["startToken"] = json!(token);
+            assert!(stage_service_state_migration(&uncertain.to_string()).is_err());
+        }
+        let mut referenced = raw;
+        referenced["sessions"] =
+            json!({"retained": {"id": "retained", "browserIds": ["session:stale"]}});
+        assert!(stage_service_state_migration(&referenced.to_string()).is_err());
+        assert!(
+            crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                .is_some()
+        );
     }
 
     #[test]
@@ -2096,7 +2417,7 @@ mod tests {
     #[test]
     fn recovery_artifact_reader_is_forward_backward_and_mixed_version_safe() {
         let current = json!({
-            "schemaVersion": super::super::service_profile_recovery::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
+            "schemaVersion": super::super::service_profile_acquisition::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
             "actions": [{"actionType": "retire_inert_browser_record"}],
         })
         .to_string();

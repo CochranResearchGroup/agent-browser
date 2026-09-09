@@ -65,7 +65,13 @@ import {
   writeDashboardWorkspaceUrlSelection,
   type DashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
-import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import {
+  fetchSharedBrowserCapabilityRegistry,
+  fetchSharedServiceContracts,
+  fetchSharedServiceStatus,
+  SERVICE_API_BASE,
+} from "@/lib/dashboard-api";
+import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
 import { browserRowCloseRoute } from "@/lib/service-browser-row-actions";
 import { execCommand } from "@/lib/exec";
 import { fetchForeignCdpScreenshot } from "@/lib/foreign-cdp-control";
@@ -1133,6 +1139,7 @@ function WorkspaceNodeRow({
       <button
         type="button"
         className="workspace-nav-row-main"
+        data-workspace-id={node.id}
         onClick={onSelect}
         aria-current={selected ? "true" : undefined}
       >
@@ -1387,17 +1394,18 @@ export function WorkspaceNavigator() {
     node?: WorkspaceNode;
   } | null>(null);
   const loadedOnceRef = useRef(false);
+  const serviceStatusInFlightRef = useRef(false);
   const lastScrolledSelectionRef = useRef<string | null>(null);
 
   const fetchServiceStatus = useCallback(async (): Promise<ServiceStatusData | null> => {
-    if (typeof window === "undefined") return null;
+    if (typeof window === "undefined" || serviceStatusInFlightRef.current) return null;
+    serviceStatusInFlightRef.current = true;
     try {
-      const base = serviceBase(activePort);
-      const statusPromise = fetch(`${serviceBase(activePort)}/status`);
+      const statusPromise = fetchSharedServiceStatus();
       const [statusResp, contractsResp, registryResp] = await Promise.all([
         statusPromise,
-        fetch(`${base}/contracts`).catch(() => null),
-        fetch(`${base}/browser-capability-registry`).catch(() => null),
+        fetchSharedServiceContracts().catch(() => null),
+        fetchSharedBrowserCapabilityRegistry().catch(() => null),
       ]);
       const json = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
       if (!json.success) throw new Error(json.error || "Service status failed");
@@ -1418,13 +1426,15 @@ export function WorkspaceNavigator() {
     } catch (err) {
       setServiceError(err instanceof Error ? err.message : "Service status unavailable");
       return null;
+    } finally {
+      serviceStatusInFlightRef.current = false;
     }
   }, [activePort]);
 
   useEffect(() => {
-    void fetchServiceStatus();
-    const timer = setInterval(fetchServiceStatus, 7000);
-    return () => clearInterval(timer);
+    return startCompletionDrivenDashboardPoll(async () => {
+      await fetchServiceStatus();
+    }, 7000);
   }, [fetchServiceStatus]);
 
   useEffect(() => {

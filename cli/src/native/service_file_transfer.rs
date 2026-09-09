@@ -30,7 +30,7 @@ pub(crate) async fn handle_service_file_transfer(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "file_transfer requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
     let transfer = cmd
         .get("fileTransfer")
         .and_then(Value::as_object)
@@ -51,6 +51,9 @@ pub(crate) async fn handle_service_file_transfer(
         .get("targetId")
         .and_then(Value::as_str)
         .ok_or_else(|| "file_transfer requires serviceTabHandle.targetId".to_string())?;
+    // File transfer bypasses native auto-launch routing. Recover only this
+    // authorized retained target before reading or changing its file inputs.
+    crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await?;
     {
         let mgr = state
             .browser
@@ -423,9 +426,6 @@ pub(crate) async fn run_service_download_capture(
         .and_then(Value::as_str)
         .ok_or_else(|| "file_transfer download requires directory".to_string())?;
     let download_dir = service_prepare_allowed_download_dir(directory, download)?;
-    let download_dir_str = download_dir
-        .to_str()
-        .ok_or("Download directory path is not valid UTF-8")?;
     let max_bytes = download.get("maxBytes").and_then(Value::as_u64);
     if download
         .get("captureMode")
@@ -437,13 +437,37 @@ pub(crate) async fn run_service_download_capture(
     }
     let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
     let session_id = mgr.active_session_id()?.to_string();
-    tokio::time::timeout(
-        tokio::time::Duration::from_millis(timeout_ms.min(1000)),
-        mgr.set_download_behavior(download_dir_str),
+    let pid = mgr
+        .browser_pid()
+        .or(state.attached_browser_pid)
+        .ok_or("download_source_identity_unproven: local browser PID unavailable")?;
+    let owner = crate::process_identity::capture_process_identity(pid, None, None)
+        .ok_or("download_source_identity_unproven: local browser identity unavailable")?;
+    let binding = state
+        .runtime_owner_binding
+        .as_ref()
+        .ok_or("download_source_identity_unproven: current owner binding unavailable")?;
+    if crate::native::runtime_lifecycle::digest_json(&owner)?
+        != binding.claim.process_instance_digest
+    {
+        return Err("download_source_identity_unproven: process differs from current owner".into());
+    }
+    let tree = mgr
+        .client
+        .send_command("Page.getFrameTree", None, Some(&session_id))
+        .await?;
+    let mut observation =
+        super::service_download_artifact::DownloadObservation::from_frame_tree(&tree)?;
+    // Preserve the current context policy. A requested output directory is a
+    // delivery destination, not authority to redirect every peer download.
+    let observer = tokio::time::timeout(
+        Duration::from_millis(timeout_ms),
+        super::service_download_artifact::subscribe(mgr.get_cdp_url()),
     )
     .await
-    .map_err(|_| "file_transfer set download behavior timed out".to_string())??;
-    let mut rx = mgr.client.subscribe();
+    .map_err(|_| "download_subscription_failed: setup deadline elapsed")??;
+    super::service_download_artifact::verify_process(&owner)?;
+    let mut rx = observer.subscribe();
     tokio::time::timeout(
         tokio::time::Duration::from_millis(timeout_ms.min(1000)),
         interaction::click(
@@ -457,114 +481,42 @@ pub(crate) async fn run_service_download_capture(
         ),
     )
     .await
-    .map_err(|_| "file_transfer download click timed out".to_string())??;
+    .map_err(|_| "download_click_uncertain: click deadline elapsed".to_string())??;
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
-    let mut downloaded_guid: Option<String> = None;
-    let mut source_url: Option<String> = None;
-    let mut canceled_event = false;
-    let mut suggested_filename = download
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        match tokio::time::timeout(remaining, rx.recv()).await {
+            Ok(Ok(event)) => {
+                if observation.observe(&event.method, &event.params)? { break; }
+            }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => {
+                return Err("download_event_unproven: download observation lost events".into());
+            }
+            Ok(Err(_)) => return Err("download_event_unproven: event stream closed".into()),
+            Err(_) => return Err("download_events_unavailable: no exact completion observed; inspect existing context policy and trace before retry".into()),
+        }
+    }
+    let file_name = download
         .get("expectedFileName")
         .or_else(|| download.get("expectedFilename"))
         .and_then(Value::as_str)
-        .map(ToString::to_string);
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            return Err("Timeout waiting for file_transfer download".to_string());
-        }
-        match tokio::time::timeout(remaining, rx.recv()).await {
-            Ok(Ok(event)) => {
-                let is_page_session = event.session_id.as_deref() == Some(&session_id);
-                let is_download_event = |method: &str, browser_method: &str, page_method: &str| {
-                    method == browser_method || (method == page_method && is_page_session)
-                };
-                if is_download_event(
-                    &event.method,
-                    "Browser.downloadWillBegin",
-                    "Page.downloadWillBegin",
-                ) {
-                    if let Some(guid) = event.params.get("guid").and_then(Value::as_str) {
-                        downloaded_guid = Some(guid.to_string());
-                    }
-                    if source_url.is_none() {
-                        source_url = event
-                            .params
-                            .get("url")
-                            .and_then(Value::as_str)
-                            .map(ToString::to_string);
-                    }
-                    if suggested_filename.is_none() {
-                        suggested_filename = event
-                            .params
-                            .get("suggestedFilename")
-                            .and_then(Value::as_str)
-                            .map(ToString::to_string);
-                    }
-                }
-                if is_download_event(
-                    &event.method,
-                    "Browser.downloadProgress",
-                    "Page.downloadProgress",
-                ) {
-                    match event.params.get("state").and_then(Value::as_str) {
-                        Some("completed") => break,
-                        Some("canceled") => {
-                            canceled_event = true;
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
-            Ok(Err(_)) => return Err("Event stream closed".to_string()),
-            Err(_) => {
-                return Err("Timeout waiting for file_transfer download".to_string());
-            }
-        }
-    }
-    let file_name = suggested_filename
-        .as_deref()
+        .or(observation.filename.as_deref())
         .and_then(service_safe_file_name)
-        .ok_or_else(|| "file_transfer download could not determine safe file name".to_string())?;
+        .ok_or("download_artifact_path_unsafe: no safe destination filename")?;
     let dest = download_dir.join(&file_name);
-    if let Some(guid) = downloaded_guid.as_deref() {
-        let guid_path = download_dir.join(guid);
-        for _ in 0..10 {
-            if guid_path.exists() {
-                break;
-            }
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        }
-        if guid_path.exists() && guid_path != dest {
-            fs::rename(&guid_path, &dest)
-                .map_err(|err| format!("Failed to rename downloaded file: {err}"))?;
-        }
-    }
-    if !dest.exists() && canceled_event {
-        return Err("Download was canceled".to_string());
-    }
-    if !dest.exists() {
-        return Err("Downloaded file not found at captured path".to_string());
-    }
-    let metadata = fs::metadata(&dest)
-        .map_err(|err| format!("Failed to read downloaded file metadata: {err}"))?;
-    if let Some(max_bytes) = max_bytes {
-        if metadata.len() > max_bytes {
-            return Err(format!(
-                "Downloaded file size {} exceeds maxBytes {}",
-                metadata.len(),
-                max_bytes
-            ));
-        }
-    }
-    Ok(json!(
-        { "ok" : true, "selector" : selector, "localPath" : dest.to_string_lossy()
-        .to_string(), "fileName" : file_name, "size" : metadata.len(), "mimeType" :
-        service_guess_mime_type(& dest), "sourceUrl" : source_url, "timedOut" :
-        false, "canceledEvent" : canceled_event, "maxBytes" : max_bytes, }
-    ))
+    let source = observation
+        .path
+        .as_deref()
+        .ok_or("download_completion_path_missing: no completed path")?;
+    let size =
+        super::service_download_artifact::deliver(&owner, Path::new(source), &dest, max_bytes)?;
+    Ok(json!({
+        "ok": true, "selector": selector, "localPath": dest.to_string_lossy(),
+        "fileName": file_name, "size": size, "mimeType": service_guess_mime_type(&dest),
+        "sourceUrl": observation.url, "timedOut": false, "canceledEvent": false, "maxBytes": max_bytes
+    }))
 }
+
 pub(crate) fn service_canonical_allowed_paths(
     value: Option<&Value>,
 ) -> Result<Vec<PathBuf>, String> {

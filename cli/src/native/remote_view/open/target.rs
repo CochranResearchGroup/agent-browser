@@ -6,6 +6,7 @@ use super::runtime::{
     RouteBoundBrowserObservation, RouteBoundOpenRuntime, SwitchTargetRequest,
 };
 use super::shared::*;
+use crate::native::browser_lifecycle::profile_child_access_from_command;
 pub(crate) fn remote_view_open_reusable_live_target(
     pages: &[PageInfo],
     preferred_target_id: Option<&str>,
@@ -168,9 +169,13 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
     });
     let mut tab = if let Some(page) = selected {
         let switch = if observation.active_target_id.as_deref() == Some(page.target_id.as_str()) {
+            // The page list may still carry the title observed during navigation.
+            // The active title is a live document.title read for this exact target;
+            // do not replace it with cached metadata when reconnecting a handoff.
+            let title = observation.active_title.as_deref().unwrap_or(&page.title);
             json!(
                 { "targetId" : page.target_id, "state" : "already_active", "url" : page
-                .url, "title" : page.title, }
+                .url, "title" : title, }
             )
         } else {
             supervisor
@@ -284,7 +289,8 @@ pub(crate) fn route_bound_open_reused_target_result(
         format!("target:{target_id}"), "targetId" : target_id, "url" : url, "title" :
         title, "profileId" : profile_id, "profileOrigin" : "agent_browser_owned",
         "leaseId" : session_id, "leaseState" : "shared", "cleanupPolicy" : "close_tabs",
-        "leaseHeartbeatExpected" : true, "ownerSessionId" : session_id, "jobId" :
+        "leaseHeartbeatExpected" : true, "ownerSessionId" : session_id,
+        "profileAccess" : profile_child_access_from_command(cmd), "jobId" :
         Value::Null, "traceFilter" : { "browserId" : browser_id, "profileId" :
         profile_id, "sessionId" : session_id, "serviceName" :
         optional_command_string(cmd, "serviceName"), "agentName" :
@@ -292,14 +298,18 @@ pub(crate) fn route_bound_open_reused_target_result(
         optional_command_string(cmd, "taskName"), }, "valid" : true, "staleReason" :
         Value::Null, }
     );
-    persist_service_owned_tab_new(
-        cmd,
-        session_id,
-        Some(target_id),
-        Some(&url),
-        Some(&title),
-        &service_tab_handle,
-    )?;
+    // Resolving presentation carries no new client acquisition authority.
+    // Persisting this synthetic handle would erase the original child's grant.
+    if cmd.get("durableResolutionMode").and_then(Value::as_str) != Some("reacquire_only") {
+        persist_service_owned_tab_new(
+            cmd,
+            session_id,
+            Some(target_id),
+            Some(&url),
+            Some(&title),
+            &service_tab_handle,
+        )?;
+    }
     Ok(json!(
         { "targetId" : target_id, "url" : url, "title" : title, "browserId" :
         browser_id, "sessionId" : session_id, "profileId" : profile_id,

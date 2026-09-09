@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "agent-browser.p157-regression-oracle.v1",
+  "contractSchemas": [
+    "service-profile-access-policy.v1.schema.json",
+    "service-profile-access-decision.v1.schema.json",
+    "service-request-provenance.v1.schema.json",
+    "service-terminal-outcome.v1.schema.json",
+    "service-profile-policy-migration.v1.schema.json",
+    "service-dashboard-health.v1.schema.json"
+  ],
+  "cases": [
+    {
+      "id": "scheduler-rejection-has-one-terminal-outcome",
+      "implementationWorkUnit": "W4",
+      "currentStatus": "green",
+      "risk": "Scheduler profile-lease rejection persists and responds before structured failure decoration.",
+      "requiredPaths": ["response.terminalOutcome", "job.terminalOutcome", "event.provenance.requestId"],
+      "targetValues": {
+        "response.terminalOutcome": "outcome:scheduler-rejection",
+        "job.terminalOutcome": "outcome:scheduler-rejection",
+        "event.provenance.requestId": "request:scheduler-rejection"
+      },
+      "currentProjection": {
+        "response": {
+          "success": false,
+          "error": "profile lease rejected",
+          "terminalOutcome": "outcome:scheduler-rejection"
+        },
+        "job": {
+          "state": "failed",
+          "error": "profile lease rejected",
+          "terminalOutcome": "outcome:scheduler-rejection"
+        },
+        "event": {
+          "kind": "job_terminal",
+          "provenance": { "requestId": "request:scheduler-rejection" }
+        }
+      }
+    },
+    {
+      "id": "runtime-lane-survives-ingress-routing",
+      "implementationWorkUnit": "W3",
+      "currentStatus": "green",
+      "risk": "The runtime host consumes the session selector before ControlRequest retains causal provenance.",
+      "requiredPaths": ["controlRequest.provenance.runtimeLaneId", "job.provenance.runtimeLaneId"],
+      "targetValues": {
+        "controlRequest.provenance.runtimeLaneId": "runtime-lane-2",
+        "job.provenance.runtimeLaneId": "runtime-lane-2"
+      },
+      "currentProjection": {
+        "controlRequest": {
+          "sessionNameConsumed": true,
+          "provenance": { "runtimeLaneId": "runtime-lane-2" }
+        },
+        "job": { "provenance": { "runtimeLaneId": "runtime-lane-2" } }
+      }
+    },
+    {
+      "id": "identity-denial-recourse-is-not-circular",
+      "implementationWorkUnit": "W5",
+      "currentStatus": "green",
+      "risk": "A client can be told to acquire the same profile whose acquisition produced the identity denial.",
+      "requiredPaths": ["failure.subject", "failure.missingPermission", "failure.executableNextAction"],
+      "forbiddenValues": ["failure.executableNextAction=profile_acquire_same_request"],
+      "currentProjection": {
+        "failure": {
+          "code": "existing_session_profile_identity_unproven",
+          "subject": { "subjectId": null, "assurance": "unknown" },
+          "missingPermission": "lifecycle_manage",
+          "executableNextAction": "service_profile_recovery_plan"
+        }
+      }
+    },
+    {
+      "id": "shared-local-does-not-require-cryptographic-enrollment",
+      "implementationWorkUnit": "W5",
+      "currentStatus": "green",
+      "risk": "Ordinary trusted local profile reuse is blocked by universal principal and capability proof.",
+      "requiredPaths": ["decision.policy.mode", "decision.subject.assurance", "decision.allowed"],
+      "targetValues": { "decision.allowed": true },
+      "currentProjection": {
+        "decision": {
+          "policy": { "mode": "shared-local" },
+          "subject": { "assurance": "self-declared" },
+          "profileReuseAction": "reuse_existing_browser",
+          "allowed": true
+        }
+      }
+    },
+    {
+      "id": "access-ambiguity-cannot-block-runtime-health",
+      "implementationWorkUnit": "W9",
+      "currentStatus": "green",
+      "risk": "Dashboard warning composition can present profile access ambiguity as runtime drift.",
+      "requiredPaths": ["health.runtime.ready", "health.access.findings", "health.acquisition.requestScoped"],
+      "forbiddenValues": ["health.runtime.state=blocked_by_access_ambiguity"],
+      "currentProjection": {
+        "health": {
+          "runtime": { "state": "ready", "ready": true, "findings": [] },
+          "access": {
+            "state": "attention",
+            "findings": [
+              {
+                "code": "legacy_profile_identity_ambiguous",
+                "blocking": false,
+                "message": "Historical profile ownership could not be proven."
+              }
+            ]
+          },
+          "acquisition": {
+            "state": "available",
+            "requestScoped": true,
+            "findings": []
+          }
+        }
+      }
+    },
+    {
+      "id": "self-declared-ephemeral-client-has-executable-continuity",
+      "implementationWorkUnit": "W11",
+      "currentStatus": "green",
+      "risk": "A trusted local client is admitted by shared-local policy but cannot launch or reconnect because no managed profile or strict runtime-owner proof exists.",
+      "requiredPaths": ["decision.profile.mode", "decision.profile.runtimeProfile", "decision.serviceRequest.available", "decision.continuity.requiresStrictOwnerProof"],
+      "targetValues": {
+        "decision.profile.mode": "managed_ephemeral",
+        "decision.serviceRequest.available": true,
+        "decision.continuity.requiresStrictOwnerProof": false
+      },
+      "currentProjection": {
+        "decision": {
+          "profile": {
+            "mode": "managed_ephemeral",
+            "runtimeProfile": "managed-ephemeral-stable-client"
+          },
+          "serviceRequest": { "available": true },
+          "continuity": { "requiresStrictOwnerProof": false }
+        }
+      }
+    }
+  ]
+}

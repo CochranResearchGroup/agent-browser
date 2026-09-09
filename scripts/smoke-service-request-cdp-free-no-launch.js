@@ -3,8 +3,8 @@
 import { spawnSync } from 'node:child_process';
 
 const tests = [
-  'service_request_command_rejects_cdp_free_without_non_cdp_execution',
-  'service_request_command_accepts_cdp_free_launch',
+  'test_cdp_free_launch_plan_is_no_devtools_headed_lifecycle_only',
+  'test_cdp_free_launch_response_reports_unsupported_cdp_operations',
 ];
 
 for (const testName of tests) {

@@ -185,6 +185,7 @@ try {
   assert.deepEqual(transactionStatusPayload.readiness, {
     payloadReady: true,
     selectedGenerationReady: true,
+    currentSelectionEvidence: null,
     runtimeConvergenceReady: true,
     upgradeTransactionState: 'accepted',
     dashboardIngressReady: false,

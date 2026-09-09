@@ -24,7 +24,7 @@ pub(crate) async fn handle_service_ui_action(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "ui_action requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
     let ui_action = cmd
         .get("uiAction")
         .and_then(Value::as_object)

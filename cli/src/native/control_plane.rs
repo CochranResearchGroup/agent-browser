@@ -17,6 +17,10 @@ use super::desktop_evidence_action::redact_desktop_evidence_stream_result;
 use super::desktop_interaction::redact_desktop_interaction_stream_result;
 use super::desktop_prompt_perception::redact_desktop_prompt_stream_result;
 use super::service_failure::attach_service_failure_recourse;
+use super::service_failure_journal::{
+    append_service_failure_best_effort, opaque_identifier_hash, ServiceFailureCategory,
+    ServiceFailureRecord, ServiceFailureReferences,
+};
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
     reconcile_persisted_service_state, record_browser_health_changed_event,
@@ -36,7 +40,11 @@ use super::service_model::{
 use super::service_monitors::{
     persisted_due_monitor_work_pending, SERVICE_MONITORS_RUN_DUE_ACTION,
 };
+use super::service_request_provenance::ServiceRequestProvenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+use super::service_terminal_outcome::{
+    ServiceTerminalOutcome, ServiceTerminalPhase, ServiceTerminalState,
+};
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
 const MAX_SERVICE_EVENTS: usize = 100;
@@ -48,6 +56,7 @@ pub struct ControlPlaneHandle {
     service_job_timeout_ms: Option<u64>,
     service_monitor_interval_ms: Option<u64>,
     running_cancellations: Arc<Mutex<HashMap<String, RunningJobCancel>>>,
+    runtime_lane_id: String,
 }
 
 pub struct ControlPlaneStatus {
@@ -95,6 +104,7 @@ pub struct ControlRequest {
     pub id: String,
     pub job_id: String,
     pub action: String,
+    pub provenance: ServiceRequestProvenance,
     pub service_name: Option<String>,
     pub agent_name: Option<String>,
     pub task_name: Option<String>,
@@ -112,6 +122,35 @@ pub struct ControlRequest {
     pub profile_lease_wait_conflict_session_ids: Vec<String>,
     pub profile_lease_wait_retry_after_ms: Option<u64>,
     pub response_tx: oneshot::Sender<Value>,
+}
+
+impl ControlRequest {
+    fn terminal_snapshot(&self) -> Self {
+        let (response_tx, _response_rx) = oneshot::channel();
+        Self {
+            id: self.id.clone(),
+            job_id: self.job_id.clone(),
+            action: self.action.clone(),
+            provenance: self.provenance.clone(),
+            service_name: self.service_name.clone(),
+            agent_name: self.agent_name.clone(),
+            task_name: self.task_name.clone(),
+            naming_warnings: self.naming_warnings.clone(),
+            command: self.command.clone(),
+            priority: self.priority,
+            timeout_ms: self.timeout_ms,
+            cancellation: self.cancellation.clone(),
+            submitted_at_wall: self.submitted_at_wall.clone(),
+            submitted_at_mono: self.submitted_at_mono,
+            profile_lease_wait_started_at: self.profile_lease_wait_started_at,
+            profile_lease_wait_profile_id: self.profile_lease_wait_profile_id.clone(),
+            profile_lease_wait_conflict_session_ids: self
+                .profile_lease_wait_conflict_session_ids
+                .clone(),
+            profile_lease_wait_retry_after_ms: self.profile_lease_wait_retry_after_ms,
+            response_tx,
+        }
+    }
 }
 
 enum WorkerMessage {
@@ -159,6 +198,7 @@ impl ControlPlaneWorker {
         service_job_timeout_ms: Option<u64>,
         service_monitor_interval_ms: Option<u64>,
     ) -> ControlPlaneHandle {
+        let runtime_lane_id = state.session_id.clone();
         let (tx, rx) = mpsc::channel(capacity);
         let status = Arc::new(ControlPlaneStatus::new());
         let running_cancellations = Arc::new(Mutex::new(HashMap::new()));
@@ -186,6 +226,7 @@ impl ControlPlaneWorker {
             service_job_timeout_ms,
             service_monitor_interval_ms,
             running_cancellations,
+            runtime_lane_id,
         }
     }
 }
@@ -205,7 +246,29 @@ impl ControlPlaneHandle {
         service_state: Value,
         launch_config: Value,
         full_tab_history: bool,
+        service_state_projection: super::service_status_projection::ServiceStateProjectionMode,
     ) -> Value {
+        let service_state = if service_state.is_null() {
+            match tokio::task::spawn_blocking(|| {
+                LockedServiceStateRepository::default_json()?.load_snapshot()
+            })
+            .await
+            {
+                Ok(Ok(state)) => serde_json::to_value(state).unwrap_or_else(|_| json!({})),
+                Ok(Err(error)) => {
+                    return json!({ "id": id, "success": false, "error": error });
+                }
+                Err(error) => {
+                    return json!({
+                        "id": id,
+                        "success": false,
+                        "error": format!("Service status snapshot task failed: {error}"),
+                    });
+                }
+            }
+        } else {
+            service_state
+        };
         let repository = match LockedServiceStateRepository::default_json() {
             Ok(repository) => repository,
             Err(error) => return json!({ "id": id, "success": false, "error": error }),
@@ -216,6 +279,7 @@ impl ControlPlaneHandle {
             service_state,
             launch_config,
             full_tab_history,
+            service_state_projection,
             super::service_status_projection::ServiceStatusProjectionDependencies::new(
                 &repository,
                 &super::service_status_projection::ReconcileServiceStatusAuthority,
@@ -236,6 +300,7 @@ impl ControlPlaneHandle {
         service_state: Value,
         launch_config: Value,
         full_tab_history: bool,
+        service_state_projection: super::service_status_projection::ServiceStateProjectionMode,
         dependencies: super::service_status_projection::ServiceStatusProjectionDependencies<
             '_,
             Repository,
@@ -248,18 +313,31 @@ impl ControlPlaneHandle {
         Preparer: super::service_status_projection::ServiceStatusAuthorityPreparer,
         BrowserAuthority: super::service_status_projection::ServiceStatusBrowserAuthorityProvider,
     {
-        let Ok(mut service_state) = serde_json::from_value::<ServiceState>(service_state) else {
-            return json!({
-                "id": id,
-                "success": false,
-                "error": "Invalid serviceState",
-            });
+        let mut service_state = if service_state.is_null() {
+            match dependencies.repository.load_snapshot() {
+                Ok(state) => state,
+                Err(error) => {
+                    return json!({ "id": id, "success": false, "error": error });
+                }
+            }
+        } else {
+            let Ok(service_state) = serde_json::from_value::<ServiceState>(service_state) else {
+                return json!({
+                    "id": id,
+                    "success": false,
+                    "error": "Invalid serviceState",
+                });
+            };
+            service_state
         };
         let waiting_profile_lease_job_count =
             service_state_waiting_profile_lease_job_count(&service_state);
         service_state.control_plane = Some(self.status_snapshot(waiting_profile_lease_job_count));
         dependencies.preparer.prepare(&mut service_state).await;
-        let browser_session_authority = dependencies.browser_authority.snapshot(&service_state);
+        let browser_session_authority = dependencies
+            .browser_authority
+            .snapshot(&service_state)
+            .await;
         let control_plane = service_state
             .control_plane
             .as_ref()
@@ -280,6 +358,7 @@ impl ControlPlaneHandle {
             browser_session_authority,
             launch_config,
             full_tab_history,
+            service_state_projection,
         )
         .await;
         service_status_result_envelope(id, result)
@@ -311,6 +390,26 @@ impl ControlPlaneHandle {
     }
 
     pub async fn submit(&self, command: Value) -> Value {
+        let connection_instance_id = super::service_connection_lifetime::new_connection_id();
+        let response = self
+            .submit_from_connection(command, &connection_instance_id)
+            .await;
+        if let Err(error) = persist_profile_connection_disconnected(&connection_instance_id) {
+            eprintln!(
+                "Could not mark service connection {connection_instance_id} disconnected: {error}"
+            );
+        }
+        response
+    }
+
+    /// Submit a command from one daemon transport connection. The connection
+    /// identity is generated by the service and remains stable for every
+    /// command read from that transport.
+    pub(crate) async fn submit_from_connection(
+        &self,
+        command: Value,
+        connection_instance_id: &str,
+    ) -> Value {
         let id = command
             .get("id")
             .and_then(|v| v.as_str())
@@ -328,8 +427,19 @@ impl ControlPlaneHandle {
             id.clone()
         };
         let command = command_with_service_job_id(command, &job_id);
-        let (command, timeout_ms) =
+        let (mut command, timeout_ms) =
             command_with_effective_job_timeout(command, self.service_job_timeout_ms);
+        command["connectionInstanceId"] = json!(connection_instance_id);
+        if let Some(child_access) = command
+            .get_mut("profileChildAccess")
+            .and_then(Value::as_object_mut)
+        {
+            child_access.insert(
+                "connectionInstanceId".to_string(),
+                json!(connection_instance_id),
+            );
+            child_access.insert("connectionState".to_string(), json!("active"));
+        }
         let _service_state_lock_timeout_override =
             crate::native::service_store::service_state_lock_timeout_override(
                 command
@@ -340,15 +450,46 @@ impl ControlPlaneHandle {
         let service_name = optional_command_string(&command, "serviceName");
         let agent_name = optional_command_string(&command, "agentName");
         let task_name = optional_command_string(&command, "taskName");
+        if command
+            .get("clientSubjectId")
+            .and_then(Value::as_str)
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            if let Some(subject_id) =
+                super::service_request_provenance::stable_self_declared_subject(
+                    service_name.as_deref(),
+                    agent_name.as_deref(),
+                    task_name.as_deref(),
+                )
+            {
+                command["clientSubjectId"] = json!(subject_id);
+            }
+        }
+        if command
+            .get("clientSubjectId")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+            && command.get("identityAssurance").is_none()
+        {
+            command["identityAssurance"] = json!("self-declared");
+        }
         let naming_warnings = request_naming_warnings(
             service_name.as_deref(),
             agent_name.as_deref(),
             task_name.as_deref(),
         );
+        let provenance = ServiceRequestProvenance::capture(
+            &command,
+            if id.is_empty() { &job_id } else { &id },
+            &job_id,
+            connection_instance_id,
+            &self.runtime_lane_id,
+        );
         let request = ControlRequest {
             id: id.clone(),
             job_id,
             action: action.clone(),
+            provenance,
             service_name,
             agent_name,
             task_name,
@@ -365,6 +506,7 @@ impl ControlPlaneHandle {
             profile_lease_wait_retry_after_ms: None,
             response_tx,
         };
+        let terminal_fallback = request.terminal_snapshot();
 
         self.status.queue_depth.fetch_add(1, Ordering::Relaxed);
         persist_service_job_queued(&request);
@@ -373,8 +515,9 @@ impl ControlPlaneHandle {
             Err(mpsc::error::TrySendError::Full(WorkerMessage::Request(request))) => {
                 let request = *request;
                 self.status.queue_depth.fetch_sub(1, Ordering::Relaxed);
-                persist_service_job_failed_to_enqueue(&request, "Control queue is full");
-                return json!({
+                return finalize_service_request(
+                    &request,
+                    json!({
                     "id": id,
                     "success": false,
                     "error": "Control queue is full",
@@ -383,13 +526,17 @@ impl ControlPlaneHandle {
                         "worker_state": self.status.worker_state().as_str(),
                         "browser_health": self.status.browser_health().as_str(),
                     },
-                });
+                    }),
+                    ServiceTerminalState::Rejected,
+                    ServiceTerminalPhase::QueueAdmission,
+                );
             }
             Err(mpsc::error::TrySendError::Closed(WorkerMessage::Request(request))) => {
                 let request = *request;
                 self.status.queue_depth.fetch_sub(1, Ordering::Relaxed);
-                persist_service_job_failed_to_enqueue(&request, "Control plane worker is stopped");
-                return json!({
+                return finalize_service_request(
+                    &request,
+                    json!({
                     "id": id,
                     "success": false,
                     "error": "Control plane worker is stopped",
@@ -397,7 +544,10 @@ impl ControlPlaneHandle {
                         "worker_state": self.status.worker_state().as_str(),
                         "browser_health": self.status.browser_health().as_str(),
                     },
-                });
+                    }),
+                    ServiceTerminalState::Rejected,
+                    ServiceTerminalPhase::QueueAdmission,
+                );
             }
             Err(mpsc::error::TrySendError::Full(WorkerMessage::Shutdown(_)))
             | Err(mpsc::error::TrySendError::Closed(WorkerMessage::Shutdown(_))) => {
@@ -416,15 +566,20 @@ impl ControlPlaneHandle {
 
         match response_rx.await {
             Ok(response) => response,
-            Err(_) => json!({
-                "id": id,
-                "success": false,
-                "error": "Control plane worker stopped before responding",
-                "data": {
-                    "worker_state": self.status.worker_state().as_str(),
-                    "browser_health": self.status.browser_health().as_str(),
-                },
-            }),
+            Err(_) => finalize_service_request(
+                &terminal_fallback,
+                json!({
+                    "id": id,
+                    "success": false,
+                    "error": "Control plane worker stopped before responding",
+                    "data": {
+                        "worker_state": self.status.worker_state().as_str(),
+                        "browser_health": self.status.browser_health().as_str(),
+                    },
+                }),
+                ServiceTerminalState::Failed,
+                ServiceTerminalPhase::Finalize,
+            ),
         }
     }
 
@@ -480,6 +635,37 @@ impl ControlPlaneHandle {
     fn browser_health(&self) -> BrowserHealth {
         self.status.browser_health()
     }
+}
+
+pub(crate) fn persist_profile_connection_disconnected(
+    connection_instance_id: &str,
+) -> Result<usize, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    persist_profile_connection_disconnected_in_repository(&repository, connection_instance_id)
+}
+
+fn persist_profile_connection_disconnected_in_repository<
+    S: super::service_store::ServiceStateStore,
+>(
+    repository: &LockedServiceStateRepository<S>,
+    connection_instance_id: &str,
+) -> Result<usize, String> {
+    // Read-only transports own no profile children. Test current ownership and
+    // persist a real disconnect atomically so polling cannot churn lease revisions.
+    repository
+        .mutate_if(
+            |state| {
+                state.tabs.values().any(|tab| {
+                    tab.profile_access.as_ref().is_some_and(|access| {
+                        access.connection_instance_id.as_deref() == Some(connection_instance_id)
+                        && access.connection_state
+                            == super::service_profile_access_policy::ProfileConnectionState::Active
+                    })
+                })
+            },
+            |state| Ok(state.mark_profile_connection_disconnected(connection_instance_id)),
+        )
+        .map(|changed| changed.unwrap_or(0))
 }
 
 pub(crate) fn service_status_result_envelope(
@@ -856,6 +1042,7 @@ fn persist_service_job_queued(request: &ControlRequest) {
     persist_service_job(ServiceJob {
         id: service_job_id(request),
         action: request.action.clone(),
+        provenance: request.provenance.clone(),
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
@@ -895,6 +1082,7 @@ fn persist_service_job_waiting_profile_lease(
     persist_service_job(ServiceJob {
         id: service_job_id(request),
         action: request.action.clone(),
+        provenance: request.provenance.clone(),
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
@@ -1042,6 +1230,7 @@ fn persist_service_job_running(request: &ControlRequest) {
     persist_service_job(ServiceJob {
         id: service_job_id(request),
         action: request.action.clone(),
+        provenance: request.provenance.clone(),
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
@@ -1072,63 +1261,183 @@ fn persist_service_job_running(request: &ControlRequest) {
     });
 }
 
-fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
+fn finalize_service_request(
+    request: &ControlRequest,
+    mut response: Value,
+    state: ServiceTerminalState,
+    phase: ServiceTerminalPhase,
+) -> Value {
+    // Recipe execution can fail inside a successfully transported response.
+    // Preserve its diagnostic payload while making job/event/trace outcomes
+    // reflect the operation, rather than the outer transport envelope.
+    let recipe_failed = request.action == "file_transfer"
+        && response.pointer("/data/ok").and_then(Value::as_bool) == Some(false);
+    let state = if recipe_failed && state == ServiceTerminalState::Succeeded {
+        response["success"] = json!(false);
+        response["error"] = response
+            .pointer("/data/error")
+            .cloned()
+            .unwrap_or_else(|| json!("file_transfer_failed: recipe did not complete"));
+        ServiceTerminalState::Failed
+    } else {
+        state
+    };
+    attach_service_failure_recourse(&mut response);
+    if let Some(existing) = load_service_job(&service_job_id(request))
+        .and_then(|job| job.terminal_outcome)
+        .filter(|outcome| outcome.state == state)
+    {
+        if let Some(failure) = existing.failure.as_ref() {
+            response["failure"] = serde_json::to_value(failure).unwrap_or(Value::Null);
+        }
+        response["terminalOutcome"] = serde_json::to_value(existing).unwrap_or(Value::Null);
+        return response;
+    }
+    let completed_at = current_timestamp();
+    let outcome = ServiceTerminalOutcome::from_response(
+        &request.provenance,
+        &response,
+        state,
+        phase,
+        completed_at,
+    );
+    response["terminalOutcome"] = serde_json::to_value(&outcome).unwrap_or(Value::Null);
+    persist_service_job_terminal(request, &response, &outcome);
+    response
+}
+
+fn persist_service_job_terminal(
+    request: &ControlRequest,
+    response: &Value,
+    outcome: &ServiceTerminalOutcome,
+) {
     let job_id = service_job_id(request);
-    let started_at = load_service_job(&job_id)
-        .and_then(|job| job.started_at)
-        .unwrap_or_else(current_timestamp);
-    let success = response
-        .get("success")
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false);
+    let allocation_refs = service_job_allocation_refs(request, Some(response));
     let error = response
         .get("error")
-        .and_then(|value| value.as_str())
+        .and_then(Value::as_str)
         .map(str::to_string);
-    let failure = response
-        .get("failure")
-        .cloned()
-        .and_then(|value| serde_json::from_value(value).ok());
-    let allocation_refs = service_job_allocation_refs(request, Some(response));
-
-    persist_service_job(ServiceJob {
-        id: job_id,
-        action: request.action.clone(),
+    let event = ServiceEvent {
+        id: format!("service-job-terminal-{}", uuid::Uuid::new_v4()),
+        timestamp: outcome.completed_at.clone(),
+        kind: ServiceEventKind::JobTerminal,
+        message: error
+            .clone()
+            .unwrap_or_else(|| format!("Service job {job_id} completed successfully")),
+        browser_id: request.provenance.browser_id.clone(),
+        profile_id: request.provenance.profile_id.clone(),
+        session_id: request.provenance.session_id.clone(),
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
-        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
-        site_id: service_job_optional_command_string(request, "siteId"),
-        login_id: service_job_optional_command_string(request, "loginId"),
-        target_service_ids: service_job_target_service_ids(request),
-        naming_warnings: request.naming_warnings.clone(),
-        has_naming_warning: !request.naming_warnings.is_empty(),
-        control_plane_mode: service_job_control_plane_mode(request),
-        lifecycle_only: service_job_lifecycle_only(request),
-        display_isolation: service_job_display_isolation(request),
-        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
-        display_allocation_id: allocation_refs.display_allocation_id,
-        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
-        remote_view_route_id: allocation_refs.remote_view_route_id,
-        route_pool_entry_id: allocation_refs.route_pool_entry_id,
-        viewer_lease_id: allocation_refs.viewer_lease_id,
-        controller_lease_id: allocation_refs.controller_lease_id,
-        target: JobTarget::Service,
-        owner: ServiceActor::System,
-        state: if success {
-            JobState::Succeeded
-        } else {
-            JobState::Failed
-        },
-        priority: service_job_priority(request.priority),
-        submitted_at: Some(request.submitted_at_wall.clone()),
-        started_at: Some(started_at),
-        completed_at: Some(current_timestamp()),
-        timeout_ms: request.timeout_ms,
-        result: Some(service_job_persisted_result(request, response)),
-        error,
-        failure,
+        provenance: Some(request.provenance.clone()),
+        terminal_outcome: Some(outcome.clone()),
+        details: Some(json!({
+            "jobId": job_id,
+            "action": request.action,
+        })),
+        ..ServiceEvent::default()
+    };
+    mutate_persisted_service_jobs(|service_state| {
+        let job = service_state
+            .jobs
+            .entry(job_id.clone())
+            .or_insert_with(|| ServiceJob {
+                id: job_id.clone(),
+                action: request.action.clone(),
+                provenance: request.provenance.clone(),
+                ..ServiceJob::default()
+            });
+        let emit_event = job.terminal_outcome.is_none();
+        job.state = match outcome.state {
+            ServiceTerminalState::Succeeded => JobState::Succeeded,
+            ServiceTerminalState::Failed | ServiceTerminalState::Rejected => JobState::Failed,
+            ServiceTerminalState::Cancelled => JobState::Cancelled,
+            ServiceTerminalState::TimedOut => JobState::TimedOut,
+        };
+        job.completed_at = Some(outcome.completed_at.clone());
+        job.result = Some(service_job_persisted_result(request, response));
+        job.error = error;
+        job.failure = outcome.failure.clone();
+        job.terminal_outcome = Some(outcome.clone());
+        job.display_allocation_id = allocation_refs.display_allocation_id.clone();
+        job.remote_view_route_id = allocation_refs.remote_view_route_id.clone();
+        job.route_pool_entry_id = allocation_refs.route_pool_entry_id.clone();
+        job.viewer_lease_id = allocation_refs.viewer_lease_id.clone();
+        job.controller_lease_id = allocation_refs.controller_lease_id.clone();
+        if emit_event {
+            service_state.events.push(event);
+            if service_state.events.len() > MAX_SERVICE_EVENTS {
+                let excess = service_state.events.len() - MAX_SERVICE_EVENTS;
+                service_state.events.drain(0..excess);
+            }
+        }
     });
+    if outcome.state != ServiceTerminalState::Succeeded {
+        let category =
+            failure_category_for_action(&request.action, request.service_name.as_deref());
+        let code = outcome
+            .failure
+            .as_ref()
+            .map(|failure| failure.code.as_str())
+            .filter(|code| !code.trim().is_empty())
+            .unwrap_or("service_request_failed");
+        let handoff_id_hash = service_job_optional_command_string(request, "handoffId")
+            .or_else(|| service_job_optional_command_string(request, "remoteViewHandoffId"))
+            .map(|id| opaque_identifier_hash(&id));
+        let record = ServiceFailureRecord::new(
+            category,
+            "service_control_plane",
+            format!("{:?}", outcome.phase).to_ascii_lowercase(),
+            code,
+            response
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("service request reached a non-success terminal state"),
+        )
+        .with_action(request.action.clone())
+        .with_references(ServiceFailureReferences {
+            runtime_environment_id: request.provenance.runtime_environment_id.clone(),
+            runtime_lane_id: request.provenance.runtime_lane_id.clone(),
+            request_id: Some(request.provenance.request_id.clone()),
+            job_id: Some(job_id),
+            trace_id: request.provenance.trace_id.clone(),
+            browser_id: request.provenance.browser_id.clone(),
+            profile_id: request.provenance.profile_id.clone(),
+            session_id: request.provenance.session_id.clone(),
+            route_id: allocation_refs.remote_view_route_id,
+            display_id: allocation_refs.display_allocation_id,
+            handoff_id_hash,
+        })
+        .with_details(json!({
+            "terminalState": outcome.state,
+            "effectState": outcome.effect_state,
+            "retryDisposition": outcome.retry_disposition,
+            "childAccessEvidence": outcome.failure.as_ref().and_then(
+                super::service_failure::child_access_failure_evidence),
+            "recommendedAction": outcome.failure.as_ref().map(|failure| &failure.recommended_action),
+        }));
+        append_service_failure_best_effort(&record);
+    }
+}
+
+fn failure_category_for_action(action: &str, service_name: Option<&str>) -> ServiceFailureCategory {
+    if service_name.is_some_and(|name| name.contains("dashboard")) {
+        return ServiceFailureCategory::DashboardAction;
+    }
+    match action {
+        "open" | "cdp_free_launch" => ServiceFailureCategory::BrowserLaunch,
+        "service_remote_view_handoff_resolve" => ServiceFailureCategory::HandoffLink,
+        "remote_view_open"
+        | "service_remote_view_route_preflight"
+        | "service_remote_view_browser_reattach"
+        | "service_remote_view_route_switch"
+        | "service_remote_view_route_checkout"
+        | "service_remote_view_route_release"
+        | "service_route_pool_repair" => ServiceFailureCategory::GuacamoleLoad,
+        "cdp_attach" | "cdp_detach" | "view_focus" => ServiceFailureCategory::CdpStream,
+        _ => ServiceFailureCategory::ServiceAction,
+    }
 }
 
 fn service_job_persisted_result(request: &ControlRequest, response: &Value) -> Value {
@@ -1157,6 +1466,14 @@ fn service_job_persisted_result(request: &ControlRequest, response: &Value) -> V
                 response.get("data").unwrap_or(&Value::Null),
             ),
         })
+    } else if response.pointer("/data/timedOut").and_then(Value::as_bool) == Some(true) {
+        json!({
+            "success": success,
+            "timedOut": true,
+            "timeoutMs": response.pointer("/data/timeoutMs").and_then(Value::as_u64),
+        })
+    } else if response.pointer("/data/cancelled").and_then(Value::as_bool) == Some(true) {
+        json!({ "success": success, "cancelled": true })
     } else {
         json!({ "success": success })
     };
@@ -1170,131 +1487,6 @@ fn service_job_persisted_result(request: &ControlRequest, response: &Value) -> V
     persisted
 }
 
-fn persist_service_job_timed_out(request: &ControlRequest) {
-    let job_id = service_job_id(request);
-    let started_at = load_service_job(&job_id)
-        .and_then(|job| job.started_at)
-        .unwrap_or_else(current_timestamp);
-    let timeout_ms = request.timeout_ms.unwrap_or_default();
-    let allocation_refs = service_job_allocation_refs(request, None);
-    persist_service_job(ServiceJob {
-        id: job_id,
-        action: request.action.clone(),
-        service_name: request.service_name.clone(),
-        agent_name: request.agent_name.clone(),
-        task_name: request.task_name.clone(),
-        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
-        site_id: service_job_optional_command_string(request, "siteId"),
-        login_id: service_job_optional_command_string(request, "loginId"),
-        target_service_ids: service_job_target_service_ids(request),
-        naming_warnings: request.naming_warnings.clone(),
-        has_naming_warning: !request.naming_warnings.is_empty(),
-        control_plane_mode: service_job_control_plane_mode(request),
-        lifecycle_only: service_job_lifecycle_only(request),
-        display_isolation: service_job_display_isolation(request),
-        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
-        display_allocation_id: allocation_refs.display_allocation_id,
-        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
-        remote_view_route_id: allocation_refs.remote_view_route_id,
-        route_pool_entry_id: allocation_refs.route_pool_entry_id,
-        viewer_lease_id: allocation_refs.viewer_lease_id,
-        controller_lease_id: allocation_refs.controller_lease_id,
-        target: JobTarget::Service,
-        owner: ServiceActor::System,
-        state: JobState::TimedOut,
-        priority: service_job_priority(request.priority),
-        submitted_at: Some(request.submitted_at_wall.clone()),
-        started_at: Some(started_at),
-        completed_at: Some(current_timestamp()),
-        timeout_ms: request.timeout_ms,
-        result: Some(json!({ "success": false, "timedOut": true, "timeoutMs": timeout_ms })),
-        error: Some(format!("Service job timed out after {}ms", timeout_ms)),
-        failure: None,
-    });
-}
-
-fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
-    let job_id = service_job_id(request);
-    let started_at = load_service_job(&job_id)
-        .and_then(|job| job.started_at)
-        .unwrap_or_else(current_timestamp);
-    let allocation_refs = service_job_allocation_refs(request, None);
-    persist_service_job(ServiceJob {
-        id: job_id,
-        action: request.action.clone(),
-        service_name: request.service_name.clone(),
-        agent_name: request.agent_name.clone(),
-        task_name: request.task_name.clone(),
-        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
-        site_id: service_job_optional_command_string(request, "siteId"),
-        login_id: service_job_optional_command_string(request, "loginId"),
-        target_service_ids: service_job_target_service_ids(request),
-        naming_warnings: request.naming_warnings.clone(),
-        has_naming_warning: !request.naming_warnings.is_empty(),
-        control_plane_mode: service_job_control_plane_mode(request),
-        lifecycle_only: service_job_lifecycle_only(request),
-        display_isolation: service_job_display_isolation(request),
-        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
-        display_allocation_id: allocation_refs.display_allocation_id,
-        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
-        remote_view_route_id: allocation_refs.remote_view_route_id,
-        route_pool_entry_id: allocation_refs.route_pool_entry_id,
-        viewer_lease_id: allocation_refs.viewer_lease_id,
-        controller_lease_id: allocation_refs.controller_lease_id,
-        target: JobTarget::Service,
-        owner: ServiceActor::System,
-        state: JobState::Cancelled,
-        priority: service_job_priority(request.priority),
-        submitted_at: Some(request.submitted_at_wall.clone()),
-        started_at: Some(started_at),
-        completed_at: Some(current_timestamp()),
-        timeout_ms: request.timeout_ms,
-        result: Some(json!({ "success": false, "cancelled": true })),
-        error: Some(reason.to_string()),
-        failure: None,
-    });
-}
-
-fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) {
-    let job_id = service_job_id(request);
-    let submitted_at = load_service_job(&job_id)
-        .and_then(|job| job.submitted_at)
-        .unwrap_or_else(current_timestamp);
-    let allocation_refs = service_job_allocation_refs(request, None);
-    persist_service_job(ServiceJob {
-        id: job_id,
-        action: request.action.clone(),
-        service_name: request.service_name.clone(),
-        agent_name: request.agent_name.clone(),
-        task_name: request.task_name.clone(),
-        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
-        site_id: service_job_optional_command_string(request, "siteId"),
-        login_id: service_job_optional_command_string(request, "loginId"),
-        target_service_ids: service_job_target_service_ids(request),
-        naming_warnings: request.naming_warnings.clone(),
-        has_naming_warning: !request.naming_warnings.is_empty(),
-        control_plane_mode: service_job_control_plane_mode(request),
-        lifecycle_only: service_job_lifecycle_only(request),
-        display_isolation: service_job_display_isolation(request),
-        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
-        display_allocation_id: allocation_refs.display_allocation_id,
-        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
-        remote_view_route_id: allocation_refs.remote_view_route_id,
-        route_pool_entry_id: allocation_refs.route_pool_entry_id,
-        viewer_lease_id: allocation_refs.viewer_lease_id,
-        controller_lease_id: allocation_refs.controller_lease_id,
-        target: JobTarget::Service,
-        owner: ServiceActor::System,
-        state: JobState::Failed,
-        priority: JobPriority::Normal,
-        submitted_at: Some(submitted_at),
-        completed_at: Some(current_timestamp()),
-        result: Some(json!({ "success": false })),
-        error: Some(error.to_string()),
-        ..ServiceJob::default()
-    });
-}
-
 fn service_job_cancelled(job_id: &str) -> bool {
     load_service_job(job_id).is_some_and(|job| job.state == JobState::Cancelled)
 }
@@ -1303,24 +1495,35 @@ fn enqueue_due_monitor_run(
     tx: &mpsc::Sender<WorkerMessage>,
     status: &Arc<ControlPlaneStatus>,
     service_job_timeout_ms: Option<u64>,
+    runtime_lane_id: &str,
 ) {
     if !persisted_due_monitor_work_pending() {
         return;
     }
     let (response_tx, _response_rx) = oneshot::channel();
     let id = format!("service-monitor-run-{}", uuid::Uuid::new_v4());
+    let command = json!({
+        "id": id,
+        "action": SERVICE_MONITORS_RUN_DUE_ACTION,
+    });
+    let connection_instance_id = super::service_connection_lifetime::new_connection_id();
+    let provenance = ServiceRequestProvenance::capture(
+        &command,
+        &id,
+        &id,
+        &connection_instance_id,
+        runtime_lane_id,
+    );
     let request = ControlRequest {
         id: id.clone(),
         job_id: id.clone(),
         action: SERVICE_MONITORS_RUN_DUE_ACTION.to_string(),
+        provenance,
         service_name: Some("agent-browser".to_string()),
         agent_name: Some("service-monitor-scheduler".to_string()),
         task_name: Some("run-due-monitors".to_string()),
         naming_warnings: Vec::new(),
-        command: json!({
-            "id": id,
-            "action": SERVICE_MONITORS_RUN_DUE_ACTION,
-        }),
+        command,
         priority: ControlPriority::Lifecycle,
         timeout_ms: service_job_timeout_ms,
         cancellation: RunningJobCancel::new(),
@@ -1339,12 +1542,30 @@ fn enqueue_due_monitor_run(
         Err(mpsc::error::TrySendError::Full(WorkerMessage::Request(request))) => {
             let request = *request;
             status.queue_depth.fetch_sub(1, Ordering::Relaxed);
-            persist_service_job_failed_to_enqueue(&request, "Control queue is full");
+            let _ = finalize_service_request(
+                &request,
+                json!({
+                    "id": request.id,
+                    "success": false,
+                    "error": "Control queue is full",
+                }),
+                ServiceTerminalState::Rejected,
+                ServiceTerminalPhase::QueueAdmission,
+            );
         }
         Err(mpsc::error::TrySendError::Closed(WorkerMessage::Request(request))) => {
             let request = *request;
             status.queue_depth.fetch_sub(1, Ordering::Relaxed);
-            persist_service_job_failed_to_enqueue(&request, "Control plane worker is stopped");
+            let _ = finalize_service_request(
+                &request,
+                json!({
+                    "id": request.id,
+                    "success": false,
+                    "error": "Control plane worker is stopped",
+                }),
+                ServiceTerminalState::Rejected,
+                ServiceTerminalPhase::QueueAdmission,
+            );
         }
         Err(mpsc::error::TrySendError::Full(WorkerMessage::Shutdown(_)))
         | Err(mpsc::error::TrySendError::Closed(WorkerMessage::Shutdown(_))) => {
@@ -1737,11 +1958,18 @@ async fn run_worker(
                                     Some("Service job was cancelled before dispatch"),
                                 );
                             }
-                            let _ = request.response_tx.send(json!({
-                                "id": request.id,
-                                "success": false,
-                                "error": "Service job was cancelled before dispatch",
-                            }));
+                            let response = finalize_service_request(
+                                &request,
+                                json!({
+                                    "id": request.id,
+                                    "success": false,
+                                    "error": "Service job was cancelled before dispatch",
+                                    "data": { "cancelled": true },
+                                }),
+                                ServiceTerminalState::Cancelled,
+                                ServiceTerminalPhase::Dispatch,
+                            );
+                            let _ = request.response_tx.send(response);
                             continue;
                         }
                         match scheduler_profile_lease_gate(&mut request, &state.session_id) {
@@ -1758,12 +1986,17 @@ async fn run_worker(
                                         Some(&error),
                                     );
                                 }
-                                persist_service_job_failed_to_enqueue(&request, &error);
-                                let _ = request.response_tx.send(json!({
-                                    "id": request.id,
-                                    "success": false,
-                                    "error": error,
-                                }));
+                                let response = finalize_service_request(
+                                    &request,
+                                    json!({
+                                        "id": request.id,
+                                        "success": false,
+                                        "error": error,
+                                    }),
+                                    ServiceTerminalState::Rejected,
+                                    ServiceTerminalPhase::SchedulerAdmission,
+                                );
+                                let _ = request.response_tx.send(response);
                                 continue;
                             }
                             SchedulerLeaseDecision::Wait {
@@ -1798,10 +2031,6 @@ async fn run_worker(
                                         };
                                         let request = *request;
                                         status.queue_depth.fetch_sub(1, Ordering::Relaxed);
-                                        persist_service_job_failed_to_enqueue(
-                                            &request,
-                                            "Control plane worker is stopped while waiting for profile lease",
-                                        );
                                         if request.profile_lease_wait_started_at.is_some() {
                                             record_profile_lease_wait_ended_event(
                                                 &request,
@@ -1809,11 +2038,17 @@ async fn run_worker(
                                                 Some("Control plane worker is stopped while waiting for profile lease"),
                                             );
                                         }
-                                        let _ = request.response_tx.send(json!({
-                                            "id": request.id,
-                                            "success": false,
-                                            "error": "Control plane worker is stopped while waiting for profile lease",
-                                        }));
+                                        let response = finalize_service_request(
+                                            &request,
+                                            json!({
+                                                "id": request.id,
+                                                "success": false,
+                                                "error": "Control plane worker is stopped while waiting for profile lease",
+                                            }),
+                                            ServiceTerminalState::Rejected,
+                                            ServiceTerminalPhase::SchedulerAdmission,
+                                        );
+                                        let _ = request.response_tx.send(response);
                                     }
                                 });
                                 continue;
@@ -1874,7 +2109,6 @@ async fn run_worker(
                                 json!(queue_wait_ms.saturating_add(daemon_total_ms));
                         }
                         state.current_cancellation = previous_cancellation;
-                        attach_service_failure_recourse(&mut response);
                         if let Ok(mut running) = running_cancellations.lock() {
                             running.remove(&request.job_id);
                         }
@@ -1886,15 +2120,21 @@ async fn run_worker(
                             .pointer("/data/cancelled")
                             .and_then(|value| value.as_bool())
                             == Some(true);
-                        if cancelled {
-                            persist_service_job_cancelled(&request, "Service job was cancelled while running");
-                        }
-                        if timed_out {
-                            persist_service_job_timed_out(&request);
-                        }
-                        if !timed_out && !cancelled {
-                            persist_service_job_finished(&request, &response);
-                        }
+                        let terminal_state = if cancelled {
+                            ServiceTerminalState::Cancelled
+                        } else if timed_out {
+                            ServiceTerminalState::TimedOut
+                        } else if response.get("success").and_then(Value::as_bool) == Some(true) {
+                            ServiceTerminalState::Succeeded
+                        } else {
+                            ServiceTerminalState::Failed
+                        };
+                        response = finalize_service_request(
+                            &request,
+                            response,
+                            terminal_state,
+                            ServiceTerminalPhase::Execution,
+                        );
                         send_response_before_follow_up(
                             request.response_tx,
                             response,
@@ -1942,7 +2182,12 @@ async fn run_worker(
                     None => std::future::pending::<tokio::time::Instant>().await,
                 }
             }, if service_monitor_interval.is_some() => {
-                enqueue_due_monitor_run(&tx, &status, service_job_timeout_ms);
+                enqueue_due_monitor_run(
+                    &tx,
+                    &status,
+                    service_job_timeout_ms,
+                    &state.session_id,
+                );
             }
         }
     }
@@ -2399,10 +2644,11 @@ mod tests {
     #[derive(Debug)]
     struct FixedBrowserAuthority;
 
+    #[async_trait::async_trait]
     impl super::super::service_status_projection::ServiceStatusBrowserAuthorityProvider
         for FixedBrowserAuthority
     {
-        fn snapshot(
+        async fn snapshot(
             &self,
             _service_state: &ServiceState,
         ) -> super::super::browser_session_authority::BrowserSessionAuthoritySnapshot {
@@ -2729,6 +2975,13 @@ mod tests {
 
     fn control_request_for_mode_test(command: Value) -> ControlRequest {
         let (response_tx, _response_rx) = oneshot::channel();
+        let provenance = ServiceRequestProvenance::capture(
+            &command,
+            "mode-test",
+            "mode-test",
+            "connection-test",
+            "test-lane",
+        );
         ControlRequest {
             id: "mode-test".to_string(),
             job_id: "mode-test".to_string(),
@@ -2737,6 +2990,7 @@ mod tests {
                 .and_then(Value::as_str)
                 .unwrap_or("unknown")
                 .to_string(),
+            provenance,
             service_name: Some("test-service".to_string()),
             agent_name: Some("test-agent".to_string()),
             task_name: Some("test-task".to_string()),
@@ -2753,6 +3007,86 @@ mod tests {
             profile_lease_wait_retry_after_ms: None,
             response_tx,
         }
+    }
+
+    #[test]
+    fn queued_job_preserves_runtime_lane_provenance_without_private_payload() {
+        let home = temp_home("control-plane-provenance");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let request = control_request_for_mode_test(json!({
+            "action": "navigate",
+            "requestId": "request-provenance",
+            "clientSubjectId": "client:fieldwork",
+            "identityAssurance": "self-declared",
+            "profileId": "research-gov",
+            "url": "https://private.example/path",
+            "credential": "must-not-persist"
+        }));
+
+        persist_service_job_queued(&request);
+
+        let job = load_service_job("mode-test").expect("queued job should be persisted");
+        assert_eq!(job.provenance.request_id, "request-provenance");
+        assert_eq!(job.provenance.runtime_lane_id.as_deref(), Some("test-lane"));
+        assert_eq!(
+            job.provenance.connection_instance_id.as_deref(),
+            Some("connection-test")
+        );
+        assert_eq!(
+            job.provenance.client_subject_id.as_deref(),
+            Some("client:fieldwork")
+        );
+        assert_eq!(
+            job.provenance.profile_resource_key.as_deref(),
+            Some("profile:research-gov")
+        );
+        let serialized = serde_json::to_string(&job.provenance).unwrap();
+        assert!(!serialized.contains("private.example"));
+        assert!(!serialized.contains("must-not-persist"));
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn transport_connection_identity_is_stable_across_queued_requests() {
+        let home = temp_home("control-plane-connection-provenance");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let mut state = DaemonState::new();
+        state.session_id = "runtime-lane-provenance".to_string();
+        let handle = ControlPlaneWorker::start(state);
+
+        for job_id in ["connection-job-1", "connection-job-2"] {
+            let response = handle
+                .submit_from_connection(
+                    json!({
+                        "id": job_id,
+                        "action": "state_list",
+                        "clientSubjectId": "client:fieldwork",
+                        "identityAssurance": "self-declared",
+                        "connectionInstanceId": "caller-cannot-override"
+                    }),
+                    "connection-service-owned",
+                )
+                .await;
+            assert_eq!(response["success"], true);
+        }
+
+        for job_id in ["connection-job-1", "connection-job-2"] {
+            let job = load_service_job(job_id).expect("completed job should remain persisted");
+            assert_eq!(
+                job.provenance.connection_instance_id.as_deref(),
+                Some("connection-service-owned")
+            );
+            assert_eq!(
+                job.provenance.runtime_lane_id.as_deref(),
+                Some("runtime-lane-provenance")
+            );
+        }
+
+        handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]
@@ -2972,6 +3306,7 @@ mod tests {
                     "warnings": []
                 }),
                 false,
+                super::super::service_status_projection::ServiceStateProjectionMode::Full,
             )
             .await;
 
@@ -3108,6 +3443,7 @@ mod tests {
                 json!({}),
                 fixed_launch_configuration(),
                 false,
+                super::super::service_status_projection::ServiceStateProjectionMode::Full,
             )
             .await;
 
@@ -3165,6 +3501,7 @@ mod tests {
             service_job_timeout_ms: None,
             service_monitor_interval_ms: None,
             running_cancellations: Arc::new(Mutex::new(HashMap::new())),
+            runtime_lane_id: "fixed-control-status".to_string(),
         };
         let control = handle
             .service_status_response_with_dependencies(
@@ -3172,6 +3509,7 @@ mod tests {
                 json!({}),
                 fixed_launch_configuration(),
                 false,
+                super::super::service_status_projection::ServiceStateProjectionMode::Full,
                 super::super::service_status_projection::ServiceStatusProjectionDependencies::new(
                     &repository,
                     &preparer,
@@ -3246,6 +3584,75 @@ mod tests {
     }
 
     #[test]
+    fn connection_disconnect_persists_only_matching_active_children() {
+        use super::super::service_model::BrowserTab;
+        use super::super::service_profile_access_policy::{
+            ProfileChildAccess, ProfileConnectionState,
+        };
+
+        let home = temp_home("connection-disconnect-persistence");
+        let path = home.join("state.json");
+        let store = JsonServiceStateStore::new(&path);
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let mut state = ServiceState::default();
+        for connection in ["closing", "surviving"] {
+            state.tabs.insert(
+                connection.to_string(),
+                BrowserTab {
+                    id: connection.to_string(),
+                    browser_id: "shared-browser".to_string(),
+                    profile_access: Some(ProfileChildAccess {
+                        subject_id: Some("client:disconnect-fixture".to_string()),
+                        connection_instance_id: Some(connection.to_string()),
+                        ..ProfileChildAccess::default()
+                    }),
+                    ..BrowserTab::default()
+                },
+            );
+        }
+        store.save(&state).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(
+            persist_profile_connection_disconnected_in_repository(&repository, "status-reader")
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            before,
+            "a read-only connection rewrote authority state"
+        );
+        assert_eq!(
+            persist_profile_connection_disconnected_in_repository(&repository, "closing").unwrap(),
+            1
+        );
+        let after = repository.load_snapshot().unwrap();
+        assert_eq!(
+            after.tabs["closing"]
+                .profile_access
+                .as_ref()
+                .unwrap()
+                .connection_state,
+            ProfileConnectionState::Disconnected
+        );
+        assert_eq!(
+            after.tabs["surviving"].profile_access,
+            state.tabs["surviving"].profile_access
+        );
+        let once = std::fs::read(&path).unwrap();
+        assert_eq!(
+            persist_profile_connection_disconnected_in_repository(&repository, "closing").unwrap(),
+            0
+        );
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            once,
+            "duplicate disconnect rewrote authority state"
+        );
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
     fn cancel_persisted_service_job_marks_queued_job_cancelled() {
         let home = temp_home("control-plane-cancel-queued");
         let guard = EnvGuard::new(&["HOME"]);
@@ -3273,9 +3680,17 @@ mod tests {
         assert_eq!(job.error.as_deref(), Some("stale"));
         assert_eq!(job.result.as_ref().unwrap()["cancelled"], true);
         assert!(job.completed_at.is_some());
+        assert_eq!(
+            job.terminal_outcome.as_ref().map(|outcome| outcome.state),
+            Some(ServiceTerminalState::Cancelled)
+        );
 
         let persisted = store.load().unwrap();
         assert_eq!(persisted.jobs["job-queued"].state, JobState::Cancelled);
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::JobTerminal));
         let _ = std::fs::remove_dir_all(&home);
     }
 
@@ -4341,9 +4756,83 @@ mod tests {
             Some("private_virtual_display")
         );
         assert_eq!(job.error.as_deref(), Some("Control queue is full"));
+        let response_outcome = response
+            .get("terminalOutcome")
+            .expect("queue rejection response must carry terminal outcome");
+        assert_eq!(
+            serde_json::to_value(job.terminal_outcome.as_ref().unwrap()).unwrap(),
+            *response_outcome
+        );
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::JobTerminal)
+            .expect("queue rejection must emit a terminal event");
+        assert_eq!(
+            serde_json::to_value(event.terminal_outcome.as_ref().unwrap()).unwrap(),
+            *response_outcome
+        );
+        assert_eq!(
+            event
+                .provenance
+                .as_ref()
+                .and_then(|provenance| provenance.runtime_lane_id.as_deref()),
+            Some("default")
+        );
 
         drop(_permit);
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn failed_download_recipe_preserves_causal_failure_in_response_job_and_event() {
+        let home = temp_home("control-plane-download-recourse");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let mut request = control_request_for_mode_test(json!({"action":"file_transfer"}));
+        request.job_id = "download-recourse".into();
+        let response = finalize_service_request(
+            &request,
+            json!({"success":true,"data":{"ok":false,"failedPhase":"download",
+                "error":"Download was canceled",
+                "traceFilter":{"taskName":"download-proof"}}}),
+            ServiceTerminalState::Succeeded,
+            ServiceTerminalPhase::Execution,
+        );
+        assert_eq!(response["success"], false);
+        assert_eq!(response["data"]["failedPhase"], "download");
+        assert_eq!(response["terminalOutcome"]["state"], "failed");
+        assert_eq!(
+            response["terminalOutcome"]["effectState"],
+            "effect_uncertain"
+        );
+        assert_eq!(response["failure"]["code"], "download_canceled");
+        assert_eq!(
+            response["failure"]["retryDisposition"],
+            "inspect_before_retry"
+        );
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        let job = &persisted.jobs["download-recourse"];
+        assert_eq!(job.state, JobState::Failed);
+        assert_eq!(
+            serde_json::to_value(job.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response["terminalOutcome"]
+        );
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::JobTerminal)
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(event.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response["terminalOutcome"]
+        );
+        assert_eq!(
+            event.provenance.as_ref().unwrap().request_id,
+            request.provenance.request_id
+        );
         let _ = std::fs::remove_dir_all(&home);
     }
 
@@ -4360,14 +4849,17 @@ mod tests {
         }));
         request.id = "viewport-job-1".to_string();
         request.job_id = "viewport-job-1".to_string();
-        let mut response = json!({
+        let response = json!({
             "id": "viewport-job-1",
             "success": false,
             "error": "service_state_lock_timeout: process mutation lock"
         });
-        attach_service_failure_recourse(&mut response);
-
-        persist_service_job_finished(&request, &response);
+        let response = finalize_service_request(
+            &request,
+            response,
+            ServiceTerminalState::Failed,
+            ServiceTerminalPhase::Execution,
+        );
 
         let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
         let persisted = store
@@ -4393,6 +4885,104 @@ mod tests {
             crate::native::service_failure::ServiceRetryDisposition::InspectBeforeRetry
         );
         assert!(!failure.reuse_allowed);
+        let response_outcome = response["terminalOutcome"].clone();
+        assert_eq!(
+            serde_json::to_value(job.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response_outcome
+        );
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::JobTerminal)
+            .expect("terminal failure must emit a traceable event");
+        assert_eq!(
+            serde_json::to_value(event.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response_outcome
+        );
+        assert_eq!(
+            event
+                .provenance
+                .as_ref()
+                .map(|provenance| provenance.request_id.as_str()),
+            Some("mode-test")
+        );
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn shared_profile_identity_rejection_keeps_provenance_recourse_and_terminal_event() {
+        let home = temp_home("control-plane-scheduler-terminal-outcome");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let request = control_request_for_mode_test(json!({
+            "id": "scheduler-rejection",
+            "action": "tab_new",
+            "runtimeProfile": "last30days-facebook",
+            "browserId": "session:retained-social",
+            "sessionName": "retained-social",
+            "serviceName": "last30days",
+            "agentName": "x-scraper",
+            "taskName": "x-feed"
+        }));
+        persist_service_job_queued(&request);
+
+        let response = finalize_service_request(
+            &request,
+            json!({
+                "id": request.id,
+                "success": false,
+                "error": "existing_session_profile_identity_unproven"
+            }),
+            ServiceTerminalState::Rejected,
+            ServiceTerminalPhase::SchedulerAdmission,
+        );
+
+        let persisted = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+            .load()
+            .unwrap();
+        let job = &persisted.jobs["mode-test"];
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::JobTerminal)
+            .unwrap();
+        let response_outcome = response["terminalOutcome"].clone();
+        assert_eq!(response_outcome["phase"], "scheduler_admission");
+        assert_eq!(response_outcome["state"], "rejected");
+        assert_eq!(
+            response_outcome["failure"]["code"],
+            "existing_session_profile_identity_unproven"
+        );
+        assert_eq!(
+            serde_json::to_value(job.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response_outcome
+        );
+        assert_eq!(
+            serde_json::to_value(event.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response_outcome
+        );
+        assert_eq!(event.provenance.as_ref().unwrap(), &request.provenance);
+        assert_eq!(
+            job.provenance.profile_id.as_deref(),
+            Some("last30days-facebook")
+        );
+        assert_eq!(
+            job.provenance.browser_id.as_deref(),
+            Some("session:retained-social")
+        );
+        assert_eq!(
+            job.provenance.session_id.as_deref(),
+            Some("retained-social")
+        );
+        assert_eq!(
+            job.failure.as_ref().unwrap().effect_state,
+            crate::native::service_failure::ServiceEffectState::NoEffect
+        );
+        assert_eq!(
+            job.failure.as_ref().unwrap().recommended_action,
+            "inspect_profile_recovery_plan"
+        );
 
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -4478,5 +5068,29 @@ mod tests {
             }
             _ => panic!("cancellation must retain the coordinator future through compensation"),
         }
+    }
+
+    #[test]
+    fn terminal_failures_map_to_forensic_categories() {
+        assert_eq!(
+            failure_category_for_action("open", None),
+            ServiceFailureCategory::BrowserLaunch
+        );
+        assert_eq!(
+            failure_category_for_action("service_remote_view_handoff_resolve", None),
+            ServiceFailureCategory::HandoffLink
+        );
+        assert_eq!(
+            failure_category_for_action("remote_view_open", None),
+            ServiceFailureCategory::GuacamoleLoad
+        );
+        assert_eq!(
+            failure_category_for_action("view_focus", None),
+            ServiceFailureCategory::CdpStream
+        );
+        assert_eq!(
+            failure_category_for_action("tab_new", Some("agent-browser-dashboard")),
+            ServiceFailureCategory::DashboardAction
+        );
     }
 }

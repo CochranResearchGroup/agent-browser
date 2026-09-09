@@ -14,6 +14,8 @@ from pathlib import Path
 CANONICAL_ENV = "AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON"
 CANONICAL_SECRET = "XRDP_AGENT_BROWSER_ROUTE_USER_POOL_JSON"
 PASSWORD_ALPHABET = string.ascii_letters + string.digits + "-_."
+MAX_CONNECTIONS = 8
+MAX_CONNECTIONS_PER_USER = 8
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -84,19 +86,34 @@ def normalized_inventory(raw: object) -> list[dict[str, str]]:
 
 
 def resolve_inventory(
-    secret_file: Path, generate_passwords: bool, allow_missing_passwords: bool = False
+    secret_file: Path,
+    generate_passwords: bool,
+    allow_missing_passwords: bool = False,
+    rotate_route_ids: set[str] | None = None,
 ) -> list[dict[str, str]]:
     values = read_env_file(secret_file)
     raw_text = os.environ.get(CANONICAL_ENV) or values.get(CANONICAL_SECRET)
     raw = json.loads(raw_text) if raw_text else legacy_inventory(values)
     routes = normalized_inventory(raw)
+    requested_rotations = rotate_route_ids or set()
+    known_route_ids = {route["id"] for route in routes}
+    missing_route_ids = requested_rotations - known_route_ids
+    if missing_route_ids:
+        missing_route_id = sorted(missing_route_ids)[0]
+        raise ValueError(f"route_user_inventory_rotate_route_missing:{missing_route_id}")
     if generate_passwords:
         for route in routes:
             if not route["password"]:
                 route["password"] = "".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(32))
-        write_inventory_secret(secret_file, routes)
-    elif not allow_missing_passwords and any(not route["password"] for route in routes):
+    for route in routes:
+        if route["id"] in requested_rotations:
+            route["password"] = "".join(
+                secrets.choice(PASSWORD_ALPHABET) for _ in range(32)
+            )
+    if not allow_missing_passwords and any(not route["password"] for route in routes):
         raise ValueError("route_user_inventory_password_missing")
+    if generate_passwords or requested_rotations:
+        write_inventory_secret(secret_file, routes)
     return routes
 
 
@@ -123,21 +140,44 @@ def write_inventory_secret(path: Path, routes: list[dict[str, str]]) -> None:
     path.chmod(0o600)
 
 
-def render_sql(routes: list[dict[str, str]], hostname: str, port: str) -> str:
+def render_sql(
+    routes: list[dict[str, str]],
+    hostname: str,
+    port: str,
+    max_connections: int = MAX_CONNECTIONS,
+    max_connections_per_user: int = MAX_CONNECTIONS_PER_USER,
+) -> str:
     declarations = ["  canonical_count integer;", "  legacy_count integer;"]
     declarations.extend(f"  route_id_{index} integer;" for index in range(len(routes)))
+    declarations.extend(
+        f"  route_sharing_profile_id_{index} integer;" for index in range(len(routes))
+    )
     declarations.extend(
         [
             "  final_canonical_count integer;",
             "  final_legacy_count integer;",
             "  distinct_username_count integer;",
+            "  sharing_profile_count integer;",
         ]
     )
-    blocks = [route_sql_block(route, index, hostname, port) for index, route in enumerate(routes)]
+    blocks = [
+        route_sql_block(
+            route,
+            index,
+            hostname,
+            port,
+            max_connections,
+            max_connections_per_user,
+        )
+        for index, route in enumerate(routes)
+    ]
     canonical_names = ", ".join(quote(route["connectionName"]) for route in routes)
     legacy_names = [route["legacyConnectionName"] for route in routes if route["legacyConnectionName"]]
     legacy_name_sql = ", ".join(quote(name) for name in legacy_names) or "NULL"
     route_ids = ", ".join(f"route_id_{index}" for index in range(len(routes)))
+    sharing_profile_names = ", ".join(
+        quote(f'Agent Browser Shared Session {route["id"]}') for route in routes
+    )
     return f"""BEGIN;
 
 DO $$
@@ -158,21 +198,36 @@ BEGIN
   FROM guacamole_connection_parameter
   WHERE connection_id IN ({route_ids}) AND parameter_name = 'username';
 
+  SELECT count(*) INTO sharing_profile_count
+  FROM guacamole_sharing_profile
+  WHERE primary_connection_id IN ({route_ids})
+    AND sharing_profile_name IN ({sharing_profile_names});
+
   IF final_canonical_count <> {len(routes)}
      OR final_legacy_count <> 0
-     OR distinct_username_count <> {len(routes)} THEN
+     OR distinct_username_count <> {len(routes)}
+     OR sharing_profile_count <> {len(routes)} THEN
     RAISE EXCEPTION
-      'route-user inventory postcondition failed: canonical %, legacy %, distinct usernames %',
-      final_canonical_count, final_legacy_count, distinct_username_count;
+      'route-user inventory postcondition failed: canonical %, legacy %, distinct usernames %, sharing profiles %',
+      final_canonical_count, final_legacy_count, distinct_username_count, sharing_profile_count;
   END IF;
 END $$;
 
 COMMIT;"""
 
 
-def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str) -> str:
+def route_sql_block(
+    route: dict[str, str],
+    index: int,
+    hostname: str,
+    port: str,
+    max_connections: int,
+    max_connections_per_user: int,
+) -> str:
     route_id = f"route_id_{index}"
+    sharing_profile_id = f"route_sharing_profile_id_{index}"
     canonical = quote(route["connectionName"])
+    sharing_profile_name = quote(f'Agent Browser Shared Session {route["id"]}')
     legacy = quote(route["legacyConnectionName"]) if route["legacyConnectionName"] else "NULL"
     names = f"{canonical}, {legacy}" if route["legacyConnectionName"] else canonical
     params = {
@@ -194,8 +249,8 @@ def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str)
     legacy_update = f"""
   IF legacy_count = 1 THEN
     UPDATE guacamole_connection
-    SET connection_name = {canonical}, protocol = 'rdp', max_connections = 4,
-        max_connections_per_user = 2
+    SET connection_name = {canonical}, protocol = 'rdp', max_connections = {max_connections},
+        max_connections_per_user = {max_connections_per_user}
     WHERE parent_id IS NULL AND connection_name = {legacy}
     RETURNING connection_id INTO {route_id};
   ELSIF canonical_count = 1 THEN""" if route["legacyConnectionName"] else """
@@ -212,13 +267,14 @@ def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str)
   END IF;
 {legacy_update}
     UPDATE guacamole_connection
-    SET protocol = 'rdp', max_connections = 4, max_connections_per_user = 2
+    SET protocol = 'rdp', max_connections = {max_connections},
+        max_connections_per_user = {max_connections_per_user}
     WHERE parent_id IS NULL AND connection_name = {canonical}
     RETURNING connection_id INTO {route_id};
   ELSE
     INSERT INTO guacamole_connection (
       connection_name, protocol, max_connections, max_connections_per_user
-    ) VALUES ({canonical}, 'rdp', 4, 2)
+    ) VALUES ({canonical}, 'rdp', {max_connections}, {max_connections_per_user})
     RETURNING connection_id INTO {route_id};
   END IF;
 
@@ -234,6 +290,26 @@ def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str)
 
   INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
   SELECT entity.entity_id, {route_id}, 'READ'::guacamole_object_permission_type
+  FROM guacamole_entity entity WHERE entity.type = 'USER'
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO guacamole_sharing_profile (
+    sharing_profile_name, primary_connection_id
+  ) VALUES ({sharing_profile_name}, {route_id})
+  ON CONFLICT (sharing_profile_name, primary_connection_id) DO UPDATE
+  SET sharing_profile_name = EXCLUDED.sharing_profile_name
+  RETURNING sharing_profile_id INTO {sharing_profile_id};
+
+  INSERT INTO guacamole_sharing_profile_parameter (
+    sharing_profile_id, parameter_name, parameter_value
+  ) VALUES ({sharing_profile_id}, 'read-only', 'false')
+  ON CONFLICT (sharing_profile_id, parameter_name) DO UPDATE
+  SET parameter_value = EXCLUDED.parameter_value;
+
+  INSERT INTO guacamole_sharing_profile_permission (
+    entity_id, sharing_profile_id, permission
+  )
+  SELECT entity.entity_id, {sharing_profile_id}, 'READ'::guacamole_object_permission_type
   FROM guacamole_entity entity WHERE entity.type = 'USER'
   ON CONFLICT DO NOTHING;
 """
@@ -253,6 +329,13 @@ def text(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def bounded_connection_limit(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1 or parsed > 64:
+        raise argparse.ArgumentTypeError("connection limit must be between 1 and 64")
+    return parsed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -260,9 +343,17 @@ def main() -> int:
     resolve.add_argument("--secret-file", required=True)
     resolve.add_argument("--generate-passwords", action="store_true")
     resolve.add_argument("--allow-missing-passwords", action="store_true")
+    resolve.add_argument("--rotate-route-id", action="append", default=[])
+    resolve.add_argument("--quiet", action="store_true")
     sql = subparsers.add_parser("sql")
     sql.add_argument("--hostname", required=True)
     sql.add_argument("--port", required=True)
+    sql.add_argument("--max-connections", type=bounded_connection_limit, default=MAX_CONNECTIONS)
+    sql.add_argument(
+        "--max-connections-per-user",
+        type=bounded_connection_limit,
+        default=MAX_CONNECTIONS_PER_USER,
+    )
     args = parser.parse_args()
     try:
         if args.command == "resolve":
@@ -270,13 +361,23 @@ def main() -> int:
                 Path(args.secret_file),
                 args.generate_passwords,
                 args.allow_missing_passwords,
+                set(args.rotate_route_id),
             )
-            print(json.dumps(routes, separators=(",", ":")))
+            if not args.quiet:
+                print(json.dumps(routes, separators=(",", ":")))
         else:
             routes = normalized_inventory(json.load(sys.stdin))
             if any(not route["password"] for route in routes):
                 raise ValueError("route_user_inventory_password_missing")
-            print(render_sql(routes, args.hostname, args.port))
+            print(
+                render_sql(
+                    routes,
+                    args.hostname,
+                    args.port,
+                    args.max_connections,
+                    args.max_connections_per_user,
+                )
+            )
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(str(error), file=sys.stderr)

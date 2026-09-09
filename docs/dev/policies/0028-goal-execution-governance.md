@@ -4,6 +4,10 @@
 
 - Apply this policy when autonomous work is expected to span multiple bounded
   slices, context windows, sessions, or human/runtime gates.
+- Minimize total work to the user’s outcome, including model calls, tests,
+  documentation, review, and replanning. Safety and explicit acceptance checks
+  remain mandatory. Authorization permits an action; evidence of expected
+  acceptance progress justifies spending effort on it.
 - Preserve the user-approved objective as the stable goal contract. Do not
   silently narrow, expand, or rewrite it to match the work already completed.
 - Treat that approved goal as standing authority for ordinary in-envelope
@@ -53,11 +57,33 @@
   metric is unavailable, another observable bound must still cover the loop.
   Repo-local defaults may supply these values; an individual packet need not
   restate them, and missing packet metadata does not block a first safe attempt.
+  Bounds prevent runaway work; they are not consumable approval tokens.
+  Reassess within the remaining goal-level allowance. Splitting, renaming,
+  reframing, replacing a worker, or opening a successor does not reset effort,
+  retry, or no-outcome-progress accounting for the same unmet criterion.
+- Establish a finite overall time or cost ceiling in the existing goal control
+  record before sustained execution. Include governance and all successor work;
+  a local tactic change cannot increase that ceiling.
+- Unless the approved plan sets a different finite allowance, reassess after
+  two consecutive checkpoints without `outcome_progress` or 30 minutes of
+  active work without it, whichever comes first. Include repair, validation,
+  model waiting, review, documentation, and replanning in elapsed effort.
+  `blocker_reduction` and `hardening` do not reset this allowance. Measure
+  progress against a named acceptance milestone; trivial metric movement does
+  not restart a stalled deliverable's allowance.
+- At that bound, end the unsuccessful repair/retry approach. Continue a
+  different ready approach autonomously only when current evidence explains
+  how it will advance acceptance within the remaining overall budget. A new
+  filename, fixed exception, passing suite, or larger context limit alone is
+  insufficient. Preserve cumulative effort and report the changed tactic once
+  in the current execution note. If no evidence-backed route remains, report
+  the incomplete outcome and the specific missing information or decision;
+  do not manufacture another governance task or request routine permission.
   Bounds prevent runaway work; they are not consumable approval tokens. When a
-  local bound is reached, first reassess, split the unit, change tactics, or
-  continue a different safe ready unit under the same authority. Escalate only
-  when no meaningful safe action remains or an exact action-specific gate is
-  reached.
+  local bound is reached, reassess, split the unit, change tactics, or continue
+  a different safe ready unit only within the remaining cumulative milestone
+  allowance. Escalate only when no meaningful safe action remains or an exact
+  action-specific gate is reached.
 - Keep one primary orchestrator responsible for authority, the critical path,
   work-unit selection, integration, progress classification, and the final
   completion claim.
@@ -93,18 +119,89 @@
   of that overlap; an accepted blocking finding blocks the affected criterion
   or integration; and an exhausted loop bound blocks repeating that same loop.
   Continue unrelated safe work when it can still advance the approved goal.
-- Stop autonomous execution only when no meaningful safe in-envelope action
-  remains, an exact applicable gate requires a user decision, or the objective
-  is complete, cancelled, or disproven. Repeated hardening or no-progress first
-  requires a local tactic change or bounded reframe; it does not automatically
-  require operator approval.
-- Continue automatically whenever a useful in-scope action is available and no
-  exact applicable gate blocks it. A recent checkpoint may support that choice,
-  but creating another checkpoint is not a prerequisite for taking an obvious
-  low-risk next step.
+- Continue automatically with a safe, authorized action when current evidence
+  supports acceptance progress and the cumulative bounds permit it. Stop the
+  affected approach when those conditions fail, even if more safe hardening
+  or bookkeeping is possible. Continue independent work that can advance the
+  goal; do not claim the whole goal is blocked merely because one route failed.
+- An operator stop takes precedence over standing continuation authority.
+  Preserve the incomplete result without further repairs or retries. Changing
+  policy or recording a handoff does not resume a stopped experiment.
 - Completion requires current evidence for every acceptance criterion. Token
   spend, elapsed time, test count, schema growth, documentation volume, and
   completed slice count are not completion evidence by themselves.
+
+## Costly Replay
+
+- Before a costly model/provider replay, name the acceptance milestone expected
+  to move and the evidence that the repaired path can reach it. Prefer a local
+  replay of the failing state plus the next transition when feasible. A passing
+  regression proves the repair, not end-to-end readiness. Batch related known
+  blockers before replay; do not spend a live attempt to discover a condition
+  that can be checked locally. Keep this rationale in the existing checkpoint,
+  not a new approval document. All successors inherit cumulative goal bounds.
+
+## Delivery Efficiency For Bugs And Features
+
+- Apply these rules to investigations, feature implementation, integration,
+  and operational repair. Optimize for usable outcomes, not activity volume.
+  The Plan0160 runs produced installed improvements but left the leading
+  consumer acceptance unresolved after repeated ten-hour runs. Successful
+  builds, fixture repairs and documentation did not justify that elapsed cost.
+- Before sustained work, identify the smallest useful end-to-end outcome,
+  its observable acceptance check, and external dependencies. Check early
+  whether the original client, credentials, environment or operator evidence
+  needed for acceptance is available. Request missing input then; continue
+  independent work without pretending a synthetic substitute closes that gate.
+- For debugging, state the observed failure and a discriminating next check.
+  For features, implement one usable path through the intended integration
+  boundary before broad polish. In both cases, distinguish product defects,
+  fixture defects, environmental failures and unavailable inputs before editing.
+- Use the existing control record, not another planning document. In addition
+  to the overall ceiling, assess delivery economics at least once per 60 minutes
+  of sustained work: what became usable, what remains on the critical path,
+  cumulative elapsed time, and expensive builds/publications consumed. Report
+  measured model cost when available; otherwise label token/time proxies.
+  This assessment does not renew the allowance or override the earlier
+  30-minute/two-checkpoint no-outcome threshold.
+- Check the numeric overall ceiling at every material checkpoint. An absent
+  ceiling is a planning defect to correct before sustained execution, not an
+  unlimited allowance. If it has been exceeded, preserve the result and report
+  the overrun; do not start a fresh investigation or build under a renamed unit.
+  A user-specified time limit takes precedence over local defaults.
+- At the no-outcome threshold, stop the failing tactic. Do not substitute
+  more tests, a new fixture name, extra policy work, a smaller unrelated fix,
+  or another model for the blocked deliverable. Continue only an independently
+  useful in-scope outcome with evidence that it can advance within the remaining
+  allowance; otherwise surface the exact missing input and incomplete result.
+  Finishing a side task does not reset accounting for the original milestone.
+- Consolidate known defects and feature changes into one qualified candidate.
+  Apply policy 0044 before another expensive cycle or after a second related
+  defect. Reconcile the known batch before selecting the next repair.
+  Default to one full release build and one production replacement per completed
+  implementation batch. A further build or replacement needs a demonstrated
+  source defect or required acceptance gap, an explicit reason cheaper checks
+  cannot resolve it, and remaining cumulative allowance. Record that decision
+  in the current checkpoint; do not manufacture a new approval gate.
+- Record only material execution changes in the runbook. Preserve detailed
+  receipts by reference. A status refresh is not a new implementation milestone,
+  and repeatedly refreshing a monitor paused for acceptance is not progress
+  toward unattended operation. Follow policy 0043's 200-line compaction rule.
+- Close out with separate statements of what is committed, what is installed
+  or integrated, what a real user can now do, and what remains unverified.
+  Report the time spent and whether the leading objective advanced. Neither
+  a long run nor a long fix list earns a completion claim.
+
+- Budget the complete delivery sequence before sustained execution: diagnosis,
+  implementation, fixture qualification, integration, publication when needed,
+  observation and closeout. Reserve time for remaining required stages before
+  starting more implementation. Use ranges and name uncertainty. If the
+  sequence cannot fit, disclose the shortfall or propose an independently useful
+  split before spending it; retain the original goal and cumulative accounting.
+- An additional-window proposal must say whether it can finish the user outcome
+  or only an intermediate gate, and list what remains afterward. Parallelism
+  may reduce elapsed time but does not erase cumulative worker effort.
+
 ## Adoption Notes
 
 Use this module for repos that run `/goal`, unattended campaigns, multi-session
@@ -117,14 +214,18 @@ goal-plan versioning, checkpoint identifiers, progress classification, and the
 configured bounds. Keep exact token counters, time windows, command names, and
 runbook schemas repo-local.
 
-Use a machine-checkable repo-local section such as:
+The following defaults apply unless an approved plan supplies a different finite bound:
 
 ```text
+
 ## Local Goal Bounds
-max_work_unit_attempts: 2
+max_work_unit_attempts: 3
 max_review_rework_cycles: 1
 max_hardening_checkpoints: 2
-checkpoint_interval: 3 slices or 90 minutes
+checkpoint_interval: 30 minutes
+max_checkpoints_without_outcome_progress: 2
+max_active_minutes_without_outcome_progress: 30
+overall_effort_ceiling: finite_value_required_in_goal_control_record
 authorization_gate: material_departure_or_explicit_action_gate_only
 continuation_default: execute_obvious_in_scope_low_risk
 bound_exhaustion_mode: local_replan_before_escalation
@@ -144,3 +245,4 @@ Recommended companion modules:
 - `subagent-workflow-optimization`
 - `validation-and-handoff`
 - `commit-and-push-cadence`
+- `model-selection-and-calibration`

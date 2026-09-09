@@ -348,6 +348,52 @@ fn deadline_reserves_one_fifth_with_floor_and_cap() {
     );
 }
 
+#[test]
+fn explicit_repository_lock_budget_survives_the_default_cap_and_respects_deadlines() {
+    let clock = Arc::new(FakeClock::default());
+    let supervisor = RouteBoundOpenSupervisor::with_clock(Some(90_000), None, clock.clone())
+        .with_repository_lock_timeout(Some(30_000));
+
+    assert_eq!(
+        supervisor.forward_repository_lock_timeout(),
+        Duration::from_millis(30_000)
+    );
+    assert_eq!(
+        supervisor.compensation_repository_lock_timeout(),
+        Duration::from_millis(30_000)
+    );
+
+    clock.set(65_000);
+    assert_eq!(
+        supervisor.forward_repository_lock_timeout(),
+        Duration::from_millis(10_000)
+    );
+    assert_eq!(
+        supervisor.compensation_repository_lock_timeout(),
+        Duration::from_millis(25_000)
+    );
+}
+
+#[test]
+fn command_supervisor_preserves_the_service_repository_lock_budget() {
+    let supervisor = RouteBoundOpenSupervisor::system_for_command(
+        &json!({
+            "jobTimeoutMs": 90_000,
+            "serviceStateLockTimeoutMs": 30_000
+        }),
+        None,
+    );
+
+    assert_eq!(
+        supervisor.forward_repository_lock_timeout(),
+        Duration::from_millis(30_000)
+    );
+    assert_eq!(
+        supervisor.compensation_repository_lock_timeout(),
+        Duration::from_millis(30_000)
+    );
+}
+
 #[tokio::test]
 async fn scripted_runtime_stops_before_every_mutating_effect_after_cancellation() {
     for phase in 0..9 {
@@ -988,6 +1034,110 @@ fn durable_handoff_observation_accepts_reacquired_intent_target() {
 }
 
 #[tokio::test]
+async fn durable_target_reacquisition_preserves_original_client_access() {
+    use crate::native::service_profile_access_policy::ProfileChildAccess;
+
+    let repository = LockedServiceStateRepository::default_json().unwrap();
+    let target_id = "retained-client-custody";
+    let tab_id = format!("target:{target_id}");
+    repository
+        .mutate(|state| {
+            state.tabs.insert(
+                tab_id.clone(),
+                BrowserTab {
+                    id: tab_id.clone(),
+                    browser_id: "session:test".to_string(),
+                    target_id: Some(target_id.to_string()),
+                    owner_session_id: Some("test".to_string()),
+                    lifecycle: TabLifecycle::Ready,
+                    url: Some("https://example.test/fixture".to_string()),
+                    profile_access: Some(ProfileChildAccess {
+                        subject_id: Some("client:original".to_string()),
+                        connection_instance_id: Some("original-connection".to_string()),
+                        ..ProfileChildAccess::default()
+                    }),
+                    ..BrowserTab::default()
+                },
+            );
+            Ok(())
+        })
+        .unwrap();
+    let before = repository.load_snapshot().unwrap();
+    let mut runtime = ScriptedRuntime::new();
+    runtime.observation.browser_present = true;
+    runtime.observation.active_target_id = Some(target_id.to_string());
+    runtime.observation.pages = vec![PageInfo {
+        target_id: target_id.to_string(),
+        session_id: "page-session".to_string(),
+        url: "https://example.test/fixture".to_string(),
+        title: "Fixture".to_string(),
+        target_type: "page".to_string(),
+    }];
+    route_bound_open_acquire_target(
+        &json!({
+            "durableResolutionMode": "reacquire_only",
+            "preferredTargetId": target_id,
+            "url": "https://example.test/fixture"
+        }),
+        &mut runtime,
+        &RouteBoundOpenSupervisor::system(Some(1_000), None),
+        &before,
+        "session:test",
+        "test",
+        true,
+    )
+    .await
+    .unwrap();
+    let after = repository.load_snapshot().unwrap();
+    assert_eq!(
+        serde_json::to_value(&after.tabs[&tab_id]).unwrap(),
+        serde_json::to_value(&before.tabs[&tab_id]).unwrap(),
+        "presentation reacquisition must not replace client access or tab custody"
+    );
+    assert_eq!(after.events.len(), before.events.len());
+    assert_eq!(*runtime.events.lock().unwrap(), vec!["refresh_targets"]);
+}
+
+#[tokio::test]
+async fn durable_target_reacquisition_uses_live_title_for_the_exact_active_target() {
+    for live_title in [Some("Synthetic fixture"), Some(""), None] {
+        let mut runtime = ScriptedRuntime::new();
+        runtime.observation.browser_present = true;
+        runtime.observation.active_target_id = Some("retained".to_string());
+        runtime.observation.active_title = live_title.map(str::to_string);
+        runtime.observation.pages = vec![PageInfo {
+            target_id: "retained".to_string(),
+            session_id: "page-session".to_string(),
+            url: "https://example.test/fixture".to_string(),
+            title: "example.test/fixture".to_string(),
+            target_type: "page".to_string(),
+        }];
+        let result = route_bound_open_acquire_target(
+            &json!({
+                "durableResolutionMode": "reacquire_only",
+                "preferredTargetId": "retained",
+                "url": "https://example.test/fixture"
+            }),
+            &mut runtime,
+            &RouteBoundOpenSupervisor::system(Some(1_000), None),
+            &ServiceState::default(),
+            "session:test",
+            "test",
+            true,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["targetId"], "retained");
+        assert_eq!(
+            result["title"],
+            live_title.unwrap_or("example.test/fixture")
+        );
+        assert_eq!(result["serviceTabHandle"]["title"], result["title"]);
+        assert_eq!(*runtime.events.lock().unwrap(), vec!["refresh_targets"]);
+    }
+}
+
+#[tokio::test]
 async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect() {
     let root = std::env::temp_dir().join(format!(
         "agent-browser-route-open-fallback-{}-{}",
@@ -1140,6 +1290,83 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
     );
     assert!(retained.browsers.is_empty());
 
+    // An explicit identity rejection cannot become an automatic convergence
+    // retry merely because it occurred during adoption. Preserve the handle.
+    for (code, effect_state) in [
+        (
+            "runtime_handoff_orphan_browser_hint_mismatch",
+            crate::native::service_failure::ServiceEffectState::NoEffect,
+        ),
+        (
+            "runtime_handoff_orphan_owner_present",
+            crate::native::service_failure::ServiceEffectState::EffectUncertain,
+        ),
+    ] {
+        runtime.adoption_issue = Some(RouteBoundRuntimeIssue::EffectFailed {
+            operation: "adopt_retained_browser",
+            message: format!("{code}: retained owner guard refused"),
+        });
+        runtime.events.lock().unwrap().clear();
+        let rejected = RouteBoundOpenCoordinator::open(
+            RouteBoundOpenInvocation::durable_resolution(
+                "handoff-a".to_string(),
+                false,
+                authorized_attribution(),
+            )
+            .unwrap(),
+            &mut runtime,
+            &repository,
+            &supervisor,
+        )
+        .await
+        .expect_err("unbound identity must remain a failed resolution");
+        assert!(rejected.starts_with(&format!("{code}:")));
+        let failure = crate::native::service_failure::classify_service_failure(&rejected);
+        assert_eq!(failure.code, code);
+        assert_eq!(failure.effect_state, effect_state);
+        assert_eq!(failure.recommended_action, "inspect_profile_recovery_plan");
+        assert_eq!(
+            *runtime.events.lock().unwrap(),
+            vec!["observe_browser", "adopt_retained_browser"]
+        );
+        assert_eq!(
+            serde_json::to_value(store.load().unwrap()).unwrap(),
+            serde_json::to_value(&retained).unwrap()
+        );
+    }
+
+    // Reproduce retained recovery after host replacement: the route is orphaned,
+    // the display is pending, and the available pool names that same display.
+    // Exercise durable resolution through the coordinator, without reparsing its
+    // command in the fixture after retained selection.
+    let mut recovery = store.load().unwrap();
+    let boot = crate::process_identity::current_boot_epoch();
+    recovery
+        .remote_view_routes
+        .get_mut("route-a")
+        .unwrap()
+        .state = "orphaned".into();
+    let display = recovery.display_allocations.get_mut("display-a").unwrap();
+    display.state = "pending".into();
+    display.boot_epoch = boot.clone();
+    let pool = recovery.route_pool.get_mut("pool-a").unwrap();
+    pool.state = "available".into();
+    pool.current_route_allocation_id = None;
+    recovery.browsers.insert(
+        "session:im-receipts".into(),
+        BrowserProcess {
+            id: "session:im-receipts".into(),
+            pid: Some(4242),
+            profile_id: Some("im-receipts-main".into()),
+            active_session_ids: vec!["im-receipts".into()],
+            health: ServiceBrowserHealth::Ready,
+            boot_epoch: boot,
+            display_allocation_id: Some("display-a".into()),
+            display_name: Some(":31".into()),
+            ..BrowserProcess::default()
+        },
+    );
+    store.save(&recovery).unwrap();
     runtime.adoption_issue = None;
     runtime.adoption_observation = Some(RouteBoundBrowserObservation {
         browser_present: true,
@@ -1183,6 +1410,7 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
     assert!(!adoption_events.contains(&"navigate_target"));
     let adopted_value = adopted.clone().into_compatibility_result().unwrap();
     assert_eq!(adopted_value["presentationGeneration"], 5);
+    assert_eq!(adopted_value["tabId"], "target:tab-a");
     assert_eq!(adopted_value["targetId"], "tab-a");
     assert_eq!(
         adopted_value["presentationReceipt"]["dashboardDeploymentGeneration"],
@@ -1216,6 +1444,38 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
     );
 
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn durable_resolution_response_uses_the_fresh_opened_tab_identity() {
+    let stale_handoff = RemoteViewHandoff {
+        tab_id: Some("target:closed-target".to_string()),
+        target_id: Some("closed-target".to_string()),
+        ..RemoteViewHandoff::default()
+    };
+    let opened = json!({
+        "tab": {
+            "targetId": "replacement-target",
+            "serviceTabHandle": {
+                "tabId": "target:replacement-target",
+                "targetId": "replacement-target"
+            }
+        }
+    });
+
+    let identity = durable_resolution_response_identity(
+        &opened,
+        Some(&stale_handoff),
+        Some("replacement-target"),
+    );
+
+    assert_eq!(
+        identity,
+        (
+            Some("target:replacement-target".to_string()),
+            Some("replacement-target".to_string())
+        )
+    );
 }
 
 #[tokio::test]
@@ -1626,6 +1886,102 @@ fn typed_terminal_failure_selects_rollback_state_without_parsing_compatibility_t
         }
         _ => panic!("structured terminal failure must produce RolledBack"),
     }
+}
+
+#[test]
+fn completed_route_bound_rollback_survives_compatibility_failure_normalization() {
+    let outcome = rolled_back_outcome(route_bound_message_error_with_cleanup(
+        "checkout_failed",
+        "route pool checkout failed".to_string(),
+        json!({"state": "rolled_back", "leaseId": "lease-a"}),
+        "opaque cleanup summary",
+    ))
+    .unwrap();
+    let compatibility_error = outcome.into_compatibility_result().unwrap_err();
+
+    let recourse = crate::native::service_failure::classify_service_failure(&compatibility_error);
+
+    assert_eq!(recourse.code, "checkout_failed");
+    assert_eq!(
+        recourse.axis,
+        crate::native::service_failure::ServiceFailureAxis::Presentation
+    );
+    assert_eq!(
+        recourse.effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+    assert_eq!(
+        recourse.retry_disposition,
+        crate::native::service_failure::ServiceRetryDisposition::InspectBeforeRetry
+    );
+}
+
+#[test]
+fn exact_pending_acquisition_can_claim_ownerless_warm_provider_route() {
+    let state = ServiceState {
+        remote_view_routes: BTreeMap::from([(
+            "route-a".to_string(),
+            RemoteViewRoute {
+                id: "route-a".to_string(),
+                display_allocation_id: Some("provider-display-a".to_string()),
+                browser_id: None,
+                session_id: None,
+                state: "ready".to_string(),
+                ..RemoteViewRoute::default()
+            },
+        )]),
+        remote_view_acquisition_leases: BTreeMap::from([(
+            "lease-a".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "lease-a".to_string(),
+                boot_epoch: crate::process_identity::current_boot_epoch(),
+                browser_id: "session:current".to_string(),
+                session_id: "current".to_string(),
+                route_id: "route-a".to_string(),
+                display_allocation_id: "remote-view-display:route-a".to_string(),
+                route_pool_entry_id: Some("pool-a".to_string()),
+                state: "pending".to_string(),
+                phase: "reserved".to_string(),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    let allocation = DisplayAllocation {
+        id: "remote-view-display:route-a".to_string(),
+        owner_browser_id: Some("session:current".to_string()),
+        owner_session_id: Some("current".to_string()),
+        display_isolation: "shared_display".to_string(),
+        state: "pending".to_string(),
+        ..DisplayAllocation::default()
+    };
+
+    ensure_remote_view_route_available_for_display(
+        &state,
+        "route-a",
+        "remote-view-display:route-a",
+        "session:current",
+        "current",
+        Some(&allocation),
+    )
+    .unwrap();
+
+    let mut foreign_state = state;
+    foreign_state
+        .remote_view_acquisition_leases
+        .get_mut("lease-a")
+        .unwrap()
+        .session_id = "other".to_string();
+    let error = ensure_remote_view_route_available_for_display(
+        &foreign_state,
+        "route-a",
+        "remote-view-display:route-a",
+        "session:current",
+        "current",
+        Some(&allocation),
+    )
+    .unwrap_err();
+    assert!(error.starts_with("route_pool_contention:"));
 }
 
 struct PendingRepository;

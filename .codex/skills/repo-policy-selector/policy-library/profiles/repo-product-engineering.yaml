@@ -9,9 +9,11 @@ modules:
   - graph-backed-memory-usage
   - codegraph-usage
   - planning-discipline
+  - model-selection-and-calibration
   - goal-execution-governance
   - parallel-plan-design
   - roadmap-runbook-governance
+  - work-item-traceability
   - architecture-guardrails
   - code-testing-discipline
   - documentation-change-control

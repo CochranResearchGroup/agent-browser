@@ -1,6 +1,7 @@
 use rust_embed::Embed;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -12,14 +13,13 @@ use tokio_tungstenite::tungstenite::Message;
 
 #[cfg(unix)]
 use crate::connection::get_socket_path;
-use crate::connection::{attach_daemon_auth_token, daemon_ready};
 #[cfg(windows)]
-use crate::connection::{get_socket_dir, resolve_port};
+use crate::connection::resolve_port;
+use crate::connection::{attach_daemon_auth_token, daemon_startup_ready, get_socket_dir};
 use crate::flags::{launch_config_status, parse_flags};
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state_with_principal,
 };
-use crate::native::service_config::refresh_persisted_profile_seeding_handoffs;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_PROFILE_LEASES_HTTP_ROUTE,
@@ -45,7 +45,8 @@ use crate::native::service_profile_lease::{
 };
 use crate::native::service_request::{
     apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
-    ServiceRequestNormalization, ServiceRequestPrincipalSource,
+    ServiceRequestIssue, ServiceRequestIssueKind, ServiceRequestNormalization,
+    ServiceRequestPrincipalSource, ServiceRequestRejection,
 };
 use crate::native::service_trace::service_commands::service_now_timestamp;
 
@@ -439,7 +440,7 @@ pub(super) async fn handle_http_request(
             ) {
                 Ok(cmd) => cmd,
                 Err(err) => {
-                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    write_json_value(&mut stream, "400 Bad Request", err.response()).await;
                     return;
                 }
             };
@@ -1467,19 +1468,31 @@ async fn stream_api_send_input(port: u16, body: &str) -> Value {
     json!({"success": true})
 }
 
-fn service_status_command(query: Option<&str>) -> Value {
-    let _ = refresh_persisted_profile_seeding_handoffs();
-    let args = vec!["service".to_string(), "status".to_string()];
-    let flags = parse_flags(&args);
-    let full_tab_history = query_params(query).into_iter().any(|(key, value)| {
+async fn service_status_command(query: Option<&str>) -> Value {
+    let query = query.map(str::to_string);
+    tokio::task::spawn_blocking(move || service_status_command_blocking(query.as_deref()))
+        .await
+        .unwrap_or_else(|_| json!({ "action": "service_status" }))
+}
+
+fn service_status_command_blocking(query: Option<&str>) -> Value {
+    let query = query_params(query);
+    let full_tab_history = query.iter().any(|(key, value)| {
         matches!(key.as_str(), "full-tab-history" | "fullTabHistory")
             && matches!(value.as_str(), "1" | "true" | "yes")
     });
+    let status_projection = query
+        .iter()
+        .find(|(key, _)| key == "projection")
+        .and_then(|(_, value)| (value == "dashboard-summary").then_some("dashboard_summary"));
     json!({
         "action": "service_status",
-        "serviceState": flags.service_state.clone(),
-        "launchConfig": launch_config_status(&flags),
+        "launchConfig": launch_config_status(&parse_flags(&[
+            "service".to_string(),
+            "status".to_string(),
+        ])),
         "fullTabHistory": full_tab_history,
+        "statusProjection": status_projection,
     })
 }
 
@@ -1492,7 +1505,11 @@ where
     F: FnOnce(String, Value) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
-    relay(session_name.to_string(), service_status_command(query)).await
+    relay(
+        session_name.to_string(),
+        service_status_command(query).await,
+    )
+    .await
 }
 
 fn service_reconcile_command() -> Value {
@@ -1503,11 +1520,8 @@ fn service_reconcile_command() -> Value {
 }
 
 fn service_resources_command() -> Value {
-    let args = vec!["service".to_string(), "resources".to_string()];
-    let flags = parse_flags(&args);
     json!({
         "action": "service_resources",
-        "serviceState": flags.service_state.clone(),
     })
 }
 
@@ -1917,6 +1931,7 @@ fn service_request_command_with_state_and_principal(
         effective_session,
         None,
     )
+    .map_err(|rejection| rejection.to_string())
 }
 
 fn service_request_command_with_state_and_authority(
@@ -1925,11 +1940,24 @@ fn service_request_command_with_state_and_authority(
     authenticated_dashboard_user: Option<&str>,
     effective_session: &str,
     authenticated_principal: Option<&AuthenticatedServicePrincipal>,
-) -> Result<Value, String> {
+) -> Result<Value, ServiceRequestRejection> {
+    let request_nonce = uuid::Uuid::new_v4();
+    let request_id = format!("http-service-request-unknown-{request_nonce}");
     let mut request = if body.trim().is_empty() {
         json!({})
     } else {
-        serde_json::from_str::<Value>(body).map_err(|err| format!("Invalid JSON: {}", err))?
+        serde_json::from_str::<Value>(body).map_err(|err| {
+            ServiceRequestRejection::record(
+                "http_service_request",
+                None,
+                &request_id,
+                effective_session,
+                ServiceRequestIssue::new(
+                    ServiceRequestIssueKind::InvalidRequest,
+                    format!("Invalid JSON: {err}"),
+                ),
+            )
+        })?
     };
     // Top-level args predates the canonical cross-transport contract. Keep its
     // raw HTTP precedence without teaching the shared normalizer about it.
@@ -1940,10 +1968,7 @@ fn service_request_command_with_state_and_authority(
         .get("action")
         .and_then(Value::as_str)
         .unwrap_or("unknown");
-    let request_id = format!(
-        "http-service-request-{action_hint}-{}",
-        uuid::Uuid::new_v4()
-    );
+    let request_id = format!("http-service-request-{action_hint}-{request_nonce}");
     let dashboard_principal =
         authenticated_dashboard_user.map(|username| format!("dashboard:{}", username.trim()));
     let fallback_principal =
@@ -1961,10 +1986,69 @@ fn service_request_command_with_state_and_authority(
         request_id: &request_id,
         effective_session: Some(effective_session),
     })
-    .map_err(|issue| issue.message().to_string())?;
+    .map_err(|issue| {
+        ServiceRequestRejection::record(
+            "http_service_request",
+            request.get("action").and_then(Value::as_str),
+            &request_id,
+            effective_session,
+            issue,
+        )
+    })?;
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);
+    if command.get("operatorFocus").and_then(Value::as_bool) == Some(true) {
+        let proof = authenticated_dashboard_user
+            .zip(service_state)
+            .ok_or_else(|| {
+                "operator_focus_authority_required: authenticated dashboard required".to_string()
+            })
+            .and_then(|(username, state)| {
+                dashboard_auth::issue_operator_focus(state, &command, username)
+            })
+            .map_err(|message| {
+                ServiceRequestRejection::record(
+                    "http_service_request",
+                    Some(action_hint),
+                    &request_id,
+                    effective_session,
+                    ServiceRequestIssue::new(
+                        ServiceRequestIssueKind::OperatorFocusAuthority,
+                        message,
+                    ),
+                )
+            })?;
+        command["operatorFocusProofToken"] = json!(proof);
+        // Retain the authenticated actor for diagnosis, separately from the
+        // caller's service/agent/task labels and without retaining the token.
+        command["clientSubjectId"] = json!(dashboard_principal);
+        command["identityAssurance"] = json!("authenticated-ingress");
+    }
+    if let Some(username) = authenticated_dashboard_user {
+        if matches!(
+            action_hint,
+            "service_viewer_lease_request" | "service_controller_lease_takeover"
+        ) {
+            let controller = action_hint == "service_controller_lease_takeover"
+                || command.get("viewerRole").and_then(Value::as_str) == Some("controller");
+            if controller {
+                dashboard_auth::require_current_operator_role(username).map_err(|message| {
+                    ServiceRequestRejection::record(
+                        "http_service_request",
+                        Some(action_hint),
+                        &request_id,
+                        effective_session,
+                        ServiceRequestIssue::new(
+                            ServiceRequestIssueKind::OperatorFocusAuthority,
+                            message,
+                        ),
+                    )
+                })?;
+            }
+            command["viewerId"] = json!(format!("dashboard:{username}"));
+        }
+    }
     if authenticated_dashboard_user.is_some() {
         apply_dashboard_deployment_generation(
             &mut command,
@@ -1985,12 +2069,13 @@ pub(super) fn service_request_command_with_dashboard_generation(
     authenticated_dashboard_user: &str,
     effective_session: &str,
     dashboard_deployment_generation: Option<&str>,
-) -> Result<Value, String> {
-    let mut command = service_request_command_with_state_and_principal(
+) -> Result<Value, ServiceRequestRejection> {
+    let mut command = service_request_command_with_state_and_authority(
         body,
         service_state,
         Some(authenticated_dashboard_user),
         effective_session,
+        None,
     )?;
     apply_dashboard_deployment_generation(&mut command, dashboard_deployment_generation);
     Ok(command)
@@ -2012,20 +2097,18 @@ pub(crate) fn service_request_adapter_fixture_for_session(
     body: &str,
     effective_session: &str,
 ) -> Result<Value, Value> {
-    match service_request_command_with_state_and_principal(
+    match service_request_command_with_state_and_authority(
         body,
         None,
         Some("test-adapter"),
         effective_session,
+        None,
     ) {
         Ok(command) => Ok(command),
-        Err(message) => {
-            let (status, body) = json_result_parts(Err(message), "400 Bad Request");
-            Err(json!({
-                "status": status,
-                "body": serde_json::from_str::<Value>(&body).unwrap(),
-            }))
-        }
+        Err(message) => Err(json!({
+            "status": "400 Bad Request",
+            "body": message.response(),
+        })),
     }
 }
 
@@ -2060,7 +2143,14 @@ pub(super) fn service_request_relay_session(
 
     if !matches!(
         command.get("action").and_then(Value::as_str),
-        Some("view_focus" | "view_takeover")
+        Some(
+            "view_focus"
+                | "view_takeover"
+                | "service_viewer_lease_request"
+                | "service_viewer_lease_heartbeat"
+                | "service_viewer_lease_release"
+                | "service_controller_lease_takeover"
+        )
     ) {
         for value in SERVICE_REQUEST_HTTP_RELAY_CANONICAL_POINTERS
             .iter()
@@ -2190,39 +2280,96 @@ fn service_daemon_session_requires_lane_refresh(service_command: Option<&Value>)
     })
 }
 
+const SERVICE_DAEMON_SESSION_RECOVERY_ENV_REMOVALS: &[&str] = &[
+    "AGENT_BROWSER_DAEMON",
+    crate::runtime_host::RUNTIME_HOST_PROCESS_ENV,
+    "AGENT_BROWSER_DAEMON_AUTH_TOKEN",
+    "AGENT_BROWSER_SESSION",
+    "AGENT_BROWSER_RUNTIME_PROFILE",
+    "AGENT_BROWSER_PROFILE",
+    "AGENT_BROWSER_CDP_URL",
+    "AGENT_BROWSER_STREAM_PORT",
+    "AGENT_BROWSER_DASHBOARD",
+    "AGENT_BROWSER_DASHBOARD_INGRESS",
+    "AGENT_BROWSER_DASHBOARD_BACKEND_ONLY",
+    "AGENT_BROWSER_DASHBOARD_PORT",
+    "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+    "AGENT_BROWSER_HEADED",
+    "AGENT_BROWSER_LEAVE_OPEN",
+    "AGENT_BROWSER_EXECUTABLE_PATH",
+    "AGENT_BROWSER_ARGS",
+    "AGENT_BROWSER_EXTENSIONS",
+    "AGENT_BROWSER_USER_AGENT",
+];
+
+fn service_daemon_session_ready_for_request(
+    named_lane_ready: bool,
+    stream_port_ready: bool,
+    requires_lane_refresh: bool,
+) -> bool {
+    named_lane_ready && stream_port_ready && !requires_lane_refresh
+}
+
+/// Verify that the named lane's published HTTP stream port is accepting
+/// connections. A shared runtime host can remain reachable after one logical
+/// lane exits, and that lane's `.stream` file can briefly outlive its listener.
+/// Treating only the host socket as readiness would return a stale port to the
+/// dashboard and surface a transient 502 instead of recreating the lane.
+fn service_daemon_stream_ready(session_name: &str) -> bool {
+    service_daemon_stream_file_ready(&get_socket_dir().join(format!("{session_name}.stream")))
+}
+
+fn service_daemon_stream_file_ready(stream_path: &Path) -> bool {
+    let Some(port) = std::fs::read_to_string(stream_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .filter(|port| *port > 0)
+    else {
+        return false;
+    };
+    TcpStream::connect_timeout(
+        &SocketAddr::from(([127, 0, 0, 1], port)),
+        Duration::from_millis(50),
+    )
+    .is_ok()
+}
+
+async fn wait_for_service_daemon_session(session_name: &str) -> bool {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if daemon_startup_ready(session_name) && service_daemon_stream_ready(session_name) {
+            return true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
 pub(super) async fn ensure_service_daemon_session(
     session_name: &str,
     service_command: Option<&Value>,
 ) -> Result<(), String> {
-    if daemon_ready(session_name) && !service_daemon_session_requires_lane_refresh(service_command)
-    {
+    if service_daemon_session_ready_for_request(
+        daemon_startup_ready(session_name),
+        service_daemon_stream_ready(session_name),
+        service_daemon_session_requires_lane_refresh(service_command),
+    ) {
         return Ok(());
     }
 
     let exe = std::env::current_exe()
         .map_err(|err| format!("Cannot resolve executable for remote-view recovery: {err}"))?;
     let mut command = tokio::process::Command::new(exe);
+    command.args(service_daemon_session_recovery_args(
+        session_name,
+        service_command,
+    ));
+    for variable in SERVICE_DAEMON_SESSION_RECOVERY_ENV_REMOVALS {
+        command.env_remove(variable);
+    }
     command
-        .args(service_daemon_session_recovery_args(
-            session_name,
-            service_command,
-        ))
-        .env_remove("AGENT_BROWSER_DAEMON")
-        .env_remove(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV)
-        .env_remove("AGENT_BROWSER_DAEMON_AUTH_TOKEN")
-        .env_remove("AGENT_BROWSER_SESSION")
-        .env_remove("AGENT_BROWSER_RUNTIME_PROFILE")
-        .env_remove("AGENT_BROWSER_PROFILE")
-        .env_remove("AGENT_BROWSER_CDP_URL")
-        .env_remove("AGENT_BROWSER_STREAM_PORT")
-        .env_remove("AGENT_BROWSER_DASHBOARD")
-        .env_remove("AGENT_BROWSER_DASHBOARD_PORT")
-        .env_remove("AGENT_BROWSER_HEADED")
-        .env_remove("AGENT_BROWSER_LEAVE_OPEN")
-        .env_remove("AGENT_BROWSER_EXECUTABLE_PATH")
-        .env_remove("AGENT_BROWSER_ARGS")
-        .env_remove("AGENT_BROWSER_EXTENSIONS")
-        .env_remove("AGENT_BROWSER_USER_AGENT")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
@@ -2242,11 +2389,11 @@ pub(super) async fn ensure_service_daemon_session(
             )
         })?;
 
-    if daemon_ready(session_name) {
+    if wait_for_service_daemon_session(session_name).await {
         return Ok(());
     }
     Err(format!(
-        "Service daemon session '{}' did not become ready (exit status {})",
+        "Service daemon session '{}' did not become ready (child {})",
         session_name, status
     ))
 }
@@ -4037,13 +4184,11 @@ fn query_params(query: Option<&str>) -> Vec<(String, String)> {
 }
 
 fn load_service_state_snapshot() -> Value {
-    let _ = refresh_persisted_profile_seeding_handoffs();
     let args = vec!["service".to_string(), "status".to_string()];
     serde_json::to_value(parse_flags(&args).service_state).unwrap_or_else(|_| json!({}))
 }
 
 pub(super) fn load_service_state() -> ServiceState {
-    let _ = refresh_persisted_profile_seeding_handoffs();
     let args = vec!["service".to_string(), "status".to_string()];
     let mut service_state = parse_flags(&args).service_state;
     service_state.refresh_profile_readiness();
@@ -4169,6 +4314,58 @@ mod tests {
     };
 
     #[test]
+    fn service_daemon_recovery_requires_the_named_runtime_host_lane() {
+        assert!(!service_daemon_session_ready_for_request(
+            false, true, false
+        ));
+        assert!(!service_daemon_session_ready_for_request(
+            true, false, false
+        ));
+        assert!(!service_daemon_session_ready_for_request(true, true, true));
+        assert!(service_daemon_session_ready_for_request(true, true, false));
+    }
+
+    #[test]
+    fn service_daemon_stream_readiness_rejects_a_stale_published_port() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-stale-stream-port-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let stream_path = root.join("dashboard-service-backend.stream");
+
+        let released_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let stale_port = released_listener.local_addr().unwrap().port();
+        drop(released_listener);
+        std::fs::write(&stream_path, stale_port.to_string()).unwrap();
+        assert!(!service_daemon_stream_file_ready(&stream_path));
+
+        let live_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        std::fs::write(
+            &stream_path,
+            live_listener.local_addr().unwrap().port().to_string(),
+        )
+        .unwrap();
+        assert!(service_daemon_stream_file_ready(&stream_path));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn service_daemon_recovery_scrubs_dashboard_process_modes() {
+        for variable in [
+            "AGENT_BROWSER_DASHBOARD",
+            "AGENT_BROWSER_DASHBOARD_INGRESS",
+            "AGENT_BROWSER_DASHBOARD_BACKEND_ONLY",
+        ] {
+            assert!(
+                SERVICE_DAEMON_SESSION_RECOVERY_ENV_REMOVALS.contains(&variable),
+                "recovery child must not inherit {variable}"
+            );
+        }
+    }
+
+    #[test]
     fn split_path_query_returns_path_and_query() {
         assert_eq!(
             split_path_query("/api/service/events?limit=2&kind=reconciliation"),
@@ -4180,13 +4377,17 @@ mod tests {
         );
     }
 
-    #[test]
-    fn service_status_command_maps_full_tab_history_query() {
-        let ordinary = service_status_command(None);
-        let full = service_status_command(Some("full-tab-history=true"));
+    #[tokio::test]
+    async fn service_status_command_maps_full_tab_history_query() {
+        let ordinary = service_status_command(None).await;
+        let full = service_status_command(Some("full-tab-history=true")).await;
+        let dashboard = service_status_command(Some("projection=dashboard-summary")).await;
 
         assert_eq!(ordinary["fullTabHistory"], false);
         assert_eq!(full["fullTabHistory"], true);
+        assert_eq!(ordinary["statusProjection"], Value::Null);
+        assert_eq!(dashboard["statusProjection"], "dashboard_summary");
+        assert!(ordinary.get("serviceState").is_none());
     }
 
     #[test]
@@ -4194,7 +4395,7 @@ mod tests {
         let cmd = service_resources_command();
 
         assert_eq!(cmd["action"], "service_resources");
-        assert!(cmd["serviceState"].is_object());
+        assert!(cmd.get("serviceState").is_none());
     }
 
     #[test]
@@ -5349,6 +5550,149 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification() {
+        const CHILD: &str = "P160_OPERATOR_FOCUS_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let root =
+                std::env::temp_dir().join(format!("p160-operator-proof-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            let auth = root.join("dashboard-auth.json");
+            std::fs::write(&auth, serde_json::to_vec(&json!({
+                "version":1,"createdAt":"fixture","sessionSecret":"ERERERERERERERERERERERERERERERERERERERERERE",
+                "users":[{"username":"operator","displayName":"Operator","role":"superuser",
+                "passwordHash":"","createdAt":"fixture","bootstrap":false}]
+            })).unwrap()).unwrap();
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["native::stream::http::tests::authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification", "--exact", "--nocapture"])
+                .env(CHILD, "1")
+                .env("HOME", &root)
+                .env("AGENT_BROWSER_HOME", root.join(".agent-browser"))
+                .env("AGENT_BROWSER_DASHBOARD_AUTH_FILE", &auth)
+                .env("AGENT_BROWSER_DASHBOARD_AUTH_DIR", &root)
+                .status().unwrap();
+            assert!(
+                status.success(),
+                "isolated operator proof fixture failed: {}",
+                root.display()
+            );
+            std::fs::remove_dir_all(root).unwrap();
+            return;
+        }
+        let state: ServiceState = serde_json::from_value(json!({
+            "profiles":{"profile-a":{"id":"profile-a"}},
+            "browsers":{"browser-a":{"id":"browser-a","profileId":"profile-a","health":"ready","pid":100,
+                "activeSessionIds":["session-a"],"displayAllocationId":"display-a"}},
+            "tabs":{"target:target-a":{"id":"target:target-a","browserId":"browser-a","targetId":"target-a",
+                "sessionId":"session-a","ownerSessionId":"session-a","lifecycle":"ready","principalId":"original-agent"}},
+            "remoteViewRoutes":{"route-a":{"id":"route-a","browserId":"browser-a","sessionId":"session-a",
+                "displayAllocationId":"display-a","state":"ready","readOnly":false,
+                "controllerLeaseId":"controller-a","controllerEpoch":1,"viewerLeaseIds":["controller-a"]}},
+            "viewerLeases":{"controller-a":{"id":"controller-a","routeId":"route-a","browserId":"browser-a",
+                "viewerId":"dashboard:operator","viewerRole":"controller","state":"controlling",
+                "expiresAt":"2099-01-01T00:00:00Z"}}
+        })).unwrap();
+        let original = serde_json::to_value(&state).unwrap();
+        let body = json!({"action":"view_focus","serviceName":"caller-label","agentName":"caller-agent","taskName":"focus",
+            "browserId":"browser-a","sessionName":"session-a",
+            "params":{"operatorFocus":true,"targetId":"target-a","routeId":"route-a","controllerLeaseId":"controller-a",
+            "operatorFocusProofToken":"caller-forged"}}).to_string();
+        let command = service_request_command_with_dashboard_generation(
+            &body,
+            Some(&state),
+            "operator",
+            "session-a",
+            None,
+        )
+        .unwrap();
+        assert_ne!(command["operatorFocusProofToken"], "caller-forged");
+        dashboard_auth::verify_operator_focus(&state, &command).unwrap();
+        assert_eq!(serde_json::to_value(&state).unwrap(), original);
+        let provenance =
+            crate::native::service_request_provenance::ServiceRequestProvenance::capture(
+                &command,
+                "request",
+                "job",
+                "connection",
+                "lane",
+            );
+        assert_eq!(
+            provenance.client_subject_id.as_deref(),
+            Some("dashboard:operator")
+        );
+        assert_eq!(provenance.identity_assurance, "authenticated-ingress");
+        assert_eq!(provenance.service_name.as_deref(), Some("caller-label"));
+        let retained = serde_json::to_string(&provenance).unwrap();
+        assert!(!retained.contains(command["operatorFocusProofToken"].as_str().unwrap()));
+        for key in [
+            "id",
+            "browserId",
+            "sessionName",
+            "targetId",
+            "routeId",
+            "controllerLeaseId",
+        ] {
+            let mut changed = command.clone();
+            changed[key] = json!("changed");
+            assert!(
+                dashboard_auth::verify_operator_focus(&state, &changed).is_err(),
+                "{key}"
+            );
+        }
+        let mut changed = state.clone();
+        changed
+            .remote_view_routes
+            .get_mut("route-a")
+            .unwrap()
+            .controller_epoch += 1;
+        assert!(dashboard_auth::verify_operator_focus(&changed, &command).is_err());
+    }
+
+    #[test]
+    fn operator_focus_labels_and_forged_proof_do_not_authenticate_dashboard() {
+        let error = service_request_command_with_state_and_authority(
+            r#"{"action":"view_focus","serviceName":"agent-browser-dashboard","agentName":"operator","taskName":"focus","params":{"operatorFocus":true,"operatorFocusProofToken":"forged"}}"#,
+            None, None, "default", None,
+        ).unwrap_err();
+        let response = error.response();
+        assert_eq!(
+            response["failure"]["code"],
+            "operator_focus_authority_required"
+        );
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["recommendedAction"],
+            "inspect_operator_focus_authority"
+        );
+        assert!(!response.to_string().contains("forged"));
+    }
+
+    #[test]
+    fn service_request_rejection_response_exposes_route_conflict_recourse() {
+        let response = ServiceRequestRejection::record(
+            "http_service_request",
+            Some("tab_new"),
+            "request-route-conflict",
+            "session",
+            ServiceRequestIssue::new(
+                ServiceRequestIssueKind::RouteHintFailure,
+                "service_access_plan_route_browser_conflict",
+            ),
+        )
+        .response();
+
+        assert_eq!(response["success"], false);
+        assert_eq!(
+            response["failure"]["code"],
+            "service_access_plan_route_browser_conflict"
+        );
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["recommendedAction"],
+            "refresh_access_plan_and_use_exact_route"
+        );
+    }
+
+    #[test]
     fn authenticated_dashboard_identity_supplies_accountable_fallback() {
         let command = service_request_command_with_state_and_principal(
             r##"{"action":"navigate","params":{"url":"https://example.com"}}"##,
@@ -5508,17 +5852,18 @@ mod tests {
 
     #[test]
     fn service_request_error_uses_http_400_envelope() {
-        assert_eq!(
+        let error =
             service_request_adapter_fixture(r##"{"action":"navigate","jobTimeoutMs":"1000"}"##)
-                .unwrap_err(),
-            json!({
-                "status": "400 Bad Request",
-                "body": {
-                    "success": false,
-                    "error": "jobTimeoutMs must be a positive integer"
-                }
-            })
+                .unwrap_err();
+        assert_eq!(error["status"], "400 Bad Request");
+        assert_eq!(
+            error["body"]["error"],
+            "jobTimeoutMs must be a positive integer"
         );
+        assert_eq!(error["body"]["failure"]["code"], "invalid_field_type");
+        assert_eq!(error["body"]["failure"]["phase"], "ingress_validation");
+        assert_eq!(error["body"]["failure"]["effectState"], "no_effect");
+        assert!(error["body"]["id"].is_string());
     }
 
     #[test]
@@ -5586,6 +5931,35 @@ mod tests {
         assert_eq!(command["streamId"], "rdp-guac");
         assert_eq!(command["provider"], "rdp_gateway");
         assert_eq!(command["openMode"], "iframe");
+    }
+
+    #[test]
+    fn service_request_relay_session_routes_viewer_lease_actions_to_requested_daemon_session() {
+        for action in [
+            "service_viewer_lease_request",
+            "service_viewer_lease_heartbeat",
+            "service_viewer_lease_release",
+            "service_controller_lease_takeover",
+        ] {
+            let body = format!(
+                r##"{{"action":"{action}","params":{{"sessionName":"p158-external-vantage-e4","browserId":"session:p158-external-vantage-e4","routeId":"development-route-1"}},"serviceName":"routing-fixture","agentName":"test-agent","taskName":"lease-routing"}}"##
+            );
+            // This test covers routing of attributed service requests, not an
+            // authenticated dashboard account or its controller permissions.
+            let command = service_request_command_with_state_and_principal(
+                &body,
+                None,
+                None,
+                "AgentBrowserDashboard",
+            )
+            .unwrap();
+
+            assert_eq!(
+                service_request_relay_session("AgentBrowserDashboard", &body, &command),
+                "p158-external-vantage-e4",
+                "action {action}"
+            );
+        }
     }
 
     #[test]

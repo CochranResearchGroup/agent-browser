@@ -14,6 +14,8 @@ use super::service_model::{
     BrowserHealth, LeaseState, ServiceEvent, ServiceEventKind, ServiceState,
 };
 
+mod retained_tree;
+
 const TEMP_PROFILE_MIN_AGE_SECONDS: u64 = 30 * 60;
 const OWNED_CLOSING_GRACE_SECONDS: u64 = 5;
 const GC_REVIEW_TOKEN_TTL_SECONDS: u64 = 10 * 60;
@@ -402,9 +404,27 @@ fn service_resource_authority_snapshot_from_samples_for_environment(
     environment: &ResourceRuntimeEnvironment,
 ) -> ResourceAuthoritySnapshot {
     let dashboard_main_pid = current_dashboard_main_pid();
+    let descendants = retained_tree::correlations(
+        state,
+        &processes,
+        crate::process_identity::current_boot_epoch().as_deref(),
+    );
     let mut records = processes
         .into_iter()
         .filter_map(|process| classify_process(state, dashboard_main_pid, process, environment))
+        .map(|mut record| {
+            if record.kind == ResourceKind::Browser
+                && record.disposition == ResourceDisposition::Observed
+                && record.correlation.browser_id.is_none()
+            {
+                if let Some(correlation) = descendants.get(&record.pid) {
+                    record.correlation = correlation.clone();
+                    record.disposition = ResourceDisposition::Protected;
+                    record.reasons = vec!["verified_retained_browser_descendant".to_string()];
+                }
+            }
+            record
+        })
         .collect::<Vec<_>>();
     records.sort_by_key(|record| record.pid);
 
@@ -941,11 +961,16 @@ fn resource_kind(
     if executable_name == "xvfb" {
         return ResourceKind::RemoteDisplay;
     }
-    if executable.contains("agent-browser") {
+    // Installation directories identify storage, not the running program. In
+    // particular, managed Chrome lives below .agent-browser/browsers/.
+    if matches!(
+        executable_name,
+        "agent-browser" | "agent-browser.exe" | "agent-browser-dev" | "agent-browser-dev.exe"
+    ) {
         return ResourceKind::AgentBrowser;
     }
-    if executable.contains("chrome")
-        || executable.contains("chromium")
+    if executable_name.contains("chrome")
+        || executable_name.contains("chromium")
         || profile_path.is_some()
         || cdp_port.is_some()
     {
@@ -1783,8 +1808,7 @@ fn linux_process_sample(
         });
     let executable = fs::read_link(format!("{proc_path}/exe"))
         .ok()
-        .map(|value| value.to_string_lossy().into_owned())
-        .or_else(|| command.first().cloned());
+        .map(|value| value.to_string_lossy().into_owned());
     Some(ProcessSample {
         pid,
         ppid,
@@ -2015,6 +2039,122 @@ mod tests {
             response["resources"][0]["correlation"]["browserId"],
             "browser-1"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn retained_browser_descendants_require_exact_owner_and_process_ancestry() {
+        use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
+        let boot = crate::process_identity::current_boot_epoch().unwrap();
+        let (mut state, mut root) = owned_closing_candidate(101, "/tmp/resource-owned-tree");
+        root.start_token = Some(format!("{boot}:100"));
+        state.browsers.get_mut("browser-101").unwrap().health = BrowserHealth::Ready;
+        let recorded = &mut state
+            .browser_process_identities
+            .get_mut("browser-101")
+            .unwrap()
+            .process_identity;
+        recorded.start_token = root.start_token.clone().unwrap();
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap();
+        owner.process_instance_digest =
+            crate::native::runtime_lifecycle::digest_json(recorded).unwrap();
+        let launch_digest = crate::native::runtime_lifecycle::package_launch_identity_digest(
+            owner,
+            root.process_group_id,
+        )
+        .unwrap();
+        let lifecycle = state
+            .runtime_owner_registry
+            .lifecycle_records
+            .get_mut("browser-101")
+            .unwrap();
+        lifecycle.boot_epoch = Some(boot.clone());
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+        lifecycle.package_launch_identity_digest = Some(launch_digest);
+        let child = ProcessSample {
+            pid: 102,
+            ppid: Some(101),
+            start_token: Some(format!("{boot}:101")),
+            executable: root.executable.clone(),
+            command: vec![
+                root.executable.clone().unwrap(),
+                "--type=zygote".to_string(),
+            ],
+            rss_bytes: Some(2048),
+            ..ProcessSample::default()
+        };
+        let grandchild = ProcessSample {
+            pid: 103,
+            ppid: Some(102),
+            start_token: Some(format!("{boot}:102")),
+            ..child.clone()
+        };
+        let samples = vec![root, child, grandchild];
+        let project = |state: &ServiceState, samples: Vec<ProcessSample>| {
+            service_resources_response_from_samples_for_environment(
+                state,
+                samples,
+                Vec::new(),
+                ResourceRuntimeEnvironment::Production,
+            )
+        };
+        let response = project(&state, samples.clone());
+        assert_eq!(response["summary"]["observedCount"], 0);
+        assert_eq!(response["summary"]["candidateCount"], 0);
+        assert_eq!(response["summary"]["protectedRssBytes"], 5120);
+        for record in &response["resources"].as_array().unwrap()[1..] {
+            assert_eq!(record["correlation"]["browserId"], "browser-101");
+            assert_eq!(
+                record["reasons"],
+                json!(["verified_retained_browser_descendant"])
+            );
+            assert!(record["gcAction"].is_null());
+            assert!(record["candidateIdentity"].is_null());
+        }
+        for case in 0..12 {
+            let mut changed_state = state.clone();
+            let mut changed = samples.clone();
+            let lifecycle = changed_state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut("browser-101")
+                .unwrap();
+            match case {
+                0 => changed[0].start_token = Some(format!("{boot}:99")),
+                1 => changed[0].executable = Some("/different/chrome".to_string()),
+                2 => changed[0].executable = None,
+                3 => lifecycle.owner_generation += 1,
+                4 => lifecycle.boot_epoch = Some("linux:prior-boot".to_string()),
+                5 => lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Closing,
+                6 => lifecycle.cleanup_obligation_state = CleanupObligationState::Unknown,
+                7 => changed[1].ppid = Some(999),
+                8 => changed[1].start_token = Some(format!("{boot}:99")),
+                9 => changed[1].executable = Some("/unrelated/chrome".to_string()),
+                10 => changed[1]
+                    .command
+                    .push("--user-data-dir=/other/profile".to_string()),
+                11 => changed[1].ppid = Some(103),
+                _ => unreachable!(),
+            }
+            let response = project(&changed_state, changed);
+            assert_eq!(response["summary"]["candidateCount"], 0, "case {case}");
+            let descendant = response["resources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r["pid"] == 103)
+                .unwrap();
+            assert!(
+                descendant["correlation"]["browserId"].is_null(),
+                "case {case}"
+            );
+            assert_eq!(descendant["disposition"], "observed", "case {case}");
+        }
     }
 
     #[test]
@@ -2389,6 +2529,36 @@ mod tests {
     }
 
     #[test]
+    fn resource_kind_uses_executable_name_not_installation_directory() {
+        let response = service_resources_response_from_samples_for_environment(
+            &ServiceState::default(),
+            vec![
+                sample(
+                    510,
+                    &["/home/me/.agent-browser/browsers/chrome-152/chrome"],
+                    Some(5),
+                ),
+                sample(511, &["/opt/agent-browser/chromium"], Some(5)),
+                sample(512, &["/tmp/chrome-test/agent-browser"], Some(5)),
+                sample(513, &["/tmp/agent-browser-fixture/node"], Some(5)),
+            ],
+            Vec::new(),
+            ResourceRuntimeEnvironment::Production,
+        );
+        assert_eq!(response["summary"]["candidateCount"], 0);
+        let resources = response["resources"].as_array().unwrap();
+        assert_eq!(resources.len(), 3);
+        for resource in &resources[..2] {
+            assert_eq!(resource["kind"], "browser");
+            assert_eq!(resource["disposition"], "observed");
+            assert_eq!(resource["reasons"], json!(["no_safe_gc_predicate_matched"]));
+            assert!(resource["gcAction"].is_null());
+        }
+        assert_eq!(resources[2]["kind"], "agent_browser");
+        assert_eq!(resources[2]["disposition"], "observed");
+    }
+
+    #[test]
     fn development_resources_keep_exact_owned_lifecycle_candidate() {
         let profile_root = "/home/dev/.agent-browser/runtime-profiles/disposable/user-data";
         let (state, candidate) = owned_closing_candidate(508, profile_root);
@@ -2630,8 +2800,13 @@ pub(crate) mod service_commands {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
     pub(crate) async fn handle_service_resources(cmd: &Value) -> Result<Value, String> {
-        let service_state = load_service_state_for_maintenance(cmd)?;
-        Ok(service_resources_response(&service_state))
+        let cmd = cmd.clone();
+        tokio::task::spawn_blocking(move || {
+            let service_state = load_service_state_for_maintenance(&cmd)?;
+            Ok(service_resources_response(&service_state))
+        })
+        .await
+        .map_err(|error| format!("Service resource inventory task failed: {error}"))?
     }
     pub(crate) async fn handle_service_resources_monitor_summary() -> Result<Value, String> {
         service_resources_monitor_summary_response()
@@ -2686,6 +2861,8 @@ pub(crate) mod service_commands {
             service_name: optional_command_string(cmd, "serviceName"),
             agent_name: optional_command_string(cmd, "agentName"),
             task_name: optional_command_string(cmd, "taskName"),
+            client_subject_id: optional_command_string(cmd, "clientSubjectId"),
+            identity_assurance: optional_command_string(cmd, "identityAssurance"),
             session_name: optional_command_string(cmd, "sessionName"),
             target_service_ids: target_service_ids_from_command(cmd),
             account_ids: account_ids_from_command(cmd),

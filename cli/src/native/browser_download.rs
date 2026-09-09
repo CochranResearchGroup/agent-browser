@@ -51,26 +51,58 @@ pub(crate) mod action_commands {
                 .file_name()
                 .ok_or("Invalid download path: no filename")?,
         );
-        let download_dir_str = download_dir
-            .to_str()
-            .ok_or("Download directory path is not valid UTF-8")?;
         let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
         let session_id = mgr.active_session_id()?.to_string();
-        mgr.set_download_behavior(download_dir_str).await?;
-        let mut rx = mgr.client.subscribe();
-        interaction::click(
-            &mgr.client,
-            &session_id,
-            &state.ref_map,
-            selector,
-            "left",
-            1,
-            &state.iframe_sessions,
-        )
-        .await?;
+        let pid = mgr
+            .browser_pid()
+            .or(state.attached_browser_pid)
+            .ok_or("download_source_identity_unproven: local browser PID unavailable")?;
+        let owner = crate::process_identity::capture_process_identity(pid, None, None)
+            .ok_or("download_source_identity_unproven: local browser identity unavailable")?;
+        let binding = state
+            .runtime_owner_binding
+            .as_ref()
+            .ok_or("download_source_identity_unproven: current owner binding unavailable")?;
+        if crate::native::runtime_lifecycle::digest_json(&owner)?
+            != binding.claim.process_instance_digest
+        {
+            return Err(
+                "download_source_identity_unproven: process differs from current owner".into(),
+            );
+        }
+        let tree = mgr
+            .client
+            .send_command("Page.getFrameTree", None, Some(&session_id))
+            .await?;
+        let mut observation =
+            crate::native::service_download_artifact::DownloadObservation::from_frame_tree(&tree)?;
         const DOWNLOAD_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_secs(30);
         let deadline = tokio::time::Instant::now() + DOWNLOAD_TIMEOUT;
-        let mut downloaded_guid: Option<String> = None;
+        // The requested path is an artifact delivery destination. Preserve the
+        // current browser-context policy so a concurrent peer keeps its own
+        // configured download directory.
+        let observer = tokio::time::timeout(
+            deadline.saturating_duration_since(tokio::time::Instant::now()),
+            crate::native::service_download_artifact::subscribe(mgr.get_cdp_url()),
+        )
+        .await
+        .map_err(|_| "download_subscription_failed: setup deadline elapsed")??;
+        crate::native::service_download_artifact::verify_process(&owner)?;
+        let mut rx = observer.subscribe();
+        tokio::time::timeout(
+            deadline.saturating_duration_since(tokio::time::Instant::now()),
+            interaction::click(
+                &mgr.client,
+                &session_id,
+                &state.ref_map,
+                selector,
+                "left",
+                1,
+                &state.iframe_sessions,
+            ),
+        )
+        .await
+        .map_err(|_| "download_click_uncertain: click deadline elapsed".to_string())??;
         loop {
             let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
             if remaining.is_zero() {
@@ -78,68 +110,26 @@ pub(crate) mod action_commands {
             }
             match tokio::time::timeout(remaining, rx.recv()).await {
                 Ok(Ok(event)) => {
-                    let is_page_session = event.session_id.as_deref() == Some(&session_id);
-                    let is_download_event =
-                        |method: &str, browser_method: &str, page_method: &str| {
-                            method == browser_method || (method == page_method && is_page_session)
-                        };
-                    if is_download_event(
-                        &event.method,
-                        "Browser.downloadWillBegin",
-                        "Page.downloadWillBegin",
-                    ) {
-                        if let Some(guid) = event.params.get("guid").and_then(|v| v.as_str()) {
-                            downloaded_guid = Some(guid.to_string());
-                        }
-                    }
-                    if is_download_event(
-                        &event.method,
-                        "Browser.downloadProgress",
-                        "Page.downloadProgress",
-                    ) {
-                        match event.params.get("state").and_then(|v| v.as_str()) {
-                            Some("completed") => break,
-                            Some("canceled") => {
-                                return Err("Download was canceled".to_string());
-                            }
-                            _ => {}
-                        }
+                    if observation.observe(&event.method, &event.params)? {
+                        break;
                     }
                 }
-                Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
-                Ok(Err(_)) => return Err("Event stream closed".to_string()),
+                Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => {
+                    return Err("download_event_unproven: download observation lost events".into());
+                }
+                Ok(Err(_)) => {
+                    return Err("download_event_unproven: event stream closed".to_string())
+                }
                 Err(_) => {
-                    return Err("Timeout waiting for download to complete".to_string());
+                    return Err("download_events_unavailable: no exact completion observed; inspect existing context policy and trace before retry".to_string());
                 }
             }
         }
-        if let Some(guid) = downloaded_guid {
-            let guid_path = download_dir.join(&guid);
-            for _ in 0..10 {
-                if guid_path.exists() {
-                    break;
-                }
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            }
-            if guid_path.exists() {
-                std::fs::rename(&guid_path, &dest)
-                    .map_err(|e| format!("Failed to rename downloaded file: {}", e))?;
-            } else {
-                if !dest.exists() {
-                    return Err(format!(
-                        "Downloaded file not found at expected path (GUID: {})",
-                        guid
-                    ));
-                }
-            }
-        } else {
-            if !dest.exists() {
-                return Err(
-                    "Download completed but could not determine the downloaded file name"
-                        .to_string(),
-                );
-            }
-        }
+        let source = observation
+            .path
+            .as_deref()
+            .ok_or("download_completion_path_missing: no completed path")?;
+        crate::native::service_download_artifact::deliver(&owner, Path::new(source), &dest, None)?;
         let dest_str = dest.to_string_lossy().to_string();
         Ok(json!({ "path" : dest_str }))
     }

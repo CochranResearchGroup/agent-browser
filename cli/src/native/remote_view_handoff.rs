@@ -926,6 +926,8 @@ pub fn apply_retained_remote_view_route(
 /// returned the route-pool entry to `available`. The caller must first prove
 /// that the exact retained browser/session is live. This helper remains
 /// fail-closed for foreign ownership, provider drift, and route/display drift.
+/// An orphaned route or pending display may retain its selection only with
+/// matching current-boot browser/display custody. Physical proof remains required.
 pub fn apply_available_retained_remote_view_route(
     state: &ServiceState,
     handoff: &RemoteViewHandoff,
@@ -963,7 +965,10 @@ pub fn apply_available_retained_remote_view_route(
         _ => false,
     };
     if route.id != route_id
-        || !matches!(route.state.as_str(), "ready" | "pending" | "checked_out")
+        || !matches!(
+            route.state.as_str(),
+            "ready" | "pending" | "checked_out" | "orphaned"
+        )
         || !route_owner_matches
         || route.display_allocation_id.as_deref() != Some(display_allocation_id)
         || handoff
@@ -980,6 +985,32 @@ pub fn apply_available_retained_remote_view_route(
     let Some(route_pool_entry) = state.route_pool.get(route_pool_entry_id) else {
         return false;
     };
+    // Selecting retained locators is not a readiness claim. Recover degraded
+    // presentation only when current-boot browser/display custody agrees; the
+    // coordinator still proves physical display ownership and visible pixels.
+    let boot = crate::process_identity::current_boot_epoch();
+    let retained_custody_matches = route.browser_id.as_deref() == Some(browser_id)
+        && route.session_id.as_deref() == Some(session_name)
+        && display_allocation.owner_browser_id.as_deref() == Some(browser_id)
+        && display_allocation.owner_session_id.as_deref() == Some(session_name)
+        && display_allocation.display_name.is_some()
+        && route_pool_entry
+            .target
+            .get("displayName")
+            .and_then(Value::as_str)
+            .is_none_or(|name| display_allocation.display_name.as_deref() == Some(name))
+        && boot.as_deref().is_some_and(|boot| {
+            display_allocation.boot_epoch.as_deref() == Some(boot)
+                && state.browsers.get(browser_id).is_some_and(|browser| {
+                    browser.id == browser_id
+                        && browser.boot_epoch.as_deref() == Some(boot)
+                        && browser.display_allocation_id.as_deref() == Some(display_allocation_id)
+                        && browser.display_name == display_allocation.display_name
+                })
+        });
+    if route.state == "orphaned" && !retained_custody_matches {
+        return false;
+    }
     let pool_state_matches = match route_pool_entry.state.as_str() {
         "available" => route_pool_entry.current_route_allocation_id.is_none(),
         "checked_out" | "pending" => {
@@ -993,7 +1024,8 @@ pub fn apply_available_retained_remote_view_route(
         .and_then(Value::as_str)
         .map_or_else(
             || {
-                matches!(route_pool_entry.state.as_str(), "checked_out" | "pending")
+                (matches!(route_pool_entry.state.as_str(), "checked_out" | "pending")
+                    || retained_custody_matches)
                     && route_pool_entry
                         .target
                         .get("displayName")
@@ -1023,7 +1055,9 @@ pub fn apply_available_retained_remote_view_route(
         _ => false,
     };
     if display_allocation.id != display_allocation_id
-        || display_allocation.state != "ready"
+        || !(display_allocation.state == "ready"
+            || (retained_custody_matches
+                && matches!(display_allocation.state.as_str(), "pending" | "orphaned")))
         || !display_owner_matches
         || !display_allocation
             .route_ids
@@ -1914,6 +1948,11 @@ pub fn planned_route_bound_handoff_response(
 pub fn opened_route_bound_handoff_response(
     input: RouteBoundHandoffOpenedResponseInput<'_>,
 ) -> Value {
+    let service_tab_handle = input
+        .tab
+        .get("serviceTabHandle")
+        .cloned()
+        .unwrap_or(Value::Null);
     let route_bound_handoff = route_bound_handoff_record(RouteBoundHandoffRecordInput {
         state: "opened",
         intent: input.intent,
@@ -1962,6 +2001,7 @@ pub fn opened_route_bound_handoff_response(
         "browserBuildProof": input.browser_build_proof,
         "launch": input.launch,
         "tab": input.tab,
+        "serviceTabHandle": service_tab_handle,
         "focus": input.focus,
         "checkout": input.checkout,
         "acquisitionLease": input.acquisition_lease,
@@ -3480,6 +3520,108 @@ mod tests {
         assert_eq!(command["routeId"], "route-a");
         assert_eq!(command["displayAllocationId"], "display-a");
 
+        let mut recovering = state.clone();
+        let boot = crate::process_identity::current_boot_epoch();
+        recovering
+            .remote_view_routes
+            .get_mut("route-a")
+            .unwrap()
+            .state = "orphaned".into();
+        let display = recovering.display_allocations.get_mut("display-a").unwrap();
+        display.state = "pending".into();
+        display.boot_epoch = boot.clone();
+        recovering.browsers.insert(
+            "session:browser-a".into(),
+            super::super::service_model::BrowserProcess {
+                id: "session:browser-a".into(),
+                boot_epoch: boot,
+                display_name: Some(":10".into()),
+                display_allocation_id: Some("display-a".into()),
+                ..Default::default()
+            },
+        );
+        let pool = recovering.route_pool.get_mut("pool-a").unwrap();
+        pool.state = "available".into();
+        pool.current_route_allocation_id = None;
+        pool.frame_url = Some("https://guac.example/guacamole/#/client/route-a".into());
+        let recovery_command =
+            || remote_view_handoff_resolution_command(&handoff, "recover-a", false).unwrap();
+        let mut pinned = recovery_command();
+        assert!(apply_available_retained_remote_view_route(
+            &recovering,
+            &handoff,
+            &mut pinned
+        ));
+        let intent = super::super::remote_view::normalize_remote_view_open_intent(&pinned).unwrap();
+        let plan = super::super::remote_view::plan_remote_view_acquisition(
+            &recovering,
+            &intent,
+            None,
+            "session:browser-a",
+            "session-a",
+        )
+        .unwrap();
+        assert_eq!(plan.selected_route_id, "route-a");
+        assert_eq!(plan.display_allocation_id, "display-a");
+        assert_eq!(plan.display_name.as_deref(), Some(":10"));
+        assert!(plan
+            .proof_required
+            .iter()
+            .any(|proof| proof == "x11_browser_window_visible"));
+        assert_eq!(recovering.display_allocations["display-a"].state, "pending");
+        for mismatch in [
+            "display_owner",
+            "route_owner",
+            "prior_boot",
+            "browser_display",
+            "pool_display",
+        ] {
+            let mut invalid = recovering.clone();
+            match mismatch {
+                "display_owner" => {
+                    invalid
+                        .display_allocations
+                        .get_mut("display-a")
+                        .unwrap()
+                        .owner_browser_id = Some("foreign-browser".into())
+                }
+                "route_owner" => {
+                    invalid
+                        .remote_view_routes
+                        .get_mut("route-a")
+                        .unwrap()
+                        .browser_id = Some("foreign-browser".into())
+                }
+                "prior_boot" => {
+                    invalid
+                        .display_allocations
+                        .get_mut("display-a")
+                        .unwrap()
+                        .boot_epoch = Some("prior-boot".into())
+                }
+                "browser_display" => {
+                    invalid
+                        .browsers
+                        .get_mut("session:browser-a")
+                        .unwrap()
+                        .display_name = Some(":12".into())
+                }
+                "pool_display" => {
+                    invalid.route_pool.get_mut("pool-a").unwrap().target =
+                        json!({"displayAllocationId": "display-a", "displayName": ":12"})
+                }
+                _ => unreachable!(),
+            }
+            let mut rejected = recovery_command();
+            let unchanged = rejected.clone();
+            assert!(!apply_available_retained_remote_view_route(
+                &invalid,
+                &handoff,
+                &mut rejected
+            ));
+            assert_eq!(rejected, unchanged);
+        }
+
         let mut mismatched_state = state;
         mismatched_state
             .route_pool
@@ -4268,7 +4410,14 @@ mod tests {
             "index": 2,
             "targetId": "target-2",
             "url": "https://x.com/home",
-            "profileId": "shared-social"
+            "profileId": "shared-social",
+            "serviceTabHandle": {
+                "browserId": "session:a",
+                "sessionName": "a",
+                "tabId": "target:target-2",
+                "targetId": "target-2",
+                "valid": true
+            }
         });
 
         let response = complete_route_bound_handoff_open(CompleteRouteBoundHandoffOpenInput {
@@ -4308,6 +4457,7 @@ mod tests {
         assert_eq!(response["acquisitionLease"]["state"], "completed");
         assert_eq!(response["acquisitionLease"]["phase"], "checked_out");
         assert_eq!(response["handoffId"], "job-handoff-a");
+        assert_eq!(response["serviceTabHandle"], tab["serviceTabHandle"]);
         assert_eq!(
             response["externalUrl"],
             "https://dashboard.example/remote-view/job-handoff-a"

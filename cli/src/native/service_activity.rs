@@ -288,6 +288,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
         ServiceEventKind::IncidentResolved => "incident_resolved",
+        ServiceEventKind::JobTerminal => "job_terminal",
     }
 }
 

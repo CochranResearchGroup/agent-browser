@@ -7,9 +7,11 @@ const page = readFileSync('packages/dashboard/src/app/page.tsx', 'utf8');
 const navigator = readFileSync('packages/dashboard/src/components/workspace-navigator.tsx', 'utf8');
 const servicePanel = readFileSync('packages/dashboard/src/components/service-panel.tsx', 'utf8');
 const sessionsStore = readFileSync('packages/dashboard/src/store/sessions.ts', 'utf8');
+const selectedWorkspaceContextHook = readFileSync('packages/dashboard/src/hooks/use-selected-workspace-context.ts', 'utf8');
 const chatStore = readFileSync('packages/dashboard/src/store/chat.ts', 'utf8');
 const remoteViewport = readFileSync('packages/dashboard/src/components/workspace-remote-viewport.tsx', 'utf8');
 const dashboardApi = readFileSync('packages/dashboard/src/lib/dashboard-api.ts', 'utf8');
+const dashboardReadCoordinator = readFileSync('packages/dashboard/src/lib/dashboard-read-coordinator.ts', 'utf8');
 const serviceWorkspaces = readFileSync('packages/dashboard/src/lib/service-workspaces.ts', 'utf8');
 const workspaceUrl = readFileSync('packages/dashboard/src/lib/workspace-url-selection.ts', 'utf8');
 const css = readFileSync('packages/dashboard/src/app/globals.css', 'utf8');
@@ -22,6 +24,12 @@ const skill = readFileSync('skills/agent-browser/SKILL.md', 'utf8');
 const cliOutput = readFileSync('cli/src/output.rs', 'utf8');
 const cliInstall = readFileSync('cli/src/install.rs', 'utf8');
 const dashboardHttp = readFileSync('cli/src/native/stream/http.rs', 'utf8');
+
+assert.match(
+  sessionsStore,
+  /useSessionsSync\(pollInterval = 10_000\)/,
+  'Session and tab polling must use the shared ten-second dashboard freshness bound',
+);
 
 assert.match(
   page,
@@ -55,7 +63,7 @@ assert.match(
 
 assert.match(
   page,
-  /fetch\("\/api\/runtime\/health", \{[\s\S]*cache: "no-store"[\s\S]*credentials: "same-origin"[\s\S]*setInterval\([\s\S]*10_000[\s\S]*<RuntimeHealthNotice state=\{runtimeHealth\} \/>/,
+  /fetchSharedRuntimeHealth\(\)[\s\S]*startCompletionDrivenDashboardPoll\(checkRuntimeHealth, 10_000\)[\s\S]*<RuntimeHealthNotice state=\{runtimeHealth\} \/>/,
   'Dashboard shell must poll live runtime health and render executable drift before operator UX degrades',
 );
 
@@ -109,6 +117,36 @@ assert.match(
 );
 
 assert.match(
+  dashboardApi,
+  /SHARED_SERVICE_READ_TTL_MS = 10_000[\s\S]*fetchSharedServiceStatus[\s\S]*fetchCoordinatedDashboardRead\(`\$\{SERVICE_API_BASE\}\/status\?projection=dashboard-summary`/,
+  'Dashboard components must share one bounded Service Status projection instead of downloading independent multi-megabyte copies',
+);
+
+assert.match(
+  dashboardApi,
+  /RUNTIME_STATIC_READ_TTL_MS = 5 \* 60_000[\s\S]*cacheGroup: RUNTIME_STATIC_READ_GROUP[\s\S]*observedRuntimeGeneration !== generation[\s\S]*invalidateCoordinatedDashboardReadGroup/,
+  'Static contracts and capability reads must be bounded and invalidated when the installed runtime generation changes',
+);
+
+assert.match(
+  dashboardReadCoordinator,
+  /class DashboardReadCoordinator[\s\S]*flights = new Map[\s\S]*snapshots = new Map/,
+  'Dashboard read sharing must be owned by one per-document coordinator',
+);
+
+for (const [label, source] of [
+  ['workspace navigator', navigator],
+  ['service panel', servicePanel],
+  ['selected workspace context', selectedWorkspaceContextHook],
+]) {
+  assert.match(
+    source,
+    /fetchSharedServiceStatus\(\)/,
+    `${label} must use the shared Service Status flight and freshness window`,
+  );
+}
+
+assert.match(
   navigator,
   /const deferredQuery = useDeferredValue\(query\)[\s\S]*const text = deferredQuery\.trim\(\)\.toLowerCase\(\)/,
   'Workspace navigator must defer query filtering so large workspace lists do not block input',
@@ -116,7 +154,7 @@ assert.match(
 
 assert.match(
   navigator,
-  /fetch\(`\$\{serviceBase\(activePort\)\}\/status`\)/,
+  /fetchSharedServiceStatus\(\)/,
   'Workspace navigator must read service-owned state from the service status endpoint',
 );
 
@@ -164,9 +202,22 @@ assert.match(
 
 assert.match(
   sessionsStore,
-  /fetch\(sessionTabsApiUrl\(s\.port\)\)/,
+  /fetchCoordinatedDashboardRead\([\s\S]*sessionTabsApiUrl\(s\.port\)/,
   'Workspace tab polling must use the same-origin dashboard session-tabs proxy',
 );
+
+for (const [label, source, guard] of [
+  ['session synchronization', sessionsStore, 'fetchInFlightRef'],
+  ['workspace navigator status', navigator, 'serviceStatusInFlightRef'],
+  ['selected workspace context', selectedWorkspaceContextHook, 'refreshInFlightRef'],
+  ['service panel status', servicePanel, 'serviceFetchInFlightRef'],
+]) {
+  assert.match(
+    source,
+    new RegExp(`${guard}\\.current[\\s\\S]*return[\\s\\S]*${guard}\\.current = true[\\s\\S]*finally[\\s\\S]*${guard}\\.current = false`),
+    `${label} must not start a new polling cycle while its prior cycle is still in flight`,
+  );
+}
 
 for (const [label, text] of [
   ['workspace navigator', navigator],

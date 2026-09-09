@@ -15,6 +15,8 @@
     "serviceName",
     "agentName",
     "taskName",
+    "provenance",
+    "terminalOutcome",
     "previousHealth",
     "currentHealth",
     "details"
@@ -48,7 +50,8 @@
         "route_released",
         "reconciliation_error",
         "incident_acknowledged",
-        "incident_resolved"
+        "incident_resolved",
+        "job_terminal"
       ]
     },
     "message": {
@@ -71,6 +74,18 @@
     },
     "taskName": {
       "type": ["string", "null"]
+    },
+    "provenance": {
+      "oneOf": [
+        { "$ref": "service-request-provenance.v1.schema.json" },
+        { "type": "null" }
+      ]
+    },
+    "terminalOutcome": {
+      "oneOf": [
+        { "$ref": "service-terminal-outcome.v1.schema.json" },
+        { "type": "null" }
+      ]
     },
     "previousHealth": {
       "oneOf": [

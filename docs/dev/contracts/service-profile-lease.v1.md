@@ -58,6 +58,8 @@ generation values plus every sealed identity before refreshing the binding.
 It does not transfer ownership, release work, close a browser, or delete a
 profile.
 
+Reconciliation also seals a single `rejoin_owned_browser` transition when the current lease explicitly authorizes `rejoin`. It reuses the direct rejoin checks for one exact uncontested ready owner and binds only that session and its same-browser active tabs, through the plan expiry. Apply rechecks current capability, lease revision, owner, process, routes, boot epoch and custody before mutation. A missing owner binding therefore has a supported plan/apply repair when rejoin is already permitted; ambiguous or foreign work remains blocked. Lease doctor findings concern profile-owner authority, while ordinary tab permission is evaluated separately. Profiles already represented by a canonical claim or registered-capability lease do not also produce a legacy owner row; a genuine missing-binding finding remains on the capability lease.
+
 Reconciliation planning captures the current host boot epoch, and apply
 requires that exact epoch to remain current. If the platform cannot establish
 one, planning remains diagnostic-only with `boot_epoch_unavailable`. This

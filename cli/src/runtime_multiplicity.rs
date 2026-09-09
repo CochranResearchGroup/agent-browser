@@ -178,7 +178,9 @@ pub(crate) fn runtime_multiplicity_report_from_doctor_inputs(
     live_dashboard_runtime: &Value,
     workstation_payload: &Value,
 ) -> Value {
-    let dashboard_process = dashboard_backend_process();
+    let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT")
+        .unwrap_or_else(|_| "production".to_string());
+    let dashboard_process = dashboard_backend_process(&runtime_environment);
     let mut runtime_hosts = Vec::new();
     let mut legacy_daemons = Vec::new();
     for listener in daemon_listener_inventory
@@ -227,10 +229,11 @@ pub(crate) fn runtime_multiplicity_report_from_doctor_inputs(
         }
     }
     let dashboard_processes = dashboard_process.into_iter().collect::<Vec<_>>();
-    let selected_generation_id = workstation_payload
-        .get("selectedGenerationId")
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let selected_generation_id = selected_generation_id_for_environment(
+        &runtime_environment,
+        workstation_payload,
+        &runtime_hosts,
+    );
     let executable_generation_ids = dashboard_processes
         .iter()
         .chain(runtime_hosts.iter())
@@ -313,14 +316,43 @@ fn transaction_state_is_active(state: &str) -> bool {
     )
 }
 
-fn dashboard_backend_process() -> Option<RuntimeProcessEvidence> {
+fn selected_generation_id_for_environment(
+    runtime_environment: &str,
+    workstation_payload: &Value,
+    runtime_hosts: &[RuntimeProcessEvidence],
+) -> Option<String> {
+    if runtime_environment == "production" {
+        return workstation_payload
+            .get("selectedGenerationId")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+    }
+
+    let generations = runtime_hosts
+        .iter()
+        .filter_map(|process| process.generation_id.clone())
+        .collect::<BTreeSet<_>>();
+    (generations.len() == 1)
+        .then(|| generations.into_iter().next())
+        .flatten()
+}
+
+fn dashboard_backend_unit_name(runtime_environment: &str) -> &'static str {
+    if runtime_environment == "development" {
+        "agent-browser-dev-dashboard-backend.service"
+    } else {
+        "agent-browser-dashboard-backend.service"
+    }
+}
+
+fn dashboard_backend_process(runtime_environment: &str) -> Option<RuntimeProcessEvidence> {
     #[cfg(target_os = "linux")]
     {
         let output = Command::new("systemctl")
             .args([
                 "--user",
                 "show",
-                "agent-browser-dashboard-backend.service",
+                dashboard_backend_unit_name(runtime_environment),
                 "--property=MainPID",
                 "--value",
             ])
@@ -397,6 +429,29 @@ mod tests {
         assert_eq!(
             report.pointer("/runtimeHosts/0/socketIdentity"),
             Some(&Value::String("unix:1:42".to_string()))
+        );
+    }
+
+    #[test]
+    fn development_multiplicity_uses_its_own_dashboard_and_host_generation() {
+        assert_eq!(
+            dashboard_backend_unit_name("development"),
+            "agent-browser-dev-dashboard-backend.service"
+        );
+        assert_eq!(
+            dashboard_backend_unit_name("production"),
+            "agent-browser-dashboard-backend.service"
+        );
+
+        let runtime_hosts = vec![process(42, "development-generation")];
+        assert_eq!(
+            selected_generation_id_for_environment(
+                "development",
+                &serde_json::json!({"selectedGenerationId": "production-generation"}),
+                &runtime_hosts,
+            )
+            .as_deref(),
+            Some("development-generation")
         );
     }
 

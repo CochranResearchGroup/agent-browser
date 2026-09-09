@@ -1,8 +1,11 @@
 use futures_util::{FutureExt, SinkExt, StreamExt};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::OnceLock;
+use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -12,6 +15,13 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
 use crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session;
+#[cfg(test)]
+use crate::native::service_failure_journal::{append_service_failure_at, read_service_failures_at};
+use crate::native::service_failure_journal::{
+    append_service_failure_best_effort, opaque_identifier_hash, read_service_failures,
+    record_client_failure_observation, ServiceFailureCategory, ServiceFailureRecord,
+    ServiceFailureReferences,
+};
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
@@ -40,9 +50,87 @@ const DASHBOARD_REMOTE_VIEW_REQUEST_PROXY_TIMEOUT: Duration = Duration::from_sec
 const DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT: Duration = Duration::from_secs(60);
 const DASHBOARD_STREAM_FRAME_PROXY_TIMEOUT: Duration = Duration::from_secs(7);
 const DASHBOARD_CDP_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(5);
-const DASHBOARD_SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(5);
+const DASHBOARD_SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS: usize = 32;
+// The lease must outlive the dashboard resolver's complete 15-second election
+// window so a delayed provider row cannot admit a second direct primary.
+const DASHBOARD_SLOW_PROXY_THRESHOLD: Duration = Duration::from_secs(1);
+
+static DASHBOARD_PROXY_INFLIGHT: AtomicUsize = AtomicUsize::new(0);
+static DASHBOARD_LOGICAL_REQUEST_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+async fn dashboard_status_cache_test_guard() -> tokio::sync::MutexGuard<'static, ()> {
+    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    TEST_LOCK.get_or_init(|| Mutex::new(())).lock().await
+}
+
+#[cfg(test)]
+#[path = "dashboard_stress_tests.rs"]
+mod dashboard_stress_tests;
+
+/// Privacy-bounded terminal telemetry for a dashboard backend request.
+///
+/// Route, method, body, and error values are closed classifications. Raw request
+/// URLs, query strings, headers, bodies, backend messages, and secrets never enter
+/// this record or its service-failure-journal projection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DashboardHttpTelemetry {
+    event: &'static str,
+    route_class: &'static str,
+    method: &'static str,
+    status: Option<u16>,
+    status_class: &'static str,
+    body_class: &'static str,
+    stage: &'static str,
+    timing_scope: &'static str,
+    elapsed_ms: u64,
+    inflight_count: usize,
+    response_bytes: Option<usize>,
+    backend_error_class: Option<&'static str>,
+}
+
+type DashboardHttpObserver = Arc<dyn Fn(DashboardHttpTelemetry) + Send + Sync + 'static>;
+type DashboardLogicalFailureObserver = Arc<dyn Fn(ServiceFailureRecord) + Send + Sync + 'static>;
+
+fn production_dashboard_http_observer() -> DashboardHttpObserver {
+    static OBSERVER: OnceLock<DashboardHttpObserver> = OnceLock::new();
+    OBSERVER
+        .get_or_init(|| Arc::new(emit_dashboard_http_telemetry))
+        .clone()
+}
+
+fn production_dashboard_logical_failure_observer() -> DashboardLogicalFailureObserver {
+    Arc::new(|record| {
+        #[cfg(not(test))]
+        append_service_failure_best_effort(&record);
+        #[cfg(test)]
+        let _ = record;
+    })
+}
+
+impl DashboardHttpTelemetry {
+    fn failed(&self) -> bool {
+        self.status.is_some_and(|status| status >= 500) || self.backend_error_class.is_some()
+    }
+}
+
+struct DashboardProxyInflightGuard;
+
+impl DashboardProxyInflightGuard {
+    fn enter() -> (Self, usize) {
+        let inflight = DASHBOARD_PROXY_INFLIGHT.fetch_add(1, Ordering::Relaxed) + 1;
+        (Self, inflight)
+    }
+}
+
+impl Drop for DashboardProxyInflightGuard {
+    fn drop(&mut self) {
+        DASHBOARD_PROXY_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 
 #[derive(Default)]
 struct DashboardServiceStatusCache {
@@ -162,11 +250,41 @@ pub async fn run_dashboard_server(port: u16) {
 }
 
 pub(crate) async fn ensure_dashboard_service_backend() {
-    if let Err(err) =
-        super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None).await
+    if let Err(err) = ensure_dashboard_service_backend_with_retry(
+        || super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None),
+        Duration::from_millis(250),
+    )
+    .await
     {
         eprintln!("Failed to initialize dashboard service backend: {err}");
     }
+}
+
+async fn ensure_dashboard_service_backend_with_retry<F, Fut>(
+    mut ensure: F,
+    retry_delay: Duration,
+) -> Result<(), String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>>,
+{
+    const MAX_ATTEMPTS: usize = 3;
+    let mut last_error = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        match ensure().await {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                if attempt < MAX_ATTEMPTS {
+                    eprintln!(
+                        "Dashboard service backend bootstrap attempt {attempt}/{MAX_ATTEMPTS} failed: {error}; retrying"
+                    );
+                    tokio::time::sleep(retry_delay).await;
+                }
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "dashboard service backend bootstrap failed".to_string()))
 }
 
 async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
@@ -208,6 +326,18 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
     if method == "POST" && path == "/api/dashboard-auth/login" {
         let body_str = read_post_body(&mut stream, &buf, n).await;
         let response = dashboard_auth::login_response(&headers, &body_str, secure_cookie);
+        if !response.is_success() {
+            append_service_failure_best_effort(
+                &ServiceFailureRecord::new(
+                    ServiceFailureCategory::DashboardAction,
+                    "dashboard_auth",
+                    "login",
+                    "dashboard_login_failed",
+                    "Dashboard authentication did not succeed.",
+                )
+                .with_action("dashboard_login"),
+            );
+        }
         let _ = stream.write_all(&response.into_http_bytes()).await;
         return;
     }
@@ -248,6 +378,19 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
 
     if method == "GET" && path == "/api/runtime/health" {
         write_json_value(&mut stream, "200 OK", crate::install::runtime_health_json()).await;
+        return;
+    }
+
+    if method == "POST" && path == "/api/guacamole-primary-claim" {
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        let (status, mut value) = guacamole_primary_claim_response(&body_str).await;
+        observe_primary_response_failure(
+            &body_str,
+            authenticated_dashboard_user.as_deref().unwrap_or("unknown"),
+            &mut value,
+            append_service_failure_best_effort,
+        );
+        write_json_value(&mut stream, status, value).await;
         return;
     }
 
@@ -515,28 +658,101 @@ async fn handle_service_api_request(
     body: &str,
     authenticated_dashboard_user: &str,
 ) {
+    if method == "GET" && split_path_query(path).0 == "/api/service/failures" {
+        let limit = split_path_query(path)
+            .1
+            .and_then(|query| {
+                query.split('&').find_map(|part| {
+                    let (key, value) = part.split_once('=')?;
+                    (key == "limit")
+                        .then(|| value.parse::<usize>().ok())
+                        .flatten()
+                })
+            })
+            .unwrap_or(100);
+        // Disk reads and bounded writer-lock admission must not stall the
+        // dashboard's asynchronous request workers.
+        let readback = tokio::task::spawn_blocking(move || read_service_failures(limit))
+            .await
+            .unwrap_or_else(|_| Err("failure_journal_reader_task_failed".to_string()));
+        match readback {
+            Ok(readback) => {
+                write_json_value(
+                    stream,
+                    "200 OK",
+                    json!({
+                        "success": true,
+                        "data": readback,
+                    }),
+                )
+                .await
+            }
+            Err(error) => {
+                write_json_error_with_code(
+                    stream,
+                    "500 Internal Server Error",
+                    &error,
+                    Some("failure_journal_read_failed"),
+                    None,
+                )
+                .await
+            }
+        }
+        return;
+    }
+    if method == "POST" && split_path_query(path).0 == "/api/service/failure-observation" {
+        match record_client_failure_observation(body, authenticated_dashboard_user) {
+            Ok(record) => {
+                write_json_value(
+                    stream,
+                    "202 Accepted",
+                    json!({
+                        "success": true,
+                        "data": {
+                            "schemaVersion": record.schema_version,
+                            "occurrenceId": record.occurrence_id,
+                            "recorded": true,
+                        }
+                    }),
+                )
+                .await;
+            }
+            Err(error) => write_json_error(stream, "400 Bad Request", &error).await,
+        }
+        return;
+    }
     if method == "POST" {
         if let Some((session_name, command_body)) = service_request_focus_command_body(path, body) {
             if let Some(port) = session_port_for_name(&session_name) {
-                match proxy_local_http_api_request(port, "POST", "/api/command", &command_body)
-                    .await
+                match proxy_local_http_api_request_with_timeout(
+                    port,
+                    "POST",
+                    "/api/command",
+                    &command_body,
+                    DASHBOARD_REMOTE_VIEW_REQUEST_PROXY_TIMEOUT,
+                )
+                .await
                 {
                     Ok(response) => {
-                        let response =
-                            match require_json_backend_response(response, port, "/api/command") {
-                                Ok(response) => response,
-                                Err(err) => {
-                                    write_json_error_with_code(
-                                        stream,
-                                        "502 Bad Gateway",
-                                        &format!("View focus proxy failed: {}", err),
-                                        Some(err.code),
-                                        err.details.clone(),
-                                    )
-                                    .await;
-                                    return;
-                                }
-                            };
+                        let response = match require_json_backend_response(
+                            response,
+                            port,
+                            "POST",
+                            "/api/command",
+                        ) {
+                            Ok(response) => response,
+                            Err(err) => {
+                                write_json_error_with_code(
+                                    stream,
+                                    "502 Bad Gateway",
+                                    &format!("View focus proxy failed: {}", err),
+                                    Some(err.code),
+                                    err.details.clone(),
+                                )
+                                .await;
+                                return;
+                            }
+                        };
                         let _ = stream.write_all(&response).await;
                         return;
                     }
@@ -561,10 +777,35 @@ async fn handle_service_api_request(
             let (session_name, command_body) = match command {
                 Ok(command) => command,
                 Err(err) => {
-                    write_json_error(stream, "400 Bad Request", &err).await;
+                    write_json_value(stream, "400 Bad Request", err.response()).await;
                     return;
                 }
             };
+            // A retained owner may outlive its host's HTTP listener. Prepare the
+            // exact owner lane before using its persisted stream port, just as
+            // the canonical service request path does.
+            let service_command = serde_json::from_str::<Value>(&command_body).ok();
+            if let Err(err) =
+                ensure_service_daemon_session(&session_name, service_command.as_ref()).await
+            {
+                if let Some(command) = service_command.as_ref() {
+                    record_durable_handoff_gateway_failure(
+                        command,
+                        &session_name,
+                        "durable_handoff_owner_prepare_failed",
+                        &err,
+                    );
+                }
+                write_json_error_with_code(
+                    stream,
+                    "502 Bad Gateway",
+                    &format!("Durable handoff owner preparation failed: {err}"),
+                    Some("durable_handoff_owner_prepare_failed"),
+                    None,
+                )
+                .await;
+                return;
+            }
             if let Some(port) = session_port_for_name(&session_name) {
                 match proxy_dashboard_service_api_request(
                     port,
@@ -592,6 +833,20 @@ async fn handle_service_api_request(
                                 return;
                             }
                         };
+                        let response = match sanitize_dashboard_handoff_response(body, response) {
+                            Ok(response) => response,
+                            Err(err) => {
+                                write_json_error_with_code(
+                                    stream,
+                                    "502 Bad Gateway",
+                                    &format!("Durable handoff public response was invalid: {err}"),
+                                    Some("durable_handoff_public_response_invalid"),
+                                    None,
+                                )
+                                .await;
+                                return;
+                            }
+                        };
                         if let Some(handoff_id) =
                             authenticated_candidate_handoff_commit_id(body, &response)
                         {
@@ -599,6 +854,7 @@ async fn handle_service_api_request(
                                 std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
                                     .ok()
                                     .filter(|value| !value.trim().is_empty())
+                                    .or_else(crate::dashboard_ingress::authenticated_selected_dashboard_generation)
                             {
                                 let commit = tokio::task::spawn_blocking(move || {
                                     crate::dashboard_ingress::
@@ -645,10 +901,7 @@ async fn handle_service_api_request(
             }
         }
 
-        if path == "/api/service/request"
-            && crate::native::service_lease_mode::profile_lease_mode_from_env()
-                == Ok(crate::native::service_lease_mode::ProfileLeaseMode::UnsafeClaimAny)
-        {
+        if path == "/api/service/request" {
             let state = load_service_state();
             let command = match service_request_command_with_dashboard_generation(
                 body,
@@ -661,21 +914,107 @@ async fn handle_service_api_request(
             ) {
                 Ok(command) => command,
                 Err(err) => {
-                    write_json_error(stream, "400 Bad Request", &err).await;
+                    write_json_value(stream, "400 Bad Request", err.response()).await;
                     return;
                 }
             };
             let session_name =
                 service_request_relay_session(DASHBOARD_SERVICE_BACKEND_SESSION, body, &command);
-            if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await {
-                write_json_error(stream, "502 Bad Gateway", &err).await;
+            if service_request_requires_daemon_relay(&command) {
+                if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await
+                {
+                    record_durable_handoff_gateway_failure(
+                        &command,
+                        &session_name,
+                        "durable_handoff_owner_prepare_failed",
+                        &err,
+                    );
+                    write_json_error_with_code(
+                        stream,
+                        "502 Bad Gateway",
+                        &format!("Durable handoff owner preparation failed: {err}"),
+                        Some("durable_handoff_owner_prepare_failed"),
+                        None,
+                    )
+                    .await;
+                    return;
+                }
+                let command_body = command.to_string();
+                match timeout(
+                    DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT,
+                    relay_command_to_daemon(&session_name, &command_body),
+                )
+                .await
+                {
+                    Ok(Ok(response)) => match serde_json::from_str::<Value>(&response) {
+                        Ok(response) => write_json_value(stream, "200 OK", response).await,
+                        Err(err) => {
+                            record_durable_handoff_gateway_failure(
+                                &command,
+                                &session_name,
+                                "durable_handoff_owner_response_invalid",
+                                &err.to_string(),
+                            );
+                            write_json_error_with_code(
+                                stream,
+                                "502 Bad Gateway",
+                                &format!("Durable handoff owner returned invalid JSON: {err}"),
+                                Some("durable_handoff_owner_response_invalid"),
+                                None,
+                            )
+                            .await;
+                        }
+                    },
+                    Ok(Err(err)) => {
+                        record_durable_handoff_gateway_failure(
+                            &command,
+                            &session_name,
+                            "durable_handoff_owner_relay_failed",
+                            &err,
+                        );
+                        write_json_error_with_code(
+                            stream,
+                            "502 Bad Gateway",
+                            &format!("Durable handoff owner relay failed: {err}"),
+                            Some("durable_handoff_owner_relay_failed"),
+                            None,
+                        )
+                        .await;
+                    }
+                    Err(_) => {
+                        record_durable_handoff_gateway_failure(
+                            &command,
+                            &session_name,
+                            "durable_handoff_owner_relay_timeout",
+                            "Durable handoff owner relay timed out",
+                        );
+                        write_json_error_with_code(
+                            stream,
+                            "504 Gateway Timeout",
+                            "Durable handoff owner relay timed out",
+                            Some("durable_handoff_owner_relay_timeout"),
+                            None,
+                        )
+                        .await;
+                    }
+                }
                 return;
             }
-            let Some(port) = session_port_for_name(&session_name) else {
+            let port = if session_name == DASHBOARD_SERVICE_BACKEND_SESSION {
+                dashboard_service_backend_port()
+            } else {
+                if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await
+                {
+                    write_json_error(stream, "502 Bad Gateway", &err).await;
+                    return;
+                }
+                session_port_for_name(&session_name)
+            };
+            let Some(port) = port else {
                 write_json_error(
                     stream,
                     "503 Service Unavailable",
-                    &format!("Claimed service session '{session_name}' has no HTTP route"),
+                    &format!("Service session '{session_name}' has no HTTP route"),
                 )
                 .await;
                 return;
@@ -696,7 +1035,7 @@ async fn handle_service_api_request(
                     write_json_error_with_code(
                         stream,
                         "502 Bad Gateway",
-                        &format!("Unsafe claimed-session proxy failed: {err}"),
+                        &format!("Service request proxy failed: {err}"),
                         Some(err.code),
                         err.details,
                     )
@@ -802,6 +1141,38 @@ async fn handle_service_api_request(
     .await;
 }
 
+fn service_request_requires_daemon_relay(command: &Value) -> bool {
+    command.get("action").and_then(Value::as_str) == Some("service_remote_view_handoff_resolve")
+}
+
+fn record_durable_handoff_gateway_failure(
+    command: &Value,
+    session_name: &str,
+    code: &str,
+    summary: &str,
+) {
+    let handoff_id_hash = command
+        .get("handoffId")
+        .and_then(Value::as_str)
+        .map(opaque_identifier_hash);
+    append_service_failure_best_effort(
+        &ServiceFailureRecord::new(
+            ServiceFailureCategory::HandoffLink,
+            "dashboard_service_gateway",
+            "resolve",
+            code,
+            summary,
+        )
+        .with_action("service_remote_view_handoff_resolve")
+        .with_references(ServiceFailureReferences {
+            runtime_lane_id: Some(DASHBOARD_SERVICE_BACKEND_SESSION.to_string()),
+            session_id: Some(session_name.to_string()),
+            handoff_id_hash,
+            ..ServiceFailureReferences::default()
+        }),
+    );
+}
+
 pub(crate) async fn dashboard_service_status_with_transports<
     Backend,
     BackendFuture,
@@ -852,8 +1223,26 @@ where
 }
 
 fn dashboard_service_backend_port() -> Option<u16> {
+    if let Some(port) = configured_dashboard_service_backend_port(
+        std::env::var("AGENT_BROWSER_DASHBOARD_BACKEND_PORT")
+            .ok()
+            .as_deref(),
+    ) {
+        return Some(port);
+    }
     let sessions: Value = serde_json::from_str(&discover_sessions()).ok()?;
     dashboard_service_backend_port_from_sessions(sessions.as_array()?)
+}
+
+/// Resolve the explicitly managed local dashboard backend before consulting
+/// browser-session discovery. A backend-only process is not a browser session
+/// and therefore cannot be expected to register in the daemon socket catalog.
+fn configured_dashboard_service_backend_port(value: Option<&str>) -> Option<u16> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port > 0)
 }
 
 fn session_port_for_name(session_name: &str) -> Option<u16> {
@@ -921,7 +1310,7 @@ fn service_request_handoff_proxy_command_body(
     path: &str,
     body: &str,
     authenticated_dashboard_user: &str,
-) -> Option<Result<(String, String), String>> {
+) -> Option<Result<(String, String), crate::native::service_request::ServiceRequestRejection>> {
     let state_path = JsonServiceStateStore::default_path().ok()?;
     let state = JsonServiceStateStore::new(state_path).load().ok()?;
     service_request_handoff_proxy_command_body_from_state(
@@ -941,7 +1330,7 @@ fn service_request_handoff_proxy_command_body_from_state(
     authenticated_dashboard_user: &str,
     state: &ServiceState,
     dashboard_deployment_generation: Option<&str>,
-) -> Option<Result<(String, String), String>> {
+) -> Option<Result<(String, String), crate::native::service_request::ServiceRequestRejection>> {
     let session_name = service_request_handoff_target_session_name_from_state(path, body, state)?;
     Some(
         service_request_command_with_dashboard_generation(
@@ -951,11 +1340,7 @@ fn service_request_handoff_proxy_command_body_from_state(
             &session_name,
             dashboard_deployment_generation,
         )
-        .and_then(|command| {
-            serde_json::to_string(&command)
-                .map(|command_body| (session_name, command_body))
-                .map_err(|err| format!("Failed to serialize service request command: {err}"))
-        }),
+        .map(|command| (session_name, command.to_string())),
     )
 }
 
@@ -1002,7 +1387,7 @@ fn service_request_handoff_target_session_name_from_state(
 
 fn service_api_proxy_timeout(method: &str, path: &str, body: &str) -> Duration {
     let (path, _) = split_path_query(path);
-    if method == "GET" && path == "/api/service/status" {
+    if dashboard_service_status_cacheable(method, path) {
         return DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT;
     }
     if method == "POST" && path == "/api/service/request" {
@@ -1041,6 +1426,7 @@ fn is_remote_view_service_action(action: &str) -> bool {
             | "service_viewer_lease_heartbeat"
             | "service_viewer_lease_release"
             | "service_controller_lease_takeover"
+            | "view_focus"
             | "view_takeover"
     )
 }
@@ -1048,6 +1434,13 @@ fn is_remote_view_service_action(action: &str) -> bool {
 fn service_request_focus_command_body(path: &str, body: &str) -> Option<(String, String)> {
     let session_name = service_request_target_session_name(path, body)?;
     let request: Value = serde_json::from_str(body).ok()?;
+    if request
+        .pointer("/params/operatorFocus")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        return None;
+    }
     let mut command = json!({
         "id": request
             .get("id")
@@ -1055,6 +1448,7 @@ fn service_request_focus_command_body(path: &str, body: &str) -> Option<(String,
             .map(str::to_string)
             .unwrap_or_else(|| format!("dashboard-view-focus-{}", uuid::Uuid::new_v4())),
         "action": "view_focus",
+        crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD: false,
     });
     for key in [
         "serviceName",
@@ -1127,6 +1521,48 @@ async fn proxy_local_http_api_request_with_timeout(
     body: &str,
     request_timeout: Duration,
 ) -> Result<Vec<u8>, DashboardReadinessError> {
+    proxy_local_http_api_request_with_timeout_observed(
+        port,
+        method,
+        path,
+        body,
+        request_timeout,
+        emit_dashboard_http_telemetry,
+    )
+    .await
+}
+
+async fn proxy_local_http_api_request_with_timeout_observed(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+    observer: impl Fn(DashboardHttpTelemetry),
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    let started_at = Instant::now();
+    let (_inflight_guard, inflight_count) = DashboardProxyInflightGuard::enter();
+    let result =
+        proxy_local_http_api_request_unobserved(port, method, path, body, request_timeout).await;
+    if let Some(telemetry) = dashboard_http_terminal_telemetry(
+        method,
+        path,
+        started_at.elapsed(),
+        inflight_count,
+        &result,
+    ) {
+        observer(telemetry);
+    }
+    result
+}
+
+async fn proxy_local_http_api_request_unobserved(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+) -> Result<Vec<u8>, DashboardReadinessError> {
     let mut backend = run_dashboard_backend_io_phase(
         DashboardBackendIoPhase {
             timeout_code: "backend_connect_timeout",
@@ -1158,6 +1594,153 @@ async fn proxy_local_http_api_request_with_timeout(
     )
     .await?;
     read_local_http_response(&mut backend, port, path, request_timeout).await
+}
+
+fn dashboard_http_terminal_telemetry(
+    method: &str,
+    path: &str,
+    elapsed: Duration,
+    inflight_count: usize,
+    result: &Result<Vec<u8>, DashboardReadinessError>,
+) -> Option<DashboardHttpTelemetry> {
+    let (status, body_class, stage, response_bytes, backend_error_class) = match result {
+        Ok(response) => {
+            let status = http_response_status(response);
+            (
+                status,
+                dashboard_http_body_class(response),
+                "response",
+                Some(response.len()),
+                status
+                    .is_some_and(|status| status >= 500)
+                    .then_some("backend_http_5xx"),
+            )
+        }
+        Err(error) => (
+            None,
+            "none",
+            dashboard_backend_error_stage(error),
+            None,
+            Some(error.code),
+        ),
+    };
+    let failed = status.is_some_and(|status| status >= 500) || backend_error_class.is_some();
+    if !failed && elapsed < DASHBOARD_SLOW_PROXY_THRESHOLD {
+        return None;
+    }
+    Some(DashboardHttpTelemetry {
+        event: if failed {
+            "dashboard_http_failed"
+        } else {
+            "dashboard_http_slow"
+        },
+        route_class: dashboard_http_route_class(path),
+        method: dashboard_http_method_class(method),
+        status,
+        status_class: dashboard_http_status_class(status),
+        body_class,
+        stage,
+        timing_scope: "local_backend_round_trip",
+        elapsed_ms: elapsed.as_millis().min(u128::from(u64::MAX)) as u64,
+        inflight_count,
+        response_bytes,
+        backend_error_class,
+    })
+}
+
+fn dashboard_http_route_class(path: &str) -> &'static str {
+    match split_path_query(path).0 {
+        "/api/command" => "service_command",
+        "/api/browser/console" => "browser_console",
+        "/json/list" => "cdp_target_list",
+        "/api/service/status" => "service_status",
+        "/api/service/resources" => "service_resources",
+        "/api/service/contracts" => "service_contracts",
+        "/api/service/browser-capability-registry" => "browser_capability_registry",
+        "/api/service/request" => "service_request",
+        path if path.starts_with("/api/service/") => "service_api",
+        path if path.starts_with("/api/stream/") => "stream_api",
+        path if path.starts_with("/api/") => "dashboard_api",
+        _ => "other",
+    }
+}
+
+fn dashboard_http_method_class(method: &str) -> &'static str {
+    match method {
+        "GET" => "GET",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "PATCH" => "PATCH",
+        "DELETE" => "DELETE",
+        "OPTIONS" => "OPTIONS",
+        _ => "OTHER",
+    }
+}
+
+fn dashboard_http_status_class(status: Option<u16>) -> &'static str {
+    match status {
+        Some(100..=199) => "1xx",
+        Some(200..=299) => "2xx",
+        Some(300..=399) => "3xx",
+        Some(400..=499) => "4xx",
+        Some(500..=599) => "5xx",
+        Some(_) => "other",
+        None => "none",
+    }
+}
+
+fn dashboard_http_body_class(response: &[u8]) -> &'static str {
+    match http_response_body(response) {
+        None => "missing",
+        Some([]) => "empty",
+        Some(body) if serde_json::from_slice::<Value>(body).is_ok() => "json",
+        Some(_) => "non_json",
+    }
+}
+
+fn dashboard_backend_error_stage(error: &DashboardReadinessError) -> &'static str {
+    match error
+        .details
+        .as_ref()
+        .and_then(|details| details.get("stage"))
+        .and_then(Value::as_str)
+    {
+        Some("connect") => "connect",
+        Some("write") => "write",
+        Some("read") => "read",
+        Some("response") => "response",
+        Some("request") => "request",
+        Some("owner_panic") => "owner_panic",
+        Some("owner_cancelled") => "owner_cancelled",
+        _ => "proxy",
+    }
+}
+
+fn dashboard_http_failure_record(telemetry: &DashboardHttpTelemetry) -> ServiceFailureRecord {
+    ServiceFailureRecord::new(
+        ServiceFailureCategory::DashboardAction,
+        "dashboard_http_gateway",
+        telemetry.stage,
+        telemetry.backend_error_class.unwrap_or("backend_http_5xx"),
+        "Dashboard HTTP gateway request failed.",
+    )
+    .with_action("dashboard_http_proxy")
+    .with_details(serde_json::to_value(telemetry).unwrap_or_else(|_| json!({})))
+}
+
+fn emit_dashboard_http_telemetry(telemetry: DashboardHttpTelemetry) {
+    let encoded = serde_json::to_string(&telemetry)
+        .unwrap_or_else(|_| r#"{"event":"dashboard_http_telemetry_encode_failed"}"#.to_string());
+    eprintln!("agent_browser_dashboard_http_telemetry {encoded}");
+    if telemetry.failed() {
+        let record = dashboard_http_failure_record(&telemetry);
+        // Unit tests inject observers and validate the record directly. Never let a
+        // provider-free test append synthetic failures to the operator's live journal.
+        #[cfg(not(test))]
+        append_service_failure_best_effort(&record);
+        #[cfg(test)]
+        let _ = record;
+    }
 }
 
 struct DashboardBackendIoPhase<'a> {
@@ -1197,7 +1780,15 @@ async fn run_dashboard_backend_io_phase<T>(
 }
 
 fn dashboard_service_status_cacheable(method: &str, path: &str) -> bool {
-    method == "GET" && split_path_query(path).0 == "/api/service/status"
+    method == "GET"
+        && matches!(
+            split_path_query(path).0,
+            "/api/service/status"
+                | "/api/service/resources"
+                | "/api/service/contracts"
+                | "/api/service/browser-capability-registry"
+                | "/api/tabs"
+        )
 }
 
 fn service_api_handler_backend_response(
@@ -1209,12 +1800,113 @@ fn service_api_handler_backend_response(
     if dashboard_service_status_cacheable(method, path) {
         return Ok(response);
     }
-    require_json_backend_response(response, port, path)
+    require_json_backend_response(response, port, method, path)
 }
 
 fn dashboard_service_status_cache() -> &'static Mutex<DashboardServiceStatusCache> {
     static CACHE: OnceLock<Mutex<DashboardServiceStatusCache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(DashboardServiceStatusCache::default()))
+}
+
+/// Persist one authenticated request failure before exposing its occurrence ID.
+/// A terminal occurrence is a separate owner event; repeated requests reference
+/// that same event without duplicating or restarting the failed owner.
+fn observe_primary_response_failure(
+    body: &str,
+    authenticated_actor: &str,
+    response: &mut Value,
+    observe: impl FnOnce(&ServiceFailureRecord),
+) {
+    if response["success"] != false {
+        return;
+    }
+    let input = serde_json::from_str::<Value>(body).unwrap_or(Value::Null);
+    let recovering = input["operation"] == "recover";
+    let record = ServiceFailureRecord::new(
+        ServiceFailureCategory::GuacamoleLoad,
+        "guacamole_primary_endpoint",
+        if recovering { "recover" } else { "ensure" },
+        response["code"]
+            .as_str()
+            .unwrap_or("guacamole_primary_failed"),
+        "The authenticated dashboard could not obtain a ready Guacamole primary.",
+    )
+    .with_action(if recovering {
+        "guacamole_primary_recover"
+    } else {
+        "guacamole_primary_ensure"
+    })
+    .with_references(ServiceFailureReferences {
+        route_id: input["routeId"].as_str().map(str::to_owned),
+        ..ServiceFailureReferences::default()
+    })
+    .with_details(json!({
+        "authenticatedActorHash": opaque_identifier_hash(authenticated_actor),
+        "terminalOccurrenceId": response["terminalOccurrenceId"],
+        "expectedTerminalOccurrenceId": input["expectedTerminalOccurrenceId"].as_str()
+            .and_then(|value| uuid::Uuid::parse_str(value).ok()).map(|value| value.to_string()),
+        "retrySafe": false,
+        "recourse": "inspect_remote_view_provider",
+    }));
+    observe(&record);
+    response["occurrenceId"] = json!(record.occurrence_id);
+    response["retrySafe"] = json!(false);
+}
+
+async fn guacamole_primary_claim_response(body: &str) -> (&'static str, Value) {
+    let Ok(value) = serde_json::from_str::<Value>(body) else {
+        return (
+            "400 Bad Request",
+            json!({ "success": false, "code": "invalid_guacamole_primary_claim" }),
+        );
+    };
+    let route_id = value["routeId"].as_str().map(str::trim).unwrap_or("");
+    let connection_id = value["connectionId"].as_str().map(str::trim).unwrap_or("");
+    if route_id.is_empty()
+        || route_id.len() > 256
+        || connection_id.is_empty()
+        || connection_id.len() > 256
+    {
+        return (
+            "400 Bad Request",
+            json!({ "success": false, "code": "invalid_guacamole_primary_claim" }),
+        );
+    }
+
+    if value["operation"] != "ensure" && value["operation"] != "recover" {
+        return (
+            "409 Conflict",
+            json!({"success": false, "code": "guacamole_viewer_primary_retired"}),
+        );
+    }
+    let result = if value["operation"] == "recover" {
+        let expected = value["expectedTerminalOccurrenceId"].as_str().unwrap_or("");
+        if uuid::Uuid::parse_str(expected).is_err() {
+            return (
+                "400 Bad Request",
+                json!({"success": false, "code": "invalid_guacamole_primary_recovery"}),
+            );
+        }
+        super::guacamole_primary_registry::recover(route_id, connection_id, expected).await
+    } else {
+        super::guacamole_primary_registry::ensure(route_id, connection_id).await
+    };
+    match result {
+        Ok(id) => (
+            "200 OK",
+            json!({
+                "success": true, "granted": false, "primaryOwned": true, "activeConnectionId": id
+            }),
+        ),
+        Err(failure) => (
+            "503 Service Unavailable",
+            json!({
+                "success": false, "code": failure.code,
+                "terminalOccurrenceId": failure.terminal_occurrence_id,
+                "recourse": "inspect_remote_view_provider"
+            }),
+        ),
+    }
 }
 
 async fn proxy_dashboard_service_api_request(
@@ -1224,15 +1916,58 @@ async fn proxy_dashboard_service_api_request(
     body: &str,
     request_timeout: Duration,
 ) -> Result<Vec<u8>, DashboardReadinessError> {
+    proxy_dashboard_service_api_request_observed(
+        port,
+        method,
+        path,
+        body,
+        request_timeout,
+        production_dashboard_http_observer(),
+    )
+    .await
+}
+
+async fn proxy_dashboard_service_api_request_observed(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+    observer: DashboardHttpObserver,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    proxy_dashboard_service_api_request_with_observers(
+        port,
+        method,
+        path,
+        body,
+        request_timeout,
+        observer,
+        production_dashboard_logical_failure_observer(),
+    )
+    .await
+}
+
+async fn proxy_dashboard_service_api_request_with_observers(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+    observer: DashboardHttpObserver,
+    logical_failure_observer: DashboardLogicalFailureObserver,
+) -> Result<Vec<u8>, DashboardReadinessError> {
     if !dashboard_service_status_cacheable(method, path) {
-        return proxy_local_http_api_request_with_timeout(
+        let result = proxy_local_http_api_request_with_timeout_observed(
             port,
             method,
             path,
             body,
             request_timeout,
+            move |telemetry| observer(telemetry),
         )
         .await;
+        observe_dashboard_logical_failure(method, path, None, &result, &logical_failure_observer);
+        return result;
     }
 
     let key = DashboardServiceStatusCacheKey {
@@ -1247,10 +1982,21 @@ async fn proxy_dashboard_service_api_request(
             DashboardServiceStatusCacheEntry::Ready { response, .. } => {
                 return Ok(response.clone());
             }
-            DashboardServiceStatusCacheEntry::InFlight { result, .. } => {
+            DashboardServiceStatusCacheEntry::InFlight {
+                request_id, result, ..
+            } => {
+                let request_id = *request_id;
                 let result = result.clone();
                 drop(cache);
-                return await_dashboard_status_flight(result, port, path).await;
+                let result = await_dashboard_status_flight(result, port, path).await;
+                observe_dashboard_logical_failure(
+                    method,
+                    path,
+                    Some(request_id),
+                    &result,
+                    &logical_failure_observer,
+                );
+                return result;
             }
         }
     }
@@ -1258,24 +2004,28 @@ async fn proxy_dashboard_service_api_request(
     evict_oldest_ready_dashboard_status_entry(&mut cache);
     if cache.entries.len() >= DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS {
         drop(cache);
-        return proxy_local_http_api_request_with_timeout(
+        let result = proxy_local_http_api_request_with_timeout_observed(
             port,
             method,
             path,
             body,
             request_timeout,
+            move |telemetry| observer(telemetry),
         )
         .await;
+        observe_dashboard_logical_failure(method, path, None, &result, &logical_failure_observer);
+        return result;
     }
 
     cache.next_request_id = cache.next_request_id.wrapping_add(1).max(1);
     let request_id = cache.next_request_id;
     let (result_tx, result_rx) = watch::channel(None);
+    let registered_at = Instant::now();
     cache.entries.insert(
         key.clone(),
         DashboardServiceStatusCacheEntry::InFlight {
             request_id,
-            registered_at: Instant::now(),
+            registered_at,
             result: result_rx.clone(),
             owner_abort: None,
         },
@@ -1286,42 +2036,29 @@ async fn proxy_dashboard_service_api_request(
     let owned_path = path.to_string();
     let owned_body = body.to_string();
     let owner = tokio::spawn(async move {
-        let mut cleanup = DashboardStatusFlightCleanup::new(
-            key.clone(),
+        let cleanup = DashboardStatusFlightCleanup::new(DashboardStatusFlightContext {
+            key: key.clone(),
             request_id,
             port,
-            owned_path.clone(),
-            result_tx,
-        );
-        let request = std::panic::AssertUnwindSafe(proxy_local_http_api_request_with_timeout(
-            port,
-            &owned_method,
-            &owned_path,
-            &owned_body,
-            request_timeout,
-        ))
-        .catch_unwind()
-        .await;
-        let result = match request {
-            Ok(result) => result,
-            Err(_) => Err(DashboardReadinessError::local_backend(
-                "backend_unavailable",
-                format!("service status backend task panicked for 127.0.0.1:{port}{owned_path}"),
-                port,
-                &owned_path,
-                "request",
-            )),
-        };
-        cleanup.publish(result.clone());
-        let mut cache = dashboard_service_status_cache().lock().await;
-        apply_dashboard_status_flight_completion(
-            &mut cache,
+            method: owned_method.clone(),
+            path: owned_path.clone(),
+            result: result_tx,
+            observer,
+            started_at: registered_at,
+        });
+        run_dashboard_status_flight_owner(
+            cleanup,
             key,
             request_id,
-            &result,
-            Instant::now(),
-        );
-        cleanup.disarm();
+            proxy_local_http_api_request_unobserved(
+                port,
+                &owned_method,
+                &owned_path,
+                &owned_body,
+                request_timeout,
+            ),
+        )
+        .await;
     });
     let owner_abort = owner.abort_handle();
     let mut cache = dashboard_service_status_cache().lock().await;
@@ -1340,46 +2077,169 @@ async fn proxy_dashboard_service_api_request(
     }
     drop(cache);
 
-    await_dashboard_status_flight(result_rx, port, path).await
+    let result = await_dashboard_status_flight(result_rx, port, path).await;
+    observe_dashboard_logical_failure(
+        method,
+        path,
+        Some(request_id),
+        &result,
+        &logical_failure_observer,
+    );
+    result
+}
+
+fn observe_dashboard_logical_failure(
+    method: &str,
+    path: &str,
+    flight_request_id: Option<u64>,
+    result: &Result<Vec<u8>, DashboardReadinessError>,
+    observer: &DashboardLogicalFailureObserver,
+) {
+    let status = result
+        .as_ref()
+        .ok()
+        .and_then(|response| http_response_status(response));
+    let backend_error_class = result.as_ref().err().map(|error| error.code);
+    if status.is_none_or(|value| value < 500) && backend_error_class.is_none() {
+        return;
+    }
+    let logical_sequence = DASHBOARD_LOGICAL_REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
+    let flight_id = opaque_identifier_hash(&format!(
+        "dashboard-flight:{flight_request_id:?}:{}:{}",
+        dashboard_http_method_class(method),
+        dashboard_http_route_class(path)
+    ));
+    let logical_request_id = opaque_identifier_hash(&format!(
+        "dashboard-logical-request:{logical_sequence}:{flight_id}"
+    ));
+    observer(
+        ServiceFailureRecord::new(
+            ServiceFailureCategory::DashboardAction,
+            "dashboard_http_logical_request",
+            "response",
+            backend_error_class.unwrap_or("backend_http_5xx"),
+            "Dashboard HTTP logical request failed.",
+        )
+        .with_action("dashboard_http_proxy")
+        .with_references(ServiceFailureReferences {
+            trace_id: Some(flight_id),
+            ..ServiceFailureReferences::default()
+        })
+        .with_details(json!({
+            "event": "dashboard_http_logical_request_failed",
+            "logicalRequestId": logical_request_id,
+            "routeClass": dashboard_http_route_class(path),
+            "method": dashboard_http_method_class(method),
+            "status": status,
+            "statusClass": dashboard_http_status_class(status),
+            "bodyClass": result
+                .as_ref()
+                .ok()
+                .map_or("none", |response| dashboard_http_body_class(response)),
+        })),
+    );
 }
 
 struct DashboardStatusFlightCleanup {
     key: DashboardServiceStatusCacheKey,
     request_id: u64,
     port: u16,
+    method: String,
     path: String,
     result: watch::Sender<Option<Result<Vec<u8>, DashboardReadinessError>>>,
+    observer: DashboardHttpObserver,
+    started_at: Instant,
+    inflight_count: usize,
+    _inflight_guard: DashboardProxyInflightGuard,
     published: bool,
+    observed: bool,
     armed: bool,
 }
 
+struct DashboardStatusFlightContext {
+    key: DashboardServiceStatusCacheKey,
+    request_id: u64,
+    port: u16,
+    method: String,
+    path: String,
+    result: watch::Sender<Option<Result<Vec<u8>, DashboardReadinessError>>>,
+    observer: DashboardHttpObserver,
+    started_at: Instant,
+}
+
 impl DashboardStatusFlightCleanup {
-    fn new(
-        key: DashboardServiceStatusCacheKey,
-        request_id: u64,
-        port: u16,
-        path: String,
-        result: watch::Sender<Option<Result<Vec<u8>, DashboardReadinessError>>>,
-    ) -> Self {
+    fn new(context: DashboardStatusFlightContext) -> Self {
+        let (inflight_guard, inflight_count) = DashboardProxyInflightGuard::enter();
         Self {
-            key,
-            request_id,
-            port,
-            path,
-            result,
+            key: context.key,
+            request_id: context.request_id,
+            port: context.port,
+            method: context.method,
+            path: context.path,
+            result: context.result,
+            observer: context.observer,
+            started_at: context.started_at,
+            inflight_count,
+            _inflight_guard: inflight_guard,
             published: false,
+            observed: false,
             armed: true,
         }
     }
 
     fn publish(&mut self, result: Result<Vec<u8>, DashboardReadinessError>) {
-        let _ = self.result.send(Some(result));
+        let _ = self.result.send(Some(result.clone()));
         self.published = true;
+        self.observe(&result);
+    }
+
+    fn observe(&mut self, result: &Result<Vec<u8>, DashboardReadinessError>) {
+        if self.observed {
+            return;
+        }
+        self.observed = true;
+        if let Some(telemetry) = dashboard_http_terminal_telemetry(
+            &self.method,
+            &self.path,
+            self.started_at.elapsed(),
+            self.inflight_count,
+            result,
+        ) {
+            (self.observer)(telemetry);
+        }
     }
 
     fn disarm(&mut self) {
         self.armed = false;
     }
+}
+
+async fn run_dashboard_status_flight_owner<F>(
+    mut cleanup: DashboardStatusFlightCleanup,
+    key: DashboardServiceStatusCacheKey,
+    request_id: u64,
+    request: F,
+) where
+    F: Future<Output = Result<Vec<u8>, DashboardReadinessError>>,
+{
+    let request = std::panic::AssertUnwindSafe(request).catch_unwind().await;
+    let result = match request {
+        Ok(result) => result,
+        Err(_) => Err(DashboardReadinessError::local_backend(
+            "backend_unavailable",
+            format!(
+                "service status backend task panicked for 127.0.0.1:{}{}",
+                cleanup.port, cleanup.path
+            ),
+            cleanup.port,
+            &cleanup.path,
+            "owner_panic",
+        )),
+    };
+    cleanup.publish(result.clone());
+    let mut cache = dashboard_service_status_cache().lock().await;
+    apply_dashboard_status_flight_completion(&mut cache, key, request_id, &result, Instant::now());
+    cleanup.disarm();
 }
 
 impl Drop for DashboardStatusFlightCleanup {
@@ -1396,9 +2256,11 @@ impl Drop for DashboardStatusFlightCleanup {
                 ),
                 self.port,
                 &self.path,
-                "request",
+                "owner_cancelled",
             );
-            let _ = self.result.send(Some(Err(error)));
+            let result = Err(error);
+            let _ = self.result.send(Some(result.clone()));
+            self.observe(&result);
         }
         let key = self.key.clone();
         let request_id = self.request_id;
@@ -1559,7 +2421,114 @@ fn authenticated_candidate_handoff_commit_id(body: &str, response: &[u8]) -> Opt
     ready.then(|| handoff_id.to_string())
 }
 
+/// Keep infrastructure-only route URLs out of the authenticated public dashboard response.
+fn sanitize_dashboard_handoff_response(
+    request_body: &str,
+    response: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let request = serde_json::from_str::<Value>(request_body)
+        .map_err(|err| format!("invalid service request JSON: {err}"))?;
+    if request.get("action").and_then(Value::as_str) != Some("service_remote_view_handoff_resolve")
+    {
+        return Ok(response);
+    }
+
+    let header_end = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or_else(|| "backend response did not include HTTP headers".to_string())?;
+    let header = std::str::from_utf8(&response[..header_end])
+        .map_err(|err| format!("backend response headers were not UTF-8: {err}"))?;
+    let status = header
+        .lines()
+        .next()
+        .and_then(|line| {
+            line.strip_prefix("HTTP/1.1 ")
+                .or_else(|| line.strip_prefix("HTTP/1.0 "))
+        })
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "backend response did not include a valid HTTP status line".to_string())?
+        .to_string();
+    let mut payload = serde_json::from_slice::<Value>(&response[header_end + 4..])
+        .map_err(|err| format!("backend response body was not JSON: {err}"))?;
+    strip_dashboard_handoff_provider_urls(&mut payload);
+    Ok(json_http_response(&status, payload))
+}
+
+fn strip_dashboard_handoff_provider_urls(value: &mut Value) {
+    const FORBIDDEN_KEYS: [&str; 5] = [
+        "providerExternalUrl",
+        "routeBinding",
+        "localEmbedUrl",
+        "dashboardEmbedUrl",
+        "healthUrl",
+    ];
+    match value {
+        Value::Object(object) => {
+            for key in FORBIDDEN_KEYS {
+                object.remove(key);
+            }
+            for nested in object.values_mut() {
+                strip_dashboard_handoff_provider_urls(nested);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                strip_dashboard_handoff_provider_urls(item);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn require_json_backend_response(
+    response: Vec<u8>,
+    port: u16,
+    method: &str,
+    path: &str,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    require_json_backend_response_observed(
+        response,
+        port,
+        method,
+        path,
+        emit_dashboard_http_telemetry,
+    )
+}
+
+fn require_json_backend_response_observed(
+    response: Vec<u8>,
+    port: u16,
+    method: &str,
+    path: &str,
+    observer: impl Fn(DashboardHttpTelemetry),
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    let status = http_response_status(&response);
+    let body_class = dashboard_http_body_class(&response);
+    let response_bytes = response.len();
+    let result = require_json_backend_response_unobserved(response, port, path);
+    if let Err(error) = &result {
+        if status.is_none_or(|status| status < 500) {
+            observer(DashboardHttpTelemetry {
+                event: "dashboard_http_failed",
+                route_class: dashboard_http_route_class(path),
+                method: dashboard_http_method_class(method),
+                status,
+                status_class: dashboard_http_status_class(status),
+                body_class,
+                stage: "response",
+                timing_scope: "response_validation",
+                elapsed_ms: 0,
+                inflight_count: DASHBOARD_PROXY_INFLIGHT.load(Ordering::Relaxed),
+                response_bytes: Some(response_bytes),
+                backend_error_class: Some(error.code),
+            });
+        }
+    }
+    result
+}
+
+fn require_json_backend_response_unobserved(
     response: Vec<u8>,
     port: u16,
     path: &str,
@@ -2260,7 +3229,15 @@ async fn handle_session_tabs_api_request(stream: &mut tokio::net::TcpStream, que
         return;
     };
 
-    match proxy_local_http_api_request(port, "GET", "/api/tabs", "").await {
+    match proxy_dashboard_service_api_request(
+        port,
+        "GET",
+        "/api/tabs",
+        "",
+        DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT,
+    )
+    .await
+    {
         Ok(response) if http_response_status(&response) == Some(200) => {
             let _ = stream.write_all(&response).await;
         }
@@ -2803,9 +3780,102 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    async fn dashboard_status_cache_test_guard() -> tokio::sync::MutexGuard<'static, ()> {
-        static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        TEST_LOCK.get_or_init(|| Mutex::new(())).lock().await
+    #[tokio::test]
+    async fn guacamole_primary_failures_correlate_requests_without_duplicating_owner_events() {
+        let mut records = Vec::new();
+        let mut ids = Vec::new();
+        for _ in 0..2 {
+            let mut response = json!({
+                "success": false, "code": "guacamole_primary_provider_closed",
+                "terminalOccurrenceId": "owner-terminal-1",
+            });
+            observe_primary_response_failure(
+                r#"{"routeId":"route-a","token":"private-token"}"#,
+                "private-actor",
+                &mut response,
+                |record| records.push(record.clone()),
+            );
+            let record = records.last().unwrap();
+            assert_eq!(response["occurrenceId"], record.occurrence_id);
+            assert_eq!(
+                record.details.as_ref().unwrap()["terminalOccurrenceId"],
+                "owner-terminal-1"
+            );
+            assert_eq!(record.references.route_id.as_deref(), Some("route-a"));
+            assert_eq!(response["retrySafe"], false);
+            let encoded = serde_json::to_string(record).unwrap();
+            assert!(!encoded.contains("private-token"));
+            assert!(!encoded.contains("private-actor"));
+            ids.push(record.occurrence_id.clone());
+        }
+        assert_ne!(ids[0], ids[1]);
+        let (_, mut invalid) = guacamole_primary_claim_response("{}").await;
+        observe_primary_response_failure("{}", "actor", &mut invalid, |record| {
+            records.push(record.clone())
+        });
+        assert_eq!(invalid["code"], "invalid_guacamole_primary_claim");
+        assert_eq!(records.len(), 3);
+        assert!(records[2].details.as_ref().unwrap()["terminalOccurrenceId"].is_null());
+        observe_primary_response_failure("{}", "actor", &mut json!({"success":true}), |_| {
+            panic!("success recorded as failure")
+        });
+    }
+
+    #[tokio::test]
+    async fn guacamole_primary_recovery_requires_terminal_identity_before_effects() {
+        for expected in [Value::Null, json!("invalid"), json!(123)] {
+            let request = json!({"operation": "recover", "routeId": "route", "connectionId": "1",
+                "expectedTerminalOccurrenceId": expected})
+            .to_string();
+            let (status, mut response) = guacamole_primary_claim_response(&request).await;
+            assert_eq!(status, "400 Bad Request");
+            assert_eq!(response["code"], "invalid_guacamole_primary_recovery");
+            observe_primary_response_failure(&request, "actor", &mut response, |record| {
+                assert_eq!(record.action.as_deref(), Some("guacamole_primary_recover"));
+                assert!(record.details.as_ref().unwrap()["expectedTerminalOccurrenceId"].is_null());
+            });
+        }
+    }
+
+    #[tokio::test]
+    async fn guacamole_primary_endpoint_rejects_legacy_viewer_election_before_effects() {
+        for operation in ["claim", "connected"] {
+            let (status, body) = guacamole_primary_claim_response(
+                &json!({
+                    "routeId": "route", "connectionId": "1", "operation": operation
+                })
+                .to_string(),
+            )
+            .await;
+            assert_eq!(status, "409 Conflict");
+            assert_eq!(body["code"], "guacamole_viewer_primary_retired");
+            assert_eq!(body["success"], false);
+        }
+        assert_eq!(
+            guacamole_primary_claim_response("{}").await.0,
+            "400 Bad Request"
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_backend_bootstrap_retries_after_runtime_host_convergence() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let observed = attempts.clone();
+        let result = ensure_dashboard_service_backend_with_retry(
+            move || {
+                let attempt = observed.fetch_add(1, Ordering::SeqCst);
+                std::future::ready(if attempt == 0 {
+                    Err("runtime host is still converging".to_string())
+                } else {
+                    Ok(())
+                })
+            },
+            Duration::ZERO,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
 
     #[test]
@@ -2846,7 +3916,7 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_service_status_cache_only_coalesces_status_reads() {
+    fn dashboard_service_read_cache_coalesces_pressure_sensitive_reads() {
         assert!(dashboard_service_status_cacheable(
             "GET",
             "/api/service/status"
@@ -2855,6 +3925,19 @@ mod tests {
             "GET",
             "/api/service/status?full-tab-history=true"
         ));
+        assert!(dashboard_service_status_cacheable(
+            "GET",
+            "/api/service/resources"
+        ));
+        assert!(dashboard_service_status_cacheable(
+            "GET",
+            "/api/service/browser-capability-registry"
+        ));
+        assert!(dashboard_service_status_cacheable(
+            "GET",
+            "/api/service/contracts"
+        ));
+        assert!(dashboard_service_status_cacheable("GET", "/api/tabs"));
         assert!(!dashboard_service_status_cacheable(
             "POST",
             "/api/service/status"
@@ -2905,7 +3988,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dashboard_service_status_single_flight_forwards_backend_bytes_unchanged() {
+    async fn dashboard_service_resources_single_flight_forwards_backend_bytes_unchanged() {
         let _guard = dashboard_status_cache_test_guard().await;
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -2927,7 +4010,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(20)).await;
             stream.write_all(&server_response).await.unwrap();
         });
-        let path = format!("/api/service/status?single-flight-port={port}");
+        let path = format!("/api/service/resources?single-flight-port={port}");
         let first =
             proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
         let second =
@@ -3015,14 +4098,32 @@ mod tests {
             retry.write_all(&server_response).await.unwrap();
         });
         let path = format!("/api/service/status?owned-cancellation-port={port}");
+        let journal_root = std::env::temp_dir().join(format!(
+            "agent-browser-dashboard-owner-cancel-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let journal_path = journal_root.join("journal.jsonl");
+        let observer_journal_path = journal_path.clone();
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+        let observer: DashboardHttpObserver = Arc::new(move |telemetry| {
+            append_service_failure_at(
+                &observer_journal_path,
+                &dashboard_http_failure_record(&telemetry),
+            )
+            .unwrap();
+            captured.lock().unwrap().push(telemetry);
+        });
         let request_path = path.clone();
+        let request_observer = observer.clone();
         let first = tokio::spawn(async move {
-            proxy_dashboard_service_api_request(
+            proxy_dashboard_service_api_request_observed(
                 port,
                 "GET",
                 &request_path,
                 "",
                 Duration::from_secs(2),
+                request_observer,
             )
             .await
         });
@@ -3059,12 +4160,113 @@ mod tests {
             .await
             .entries
             .contains_key(&key));
+        {
+            let events = observed.lock().unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].stage, "owner_cancelled");
+            assert_eq!(events[0].timing_scope, "local_backend_round_trip");
+            assert_eq!(events[0].backend_error_class, Some("backend_unavailable"));
+        }
+        let readback = read_service_failures_at(&journal_path, 10).unwrap();
+        assert_eq!(readback.records.len(), 1);
+        assert_eq!(readback.records[0].stage, "owner_cancelled");
 
-        let retry =
-            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(2))
-                .await
-                .unwrap();
+        let retry = proxy_dashboard_service_api_request_observed(
+            port,
+            "GET",
+            &path,
+            "",
+            Duration::from_secs(2),
+            observer,
+        )
+        .await
+        .unwrap();
         assert_eq!(retry, expected);
+        assert_eq!(observed.lock().unwrap().len(), 1);
+        assert_eq!(
+            read_service_failures_at(&journal_path, 10)
+                .unwrap()
+                .records
+                .len(),
+            1
+        );
+        let _ = std::fs::remove_dir_all(journal_root);
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_status_owner_panic_is_observed_exactly_once() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let path = "/api/service/status?panic-fixture=true".to_string();
+        let key = DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port: 9222,
+            path: path.clone(),
+        };
+        let request_id = 77;
+        let (result_tx, result_rx) = watch::channel(None);
+        dashboard_service_status_cache()
+            .lock()
+            .await
+            .entries
+            .insert(
+                key.clone(),
+                DashboardServiceStatusCacheEntry::InFlight {
+                    request_id,
+                    registered_at: Instant::now(),
+                    result: result_rx.clone(),
+                    owner_abort: None,
+                },
+            );
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+        let journal_root = std::env::temp_dir().join(format!(
+            "agent-browser-dashboard-owner-panic-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let journal_path = journal_root.join("journal.jsonl");
+        let observer_journal_path = journal_path.clone();
+        let cleanup = DashboardStatusFlightCleanup::new(DashboardStatusFlightContext {
+            key: key.clone(),
+            request_id,
+            port: 9222,
+            method: "GET".to_string(),
+            path,
+            result: result_tx,
+            observer: Arc::new(move |telemetry| {
+                append_service_failure_at(
+                    &observer_journal_path,
+                    &dashboard_http_failure_record(&telemetry),
+                )
+                .unwrap();
+                captured.lock().unwrap().push(telemetry);
+            }),
+            started_at: Instant::now(),
+        });
+
+        run_dashboard_status_flight_owner(cleanup, key.clone(), request_id, async {
+            panic!("injected owner panic");
+            #[allow(unreachable_code)]
+            Ok(Vec::new())
+        })
+        .await;
+
+        let error = result_rx.borrow().clone().unwrap().unwrap_err();
+        assert_eq!(error.code, "backend_unavailable");
+        {
+            let events = observed.lock().unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].stage, "owner_panic");
+            assert_eq!(events[0].backend_error_class, Some("backend_unavailable"));
+        }
+        let readback = read_service_failures_at(&journal_path, 10).unwrap();
+        assert_eq!(readback.records.len(), 1);
+        assert_eq!(readback.records[0].stage, "owner_panic");
+        assert!(!dashboard_service_status_cache()
+            .lock()
+            .await
+            .entries
+            .contains_key(&key));
+        let _ = std::fs::remove_dir_all(journal_root);
     }
 
     #[tokio::test]
@@ -3093,14 +4295,31 @@ mod tests {
             }
         });
         let path = format!("/api/service/status?shared-failure-port={port}");
-        let first =
-            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
-        let second =
-            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+        let observer: DashboardHttpObserver =
+            Arc::new(move |telemetry| captured.lock().unwrap().push(telemetry));
+        let first = proxy_dashboard_service_api_request_observed(
+            port,
+            "GET",
+            &path,
+            "",
+            Duration::from_secs(1),
+            observer.clone(),
+        );
+        let second = proxy_dashboard_service_api_request_observed(
+            port,
+            "GET",
+            &path,
+            "",
+            Duration::from_secs(1),
+            observer.clone(),
+        );
         let (first, second) = tokio::join!(first, second);
         assert_eq!(first.unwrap(), response);
         assert_eq!(second.unwrap(), response);
         assert_eq!(request_count.load(Ordering::SeqCst), 1);
+        assert_eq!(observed.lock().unwrap().len(), 1);
 
         let key = DashboardServiceStatusCacheKey {
             backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
@@ -3118,13 +4337,20 @@ mod tests {
             }
             tokio::task::yield_now().await;
         }
-        let retry =
-            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1))
-                .await
-                .unwrap();
+        let retry = proxy_dashboard_service_api_request_observed(
+            port,
+            "GET",
+            &path,
+            "",
+            Duration::from_secs(1),
+            observer,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(retry, response);
         assert_eq!(request_count.load(Ordering::SeqCst), 2);
+        assert_eq!(observed.lock().unwrap().len(), 2);
     }
 
     #[test]
@@ -3259,6 +4485,7 @@ mod tests {
 
     #[test]
     fn dashboard_service_status_cache_prunes_ready_entries_only_after_ttl() {
+        assert_eq!(DASHBOARD_SERVICE_STATUS_CACHE_TTL, Duration::from_secs(10));
         let mut cache = DashboardServiceStatusCache::default();
         let fresh_key = DashboardServiceStatusCacheKey {
             backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
@@ -3341,6 +4568,24 @@ mod tests {
             dashboard_service_backend_port_from_sessions(&first_sessions),
             None
         );
+    }
+
+    #[test]
+    fn dashboard_service_backend_accepts_only_an_explicit_nonzero_port() {
+        assert_eq!(
+            configured_dashboard_service_backend_port(Some("4949")),
+            Some(4949)
+        );
+        assert_eq!(
+            configured_dashboard_service_backend_port(Some(" 4949 ")),
+            Some(4949)
+        );
+        assert_eq!(configured_dashboard_service_backend_port(Some("0")), None);
+        assert_eq!(
+            configured_dashboard_service_backend_port(Some("not-a-port")),
+            None
+        );
+        assert_eq!(configured_dashboard_service_backend_port(None), None);
     }
 
     #[test]
@@ -3588,6 +4833,22 @@ mod tests {
             service_api_proxy_timeout("GET", "/api/service/status", ""),
             DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT
         );
+        assert_eq!(
+            service_api_proxy_timeout("GET", "/api/service/resources", ""),
+            DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT
+        );
+        assert_eq!(
+            service_api_proxy_timeout(
+                "POST",
+                "/api/service/request",
+                r##"{"action":"view_focus"}"##
+            ),
+            DASHBOARD_REMOTE_VIEW_REQUEST_PROXY_TIMEOUT
+        );
+        assert!(dashboard_service_status_cacheable(
+            "GET",
+            "/api/service/resources"
+        ));
     }
 
     #[test]
@@ -3605,6 +4866,62 @@ mod tests {
             authenticated_candidate_handoff_commit_id(request, &ready),
             Some("handoff-a".to_string())
         );
+    }
+
+    #[test]
+    fn public_dashboard_handoff_response_omits_provider_route_urls() {
+        let request = r##"{"action":"service_remote_view_handoff_resolve","params":{"handoffId":"handoff-a"}}"##;
+        let response = json_http_response(
+            "200 OK",
+            json!({
+                "success": true,
+                "data": {
+                    "status": "ready",
+                    "resolved": true,
+                    "handoffUrl": "https://dashboard.example.test/remote-view/handoff-a",
+                    "providerExternalUrl": "http://127.0.0.1:8080/guacamole/",
+                    "localEmbedUrl": "http://127.0.0.1:8080/guacamole/",
+                    "dashboardEmbedUrl": "https://dashboard.example.test/guacamole/",
+                    "healthUrl": "http://127.0.0.1:8080/health",
+                    "routeBinding": {
+                        "externalUrl": "http://127.0.0.1:8080/guacamole/",
+                        "frameUrl": "http://127.0.0.1:8080/guacamole/"
+                    },
+                    "open": {
+                        "intent": {"url": "http://127.0.0.1:19058/fixture"},
+                        "providerExternalUrl": "http://127.0.0.1:8080/guacamole/",
+                        "routeBinding": {"healthUrl": "http://127.0.0.1:8080/health"}
+                    }
+                }
+            }),
+        );
+
+        let sanitized = sanitize_dashboard_handoff_response(request, response).unwrap();
+        let payload: Value =
+            serde_json::from_slice(http_response_body(&sanitized).unwrap()).unwrap();
+        let data = payload.get("data").unwrap();
+        assert_eq!(
+            data.get("handoffUrl").and_then(Value::as_str),
+            Some("https://dashboard.example.test/remote-view/handoff-a")
+        );
+        assert_eq!(
+            data.pointer("/open/intent/url").and_then(Value::as_str),
+            Some("http://127.0.0.1:19058/fixture")
+        );
+        for pointer in [
+            "/providerExternalUrl",
+            "/localEmbedUrl",
+            "/dashboardEmbedUrl",
+            "/healthUrl",
+            "/routeBinding",
+            "/open/providerExternalUrl",
+            "/open/routeBinding",
+        ] {
+            assert!(
+                data.pointer(pointer).is_none(),
+                "retained forbidden field {pointer}"
+            );
+        }
     }
 
     #[test]
@@ -3688,7 +5005,17 @@ mod tests {
         assert_eq!(command["agentName"], "operator");
         assert_eq!(command["taskName"], "workspace-viewport-control");
         assert_eq!(command["jobTimeoutMs"], 5000);
+        assert_eq!(
+            command[crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD],
+            false
+        );
         assert!(command.get("sessionName").is_none());
+        let mut operator: Value = serde_json::from_str(body).unwrap();
+        operator["params"]["operatorFocus"] = json!(true);
+        assert!(
+            service_request_focus_command_body("/api/service/request", &operator.to_string())
+                .is_none()
+        );
     }
 
     #[test]
@@ -3902,12 +5229,13 @@ mod tests {
             let _ = socket.read(&mut buffer).await;
         });
 
-        let err = proxy_local_http_api_request_with_timeout(
+        let err = proxy_local_http_api_request_with_timeout_observed(
             port,
             "GET",
             "/api/empty",
             "",
             Duration::from_secs(1),
+            |_| {},
         )
         .await
         .unwrap_err();
@@ -3936,12 +5264,13 @@ mod tests {
             let _ = socket.write_all(b"not an http response");
         });
 
-        let err = proxy_local_http_api_request_with_timeout(
+        let err = proxy_local_http_api_request_with_timeout_observed(
             port,
             "GET",
             "/api/invalid",
             "",
             Duration::from_millis(100),
+            |_| {},
         )
         .await
         .unwrap_err();
@@ -3965,12 +5294,13 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(200)).await;
         });
 
-        let err = proxy_local_http_api_request_with_timeout(
+        let err = proxy_local_http_api_request_with_timeout_observed(
             port,
             "GET",
             "/api/slow",
             "",
             Duration::from_millis(20),
+            |_| {},
         )
         .await
         .unwrap_err();
@@ -4045,13 +5375,166 @@ mod tests {
         )
         .into_bytes();
 
-        let err = require_json_backend_response(response, 9222, "/api/service/status").unwrap_err();
+        let err = require_json_backend_response_observed(
+            response,
+            9222,
+            "GET",
+            "/api/service/status",
+            |_| {},
+        )
+        .unwrap_err();
 
         assert_eq!(err.code, "invalid_backend_payload");
         assert_eq!(
             err.details.unwrap()["readinessState"],
             json!("invalid_payload")
         );
+    }
+
+    #[tokio::test]
+    async fn dashboard_gateway_observes_injected_502_and_504_once_each() {
+        for (status, expected_status) in [
+            ("502 Bad Gateway", 502_u16),
+            ("504 Gateway Timeout", 504_u16),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let response = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: 17\r\n\r\n{{\"success\":false}}"
+            )
+            .into_bytes();
+            let backend_response = response.clone();
+            tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 1024];
+                let _ = socket.read(&mut request).await.unwrap();
+                socket.write_all(&backend_response).await.unwrap();
+            });
+            let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+            let captured = observed.clone();
+
+            let actual = proxy_local_http_api_request_with_timeout_observed(
+                port,
+                "GET",
+                "/api/service/status?token=must-not-appear",
+                "",
+                Duration::from_secs(1),
+                move |telemetry| captured.lock().unwrap().push(telemetry),
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(actual, response);
+            let events = observed.lock().unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].status, Some(expected_status));
+            assert_eq!(events[0].status_class, "5xx");
+            assert_eq!(events[0].route_class, "service_status");
+            assert_eq!(events[0].body_class, "json");
+            assert_eq!(events[0].response_bytes, Some(actual.len()));
+        }
+    }
+
+    #[test]
+    fn dashboard_gateway_non_json_failure_is_redacted_and_has_journal_parity() {
+        let body = b"not-json-secret";
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            std::str::from_utf8(body).unwrap()
+        )
+        .into_bytes();
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+
+        let error = require_json_backend_response_observed(
+            response,
+            9222,
+            "GET",
+            "/api/service/jobs?token=raw-secret&url=https://private.test",
+            move |telemetry| captured.lock().unwrap().push(telemetry),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, "invalid_backend_payload");
+        let events = observed.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        let telemetry = &events[0];
+        assert_eq!(telemetry.route_class, "service_api");
+        assert_eq!(telemetry.method, "GET");
+        assert_eq!(telemetry.status, Some(200));
+        assert_eq!(telemetry.body_class, "non_json");
+        assert_eq!(
+            telemetry.backend_error_class,
+            Some("invalid_backend_payload")
+        );
+        let encoded = serde_json::to_string(telemetry).unwrap();
+        assert!(!encoded.contains("raw-secret"));
+        assert!(!encoded.contains("private.test"));
+        assert!(!encoded.contains("not-json-secret"));
+
+        let record = dashboard_http_failure_record(telemetry);
+        assert_eq!(
+            record.details,
+            Some(serde_json::to_value(telemetry).unwrap())
+        );
+        assert_eq!(record.code, "invalid_backend_payload");
+        assert_eq!(record.stage, "response");
+    }
+
+    #[test]
+    fn dashboard_gateway_does_not_duplicate_http_5xx_during_json_validation() {
+        let response = b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nnot-json".to_vec();
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let terminal = dashboard_http_terminal_telemetry(
+            "POST",
+            "/api/command?secret=value",
+            Duration::from_millis(5),
+            1,
+            &Ok(response.clone()),
+        )
+        .unwrap();
+        observed.lock().unwrap().push(terminal);
+        let captured = observed.clone();
+
+        let error = require_json_backend_response_observed(
+            response,
+            9222,
+            "POST",
+            "/api/command?secret=value",
+            move |telemetry| captured.lock().unwrap().push(telemetry),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, "invalid_backend_payload");
+        let events = observed.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].status, Some(502));
+        assert_eq!(events[0].backend_error_class, Some("backend_http_5xx"));
+    }
+
+    #[test]
+    fn dashboard_gateway_omits_fast_success_but_records_slow_success() {
+        let response = Ok(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}".to_vec());
+        assert!(dashboard_http_terminal_telemetry(
+            "GET",
+            "/api/service/status",
+            Duration::from_millis(10),
+            1,
+            &response,
+        )
+        .is_none());
+        let slow = dashboard_http_terminal_telemetry(
+            "GET",
+            "/api/service/status",
+            DASHBOARD_SLOW_PROXY_THRESHOLD,
+            3,
+            &response,
+        )
+        .unwrap();
+        assert_eq!(slow.event, "dashboard_http_slow");
+        assert_eq!(slow.inflight_count, 3);
+        assert!(!slow.failed());
     }
 
     #[test]
@@ -4072,6 +5555,18 @@ mod tests {
         assert_eq!(value["success"], false);
         assert_eq!(value["code"], "invalid_backend_payload");
         assert_eq!(value["details"]["stage"], "response");
+    }
+
+    #[test]
+    fn durable_handoff_resolution_uses_daemon_relay_without_an_http_lane() {
+        assert!(service_request_requires_daemon_relay(&json!({
+            "action": "service_remote_view_handoff_resolve",
+            "sessionName": "retained-owner-without-http-route",
+        })));
+        assert!(!service_request_requires_daemon_relay(&json!({
+            "action": "tab_new",
+            "sessionName": "ordinary-http-routed-lane",
+        })));
     }
 
     #[test]

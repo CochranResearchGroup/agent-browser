@@ -13,6 +13,11 @@ use super::service_model::{
     ProfileTargetReadiness, ServiceActor, ServiceEntitySource, ServiceProvider, ServiceState,
     SiteMonitor, SitePolicy,
 };
+use super::service_profile_access_policy::{
+    effective_profile_permissions, mutate_profile_policy, ProfileAccessPolicyState,
+    ProfileEvictionMode, ProfileIdentityAssurance, ProfilePolicyMutationRequest,
+    ProfilePolicyMutationResult, ProfilePolicyTarget, ServiceProfileAccessPolicy,
+};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 fn validate_entity_id(id: &str, label: &str) -> Result<(), String> {
@@ -814,12 +819,6 @@ pub fn update_persisted_profile_seeding_handoff(
     update_profile_seeding_handoff_in_repository(&repository, id, update)
 }
 
-/// Refresh default persisted handoff lifecycles from retained PID state.
-pub fn refresh_persisted_profile_seeding_handoffs() -> Result<usize, String> {
-    let repository = LockedServiceStateRepository::default_json()?;
-    repository.mutate(|state| Ok(refresh_profile_seeding_handoff_lifecycles(state)))
-}
-
 /// Record a default persisted CDP-free runtime-login launch, if it maps to a known profile target.
 pub fn record_persisted_profile_seeding_handoff_launch(
     profile_id: &str,
@@ -953,6 +952,111 @@ pub fn delete_profile_in_repository(
     id: &str,
 ) -> Result<Option<BrowserProfile>, String> {
     repository.mutate(|state| delete_profile(state, id))
+}
+
+pub(crate) struct ProfilePolicyMutationInput<'a> {
+    pub(crate) profile_id: &'a str,
+    pub(crate) expected_revision: u64,
+    pub(crate) target: ProfilePolicyTarget,
+    pub(crate) subject_id: Option<&'a str>,
+    pub(crate) assurance: ProfileIdentityAssurance,
+    pub(crate) eviction_mode: Option<ProfileEvictionMode>,
+    pub(crate) grace_deadline: Option<String>,
+    pub(crate) now: &'a str,
+}
+
+pub(crate) fn mutate_profile_policy_in_repository(
+    repository: &impl ServiceStateRepository,
+    input: ProfilePolicyMutationInput<'_>,
+) -> Result<ProfilePolicyMutationResult, String> {
+    repository.mutate(|state| {
+        let current = state
+            .profiles
+            .get(input.profile_id)
+            .ok_or_else(|| format!("Profile '{}' was not found", input.profile_id))?
+            .access_policy
+            .clone()
+            .unwrap_or_else(|| ServiceProfileAccessPolicy::shared_local_default(input.profile_id));
+        let prospective = ServiceProfileAccessPolicy {
+            profile_id: input.profile_id.to_string(),
+            mode: input.target.mode,
+            state: ProfileAccessPolicyState::Active,
+            default_permissions: input.target.default_permissions.clone(),
+            grants: input.target.grants.clone(),
+            ..current.clone()
+        };
+        let incompatible_occupancy = state
+            .tabs
+            .values()
+            // A successful release retains child ACL history on the closed row.
+            // Disconnection alone is not terminal and must still fence narrowing.
+            .filter(|tab| tab.lifecycle != super::service_model::TabLifecycle::Closed)
+            .filter(|tab| service_tab_uses_profile(state, tab, input.profile_id))
+            .filter_map(|tab| {
+                let child = tab.profile_access.as_ref()?;
+                let allowed = effective_profile_permissions(
+                    &prospective,
+                    child.subject_id.as_deref(),
+                    child.identity_assurance,
+                );
+                child
+                    .permissions
+                    .iter()
+                    .any(|permission| !allowed.contains(permission))
+                    .then(|| tab.id.clone())
+            })
+            .collect::<Vec<_>>();
+        let result = mutate_profile_policy(
+            &current,
+            ProfilePolicyMutationRequest {
+                expected_revision: input.expected_revision,
+                target: input.target,
+                subject_id: input.subject_id,
+                assurance: input.assurance,
+                incompatible_occupancy,
+                eviction_mode: input.eviction_mode,
+                grace_deadline: input.grace_deadline,
+                now: input.now,
+            },
+        )
+        .map_err(|failure| {
+            serde_json::to_string(&failure)
+                .unwrap_or_else(|_| "profile_policy_mutation_failed".to_string())
+        })?;
+        if let Some(plan) = result.eviction_plan.as_ref() {
+            super::service_profile_lifecycle::register_profile_eviction_authorization(
+                &mut state.profile_lifecycle_authorizations,
+                plan,
+                input.assurance,
+                input.now,
+            )?;
+        }
+        let profile = state
+            .profiles
+            .get_mut(input.profile_id)
+            .expect("profile existence was checked before mutation");
+        profile.access_policy = Some(result.policy.clone());
+        Ok(result)
+    })
+}
+
+fn service_tab_uses_profile(
+    state: &ServiceState,
+    tab: &super::service_model::BrowserTab,
+    profile_id: &str,
+) -> bool {
+    tab.owner_session_id
+        .as_deref()
+        .or(tab.session_id.as_deref())
+        .and_then(|session_id| state.sessions.get(session_id))
+        .and_then(|session| session.profile_id.as_deref())
+        .or_else(|| {
+            state
+                .browsers
+                .get(&tab.browser_id)
+                .and_then(|browser| browser.profile_id.as_deref())
+        })
+        == Some(profile_id)
 }
 
 pub fn upsert_session_in_repository(
@@ -1710,6 +1814,143 @@ mod tests {
         assert!(!persisted.monitors.contains_key("google-login-freshness"));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
+
+    #[test]
+    fn profile_policy_repository_mutation_persists_drain_and_lifecycle_authorization() {
+        use crate::native::service_model::{BrowserProcess, BrowserTab};
+        use crate::native::service_profile_access_policy::{
+            ProfileAccessGrant, ProfileAccessMode, ProfileChildAccess, ProfileConnectionState,
+            ProfilePermission,
+        };
+
+        let path = unique_state_path("profile-policy-drain");
+        let store = JsonServiceStateStore::new(&path);
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let admin_grant = ProfileAccessGrant {
+            subject_id: "principal:admin".to_string(),
+            minimum_assurance: ProfileIdentityAssurance::RegisteredCapability,
+            permissions: vec![
+                ProfilePermission::PolicyWrite,
+                ProfilePermission::Drain,
+                ProfilePermission::Evict,
+            ],
+        };
+        let policy = ServiceProfileAccessPolicy {
+            profile_id: "research-gov".to_string(),
+            revision: 7,
+            grants: vec![admin_grant.clone()],
+            ..ServiceProfileAccessPolicy::shared_local_default("research-gov")
+        };
+        let mut state = ServiceState {
+            profiles: std::collections::BTreeMap::from([(
+                "research-gov".to_string(),
+                BrowserProfile {
+                    id: "research-gov".to_string(),
+                    access_policy: Some(policy),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: std::collections::BTreeMap::from([(
+                "browser:shared".to_string(),
+                BrowserProcess {
+                    id: "browser:shared".to_string(),
+                    profile_id: Some("research-gov".to_string()),
+                    ..BrowserProcess::default()
+                },
+            )]),
+            tabs: std::collections::BTreeMap::from([(
+                "tab:fieldwork".to_string(),
+                BrowserTab {
+                    id: "tab:fieldwork".to_string(),
+                    browser_id: "browser:shared".to_string(),
+                    profile_access: Some(ProfileChildAccess {
+                        subject_id: Some("client:fieldwork".to_string()),
+                        identity_assurance: ProfileIdentityAssurance::SelfDeclared,
+                        connection_instance_id: Some("connection:fieldwork".to_string()),
+                        connection_state: ProfileConnectionState::Disconnected,
+                        permissions: vec![ProfilePermission::TabControlOwn],
+                        ..ProfileChildAccess::default()
+                    }),
+                    ..BrowserTab::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        state.refresh_service_tab_handles();
+        store.save(&state).unwrap();
+        let target = ProfilePolicyTarget {
+            mode: ProfileAccessMode::Restricted,
+            default_permissions: Vec::new(),
+            grants: vec![admin_grant],
+        };
+
+        let started = mutate_profile_policy_in_repository(
+            &repository,
+            ProfilePolicyMutationInput {
+                profile_id: "research-gov",
+                expected_revision: 7,
+                target: target.clone(),
+                subject_id: Some("principal:admin"),
+                assurance: ProfileIdentityAssurance::RegisteredCapability,
+                eviction_mode: Some(ProfileEvictionMode::ForceImmediate),
+                grace_deadline: None,
+                now: "2026-09-02T18:00:00Z",
+            },
+        )
+        .expect("occupied narrowing should persist a drain");
+        assert_eq!(started.blocking_occupancy, vec!["tab:fieldwork"]);
+        let persisted_drain = store.load().unwrap();
+        assert_eq!(
+            persisted_drain.profiles["research-gov"]
+                .access_policy
+                .as_ref()
+                .unwrap()
+                .state,
+            ProfileAccessPolicyState::Draining
+        );
+        let eviction_plan = started
+            .eviction_plan
+            .as_ref()
+            .expect("forced drain should create an exact eviction plan");
+        let authorization = persisted_drain
+            .profile_lifecycle_authorizations
+            .values()
+            .find(|authorization| authorization.authorization_id == eviction_plan.plan_id)
+            .expect("forced drain should persist its lifecycle authorization atomically");
+        assert_eq!(authorization.profile_id, "research-gov");
+        assert_eq!(authorization.policy_revision, 7);
+        assert_eq!(
+            authorization.target_resource_ids,
+            vec!["tab:fieldwork".to_string()]
+        );
+
+        repository
+            .mutate(|state| {
+                // Runtime release retains the historical tab and its child ACL.
+                state.tabs.get_mut("tab:fieldwork").unwrap().lifecycle =
+                    super::super::service_model::TabLifecycle::Closed;
+                Ok(())
+            })
+            .unwrap();
+        let completed = mutate_profile_policy_in_repository(
+            &repository,
+            ProfilePolicyMutationInput {
+                profile_id: "research-gov",
+                expected_revision: 7,
+                target,
+                subject_id: Some("principal:admin"),
+                assurance: ProfileIdentityAssurance::RegisteredCapability,
+                eviction_mode: None,
+                grace_deadline: None,
+                now: "2026-09-02T18:01:00Z",
+            },
+        )
+        .expect("drained narrowing should commit");
+        assert_eq!(completed.policy.revision, 8);
+        assert_eq!(completed.policy.state, ProfileAccessPolicyState::Active);
+        assert!(store.load().unwrap().tabs.contains_key("tab:fieldwork"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
@@ -1732,12 +1973,13 @@ pub(crate) mod service_commands {
     use crate::native::service_access::required_service_config_id;
     use crate::native::service_config::{
         delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
-        delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
+        delete_persisted_session, delete_persisted_site_policy,
+        mutate_profile_policy_in_repository, reset_persisted_monitor_failures,
         update_persisted_monitor_state, update_persisted_profile_freshness,
         update_persisted_profile_seeding_handoff,
         upsert_persisted_browser_capability_registry_record, upsert_persisted_monitor,
         upsert_persisted_profile, upsert_persisted_provider, upsert_persisted_session,
-        upsert_persisted_site_policy,
+        upsert_persisted_site_policy, ProfilePolicyMutationInput,
     };
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::service_model::{
@@ -1752,6 +1994,10 @@ pub(crate) mod service_commands {
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
         ViewStream, ViewStreamProvider, ViewerLease,
     };
+    use crate::native::service_profile_access_policy::{
+        profile_policy_target_for_preset, ProfileAccessMode, ProfileAccessPreset,
+        ProfileEvictionMode, ProfileIdentityAssurance, ProfilePolicyTarget,
+    };
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::state;
     use crate::runtime_profile::{
@@ -1764,6 +2010,7 @@ pub(crate) mod service_commands {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
+    use time::{format_description::well_known::Rfc3339, OffsetDateTime};
     pub(crate) async fn handle_service_profile_upsert(cmd: &Value) -> Result<Value, String> {
         let profile_id = required_service_config_id(cmd, "profileId")?;
         let body = cmd.get("profile").cloned().ok_or("Missing profile")?;
@@ -1808,6 +2055,95 @@ pub(crate) mod service_commands {
             { "id" : profile_id, "deleted" : removed.is_some(), "profile" : removed,
             }
         ))
+    }
+    pub(crate) async fn handle_service_profile_policy_mutate(cmd: &Value) -> Result<Value, String> {
+        let profile_id = required_service_config_id(cmd, "profileId")?;
+        let expected_revision = cmd
+            .get("expectedRevision")
+            .and_then(Value::as_u64)
+            .ok_or("service_profile_policy_mutate requires expectedRevision")?;
+        let target = match (
+            cmd.get("targetPolicy"),
+            cmd.get("mode").or_else(|| cmd.get("preset")),
+        ) {
+            (Some(_), Some(_)) => {
+                return Err(
+                    "service_profile_policy_mutate accepts targetPolicy or mode and preset, not both"
+                        .to_string(),
+                );
+            }
+            (Some(target), None) => serde_json::from_value::<ProfilePolicyTarget>(target.clone())
+                .map_err(|error| format!("Invalid targetPolicy: {error}"))?,
+            (None, Some(_)) => {
+                let mode = serde_json::from_value::<ProfileAccessMode>(
+                    cmd.get("mode")
+                        .cloned()
+                        .ok_or("service_profile_policy_mutate preset requires mode")?,
+                )
+                .map_err(|error| format!("Invalid mode: {error}"))?;
+                let preset = serde_json::from_value::<ProfileAccessPreset>(
+                    cmd.get("preset")
+                        .cloned()
+                        .ok_or("service_profile_policy_mutate mode requires preset")?,
+                )
+                .map_err(|error| format!("Invalid preset: {error}"))?;
+                profile_policy_target_for_preset(mode, preset)
+            }
+            (None, None) => {
+                return Err(
+                    "service_profile_policy_mutate requires targetPolicy or mode and preset"
+                        .to_string(),
+                );
+            }
+        };
+        let eviction_mode = cmd
+            .get("evictionMode")
+            .cloned()
+            .map(serde_json::from_value::<ProfileEvictionMode>)
+            .transpose()
+            .map_err(|error| format!("Invalid evictionMode: {error}"))?;
+        let authenticated_subject = cmd
+            .get("servicePrincipalId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty());
+        let subject_id = authenticated_subject.or_else(|| {
+            cmd.get("clientSubjectId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+        });
+        let assurance = if authenticated_subject.is_some() {
+            ProfileIdentityAssurance::RegisteredCapability
+        } else if subject_id.is_some() {
+            ProfileIdentityAssurance::SelfDeclared
+        } else {
+            ProfileIdentityAssurance::Unknown
+        };
+        let now = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|error| format!("Could not format profile policy timestamp: {error}"))?;
+        let repository = LockedServiceStateRepository::default_json()?;
+        let result = mutate_profile_policy_in_repository(
+            &repository,
+            ProfilePolicyMutationInput {
+                profile_id,
+                expected_revision,
+                target,
+                subject_id,
+                assurance,
+                eviction_mode,
+                grace_deadline: optional_command_string(cmd, "graceDeadline"),
+                now: &now,
+            },
+        )?;
+        Ok(json!({
+            "profileId": profile_id,
+            "outcome": result.outcome,
+            "policy": result.policy,
+            "blockingOccupancy": result.blocking_occupancy,
+            "evictionPlan": result.eviction_plan,
+            "evictionReceipt": result.eviction_receipt,
+            "receipt": result.receipt,
+        }))
     }
     pub(crate) async fn handle_service_site_policy_upsert(cmd: &Value) -> Result<Value, String> {
         let site_policy_id = required_service_config_id(cmd, "sitePolicyId")?;

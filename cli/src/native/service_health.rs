@@ -376,6 +376,8 @@ async fn reconcile_service_state_with_controller_fence(
 ) -> ServiceReconcileSummary {
     let before = state.clone();
     let reconciled_at = current_timestamp();
+    let closed_seeding_handoffs =
+        super::service_config::refresh_profile_seeding_handoff_lifecycles(state);
     let reconciled_stale_running_jobs =
         reconcile_stale_running_service_jobs(state, reconciled_at.as_str());
     let reconciled_stale_running_job_count = reconciled_stale_running_jobs.len();
@@ -423,6 +425,7 @@ async fn reconcile_service_state_with_controller_fence(
                 "expiredSessionLeases": summary.expired_session_leases.clone(),
                 "expiredSessionLeaseCount": summary.expired_session_leases.len(),
                 "completedRuntimeLifecycles": completed_runtime_lifecycles,
+                "closedSeedingHandoffCount": closed_seeding_handoffs,
                 "reconciledStaleRunningJobs": reconciled_stale_running_jobs,
                 "reconciledStaleRunningJobCount": reconciled_stale_running_job_count,
                 "tabCount": state.tabs.len(),
@@ -869,6 +872,42 @@ pub fn persist_service_browser_record_in_repository(
     repository.mutate(|service_state| {
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
+        // Connecting to the same retained process observes its health; it does
+        // not launch a new browser. Keep its launch posture and display binding
+        // instead of replacing them with the CDP connection's empty metadata.
+        let retained_attachment = host == BrowserHost::AttachedExisting
+            && previous.as_ref().is_some_and(|browser| {
+                browser.boot_epoch.is_some()
+                    && browser.boot_epoch == crate::process_identity::current_boot_epoch()
+                    && browser.pid == pid
+                    && browser.cdp_endpoint.is_some()
+                    && browser.cdp_endpoint == cdp_endpoint
+                    && metadata.as_ref().is_none_or(|metadata| {
+                        metadata.profile_id.is_none() || metadata.profile_id == browser.profile_id
+                    })
+            })
+            && process_identity.as_ref().is_some_and(|observed| {
+                !observed.process_identity.start_token.is_empty()
+                    && observed.process_identity.executable_path.is_some()
+                    && Some(observed.process_identity.pid) == pid
+                    && service_state
+                        .browser_process_identities
+                        .get(&id)
+                        .is_some_and(|retained| {
+                            retained.process_identity == observed.process_identity
+                        })
+            });
+        if retained_attachment {
+            let mut browser = previous.clone().expect("retained attachment has a browser");
+            browser.health = health;
+            browser.last_error = last_error;
+            let details = browser_health_observation_details(&browser, None);
+            apply_browser_health_observation(&mut browser, Some(&details));
+            record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
+            service_state.browsers.insert(id, browser);
+            refresh_remote_view_attachability(service_state);
+            return Ok(());
+        }
         let profile_id = metadata
             .as_ref()
             .and_then(|metadata| metadata.profile_id.clone())
@@ -1696,9 +1735,67 @@ fn persist_closed_browser_health_with_context(
             session.boot_epoch = crate::process_identity::current_boot_epoch();
             session.profile_lease_conflict_session_ids.clear();
         }
+        // A duplicate close callback can arrive after terminal cleanup removed
+        // the operational row. Keep its failure event, but do not recreate a
+        // profile-less browser with an active session from that stale callback.
+        // Uncertain process cleanup must still retain its degraded obligation.
+        let removed_terminal_owner = previous.is_none()
+            && !service_state.sessions.contains_key(session_id)
+            && !service_state.browser_process_identities.contains_key(&id)
+            && outcome.is_some_and(|outcome| !outcome.os_degraded_possible())
+            && service_state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get(&id)
+                .is_some_and(|lifecycle| {
+                    use crate::runtime_owner_transfer::{
+                        CleanupObligationState, RuntimeLaneLifecycleState,
+                    };
+                    lifecycle.logical_browser_id == id
+                        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+                        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+                        && lifecycle
+                            .terminal_evidence
+                            .iter()
+                            .any(|evidence| evidence == "exact_process_exited")
+                        && lifecycle
+                            .terminal_evidence
+                            .iter()
+                            .any(|evidence| evidence == "profile_lock_released")
+                        && outcome
+                            .and_then(|outcome| outcome.pid)
+                            .is_none_or(|pid| lifecycle.process_group_id == Some(pid))
+                        && service_state
+                            .runtime_owner_registry
+                            .owner(&lifecycle.profile_identity_digest)
+                            .is_some_and(|owner| {
+                                owner.browser_id == id
+                                    && owner.daemon_session_route == session_id
+                                    && owner.owner_generation == lifecycle.owner_generation
+                                    && owner.pending_transfer.is_none()
+                            })
+                });
+        if removed_terminal_owner {
+            push_service_event(
+                service_state,
+                ServiceEvent {
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Late close failure retained without recreating a terminal browser"
+                        .to_string(),
+                    browser_id: Some(id.clone()),
+                    current_health: Some(health),
+                    details: Some(serde_json::json!({
+                        "operationalRecordRecreated": false,
+                        "terminalEvidencePreserved": true,
+                        "lateCloseObservation": browser.last_health_observation,
+                    })),
+                    ..new_service_event()
+                },
+            );
+        }
         if health == BrowserHealth::NotStarted {
             remove_browser_operational_record(service_state, &id, Some(session_id));
-        } else {
+        } else if !removed_terminal_owner {
             service_state.browsers.insert(id, browser);
         }
         Ok(())
@@ -1878,6 +1975,18 @@ pub fn merge_reconciled_service_state(
         target.presentation_capacity = reconciled.presentation_capacity.clone();
     }
 
+    // A seeding browser can be relaunched or its record updated while health
+    // probes run. Only publish closure of the exact record that was observed.
+    for (id, handoff) in &reconciled.profile_seeding_handoffs {
+        if before.profile_seeding_handoffs.get(id) != Some(handoff)
+            && target.profile_seeding_handoffs.get(id) == before.profile_seeding_handoffs.get(id)
+        {
+            target
+                .profile_seeding_handoffs
+                .insert(id.clone(), handoff.clone());
+        }
+    }
+
     for (id, reconciled_browser) in &reconciled.browsers {
         match target.browsers.get_mut(id) {
             Some(target_browser) => {
@@ -1913,7 +2022,12 @@ pub fn merge_reconciled_service_state(
     }
 
     for (id, reconciled_tab) in &reconciled.tabs {
-        target.tabs.insert(id.clone(), reconciled_tab.clone());
+        // CDP observations cannot overwrite custody granted or narrowed while
+        // the probe was in flight, nor resurrect a concurrently removed tab.
+        // Preserve the newer record; a subsequent probe can refresh its view.
+        if target.tabs.get(id) == before.tabs.get(id) {
+            target.tabs.insert(id.clone(), reconciled_tab.clone());
+        }
     }
     for id in before.tabs.keys() {
         if reconciled.tabs.contains_key(id) {
@@ -2002,54 +2116,24 @@ pub fn merge_reconciled_service_state(
         }
     }
 
+    // Probes run outside the repository lock. A newer reservation, checkout,
+    // finalization or release owns the whole display/route record. Mixing stale
+    // health with newer custody can orphan a successfully completed acquisition.
+    // Defer that record to the next fresh probe instead of overwriting it.
     for (id, reconciled_allocation) in &reconciled.display_allocations {
-        let target_released_after_reconcile_started = target
-            .display_allocations
-            .get(id)
-            .is_some_and(|allocation| {
-                allocation.state == "released"
-                    && before
-                        .display_allocations
-                        .get(id)
-                        .is_some_and(|before_allocation| before_allocation != allocation)
-            });
-        if target_released_after_reconcile_started {
-            continue;
+        if target.display_allocations.get(id) == before.display_allocations.get(id) {
+            target
+                .display_allocations
+                .insert(id.clone(), reconciled_allocation.clone());
         }
-        target
-            .display_allocations
-            .insert(id.clone(), reconciled_allocation.clone());
     }
 
     for (id, reconciled_route) in &reconciled.remote_view_routes {
-        let target_route = target.remote_view_routes.get(id).cloned();
-        let target_released_after_reconcile_started = target_route.as_ref().is_some_and(|route| {
-            route.state == "released"
-                && before
-                    .remote_view_routes
-                    .get(id)
-                    .is_some_and(|before_route| before_route != route)
-        });
-        if target_released_after_reconcile_started {
-            continue;
+        if target.remote_view_routes.get(id) == before.remote_view_routes.get(id) {
+            target
+                .remote_view_routes
+                .insert(id.clone(), reconciled_route.clone());
         }
-        let target_authority_changed_after_reconcile_started = before
-            .remote_view_routes
-            .get(id)
-            .zip(target_route.as_ref())
-            .is_some_and(|(before_route, target_route)| {
-                target_route.controller_lease_id != before_route.controller_lease_id
-                    || target_route.controller_epoch != before_route.controller_epoch
-                    || target_route.viewer_lease_ids != before_route.viewer_lease_ids
-            });
-        let mut merged_route = reconciled_route.clone();
-        if target_authority_changed_after_reconcile_started {
-            let target_route = target_route.expect("changed route authority requires target route");
-            merged_route.controller_lease_id = target_route.controller_lease_id;
-            merged_route.controller_epoch = target_route.controller_epoch;
-            merged_route.viewer_lease_ids = target_route.viewer_lease_ids;
-        }
-        target.remote_view_routes.insert(id.clone(), merged_route);
     }
 
     for (id, reconciled_lease) in &reconciled.viewer_leases {
@@ -2178,14 +2262,21 @@ async fn refresh_browser_record_health(
         if ownership == crate::process_identity::RuntimeProcessOwnership::AmbiguousLegacyBrowser {
             browser.health = BrowserHealth::Degraded;
             browser.last_error = Some(format!(
-                "Recorded browser PID {} is live but process ownership is ambiguous",
-                pid
+                "Recorded browser PID {} is live but process ownership is ambiguous ({})",
+                pid, assessment.reason
             ));
             let details = serde_json::json!({
                 "currentReasonKind": recovery_reason_kind_for_health(browser.health).as_str(),
                 "failureClass": "browser_process_identity_ambiguous",
                 "processExitDetection": "persisted_process_identity",
                 "processExitPid": pid,
+                "processIdentityAssessmentReason": assessment.reason,
+                "processObservationFailure": match &assessment.observation {
+                    crate::process_identity::ProcessObservation::Failed { reason } => Some(reason.as_str()),
+                    _ => None,
+                },
+                "effectState": "no_effect",
+                "recourse": "inspect_process_observation_before_retry",
             });
             apply_browser_health_observation(browser, Some(&details));
             return;
@@ -2332,7 +2423,7 @@ fn reconcile_remote_view_state(
 }
 
 /// Reconciles retained remote-view state against a current route-display probe.
-fn reconcile_remote_view_state_with_display_probe(
+pub(crate) fn reconcile_remote_view_state_with_display_probe(
     state: &mut ServiceState,
     display_socket_available: impl Fn(&str) -> bool,
     controller_fence_held: bool,
@@ -2344,6 +2435,16 @@ fn reconcile_remote_view_state_with_display_probe(
         .map(|(id, browser)| (id.clone(), browser.health))
         .collect::<BTreeMap<_, _>>();
     let mut repair = RemoteViewReconcileRepair::default();
+    // A positively bound acquisition is temporarily pending, not an orphan.
+    // Socket and browser-health failures below still invalidate that route.
+    let pending_acquisition_routes = state
+        .remote_view_routes
+        .iter()
+        .filter(|(_, route)| {
+            super::presentation_inventory::has_current_acquisition_binding(state, route)
+        })
+        .map(|(id, _)| id.clone())
+        .collect::<BTreeSet<_>>();
 
     let mut unavailable_route_displays = BTreeMap::new();
     for entry in state.route_pool.values_mut() {
@@ -2472,7 +2573,9 @@ fn reconcile_remote_view_state_with_display_probe(
                         .map(|state| (id.clone(), state.clone()))
                 })
                 .and_then(|(id, state)| {
-                    if matches!(state.as_str(), "ready" | "allocating") {
+                    if matches!(state.as_str(), "ready" | "allocating")
+                        || (state == "pending" && pending_acquisition_routes.contains(&route.id))
+                    {
                         None
                     } else {
                         Some(("display_allocation_unavailable", id, state))
@@ -2580,10 +2683,14 @@ fn reconcile_remote_view_state_with_display_probe(
             let route_browser_id = route_browser_owners
                 .get(id)
                 .and_then(|browser_id| browser_id.as_deref());
-            !matches!(
+            let route_available = matches!(
                 route_states.get(id).map(String::as_str),
                 Some("ready" | "reconnecting" | "allocating")
-            ) || route_browser_id.is_none()
+            ) || (route_states.get(id).map(String::as_str)
+                == Some("pending")
+                && pending_acquisition_routes.contains(id));
+            !route_available
+                || route_browser_id.is_none()
                 || route_browser_id.is_some_and(|browser_id| {
                     browser_health.get(browser_id) != Some(&BrowserHealth::Ready)
                         || lease
@@ -3006,6 +3113,8 @@ fn service_browser_recovery_override_event(
         service_name: service_name.map(str::to_string),
         agent_name: agent_name.map(str::to_string),
         task_name: task_name.map(str::to_string),
+        provenance: None,
+        terminal_outcome: None,
         previous_health: Some(previous_health),
         current_health: Some(browser.health),
         details: Some(details),
@@ -3333,8 +3442,102 @@ fn remove_post_termination_browser_history(state: &mut ServiceState) -> usize {
         .collect::<Vec<_>>();
     browser_ids
         .iter()
-        .map(|id| remove_browser_operational_record(state, id, None))
+        .map(|id| {
+            if let Some(browser) = state
+                .browsers
+                .get(id)
+                .filter(|browser| browser.health == BrowserHealth::Degraded)
+            {
+                let details = serde_json::json!({
+                    "action": "terminal_degraded_placeholder_removed",
+                    "lastError": browser.last_error,
+                    "lastHealthObservation": browser.last_health_observation,
+                    "terminalEvidencePreserved": true,
+                });
+                push_service_event(
+                    state,
+                    ServiceEvent {
+                        kind: ServiceEventKind::Reconciliation,
+                        browser_id: Some(id.clone()),
+                        message:
+                            "Removed historical close failure after exact terminal cleanup proof"
+                                .to_string(),
+                        details: Some(details),
+                        ..new_service_event()
+                    },
+                );
+            }
+            remove_browser_operational_record(state, id, None)
+        })
         .sum()
+}
+
+/// Retire legacy late-close placeholders only when exact terminal ownership
+/// agrees and no operational identity, session, tab, or presentation survives.
+/// A degraded health label alone never proves process cleanup.
+fn proven_terminal_degraded_placeholder(
+    state: &ServiceState,
+    browser_id: &str,
+    browser: &BrowserProcess,
+) -> bool {
+    use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
+    if browser.profile_id.is_some()
+        || browser.pid.is_some()
+        || browser.cdp_endpoint.is_some()
+        || browser.display_allocation_id.is_some()
+        || !browser.view_streams.is_empty()
+        || !browser.tab_handles.is_empty()
+        || state.browser_process_identities.contains_key(browser_id)
+        || state.tabs.values().any(|tab| tab.browser_id == browser_id)
+    {
+        return false;
+    }
+    let Some(lifecycle) = state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get(browser_id)
+    else {
+        return false;
+    };
+    let Some(owner) = state
+        .runtime_owner_registry
+        .owner(&lifecycle.profile_identity_digest)
+    else {
+        return false;
+    };
+    lifecycle.logical_browser_id == browser_id
+        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+        && lifecycle
+            .terminal_evidence
+            .iter()
+            .any(|evidence| evidence == "exact_process_exited")
+        && lifecycle
+            .terminal_evidence
+            .iter()
+            .any(|evidence| evidence == "profile_lock_released")
+        && owner.browser_id == browser_id
+        && owner.owner_generation == lifecycle.owner_generation
+        && owner.pending_transfer.is_none()
+        && !state
+            .runtime_owner_registry
+            .principal_bindings
+            .contains_key(&lifecycle.profile_identity_digest)
+        && !state.sessions.contains_key(&owner.daemon_session_route)
+        && !state
+            .sessions
+            .values()
+            .any(|session| session.browser_ids.iter().any(|id| id == browser_id))
+        && browser
+            .active_session_ids
+            .iter()
+            .all(|session_id| session_id == &owner.daemon_session_route)
+        && !state.browsers.iter().any(|(id, other)| {
+            id != browser_id
+                && other
+                    .active_session_ids
+                    .contains(&owner.daemon_session_route)
+        })
 }
 
 /// Downgrade legacy `ready` rows after their last lease has been released.
@@ -3383,6 +3586,9 @@ fn historical_browser_placeholder(
     browser_id: &str,
     browser: &BrowserProcess,
 ) -> bool {
+    if browser.health == BrowserHealth::Degraded {
+        return proven_terminal_degraded_placeholder(state, browser_id, browser);
+    }
     if !matches!(
         browser.health,
         BrowserHealth::NotStarted
@@ -3859,6 +4065,53 @@ mod tests {
     }
 
     #[test]
+    fn reconciliation_cannot_erase_newer_tab_custody_or_resurrect_removed_tabs() {
+        use crate::native::service_profile_access_policy::ProfileChildAccess;
+        let tab = BrowserTab {
+            id: "target:owned".into(),
+            browser_id: "browser".into(),
+            target_id: Some("owned".into()),
+            lifecycle: TabLifecycle::Ready,
+            ..BrowserTab::default()
+        };
+        // A probe begins before the broker records its newly admitted child.
+        for already_observed in [false, true] {
+            let mut before = ServiceState::default();
+            if already_observed {
+                before.tabs.insert(tab.id.clone(), tab.clone());
+            }
+            let mut reconciled = before.clone();
+            let mut observed = tab.clone();
+            observed.title = Some("Observed title".into());
+            reconciled.tabs.insert(tab.id.clone(), observed.clone());
+            let mut current = before.clone();
+            let mut owned = tab.clone();
+            owned.profile_access = Some(ProfileChildAccess {
+                subject_id: Some("original-client".into()),
+                connection_instance_id: Some("original-connection".into()),
+                ..ProfileChildAccess::default()
+            });
+            owned.work_lease_id = Some("current-work-lease".into());
+            owned.work_lease_revision = 2;
+            current.tabs.insert(tab.id.clone(), owned.clone());
+            merge_reconciled_service_state(&mut current, &before, &reconciled);
+            assert_eq!(current.tabs[&tab.id].profile_access, owned.profile_access);
+            assert_eq!(current.tabs[&tab.id].work_lease_revision, 2);
+
+            let mut unchanged = before.clone();
+            merge_reconciled_service_state(&mut unchanged, &before, &reconciled);
+            assert_eq!(unchanged.tabs[&tab.id].title, observed.title);
+
+            if already_observed {
+                let mut removed = before.clone();
+                removed.tabs.remove(&tab.id);
+                merge_reconciled_service_state(&mut removed, &before, &reconciled);
+                assert!(!removed.tabs.contains_key(&tab.id));
+            }
+        }
+    }
+
+    #[test]
     fn merge_reconciled_service_state_preserves_newer_mutations() {
         let before = ServiceState {
             browsers: BTreeMap::from([(
@@ -4077,6 +4330,69 @@ mod tests {
             renewed_target.browsers["browser-1"].active_session_ids,
             vec!["session-1".to_string()]
         );
+    }
+
+    #[test]
+    fn merge_reconciled_service_state_preserves_completed_acquisition() {
+        let before: ServiceState = serde_json::from_value(serde_json::json!({
+            "displayAllocations": {"display": {
+                "id": "display", "state": "pending", "routeIds": ["route"]
+            }},
+            "remoteViewRoutes": {"route": {
+                "id": "route", "state": "pending", "displayAllocationId": "display"
+            }},
+            "routePool": {"pool": {
+                "id": "pool", "routeId": "route", "state": "pending"
+            }},
+            "remoteViewAcquisitionLeases": {"acquisition": {
+                "id": "acquisition", "browserId": "browser", "sessionId": "session",
+                "routeId": "route", "displayAllocationId": "display",
+                "routePoolEntryId": "pool", "state": "pending", "phase": "reserved"
+            }}
+        }))
+        .unwrap();
+        // A health probe starts while acquisition is pending. Checkout completes
+        // before that probe writes its unchanged pending snapshot back.
+        let reconciled = before.clone();
+        let mut target = before.clone();
+        super::super::remote_view_finalization::finalize_route_bound_acquisition(
+            &mut target,
+            "acquisition",
+            &serde_json::json!({"routeBinding": {"launchDisplayName": ":14"}}),
+            "2026-09-08T03:34:52Z",
+        )
+        .unwrap();
+        let completed_display = target.display_allocations["display"].clone();
+        let completed_route = target.remote_view_routes["route"].clone();
+        let completed_pool = target.route_pool["pool"].clone();
+
+        merge_reconciled_service_state(&mut target, &before, &reconciled);
+
+        assert_eq!(
+            target.remote_view_acquisition_leases["acquisition"].state,
+            "completed"
+        );
+        assert_eq!(target.display_allocations["display"], completed_display);
+        assert_eq!(target.remote_view_routes["route"], completed_route);
+        assert_eq!(target.route_pool["pool"], completed_pool);
+
+        // A later probe based on the completed state must still publish real
+        // health changes; preserving checkout is not permanent immunity.
+        let fresh_before = target.clone();
+        let mut fresh_reconciled = fresh_before.clone();
+        fresh_reconciled
+            .display_allocations
+            .get_mut("display")
+            .unwrap()
+            .state = "orphaned".into();
+        fresh_reconciled
+            .remote_view_routes
+            .get_mut("route")
+            .unwrap()
+            .state = "orphaned".into();
+        merge_reconciled_service_state(&mut target, &fresh_before, &fresh_reconciled);
+        assert_eq!(target.display_allocations["display"].state, "orphaned");
+        assert_eq!(target.remote_view_routes["route"].state, "orphaned");
     }
 
     #[test]
@@ -7092,7 +7408,29 @@ mod tests {
             ..BrowserProcess::default()
         });
 
+        use crate::native::service_model::{
+            ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
+        };
+        state.profile_seeding_handoffs.insert(
+            "fixture:example".to_string(),
+            ProfileSeedingHandoffRecord {
+                id: "fixture:example".to_string(),
+                profile_id: "fixture".to_string(),
+                target_service_id: "example".to_string(),
+                pid: Some(u32::MAX),
+                state: ProfileSeedingHandoffState::SeedingWaitingForClose,
+                ..ProfileSeedingHandoffRecord::default()
+            },
+        );
         let summary = reconcile_service_state(&mut state).await;
+        assert_eq!(
+            state.profile_seeding_handoffs["fixture:example"].state,
+            ProfileSeedingHandoffState::SeedingClosedUnverified
+        );
+        assert_eq!(
+            state.events.last().unwrap().details.as_ref().unwrap()["closedSeedingHandoffCount"],
+            1
+        );
 
         assert_eq!(summary.browser_count, 0);
         assert_eq!(summary.changed_browsers, 1);
@@ -7258,6 +7596,108 @@ mod tests {
             reconciliation.details.as_ref().unwrap()["removedTerminatedBrowsers"],
             1
         );
+    }
+
+    #[tokio::test]
+    async fn reconcile_removes_proven_terminal_degraded_placeholder() {
+        use crate::runtime_owner_transfer::{
+            CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
+            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+        };
+        let browser_id = "session:terminal-viewer";
+        let profile_digest = "a".repeat(64);
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: browser_id.to_string(),
+            health: BrowserHealth::Degraded,
+            active_session_ids: vec!["terminal-viewer".to_string()],
+            last_error: Some("Late polite close failed after process cleanup".to_string()),
+            ..BrowserProcess::default()
+        });
+        state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(ProfileOwner {
+            owner_id: "terminal-owner".to_string(),
+            profile_identity_digest: profile_digest.clone(),
+            state: ProfileOwnerState::Ready,
+            owner_generation: 3,
+            browser_id: browser_id.to_string(),
+            daemon_session_route: "terminal-viewer".to_string(),
+            process_instance_digest: "1".repeat(64),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "2".repeat(64),
+            target_set_digest: "3".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        });
+        state.runtime_owner_registry.lifecycle_records.insert(
+            browser_id.to_string(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: browser_id.to_string(),
+                profile_identity_digest: profile_digest,
+                owner_generation: 3,
+                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state: CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        for case in [
+            "missing_exit",
+            "missing_lock",
+            "cleanup_owned",
+            "generation_drift",
+            "profile_present",
+            "session_present",
+        ] {
+            let mut uncertain = state.clone();
+            let lifecycle = uncertain
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut(browser_id)
+                .unwrap();
+            match case {
+                "missing_exit" => lifecycle
+                    .terminal_evidence
+                    .retain(|entry| entry != "exact_process_exited"),
+                "missing_lock" => lifecycle
+                    .terminal_evidence
+                    .retain(|entry| entry != "profile_lock_released"),
+                "cleanup_owned" => {
+                    lifecycle.cleanup_obligation_state = CleanupObligationState::Owned
+                }
+                "generation_drift" => lifecycle.owner_generation += 1,
+                "profile_present" => {
+                    uncertain.browsers.get_mut(browser_id).unwrap().profile_id =
+                        Some("work".to_string())
+                }
+                "session_present" => {
+                    uncertain.sessions.insert(
+                        "terminal-viewer".to_string(),
+                        BrowserSession {
+                            id: "terminal-viewer".to_string(),
+                            browser_ids: vec![browser_id.to_string()],
+                            ..BrowserSession::default()
+                        },
+                    );
+                }
+                _ => unreachable!(),
+            }
+            reconcile_service_state(&mut uncertain).await;
+            assert!(uncertain.browsers.contains_key(browser_id), "{case}");
+        }
+        let before = state.runtime_owner_registry.clone();
+        let summary = reconcile_service_state(&mut state).await;
+        assert_eq!(summary.browser_count, 0);
+        assert!(state.browsers.is_empty());
+        assert_eq!(state.runtime_owner_registry, before);
+        assert!(state
+            .events
+            .iter()
+            .any(|event| event.details.as_ref().is_some_and(|details| {
+                details["action"] == "terminal_degraded_placeholder_removed"
+                    && details["lastError"] == "Late polite close failed after process cleanup"
+            })));
     }
 
     #[tokio::test]
@@ -7851,6 +8291,59 @@ pub(crate) mod service_commands {
                 browser_id
             ));
         }
+        if cmd.get("connectionInstanceId").is_some() {
+            use crate::native::service_profile_access_policy::{
+                evaluate_profile_access, ProfileAccessEvaluation, ProfileIdentityAssurance,
+                ProfilePermission,
+            };
+            let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+            let profile_id = snapshot
+                .browsers
+                .get(browser_id)
+                .and_then(|browser| browser.profile_id.as_deref())
+                .ok_or(
+                    "service_browser_close_authority_denied: current browser profile is missing",
+                )?;
+            let principal = cmd
+                .get("servicePrincipalId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty());
+            let subject = principal.or_else(|| {
+                cmd.get("clientSubjectId")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+            });
+            let (_, decision) = evaluate_profile_access(ProfileAccessEvaluation {
+                profile_id,
+                explicit_policy: snapshot
+                    .profiles
+                    .get(profile_id)
+                    .and_then(|profile| profile.access_policy.as_ref()),
+                subject_id: subject.map(str::to_string),
+                assurance: if principal.is_some() {
+                    ProfileIdentityAssurance::RegisteredCapability
+                } else if subject.is_some() {
+                    ProfileIdentityAssurance::SelfDeclared
+                } else {
+                    ProfileIdentityAssurance::Unknown
+                },
+                connection_instance_id: cmd
+                    .get("connectionInstanceId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                permission: ProfilePermission::FullShutdown,
+                operation: "service_browser_close",
+                incompatible_occupancy: Vec::new(),
+            });
+            if !decision.allowed {
+                return Err(format!("service_browser_close_authority_denied: expected=full_shutdown; observed=denied; profile={profile_id}; policyRevision={}; source=service_health.rs::handle_service_browser_close", decision.policy_revision));
+            }
+        }
+        // Retained tab recovery defaults to detach so ordinary daemon teardown
+        // preserves Chrome. An explicit Service browser close requests terminal
+        // shutdown instead; handle_close still fences the current lifecycle owner
+        // before approving process effects and records exact shutdown evidence.
+        state.close_behavior = crate::native::action_runtime::runtime::CloseBehavior::CloseBrowser;
         let mut result = handle_close(state).await?;
         result["browserId"] = json!(browser_id);
         result["requestedBrowserId"] = json!(browser_id);

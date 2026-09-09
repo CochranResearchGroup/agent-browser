@@ -37,7 +37,7 @@ use crate::native::service_profile_lease::{
 };
 use crate::native::service_request::{
     apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
-    ServiceRequestNormalization, ServiceRequestPrincipalSource,
+    ServiceRequestNormalization, ServiceRequestPrincipalSource, ServiceRequestRejection,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::service_commands::service_now_timestamp;
@@ -994,6 +994,15 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "description": "Calling service name, for example JournalDownloader."
                     },
+                    "clientSubjectId": {
+                        "type": "string",
+                        "description": "Stable self-declared or authenticated client subject evaluated by the selected profile access policy."
+                    },
+                    "identityAssurance": {
+                        "type": "string",
+                        "enum": ["self-declared", "authenticated-ingress", "registered-capability", "operator", "unknown"],
+                        "description": "Assurance used by the current profile access decision. Trusted ingress state determines effective assurance."
+                    },
                     "agentName": {
                         "type": "string",
                         "description": "Calling agent name."
@@ -1122,6 +1131,11 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "integer",
                         "minimum": 1,
                         "description": "Optional worker-bound timeout for this queued service request."
+                    },
+                    "serviceStateLockTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional bounded Service State lock-acquisition wait. Values above the daemon cap are clamped to 300000 ms."
                     },
                     "profileLeasePolicy": {
                         "type": "string",
@@ -1269,6 +1283,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "additionalProperties": true,
                         "description": "Lease-backed service tab handle returned by requestServiceTab and required by cdp_attach and cdp_detach."
                     },
+                    "tabId": {
+                        "type": "string",
+                        "description": "Exact retained tab identifier for tab_close; must agree with all other selectors and current child close permission."
+                    },
                     "targetId": {
                         "type": "string",
                         "description": "Optional CDP target id override when the service tab handle already authorizes the tab."
@@ -1415,6 +1433,24 @@ fn service_mcp_tools() -> Vec<Value> {
                     "serviceName": {
                         "type": "string",
                         "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "clientSubjectId": {
+                        "type": "string",
+                        "description": "Stable self-declared or authenticated client subject evaluated by the selected profile access policy."
+                    },
+                    "identityAssurance": {
+                        "type": "string",
+                        "enum": ["self-declared", "authenticated-ingress", "registered-capability", "operator", "unknown"],
+                        "description": "Assurance used by the current profile access decision. Trusted ingress state determines effective assurance."
+                    },
+                    "policyRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Profile access-policy revision admitted by the broker."
+                    },
+                    "accessDecisionId": {
+                        "type": "string",
+                        "description": "Deterministic profile access-decision identity admitted by the broker."
                     },
                     "agentName": {
                         "type": "string",
@@ -6392,7 +6428,16 @@ fn service_request_command_with_state_and_authority(
         request_id: &request_id,
         effective_session: Some(effective_session),
     })
-    .map_err(|issue| JsonRpcError::invalid_params(issue.message()))?;
+    .map_err(|issue| {
+        let rejection = ServiceRequestRejection::record(
+            "mcp_service_request",
+            request.get("action").and_then(Value::as_str),
+            &request_id,
+            effective_session,
+            issue,
+        );
+        JsonRpcError::invalid_service_request(&rejection)
+    })?;
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);
@@ -11071,7 +11116,15 @@ fn queued_tool_command_session(tool_name: &str, default_session: &str, command: 
         return service_request_session_candidate(command.get("sessionName"))
             .unwrap_or_else(|| default_session.to_string());
     }
-    for value in [command.get("sessionName"), command.get("browserId")] {
+    // A returned handle carries the same canonical route hints as HTTP ingress.
+    // Selecting its lane does not authorize the operation: the daemon still
+    // validates the handle's selectors, current custody and caller permissions.
+    for value in [
+        command.get("sessionName"),
+        command.get("browserId"),
+        command.pointer("/serviceTabHandle/sessionName"),
+        command.pointer("/serviceTabHandle/browserId"),
+    ] {
         if let Some(session_name) = service_request_session_candidate(value) {
             return session_name;
         }
@@ -11116,14 +11169,12 @@ fn tool_response_from_daemon(
     trace: Value,
     response: Response,
 ) -> Value {
-    let payload = json!({
-        "tool": tool_name,
-        "session": session,
-        "trace": trace,
-        "success": response.success,
-        "data": response.data,
-        "error": response.error,
-    });
+    // Preserve the daemon's optional correlation and typed recourse fields.
+    // Do not manufacture a terminal result when an older daemon omits one.
+    let mut payload = serde_json::to_value(&response).expect("response is JSON serializable");
+    payload["tool"] = json!(tool_name);
+    payload["session"] = json!(session);
+    payload["trace"] = trace;
     json!({
         "content": [
             {
@@ -11205,6 +11256,23 @@ impl JsonRpcError {
             code: -32602,
             message: "Invalid params",
             data: Some(json!({ "message": message })),
+        }
+    }
+
+    fn invalid_service_request(rejection: &ServiceRequestRejection) -> Self {
+        let response = rejection.response();
+        let mut data = json!({
+            "message": response["error"],
+            "requestId": response["id"],
+            "failure": response["failure"],
+        });
+        if let Some(decision) = response.get("profileAccessDecision") {
+            data["profileAccessDecision"] = decision.clone();
+        }
+        Self {
+            code: -32602,
+            message: "Invalid params",
+            data: Some(data),
         }
     }
 
@@ -13980,17 +14048,22 @@ mod tests {
             "action": "navigate",
             "args": ["--top-level"]
         });
+        let error = service_request_adapter_fixture(&request).unwrap_err();
+        assert_eq!(error["jsonrpc"], "2.0");
+        assert_eq!(error["id"], "fixture");
+        assert_eq!(error["error"]["code"], -32602);
+        assert_eq!(error["error"]["message"], "Invalid params");
         assert_eq!(
-            service_request_adapter_fixture(&request).unwrap_err(),
-            json!({
-                "jsonrpc": "2.0",
-                "id": "fixture",
-                "error": {
-                    "code": -32602,
-                    "message": "Invalid params",
-                    "data": {"message": "unknown service request field: args"}
-                }
-            })
+            error["error"]["data"]["message"],
+            "unknown service request field: args"
+        );
+        assert_eq!(
+            error["error"]["data"]["failure"]["effectState"],
+            "no_effect"
+        );
+        assert_eq!(
+            error["error"]["data"]["failure"]["hardStops"],
+            json!(["blind_retry"])
         );
 
         let (_, command) = service_request_command(&json!({
@@ -14002,7 +14075,7 @@ mod tests {
     }
 
     #[test]
-    fn service_request_tool_session_uses_browser_id_route_hint() {
+    fn service_request_tool_session_uses_explicit_and_handle_route_hints() {
         let command = json!({
             "action": "tab_new",
             "browserId": "session:operator-social",
@@ -14016,6 +14089,34 @@ mod tests {
             queued_tool_command_session("browser_navigate", "AgentBrowserDashboard", &command),
             "AgentBrowserDashboard"
         );
+        for action in ["diagnostics", "evaluate", "tab_handle_release"] {
+            let mut retained = json!({
+                "action": action,
+                "serviceTabHandle": {
+                    "sessionName": "operator-social",
+                    "browserId": "session:operator-social",
+                },
+            });
+            assert_eq!(
+                queued_tool_command_session("service_request", "AgentBrowserDashboard", &retained),
+                "operator-social"
+            );
+            retained["serviceTabHandle"]
+                .as_object_mut()
+                .unwrap()
+                .remove("sessionName");
+            assert_eq!(
+                queued_tool_command_session("service_request", "AgentBrowserDashboard", &retained),
+                "operator-social"
+            );
+            // Keep explicit routing intact so conflicting handle custody is
+            // rejected by the destination daemon rather than silently ignored.
+            retained["sessionName"] = json!("explicit-other");
+            assert_eq!(
+                queued_tool_command_session("service_request", "AgentBrowserDashboard", &retained),
+                "explicit-other"
+            );
+        }
     }
 
     #[test]
@@ -15634,12 +15735,19 @@ mod tests {
 
     #[test]
     fn tool_response_includes_trace_and_error_flag() {
-        let response = Response {
-            success: false,
-            data: None,
-            error: Some("Service job not found: job-1".to_string()),
-            warning: None,
-        };
+        // Exercise the socket JSON decode as well as the MCP projection.
+        let wire = json!({
+            "id": "request-ownership-1",
+            "success": false,
+            "data": null,
+            "error": "Service job not found: job-1",
+            "failure": {"code": "service_job_not_found", "effectState": "no_effect"},
+            "terminalOutcome": {
+                "state": "failed",
+                "provenance": {"requestId": "request-ownership-1"}
+            }
+        });
+        let response: Response = serde_json::from_value(wire.clone()).unwrap();
         let tool_response = tool_response_from_daemon(
             "service_job_cancel",
             "default",
@@ -15654,6 +15762,25 @@ mod tests {
         assert_eq!(payload["session"], "default");
         assert_eq!(payload["trace"]["serviceName"], "svc");
         assert_eq!(payload["error"], "Service job not found: job-1");
+        for field in ["id", "failure", "terminalOutcome"] {
+            assert_eq!(payload[field], wire[field], "lost daemon field: {field}");
+        }
+
+        let legacy: Response = serde_json::from_value(json!({
+            "success": true, "data": {"value": 42}, "error": null
+        }))
+        .unwrap();
+        let result = tool_response_from_daemon("service_request", "default", json!({}), legacy);
+        let payload: Value =
+            serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(result["isError"], false);
+        assert_eq!(payload["data"]["value"], 42);
+        for field in ["id", "failure", "terminalOutcome"] {
+            assert!(
+                payload.get(field).is_none(),
+                "invented daemon field: {field}"
+            );
+        }
     }
 
     #[test]

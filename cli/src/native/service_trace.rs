@@ -1112,6 +1112,7 @@ pub(crate) mod service_commands {
             ServiceEventKind::ReconciliationError => "reconciliation_error",
             ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
             ServiceEventKind::IncidentResolved => "incident_resolved",
+            ServiceEventKind::JobTerminal => "job_terminal",
         }
     }
     pub(crate) fn service_job_state_name(state: ServiceJobState) -> &'static str {

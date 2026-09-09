@@ -90,6 +90,7 @@ fn file_sha256(path: &Path) -> Result<String, std::io::Error> {
 
 pub async fn run_daemon(session: &str) {
     let startup_started = Instant::now();
+    super::service_failure_journal::initialize_failure_journal();
     let socket_dir = get_daemon_socket_dir();
     let endpoint_key = crate::runtime_host::endpoint_key(session).to_string();
     if !socket_dir.exists() {
@@ -844,6 +845,8 @@ async fn handle_connection<S>(
     let (reader, mut writer) = tokio::io::split(stream);
     let mut buf_reader = BufReader::new(reader);
     let mut line = String::new();
+    let connection_instance_id = super::service_connection_lifetime::new_connection_id();
+    let _disconnect_guard = ProfileConnectionDisconnectGuard(&connection_instance_id);
 
     loop {
         line.clear();
@@ -932,21 +935,17 @@ async fn handle_connection<S>(
                     }
                 };
                 let control_plane = lane.control_plane.clone();
-                if crate::runtime_host::command_accepts_lane_profile_defaults(&cmd) {
-                    if let (Some(runtime_profile), Some(object)) =
-                        (lane.config.runtime_profile.as_ref(), cmd.as_object_mut())
-                    {
-                        object
-                            .entry("runtimeProfile".to_string())
-                            .or_insert_with(|| Value::String(runtime_profile.clone()));
-                    }
-                    if let (Some(profile), Some(object)) =
-                        (lane.config.profile.as_ref(), cmd.as_object_mut())
-                    {
-                        object
-                            .entry("profile".to_string())
-                            .or_insert_with(|| Value::String(profile.clone()));
-                    }
+                crate::runtime_host::reconcile_lane_profile_defaults(&mut cmd, &lane.config);
+                if !super::actions::action_skips_browser_launch(
+                    cmd["action"].as_str().unwrap_or(""),
+                ) || matches!(
+                    cmd["action"].as_str(),
+                    Some("close" | "tab_close" | "tab_handle_release" | "tab_handle_refresh")
+                ) {
+                    super::service_request_provenance::attribute_native_session(
+                        &mut cmd,
+                        &lane_session,
+                    );
                 }
 
                 if let Some(ref tx) = idle_reset_tx {
@@ -972,7 +971,7 @@ async fn handle_connection<S>(
                     let service_state = cmd
                         .get("serviceState")
                         .cloned()
-                        .unwrap_or_else(|| serde_json::json!({}));
+                        .unwrap_or(serde_json::Value::Null);
                     let launch_config =
                         super::service_status_projection::launch_configuration_from_status_command(
                             &cmd,
@@ -981,14 +980,26 @@ async fn handle_connection<S>(
                         .get("fullTabHistory")
                         .and_then(|value| value.as_bool())
                         .unwrap_or(false);
+                    let service_state_projection =
+                        super::service_status_projection::service_state_projection_from_status_command(
+                            &cmd,
+                        );
                     control_plane
-                        .service_status_response(id, service_state, launch_config, full_tab_history)
+                        .service_status_response(
+                            id,
+                            service_state,
+                            launch_config,
+                            full_tab_history,
+                            service_state_projection,
+                        )
                         .await
                 } else {
-                    control_plane.submit(cmd).await
+                    control_plane
+                        .submit_from_connection(cmd, &connection_instance_id)
+                        .await
                 };
 
-                let mut resp = serde_json::to_string(&response).unwrap_or_default();
+                let mut resp = serialize_daemon_response(response).await;
                 resp.push('\n');
                 if writer.write_all(resp.as_bytes()).await.is_err() {
                     break;
@@ -1001,8 +1012,8 @@ async fn handle_connection<S>(
                         }
                     }
                     router.close_lane(&lane_session).await;
-                    if !crate::runtime_host::admission_enabled() || router.lanes.is_empty() {
-                        // Signal the daemon or now-empty runtime host to exit gracefully.
+                    if !crate::runtime_host::admission_enabled() {
+                        // Legacy daemons exit with their lane; shared hosts accept future lanes.
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                         close_notify.notify_one();
                     }
@@ -1010,6 +1021,30 @@ async fn handle_connection<S>(
                 }
             }
             Err(_) => break,
+        }
+    }
+}
+
+async fn serialize_daemon_response(response: Value) -> String {
+    tokio::task::spawn_blocking(move || serde_json::to_string(&response))
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or_else(|| {
+            r#"{"success":false,"error":"Daemon response serialization failed"}"#.to_string()
+        })
+}
+
+struct ProfileConnectionDisconnectGuard<'a>(&'a str);
+
+impl Drop for ProfileConnectionDisconnectGuard<'_> {
+    fn drop(&mut self) {
+        if let Err(error) = super::control_plane::persist_profile_connection_disconnected(self.0) {
+            let _ = writeln!(
+                std::io::stderr(),
+                "Could not mark service connection {} disconnected: {error}",
+                self.0
+            );
         }
     }
 }
@@ -1099,6 +1134,73 @@ fn get_port_for_session(session: &str) -> u16 {
 mod tests {
     #[allow(unused_imports)]
     use super::*;
+
+    #[tokio::test]
+    async fn closing_last_runtime_lane_does_not_stop_shared_host() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_RUNTIME_HOST",
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+        ]);
+        let home = std::env::temp_dir().join(format!("ab-last-lane-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            home.join("agent-home").to_str().unwrap(),
+        );
+        guard.set("AGENT_BROWSER_RUNTIME_HOST", "1");
+        guard.set(
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+            home.join("supervisor").to_str().unwrap(),
+        );
+        let router = RuntimeHostRouter::new(
+            home.clone(),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let notify = Arc::new(Notify::new());
+        let (client, server) = tokio::io::duplex(8192);
+        let task = tokio::spawn(handle_connection(
+            server,
+            router.clone(),
+            "cold",
+            None,
+            None,
+            notify.clone(),
+            Arc::new("fixture-auth".into()),
+        ));
+        let (reader, mut writer) = tokio::io::split(client);
+        writer.write_all(b"{\"id\":\"close-last\",\"action\":\"close\",\"_agentBrowserAuthToken\":\"fixture-auth\"}\n").await.unwrap();
+        let mut response = String::new();
+        BufReader::new(reader)
+            .read_line(&mut response)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&response).unwrap()["success"],
+            true
+        );
+        task.await.unwrap();
+        assert!(router.lanes.is_empty());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), notify.notified())
+                .await
+                .is_err(),
+            "closing the last lane must not stop the shared host"
+        );
+        router.shutdown().await;
+        fs::remove_dir_all(home).unwrap();
+    }
 
     #[test]
     fn executable_hashing_streams_file_contents() {
@@ -1317,5 +1419,48 @@ mod tests {
                 other
             ),
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn daemon_serializes_two_clients_and_500_large_reads_without_starving_runtime() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let running = Arc::new(AtomicBool::new(true));
+        let heartbeat_count = Arc::new(AtomicUsize::new(0));
+        let heartbeat_running = running.clone();
+        let heartbeat_observations = heartbeat_count.clone();
+        let heartbeat = tokio::spawn(async move {
+            while heartbeat_running.load(Ordering::Relaxed) {
+                heartbeat_observations.fetch_add(1, Ordering::Relaxed);
+                tokio::task::yield_now().await;
+            }
+        });
+
+        let client = |client_id: usize| async move {
+            for ordinal in 0..250 {
+                let response = serde_json::json!({
+                    "success": true,
+                    "clientId": client_id,
+                    "ordinal": ordinal,
+                    "data": "x".repeat(32 * 1024),
+                });
+                let serialized = serialize_daemon_response(response).await;
+                assert!(serialized.starts_with("{\"clientId\":"));
+                assert!(serialized.len() > 32 * 1024);
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(15), async {
+            tokio::join!(client(1), client(2));
+        })
+        .await
+        .expect("two constrained-runtime clients must finish all 500 serializations");
+        running.store(false, Ordering::Relaxed);
+        heartbeat.await.unwrap();
+
+        assert!(
+            heartbeat_count.load(Ordering::Relaxed) > 100,
+            "the two-worker runtime must continue scheduling unrelated work"
+        );
     }
 }

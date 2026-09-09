@@ -4,12 +4,16 @@ import {
   accessSync,
   chmodSync,
   copyFileSync,
+  closeSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -18,7 +22,8 @@ import {
   constants as fsConstants,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { developmentRuntimeNamespace, requireNamespacedDevelopmentPorts } from './development-runtime-namespace.js';
 import {
   developmentAgentSkillStatus,
   developmentPresentationProviderDescriptor,
@@ -61,38 +66,53 @@ export function evaluateProtectedLeaseAuthorityStatus({ unit, socket, operatorGr
 }
 
 export function developmentRuntimeDescriptor(env = process.env) {
+  const namespace = developmentRuntimeNamespace(env);
+  requireNamespacedDevelopmentPorts(env);
   const userHome = resolve(env.AGENT_BROWSER_DEV_USER_HOME || homedir());
   const installRoot = resolve(
-    env.AGENT_BROWSER_DEV_INSTALL_ROOT || join(userHome, '.local', 'lib', 'agent-browser-dev'),
+    env.AGENT_BROWSER_DEV_INSTALL_ROOT || join(userHome, '.local', 'lib', namespace.name),
   );
   const pseudoHome = resolve(
-    env.AGENT_BROWSER_DEV_HOME || join(userHome, '.local', 'share', 'agent-browser-dev', 'home'),
+    env.AGENT_BROWSER_DEV_HOME || join(userHome, '.local', 'share', namespace.name, 'home'),
   );
   const runtimeBase = resolve(
     env.AGENT_BROWSER_DEV_RUNTIME_DIR ||
-      join(env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`, 'agent-browser-dev'),
+      join(env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`, namespace.name),
   );
   const browserExecutable = resolveDevelopmentBrowserExecutable(env, pseudoHome);
   const presentationProvider = developmentPresentationProviderDescriptor(env);
-  return {
+  const guacamoleHeaderUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
+  if (!guacamoleHeaderUser || !/^[A-Za-z0-9._@-]+$/.test(guacamoleHeaderUser)) {
+    throw new Error('Development Guacamole header user contains unsupported characters');
+  }
+  const unitNames = {
+    runtimeHost: `${namespace.name}-runtime-host.service`,
+    backend: `${namespace.name}-dashboard-backend.service`,
+    dashboard: `${namespace.name}-dashboard.service`,
+  };
+  const descriptor = {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
     environment: 'development',
-    executable: resolve(env.AGENT_BROWSER_DEV_BIN || join(userHome, '.local', 'bin', 'agent-browser-dev')),
+    namespace: namespace.namespace,
+    externalBrowserDiscovery: 'disabled',
+    executable: resolve(env.AGENT_BROWSER_DEV_BIN || join(userHome, '.local', 'bin', namespace.name)),
     installRoot,
     generations: join(installRoot, 'generations'),
     current: join(installRoot, 'current'),
     pseudoHome,
     stateDir: join(pseudoHome, '.agent-browser'),
+    runtimeHostIngressState: join(pseudoHome, '.agent-browser', 'runtime-host-ingress.json'),
     authDir: join(pseudoHome, '.agent-browser', 'dashboard-auth'),
     browserExecutable,
+    guacamoleHeaderUser,
     laneManifest: join(
       pseudoHome,
       '.config',
       'agent-browser',
       'session-supervisors',
-      'development-default.json',
+      `development-default${namespace.suffix}.json`,
     ),
-    laneSession: 'development-default',
+    laneSession: `development-default${namespace.suffix}`,
     laneStreamPort: Number(env.AGENT_BROWSER_DEV_LANE_STREAM_PORT || 4951),
     socketDir: runtimeBase,
     systemdDir: resolve(
@@ -101,23 +121,56 @@ export function developmentRuntimeDescriptor(env = process.env) {
     dashboardPort: Number(env.AGENT_BROWSER_DEV_DASHBOARD_PORT || 4948),
     backendPort: Number(env.AGENT_BROWSER_DEV_BACKEND_PORT || 4949),
     shadowPort: Number(env.AGENT_BROWSER_DEV_SHADOW_PORT || 4950),
-    localHost: 'agent-browser-dev.localhost',
-    ingressService: 'agent-browser-dev',
+    localHost: `${namespace.name}.localhost`,
+    ingressService: namespace.name,
     presentationProvider,
-    units: [
-      'agent-browser-dev-runtime-host.service',
-      'agent-browser-dev-dashboard-backend.service',
-      'agent-browser-dev-dashboard.service',
-    ],
+    unitNames,
+    units: Object.values(unitNames),
   };
+  if (namespace.namespace) validateNamespacedRuntimeIsolation(descriptor, env, userHome);
+  return descriptor;
+}
+
+function canonicalProspectivePath(path) {
+  let ancestor = resolve(path);
+  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  return resolve(realpathSync(ancestor), relative(ancestor, resolve(path)));
+}
+
+function pathsOverlap(left, right) {
+  const within = (root, path) => {
+    const relation = relative(root, path);
+    return relation === '' || (!relation.startsWith('../') && !isAbsolute(relation));
+  };
+  return within(left, right) || within(right, left);
+}
+
+/** A namespace cannot redirect its mutable runtime paths into either existing lane. */
+function validateNamespacedRuntimeIsolation(descriptor, env, userHome) {
+  const protectedPaths = [...new Set([userHome, homedir()])].flatMap((home) => [
+    join(home, '.local/lib/agent-browser'), join(home, '.local/lib/agent-browser-dev'),
+    join(home, '.local/share/agent-browser-dev'), join(home, '.agent-browser'),
+    join(home, '.local/bin/agent-browser'), join(home, '.local/bin/agent-browser-dev'),
+    join(home, '.config/agent-browser'),
+  ]);
+  const runtimeRoot = env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`;
+  protectedPaths.push(join(runtimeRoot, 'agent-browser'), join(runtimeRoot, 'agent-browser-dev'));
+  for (const path of [descriptor.executable, descriptor.installRoot, descriptor.pseudoHome,
+    descriptor.socketDir, descriptor.systemdDir]) {
+    if (protectedPaths.some((protectedPath) => pathsOverlap(
+      canonicalProspectivePath(path), canonicalProspectivePath(protectedPath),
+    ))) throw new Error('Namespaced development path overlaps production or default development');
+  }
 }
 
 export function renderDevelopmentUnits(descriptor, generationBinary) {
   const common = [
     `Environment=HOME=${descriptor.pseudoHome}`,
     `Environment=AGENT_BROWSER_RUNTIME_ENVIRONMENT=development`,
+    `Environment=AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled`,
     `Environment=AGENT_BROWSER_RUNTIME_HOST=1`,
     `Environment=AGENT_BROWSER_SOCKET_DIR=${descriptor.socketDir}`,
+    `Environment=AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=${descriptor.runtimeHostIngressState}`,
     `Environment=AGENT_BROWSER_DASHBOARD_AUTH_DIR=${descriptor.authDir}`,
     `Environment=AGENT_BROWSER_EXECUTABLE_PATH=${descriptor.browserExecutable}`,
     `Environment=AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${descriptor.presentationProvider.inventoryPath}`,
@@ -125,9 +178,11 @@ export function renderDevelopmentUnits(descriptor, generationBinary) {
     `Environment=AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=${descriptor.presentationProvider.hardMaxSlots}`,
     `Environment=AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1`,
     `Environment=AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE=1`,
+    `Environment=AGENT_BROWSER_GUACAMOLE_HEADER_USER=${descriptor.guacamoleHeaderUser}`,
+    ...(descriptor.namespace ? [`Environment=AGENT_BROWSER_DEV_NAMESPACE=${descriptor.namespace}`] : []),
   ].join('\n');
   return {
-    'agent-browser-dev-runtime-host.service': `[Unit]
+    [descriptor.unitNames.runtimeHost]: `[Unit]
 Description=Agent Browser development runtime host
 After=default.target
 StartLimitIntervalSec=60
@@ -145,10 +200,10 @@ PrivateTmp=true
 [Install]
 WantedBy=default.target
 `,
-    'agent-browser-dev-dashboard-backend.service': `[Unit]
+    [descriptor.unitNames.backend]: `[Unit]
 Description=Agent Browser development dashboard backend
-After=network-online.target agent-browser-dev-runtime-host.service
-Wants=network-online.target agent-browser-dev-runtime-host.service
+After=network-online.target ${descriptor.unitNames.runtimeHost}
+Wants=network-online.target ${descriptor.unitNames.runtimeHost}
 
 [Service]
 Type=simple
@@ -163,10 +218,10 @@ RestartSec=3
 [Install]
 WantedBy=default.target
 `,
-    'agent-browser-dev-dashboard.service': `[Unit]
+    [descriptor.unitNames.dashboard]: `[Unit]
 Description=Agent Browser development stable dashboard ingress
-After=agent-browser-dev-dashboard-backend.service network-online.target
-Wants=agent-browser-dev-dashboard-backend.service network-online.target
+After=${descriptor.unitNames.backend} network-online.target
+Wants=${descriptor.unitNames.backend} network-online.target
 
 [Service]
 Type=simple
@@ -201,9 +256,13 @@ export function installDevelopmentRuntime({
   const generationDir = join(descriptor.generations, generationId);
   const generationBinary = join(generationDir, 'bin', 'agent-browser');
   const before = snapshotProduction(env);
+  const defaultDevelopmentBefore = descriptor.namespace ? defaultDevelopmentSnapshot(env) : null;
   const previousCurrent = resolvedLink(descriptor.current);
   const previousExecutable = captureStableExecutable(descriptor.executable);
   const previousLaneManifests = captureDevelopmentLaneManifests(dirname(descriptor.laneManifest));
+  const previousRuntimeHostIngress = existsSync(descriptor.runtimeHostIngressState)
+    ? readFileSync(descriptor.runtimeHostIngressState, 'utf8')
+    : null;
   const previousUnits = new Map();
 
   mkdirSync(join(generationDir, 'bin'), { recursive: true, mode: 0o700 });
@@ -224,11 +283,13 @@ export function installDevelopmentRuntime({
   writeJsonAtomic(join(generationDir, 'generation.json'), {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
     environment: descriptor.environment,
+    ...(descriptor.namespace ? { namespace: descriptor.namespace } : {}),
     generationId,
     version,
     sha256,
     sourceBinary,
     browserExecutable: descriptor.browserExecutable,
+    externalBrowserDiscovery: descriptor.externalBrowserDiscovery,
     desktopInputProvider: {
       enabled: true,
       providerId: 'controlled-x11-xtest',
@@ -245,6 +306,7 @@ export function installDevelopmentRuntime({
     executableSha256: sha256,
     streamPort: descriptor.laneStreamPort,
     runtimeProfile: descriptor.laneSession,
+    ...(descriptor.namespace ? { namespace: descriptor.namespace } : {}),
     provenance: {
       packageVersion: version,
       installedAt: new Date().toISOString(),
@@ -269,6 +331,27 @@ export function installDevelopmentRuntime({
     });
   }
 
+  // An optional provider with no staged manifest has no admitted routes. Keep
+  // that fact explicit so its configured inventory path does not prevent even
+  // headless commands from loading flags. Never overwrite provider-owned data
+  // or reconstruct missing inventory for an already-staged provider.
+  const provider = descriptor.presentationProvider;
+  if (env.AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED !== '1' &&
+      !existsSync(provider.manifest) && !existsSync(provider.inventoryPath)) {
+    const serviceStatePath = join(descriptor.stateDir, 'service', 'state.json');
+    const serviceState = existsSync(serviceStatePath)
+      ? JSON.parse(readFileSync(serviceStatePath, 'utf8')) : {};
+    if (Object.keys(serviceState.remoteViewRoutes ?? {}).length === 0 &&
+        Object.keys(serviceState.routePool ?? {}).length === 0) {
+      mkdirSync(dirname(provider.inventoryPath), { recursive: true, mode: 0o700 });
+      writeJsonAtomic(provider.inventoryPath, {
+        schemaVersion: 'agent-browser.development-presentation-inventory.v1',
+        environment: 'development',
+        routes: [],
+      });
+    }
+  }
+
   const units = renderDevelopmentUnits(descriptor, generationBinary);
   for (const [name, content] of Object.entries(units)) {
     const path = join(descriptor.systemdDir, name);
@@ -284,19 +367,21 @@ export function installDevelopmentRuntime({
 
   try {
     if (activate && env.AGENT_BROWSER_DEV_SKIP_SYSTEMD !== '1') {
-      systemctl(['daemon-reload'], env);
-      systemctl(['enable', '--now', ...descriptor.units], env);
-      systemctl(['restart', ...descriptor.units], env);
-      waitForDevelopmentManifest(descriptor, generationBinary, env);
+      activateDevelopmentRuntime({ descriptor, generationId, generationBinary, sha256, env });
     }
     synchronizeDevelopmentAgentSkill({ env });
     const after = snapshotProduction(env);
     verifyProduction(before, after);
+    const defaultDevelopmentAfter = descriptor.namespace ? defaultDevelopmentSnapshot(env) : null;
+    if (descriptor.namespace) assertDefaultDevelopmentUnchanged(defaultDevelopmentBefore, defaultDevelopmentAfter);
     return {
       success: true,
       descriptor,
       generation: { generationId, path: generationDir, binary: generationBinary, version, sha256 },
       production: { before, after, unchanged: true },
+      ...(descriptor.namespace ? { defaultDevelopment: {
+        before: defaultDevelopmentBefore, after: defaultDevelopmentAfter, unchanged: true,
+      } } : {}),
       status: developmentRuntimeStatus({ env }),
     };
   } catch (error) {
@@ -317,20 +402,97 @@ export function installDevelopmentRuntime({
       new Set([descriptor.laneManifest, ...previousLaneManifests.keys()]),
       previousLaneManifests,
     );
+    if (previousRuntimeHostIngress === null) {
+      rmSync(descriptor.runtimeHostIngressState, { force: true });
+    } else {
+      writeFileAtomic(descriptor.runtimeHostIngressState, previousRuntimeHostIngress, 0o600);
+    }
     for (const [path, content] of previousUnits) {
       if (content === null) rmSync(path, { force: true });
       else writeFileAtomic(path, content, 0o644);
     }
     if (activate && env.AGENT_BROWSER_DEV_SKIP_SYSTEMD !== '1') {
       try {
-        systemctl(['daemon-reload'], env);
-        if (previousCurrent) systemctl(['restart', ...descriptor.units], env);
+        if (previousCurrent) {
+          const previousBinary = join(previousCurrent, 'bin', 'agent-browser');
+          activateDevelopmentRuntime({ descriptor, generationId: basename(previousCurrent),
+            generationBinary: previousBinary,
+            sha256: createHash('sha256').update(readFileSync(previousBinary)).digest('hex'), env });
+        } else systemctl(['daemon-reload'], env);
       } catch {
         // Preserve the original activation error; doctor will expose rollback issues.
       }
     }
     throw error;
   }
+}
+
+/** Start only the runtime host until exact host ownership is ready, then admit dashboard clients. */
+export function activateDevelopmentRuntime({
+  descriptor, generationId, generationBinary, sha256, env = process.env,
+  runSystemctl = systemctl, observeHost = observeDevelopmentRuntimeHostReadiness,
+  publishIngress = publishDevelopmentRuntimeIngress, waitForManifest = waitForDevelopmentManifest,
+  now = Date.now, wait = () => execFileSync('sleep', ['0.25']),
+}) {
+  const timeout = Number(env.AGENT_BROWSER_DEV_START_TIMEOUT_MS || 20_000);
+  if (!Number.isFinite(timeout) || timeout < 1) throw new Error('Invalid development startup timeout');
+  runSystemctl(['daemon-reload'], env);
+  runSystemctl(['enable', ...descriptor.units], env);
+  runSystemctl(['stop', descriptor.unitNames.dashboard, descriptor.unitNames.backend], env);
+  runSystemctl(['reset-failed', descriptor.unitNames.runtimeHost], env);
+  runSystemctl(['restart', descriptor.unitNames.runtimeHost], env);
+  const deadline = now() + timeout;
+  let ready = false;
+  do {
+    const observation = observeHost({ descriptor, generationBinary, sha256, env });
+    if (observation.state === 'wrong_owner') {
+      throw new Error('Development runtime host listener belongs to the wrong systemd unit');
+    }
+    if (observation.state === 'ready') { ready = true; break; }
+    wait();
+  } while (now() < deadline);
+  if (!ready) throw new Error('Development runtime host did not establish exact owned readiness');
+  publishIngress({ descriptor, generationId, generationBinary, sha256 });
+  runSystemctl(['start', descriptor.unitNames.backend, descriptor.unitNames.dashboard], env);
+  waitForManifest(descriptor, generationBinary, env);
+}
+
+/** Evaluate the listener, systemd owner and current runtime identity together before client startup. */
+export function evaluateDevelopmentRuntimeHostReadiness({
+  unit, host, identity, listenerPid, listenerCgroup, startToken, expectedUnit, generationBinary, sha256,
+}) {
+  if (listenerPid && (listenerPid !== unit.mainPid ||
+      !listenerCgroup?.split('\n').some((line) => line.split(':').slice(2).join(':').endsWith(`/${expectedUnit}`)))) {
+    return { state: 'wrong_owner' };
+  }
+  const ready = unit.activeState === 'active' && unit.mainPid > 0 &&
+    unit.executable === generationBinary && listenerPid === unit.mainPid &&
+    host?.pid === unit.mainPid && identity?.pid === unit.mainPid &&
+    identity.executablePath === generationBinary && identity.startToken === startToken &&
+    typeof startToken === 'string' && host.executableGeneration === sha256 &&
+    typeof host.socketIdentity === 'string' && host.socketIdentity.length > 0;
+  return { state: ready ? 'ready' : 'pending' };
+}
+
+function observeDevelopmentRuntimeHostReadiness({ descriptor, generationBinary, sha256, env }) {
+  const unit = unitStatus(descriptor.unitNames.runtimeHost, env);
+  const listenerPid = listeningProcessId(descriptor.laneStreamPort);
+  let listenerCgroup = null;
+  let startToken = null;
+  if (listenerPid) {
+    try {
+      listenerCgroup = readFileSync(`/proc/${listenerPid}/cgroup`, 'utf8');
+      const stat = readFileSync(`/proc/${listenerPid}/stat`, 'utf8');
+      const ticks = stat.slice(stat.lastIndexOf(')') + 2).split(/\s+/)[19];
+      const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+      startToken = `linux:${boot}:${ticks}`;
+    } catch { /* An exiting process has not proved readiness. */ }
+  }
+  return evaluateDevelopmentRuntimeHostReadiness({ unit,
+    host: readJson(join(descriptor.socketDir, 'runtime-host.json')),
+    identity: readJson(join(descriptor.socketDir, 'runtime-host.identity.json')),
+    listenerPid, listenerCgroup, startToken, expectedUnit: descriptor.unitNames.runtimeHost,
+    generationBinary, sha256 });
 }
 
 export function developmentRuntimeStatus({ env = process.env } = {}) {
@@ -345,6 +507,7 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     descriptor.units.map((unit) => [unit, unitStatus(unit, env)]),
   );
   const laneManifest = readJson(descriptor.laneManifest);
+  const runtimeHostIngress = readJson(descriptor.runtimeHostIngressState);
   const manifest = fetchJson(`http://127.0.0.1:${descriptor.dashboardPort}/api/runtime/manifest`);
   const backendManifest = fetchJson(`http://127.0.0.1:${descriptor.backendPort}/api/runtime/manifest`);
   const localIngressManifest = fetchJson('http://127.0.0.1/api/runtime/manifest', [
@@ -372,6 +535,7 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     executable,
     stableExecutable,
     laneManifest,
+    runtimeHostIngress,
     units,
     manifest,
     backendManifest,
@@ -381,6 +545,8 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     presentationProvider,
     developmentSkill,
     protectedLeaseAuthority,
+    externalBrowserDiscovery: descriptor.externalBrowserDiscovery,
+    generationMetadata: selectedGeneration ? readJson(join(selectedGeneration, 'generation.json')) : null,
     ready:
       Boolean(selectedGeneration) &&
       Boolean(executable) &&
@@ -389,7 +555,10 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
       launcher?.includes(`export AGENT_BROWSER_EXECUTABLE_PATH=${shellQuote(descriptor.browserExecutable)}`) === true &&
       laneManifest?.schemaVersion === 'agent-browser.session-supervisor.v1' &&
       laneManifest?.executablePath === executable &&
+      runtimeHostIngress?.selectedBackend?.pid === units[descriptor.unitNames.runtimeHost]?.mainPid &&
+      runtimeHostIngress?.selectedBackend?.binarySha256 === manifest?.executable?.sha256 &&
       Object.values(units).every((unit) => unit.activeState === 'active') &&
+      developmentExternalDiscoveryChecks(units).every((item) => item.ok) &&
       protectedLeaseAuthority.ready &&
       manifest?.runtimeEnvironment === 'development' &&
       manifest?.executable?.path === executable,
@@ -407,15 +576,25 @@ export function doctorDevelopmentRuntime({ env = process.env } = {}) {
     check('stable-executable', Boolean(status.stableExecutable), status.stableExecutable),
     check('selected-executable', Boolean(status.executable), status.executable),
     check('lane-manifest', status.laneManifest?.executablePath === status.executable, status.laneManifest?.executablePath),
+    check(
+      'runtime-host-ingress',
+      status.runtimeHostIngress?.selectedBackend?.pid === status.units[status.descriptor.unitNames.runtimeHost].mainPid &&
+        status.runtimeHostIngress?.selectedBackend?.binarySha256 === status.manifest?.executable?.sha256,
+      status.runtimeHostIngress?.selectedBackend || null,
+    ),
     ...Object.entries(status.units).map(([name, unit]) =>
       check(`unit:${name}`, unit.activeState === 'active', unit.activeState),
     ),
     ...Object.entries(status.units).map(([name, unit]) =>
       check(`unit-executable:${name}`, unit.executable === status.executable, unit.executable),
     ),
-    check('port:dashboard', status.ports.dashboard === status.units['agent-browser-dev-dashboard.service'].mainPid, status.ports.dashboard),
-    check('port:backend', status.ports.backend === status.units['agent-browser-dev-dashboard-backend.service'].mainPid, status.ports.backend),
-    check('port:lane', status.ports.lane === status.units['agent-browser-dev-runtime-host.service'].mainPid, status.ports.lane),
+    ...developmentExternalDiscoveryChecks(status.units),
+    check('generation-external-browser-discovery',
+      status.generationMetadata?.externalBrowserDiscovery === 'disabled',
+      status.generationMetadata?.externalBrowserDiscovery),
+    check('port:dashboard', status.ports.dashboard === status.units[status.descriptor.unitNames.dashboard].mainPid, status.ports.dashboard),
+    check('port:backend', status.ports.backend === status.units[status.descriptor.unitNames.backend].mainPid, status.ports.backend),
+    check('port:lane', status.ports.lane === status.units[status.descriptor.unitNames.runtimeHost].mainPid, status.ports.lane),
     check('auth:store', status.auth.store.private, status.auth.store),
     check('auth:bootstrap', status.auth.bootstrap.private, status.auth.bootstrap),
     check(
@@ -451,9 +630,11 @@ export function renderDevelopmentLauncher(descriptor, generationBinary) {
   return `#!/usr/bin/env sh
 set -eu
 export HOME=${shellQuote(descriptor.pseudoHome)}
-export AGENT_BROWSER_RUNTIME_ENVIRONMENT=development
+${descriptor.namespace ? `export AGENT_BROWSER_DEV_NAMESPACE=${shellQuote(descriptor.namespace)}\n` : ''}export AGENT_BROWSER_RUNTIME_ENVIRONMENT=development
+export AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled
 export AGENT_BROWSER_RUNTIME_HOST=1
 export AGENT_BROWSER_SOCKET_DIR=${shellQuote(descriptor.socketDir)}
+export AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=${shellQuote(descriptor.runtimeHostIngressState)}
 export AGENT_BROWSER_DASHBOARD_AUTH_DIR=${shellQuote(descriptor.authDir)}
 export AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${shellQuote(descriptor.presentationProvider.inventoryPath)}
 export AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=${descriptor.presentationProvider.warmSlots}
@@ -465,6 +646,53 @@ if [ -z "\${AGENT_BROWSER_EXECUTABLE_PATH:-}" ]; then
 fi
 exec ${shellQuote(generationBinary)} "$@"
 `;
+}
+
+export function publishDevelopmentRuntimeIngress({
+  descriptor,
+  generationId,
+  generationBinary,
+  sha256,
+}) {
+  const host = readJson(join(descriptor.socketDir, 'runtime-host.json'));
+  const identity = readJson(join(descriptor.socketDir, 'runtime-host.identity.json'));
+  if (
+    !host ||
+    !identity ||
+    host.pid !== identity.pid ||
+    identity.executablePath !== generationBinary ||
+    host.executableGeneration !== sha256 ||
+    typeof host.socketIdentity !== 'string' ||
+    !host.socketIdentity
+  ) {
+    throw new Error('Development runtime host identity is incomplete or does not match the selected generation');
+  }
+  const bootId = /^linux:([^:]+):/.exec(identity.startToken || '')?.[1] || null;
+  const bootEpoch = bootId ? `linux:${bootId}` : null;
+  if (!bootEpoch) throw new Error('Development runtime host start token does not identify the current boot');
+  const previous = readJson(descriptor.runtimeHostIngressState);
+  if (previous?.activeTransactionId) {
+    throw new Error(`Development runtime ingress has an active transaction: ${previous.activeTransactionId}`);
+  }
+  const registry = {
+    schemaVersion: 'agent-browser.runtime-host-ingress.v1',
+    revision: Number.isSafeInteger(previous?.revision) ? previous.revision + 1 : 1,
+    bootEpoch,
+    activeTransactionId: null,
+    selectedBackend: {
+      topology: 'single_host',
+      generationId,
+      socketDir: descriptor.socketDir,
+      binarySha256: sha256,
+      hostId: host.hostId,
+      pid: host.pid,
+      socketIdentity: host.socketIdentity,
+    },
+    candidateBackend: null,
+    fallbackBackend: null,
+  };
+  writeJsonAtomic(descriptor.runtimeHostIngressState, registry);
+  return registry;
 }
 
 function resolveDevelopmentBrowserExecutable(env, pseudoHome) {
@@ -516,10 +744,42 @@ export function garbageCollectDevelopmentRuntime({ env = process.env, retain = 2
   const removed = [];
   for (const path of generations) {
     if (protectedPaths.has(path)) continue;
+    if (descriptor.namespace && readJson(join(path, 'generation.json'))?.namespace !== descriptor.namespace) continue;
     rmSync(path, { recursive: true, force: true });
     removed.push(path);
   }
   return { success: true, removed, retained: generations.filter((path) => !removed.includes(path)), liveExecutables };
+}
+
+/** Snapshot default-development custody and attached identities during an isolated namespace install. */
+export function defaultDevelopmentSnapshot(env = process.env) {
+  const baselineEnv = Object.fromEntries(Object.entries(env).filter(([key]) =>
+    !key.startsWith('AGENT_BROWSER_DEV_') ||
+    ['AGENT_BROWSER_DEV_USER_HOME', 'AGENT_BROWSER_DEV_SKIP_SYSTEMD', 'AGENT_BROWSER_DEV_BROWSER_EXECUTABLE',
+      'AGENT_BROWSER_DEV_OPERATOR_USER'].includes(key)));
+  const descriptor = developmentRuntimeDescriptor(baselineEnv);
+  return {
+    selectedGeneration: resolvedLink(descriptor.current),
+    processes: env.AGENT_BROWSER_DEV_SKIP_SYSTEMD === '1' ? [] : processCensusUnder(descriptor.generations),
+    custody: {
+      executable: fileIdentity(descriptor.executable),
+      laneManifest: fileIdentity(descriptor.laneManifest),
+      ingress: fileIdentity(descriptor.runtimeHostIngressState),
+      remoteViewHandoffs: fileIdentity(join(descriptor.stateDir, 'service/remote-view-handoffs.json')),
+      ...Object.fromEntries(descriptor.units.map((name) => [name, fileIdentity(join(descriptor.systemdDir, name))])),
+    },
+    units: Object.fromEntries(descriptor.units.map((name) => [name, unitStatus(name, baselineEnv)])),
+    serviceIdentities: serviceIdentityProjection(join(descriptor.stateDir, 'service/state.json')),
+  };
+}
+
+export function assertDefaultDevelopmentUnchanged(before, after) {
+  if (JSON.stringify({ ...before, processes: undefined, serviceIdentities: undefined }) !==
+      JSON.stringify({ ...after, processes: undefined, serviceIdentities: undefined })) {
+    throw new Error('Default development runtime custody changed during namespaced activation');
+  }
+  assertStableProcessCensusPreserved(before.processes, after.processes);
+  assertIdentityProjectionPreserved(before.serviceIdentities, after.serviceIdentities);
 }
 
 export function productionSnapshot(env = process.env) {
@@ -602,11 +862,52 @@ function unitStatus(unit, env) {
       activeState: values.ActiveState || 'unknown',
       mainPid,
       executable: mainPid ? processExecutable(mainPid) : null,
+      externalBrowserDiscovery: observeDevelopmentExternalDiscovery(mainPid),
       activeEnterTimestamp: values.ActiveEnterTimestamp || null,
     };
   } catch (error) {
     return { loadState: 'unknown', activeState: 'unknown', mainPid: null, error: String(error.message || error) };
   }
+}
+
+/** Read only the exact attached process's discovery policy; never return its other environment values. */
+export function observeDevelopmentExternalDiscovery(pid) {
+  if (!Number.isSafeInteger(pid) || pid < 1) return { state: 'unavailable', policy: null };
+  let fd;
+  try {
+    fd = openSync(`/proc/${pid}/environ`, 'r');
+    const buffer = Buffer.alloc(65_537);
+    let length = 0;
+    while (length < buffer.length) {
+      const count = readSync(fd, buffer, length, buffer.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length === buffer.length) return { state: 'unavailable', policy: null };
+    const prefix = 'AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=';
+    const matches = buffer.subarray(0, length).toString('utf8').split('\0')
+      .filter((entry) => entry.startsWith(prefix));
+    if (matches.length === 0) return { state: 'missing', policy: null };
+    const value = matches[0].slice(prefix.length);
+    if (matches.length !== 1 || !['enabled', 'disabled'].includes(value)) {
+      return { state: 'invalid', policy: null };
+    }
+    return { state: 'observed', policy: value };
+  } catch {
+    return { state: 'unavailable', policy: null };
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/** Doctor admission uses live process readback, including missing/invalid-policy failures. */
+export function developmentExternalDiscoveryChecks(units) {
+  return Object.entries(units).map(([name, unit]) => check(
+    `unit-external-browser-discovery:${name}`,
+    unit.externalBrowserDiscovery?.state === 'observed' &&
+      unit.externalBrowserDiscovery.policy === 'disabled',
+    unit.externalBrowserDiscovery ?? { state: 'unavailable', policy: null },
+  ));
 }
 
 function protectedLeaseAuthorityStatus(env) {

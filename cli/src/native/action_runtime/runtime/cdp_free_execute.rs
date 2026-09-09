@@ -20,6 +20,11 @@ use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
 };
+use crate::native::service_profile_access_policy::{
+    evaluate_profile_child_access, ProfileChildAccess, ProfileChildAccessRequest,
+    ProfileIdentityAssurance, ProfilePermission, ServiceProfileAccessPolicy,
+};
+use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::state;
 use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
@@ -251,6 +256,7 @@ pub(crate) async fn handle_cdp_attach(
     state: &mut DaemonState,
 ) -> Result<Value, String> {
     validate_cdp_attach_request(cmd, state)?;
+    crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await?;
     let browser_id = service_tab_handle_browser_id(state);
     let mgr = state.browser.as_mut().ok_or_else(|| {
         "Cannot attach CDP: target browser session is not running; request a service tab first"
@@ -303,7 +309,7 @@ pub(crate) async fn handle_cdp_detach(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "cdp_detach requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
     let detached_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
@@ -336,7 +342,7 @@ pub(crate) fn validate_cdp_attach_request(cmd: &Value, state: &DaemonState) -> R
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "cdp_attach requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
     if handle.get("targetId").and_then(Value::as_str).is_none()
         && cmd.get("targetId").and_then(Value::as_str).is_none()
     {
@@ -372,19 +378,362 @@ pub(crate) fn service_tab_handle_browser_id(state: &DaemonState) -> String {
         .map(str::to_string)
         .unwrap_or_else(|| service_browser_id(&state.session_id))
 }
+/// Bind legacy Service browser commands to current child custody before effects.
+/// Browser observations choose a target, but never grant permission to it.
+pub(crate) fn bind_native_service_tab_command(
+    command: &Value,
+    state: &DaemonState,
+) -> Result<Value, String> {
+    let action = command.get("action").and_then(Value::as_str).unwrap_or("");
+    if command.get("serviceTabHandle").is_some()
+        || command.get("connectionInstanceId").is_none()
+        || matches!(action, "tab_new" | "window_new")
+        || (action == "navigate"
+            && state.browser.is_none()
+            && command
+                .get("profileChildAccess")
+                .is_some_and(|grant| !grant.is_null()))
+    {
+        return Ok(command.clone());
+    }
+    let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+    if let Some(admitted) =
+        super::native_acquisition::admit_cold_navigation(command, state, &snapshot)?
+    {
+        return Ok(admitted);
+    }
+    let browser_id = service_tab_handle_browser_id(state);
+    let mut targets = Vec::new();
+    for (field, prefix) in [("targetId", ""), ("tabId", "target:")] {
+        if let Some(value) = command.get(field).filter(|value| !value.is_null()) {
+            let target = value
+                .as_str()
+                .and_then(|value| value.strip_prefix(prefix))
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| format!("service_tab_target_selector_conflict: invalid {field}"))?;
+            targets.push(target.to_string());
+        }
+    }
+    if action == "tab_switch" {
+        let index = command
+            .get("index")
+            .and_then(Value::as_u64)
+            .and_then(|index| usize::try_from(index).ok());
+        let target = state.browser.as_ref().zip(index)
+            .and_then(|(browser, index)| browser.pages_list().get(index).map(|page| page.target_id.clone()))
+            .ok_or("service_tab_target_unproven: no current index inventory; request the exact owned tab handle")?;
+        targets.push(target);
+    }
+    if targets.is_empty() {
+        let subject = command
+            .get("servicePrincipalId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                command
+                    .get("clientSubjectId")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+            });
+        let owned_targets: Vec<String> = snapshot
+            .tabs
+            .values()
+            .filter(|tab| {
+                tab.browser_id == browser_id
+                    && tab.lifecycle == crate::native::service_model::TabLifecycle::Ready
+                    && subject.is_some()
+                    && tab
+                        .profile_access
+                        .as_ref()
+                        .and_then(|access| access.subject_id.as_deref())
+                        == subject
+            })
+            .filter_map(|tab| tab.target_id.clone())
+            .collect();
+        let active_owned = state
+            .browser
+            .as_ref()
+            .and_then(|browser| browser.active_target_id().ok())
+            .filter(|active| owned_targets.iter().any(|target| target == active));
+        if let Some(target) = active_owned {
+            targets.push(target.to_string());
+        } else {
+            targets.extend(owned_targets);
+        }
+    }
+    targets.sort();
+    targets.dedup();
+    if targets.len() != 1 {
+        return Err("service_tab_target_unproven: target is missing or ambiguous; request the exact owned tab handle".into());
+    }
+    let tab_id = format!("target:{}", targets[0]);
+    let tab = snapshot
+        .tabs
+        .get(&tab_id)
+        .filter(|tab| tab.browser_id == browser_id)
+        .ok_or("service_tab_target_unproven: no current target in the routed browser")?;
+    if tab.profile_access.is_none() {
+        return Err("service_tab_target_unproven: current child access record is missing; acquire an owned service tab".into());
+    }
+    let handle = snapshot
+        .service_tab_handle(&tab_id)
+        .ok_or("service_tab_target_unproven: current service handle is unavailable")?;
+    let mut bound = command.clone();
+    bound["serviceTabHandle"] = serde_json::to_value(handle).map_err(|error| error.to_string())?;
+    Ok(bound)
+}
+
 pub(crate) fn validate_service_tab_handle_for_daemon(
     handle: &Map<String, Value>,
+    cmd: &Value,
     state: &DaemonState,
-) -> Result<(), String> {
-    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+) -> Result<Option<ProfileChildAccess>, String> {
+    let action = cmd
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let stale_error = (handle.get("valid").and_then(Value::as_bool) != Some(true)).then(|| {
         let stale_reason = handle
             .get("staleReason")
             .and_then(Value::as_str)
             .unwrap_or("unknown");
-        return Err(format!("service tab handle is stale: {stale_reason}"));
-    }
+        format!("service tab handle is stale: {stale_reason}")
+    });
     let browser_id = service_tab_handle_browser_id(state);
-    validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))
+    validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))?;
+    if ["runtimeProfile", "profileId", "profile"]
+        .iter()
+        .any(|field| {
+            cmd.get(field).is_some_and(|value| !value.is_null())
+                || cmd
+                    .get("params")
+                    .and_then(|params| params.get(field))
+                    .is_some_and(|value| !value.is_null())
+        })
+    {
+        let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+        validate_handle_profile_selectors(&snapshot, handle, cmd)?;
+    }
+    let access = if action == "view_focus"
+        && cmd.get("operatorFocus").and_then(Value::as_bool) == Some(true)
+    {
+        let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+        crate::native::stream::verify_operator_focus(&snapshot, cmd)?;
+        None
+    } else {
+        authorize_profile_child_access(handle, cmd)?
+    };
+    if action != "tab_handle_refresh" {
+        if let Some(error) = stale_error {
+            return Err(error);
+        }
+    }
+    Ok(access)
+}
+
+/// Every explicit selector must agree with the handle's current configured
+/// profile, including actions that deliberately skip browser auto-launch.
+fn validate_handle_profile_selectors(
+    snapshot: &crate::native::service_model::ServiceState,
+    handle: &Map<String, Value>,
+    cmd: &Value,
+) -> Result<(), String> {
+    let conflict = |field: &str| {
+        format!("service_tab_profile_selector_conflict: field={field}; expected=current_handle_profile; observed=unproven_or_conflicting_selector; source=native/action_runtime/runtime/cdp_free_execute.rs::validate_handle_profile_selectors")
+    };
+    let tab = handle
+        .get("tabId")
+        .and_then(Value::as_str)
+        .and_then(|id| snapshot.tabs.get(id))
+        .ok_or_else(|| conflict("tabId"))?;
+    let profile_id = snapshot
+        .browsers
+        .get(&tab.browser_id)
+        .and_then(|browser| browser.profile_id.as_deref())
+        .ok_or_else(|| conflict("profileId"))?;
+    let profile = snapshot
+        .profiles
+        .get(profile_id)
+        .ok_or_else(|| conflict("profileId"))?;
+    for field in ["runtimeProfile", "profileId", "profile"] {
+        for value in [
+            cmd.get(field),
+            cmd.get("params").and_then(|params| params.get(field)),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if value.is_null() {
+                continue;
+            }
+            let requested = value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| conflict(field))?;
+            let matches = if field == "profile" {
+                let expected = crate::runtime_profile::resolved_profile_identity_digest(
+                    profile.user_data_dir.as_deref().unwrap_or(profile_id),
+                    profile_id,
+                );
+                let observed =
+                    crate::runtime_profile::resolved_profile_identity_digest(requested, profile_id);
+                matches!((expected, observed), (Ok(expected), Ok(observed)) if expected == observed)
+            } else {
+                requested == profile_id || profile.user_data_dir.as_deref() == Some(requested)
+            };
+            if !matches {
+                return Err(conflict(field));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn authorize_profile_child_access(
+    handle: &Map<String, Value>,
+    cmd: &Value,
+) -> Result<Option<ProfileChildAccess>, String> {
+    let Some(tab_id) = handle.get("tabId").and_then(Value::as_str) else {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    };
+    let Some(connection_instance_id) = cmd
+        .get("connectionInstanceId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    else {
+        if handle
+            .get("profileAccess")
+            .is_some_and(|value| !value.is_null())
+        {
+            return Err("profile child access requires a service-generated connection".to_string());
+        }
+        return Ok(None);
+    };
+    let authenticated_subject = cmd
+        .get("servicePrincipalId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty());
+    let subject_id = authenticated_subject.or_else(|| {
+        cmd.get("clientSubjectId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+    });
+    let assurance = if authenticated_subject.is_some() {
+        ProfileIdentityAssurance::RegisteredCapability
+    } else if subject_id.is_some() {
+        ProfileIdentityAssurance::SelfDeclared
+    } else {
+        ProfileIdentityAssurance::Unknown
+    };
+    let action = cmd
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let permission = match action {
+        "diagnostics" | "probe" | "network_capture" => ProfilePermission::TabObserve,
+        "tab_handle_release" | "tab_close" => ProfilePermission::TabCloseOwn,
+        _ => ProfilePermission::TabControlOwn,
+    };
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|service_state| {
+        authorize_profile_child_access_in_state(
+            service_state,
+            handle,
+            tab_id,
+            subject_id,
+            assurance,
+            connection_instance_id,
+            permission,
+        )
+    })
+}
+
+fn authorize_profile_child_access_in_state(
+    service_state: &mut crate::native::service_model::ServiceState,
+    handle: &Map<String, Value>,
+    tab_id: &str,
+    subject_id: Option<&str>,
+    assurance: ProfileIdentityAssurance,
+    connection_instance_id: &str,
+    permission: ProfilePermission,
+) -> Result<Option<ProfileChildAccess>, String> {
+    let Some(tab) = service_state.tabs.get(tab_id) else {
+        if handle
+            .get("profileAccess")
+            .is_some_and(|value| !value.is_null())
+        {
+            return Err("profile child access record is missing".to_string());
+        }
+        return Ok(None);
+    };
+    let Some(mut child) = tab.profile_access.clone() else {
+        if handle
+            .get("profileAccess")
+            .is_some_and(|value| !value.is_null())
+        {
+            return Err("profile child access record is missing".to_string());
+        }
+        return Ok(None);
+    };
+    // Reconnect only with positive evidence that the service host which minted
+    // the persisted connection ended. Never trust the caller's handle copy.
+    if child
+        .connection_instance_id
+        .as_deref()
+        .is_some_and(crate::native::service_connection_lifetime::connection_host_ended)
+    {
+        child.connection_state =
+            crate::native::service_profile_access_policy::ProfileConnectionState::Disconnected;
+    }
+    // One-shot HTTP and MCP requests receive a fresh service-generated
+    // connection. A disconnected child may therefore reconnect as part of
+    // its next authorized operation. An active child remains exclusive to
+    // its current connection and cannot be stolen by matching labels.
+    let reconnect = child.connection_state
+        == crate::native::service_profile_access_policy::ProfileConnectionState::Disconnected;
+    let profile_id = tab
+        .owner_session_id
+        .as_deref()
+        .or(tab.session_id.as_deref())
+        .and_then(|session_id| service_state.sessions.get(session_id))
+        .and_then(|session| session.profile_id.as_deref())
+        .or_else(|| {
+            service_state
+                .browsers
+                .get(&tab.browser_id)
+                .and_then(|browser| browser.profile_id.as_deref())
+        })
+        .unwrap_or("unselected");
+    let policy = service_state
+        .profiles
+        .get(profile_id)
+        .and_then(|profile| profile.access_policy.clone())
+        .unwrap_or_else(|| ServiceProfileAccessPolicy::shared_local_default(profile_id));
+    let result = evaluate_profile_child_access(ProfileChildAccessRequest {
+        child: &child,
+        current_policy: &policy,
+        subject_id,
+        assurance,
+        connection_instance_id,
+        permission,
+        reconnect,
+    });
+    if !result.allowed {
+        // Keep the exact reason: Service recourse classifies these pre-effect
+        // authority denials without changing this ownership decision.
+        return Err(crate::native::service_failure::profile_child_denial_error(
+            result.reason,
+            result.denial_evidence.as_ref(),
+        ));
+    }
+    if result.reconnected {
+        if let Some(tab) = service_state.tabs.get_mut(tab_id) {
+            tab.profile_access = Some(result.child.clone());
+        }
+        service_state.refresh_service_tab_handles();
+    }
+    Ok(Some(result.child))
 }
 pub(crate) fn validate_service_tab_handle_route_for_daemon(
     handle: &Map<String, Value>,
@@ -393,6 +742,7 @@ pub(crate) fn validate_service_tab_handle_route_for_daemon(
     let browser_id = service_tab_handle_browser_id(state);
     validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))
 }
+/// Reject conflicting handle routes before admitting the requested browser effect.
 fn validate_service_tab_handle_route(
     handle: &Map<String, Value>,
     session_id: &str,
@@ -408,14 +758,14 @@ fn validate_service_tab_handle_route(
         && authorized_browser_id != Some(browser_id)
     {
         return Err(format!(
-            "service tab handle browserId {browser_id} does not match routed session {session_id}"
+            "service_tab_route_mismatch: service tab handle browserId {browser_id} does not match routed session {session_id}"
         ));
     }
     if let Some(handle_session_name) = handle.get("sessionName").and_then(Value::as_str) {
         if handle_session_name != session_id {
             return Err(
                 format!(
-                    "service tab handle sessionName {handle_session_name} does not match routed session {session_id}"
+                    "service_tab_route_mismatch: service tab handle sessionName {handle_session_name} does not match routed session {session_id}"
                 ),
             );
         }
@@ -493,7 +843,14 @@ pub(crate) async fn launch_safari(cmd: &Value, state: &mut DaemonState) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_model::{
+        BrowserProcess, BrowserProfile, BrowserSession, BrowserTab, ServiceState,
+    };
+    use crate::native::service_profile_access_policy::{
+        ProfileConnectionState, PROFILE_CHILD_ACCESS_SCHEMA_V1,
+    };
     use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};
+    use std::collections::BTreeMap;
 
     fn retained_owner_state() -> DaemonState {
         let mut state = DaemonState::new();
@@ -511,6 +868,64 @@ mod tests {
     }
 
     #[test]
+    fn explicit_handle_profile_selectors_cannot_be_discarded() {
+        let mut snapshot = ServiceState::default();
+        snapshot.profiles.insert(
+            "catalog".into(),
+            BrowserProfile {
+                id: "catalog".into(),
+                user_data_dir: Some("RuntimeName".into()),
+                ..BrowserProfile::default()
+            },
+        );
+        snapshot.browsers.insert(
+            "browser".into(),
+            BrowserProcess {
+                id: "browser".into(),
+                profile_id: Some("catalog".into()),
+                ..BrowserProcess::default()
+            },
+        );
+        snapshot.tabs.insert(
+            "target:owned".into(),
+            BrowserTab {
+                id: "target:owned".into(),
+                browser_id: "browser".into(),
+                ..BrowserTab::default()
+            },
+        );
+        let handle = json!({"tabId":"target:owned"});
+        let handle = handle.as_object().unwrap();
+        for selector in ["catalog", "RuntimeName"] {
+            let cmd =
+                json!({"action":"tab_close", "runtimeProfile":selector, "profile":"RuntimeName"});
+            validate_handle_profile_selectors(&snapshot, handle, &cmd).unwrap();
+            for field in ["runtimeProfile", "profileId", "profile"] {
+                for nested in [false, true] {
+                    let mut wrong = cmd.clone();
+                    if nested {
+                        wrong["params"] = json!({field:"foreign"});
+                    } else {
+                        wrong[field] = json!("foreign");
+                    }
+                    let before = snapshot.clone();
+                    let error =
+                        validate_handle_profile_selectors(&snapshot, handle, &wrong).unwrap_err();
+                    assert!(error.starts_with("service_tab_profile_selector_conflict:"));
+                    assert!(error.contains(&format!("field={field}")));
+                    let recourse = serde_json::to_value(
+                        crate::native::service_failure::classify_service_failure(&error),
+                    )
+                    .unwrap();
+                    assert_eq!(recourse["effectState"], "no_effect");
+                    assert_eq!(recourse["phase"], "child_admission");
+                    assert_eq!(snapshot, before);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn retained_owner_authorizes_durable_service_tab_handle_identity() {
         let state = retained_owner_state();
         let handle = json!({
@@ -525,14 +940,18 @@ mod tests {
             service_tab_handle_browser_id(&state),
             "session:durable-browser"
         );
-        validate_service_tab_handle_for_daemon(handle.as_object().expect("handle object"), &state)
-            .expect("durable owner browser id should be authorized");
+        validate_service_tab_handle_for_daemon(
+            handle.as_object().expect("handle object"),
+            &json!({"action": "cdp_attach"}),
+            &state,
+        )
+        .expect("durable owner browser id should be authorized");
     }
 
     #[test]
     fn retained_owner_rejects_unrelated_service_tab_handle_identity() {
         let state = retained_owner_state();
-        let handle = json!({
+        let mut handle = json!({
             "browserId": "session:unrelated-browser",
             "sessionName": "handoff-owner-route",
             "tabId": "target:tab-1",
@@ -540,11 +959,190 @@ mod tests {
             "valid": true,
         });
 
-        let error = validate_service_tab_handle_for_daemon(
-            handle.as_object().expect("handle object"),
-            &state,
+        for field in ["browserId", "sessionName"] {
+            if field == "sessionName" {
+                handle["browserId"] = json!("session:durable-browser");
+                handle["sessionName"] = json!("unrelated-route");
+            }
+            let error = validate_service_tab_handle_for_daemon(
+                handle.as_object().expect("handle object"),
+                &json!({"action": "cdp_attach"}),
+                &state,
+            )
+            .expect_err("unrelated route identity must fail closed");
+            assert!(error.contains(&format!("service tab handle {field}")));
+            let failure = crate::native::service_failure::classify_service_failure(&error);
+            assert_eq!(failure.code, "service_tab_route_mismatch");
+            assert_eq!(
+                failure.effect_state,
+                crate::native::service_failure::ServiceEffectState::NoEffect
+            );
+            assert_eq!(
+                failure.phase,
+                crate::native::service_failure::ServiceFailurePhase::ChildAdmission
+            );
+            assert!(failure
+                .safe_next_actions
+                .iter()
+                .any(|action| action == "compare_requested_session_to_current_handle"));
+        }
+    }
+
+    #[test]
+    fn attributed_tab_access_enforces_connection_subject_and_reconnect() {
+        let profile_id = "research-gov";
+        let browser_id = "session:shared-browser";
+        let session_id = "shared-session";
+        let tab_id = "target:fieldwork-tab";
+        let child = ProfileChildAccess {
+            schema_version: PROFILE_CHILD_ACCESS_SCHEMA_V1.to_string(),
+            parent_policy_revision: 1,
+            access_decision_id: "decision:fieldwork".to_string(),
+            subject_id: Some("client:fieldwork".to_string()),
+            identity_assurance: ProfileIdentityAssurance::SelfDeclared,
+            connection_instance_id: Some("connection:owner".to_string()),
+            connection_state: ProfileConnectionState::Active,
+            permissions: vec![
+                ProfilePermission::TabObserve,
+                ProfilePermission::TabControlOwn,
+                ProfilePermission::TabCloseOwn,
+            ],
+        };
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                profile_id.to_string(),
+                BrowserProfile {
+                    id: profile_id.to_string(),
+                    access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(
+                        profile_id,
+                    )),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                browser_id.to_string(),
+                BrowserProcess {
+                    id: browser_id.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                session_id.to_string(),
+                BrowserSession {
+                    id: session_id.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    browser_ids: vec![browser_id.to_string()],
+                    tab_ids: vec![tab_id.to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            tabs: BTreeMap::from([(
+                tab_id.to_string(),
+                BrowserTab {
+                    id: tab_id.to_string(),
+                    browser_id: browser_id.to_string(),
+                    owner_session_id: Some(session_id.to_string()),
+                    profile_access: Some(child),
+                    ..BrowserTab::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let handle = json!({
+            "tabId": tab_id,
+            "profileAccess": {"subjectId": "client:fieldwork"}
+        });
+        let handle = handle.as_object().expect("handle object");
+
+        let active_owner_error = authorize_profile_child_access_in_state(
+            &mut state,
+            handle,
+            tab_id,
+            Some("client:fieldwork"),
+            ProfileIdentityAssurance::SelfDeclared,
+            "connection:other",
+            ProfilePermission::TabControlOwn,
         )
-        .expect_err("unrelated browser id must fail closed");
-        assert!(error.contains("does not match routed session"));
+        .expect_err("matching labels cannot steal an active child");
+        assert!(active_owner_error.contains("owner_connection_still_active"));
+
+        assert_eq!(
+            state.mark_profile_connection_disconnected("connection:owner"),
+            1
+        );
+        let reconnected = authorize_profile_child_access_in_state(
+            &mut state,
+            handle,
+            tab_id,
+            Some("client:fieldwork"),
+            ProfileIdentityAssurance::SelfDeclared,
+            "connection:other",
+            ProfilePermission::TabControlOwn,
+        )
+        .expect("stable subject should reconnect a disconnected child")
+        .expect("attributed child should be returned");
+        assert_eq!(
+            reconnected.connection_instance_id.as_deref(),
+            Some("connection:other")
+        );
+
+        authorize_profile_child_access_in_state(
+            &mut state,
+            handle,
+            tab_id,
+            Some("client:fieldwork"),
+            ProfileIdentityAssurance::SelfDeclared,
+            "connection:other",
+            ProfilePermission::TabCloseOwn,
+        )
+        .expect("the owner connection may close its own tab");
+        let before_denial = serde_json::to_value(&state).unwrap();
+        let wrong_subject_error = authorize_profile_child_access_in_state(
+            &mut state,
+            handle,
+            tab_id,
+            Some("client:other"),
+            ProfileIdentityAssurance::SelfDeclared,
+            "connection:other",
+            ProfilePermission::TabObserve,
+        )
+        .expect_err("a different subject cannot use the child");
+        assert!(wrong_subject_error.contains("subject_mismatch"));
+        assert_eq!(serde_json::to_value(&state).unwrap(), before_denial);
+        let failure =
+            crate::native::service_failure::classify_service_failure(&wrong_subject_error);
+        assert_eq!(failure.code, "profile_child_subject_mismatch");
+        assert_eq!(
+            failure.effect_state,
+            crate::native::service_failure::ServiceEffectState::NoEffect
+        );
+        assert_eq!(failure.recommended_action, "use_own_service_tab_handle");
+        // A returned handle is not authority to reconstruct a missing grant.
+        for missing_tab in [false, true] {
+            if missing_tab {
+                state.tabs.remove(tab_id);
+            } else {
+                state.tabs.get_mut(tab_id).unwrap().profile_access = None;
+            }
+            let before_missing = serde_json::to_value(&state).unwrap();
+            let error = authorize_profile_child_access_in_state(
+                &mut state,
+                handle,
+                tab_id,
+                Some("client:fieldwork"),
+                ProfileIdentityAssurance::SelfDeclared,
+                "connection:other",
+                ProfilePermission::TabControlOwn,
+            )
+            .expect_err("missing authority must stop before reconnect");
+            assert_eq!(serde_json::to_value(&state).unwrap(), before_missing);
+            let failure = crate::native::service_failure::classify_service_failure(&error);
+            assert_eq!(failure.code, "profile_child_access_record_missing");
+            assert_eq!(
+                failure.effect_state,
+                crate::native::service_failure::ServiceEffectState::NoEffect
+            );
+        }
     }
 }

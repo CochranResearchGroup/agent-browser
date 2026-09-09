@@ -29,6 +29,15 @@ import {
   writeDashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
 import {
+  hashOpaqueIdentifier,
+  installDashboardFetchFailureInstrumentation,
+  reportDashboardFailure,
+} from "@/lib/failure-observation";
+import { fetchDashboardAuthStatus } from "@/lib/dashboard-auth-status";
+import { fetchSharedRuntimeHealth } from "@/lib/dashboard-api";
+import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
+import { summarizeRuntimeAccess } from "@/lib/runtime-health-summary";
+import {
   ServiceDetailInspector,
   ServicePanel,
   type ServiceInspectorActions,
@@ -158,6 +167,35 @@ type RuntimeHealthIssue = {
   recommendedAction?: string;
 };
 
+type DashboardHealthFinding = {
+  code: string;
+  blocking: boolean;
+  message: string;
+};
+
+type DashboardHealthAxes = {
+  schemaVersion: "agent-browser.dashboard-health.v1";
+  runtime: {
+    state: "ready" | "degraded" | "blocked" | "unknown";
+    ready: boolean;
+    findings: DashboardHealthFinding[];
+  };
+  convergence: {
+    state: "ready" | "degraded" | "blocked" | "unknown";
+    ready: boolean;
+    findings: DashboardHealthFinding[];
+  };
+  access: {
+    state: "allowed" | "attention" | "denied" | "unknown";
+    findings: DashboardHealthFinding[];
+  };
+  acquisition: {
+    state: "available" | "waiting" | "denied" | "unknown";
+    requestScoped: true;
+    findings: DashboardHealthFinding[];
+  };
+};
+
 type SessionSupervisorHealth = {
   ready?: boolean;
   count?: number;
@@ -234,6 +272,14 @@ type RuntimeHealth = {
   staleSessions?: string[];
   sessionSupervisors?: SessionSupervisorHealth;
   issues?: RuntimeHealthIssue[];
+  dashboardHealth?: DashboardHealthAxes;
+  workstationConvergence?: {
+    schemaVersion?: string;
+    state?: string;
+    ready?: boolean;
+    executableNextAction?: string | null;
+    dashboardHealth?: DashboardHealthAxes;
+  };
   runtimeMultiplicity?: RuntimeMultiplicityHealth;
   runtimeMonitor?: RuntimeMonitorHealth;
   runtimeLifecycle?: {
@@ -295,18 +341,19 @@ const REQUIRED_RUNTIME_FEATURES = [
 
 const REQUIRED_RUNTIME_CONTRACT = "service-ui-runtime.v1";
 
-function workstationUpgradeIssue(health: RuntimeHealth): string | null {
-  const upgrade = health.workstationUpgrade;
-  const transaction = upgrade?.latestTransaction;
-  if (!transaction?.state) return null;
-  const quietStates = new Set(["accepted", "old_generation_retirable"]);
-  if (!upgrade?.admissionDraining && quietStates.has(transaction.state)) return null;
-  const selected = upgrade?.selectedGenerationId || "none";
-  const candidate = transaction.candidateGenerationId || "unknown";
-  const migrationCount = transaction.runtimeMigrations?.length ?? 0;
-  const rollback = transaction.oldGenerationId ? "old generation retained" : "no prior generation";
-  const blocker = transaction.stopReason ? ` Blocker: ${transaction.stopReason}.` : "";
-  return `Workstation transaction ${transaction.state}: selected ${selected}, candidate ${candidate}, ${migrationCount} runtime dispositions, ${rollback}.${blocker}`;
+function workstationConvergenceIssue(health: RuntimeHealth): string | null {
+  const axes = health.dashboardHealth;
+  if (!axes) return null;
+  const acquisition = health.dashboardHealth?.acquisition;
+  if (acquisition?.requestScoped !== true) {
+    return "The runtime health contract did not preserve request-scoped acquisition state.";
+  }
+  if (axes.runtime.ready && axes.convergence.ready) return null;
+  const finding = axes.runtime.findings.find((candidate) => candidate.blocking)
+    ?? axes.convergence.findings.find((candidate) => candidate.blocking);
+  const message = finding?.message || "The installed runtime has not reached its selected convergence state.";
+  const action = health.workstationConvergence?.executableNextAction;
+  return action ? `${message} Next action: ${action}.` : message;
 }
 
 function dashboardSectionFromPath(pathname: string): DashboardSection {
@@ -396,10 +443,7 @@ function DashboardAuthGate({ initialSection }: { initialSection: DashboardSectio
     let cancelled = false;
     async function checkAuth() {
       try {
-        const response = await fetch("/api/dashboard-auth/status", {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
+        const response = await fetchDashboardAuthStatus();
         const payload = (await response.json()) as DashboardAuthStatus;
         if (cancelled) return;
         setUser(payload.authenticated ? payload.user ?? null : null);
@@ -489,6 +533,7 @@ function RemoteViewHandoffGate({
           agentName: user.username || "operator",
           taskName: "durable-remote-view-handoff",
           params: { handoffId, allowReopenClosed },
+          serviceStateLockTimeoutMs: 30_000,
           jobTimeoutMs: 90_000,
         }),
       });
@@ -497,7 +542,10 @@ function RemoteViewHandoffGate({
         throw new Error(payload.error || "The remote-view handoff could not be resolved.");
       }
       let nextResolution = payload.data;
-      if (nextResolution.resolved && !durableHandoffPresentationReady(nextResolution)) {
+      const presentationMayStillConverge = nextResolution.resolved === true
+        || nextResolution.status === "ready"
+        || nextResolution.status === "converging";
+      if (presentationMayStillConverge && !durableHandoffPresentationReady(nextResolution)) {
         nextResolution = {
           ...nextResolution,
           status: "converging",
@@ -557,6 +605,14 @@ function RemoteViewHandoffGate({
         jobId: handoffId,
       }, "replace");
     } catch (cause) {
+      void hashOpaqueIdentifier(handoffId).then((handoffIdHash) => reportDashboardFailure({
+        category: "handoff_link",
+        stage: "resolve",
+        code: "handoff_unusable",
+        summary: "The authenticated dashboard could not resolve the durable handoff into a usable view.",
+        action: "service_remote_view_handoff_resolve",
+        handoffIdHash,
+      }));
       setError(cause instanceof Error ? cause.message : "The remote-view handoff could not be resolved.");
     } finally {
       setResolving(false);
@@ -751,7 +807,7 @@ function RuntimeHealthNotice({ state }: { state: RuntimeHealthState }) {
     >
       <AlertTriangle className="size-4 shrink-0" />
       <div className="min-w-0">
-        <p>Runtime status out of sync</p>
+        <p>Runtime convergence action required</p>
         <span>
           {state.issue}
           {sessions.length > 0 ? ` Affected sessions: ${sessions.join(", ")}.` : ""}
@@ -775,9 +831,12 @@ function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
   const generations = lifecycle?.retention?.generations
     ?? monitor?.receipt?.effects?.generations;
   const convergenceWindow = multiplicity?.convergenceWindow;
+  const access = state.health?.dashboardHealth?.access;
+  const accessSummary = summarizeRuntimeAccess(access);
   const healthy = multiplicity?.steadyState === true
     && monitor?.ready === true
-    && (cleanup?.missingCount ?? 0) === 0;
+    && (cleanup?.missingCount ?? 0) === 0
+    && accessSummary.ready;
   return (
     <div
       className="dashboard-runtime-notice"
@@ -797,6 +856,7 @@ function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
           {generations ? ` Last retention pass removed ${generations.removed?.length ?? 0} and retained ${generations.retained?.length ?? 0}.` : ""}
           {monitor?.state ? ` Monitor ${monitor.state}${monitor.ageSeconds == null ? "" : ` (${monitor.ageSeconds}s old)`}.` : ""}
           {(lifecycle?.incident ?? monitor?.receipt?.incident)?.type ? ` Blocking incident ${(lifecycle?.incident ?? monitor?.receipt?.incident)?.type} after ${(lifecycle?.incident ?? monitor?.receipt?.incident)?.failureCount ?? "?"} failures.` : ""}
+          {accessSummary.text ? ` ${accessSummary.text}` : ""}
         </span>
       </div>
     </div>
@@ -851,10 +911,14 @@ function DashboardExperience({
     issue: null,
   });
   const activePort = useAtomValue(activePortAtom);
-  useStreamSync(activePort);
+  // A durable workspace route owns its selected view stream. Connecting the
+  // legacy active-session CDP socket as well creates an unrelated retry loop.
+  useStreamSync(activePort, !hasWorkspaceViewportRoute);
   useSessionsSync();
   useActivitySync();
   useChatStatusSync();
+
+  useEffect(() => installDashboardFetchFailureInstrumentation(), []);
 
   const sessions = useAtomValue(sessionsAtom);
   const hasSessions = sessions.length > 0;
@@ -897,17 +961,12 @@ function DashboardExperience({
     let cancelled = false;
     const checkRuntimeHealth = async () => {
       try {
-        const response = await fetch("/api/runtime/health", {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
+        const response = await fetchSharedRuntimeHealth();
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
         const health = await response.json() as RuntimeHealth;
-        const issue = workstationUpgradeIssue(health) || (health.ready === false
-          ? health.issues?.[0]?.message || "Active daemon sessions are out of sync with the installed runtime."
-          : null);
+        const issue = workstationConvergenceIssue(health);
         if (!cancelled) {
           setRuntimeHealth({ loading: false, health, issue });
         }
@@ -922,11 +981,10 @@ function DashboardExperience({
         }
       }
     };
-    void checkRuntimeHealth();
-    const interval = window.setInterval(checkRuntimeHealth, 10_000);
+    const stop = startCompletionDrivenDashboardPoll(checkRuntimeHealth, 10_000);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      stop();
     };
   }, []);
   useEffect(() => {

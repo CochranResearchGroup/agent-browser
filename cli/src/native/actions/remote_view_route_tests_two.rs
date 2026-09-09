@@ -223,7 +223,7 @@ async fn test_remote_view_open_dry_run_prefers_inline_route_pool_identity_over_s
     assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":11");
     assert_eq!(
         result["data"]["displayAllocationId"],
-        "remote-view-display:11"
+        "remote-view-display:guacamole-3"
     );
     let _ = fs::remove_dir_all(&home);
 }

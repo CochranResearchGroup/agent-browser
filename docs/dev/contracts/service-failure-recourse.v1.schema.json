@@ -12,7 +12,10 @@
     "effectState",
     "retryDisposition",
     "recommendedAction",
-    "reuseAllowed"
+    "reuseAllowed",
+    "subject",
+    "missingPermission",
+    "executableNextAction"
   ],
   "properties": {
     "schemaVersion": {
@@ -23,11 +26,11 @@
     },
     "axis": {
       "type": "string",
-      "enum": ["service_state", "lifecycle_owner", "profile_lease", "presentation", "unknown"]
+      "enum": ["request", "service_state", "lifecycle_owner", "profile_lease", "profile_access", "presentation", "unknown"]
     },
     "phase": {
       "type": "string",
-      "enum": ["process_mutex_wait", "file_lock_wait", "launch_admission", "commit", "finalize", "unknown"]
+      "enum": ["ingress_validation", "process_mutex_wait", "file_lock_wait", "launch_admission", "child_admission", "commit", "finalize", "unknown"]
     },
     "effectState": {
       "type": "string",
@@ -42,6 +45,15 @@
     },
     "reuseAllowed": {
       "type": "boolean"
+    },
+    "subject": {
+      "type": ["object", "null"]
+    },
+    "missingPermission": {
+      "type": ["string", "null"]
+    },
+    "executableNextAction": {
+      "type": ["object", "null"]
     },
     "waitMs": {
       "type": "integer",

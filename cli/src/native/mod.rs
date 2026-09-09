@@ -57,6 +57,8 @@ pub(crate) mod desktop_evidence;
 pub(crate) mod desktop_evidence_action;
 #[allow(dead_code)]
 pub(crate) mod desktop_evidence_cdp;
+pub(crate) mod service_connection_lifetime;
+pub(crate) mod service_connection_reconcile;
 // The configured episode is landing adapter by adapter so each live boundary
 // can remain fail-closed until the product caller is complete.
 #[allow(dead_code)]
@@ -131,8 +133,11 @@ pub mod service_contracts;
 mod service_crash_regeneration;
 #[allow(dead_code)]
 pub mod service_diagnostics;
+mod service_download_artifact;
 #[allow(dead_code)]
 pub mod service_failure;
+#[allow(dead_code)]
+pub mod service_failure_journal;
 #[allow(dead_code)]
 pub mod service_file_transfer;
 #[allow(dead_code)]
@@ -159,23 +164,29 @@ pub mod service_network_capture;
 pub(crate) mod service_principal;
 #[allow(dead_code)]
 pub mod service_probe;
+pub(crate) mod service_profile_access_policy;
+#[allow(dead_code)]
+pub(crate) mod service_profile_acquisition;
 #[allow(dead_code)]
 pub(crate) mod service_profile_lease;
-#[allow(dead_code)]
-pub(crate) mod service_profile_recovery;
+pub(crate) mod service_profile_lifecycle;
 #[allow(dead_code)]
 pub mod service_renderer_crash;
 #[allow(dead_code)]
 pub mod service_request;
 #[allow(dead_code)]
+pub(crate) mod service_request_provenance;
+#[allow(dead_code)]
 pub mod service_resources;
 #[allow(dead_code)]
 pub mod service_retained_state;
 pub(crate) mod service_state_migration;
+pub(crate) mod service_state_validation;
 #[allow(dead_code)]
 pub mod service_status_projection;
 #[allow(dead_code)]
 pub mod service_store;
+pub(crate) mod service_terminal_outcome;
 #[allow(dead_code)]
 pub mod service_trace;
 #[allow(dead_code)]

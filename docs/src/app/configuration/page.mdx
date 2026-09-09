@@ -136,6 +136,44 @@ The <code>service.profiles</code> and <code>service.sessions</code> maps define
 service control-plane metadata for profile allocation, keyring posture, caller
 ownership, profile binding, lease state, and cleanup policy. These records are
 exposed through service status, MCP resources, and the HTTP service APIs.
+
+Set <code>AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled</code> on runtime
+processes to skip host process enumeration and foreign CDP endpoint probes in
+session discovery. Runtime-owned socket sessions remain visible. The default
+is <code>enabled</code>; invalid explicit values disable external discovery.
+The isolated development launcher and services pin <code>disabled</code>, and
+development doctor checks the running process environments. This does not
+sandbox browsers or sanitize retained Service records and desktop content;
+verify those independently before synthetic-only visual capture.
+
+For parallel development publication, set
+<code>AGENT_BROWSER_DEV_NAMESPACE</code> to 1–8 lowercase letters or digits,
+starting with a letter. Namespaced runtime paths, launchers, service units,
+provider containers, route users, and ingress identities are separate from
+default development. Pin every port below before installation, and retain the
+same environment for subsequent status, doctor, provider, and maintenance
+commands. Missing, duplicate, production, or default-development ports fail
+closed. Omitting the namespace preserves default development behavior.
+
+<table>
+  <thead><tr><th>Environment variable</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>AGENT_BROWSER_DEV_DASHBOARD_PORT</code></td><td>Dashboard upstream</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_BACKEND_PORT</code></td><td>Dashboard backend</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_SHADOW_PORT</code></td><td>Reserved shadow port</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_LANE_STREAM_PORT</code></td><td>Runtime lane</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_GUACAMOLE_PORT</code></td><td>Guacamole web application</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_GUACD_PORT</code></td><td>Guacamole transport</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_POSTGRES_PORT</code></td><td>Provider database</td></tr>
+  </tbody>
+</table>
+
+Check local port availability before provisioning. Separately review the new
+public HTTPS origin and immutable ingress revision before provider staging;
+namespacing does not publish a route or permit borrowing another environment's
+resources. Installation checks both production and default development
+identity for non-interference. Do not reuse their writable roots.
+
 Set <code>service.defaultBrowserBuild</code> to
 <code>stealthcdp_chromium</code> only when service-owned launches should prefer
 the patched Chromium posture. If no explicit default is configured and a ready
@@ -348,6 +386,8 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_ALLOW_FILE_ACCESS</code></td><td>Allow <code>file://</code> URLs to access local files.</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_COLOR_SCHEME</code></td><td>Color scheme preference (<code>dark</code>, <code>light</code>, <code>no-preference</code>).</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_DOWNLOAD_PATH</code></td><td>Default directory for browser downloads.</td><td>(temp directory)</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL</code></td><td>Reviewed public HTTPS origin used for initial development-provider staging and provider mutation. Requires the matching external ingress revision. Read-only status and doctor commands reuse a validated installed v2 binding when both variables are absent.</td><td>(unconfigured)</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION</code></td><td>Immutable reviewed Cooper deployment revision or receipt ID bound to the development public operator origin. Supply it with the public operator URL for staging and provider mutation; partial explicit configuration fails closed.</td><td>(unconfigured)</td></tr>
     <tr><td><code>AGENT_BROWSER_DEFAULT_TIMEOUT</code></td><td>Default timeout in ms. Keep below 30000 to avoid IPC timeouts.</td><td><code>25000</code></td></tr>
     <tr><td><code>AGENT_BROWSER_SESSION_NAME</code></td><td>Auto-save/load state persistence name.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_STATE_EXPIRE_DAYS</code></td><td>Auto-delete saved session states older than N days.</td><td><code>30</code></td></tr>

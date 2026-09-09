@@ -13,6 +13,7 @@ modules:
   - policy-adoption-feedback-loop
   - graph-backed-memory-usage
   - planning-discipline
+  - model-selection-and-calibration
   - commit-history-discipline
   - commit-and-push-cadence
   - versioning-and-release

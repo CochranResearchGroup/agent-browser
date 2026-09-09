@@ -28,6 +28,8 @@ import {
   createServiceRoutePoolRepairRequest,
   createServiceManualSeedingAcquireRequest,
   createServiceManualSeedingCloseRequest,
+  createServiceProfilePolicyMutationRequest,
+  createServiceProfileTabEvictionRequest,
   createServiceBrowserContaminationReportRequest,
   createServiceBrowserRetirementPlanRequest,
   createServiceBrowserRetirementApplyRequest,
@@ -38,6 +40,7 @@ import {
   createServiceViewerLeaseHeartbeatRequest,
   createServiceViewerLeaseReleaseRequest,
   createServiceViewerLeaseRequest,
+  deriveServiceRemoteViewHandoffResumeIntent,
   evaluateServiceTab,
   getServiceFailureRecourse,
   getServiceTabHandle,
@@ -48,10 +51,12 @@ import {
   isServiceCdpFreeActionAvailable,
   isServiceRemoteViewOpenOperatorVisibleReady,
   postServiceRequest,
+  ServiceRequestHttpError,
   probeServiceTab,
   requestServiceFileTransfer,
   captureServiceNetwork,
   captureServiceDesktopFrame,
+  classifyServiceControlPlaneAuthority,
   observeServiceDesktopEvidence,
   locateServiceDesktopControl,
   observeServiceDesktopPrompt,
@@ -82,6 +87,8 @@ import {
   requestServiceRoutePoolRepair,
   requestServiceManualSeedingAcquire,
   requestServiceManualSeedingClose,
+  requestServiceProfilePolicyMutation,
+  requestServiceProfileTabEviction,
   requestServiceBrowserContaminationReport,
   requestServiceBrowserRetirementPlan,
   requestServiceBrowserRetirementApply,
@@ -142,6 +149,48 @@ function assertServiceRequestActionDataCoverage() {
   assert.deepEqual(
     desktopResponseSchema.required,
     ['ok', 'action', 'context', 'frameReceipt', 'imageBase64'],
+  );
+  assert.deepEqual(
+    createServiceProfilePolicyMutationRequest({
+      profileId: 'research-gov',
+      expectedRevision: 7,
+      mode: 'shared-local',
+      preset: 'participant',
+      clientSubjectId: 'client:fieldwork',
+    }),
+    {
+      action: 'service_profile_policy_mutate',
+      profileId: 'research-gov',
+      clientSubjectId: 'client:fieldwork',
+      params: {
+        expectedRevision: 7,
+        mode: 'shared-local',
+        preset: 'participant',
+      },
+    },
+  );
+  assert.deepEqual(
+    createServiceProfileTabEvictionRequest({
+      authorizationId: 'profile-eviction:7',
+      tabId: 'tab:stale',
+    }),
+    {
+      action: 'service_profile_tab_evict',
+      params: {
+        authorizationId: 'profile-eviction:7',
+        tabId: 'tab:stale',
+      },
+    },
+  );
+  assert.throws(
+    () => createServiceProfilePolicyMutationRequest({
+      profileId: 'research-gov',
+      expectedRevision: 7,
+      mode: 'restricted',
+      preset: 'observer',
+      targetPolicy: {},
+    }),
+    /targetPolicy or mode and preset/,
   );
   assert.equal(desktopResponseSchema.properties.context.$ref, 'desktop-context.v1.schema.json');
   assert.equal(desktopResponseSchema.properties.frameReceipt.$ref, 'frame-receipt.v1.schema.json');
@@ -1035,6 +1084,14 @@ async function main() {
     },
     jobTimeoutMs: 45_000,
   });
+  assert.throws(
+    () =>
+      createServiceTabRequest({
+        url: 'https://example.com/route-bound',
+        params: { routePoolEntryId: 'guacamole-rdp-b' },
+      }),
+    /use requestServiceRemoteViewOpen\(\) to acquire the route and serviceTabHandle/,
+  );
   const accessPlan = {
     decision: {
       serviceRequest: {
@@ -1498,6 +1555,42 @@ async function main() {
   });
   assert.deepEqual(postRecorder.calls[0].body, request);
 
+  const routeConflictFailure = {
+    schemaVersion: 'agent-browser.service-failure-recourse.v1',
+    code: 'service_access_plan_route_browser_conflict',
+    axis: 'profile_lease',
+    phase: 'launch_admission',
+    effectState: 'no_effect',
+    retryDisposition: 'refresh_access_plan',
+    recommendedAction: 'refresh_access_plan_and_use_exact_route',
+    reuseAllowed: false,
+    safeNextActions: ['refresh_access_plan', 'submit_exact_planned_route'],
+    hardStops: ['blind_retry', 'launch_duplicate_profile_lane'],
+  };
+  await assert.rejects(
+    postServiceRequest({
+      baseUrl: 'http://127.0.0.1:4849',
+      request,
+      fetch: async () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          success: false,
+          error: routeConflictFailure.code,
+          failure: routeConflictFailure,
+        }),
+      }),
+    }),
+    (error) => {
+      assert.ok(error instanceof ServiceRequestHttpError);
+      assert.equal(error.status, 400);
+      assert.equal(error.code, routeConflictFailure.code);
+      assert.deepEqual(error.failure, routeConflictFailure);
+      assert.equal(error.response.success, false);
+      return true;
+    },
+  );
+
   const viewportFailure = {
     id: 'viewport-job-1',
     success: false,
@@ -1725,6 +1818,32 @@ async function main() {
       serviceTabHandle: tabHandle,
     },
   );
+  // A borrowed handle identifies the target, never the requesting client.
+  const borrowedHandleRequest = {
+    serviceName: 'AnotherService',
+    agentName: 'another-agent',
+    taskName: 'cross-client-evaluation',
+    serviceTabHandle: {
+      ...tabHandle,
+      profileAccess: {
+        subjectId: 'client:owner',
+        identityAssurance: 'registered-capability',
+      },
+    },
+    script: 'document.title',
+    timeoutMs: 1000,
+    maxReturnBytes: 128,
+  };
+  const borrowedHandleEvaluate = createServiceEvaluateRequest(borrowedHandleRequest);
+  assert.equal(borrowedHandleEvaluate.clientSubjectId, undefined);
+  assert.equal(borrowedHandleEvaluate.identityAssurance, undefined);
+  const explicitCallerEvaluate = createServiceEvaluateRequest({
+    ...borrowedHandleRequest,
+    clientSubjectId: 'client:caller',
+    identityAssurance: 'self-declared',
+  });
+  assert.equal(explicitCallerEvaluate.clientSubjectId, 'client:caller');
+  assert.equal(explicitCallerEvaluate.identityAssurance, 'self-declared');
   const overriddenEvaluateRequest = createServiceEvaluateRequest({
     serviceTabHandle: tabHandle,
     browserId: 'session:override',
@@ -1895,6 +2014,42 @@ async function main() {
   assert.deepEqual(diagnosticsResponse.data.controlPlaneAttestation.missingProofs, [
     'browser_owner',
   ]);
+  assert.deepEqual(classifyServiceControlPlaneAuthority(diagnosticsResponse), {
+    mode: 'observation_only',
+    observationCapable: true,
+    effectCapable: false,
+    missingProofs: ['browser_owner'],
+    reason: 'missing_control_plane_proof:browser_owner',
+    serviceTabHandle: tabHandle,
+  });
+  assert.deepEqual(
+    classifyServiceControlPlaneAuthority({
+      success: true,
+      data: {
+        serviceTabHandle: tabHandle,
+        controlPlaneAttestation: {
+          complete: true,
+          missingProofs: [],
+        },
+      },
+    }),
+    {
+      mode: 'effect_capable',
+      observationCapable: true,
+      effectCapable: true,
+      missingProofs: [],
+      reason: null,
+      serviceTabHandle: tabHandle,
+    },
+  );
+  assert.deepEqual(classifyServiceControlPlaneAuthority({ success: true, data: {} }), {
+    mode: 'unavailable',
+    observationCapable: false,
+    effectCapable: false,
+    missingProofs: [],
+    reason: 'service_tab_handle_unavailable',
+    serviceTabHandle: null,
+  });
   const diagnosticsAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
   await getServiceTabDiagnostics({
     baseUrl: 'http://127.0.0.1:4849',
@@ -2799,6 +2954,17 @@ async function main() {
   });
   assert.equal(routeOpenRequest.action, 'remote_view_open');
   assert.equal(routeOpenRequest.serviceName, 'agent-browser-dashboard');
+  // Routing must agree with the action metadata used to persist the handoff.
+  assert.equal(routeOpenRequest.browserId, 'session:rdp-a');
+  assert.equal(routeOpenRequest.sessionName, 'rdp-a');
+  const plannedSessionOpen = createServiceRemoteViewOpenRequest({
+    sessionName: 'planned-profile-session',
+    runtimeProfile: 'planned-profile',
+    params: { sessionName: 'stale-action-session' },
+  });
+  assert.equal(plannedSessionOpen.sessionName, 'planned-profile-session');
+  assert.equal(plannedSessionOpen.params.sessionName, 'planned-profile-session');
+  assert.equal(Object.hasOwn(plannedSessionOpen, 'browserId'), false);
   assert.deepEqual(routeOpenRequest.params, {
     displayAllocationId: 'display-a',
     routeId: 'route-a',
@@ -2913,6 +3079,32 @@ async function main() {
     viewerLeaseId: 'viewer-a',
     viewerId: 'operator-a',
   });
+  const takeoverEnvelopeSchema = JSON.parse(readFileSync(
+    new URL('../docs/dev/contracts/service-request.v1.schema.json', import.meta.url), 'utf8',
+  ));
+  assert.deepEqual(
+    Object.keys(controllerTakeoverRequest).filter((field) => !Object.hasOwn(takeoverEnvelopeSchema.properties, field)),
+    [],
+    'takeover convenience fields must not become unknown HTTP envelope fields',
+  );
+  const takeoverInput = Object.freeze({
+    serviceName: 'review', agentName: 'client', taskName: 'takeover',
+    browserId: 'browser-a', sessionName: 'session-a', jobTimeoutMs: 20000,
+    routeId: 'route-a', viewerLeaseId: 'lease-a', viewerId: 'viewer-a',
+    viewerName: 'Operator', openMode: 'tile', expiresAt: '2026-09-06T12:00:00Z',
+    params: Object.freeze({ routeId: 'overridden-route', extra: true }),
+  });
+  assert.deepEqual(createServiceControllerLeaseTakeoverRequest(takeoverInput), {
+    action: 'service_controller_lease_takeover',
+    serviceName: 'review', agentName: 'client', taskName: 'takeover',
+    browserId: 'browser-a', sessionName: 'session-a', jobTimeoutMs: 20000,
+    params: {
+      browserId: 'browser-a', routeId: 'route-a', viewerLeaseId: 'lease-a',
+      viewerId: 'viewer-a', viewerName: 'Operator', openMode: 'tile',
+      expiresAt: '2026-09-06T12:00:00Z', extra: true,
+    },
+  });
+  assert.deepEqual(takeoverInput.params, { routeId: 'overridden-route', extra: true });
 
   const viewerLeaseHeartbeatRequest = createServiceViewerLeaseHeartbeatRequest({
     serviceName: 'agent-browser-dashboard',
@@ -2964,6 +3156,16 @@ async function main() {
       displayAllocationId: 'display-a',
       browserId: 'session:rdp-a',
       sessionName: 'rdp-a',
+      serviceTabHandle: {
+        browserId: 'session:rdp-a',
+        sessionName: 'rdp-a',
+        tabId: 'target:target-facebook',
+        targetId: 'target-facebook',
+        profileOrigin: 'agent_browser_owned',
+        leaseHeartbeatExpected: true,
+        traceFilter: {},
+        valid: true,
+      },
       tab: {
         targetId: 'target-facebook',
         profileId: 'last30days-facebook',
@@ -3036,6 +3238,8 @@ async function main() {
   const remoteViewOpenResponse = await requestServiceRemoteViewOpen({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: remoteViewOpenWorkflow.fetch,
+    browserId: 'session:rdp-a',
+    sessionName: 'rdp-a',
     displayAllocationId: 'display-a',
     routeId: 'route-a',
     routePoolEntry: {
@@ -3067,6 +3271,7 @@ async function main() {
   assert.equal(remoteViewOpenSummary.routeId, 'route-a');
   assert.equal(remoteViewOpenSummary.tabId, 'target-facebook');
   assert.equal(remoteViewOpenSummary.profileId, 'last30days-facebook');
+  assert.equal(remoteViewOpenSummary.serviceTabHandle?.targetId, 'target-facebook');
   assert.equal(remoteViewOpenSummary.visualProof, 'browser_window_visible');
   assert.equal(remoteViewOpenSummary.browserBuildState, 'matched');
   assert.equal(remoteViewOpenSummary.requestedBrowserBuild, 'stealthcdp_chromium');
@@ -3077,8 +3282,12 @@ async function main() {
   assert.match(remoteViewOpenSummary.summary, /profile=last30days-facebook/);
   assert.equal(requireServiceRemoteViewOpenOperatorVisible(remoteViewOpenResponse)?.status, 'opened');
   assert.equal(remoteViewOpenWorkflow.calls[0].body.action, 'remote_view_open');
+  assert.equal(remoteViewOpenWorkflow.calls[0].body.browserId, 'session:rdp-a');
+  assert.equal(remoteViewOpenWorkflow.calls[0].body.sessionName, 'rdp-a');
   assert.equal(remoteViewOpenWorkflow.calls[0].body.allowInfrastructureOnlyReadiness, undefined);
   assert.deepEqual(remoteViewOpenWorkflow.calls[0].body.params, {
+    browserId: 'session:rdp-a',
+    sessionName: 'rdp-a',
     displayAllocationId: 'display-a',
     routeId: 'route-a',
     routePoolEntry: {
@@ -3108,6 +3317,92 @@ async function main() {
     handoffId: 'handoff-route-a',
     handoffUrl: 'https://agent-browser.example.test/remote-view/handoff-route-a',
   });
+
+  const researchGovHandle = {
+    browserId: 'session:research-gov-nsf',
+    sessionName: 'handoff-research-gov',
+    tabId: 'target:research-gov',
+    targetId: 'research-gov-target',
+    url: 'https://www.research.gov/research-web/',
+    title: 'Research.gov',
+    profileId: 'research-gov-nsf',
+    profileOrigin: 'agent_browser_owned',
+    leaseId: 'handoff-research-gov',
+    leaseState: 'shared',
+    cleanupPolicy: 'close_tabs',
+    leaseHeartbeatExpected: true,
+    ownerSessionId: 'handoff-research-gov',
+    jobId: null,
+    traceFilter: {
+      browserId: 'session:research-gov-nsf',
+      profileId: 'research-gov-nsf',
+      sessionId: 'handoff-research-gov',
+      serviceName: 'research-gov-operator',
+      agentName: 'codex',
+      taskName: 'prepare-nsf-proposal',
+    },
+    valid: true,
+    staleReason: null,
+  };
+  assert.deepEqual(
+    deriveServiceRemoteViewHandoffResumeIntent({
+      success: true,
+      data: {
+        status: 'ready',
+        handoffId: 'r580584',
+        handoffUrl: 'https://agent-browser.example.test/remote-view/r580584',
+        providerExternalUrl: 'https://guac.example/#/client/research-gov',
+        browserId: 'session:research-gov-nsf',
+        sessionName: 'handoff-research-gov',
+        targetId: 'research-gov-target',
+        tab: {
+          profileId: 'research-gov-nsf',
+          serviceTabHandle: researchGovHandle,
+        },
+      },
+    }),
+    {
+      serviceName: 'research-gov-operator',
+      agentName: 'codex',
+      taskName: 'prepare-nsf-proposal',
+      browserId: 'session:research-gov-nsf',
+      sessionName: 'handoff-research-gov',
+      runtimeProfile: 'research-gov-nsf',
+      targetId: 'research-gov-target',
+      url: 'https://www.research.gov/research-web/',
+      serviceTabHandle: researchGovHandle,
+    },
+  );
+  assert.throws(
+    () =>
+      deriveServiceRemoteViewHandoffResumeIntent({
+        success: true,
+        data: {
+          serviceTabHandle: {
+            ...researchGovHandle,
+            traceFilter: {
+              ...researchGovHandle.traceFilter,
+              taskName: null,
+            },
+          },
+        },
+      }),
+    /durable handoff resume intent is missing taskName/,
+  );
+  assert.throws(
+    () =>
+      deriveServiceRemoteViewHandoffResumeIntent({
+        success: true,
+        data: {
+          serviceTabHandle: {
+            ...researchGovHandle,
+            valid: false,
+            staleReason: 'target_missing',
+          },
+        },
+      }),
+    /service tab handle is stale: target_missing/,
+  );
 
   const rawOnlyRemoteViewOpenWorkflow = createFetchRecorder({
     success: true,
@@ -3484,15 +3779,21 @@ async function main() {
   for (const [request, action] of [
     [requestServiceManualSeedingAcquire, 'service_profile_manual_seeding_acquire'],
     [requestServiceManualSeedingClose, 'service_profile_manual_seeding_close'],
+    [requestServiceProfilePolicyMutation, 'service_profile_policy_mutate'],
+    [requestServiceProfileTabEviction, 'service_profile_tab_evict'],
     [requestServiceBrowserContaminationReport, 'service_browser_contamination_report'],
     [requestServiceBrowserRetirementPlan, 'service_browser_retirement_plan'],
     [requestServiceBrowserRetirementApply, 'service_browser_retirement_apply'],
   ]) {
     const workflow = createFetchRecorder({ success: true, data: {} });
     const options = action === 'service_profile_manual_seeding_acquire'
-      ? { profileId: 'contractor-portal', targetServiceId: 'odollo-contractor-portal' }
+        ? { profileId: 'contractor-portal', targetServiceId: 'odollo-contractor-portal' }
       : action === 'service_profile_manual_seeding_close'
         ? { profileId: 'contractor-portal', targetServiceId: 'odollo-contractor-portal', handoffId: 'handoff-seeding', pid: 4242 }
+        : action === 'service_profile_policy_mutate'
+          ? { profileId: 'research-gov', expectedRevision: 7, mode: 'shared-local', preset: 'participant' }
+          : action === 'service_profile_tab_evict'
+            ? { authorizationId: 'profile-eviction:7', tabId: 'tab:stale' }
         : action === 'service_browser_retirement_plan'
           ? { browserId: 'browser-inert', expiresAt: '2026-08-29T00:00:00Z' }
           : action === 'service_browser_retirement_apply'

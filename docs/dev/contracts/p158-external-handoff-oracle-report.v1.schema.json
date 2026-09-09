@@ -1,0 +1,30 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://agent-browser.local/contracts/p158-external-handoff-oracle-report.v1.schema.json",
+  "title":"Plan 0158 external handoff oracle report",
+  "type":"object",
+  "required":["schemaVersion","planId","auditId","fixtureId","inputSha256","auditedAt","repairAttempted","passed","summary","urlClassifications","findings"],
+  "properties":{
+    "schemaVersion":{"const":"agent-browser.p158-external-handoff-oracle-report.v1"},"planId":{"const":"P158"},
+    "auditId":{"$ref":"#/$defs/id"},"fixtureId":{"$ref":"#/$defs/id"},"inputSha256":{"$ref":"#/$defs/sha256"},"auditedAt":{"type":"string","format":"date-time"},"repairAttempted":{"const":false},"passed":{"type":"boolean"},
+    "summary":{"$ref":"#/$defs/summary"},
+    "urlClassifications":{"type":"array","items":{"$ref":"#/$defs/urlClassification"}},
+    "findings":{"type":"array","items":{"$ref":"#/$defs/finding"}}
+  },"additionalProperties":false,
+  "$defs":{
+    "id":{"type":"string","minLength":1,"maxLength":200},"sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "urlRole":{"enum":["starting_handoff","location_header","iframe_src","form_action","websocket_endpoint","reconnect_target","copied_action","error_action","provider_external_url","route_binding","local_embed_url","dashboard_embed_url","health_url"]},
+    "hostClass":{"enum":["public","localhost_literal","ipv4_loopback","ipv6_loopback","rfc1918","link_local","local_domain","raw_guacamole","invalid"]},
+    "findingCode":{"enum":["external_vantage_unproven","invalid_handoff_url","non_https_url","loopback_url_leak","private_network_url_leak","link_local_url_leak","local_domain_url_leak","raw_guacamole_url_leak","forbidden_role_url_leak","dns_failure","tls_failure","redirect_failure","cookie_failure","iframe_failure","form_action_failure","websocket_failure","reconnect_failure","operator_not_ready","pixels_before_ready","visible_identity_mismatch","handoff_changed","duplicate_cold_launch","capture_gap"]},
+    "summary":{
+      "type":"object","required":["urlObservationCount","ingressCheckCount","reconnectCount","findingCount","findingCounts"],
+      "properties":{"urlObservationCount":{"type":"integer","minimum":0},"ingressCheckCount":{"type":"integer","minimum":0},"reconnectCount":{"type":"integer","minimum":0},"findingCount":{"type":"integer","minimum":0},"findingCounts":{
+        "type":"object","required":["external_vantage_unproven","invalid_handoff_url","non_https_url","loopback_url_leak","private_network_url_leak","link_local_url_leak","local_domain_url_leak","raw_guacamole_url_leak","forbidden_role_url_leak","dns_failure","tls_failure","redirect_failure","cookie_failure","iframe_failure","form_action_failure","websocket_failure","reconnect_failure","operator_not_ready","pixels_before_ready","visible_identity_mismatch","handoff_changed","duplicate_cold_launch","capture_gap"],
+        "properties":{"external_vantage_unproven":{"$ref":"#/$defs/count"},"invalid_handoff_url":{"$ref":"#/$defs/count"},"non_https_url":{"$ref":"#/$defs/count"},"loopback_url_leak":{"$ref":"#/$defs/count"},"private_network_url_leak":{"$ref":"#/$defs/count"},"link_local_url_leak":{"$ref":"#/$defs/count"},"local_domain_url_leak":{"$ref":"#/$defs/count"},"raw_guacamole_url_leak":{"$ref":"#/$defs/count"},"forbidden_role_url_leak":{"$ref":"#/$defs/count"},"dns_failure":{"$ref":"#/$defs/count"},"tls_failure":{"$ref":"#/$defs/count"},"redirect_failure":{"$ref":"#/$defs/count"},"cookie_failure":{"$ref":"#/$defs/count"},"iframe_failure":{"$ref":"#/$defs/count"},"form_action_failure":{"$ref":"#/$defs/count"},"websocket_failure":{"$ref":"#/$defs/count"},"reconnect_failure":{"$ref":"#/$defs/count"},"operator_not_ready":{"$ref":"#/$defs/count"},"pixels_before_ready":{"$ref":"#/$defs/count"},"visible_identity_mismatch":{"$ref":"#/$defs/count"},"handoff_changed":{"$ref":"#/$defs/count"},"duplicate_cold_launch":{"$ref":"#/$defs/count"},"capture_gap":{"$ref":"#/$defs/count"}},"additionalProperties":false
+      }},"additionalProperties":false
+    },
+    "count":{"type":"integer","minimum":0},
+    "urlClassification":{"type":"object","required":["observationId","role","url","scheme","hostClass","operatorSafe"],"properties":{"observationId":{"$ref":"#/$defs/id"},"role":{"$ref":"#/$defs/urlRole"},"url":{"type":"string","minLength":1},"scheme":{"type":["string","null"]},"hostClass":{"$ref":"#/$defs/hostClass"},"operatorSafe":{"type":"boolean"}},"additionalProperties":false},
+    "finding":{"type":"object","required":["findingId","code","severity","message","observationIds","checkIds","reconnectIds","field","expected","observed","repairAttempted"],"properties":{"findingId":{"$ref":"#/$defs/id"},"code":{"$ref":"#/$defs/findingCode"},"severity":{"enum":["blocking","needs_evidence"]},"message":{"type":"string","minLength":1},"observationIds":{"type":"array","uniqueItems":true,"items":{"$ref":"#/$defs/id"}},"checkIds":{"type":"array","uniqueItems":true,"items":{"$ref":"#/$defs/id"}},"reconnectIds":{"type":"array","uniqueItems":true,"items":{"$ref":"#/$defs/id"}},"field":{"type":["string","null"],"minLength":1},"expected":{},"observed":{},"repairAttempted":{"const":false}},"additionalProperties":false}
+  }
+}

@@ -14,6 +14,19 @@ pub(crate) fn remote_view_open_ensure_display_access(
             route_binding.route_id
         ));
     };
+    let owner = super::super::display_owner::route_display_owner(
+        Some(display_name),
+        route_binding.route_user.as_deref(),
+    );
+    if owner.get("verified").and_then(Value::as_bool) != Some(true) {
+        return Err(format!(
+            "{}: displayOwnerEvidence={owner}",
+            owner
+                .get("code")
+                .and_then(Value::as_str)
+                .unwrap_or("route_display_owner_unproven")
+        ));
+    }
     let initial_probe = remote_view_open_display_access_probe(display_name);
     if initial_probe
         .get("success")
@@ -50,10 +63,34 @@ pub(crate) fn remote_view_open_ensure_display_access(
     let helper_path = env::var("AGENT_BROWSER_PRIVILEGED_HELPER").unwrap_or_else(|_| {
         "/usr/local/libexec/agent-browser/agent-browser-privileged-helper".to_string()
     });
-    let status = Command::new("timeout")
+    // The runtime deliberately cannot elevate. Let the user manager supervise
+    // only the installed, sudoers-restricted grant helper outside that sandbox.
+    // Runtime isolation is unchanged. The inner timeout bounds the grant itself;
+    // the outer deadline also bounds unit creation and collection.
+    let mut grant = Command::new("timeout");
+    #[cfg(target_os = "linux")]
+    grant.args([
+        "--kill-after=1",
+        "6s",
+        "/usr/bin/systemd-run",
+        "--user",
+        "--quiet",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--unit",
+        &format!("agent-browser-display-grant-{}", uuid::Uuid::new_v4()),
+        "--property=PrivateUsers=false",
+        "--property=PrivateTmp=false",
+        "--property=NoNewPrivileges=false",
+        "--property=RuntimeMaxSec=4s",
+        "--property=TimeoutStopSec=1s",
+        "--property=KillMode=control-group",
+        "timeout",
+    ]);
+    let output = grant
         .args([
-            "--kill-after=1",
-            REMOTE_VIEW_DISPLAY_ACCESS_GRANT_TIMEOUT_SECONDS,
+            "--kill-after=1", REMOTE_VIEW_DISPLAY_ACCESS_GRANT_TIMEOUT_SECONDS,
             "sudo",
             "-n",
             &helper_path,
@@ -67,20 +104,20 @@ pub(crate) fn remote_view_open_ensure_display_access(
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .stderr(Stdio::piped())
+        .output()
         .map_err(|err| {
             format!(
                 "display_access_grant_failed: route '{}' display '{}' bounded helper could not start: {}",
                 route_binding.route_id, display_name, err
             )
         })?;
-    if !status.success() {
+    if !output.status.success() {
         return Err(remote_view_display_access_grant_error(
             &route_binding.route_id,
             display_name,
-            status.code().unwrap_or(-1),
-            "",
+            output.status.code().unwrap_or(-1),
+            &String::from_utf8_lossy(&output.stderr),
         ));
     }
     let final_probe = remote_view_open_display_access_probe(display_name);
@@ -107,6 +144,11 @@ pub(crate) fn remote_view_display_access_grant_error(
     exit_code: i32,
     stderr: &str,
 ) -> String {
+    let stderr = stderr
+        .chars()
+        .filter(|c| !c.is_control() || matches!(c, '\n' | '\t'))
+        .take(1024)
+        .collect::<String>();
     let stderr_suffix = if stderr.is_empty() {
         String::new()
     } else {

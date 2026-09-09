@@ -34,6 +34,172 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+
+/// Restore a daemon-local connection for an authorized retained handle without
+/// acquisition. Revalidate process and endpoint identity before any CDP effect;
+/// install the manager only after exact-target attachment and a final owner fence.
+pub(crate) async fn ensure_retained_service_tab_browser(
+    cmd: &Value,
+    state: &mut DaemonState,
+) -> Result<(), String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "serviceTabHandle is required".to_string())?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
+    if let Some(manager) = state.browser.as_ref() {
+        let target_is_attached =
+            handle
+                .get("targetId")
+                .and_then(Value::as_str)
+                .is_some_and(|target| {
+                    manager
+                        .pages_list()
+                        .iter()
+                        .any(|page| page.target_id == target)
+                });
+        if target_is_attached || manager.owns_launched_browser_process() {
+            return Ok(());
+        }
+        // Retained recovery attaches only the authorized target. A subsequent
+        // original handle may name another surviving target, including after
+        // release empties that manager. Re-run the full identity fence and
+        // replace only the borrowed connection; never drop an owned process.
+    }
+    reattach_verified_retained_target(
+        handle
+            .get("browserId")
+            .and_then(Value::as_str)
+            .ok_or("serviceTabHandle.browserId is required")?,
+        handle
+            .get("profileId")
+            .and_then(Value::as_str)
+            .ok_or("serviceTabHandle.profileId is required")?,
+        handle
+            .get("targetId")
+            .and_then(Value::as_str)
+            .ok_or("serviceTabHandle.targetId is required")?,
+        state,
+    )
+    .await
+}
+
+/// Rehydrate a retained connection after the caller has authorized the exact
+/// target through a service handle or authenticated durable-handoff resolution.
+/// This shared identity fence neither acquires a profile nor transfers ownership.
+pub(crate) async fn reattach_verified_retained_target(
+    browser_id: &str,
+    requested_profile_id: &str,
+    target_id: &str,
+    state: &mut DaemonState,
+) -> Result<(), String> {
+    use crate::native::runtime_lifecycle::{digest_json, RuntimeLifecycleAuthority};
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+    let repository = LockedServiceStateRepository::default_json()?;
+    let mut binding =
+        crate::runtime_owner_transfer::owner_binding_for_session(&repository, &state.session_id)?
+            .ok_or_else(|| {
+            "service_tab_recovery_owner_missing: retained owner evidence is unavailable".to_string()
+        })?;
+    RuntimeLifecycleAuthority::new(&repository).authorize_effect(&mut binding)?;
+    let snapshot = repository.load_snapshot()?;
+    let browser = snapshot
+        .browsers
+        .get(&binding.claim.logical_browser_id)
+        .filter(|browser| {
+            browser_id == browser.id
+                && browser.profile_id.as_deref().is_some_and(|profile_id| {
+                    let requested = Some(requested_profile_id);
+                    requested == Some(profile_id)
+                        || requested.is_some_and(|requested| {
+                            snapshot
+                                .profiles
+                                .get(profile_id)
+                                .and_then(|profile| profile.user_data_dir.as_deref())
+                                == Some(requested)
+                        })
+                })
+        })
+        .ok_or_else(|| {
+            "service_tab_recovery_identity_mismatch: retained browser or Profile binding differs"
+                .to_string()
+        })?;
+    let profile_id = browser
+        .profile_id
+        .as_deref()
+        .ok_or("service_tab_recovery_identity_mismatch: profile record missing")?;
+    let profile = snapshot
+        .profiles
+        .get(profile_id)
+        .ok_or("service_tab_recovery_identity_mismatch: profile record missing")?;
+    let resolved_profile = crate::runtime_profile::resolve_profile(
+        profile.user_data_dir.as_deref(),
+        (!profile_id.starts_with("custom:")).then_some(profile_id),
+    )?;
+    if crate::runtime_profile::canonical_profile_identity_digest(&resolved_profile.user_data_dir)?
+        != binding.claim.profile_identity_digest
+    {
+        return Err(
+            "service_tab_recovery_identity_mismatch: configured physical profile differs".into(),
+        );
+    }
+    let owner = snapshot
+        .runtime_owner_registry
+        .owner(&binding.claim.profile_identity_digest)
+        .ok_or_else(|| {
+            "service_tab_recovery_owner_missing: retained owner evidence is unavailable".to_string()
+        })?;
+    let process = browser
+        .pid
+        .and_then(|pid| crate::process_identity::capture_process_identity(pid, None, None))
+        .ok_or_else(|| {
+            "service_tab_recovery_process_unproven: original process identity is unavailable"
+                .to_string()
+        })?;
+    if digest_json(&process)? != binding.claim.process_instance_digest {
+        return Err(
+            "service_tab_recovery_identity_mismatch: original process identity differs".to_string(),
+        );
+    }
+    let endpoint = browser.cdp_endpoint.as_deref().ok_or_else(|| {
+        "service_tab_recovery_endpoint_unproven: retained endpoint is unavailable".to_string()
+    })?;
+    if format!("{:x}", Sha256::digest(endpoint.as_bytes())) != owner.cdp_endpoint_identity_digest {
+        return Err(
+            "service_tab_recovery_identity_mismatch: retained endpoint identity differs"
+                .to_string(),
+        );
+    }
+    let manager =
+        BrowserManager::connect_retained_service_tab(endpoint, target_id, resolved_profile)
+            .await
+            .map_err(|error| {
+                if error.starts_with("service_tab_recovery_target_missing:") {
+                    error
+                } else {
+                    format!("service_tab_recovery_attach_failed: {error}")
+                }
+            })?;
+    RuntimeLifecycleAuthority::new(&repository)
+        .authorize_effect(&mut binding)
+        .map_err(|error| format!("service_tab_recovery_attach_failed: {error}"))?;
+    if crate::process_identity::capture_process_identity(process.pid, None, None).as_ref()
+        != Some(&process)
+    {
+        return Err("service_tab_recovery_attach_failed: process changed during attachment".into());
+    }
+    state.reset_input_state();
+    state.attached_runtime_profile = manager.runtime_profile_name().map(str::to_string);
+    state.attached_browser_pid = browser.pid;
+    state.close_behavior = crate::native::action_runtime::runtime::CloseBehavior::Detach;
+    state.runtime_owner_binding = Some(binding);
+    state.browser = Some(manager);
+    state.subscribe_to_browser_events();
+    state.start_fetch_handler();
+    state.start_dialog_handler();
+    state.update_stream_client().await;
+    Ok(())
+}
 pub(crate) async fn handle_service_probe(
     cmd: &Value,
     state: &mut DaemonState,
@@ -42,7 +208,7 @@ pub(crate) async fn handle_service_probe(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "probe requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
     let probe = cmd
         .get("probe")
         .and_then(Value::as_object)
@@ -77,6 +243,7 @@ pub(crate) async fn handle_service_probe(
             max_detectors
         ));
     }
+    ensure_retained_service_tab_browser(cmd, state).await?;
     let mgr = state.browser.as_mut().ok_or_else(|| {
         "Cannot probe: target browser session is not running; request a service tab first"
             .to_string()
@@ -400,7 +567,7 @@ pub(crate) mod action_commands {
             .get("serviceTabHandle")
             .and_then(Value::as_object)
             .ok_or_else(|| "evaluate requires serviceTabHandle".to_string())?;
-        validate_service_tab_handle_for_daemon(handle, state)?;
+        validate_service_tab_handle_for_daemon(handle, cmd, state)?;
         if cmd.get("returnByValue").and_then(Value::as_bool) == Some(false) {
             return Err(
                 "evaluate requires returnByValue=true so results can be capped".to_string(),
@@ -420,6 +587,7 @@ pub(crate) mod action_commands {
             .get("maxReturnBytes")
             .and_then(Value::as_u64)
             .ok_or_else(|| "evaluate requires positive maxReturnBytes".to_string())?;
+        super::ensure_retained_service_tab_browser(cmd, state).await?;
         let mgr = state.browser.as_mut().ok_or_else(|| {
             "Cannot evaluate: target browser session is not running; request a service tab first"
                 .to_string()

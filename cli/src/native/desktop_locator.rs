@@ -819,11 +819,7 @@ fn overlap_ratio(left: PixelBounds, right: PixelBounds) -> u32 {
     let union = u64::from(left.width) * u64::from(left.height)
         + u64::from(right.width) * u64::from(right.height)
         - intersection;
-    if union == 0 {
-        0
-    } else {
-        ((intersection * 10_000) / union) as u32
-    }
+    (intersection * 10_000).checked_div(union).unwrap_or(0) as u32
 }
 
 fn validate_ocr_evidence(

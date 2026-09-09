@@ -866,6 +866,7 @@ async fn auto_launch_with_authority(
     apply_retained_remote_headed_metadata(&mut metadata, retained_remote_headed.as_ref());
     metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
     if !protected {
+        super::retained_launch::recover(&state.session_id, &effective_command).await?;
         if let Some(target) = shared_profile_attach_target_for_auto_launch(
             &metadata,
             &effective_command,
@@ -1183,6 +1184,10 @@ pub(crate) async fn try_auto_restore_state(state: &mut DaemonState) {
     }
 }
 pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let admitted =
+        super::native_acquisition::admit_cold_navigation(cmd, state, &repository.load_snapshot()?)?;
+    let cmd = admitted.as_ref().unwrap_or(cmd);
     let headless = cmd
         .get("headless")
         .and_then(|v| v.as_bool())
@@ -1547,7 +1552,23 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
         service_host,
         ServiceBrowserHealth::Ready,
         Some(metadata),
-    );
+    )
+    .and_then(|()| {
+        // The preliminary native launch creates the first tab. Persist its
+        // admitted child custody so the following CLI connection can navigate it.
+        if effective_cmd.get("profileChildAccess").is_some() {
+            crate::native::browser_navigation::persist_service_owned_navigate_tab(
+                &effective_cmd,
+                &state.session_id,
+                state
+                    .browser
+                    .as_ref()
+                    .ok_or("native_launch_browser_missing")?,
+                &json!({}),
+            )?;
+        }
+        Ok(())
+    });
     require_owned_launch_persistence(persistence, || cleanup_failed_owned_launch(state)).await?;
     state.launch_hash = Some(new_hash);
     state.subscribe_to_browser_events();

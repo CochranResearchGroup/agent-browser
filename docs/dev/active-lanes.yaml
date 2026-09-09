@@ -1,5 +1,37 @@
 schema_version: 1
 lanes:
+  - id: P157
+    objective: Complete frozen-candidate adversarial acceptance for profile permissions, runtime convergence, remote handoffs, dashboard truth, and causal logging
+    plan: docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md
+    plan_ref: refs/heads/plan/profile-permissions-and-request-provenance
+    branch: plan/profile-permissions-and-request-provenance
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 7238f8396ad17c30ae0fcefd326f0ef68df53a1e
+    remote_ref: refs/remotes/origin/plan/profile-permissions-and-request-provenance
+    integration_receipt: null
+    integration: merge
+    dependencies: [P144, P156]
+    overlaps: [P144, P156]
+    reconciled_overlaps: [P144, P156]
+    updated_at: 2026-09-02
+  - id: P156
+    objective: Add explicit full-shutdown runtime replacement so workstation installation can converge after cooperative takeover fails
+    plan: docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md
+    plan_ref: refs/heads/feature/full-runtime-shutdown
+    branch: feature/full-runtime-shutdown
+    target: main
+    plan_state: CLOSED
+    custody_state: INTEGRATION_READY
+    checkpoint: 3bfb1c49f01c97921277db8cb6b47b85772528d9
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P148, P150, P155]
+    overlaps: [P144]
+    reconciled_overlaps: [P144_authority_observed_no_lease_mutation]
+    updated_at: 2026-09-02
   - id: P144
     objective: Replace inferred profile lease authority with one canonical fenced authority kernel
     plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md
@@ -15,4 +47,20 @@ lanes:
     dependencies: []
     overlaps: []
     reconciled_overlaps: []
+    updated_at: 2026-09-02
+  - id: P155
+    objective: Derive deterministic durable-handoff resume intent and truthful client authority disposition
+    plan: docs/dev/plans/0155-2026-09-02-durable-handoff-resume-intent-plan.md
+    plan_ref: refs/heads/fieldwork/research-gov-deterministic-automation
+    branch: fieldwork/research-gov-deterministic-automation
+    target: main
+    plan_state: CLOSED
+    custody_state: INTEGRATION_READY
+    checkpoint: 804519f0aa2a7d2ced913445ee01c3d58aab045f
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P150]
+    overlaps: [P144]
+    reconciled_overlaps: [P144_authority_consumed_read_only_no_lease_mutation]
     updated_at: 2026-09-02

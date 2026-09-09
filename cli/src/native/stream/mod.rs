@@ -5,8 +5,14 @@ mod cdp_loop;
 pub(crate) mod chat;
 mod dashboard;
 mod dashboard_auth;
+pub(crate) use dashboard_auth::verify_operator_focus;
 mod discovery;
 mod foreign_cdp_control;
+mod guacamole_primary_binding;
+mod guacamole_primary_protocol;
+mod guacamole_primary_provider;
+mod guacamole_primary_registry;
+mod guacamole_primary_transport;
 mod http;
 mod websocket;
 
@@ -261,6 +267,7 @@ impl StreamServer {
         let last_tabs_bg = last_tabs.clone();
         let last_engine_bg = last_engine.clone();
         let recording_bg = recording.clone();
+        let cdp_session_name = session_id.clone();
         let cdp_task = tokio::spawn(async move {
             cdp_loop::cdp_event_loop(
                 frame_tx_bg,
@@ -275,6 +282,8 @@ impl StreamServer {
                 last_tabs_bg,
                 last_engine_bg,
                 recording_bg,
+                cdp_session_name,
+                port,
                 shutdown_rx,
             )
             .await;

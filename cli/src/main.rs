@@ -23,6 +23,7 @@ mod runtime_multiplicity;
 #[allow(dead_code)]
 mod runtime_owner_transfer;
 mod runtime_profile;
+mod runtime_replacement;
 mod runtime_retention;
 mod session_supervisor;
 #[cfg(test)]
@@ -31,6 +32,7 @@ mod upgrade;
 mod validation;
 mod windows_browser_doctor;
 mod windows_browser_setup;
+mod workstation_convergence;
 mod workstation_install;
 
 use serde_json::json;
@@ -51,9 +53,7 @@ use connection::{
 use flags::{clean_args, parse_flags, upsert_runtime_profile_in_user_config, Flags};
 use install::{run_install, run_install_doctor, run_install_stealthcdp_chromium};
 use native::cdp::chrome::{launch_chrome_detached, LaunchOptions};
-use native::service_config::{
-    record_persisted_profile_seeding_handoff_launch, refresh_persisted_profile_seeding_handoffs,
-};
+use native::service_config::record_persisted_profile_seeding_handoff_launch;
 use output::{
     print_command_help, print_help, print_response_with_opts, print_version, OutputOptions,
 };
@@ -622,6 +622,61 @@ fn runtime_profile_name_for_launch(flags: &Flags) -> Option<String> {
         flags.cli_runtime_profile,
         flags.default_runtime_profile.as_deref(),
     )
+}
+
+/// Keep a native lane's proven profile ahead of generic CLI startup defaults.
+fn apply_existing_lane_profile_to_flags(
+    flags: &mut Flags,
+    command: &serde_json::Value,
+    state: &native::service_model::ServiceState,
+) -> Result<(), String> {
+    let mut request = command.clone();
+    native::service_request_provenance::attribute_native_session(&mut request, &flags.session);
+    for (field, value) in [
+        ("runtimeProfile", flags.runtime_profile.as_ref()),
+        ("profile", flags.profile.as_ref()),
+    ] {
+        if let Some(value) = value {
+            request[field] = json!(value);
+        }
+    }
+    let mut options = LaunchOptions {
+        runtime_profile: flags.runtime_profile.clone(),
+        profile: flags.profile.clone(),
+        ..LaunchOptions::default()
+    };
+    native::action_runtime::runtime::apply_existing_session_profile_selection(
+        &mut options,
+        &request,
+        Some(&flags.session),
+        state,
+    )?;
+    flags.runtime_profile = options.runtime_profile;
+    flags.profile = options.profile;
+    Ok(())
+}
+
+fn attribute_prestart_launch(
+    launch: &mut serde_json::Value,
+    command: &serde_json::Value,
+    session: &str,
+) {
+    for field in [
+        "serviceName",
+        "agentName",
+        "taskName",
+        "clientSubjectId",
+        "identityAssurance",
+        "traceId",
+    ] {
+        if let Some(value) = command.get(field) {
+            launch[field] = value.clone();
+        }
+    }
+    native::service_request_provenance::attribute_native_session(launch, session);
+    if let Some(id) = command.get("id") {
+        launch["causedByRequestId"] = id.clone();
+    }
 }
 
 fn runtime_profile_name_for_launch_parts(
@@ -1756,6 +1811,21 @@ fn exit_close_identity_failure(error: &str, json_mode: bool) -> ! {
 }
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    if let Some(result) = process_identity::run_namespace_observer_entry(
+        &env::args().collect::<Vec<_>>(),
+    )
+    .or_else(|| {
+        native::remote_view::display_owner::run_namespace_observer_entry(
+            &env::args().collect::<Vec<_>>(),
+        )
+    }) {
+        if let Err(error) = result {
+            eprintln!("{error}");
+            exit(1);
+        }
+        return;
+    }
     // Rust ignores SIGPIPE by default, causing println! to panic on broken pipes.
     // Reset to SIG_DFL so the OS terminates the process cleanly instead.
     #[cfg(unix)]
@@ -1871,14 +1941,10 @@ fn main() {
     }
 
     let args: Vec<String> = env::args().skip(1).collect();
-    if matches!(
-        args.first().map(String::as_str),
-        Some("service") | Some("runtime")
-    ) {
-        let _ = refresh_persisted_profile_seeding_handoffs();
-    }
-    let mut flags = parse_flags(&args);
     let clean = clean_args(&args);
+    // Parsing and read-only commands must not persist lifecycle observations.
+    // Explicit Service reconciliation owns detached seeding-handoff refresh.
+    let mut flags = parse_flags(&args);
 
     let has_help = args.iter().any(|a| a == "--help" || a == "-h");
     let has_version = args.iter().any(|a| a == "--version" || a == "-V");
@@ -2119,10 +2185,10 @@ fn main() {
 
     let authority_selected_session = match cmd.get("action").and_then(|value| value.as_str()) {
         Some("service_profile_acquire") => {
-            native::service_profile_recovery::profile_acquisition_daemon_route(&cmd).map(Some)
+            native::service_profile_acquisition::profile_acquisition_daemon_route(&cmd).map(Some)
         }
         Some("service_profile_recovery_apply") => {
-            native::service_profile_recovery::profile_recovery_apply_daemon_route(&cmd).map(Some)
+            native::service_profile_acquisition::profile_recovery_apply_daemon_route(&cmd).map(Some)
         }
         _ => Ok(None),
     };
@@ -2191,12 +2257,18 @@ fn main() {
         let action = cmd.get("action").and_then(|v| v.as_str());
         let resp = match result {
             Ok(data) => connection::Response {
+                id: None,
+                failure: None,
+                terminal_outcome: None,
                 success: true,
                 data: Some(data),
                 error: None,
                 warning: None,
             },
             Err(e) => connection::Response {
+                id: None,
+                failure: None,
+                terminal_outcome: None,
                 success: false,
                 data: None,
                 error: Some(e),
@@ -2211,7 +2283,72 @@ fn main() {
         return;
     }
 
-    if !command_skips_browser_launch_for_prestart(&cmd) {
+    // Local operator maintenance never routes through consumer service ingress.
+    if let Some(result) = native::service_connection_reconcile::dispatch(&cmd) {
+        let response = match result {
+            Ok(data) => connection::Response {
+                success: true,
+                data: Some(data),
+                ..Default::default()
+            },
+            Err(error) => connection::Response {
+                error: Some(error),
+                ..Default::default()
+            },
+        };
+        output::print_response_with_opts(
+            &response,
+            Some("service_connections_reconcile"),
+            &OutputOptions::from_flags(&flags),
+        );
+        if !response.success {
+            exit(1);
+        }
+        return;
+    }
+
+    // Validate an explicitly selected Service State file before any daemon or
+    // default-store path. The receipt binds the exact bytes to this executable.
+    if let Some(result) = native::service_state_validation::dispatch_service_state_validation(&cmd)
+    {
+        let action = cmd.get("action").and_then(|value| value.as_str());
+        let resp = match result {
+            Ok(receipt) => {
+                let success = receipt.accepted;
+                let error = receipt
+                    .error
+                    .as_ref()
+                    .map(|validation_error| validation_error.message.clone());
+                connection::Response {
+                    id: None,
+                    failure: None,
+                    terminal_outcome: None,
+                    success,
+                    data: serde_json::to_value(receipt).ok(),
+                    error,
+                    warning: None,
+                }
+            }
+            Err(error) => connection::Response {
+                id: None,
+                failure: None,
+                terminal_outcome: None,
+                success: false,
+                data: None,
+                error: Some(error),
+                warning: None,
+            },
+        };
+        output::print_response_with_opts(&resp, action, &OutputOptions::from_flags(&flags));
+        if !resp.success {
+            exit(1);
+        }
+        return;
+    }
+
+    if !command_skips_browser_launch_for_prestart(&cmd)
+        && !connection::daemon_startup_ready(&flags.session)
+    {
         cmd["serviceState"] = json!(flags.service_state.clone());
     }
 
@@ -2221,6 +2358,12 @@ fn main() {
         let mut state = native::action_runtime::DaemonState::new();
         let raw = rt.block_on(native::actions::execute_command(&cmd, &mut state));
         let resp = connection::Response {
+            id: raw
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
+            failure: raw.get("failure").cloned(),
+            terminal_outcome: raw.get("terminalOutcome").cloned(),
             success: raw
                 .get("success")
                 .and_then(|value| value.as_bool())
@@ -2247,6 +2390,9 @@ fn main() {
         match force_close_session_from_metadata(&flags.session) {
             Ok(true) => {
                 let resp = connection::Response {
+                    id: None,
+                    failure: None,
+                    terminal_outcome: None,
                     success: true,
                     data: Some(json!({
                         "closed": true,
@@ -2289,6 +2435,9 @@ fn main() {
                     match force_close_session_from_metadata(&flags.session) {
                         Ok(true) => {
                             let resp = connection::Response {
+                                id: None,
+                                failure: None,
+                                terminal_outcome: None,
                                 success: true,
                                 data: Some(json!({
                                     "closed": true,
@@ -2336,6 +2485,9 @@ fn main() {
                     match force_close_session_from_metadata(&flags.session) {
                         Ok(true) => {
                             let resp = connection::Response {
+                                id: None,
+                                failure: None,
+                                terminal_outcome: None,
                                 success: true,
                                 data: Some(json!({
                                     "closed": true,
@@ -2382,6 +2534,20 @@ fn main() {
     let use_real_keychain = env::var("AGENT_BROWSER_USE_REAL_KEYCHAIN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""))
         || keychain_password.is_some();
+    if !command_skips_browser_launch_for_prestart(&cmd) {
+        use native::service_store::ServiceStateRepository;
+        let continuity = native::service_store::LockedServiceStateRepository::default_json()
+            .and_then(|repository| repository.load_snapshot())
+            .and_then(|state| apply_existing_lane_profile_to_flags(&mut flags, &cmd, &state));
+        if let Err(error) = continuity {
+            if flags.json {
+                print_json_error(error);
+            } else {
+                eprintln!("{} {}", color::error_indicator(), error);
+            }
+            exit(1);
+        }
+    }
     let selected_runtime_profile = runtime_profile_name_for_launch(&flags);
     let live_runtime_status = if flags.cdp.is_none() && flags.provider.is_none() {
         live_runtime_status_for_flags(&flags)
@@ -2962,18 +3128,11 @@ fn main() {
         }
 
         apply_remote_headed_launch_env_hints(&mut launch_cmd);
+        attribute_prestart_launch(&mut launch_cmd, &cmd, &flags.session);
 
         match send_command(launch_cmd, &flags.session) {
             Ok(resp) if !resp.success => {
-                // Launch command failed (e.g., invalid state file, profile error)
-                let error_msg = resp
-                    .error
-                    .unwrap_or_else(|| "Browser launch failed".to_string());
-                if flags.json {
-                    print_json_error(error_msg);
-                } else {
-                    eprintln!("{} {}", color::error_indicator(), error_msg);
-                }
+                print_response_with_opts(&resp, Some("launch"), &OutputOptions::from_flags(&flags));
                 exit(1);
             }
             Err(e) => {

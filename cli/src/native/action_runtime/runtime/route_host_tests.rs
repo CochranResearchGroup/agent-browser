@@ -49,6 +49,8 @@ use crate::native::service_health::{
     close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
 };
 use crate::native::service_lifecycle::upsert_service_profile_and_session;
+use crate::native::service_profile_access_policy::ServiceProfileAccessPolicy;
+use crate::native::service_profile_acquisition::authenticated_cold_session_name;
 
 #[test]
 fn exact_close_skips_launch_only_profile_lease_selection() {
@@ -657,6 +659,153 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
         inherited_default_options.runtime_profile.as_deref(),
         Some(profile_id)
     );
+
+    let mut session_only_options = LaunchOptions {
+        runtime_profile: Some("obsolete-lane-default".to_string()),
+        profile: Some(home.join("unrelated-startup-profile").display().to_string()),
+        ..LaunchOptions::default()
+    };
+    let session_only_selection = apply_service_profile_selection(
+        &mut session_only_options,
+        &json!({
+            "action": "tab_switch",
+            "sessionName": session_id,
+            "serviceName": "OdolloFulfillment",
+            "params": { "index": 1 }
+        }),
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(
+        session_only_selection,
+        Some(ProfileSelectionReason::ExistingOwner)
+    );
+    assert_eq!(
+        session_only_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+    assert_eq!(session_only_options.profile.as_deref(), Some(profile_hint));
+
+    let mut focus_options = LaunchOptions {
+        runtime_profile: Some("obsolete-lane-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let focus_selection = apply_service_profile_selection(
+        &mut focus_options,
+        &json!({
+            "action": "view_focus",
+            "serviceName": "OdolloFulfillment"
+        }),
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(focus_selection, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(focus_options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(focus_options.profile.as_deref(), Some(profile_hint));
+
+    // A previous generation's capability is not authority for this owner, but
+    // must not veto a fresh client independently admitted by shared-local policy.
+    let mut state = state;
+    let digest = state
+        .runtime_owner_registry
+        .owners
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let historical = crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+        principal_id: "previous-client".to_string(),
+        profile_id: profile_id.to_string(),
+        profile_identity_digest: digest.clone(),
+        capability_id: "previous-capability".to_string(),
+        provenance:
+            crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+        owner_generation: 3,
+    };
+    state
+        .runtime_owner_registry
+        .principal_bindings
+        .insert(digest.clone(), historical.clone());
+    let shared_command = json!({
+        "action": "tab_new", "sessionName": session_id,
+        "clientSubjectId": "service:second-client", "identityAssurance": "self-declared"
+    });
+    assert_eq!(
+        apply_existing_session_profile_selection(
+            &mut LaunchOptions::default(),
+            &shared_command,
+            Some(session_id),
+            &state
+        )
+        .unwrap(),
+        Some(ProfileSelectionReason::ExistingOwner)
+    );
+    assert_eq!(
+        state.runtime_owner_registry.principal_bindings[&digest],
+        historical
+    );
+    assert!(!state
+        .runtime_owner_registry
+        .principal_binding_is_current(Some(&historical)));
+    // Neither a stale capability nor missing subject identity may borrow this path.
+    for command in [
+        json!({ "action": "tab_new", "sessionName": session_id }),
+        json!({ "servicePrincipalProvenance": "registered_capability", "servicePrincipalId": "previous-client",
+            "action": "tab_new", "sessionName": session_id, "clientSubjectId": "service:second-client", "identityAssurance": "registered-capability" }),
+    ] {
+        assert!(apply_existing_session_profile_selection(
+            &mut LaunchOptions::default(),
+            &command,
+            Some(session_id),
+            &state
+        )
+        .is_err());
+    }
+    state
+        .runtime_owner_registry
+        .principal_bindings
+        .get_mut(&digest)
+        .unwrap()
+        .owner_generation = 5;
+    assert!(apply_existing_session_profile_selection(
+        &mut LaunchOptions::default(),
+        &shared_command,
+        Some(session_id),
+        &state
+    )
+    .is_err());
+    for generation in [4, 5] {
+        let binding = state
+            .runtime_owner_registry
+            .principal_bindings
+            .get_mut(&digest)
+            .unwrap();
+        binding.owner_generation = generation;
+        // A binding claiming another profile is always inconsistent, even when current.
+        binding.profile_id = "different-profile".to_string();
+        assert!(apply_existing_session_profile_selection(
+            &mut LaunchOptions::default(),
+            &shared_command,
+            Some(session_id),
+            &state
+        )
+        .is_err());
+    }
+    state
+        .runtime_owner_registry
+        .principal_bindings
+        .insert(digest.clone(), historical);
+    state.profiles.get_mut(profile_id).unwrap().access_policy = Some(ServiceProfileAccessPolicy {
+        mode: crate::native::service_profile_access_policy::ProfileAccessMode::Restricted,
+        ..ServiceProfileAccessPolicy::shared_local_default(profile_id)
+    });
+    assert!(apply_existing_session_profile_selection(
+        &mut LaunchOptions::default(),
+        &shared_command,
+        Some(session_id),
+        &state
+    )
+    .is_err());
 }
 
 #[test]
@@ -727,12 +876,43 @@ fn test_existing_session_rejects_explicit_profile_conflict() {
 
     let error = apply_service_profile_selection(
         &mut options,
-        &json!({ "action": "launch", "serviceName": "BooksReceipts" }),
+        &json!({ "action": "launch", "serviceName": "BooksReceipts", "runtimeProfile": "default" }),
         Some("books-receipts"),
     )
     .unwrap_err();
 
-    assert_eq!(error, "explicit_profile_conflicts_with_current_owner");
+    assert!(error.starts_with("explicit_profile_conflicts_with_current_owner:"));
+    assert!(error.contains("field=runtimeProfile"));
+    assert!(error.contains(
+        "source=native/action_runtime/runtime/daemon.rs::apply_existing_session_profile_selection"
+    ));
+    let recourse = crate::native::service_failure::classify_service_failure(&error);
+    assert_eq!(
+        recourse.effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+    assert_eq!(
+        recourse.phase,
+        crate::native::service_failure::ServiceFailurePhase::LaunchAdmission
+    );
+    for selectors in [
+        json!({"runtimeProfile": "books-bank", "params": {"profileId": "foreign"}}),
+        json!({"profileId": "books-bank", "params": {"runtimeProfile": "foreign"}}),
+        json!({"params": {"profile": "/unrelated-profile"}}),
+        json!({"profileId": ""}),
+        json!({"runtimeProfile": false}),
+    ] {
+        let mut command = selectors;
+        command["action"] = json!("tab_switch");
+        command["sessionName"] = json!("books-receipts");
+        let mut options = LaunchOptions::default();
+        let error = apply_service_profile_selection(&mut options, &command, Some("books-receipts"))
+            .unwrap_err();
+        assert!(
+            error.starts_with("explicit_profile_conflicts_with_current_owner:"),
+            "{error}"
+        );
+    }
 }
 
 #[test]
@@ -1071,6 +1251,90 @@ fn authenticated_principal_recovers_exact_released_terminal_projection() {
 }
 
 #[test]
+fn exact_terminal_custom_profile_can_reopen_after_proven_close() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("terminal-custom-profile-relaunch-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = "custom:fixture";
+    let session_id = "custom-profile-session";
+    let browser_id = format!("session:{session_id}");
+    let user_data_dir = home.join("custom-profile");
+    fs::create_dir_all(&user_data_dir).unwrap();
+    let profile_identity_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "terminal-provider-owner".to_string(),
+        profile_identity_digest: profile_identity_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 5,
+        browser_id: browser_id.clone(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+    runtime_owner_registry.lifecycle_records.insert(
+        browser_id.clone(),
+        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+            logical_browser_id: browser_id,
+            profile_identity_digest,
+            owner_generation: 5,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state:
+                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "service_reconcile_process_group_absent:62232".to_string(),
+                "service_reconcile_profile_lock_stale_pid_absent:62232".to_string(),
+            ],
+            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+        },
+    );
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(user_data_dir.to_string_lossy().into_owned()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                lease: LeaseState::Released,
+                profile_id: Some(profile_id.to_string()),
+                ..BrowserSession::default()
+            },
+        )]),
+        runtime_owner_registry,
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+
+    // A path-backed CLI profile has no runtime-profile name. The retained
+    // record is selected by its canonical directory and exact terminal owner.
+    let command = json!({"action": "launch", "profile": user_data_dir});
+    let mut options = LaunchOptions {
+        profile: Some(user_data_dir.to_string_lossy().into_owned()),
+        ..LaunchOptions::default()
+    };
+    let result = apply_service_profile_selection(&mut options, &command, Some(session_id));
+    assert_eq!(result.unwrap(), None);
+    assert!(options.runtime_profile.is_none());
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("terminal-owner-explicit-profile-relaunch-home");
@@ -1225,6 +1489,137 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         closed_projection_options.runtime_profile.as_deref(),
         Some(profile_id)
     );
+
+    let historical_tab_id = "target:closed-historical-provider-route";
+    state.tabs.insert(
+        historical_tab_id.to_string(),
+        BrowserTab {
+            id: historical_tab_id.to_string(),
+            browser_id: "session:older-terminal-owner".to_string(),
+            lifecycle: TabLifecycle::Closed,
+            owner_session_id: Some("older-terminal-owner".to_string()),
+            service_tab_handle: Some(ServiceTabHandle {
+                browser_id: "session:older-terminal-owner".to_string(),
+                session_name: Some("older-terminal-owner".to_string()),
+                tab_id: historical_tab_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                lease_state: Some(LeaseState::Released),
+                owner_session_id: Some("older-terminal-owner".to_string()),
+                valid: false,
+                stale_reason: Some("tab_closed".to_string()),
+                ..ServiceTabHandle::default()
+            }),
+            ..BrowserTab::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut historical_projection_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let historical_projection_selection = apply_service_profile_selection(
+        &mut historical_projection_options,
+        &command,
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(historical_projection_selection, None);
+    assert_eq!(
+        historical_projection_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+
+    let display_allocation_id = "development-display-1";
+    let route_id = "development-route-1";
+    state
+        .browsers
+        .get_mut(&format!("session:{session_id}"))
+        .unwrap()
+        .display_allocation_id = Some(display_allocation_id.to_string());
+    state.display_allocations.insert(
+        display_allocation_id.to_string(),
+        DisplayAllocation {
+            id: display_allocation_id.to_string(),
+            owner_browser_id: Some(format!("session:{session_id}")),
+            owner_session_id: Some(session_id.to_string()),
+            profile_id: Some(profile_id.to_string()),
+            state: "ready".to_string(),
+            route_ids: vec![route_id.to_string()],
+            ..DisplayAllocation::default()
+        },
+    );
+    state.remote_view_acquisition_leases.insert(
+        format!("remote-view-open:{session_id}:{route_id}:fixture"),
+        RemoteViewAcquisitionLease {
+            id: format!("remote-view-open:{session_id}:{route_id}:fixture"),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+            browser_id: format!("session:{session_id}"),
+            session_id: session_id.to_string(),
+            route_id: route_id.to_string(),
+            display_allocation_id: display_allocation_id.to_string(),
+            state: "pending".to_string(),
+            phase: "display_ready".to_string(),
+            ..RemoteViewAcquisitionLease::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    // Route-bound remote-view execution normalizes its browser effect to a
+    // launch command after reserving the exact display and acquisition lease.
+    let remote_view_command = json!({
+        "action": "launch",
+        "profile": profile_id,
+        "serviceName": "development-presentation-provider",
+    });
+    let mut route_prepared_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let route_prepared_selection = apply_service_profile_selection(
+        &mut route_prepared_options,
+        &remote_view_command,
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(route_prepared_selection, None);
+    assert_eq!(
+        route_prepared_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+
+    state
+        .remote_view_acquisition_leases
+        .values_mut()
+        .next()
+        .unwrap()
+        .state = "completed".to_string();
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut stale_route_preparation_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_service_profile_selection(
+            &mut stale_route_preparation_options,
+            &remote_view_command,
+            Some(session_id),
+        )
+        .unwrap_err(),
+        "existing_session_profile_identity_inconsistent"
+    );
+
+    state
+        .browsers
+        .get_mut(&format!("session:{session_id}"))
+        .unwrap()
+        .display_allocation_id = None;
+    state.display_allocations.clear();
+    state.remote_view_acquisition_leases.clear();
 
     state.sessions.get_mut(session_id).unwrap().lease = LeaseState::Exclusive;
     JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
@@ -2268,6 +2663,10 @@ fn test_browser_preference_binding_requires_all_identity_filters_for_launch() {
 }
 #[tokio::test]
 async fn test_service_access_plan_reports_browser_build_summary_without_launch() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("service-access-plan-browser-build-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
     let response = handle_service_access_plan(&json!(
         { "serviceName" : "CanvaCLI", "agentName" : "codex", "taskName" :
         "openCanvaWorkspace", "loginId" : "canary-site", "browserBuild" :
@@ -2293,7 +2692,7 @@ async fn test_service_access_plan_reports_browser_build_summary_without_launch()
     assert_eq!(response["decision"]["launchPosture"]["source"], "request");
     assert_eq!(
         response["decision"]["profileReuse"]["recommendedAction"],
-        "register_or_select_profile"
+        "launch_new_browser"
     );
     assert_eq!(
         response["browserBuildSelectionSummary"]["browserBuild"],
@@ -2303,6 +2702,7 @@ async fn test_service_access_plan_reports_browser_build_summary_without_launch()
         .as_str()
         .expect("compact summary should be present")
         .contains("build=stealthcdp_chromium"));
+    let _ = fs::remove_dir_all(home);
 }
 #[test]
 fn test_apply_service_browser_capability_selection_requires_compatibility() {
@@ -3165,6 +3565,55 @@ fn service_profile_lease_fail_open_leaves_conflict_free_request_unchanged() {
 }
 
 #[test]
+fn view_focus_bypasses_profile_acquisition_fail_open_rewrite() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let home = unique_socket_dir("profile-lease-view-focus-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    guard.set("AGENT_BROWSER_PROFILE_LEASE_MODE", "fail_open_ephemeral");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            sessions: BTreeMap::from([
+                (
+                    "exclusive-holder".to_string(),
+                    BrowserSession {
+                        id: "exclusive-holder".to_string(),
+                        profile_id: Some("shared-profile".to_string()),
+                        lease: LeaseState::Exclusive,
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "focus-session".to_string(),
+                    BrowserSession {
+                        id: "focus-session".to_string(),
+                        profile_id: Some("shared-profile".to_string()),
+                        ..BrowserSession::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let mut command = json!({
+        "action": "view_focus",
+        "serviceName": "agent-browser-dashboard",
+        "sessionName": "focus-session",
+        "targetId": "target-1"
+    });
+    let original = command.clone();
+
+    let decision = service_profile_lease_admission(&mut command, "focus-session", Some(0))
+        .expect("view focus admission should bypass profile acquisition");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+    assert_eq!(command, original);
+    assert!(command.get("profileLeaseFailOpen").is_none());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn service_profile_lease_admission_never_rewrites_canonical_authorization() {
     let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
     let home = unique_socket_dir("profile-lease-canonical-admission-home");
@@ -3571,6 +4020,77 @@ fn test_shared_profile_attach_target_reuses_current_session_owner() {
     );
     let _ = fs::remove_dir_all(&home);
 }
+
+#[test]
+fn test_shared_profile_attach_target_honors_exact_service_route_hints() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("shared-profile-explicit-route-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            profiles: BTreeMap::from([(
+                "last30days-facebook".to_string(),
+                BrowserProfile {
+                    id: "last30days-facebook".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "session:retained-social".to_string(),
+                BrowserProcess {
+                    id: "session:retained-social".to_string(),
+                    profile_id: Some("last30days-facebook".to_string()),
+                    host: ServiceBrowserHost::RemoteHeaded,
+                    health: ServiceBrowserHealth::Ready,
+                    display_isolation: Some("shared_display".to_string()),
+                    pid: Some(42),
+                    cdp_endpoint: Some("http://127.0.0.1:9222".to_string()),
+                    active_session_ids: vec!["retained-social".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "retained-social".to_string(),
+                BrowserSession {
+                    id: "retained-social".to_string(),
+                    profile_id: Some("last30days-facebook".to_string()),
+                    browser_ids: vec!["session:retained-social".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let metadata = ServiceLaunchMetadata {
+        profile_id: Some("last30days-facebook".to_string()),
+        ..ServiceLaunchMetadata::default()
+    };
+
+    let target = shared_profile_attach_target_for_auto_launch(
+        &metadata,
+        &json!({
+            "action": "tab_new",
+            "runtimeProfile": "last30days-facebook",
+            "browserId": "session:retained-social",
+            "sessionName": "retained-social",
+            "browserHost": "remote_headed",
+            "displayIsolation": "shared_display",
+        }),
+        "shared-runtime-host",
+    )
+    .expect("exact service route should attach the retained shared browser");
+
+    assert_eq!(target.browser_id, "session:retained-social");
+    assert_eq!(target.runtime_profile, "last30days-facebook");
+    assert_eq!(
+        target.owner_session_ids,
+        vec!["retained-social".to_string()]
+    );
+    let _ = fs::remove_dir_all(&home);
+}
 #[test]
 fn test_shared_profile_auto_launch_acquisition_reports_plain_open_owner() {
     let command = json!(
@@ -3701,6 +4221,359 @@ fn retained_profile_route_state() -> ServiceState {
 }
 
 #[test]
+fn implicit_native_target_requires_current_unambiguous_child_custody() {
+    use crate::native::service_profile_access_policy::ProfileChildAccess;
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("implicit-native-child");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let mut snapshot = retained_profile_route_state();
+    snapshot.tabs.insert(
+        "target:owned".into(),
+        BrowserTab {
+            id: "target:owned".into(),
+            browser_id: "session:carrier-evidence".into(),
+            target_id: Some("owned".into()),
+            owner_session_id: Some("carrier-evidence".into()),
+            lifecycle: TabLifecycle::Ready,
+            profile_access: Some(ProfileChildAccess {
+                subject_id: Some("client:owner".into()),
+                ..ProfileChildAccess::default()
+            }),
+            ..BrowserTab::default()
+        },
+    );
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store.save(&snapshot).unwrap();
+    let mut daemon = DaemonState::new();
+    daemon.session_id = "carrier-evidence".into();
+    let command = json!({"action":"fill", "connectionInstanceId":"connection:owner", "clientSubjectId":"client:owner"});
+    let bound = bind_native_service_tab_command(&command, &daemon).unwrap();
+    assert_eq!(bound["serviceTabHandle"]["targetId"], "owned");
+    assert_eq!(
+        bound["serviceTabHandle"]["profileAccess"]["subjectId"],
+        "client:owner"
+    );
+    let mut peer = snapshot.tabs["target:owned"].clone();
+    peer.id = "target:peer".into();
+    peer.target_id = Some("peer".into());
+    snapshot.tabs.insert(peer.id.clone(), peer);
+    store.save(&snapshot).unwrap();
+    assert!(bind_native_service_tab_command(&command, &daemon)
+        .unwrap_err()
+        .contains("ambiguous"));
+    let mut explicit = command.clone();
+    explicit["targetId"] = json!("owned");
+    assert_eq!(
+        bind_native_service_tab_command(&explicit, &daemon).unwrap()["serviceTabHandle"]
+            ["targetId"],
+        "owned"
+    );
+    explicit["tabId"] = json!("target:peer");
+    assert!(bind_native_service_tab_command(&explicit, &daemon).is_err());
+    explicit.as_object_mut().unwrap().remove("tabId");
+    snapshot
+        .tabs
+        .get_mut("target:owned")
+        .unwrap()
+        .profile_access = None;
+    store.save(&snapshot).unwrap();
+    let error = bind_native_service_tab_command(&explicit, &daemon).unwrap_err();
+    assert!(error.contains("child access record is missing"));
+    assert_eq!(
+        crate::native::service_failure::classify_service_failure(&error).effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+}
+
+#[test]
+fn cold_native_navigation_acquires_child_permission_before_target_binding() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+    let home = unique_socket_dir("cold-native-admission");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    guard.remove("AGENT_BROWSER_HOME");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store.save(&ServiceState::default()).unwrap();
+    let mut daemon = DaemonState::new();
+    daemon.session_id = "cold-native".into();
+    let command = json!({
+        "action": "navigate", "url": "about:blank",
+        "runtimeProfile": "cold-native", "profile": home.join("profile"),
+        "clientSubjectId": "cli-session:cold-native", "identityAssurance": "self-declared",
+        "connectionInstanceId": "connection:cold-native"
+    });
+    let admitted = bind_native_service_tab_command(&command, &daemon).unwrap();
+    assert_eq!(
+        admitted["profileChildAccess"]["subjectId"],
+        command["clientSubjectId"]
+    );
+    assert_eq!(
+        admitted["profileChildAccess"]["connectionInstanceId"],
+        command["connectionInstanceId"]
+    );
+    assert_eq!(admitted["runtimeProfile"], "cold-native");
+    assert!(admitted.get("serviceTabHandle").is_none());
+    assert!(admitted.get("sessionName").is_none());
+    assert!(store.load().unwrap().browsers.is_empty());
+    for (field, value) in [
+        ("targetId", "missing"),
+        ("browserId", "session:peer"),
+        ("sessionName", "peer"),
+    ] {
+        let mut conflicting = command.clone();
+        conflicting[field] = json!(value);
+        assert!(
+            bind_native_service_tab_command(&conflicting, &daemon).is_err(),
+            "{field}"
+        );
+    }
+    let mut snapshot = ServiceState::default();
+    let policy = ServiceProfileAccessPolicy::shared_local_default("cold-native");
+    snapshot.profiles.insert(
+        "cold-native".into(),
+        BrowserProfile {
+            id: "cold-native".into(),
+            user_data_dir: Some(home.join("profile").display().to_string()),
+            access_policy: Some(policy.clone()),
+            ..BrowserProfile::default()
+        },
+    );
+    use crate::native::service_profile_access_policy::{
+        ProfileAccessMode, ProfileAccessPolicyState, ProfilePermission,
+    };
+    let mut restricted = policy.clone();
+    restricted.mode = ProfileAccessMode::Restricted;
+    let mut draining = policy.clone();
+    draining.state = ProfileAccessPolicyState::Draining;
+    let mut no_create = policy.clone();
+    no_create
+        .default_permissions
+        .retain(|permission| *permission != ProfilePermission::TabCreate);
+    let mut no_use = policy.clone();
+    no_use
+        .default_permissions
+        .retain(|permission| *permission != ProfilePermission::ProfileUse);
+    for denied_policy in [restricted, draining, no_create, no_use] {
+        snapshot
+            .profiles
+            .get_mut("cold-native")
+            .unwrap()
+            .access_policy = Some(denied_policy);
+        store.save(&snapshot).unwrap();
+        let mut forged = command.clone();
+        forged["identityAssurance"] = json!("operator");
+        let error = bind_native_service_tab_command(&forged, &daemon).unwrap_err();
+        assert!(error.contains("profile_access_denied"), "{error}");
+        assert!(store.load().unwrap().browsers.is_empty());
+    }
+    snapshot
+        .profiles
+        .get_mut("cold-native")
+        .unwrap()
+        .access_policy = Some(policy);
+    snapshot.browsers.insert(
+        "session:peer".into(),
+        BrowserProcess {
+            id: "session:peer".into(),
+            profile_id: Some("cold-native".into()),
+            health: ServiceBrowserHealth::Ready,
+            ..BrowserProcess::default()
+        },
+    );
+    store.save(&snapshot).unwrap();
+    assert!(bind_native_service_tab_command(&command, &daemon)
+        .unwrap_err()
+        .contains("service_tab_target_unproven"));
+    assert_eq!(store.load().unwrap().browsers.len(), 1);
+    snapshot.browsers.clear();
+    use crate::runtime_owner_transfer::{
+        CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
+        RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+    };
+    let digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&home.join("profile")).unwrap();
+    snapshot.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(ProfileOwner {
+        owner_id: "closed-owner".into(),
+        profile_identity_digest: digest.clone(),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 1,
+        browser_id: "session:cold-native".into(),
+        daemon_session_route: "cold-native".into(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".into(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    });
+    snapshot.runtime_owner_registry.lifecycle_records.insert(
+        "session:cold-native".into(),
+        RuntimeLifecycleRecord {
+            logical_browser_id: "session:cold-native".into(),
+            profile_identity_digest: digest,
+            owner_generation: 1,
+            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state: CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".into(),
+                "profile_lock_released".into(),
+            ],
+            ..RuntimeLifecycleRecord::default()
+        },
+    );
+    store.save(&snapshot).unwrap();
+    assert!(
+        bind_native_service_tab_command(&command, &daemon).is_ok(),
+        "terminal history must allow permission-checked reopen"
+    );
+    let mut session_only = command.clone();
+    session_only.as_object_mut().unwrap().remove("profile");
+    session_only
+        .as_object_mut()
+        .unwrap()
+        .remove("runtimeProfile");
+    let reopened = bind_native_service_tab_command(&session_only, &daemon)
+        .expect("session-only reopen must recover the exact terminal profile identity");
+    assert_eq!(reopened["runtimeProfile"], "cold-native");
+    assert_eq!(reopened["profile"], json!(home.join("profile")));
+    // Exercise the CLI's preliminary launch, not just the later navigate path.
+    let mut flags = crate::flags::parse_flags(&[
+        "agent-browser".into(),
+        "--session".into(),
+        "cold-native".into(),
+    ]);
+    assert_eq!(
+        crate::runtime_profile_name_for_launch(&flags).as_deref(),
+        Some("default")
+    );
+    crate::apply_existing_lane_profile_to_flags(&mut flags, &session_only, &snapshot).unwrap();
+    let mut prestart = json!({"action":"launch", "runtimeProfile": flags.runtime_profile, "profile": flags.profile});
+    crate::attribute_prestart_launch(&mut prestart, &session_only, &flags.session);
+    let metadata = service_profile_lease_metadata_for_command(&prestart, Some(&flags.session))
+        .unwrap()
+        .expect("prestart attribution must retain profile lease metadata");
+    assert_eq!(metadata.profile_id.as_deref(), Some("cold-native"));
+    prestart["connectionInstanceId"] = json!("prestart-connection");
+    let admitted_launch =
+        super::native_acquisition::admit_cold_navigation(&prestart, &daemon, &snapshot)
+            .unwrap()
+            .expect("native preliminary launch must acquire first-tab custody");
+    assert_eq!(
+        admitted_launch["profileChildAccess"]["subjectId"],
+        session_only["clientSubjectId"]
+    );
+    let mut duplicate = snapshot.profiles["cold-native"].clone();
+    duplicate.id = "same-directory".into();
+    snapshot.profiles.insert(duplicate.id.clone(), duplicate);
+    store.save(&snapshot).unwrap();
+    assert!(bind_native_service_tab_command(&session_only, &daemon).is_err());
+    snapshot.profiles.remove("same-directory");
+    snapshot
+        .runtime_owner_registry
+        .lifecycle_records
+        .get_mut("session:cold-native")
+        .unwrap()
+        .cleanup_obligation_state = CleanupObligationState::Owned;
+    store.save(&snapshot).unwrap();
+    assert!(bind_native_service_tab_command(&session_only, &daemon).is_err());
+    assert!(
+        bind_native_service_tab_command(&command, &daemon).is_err(),
+        "unsettled cleanup still blocks reopen"
+    );
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn configured_runtime_alias_preserves_exact_owner_selection() {
+    use sha2::Digest;
+    let endpoint = "ws://127.0.0.1:39111/devtools/browser/current";
+    let mut state = retained_profile_route_state();
+    let profile_id = "managed-one-time-route";
+    let runtime_name = "p160-distinct-runtime-name";
+    state.profiles.get_mut(profile_id).unwrap().user_data_dir = Some(runtime_name.into());
+    let path = crate::runtime_profile::resolve_profile(Some(runtime_name), Some(profile_id))
+        .unwrap()
+        .user_data_dir;
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "p160-alias-owner".into(),
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(&path)
+            .unwrap(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 4,
+        browser_id: "session:carrier-evidence".into(),
+        daemon_session_route: "carrier-evidence".into(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".into(),
+        cdp_endpoint_identity_digest: format!("{:x}", sha2::Sha256::digest(endpoint.as_bytes())),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    state.runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+    for selector in [profile_id, runtime_name] {
+        let command = json!({"action":"tab_switch", "runtimeProfile":selector,
+            "browserId":"session:carrier-evidence", "sessionName":"carrier-evidence"});
+        let accepts = |cmd: &Value,
+                       candidate_path: &Path,
+                       pid: Option<u32>,
+                       url: &str,
+                       state: &ServiceState| {
+            super::profile_lease::configured_profile_alias_matches_active_browser(
+                cmd,
+                "carrier-evidence",
+                candidate_path,
+                pid,
+                url,
+                state,
+            )
+        };
+        assert!(accepts(&command, &path, Some(4242), endpoint, &state));
+        assert!(!accepts(&command, &path, Some(9999), endpoint, &state));
+        assert!(!accepts(
+            &command,
+            Path::new("/tmp/foreign-profile"),
+            Some(4242),
+            endpoint,
+            &state
+        ));
+        assert!(!accepts(
+            &command,
+            &path,
+            Some(4242),
+            "ws://127.0.0.1:39111/devtools/browser/foreign",
+            &state
+        ));
+        for field in ["runtimeProfile", "profile", "sessionName", "browserId"] {
+            let mut foreign = command.clone();
+            foreign[field] = json!("foreign");
+            assert!(
+                !accepts(&foreign, &path, Some(4242), endpoint, &state),
+                "{field}"
+            );
+        }
+        let mut unowned = state.clone();
+        unowned.runtime_owner_registry.owners.clear();
+        assert!(!accepts(&command, &path, Some(4242), endpoint, &unowned));
+        let mut options = LaunchOptions {
+            runtime_profile: Some(selector.into()),
+            ..LaunchOptions::default()
+        };
+        assert_eq!(
+            apply_existing_session_profile_selection(
+                &mut options,
+                &command,
+                Some("carrier-evidence"),
+                &state
+            )
+            .unwrap(),
+            Some(ProfileSelectionReason::ExistingOwner)
+        );
+    }
+}
+
+#[test]
 fn test_retained_profile_route_accepts_exact_current_owner() {
     let state = retained_profile_route_state();
     let command = json!({
@@ -3752,6 +4625,59 @@ fn test_retained_profile_route_rejects_unproven_owner() {
         "ws://127.0.0.1:49999/devtools/browser/wrong",
         &state,
     ));
+}
+
+#[test]
+fn shared_local_session_continuity_does_not_require_runtime_owner_proof() {
+    let profile_id = "ephemeral-debug-profile";
+    let session_id = "ephemeral-debug-session";
+    let browser_id = "session:ephemeral-debug-session";
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                name: "Ephemeral debug profile".to_string(),
+                access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(profile_id)),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                browser_ids: vec![browser_id.to_string()],
+                ..BrowserSession::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            browser_id.to_string(),
+            BrowserProcess {
+                id: browser_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                health: ServiceBrowserHealth::ProcessExited,
+                active_session_ids: vec![session_id.to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    let mut options = LaunchOptions::default();
+    let reason = apply_existing_session_profile_selection(
+        &mut options,
+        &json!({
+            "action": "navigate",
+            "clientSubjectId": "client:debugger",
+            "identityAssurance": "self-declared"
+        }),
+        Some(session_id),
+        &state,
+    )
+    .expect("shared-local continuity should remain usable without a strict owner binding");
+
+    assert_eq!(reason, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
 }
 
 #[test]
@@ -4269,4 +5195,27 @@ fn test_managed_runtime_attach_is_only_for_compatible_headless_launches() {
         ..LaunchOptions::default()
     };
     assert!(!can_attach_managed_runtime_for_launch(&remote_headed));
+}
+
+#[test]
+fn planned_runtime_profile_does_not_override_explicit_custom_directory() {
+    let planned = json!({"runtimeProfile": "managed-ephemeral-planned", "profile": "/tmp/planned"});
+    for command in [
+        json!({"action": "launch", "profile": "/tmp/requested"}),
+        json!({"action": "navigate", "profile": "/tmp/requested"}),
+    ] {
+        let options = LaunchOptions {
+            profile: Some("/tmp/requested".to_string()),
+            ..LaunchOptions::default()
+        };
+        let effective =
+            crate::native::action_runtime::runtime::daemon::apply_planned_launch_defaults(
+                &command,
+                &json!({}),
+                &planned,
+                &options,
+            );
+        assert_eq!(effective["profile"], "/tmp/requested");
+        assert!(effective.get("runtimeProfile").is_none());
+    }
 }

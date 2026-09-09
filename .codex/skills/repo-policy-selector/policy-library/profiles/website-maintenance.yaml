@@ -9,6 +9,7 @@ modules:
   - graph-backed-memory-usage
   - codegraph-usage
   - planning-discipline
+  - model-selection-and-calibration
   - website-surface-targeting
   - db-backed-state-governance
   - live-drift-reconciliation

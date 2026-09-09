@@ -141,6 +141,15 @@ in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
   Provider-backed acceptance must set
   `AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` and pass the exact
   development provider doctor without borrowing production resources.
+- Before staging the development provider, set
+  `AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL` to its reviewed public HTTPS origin
+  and `AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION` to the immutable reviewed
+  Cooper deployment revision or receipt ID. They are required together and
+  are bound by a deterministic digest. Read-only status and doctor commands
+  reuse a validated binding from an installed v2 provider manifest when both
+  variables are absent. Initial staging and provider mutation still require
+  the explicit pair; partial or changed explicit values fail closed. Loopback
+  is a local diagnostic only.
 - Before provider mutation, run `pnpm development-runtime:provider-plan`,
   `pnpm development-runtime:provider-stage`, and
   `pnpm development-runtime:provider-preflight`. Apply only with
@@ -149,6 +158,16 @@ in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
 - Provider doctor success does not prove Service capacity projection. Require
   non-null `presentationCapacity` from development Service Status before
   running presentation-capacity acceptance.
+- Plan 0158 external-vantage evidence runs only through the manually dispatched
+  `p158-external-vantage.yml` workflow. Its protected GitHub environment must
+  supply the durable handoff, dashboard credentials, expected retained
+  identity, prepared synthetic pixel-marker region, and synthetic-only visual
+  capture attestation as secrets. Never add
+  an automatic trigger or retry to this lane.
+  Dispatch calibration with one shared RFC3339 start at least 30 minutes in
+  the future; both clients bind to its hashed 20-minute schedule and end.
+  The two client jobs must finish successfully before accepting the aggregate
+  receipt; partial artifacts are diagnostic evidence only.
 - Use `pnpm development-runtime:provider-scale-out -- --apply` and
   `pnpm development-runtime:provider-scale-in -- --apply` for one-route elastic
   lifecycle effects. Scale-out is pressure-admitted. Scale-in requires elapsed
@@ -204,10 +223,15 @@ and `MemorySwapMax=4G`; all admitted scopes share an aggregate
 unavailable. Do not invoke `cargo check`,
 `cargo build`, `cargo clippy`, or `cargo test` directly from WSL agent sessions.
 Set `AGENT_BROWSER_CARGO_BUILD_JOBS` only when a particular build needs a
-different bounded parallelism level. Capacity admission holds an exclusive
+different bounded parallelism level. Do not set it to `2` merely because the
+wrapper admits at most two concurrent Cargo invocations: invocation concurrency
+and the number of build jobs inside each invocation are independent controls.
+Capacity admission holds an exclusive
 lock only while reconciling claims; Cargo does not hold that lock. A third
 invocation waits with a typed pressure reason, and admission automatically
 drops below two when current resources cannot preserve the reserve.
+On native Linux CI runners, the wrapper skips WSL host admission and cgroups,
+then executes Cargo with the configured build jobs and acceleration settings.
 The wrapper automatically uses `sccache` and `mold` for native Linux builds
 when those exact executables are available. Set `AGENT_BROWSER_CARGO_CACHE=off`
 or `AGENT_BROWSER_CARGO_FAST_LINKER=off` for a deterministic opt-out. Run
@@ -232,10 +256,12 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 ### CI Cadence
 
-Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, Service Client, Rust Quality, and Rust. Service Client runs `pnpm test:browser-capability-registry-draft` and `pnpm test:service-client`, which check the draft browser capability registry sample, generated service client files, JavaScript type coverage, service request helper contracts, service observability helper contracts, managed-profile flow contracts, and the no-launch service-client example broker-first contract without launching Chrome. Dashboard action-surface changes should run `pnpm test:dashboard-inspector-actions` so the Service right-pane inspector keeps selected-record state separate from mutable incident and job actions. Rust Quality runs Linux format and clippy checks before the Rust unit-test job starts, so style or lint failures fail fast without spending time on the unit suite. The Rust job uses `scripts/ci/rust-tests.sh` with Cargo's default test profile to run parallel-safe tests first, then env-mutating test modules serially in the same job so coverage is preserved without duplicate CI compile work. Service request action changes must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`, `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`, HTTP `/api/service/request`, and generated `@agent-browser/client` helpers aligned; the fast parity, client, and Rust gates include no-launch guards for that invariant. The Rust job also runs the no-launch service contract metadata smoke, no-launch MCP resource-read smoke, no-launch profile-source smoke, no-launch site-policy source smoke, and no-launch HTTP and MCP incident-summary smokes after the Rust suite, so the service contracts, MCP read resources, effective profile and site-policy provenance, and grouped incident summary contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci` when intentionally validating the optimized CI profile locally. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
+Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, Service Client, Rust Quality, and Rust. Service Client runs `pnpm test:browser-capability-registry-draft` and `pnpm test:service-client`, which check the draft browser capability registry sample, generated service client files, JavaScript type coverage, service request helper contracts, service observability helper contracts, managed-profile flow contracts, and the no-launch service-client example broker-first contract without launching Chrome. Dashboard action-surface changes should run `pnpm test:dashboard-inspector-actions` so the Service right-pane inspector keeps selected-record state separate from mutable incident and job actions. Rust Quality runs Linux format and clippy checks before the Rust unit-test job starts, so style or lint failures fail fast without spending time on the unit suite. The Rust job uses `scripts/ci/rust-tests.sh` with Cargo's default test profile to run the CLI tests serially in one harness invocation. This preserves isolation for tests that mutate process-global environment or user-scoped runtime state and prevents uncached runners from recompiling the large CLI test executable for every filter. The Rust test step is bounded to 30 minutes. The fixed-input status producer and generated-client harness runs after that suite. The job then builds one exact-head debug CLI and pins every command-based no-launch smoke to that binary; the smoke step is bounded to 10 minutes. Service request action changes must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`, `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`, HTTP `/api/service/request`, and generated `@agent-browser/client` helpers aligned; the fast parity, client, and Rust gates include no-launch guards for that invariant. The Rust job also runs the no-launch service contract metadata smoke, no-launch MCP resource-read smoke, no-launch profile-source smoke, no-launch site-policy source smoke, and no-launch HTTP and MCP incident-summary smokes after the Rust suite, so the service contracts, MCP read resources, effective profile and site-policy provenance, and grouped incident summary contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci` when intentionally validating the optimized CI profile locally. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
 
-Before pushing, match local validation to every touched surface since the last
-green CI, not only the files in the final commit. If any Rust source under
+At a completed repair batch, before merge readiness or governed runtime
+effects, match validation to every touched surface since the batch baseline,
+not only the final commit. Follow policy 0042 for intermediate custody commits
+and reuse of passed gates. If any Rust source under
 `cli/src/` or `crates/` changed in the current slice, run
 `scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check` and
 `scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings`. If a service
@@ -374,7 +400,14 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 
 ## Policy Re-read Triggers
 
-- re-read planning-related policy before opening, revising, or closing a substantive plan
+- Before substantive bug hunting or feature work, read policies
+  `0028-goal-execution-governance.md`, `0042-code-testing-discipline.md`, and
+  `0045-model-selection-and-calibration.md` for delivery bounds, batch validation,
+  and economical task routing; read `0021-subagent-workflow-optimization.md`
+  when considering delegation. These apply to ongoing continuations too.
+- Read policy `0044-planning-discipline.md` before substantive planning, a
+  second related defect, or another expensive build/deployment/acceptance cycle.
+  It routes consolidation, evidence, delivery budgeting and worker assignments.
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete
 - re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
@@ -421,6 +454,10 @@ Read and follow:
 - `docs/dev/policies/0038-multi-agent-reconciliation.md`
 - `docs/dev/policies/0039-policy-harvest-loop.md`
 - `docs/dev/policies/0042-code-testing-discipline.md`
+- `docs/dev/policies/0043-roadmap-runbook-governance.md`
+- `docs/dev/policies/0044-planning-discipline.md`
+- `docs/dev/policies/0045-model-selection-and-calibration.md`
+- `docs/dev/policies/0046-work-item-traceability.md`
 
 ## Scope
 

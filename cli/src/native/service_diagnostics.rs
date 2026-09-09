@@ -26,7 +26,13 @@ pub(crate) async fn handle_service_diagnostics(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "diagnostics requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
+    // A retained connection may contain only a different client's target.
+    // Revalidate and attach this authorized target before observing it, while
+    // preserving state-only diagnostics when no browser is connected.
+    if state.browser.is_some() {
+        crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await?;
+    }
     let target_id = handle.get("targetId").and_then(Value::as_str);
     let observed_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
@@ -123,12 +129,16 @@ pub(crate) async fn handle_service_diagnostics(
         .as_ref()
         .and_then(|service_state| service_state.sessions.get(&session_name))
         .cloned();
-    let profile_record = profile_id.as_deref().and_then(|profile_id| {
-        service_state
-            .as_ref()
-            .and_then(|service_state| service_state.profiles.get(profile_id))
-            .cloned()
-    });
+    let profile_record = session_record
+        .as_ref()
+        .and_then(|session| session.profile_id.as_deref())
+        .or(profile_id.as_deref())
+        .and_then(|profile_id| {
+            service_state
+                .as_ref()
+                .and_then(|service_state| service_state.profiles.get(profile_id))
+                .cloned()
+        });
     let control_plane_attestation = service_state
         .as_ref()
         .map(|service_state| {
@@ -230,12 +240,13 @@ fn unavailable_control_plane_attestation(observed_at: &str) -> Value {
         "processIdentity": Value::Null,
         "profileLease": Value::Null,
         "handoffReceipt": Value::Null,
+        "ownerCustody": Value::Null,
         "missingProofs": [
             "service_state",
             "browser_owner",
             "process_identity",
             "profile_lease",
-            "handoff_receipt",
+            "owner_custody",
         ],
     })
 }
@@ -243,8 +254,12 @@ fn unavailable_control_plane_attestation(observed_at: &str) -> Value {
 /// Project the exact current effect authority for one service tab handle.
 ///
 /// Every proof is derived from the same persisted service snapshot. Missing or
-/// conflicting owner, process, profile-lease, or handoff evidence keeps the
+/// conflicting owner, process, profile-lease, or custody evidence keeps the
 /// attestation incomplete so callers can fail closed before an input action.
+/// Join current lease and owner custody from one snapshot. A caller handle's
+/// lease mode is historical metadata, not authority to override current state.
+/// A managed launch proves custody through its exact lifecycle record; only an
+/// actual owner transfer can supply a handoff receipt.
 fn service_control_plane_attestation(
     service_state: &ServiceState,
     handle: &Map<String, Value>,
@@ -257,6 +272,21 @@ fn service_control_plane_attestation(
     let browser = service_state.browsers.get(browser_id);
     let session = service_state.sessions.get(session_name);
     let tab = service_state.tabs.get(tab_id);
+    let requested_profile_id = profile_id;
+    let profile_id = session.and_then(|session| session.profile_id.as_deref());
+    // Handles can carry the runtime name from acquisition while the current
+    // session uses its configured catalog ID. Accept only that exact configured
+    // alias, never an unrelated name or a caller-selected replacement profile.
+    let requested_profile_matches = profile_id.is_some_and(|id| {
+        requested_profile_id == Some(id)
+            || requested_profile_id.is_some_and(|requested| {
+                service_state
+                    .profiles
+                    .get(id)
+                    .and_then(|profile| profile.user_data_dir.as_deref())
+                    == Some(requested)
+            })
+    });
     let owner = service_state
         .runtime_owner_registry
         .attestation_for_session(session_name)?;
@@ -317,6 +347,19 @@ fn service_control_plane_attestation(
                     && candidate.lease == LeaseState::Exclusive
             })
     });
+    let current_handle = service_state.service_tab_handle(tab_id);
+    let handle_identity_matches = current_handle.as_ref().is_some_and(|current| {
+        current.valid
+            && current.lease_state == Some(LeaseState::Exclusive)
+            && handle.get("browserId").and_then(Value::as_str) == Some(browser_id)
+            && handle.get("tabId").and_then(Value::as_str) == Some(tab_id)
+            && handle.get("targetId").and_then(Value::as_str) == current.target_id.as_deref()
+            && current.target_id.is_some()
+            && current.profile_id.as_deref() == profile_id
+            && handle.get("profileId").and_then(Value::as_str) == requested_profile_id
+            && requested_profile_matches
+            && handle.get("sessionName").and_then(Value::as_str) == Some(session_name)
+    });
     let lease_active = browser.is_some()
         && tab.is_some()
         && profile_id.is_some_and(|profile_id| service_state.profiles.contains_key(profile_id))
@@ -344,12 +387,21 @@ fn service_control_plane_attestation(
         })
         && handle.get("valid").and_then(Value::as_bool) == Some(true)
         && handle.get("leaseId").and_then(Value::as_str) == Some(session_name)
-        && handle.get("leaseState").and_then(Value::as_str) == Some("exclusive")
+        && matches!(
+            handle.get("leaseState").and_then(Value::as_str),
+            Some("shared" | "exclusive")
+        )
+        && handle_identity_matches
         && !profile_conflict;
     let profile_lease = session.map(|session| {
         json!({
             "id": handle.get("leaseId").cloned().unwrap_or(Value::Null),
             "mode": session.lease,
+            "profileId": profile_id,
+            "requestedProfileId": requested_profile_id,
+            "requestedProfileMatches": requested_profile_matches,
+            "suppliedHandleMode": handle.get("leaseState"),
+            "handleIdentityMatches": handle_identity_matches,
             "state": if lease_active { "active" } else { "unproven" },
             "holder": {
                 "sessionId": session.id,
@@ -381,7 +433,64 @@ fn service_control_plane_attestation(
         .and_then(Value::as_str)
         == Some("accepted");
 
+    // A fresh managed browser has no transfer receipt. Require positive launch
+    // custody instead of treating missing transfer history as sufficient proof.
+    let current_owner = service_state
+        .runtime_owner_registry
+        .owners
+        .values()
+        .find(|candidate| {
+            owner.as_ref().is_some_and(|attested| {
+                candidate.owner_id == attested.owner_id
+                    && candidate.owner_generation == attested.owner_generation
+            })
+        });
+    let lifecycle = service_state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get(browser_id);
+    let boot = crate::process_identity::current_boot_epoch();
+    let launch_checks = current_owner.zip(lifecycle).map(|(current, lifecycle)| {
+        json!({
+            "noPendingTransfer": current.pending_transfer.is_none(),
+            "noTransferHistory": current.last_transition.is_none(),
+            "browserMatches": lifecycle.logical_browser_id == browser_id,
+            "profileMatches": lifecycle.profile_identity_digest == current.profile_identity_digest,
+            "generationMatches": lifecycle.owner_generation == current.owner_generation,
+            "lifecycleReady": lifecycle.lifecycle_state == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Ready,
+            "cleanupOwned": lifecycle.cleanup_obligation_state == crate::runtime_owner_transfer::CleanupObligationState::Owned,
+            "bootMatches": boot.is_some() && lifecycle.boot_epoch == boot,
+            "launchDigestMatches": lifecycle.package_launch_identity_digest.as_deref().is_some_and(|recorded| {
+                super::runtime_lifecycle::package_launch_identity_digest(current, lifecycle.process_group_id)
+                    .is_ok_and(|expected| expected == recorded)
+            }),
+        })
+    });
+    let launch_matches = launch_checks
+        .as_ref()
+        .and_then(Value::as_object)
+        .is_some_and(|checks| checks.values().all(|value| value == &Value::Bool(true)));
+    let custody_verified =
+        owner_authoritative && process_authoritative && (handoff_accepted || launch_matches);
+    let owner_custody = json!({
+        "verified": custody_verified,
+        "basis": if handoff_accepted { "owner_transfer" } else if launch_matches { "managed_launch" } else { "unproven" },
+        "launchRecordMatches": launch_matches,
+        "launchChecks": launch_checks,
+        "handoffAccepted": handoff_accepted,
+        "source": "native/service_diagnostics.rs:service_control_plane_attestation",
+    });
+
+    let display_owner = browser.map(|browser| {
+        super::remote_view::display_owner::browser_display_owner(service_state, browser)
+    });
     let mut missing_proofs = Vec::new();
+    if display_owner
+        .as_ref()
+        .is_some_and(|proof| proof["verified"] != true)
+    {
+        missing_proofs.push("display_owner");
+    }
     if !owner_authoritative {
         missing_proofs.push("browser_owner");
     }
@@ -391,8 +500,8 @@ fn service_control_plane_attestation(
     if !lease_active {
         missing_proofs.push("profile_lease");
     }
-    if !handoff_accepted {
-        missing_proofs.push("handoff_receipt");
+    if !custody_verified {
+        missing_proofs.push("owner_custody");
     }
     Ok(json!({
         "schemaVersion": "agent-browser.service-control-plane-attestation.v1",
@@ -402,6 +511,8 @@ fn service_control_plane_attestation(
         "processIdentity": process_projection,
         "profileLease": profile_lease,
         "handoffReceipt": handoff_receipt,
+        "ownerCustody": owner_custody,
+        "displayOwner": display_owner,
         "missingProofs": missing_proofs,
     }))
 }
@@ -622,6 +733,134 @@ mod tests {
         .clone()
     }
 
+    fn attest(state: &ServiceState, handle: &Map<String, Value>) -> Value {
+        service_control_plane_attestation(
+            state,
+            handle,
+            "browser-1",
+            "session-1",
+            "tab-1",
+            Some("profile-1"),
+            "2026-08-21T22:00:01Z",
+        )
+        .unwrap()
+    }
+
+    fn add_launch_custody(state: &mut ServiceState) {
+        use crate::runtime_owner_transfer::{
+            CleanupObligationState, RuntimeLaneLifecycleState, RuntimeLifecycleRecord,
+        };
+        let owner = state.runtime_owner_registry.owners.values().next().unwrap();
+        let record = RuntimeLifecycleRecord {
+            logical_browser_id: owner.browser_id.clone(),
+            profile_identity_digest: owner.profile_identity_digest.clone(),
+            owner_generation: owner.owner_generation,
+            lifecycle_state: RuntimeLaneLifecycleState::Ready,
+            cleanup_obligation_state: CleanupObligationState::Owned,
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+            process_group_id: Some(4242),
+            package_launch_identity_digest: Some(
+                super::super::runtime_lifecycle::package_launch_identity_digest(owner, Some(4242))
+                    .unwrap(),
+            ),
+            ..RuntimeLifecycleRecord::default()
+        };
+        state
+            .runtime_owner_registry
+            .lifecycle_records
+            .insert(owner.browser_id.clone(), record);
+    }
+
+    #[test]
+    fn remote_headed_attestation_requires_physical_display_owner_proof() {
+        let mut state = state_with_attestation(true);
+        let browser = state.browsers.get_mut("browser-1").unwrap();
+        browser.host = super::super::service_model::BrowserHost::RemoteHeaded;
+        browser.display_name = Some(":12345".to_string());
+        browser.display_allocation_id = Some("display-unproven".to_string());
+        let result = attest(&state, &handle());
+        assert_eq!(result["complete"], false);
+        assert!(result["missingProofs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("display_owner")));
+    }
+
+    #[test]
+    fn attestation_uses_current_lease_without_trusting_stale_handle_metadata() {
+        let state = state_with_attestation(true);
+        let mut supplied = handle();
+        supplied.insert("leaseState".into(), json!("shared"));
+        assert_eq!(attest(&state, &supplied)["complete"], true);
+        for (field, value) in [
+            ("leaseId", json!("foreign")),
+            ("targetId", json!("foreign")),
+            ("valid", json!(false)),
+            ("leaseState", json!("released")),
+        ] {
+            let mut invalid = supplied.clone();
+            invalid.insert(field.into(), value);
+            assert_eq!(attest(&state, &invalid)["complete"], false, "{field}");
+        }
+        let mut released = state.clone();
+        released.sessions.get_mut("session-1").unwrap().lease = LeaseState::Released;
+        assert_eq!(attest(&released, &supplied)["complete"], false);
+    }
+
+    #[test]
+    fn attestation_accepts_only_the_configured_runtime_profile_alias() {
+        let mut state = state_with_attestation(true);
+        state.profiles.get_mut("profile-1").unwrap().user_data_dir = Some("RuntimeName".into());
+        for (requested, expected) in [("RuntimeName", true), ("foreign-profile", false)] {
+            let mut supplied = handle();
+            supplied.insert("profileId".into(), json!(requested));
+            let result = service_control_plane_attestation(
+                &state,
+                &supplied,
+                "browser-1",
+                "session-1",
+                "tab-1",
+                Some(requested),
+                "2026-08-21T22:00:01Z",
+            )
+            .unwrap();
+            assert_eq!(result["complete"], expected, "{requested}");
+        }
+    }
+
+    #[test]
+    fn attestation_accepts_exact_launch_custody_without_inventing_handoff() {
+        let mut state = state_with_attestation(false);
+        add_launch_custody(&mut state);
+        let proof = attest(&state, &handle());
+        assert_eq!(proof["complete"], true);
+        assert_eq!(proof["handoffReceipt"], Value::Null);
+        assert_eq!(proof["ownerCustody"]["basis"], "managed_launch");
+        assert_eq!(proof["ownerCustody"]["verified"], true);
+        for defect in ["generation", "digest", "boot", "cleanup", "missing"] {
+            let mut invalid = state.clone();
+            let record = invalid
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut("browser-1")
+                .unwrap();
+            match defect {
+                "generation" => record.owner_generation += 1,
+                "digest" => record.package_launch_identity_digest = Some(digest("wrong")),
+                "boot" => record.boot_epoch = Some("old-boot".into()),
+                "cleanup" => {
+                    record.cleanup_obligation_state =
+                        crate::runtime_owner_transfer::CleanupObligationState::Unknown
+                }
+                "missing" => {
+                    invalid.runtime_owner_registry.lifecycle_records.clear();
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(attest(&invalid, &handle())["complete"], false, "{defect}");
+        }
+    }
+
     #[test]
     fn control_plane_attestation_is_complete_only_for_exact_current_authority() {
         let attestation = service_control_plane_attestation(
@@ -665,7 +904,7 @@ mod tests {
 
         assert_eq!(attestation["complete"], false);
         assert_eq!(attestation["handoffReceipt"], Value::Null);
-        assert_eq!(attestation["missingProofs"], json!(["handoff_receipt"]));
+        assert_eq!(attestation["missingProofs"], json!(["owner_custody"]));
     }
 
     #[test]

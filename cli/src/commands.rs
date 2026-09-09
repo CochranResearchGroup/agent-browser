@@ -91,6 +91,7 @@ const SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE: &str = "service browser-capability
 const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
 
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--session-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
+const SERVICE_STATE_VALIDATE_USAGE: &str = "service state validate --path <absolute-path> [--json]";
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
 const DESKTOP_EVIDENCE_OBSERVE_USAGE: &str = "desktop evidence observe --browser-id <id> [--episode-id <id>] [--evidence-surface stacking_or_occlusion|passkey_chooser] [--service-tab-handle-json <json> --trigger-selector <css>] [--include-frame] [--service-name <name>] [--agent-name <name>] [--task-name <name>]";
@@ -3391,6 +3392,76 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         // === Service status ===
         "service" => match rest.first().copied() {
+            Some("connections") => {
+                if !matches!(rest.len(), 4 | 5) || rest.get(1) != Some(&"reconcile") || rest.get(2) != Some(&"--plan") || !std::path::Path::new(rest[3]).is_absolute() || (rest.len() == 5 && rest[4] != "--apply") {
+                    return Err(ParseError::InvalidValue {
+                        message: "Expected one absolute reconciliation plan and optional --apply".to_string(),
+                        usage: "service connections reconcile --plan <absolute-path> [--apply]",
+                    });
+                }
+                Ok(json!({"id":id,"action":"service_connections_reconcile","planPath":rest[3],"apply":rest.len()==5}))
+            }
+            Some("state") => match rest.get(1).copied() {
+                Some("validate") => {
+                    let mut path = None;
+                    let mut i = 2;
+                    while i < rest.len() {
+                        match rest[i] {
+                            "--path" => {
+                                let Some(raw) = rest.get(i + 1) else {
+                                    return Err(ParseError::MissingArguments {
+                                        context: "service state validate --path".to_string(),
+                                        usage: SERVICE_STATE_VALIDATE_USAGE,
+                                    });
+                                };
+                                if !std::path::Path::new(raw).is_absolute() {
+                                    return Err(ParseError::InvalidValue {
+                                        message:
+                                            "Service State validation path must be absolute"
+                                                .to_string(),
+                                        usage: SERVICE_STATE_VALIDATE_USAGE,
+                                    });
+                                }
+                                if path.replace(*raw).is_some() {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "--path may be supplied only once".to_string(),
+                                        usage: SERVICE_STATE_VALIDATE_USAGE,
+                                    });
+                                }
+                                i += 1;
+                            }
+                            flag => {
+                                return Err(ParseError::InvalidValue {
+                                    message: format!(
+                                        "Unknown flag for service state validate: {flag}"
+                                    ),
+                                    usage: SERVICE_STATE_VALIDATE_USAGE,
+                                });
+                            }
+                        }
+                        i += 1;
+                    }
+                    let Some(path) = path else {
+                        return Err(ParseError::MissingArguments {
+                            context: "service state validate".to_string(),
+                            usage: SERVICE_STATE_VALIDATE_USAGE,
+                        });
+                    };
+                    Ok(json!({
+                        "id": id,
+                        "action": "service_state_validate",
+                        "path": path,
+                    }))
+                }
+                Some(sub) => Err(ParseError::UnknownSubcommand {
+                    subcommand: sub.to_string(),
+                    valid_options: &["validate"],
+                }),
+                None => Err(ParseError::MissingArguments {
+                    context: "service state".to_string(),
+                    usage: "service state validate --path <absolute-path> [--json]",
+                }),
+            },
             Some("status") | Some("watch") => {
                 let mut cmd = json!({
                     "id": id,
@@ -4892,6 +4963,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             Some(sub) => Err(ParseError::UnknownSubcommand {
                 subcommand: sub.to_string(),
                 valid_options: &[
+                    "state",
                     "status",
                     "watch",
                     "reconcile",
@@ -4913,7 +4985,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|resources|gc|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
+                usage: "service <state|status|watch|reconcile|resources|gc|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
             }),
         },
 
@@ -8547,6 +8619,60 @@ mod tests {
             .as_array()
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn test_service_connections_reconcile_requires_explicit_local_plan() {
+        let preview = parse_command(
+            &args("service connections reconcile --plan /tmp/plan.json"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(preview["action"], "service_connections_reconcile");
+        assert_eq!(preview["apply"], false);
+        let apply = parse_command(
+            &args("service connections reconcile --plan /tmp/plan.json --apply"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(apply["apply"], true);
+        for command in [
+            "service connections",
+            "service connections reconcile --plan relative.json",
+            "service connections reconcile --plan /tmp/a --apply --apply",
+        ] {
+            assert!(parse_command(&args(command), &default_flags()).is_err());
+        }
+    }
+
+    #[test]
+    fn test_service_state_validate_requires_one_absolute_path() {
+        let cmd = parse_command(
+            &args("service state validate --path /tmp/candidate-state.json"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(cmd["action"], "service_state_validate");
+        assert_eq!(cmd["path"], "/tmp/candidate-state.json");
+
+        assert!(matches!(
+            parse_command(
+                &args("service state validate --path relative/state.json"),
+                &default_flags()
+            ),
+            Err(ParseError::InvalidValue { .. })
+        ));
+        assert!(matches!(
+            parse_command(&args("service state validate"), &default_flags()),
+            Err(ParseError::MissingArguments { .. })
+        ));
+        assert!(matches!(
+            parse_command(
+                &args("service state validate --path /tmp/a --path /tmp/b"),
+                &default_flags()
+            ),
+            Err(ParseError::InvalidValue { .. })
+        ));
     }
 
     #[test]

@@ -238,7 +238,11 @@ pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<P
             .get(&owner.browser_id)
             .and_then(|browser| browser.profile_id.clone())
         {
-            legacy_profiles.insert(profile_id);
+            // Owner context must not create a second legacy authority row for
+            // a profile already represented by a claim or capability lease.
+            if !bound_profiles.contains(&profile_id) {
+                legacy_profiles.insert(profile_id);
+            }
         }
     }
     for profile_id in legacy_profiles {
@@ -634,8 +638,10 @@ fn bind_registered_principal_to_current_owner(
     else {
         return Ok(false);
     };
-    let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path))?;
+    let profile_identity_digest = crate::runtime_profile::resolved_profile_identity_digest(
+        profile_path,
+        &registered.capability.profile_id,
+    )?;
     let Some(owner) = state
         .runtime_owner_registry
         .owners
@@ -675,8 +681,10 @@ fn rotate_registered_principal_owner_binding(
     else {
         return Ok(false);
     };
-    let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path))?;
+    let profile_identity_digest = crate::runtime_profile::resolved_profile_identity_digest(
+        profile_path,
+        &registered.capability.profile_id,
+    )?;
     if let Some(existing) = state
         .runtime_owner_registry
         .principal_bindings
@@ -1133,7 +1141,10 @@ pub(crate) fn doctor_profile_leases(state: &ServiceState, now: &str) -> ProfileL
                 .to_string(),
                 lease_id: lease.id.clone(),
                 profile_id: lease.profile_id.clone(),
-                message: format!("Profile lease {} is blocked by {}", lease.id, axis),
+                message: format!(
+                    "Profile-owner lease {} requires {}. Inspect its authorizedActions and recourse for an exact repair; ordinary tab permission is evaluated separately.",
+                    lease.id, axis
+                ),
                 safe_actions: lease
                     .authorized_actions
                     .iter()
@@ -1174,7 +1185,7 @@ pub(crate) fn rejoin_profile_lease(
         return Ok(lease);
     }
     let expires_at = expires_at
-        .filter(|expires_at| *expires_at > now)
+        .filter(|expires_at| rfc3339_at_or_after(now, expires_at) == Ok(false))
         .ok_or_else(|| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
     let has_principal_binding = state
         .runtime_owner_registry
@@ -1277,8 +1288,9 @@ pub(crate) fn release_profile_lease(
 
 #[allow(clippy::too_many_arguments)]
 /// Builds a sealed, no-effect descriptor for exact stale-session release or
-/// same-capability owner-generation refresh. A binding refresh is proposed
-/// only when the ready owner and every retained lease identity already agree.
+/// same-capability owner-generation refresh, or an already-authorized exact
+/// owner rejoin. Rejoin uses the same unique, uncontested custody predicate as
+/// the direct operation and is sealed alone to preserve its lease revision.
 pub(crate) fn plan_profile_lease_reconciliation(
     state: &ServiceState,
     lease_id: &str,
@@ -1354,6 +1366,27 @@ pub(crate) fn plan_profile_lease_reconciliation(
                 from_state: binding.owner_generation.to_string(),
                 to_state: owner.owner_generation.to_string(),
             });
+        }
+    }
+    if lease.observation_only
+        && lease
+            .authorized_actions
+            .iter()
+            .any(|action| action == "rejoin")
+    {
+        if let Some((session_id, _)) = lease
+            .profile_identity_digest
+            .as_deref()
+            .and_then(|digest| exact_rejoin_target_for_owner(state, authority, digest, now))
+        {
+            // Do not mix rejoin with stale-session changes that would invalidate
+            // its sealed lease revision before the guarded operation executes.
+            proposed_transitions = vec![ProfileLeaseTransition {
+                action: "rejoin_owned_browser".to_string(),
+                session_id,
+                from_state: lease.state.clone(),
+                to_state: "active".to_string(),
+            }];
         }
     }
     let mut blocked_reasons = Vec::new();
@@ -1465,6 +1498,32 @@ pub(crate) fn apply_profile_lease_reconciliation(
         ));
     }
     for transition in &plan.proposed_transitions {
+        if transition.action == "rejoin_owned_browser" {
+            let target = lease
+                .profile_identity_digest
+                .as_deref()
+                .and_then(|digest| exact_rejoin_target_for_owner(state, authority, digest, now));
+            if plan.proposed_transitions.len() != 1
+                || transition.from_state != lease.state
+                || transition.to_state != "active"
+                || target.as_ref().map(|(session, _)| session.as_str())
+                    != Some(transition.session_id.as_str())
+            {
+                return Err(lease_error(
+                    ProfileLeaseFailureCode::PlanInvalid,
+                    &plan.lease_id,
+                ));
+            }
+            rejoin_profile_lease(
+                state,
+                &plan.lease_id,
+                &plan.lease_revision,
+                authority,
+                now,
+                Some(&plan.expires_at),
+            )?;
+            continue;
+        }
         if transition.action == "refresh_principal_owner_binding" {
             let binding = state
                 .runtime_owner_registry
@@ -1712,8 +1771,58 @@ fn bound_profile_lease(
         recourse,
         observation_only: !coherent,
     };
+    project_exact_terminal_history(state, &mut record, now);
     record.lease_revision = lease_revision(&record);
     record
+}
+
+/// Terminal owner history cannot block profile use. Only an exact, cleanup-
+/// satisfied generation without current work or a live browser projection is
+/// historical; the retained evidence never grants effect authority.
+fn project_exact_terminal_history(
+    state: &ServiceState,
+    record: &mut ProfileLeaseRecord,
+    now: &str,
+) {
+    let Some(owner) = record
+        .profile_identity_digest
+        .as_deref()
+        .and_then(|digest| state.runtime_owner_registry.owners.get(digest))
+    else {
+        return;
+    };
+    if owner.pending_transfer.is_some()
+        || state.browsers.contains_key(&owner.browser_id)
+        || sessions_for_profile(state, &record.profile_id)
+            .iter()
+            .any(|session| !inactive_or_expired(session.lease, session.expires_at.as_deref(), now))
+        || state
+            .tabs
+            .values()
+            .any(|tab| tab.browser_id == owner.browser_id && tab.lifecycle != TabLifecycle::Closed)
+    {
+        return;
+    }
+    let exact_terminal = state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get(&owner.browser_id)
+        .is_some_and(|lifecycle| {
+            lifecycle.logical_browser_id == owner.browser_id
+                && lifecycle.profile_identity_digest == owner.profile_identity_digest
+                && lifecycle.owner_generation == owner.owner_generation
+                && lifecycle.lifecycle_state
+                    == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
+                && lifecycle.cleanup_obligation_state
+                    == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
+                && !lifecycle.terminal_evidence.is_empty()
+        });
+    if exact_terminal {
+        record.state = "historical".to_string();
+        record.blocking_identity_axes.clear();
+        record.authorized_actions = READ_ACTIONS.map(ToString::to_string).to_vec();
+        record.observation_only = true;
+    }
 }
 
 fn unbound_capability_profile_lease(
@@ -1726,7 +1835,8 @@ fn unbound_capability_profile_lease(
         .get(&capability.profile_id)
         .and_then(|profile| profile.user_data_dir.as_deref())
         .and_then(|path| {
-            crate::runtime_profile::canonical_profile_identity_digest(Path::new(path)).ok()
+            crate::runtime_profile::resolved_profile_identity_digest(path, &capability.profile_id)
+                .ok()
         });
     let owner = profile_identity_digest
         .as_deref()
@@ -1811,6 +1921,7 @@ fn unbound_capability_profile_lease(
         },
         observation_only: true,
     };
+    project_exact_terminal_history(state, &mut record, now);
     record.lease_revision = lease_revision(&record);
     record
 }
@@ -2372,6 +2483,44 @@ mod tests {
     const SEAL_KEY: &[u8] = b"profile-lease-test-seal-key-more-than-thirty-two-bytes";
     const NOW: &str = "2026-08-27T12:00:00Z";
 
+    #[test]
+    fn named_profile_registration_and_lease_projection_use_launch_identity() {
+        let _guard = EnvGuard::new(&["HOME"]);
+        let (mut state, authority, _) = state_with_lease();
+        let profile_id = authority.profile_id.clone();
+        let profile = state.profiles.get_mut(&profile_id).unwrap();
+        profile.user_data_dir = Some("p160-named-identity-fixture".to_string());
+        let resolved = crate::runtime_profile::resolve_profile(
+            profile.user_data_dir.as_deref(),
+            Some(&profile_id),
+        )
+        .unwrap();
+        let expected =
+            crate::runtime_profile::canonical_profile_identity_digest(&resolved.user_data_dir)
+                .unwrap();
+        let mut owner = state
+            .runtime_owner_registry
+            .owners
+            .values()
+            .next()
+            .unwrap()
+            .clone();
+        owner.profile_identity_digest = expected.clone();
+        state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(owner);
+        let registered = super::super::service_principal::RegisteredProfileCapability {
+            principal: state.service_principals.principals[&authority.principal_id].clone(),
+            capability: state.service_principals.profile_capabilities[&authority.capability_id]
+                .clone(),
+        };
+        assert_eq!(
+            unbound_capability_profile_lease(&state, &registered.capability, NOW)
+                .profile_identity_digest
+                .as_deref(),
+            Some(expected.as_str())
+        );
+        assert!(bind_registered_principal_to_current_owner(&mut state, &registered).unwrap());
+    }
+
     fn state_with_lease() -> (ServiceState, AuthenticatedServicePrincipal, String) {
         let profile_id = "odollo-fulfillment";
         let principal_id = "principal:odollo-fulfillment";
@@ -2454,6 +2603,95 @@ mod tests {
         (state, authority, lease_id)
     }
 
+    #[test]
+    fn named_profile_registration_projection_and_foreign_guard() {
+        let (mut state, authority, _) = state_with_lease();
+        let profile_id = authority.profile_id.clone();
+        state.profiles.get_mut(&profile_id).unwrap().user_data_dir = Some("Default".to_string());
+        let resolved =
+            crate::runtime_profile::resolve_profile(Some("Default"), Some(&profile_id)).unwrap();
+        let expected =
+            crate::runtime_profile::canonical_profile_identity_digest(&resolved.user_data_dir)
+                .unwrap();
+        let raw = crate::runtime_profile::canonical_profile_identity_digest(Path::new("Default"))
+            .unwrap();
+        assert_ne!(
+            expected, raw,
+            "named profile must not be rooted at caller cwd"
+        );
+        let mut owner = state
+            .runtime_owner_registry
+            .owners
+            .values()
+            .next()
+            .unwrap()
+            .clone();
+        owner.profile_identity_digest = expected.clone();
+        state.runtime_owner_registry.owners.clear();
+        state
+            .runtime_owner_registry
+            .owners
+            .insert(expected.clone(), owner);
+        state.runtime_owner_registry.principal_bindings.clear();
+        let registered = super::super::service_principal::RegisteredProfileCapability {
+            principal: state.service_principals.principals[&authority.principal_id].clone(),
+            capability: state.service_principals.profile_capabilities[&authority.capability_id]
+                .clone(),
+        };
+        let projected = unbound_capability_profile_lease(&state, &registered.capability, NOW);
+        assert_eq!(
+            projected.profile_identity_digest.as_deref(),
+            Some(expected.as_str())
+        );
+        // Previously issued capability repairs the one exact legacy session through
+        // the existing guarded rejoin API; no re-registration or rotation.
+        let mut existing = state.clone();
+        let session = existing.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.work_lease_revision = 0;
+        session.expires_at = None;
+        let lease = unbound_capability_profile_lease(&existing, &registered.capability, NOW);
+        assert!(lease.authorized_actions.contains(&"rejoin".to_string()));
+        let repaired = rejoin_profile_lease(
+            &mut existing,
+            &lease.id,
+            &lease.lease_revision,
+            &authority,
+            NOW,
+            Some("2026-08-27T13:00:00Z"),
+        )
+        .unwrap();
+        assert!(!repaired.observation_only);
+        assert_eq!(
+            existing.runtime_owner_registry.principal_bindings[&expected].capability_id,
+            authority.capability_id
+        );
+        assert!(bind_registered_principal_to_current_owner(&mut state, &registered).unwrap());
+        assert_eq!(
+            state.runtime_owner_registry.principal_bindings[&expected].principal_id,
+            authority.principal_id
+        );
+        let foreign = register_profile_capability(
+            &mut state.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:foreign".to_string(),
+                display_name: None,
+                profile_id,
+                registered_at: Some(NOW.to_string()),
+                registered_by: None,
+            },
+            "foreign-capability-token-more-than-thirty-two-characters",
+        )
+        .unwrap();
+        assert!(bind_registered_principal_to_current_owner(&mut state, &foreign).is_err());
+        assert_eq!(
+            state.runtime_owner_registry.principal_bindings[&expected].principal_id,
+            authority.principal_id
+        );
+    }
+
     fn temp_service_home(label: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!(
             "agent-browser-profile-lease-{label}-{}",
@@ -2471,6 +2709,59 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn terminal_bound_owner_is_history_only_with_exact_cleanup_and_no_work() {
+        use crate::runtime_owner_transfer::{
+            CleanupObligationState, RuntimeLaneLifecycleState, RuntimeLifecycleRecord,
+        };
+        let (mut state, _, lease_id) = state_with_lease();
+        state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Released;
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap();
+        owner.owner_generation += 1;
+        let record = RuntimeLifecycleRecord {
+            logical_browser_id: owner.browser_id.clone(),
+            profile_identity_digest: owner.profile_identity_digest.clone(),
+            owner_generation: owner.owner_generation,
+            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state: CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".into(),
+                "profile_lock_released".into(),
+            ],
+            ..RuntimeLifecycleRecord::default()
+        };
+        state
+            .runtime_owner_registry
+            .lifecycle_records
+            .insert(record.logical_browser_id.clone(), record);
+        let lease = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        assert_eq!(lease.state, "historical");
+        assert!(lease.blocking_identity_axes.is_empty());
+        assert!(lease.observation_only);
+        assert!(lease
+            .authorized_actions
+            .iter()
+            .all(|action| READ_ACTIONS.contains(&action.as_str())));
+        assert!(doctor_profile_leases(&state, NOW).healthy);
+
+        state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Exclusive;
+        assert!(!doctor_profile_leases(&state, NOW).healthy);
+        state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Released;
+        state
+            .runtime_owner_registry
+            .lifecycle_records
+            .values_mut()
+            .next()
+            .unwrap()
+            .owner_generation -= 1;
+        assert!(!doctor_profile_leases(&state, NOW).healthy);
     }
 
     #[test]
@@ -2780,6 +3071,104 @@ mod tests {
         assert_eq!(binding.principal_id, authority.principal_id);
         assert_eq!(binding.capability_id, authority.capability_id);
         assert_eq!(binding.owner_generation, 9);
+    }
+
+    #[test]
+    fn reconcile_plan_rejoins_missing_binding_and_rejects_changed_custody() {
+        let (mut state, authority, _) = state_with_lease();
+        state.runtime_owner_registry.principal_bindings.clear();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.work_lease_revision = 0;
+        session.expires_at = None;
+        state.tabs.insert(
+            "tab-odollo".to_string(),
+            BrowserTab {
+                id: "tab-odollo".to_string(),
+                browser_id: "browser-odollo".to_string(),
+                owner_session_id: Some("session-odollo".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        );
+        state.browsers.insert(
+            "browser-odollo".to_string(),
+            super::super::service_model::BrowserProcess {
+                id: "browser-odollo".to_string(),
+                profile_id: Some(authority.profile_id.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            profile_leases_for_state(&state, NOW).len(),
+            1,
+            "an unbound capability must not also project a legacy owner row"
+        );
+        let lease = profile_leases_for_state(&state, NOW)
+            .into_iter()
+            .find(|lease| lease.principal_id.as_deref() == Some(authority.principal_id.as_str()))
+            .unwrap();
+        let plan = plan_profile_lease_reconciliation(
+            &state,
+            &lease.id,
+            &lease.lease_revision,
+            &authority,
+            NOW,
+            "2026-08-27T08:00:00-05:00",
+            Some("boot-epoch-1".to_string()),
+            "rejoin-missing-binding".to_string(),
+            SEAL_KEY,
+        )
+        .unwrap();
+        assert!(plan.effect_capable, "{:?}", plan.blocked_reasons);
+        assert_eq!(plan.proposed_transitions.len(), 1);
+        assert_eq!(plan.proposed_transitions[0].action, "rejoin_owned_browser");
+        assert_eq!(plan.proposed_transitions[0].session_id, "session-odollo");
+
+        let mut changed = state.clone();
+        changed.tabs.values_mut().next().unwrap().principal_id =
+            Some("foreign-principal".to_string());
+        let before = changed.clone();
+        assert!(apply_profile_lease_reconciliation(
+            &mut changed,
+            &plan,
+            &authority,
+            NOW,
+            Some("boot-epoch-1"),
+            SEAL_KEY,
+        )
+        .is_err());
+        assert_eq!(changed, before);
+
+        let receipt = apply_profile_lease_reconciliation(
+            &mut state,
+            &plan,
+            &authority,
+            NOW,
+            Some("boot-epoch-1"),
+            SEAL_KEY,
+        )
+        .unwrap();
+        assert_eq!(receipt.transition_count, 1);
+        let result = inspect_profile_lease(&state, &lease.id, NOW).unwrap();
+        assert_eq!(result.state, "active");
+        assert!(result.blocking_identity_axes.is_empty());
+        let after = state.clone();
+        assert!(
+            apply_profile_lease_reconciliation(
+                &mut state,
+                &plan,
+                &authority,
+                NOW,
+                Some("boot-epoch-1"),
+                SEAL_KEY,
+            )
+            .unwrap()
+            .replayed
+        );
+        assert_eq!(state, after);
     }
 
     #[test]
@@ -3133,6 +3522,17 @@ mod tests {
             )]),
             ..ServiceState::default()
         };
+        let (retained, _, _) = state_with_lease();
+        state.runtime_owner_registry = retained.runtime_owner_registry;
+        state.runtime_owner_registry.principal_bindings.clear();
+        state.browsers.insert(
+            "browser-odollo".to_string(),
+            super::super::service_model::BrowserProcess {
+                id: "browser-odollo".to_string(),
+                profile_id: Some("last30days-social".to_string()),
+                ..Default::default()
+            },
+        );
         let claim = state
             .acquire_lease_claim(AcquireLeaseClaimRequest {
                 resource: LeaseResourceKey::profile("last30days-social"),

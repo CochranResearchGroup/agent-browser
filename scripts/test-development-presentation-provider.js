@@ -2,16 +2,19 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA,
+  developmentExternalIngressBinding,
   developmentPresentationProviderDescriptor,
   developmentPresentationProviderManifest,
   developmentPresentationProviderManifestCompatible,
+  developmentPresentationProviderManifestUpgradeCompatible,
   developmentAgentSkillStatus,
   doctorDevelopmentPresentationProvider,
+  evaluateDevelopmentPresentationProviderObservation,
   synchronizeDevelopmentAgentSkill,
   validateDevelopmentPresentationProviderIsolation,
 } from './lib/development-presentation-provider.js';
@@ -19,12 +22,14 @@ import {
   DEVELOPMENT_PRESENTATION_DEPLOYMENT_SCHEMA,
   applyDevelopmentPresentationProvider,
   developmentPresentationProviderDeploymentPlan,
+  ensureDevelopmentPresentationBootstrapInventory,
   probeDevelopmentPresentationProvider,
   prepareDevelopmentPresentationProviderSecrets,
   renderDevelopmentPresentationProviderBundle,
   stageDevelopmentPresentationProviderBundle,
 } from './lib/development-presentation-provider-deployment.js';
 import {
+  createDevelopmentPresentationProviderSystemEffects,
   createDevelopmentPresentationLifecycleSystemEffects,
   developmentPresentationProviderSystemPreflight,
 } from './lib/development-presentation-provider-system-effects.js';
@@ -39,10 +44,141 @@ import {
 
 const fixture = mkdtempSync(join(tmpdir(), 'agent-browser-dev-provider-'));
 const userHome = join(fixture, 'user');
-const env = { ...process.env, AGENT_BROWSER_DEV_USER_HOME: userHome };
+const env = {
+  ...process.env,
+  AGENT_BROWSER_DEV_USER_HOME: userHome,
+  AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: 'https://agent-browser-dev.example.test/',
+  AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
+};
+
+function readExtensionArchive(path) {
+  const result = spawnSync('python3', ['-c', `
+import base64, io, json, sys, zipfile
+with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as archive:
+    assert archive.testzip() is None
+    assert len(archive.namelist()) == len(set(archive.namelist()))
+    print(json.dumps({name: base64.b64encode(archive.read(name)).decode() for name in archive.namelist()}))
+`], { input: readFileSync(path), encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  return Object.fromEntries(Object.entries(JSON.parse(result.stdout))
+    .map(([name, content]) => [name, Buffer.from(content, 'base64')]));
+}
 
 try {
   const descriptor = developmentPresentationProviderDescriptor(env);
+  const namespaceEnv = {
+    ...env,
+    AGENT_BROWSER_DEV_NAMESPACE: 'p158',
+    AGENT_BROWSER_DEV_DASHBOARD_PORT: '5148',
+    AGENT_BROWSER_DEV_BACKEND_PORT: '5149',
+    AGENT_BROWSER_DEV_SHADOW_PORT: '5150',
+    AGENT_BROWSER_DEV_LANE_STREAM_PORT: '5151',
+    AGENT_BROWSER_DEV_GUACAMOLE_PORT: '8193',
+    AGENT_BROWSER_DEV_GUACD_PORT: '4923',
+    AGENT_BROWSER_DEV_POSTGRES_PORT: '56433',
+  };
+  const namespaced = developmentPresentationProviderDescriptor(namespaceEnv);
+  assert.notEqual(namespaced.root, descriptor.root);
+  assert.notEqual(namespaced.pseudoHome, descriptor.pseudoHome);
+  assert.equal(namespaced.routes[0].routeId, 'development-p158-route-1');
+  assert.equal(namespaced.routes[0].user, 'agent-browser-rdp-dev-p158-1');
+  assert.equal(namespaced.routes[0].viewerSession, 'development-p158-presentation-provider-v5-1');
+  assert.equal(namespaced.composeProject, 'agent-browser-dev-p158-presentation');
+  validateDevelopmentPresentationProviderIsolation(namespaced);
+  for (const field of ['root', 'pseudoHome', 'composeProject', 'services', 'database', 'routes']) {
+    assert.throws(() => validateDevelopmentPresentationProviderIsolation({
+      ...namespaced, [field]: descriptor[field],
+    }), /default development|namespace/);
+  }
+  assert.throws(() => developmentPresentationProviderDescriptor({
+    ...namespaceEnv, AGENT_BROWSER_DEV_POSTGRES_PORT: '55433',
+  }), /outside production/);
+  const namespacedBundle = renderDevelopmentPresentationProviderBundle(namespaced);
+  assert.ok(JSON.stringify(namespacedBundle).includes('agent-browser-dev-p158-guacamole-postgres-data'));
+  stageDevelopmentPresentationProviderBundle({ env: namespaceEnv });
+  assert.equal(existsSync(namespaced.root), true);
+  assert.equal(existsSync(descriptor.root), false);
+  const defaultDevelopmentRoot = join(userHome, '.local', 'share', 'agent-browser-dev');
+  mkdirSync(defaultDevelopmentRoot, { recursive: true });
+  const defaultAlias = join(fixture, 'default-development-alias');
+  symlinkSync(defaultDevelopmentRoot, defaultAlias, 'dir');
+  assert.throws(() => stageDevelopmentPresentationProviderBundle({ env: {
+    ...namespaceEnv, AGENT_BROWSER_DEV_PRESENTATION_ROOT: join(defaultAlias, 'not-created', 'provider'),
+  } }), /default development/);
+  assert.equal(existsSync(join(defaultDevelopmentRoot, 'not-created')), false);
+  const productionRoot = join(userHome, '.agent-browser');
+  mkdirSync(productionRoot, { recursive: true });
+  const productionAlias = join(fixture, 'production-alias');
+  symlinkSync(productionRoot, productionAlias, 'dir');
+  assert.throws(() => stageDevelopmentPresentationProviderBundle({ env: {
+    ...namespaceEnv, AGENT_BROWSER_DEV_PRESENTATION_ROOT: join(productionAlias, 'not-created', 'provider'),
+  } }), /production path/);
+  assert.equal(existsSync(join(productionRoot, 'not-created')), false);
+  assert.throws(() => stageDevelopmentPresentationProviderBundle({ env: {
+    ...namespaceEnv, AGENT_BROWSER_DEV_PRESENTATION_ROOT: descriptor.root,
+  } }), /default development/);
+  assert.equal(existsSync(descriptor.root), false);
+  const secondProvider = developmentPresentationProviderDescriptor({ ...namespaceEnv,
+    AGENT_BROWSER_DEV_NAMESPACE: 'p159',
+    AGENT_BROWSER_DEV_DASHBOARD_PORT: '5248',
+    AGENT_BROWSER_DEV_BACKEND_PORT: '5249',
+    AGENT_BROWSER_DEV_SHADOW_PORT: '5250',
+    AGENT_BROWSER_DEV_LANE_STREAM_PORT: '5251',
+    AGENT_BROWSER_DEV_GUACAMOLE_PORT: '8293',
+    AGENT_BROWSER_DEV_GUACD_PORT: '5023',
+    AGENT_BROWSER_DEV_POSTGRES_PORT: '57433',
+  });
+  assert.notEqual(secondProvider.root, namespaced.root);
+  validateDevelopmentPresentationProviderIsolation(secondProvider);
+  assert.ok(Object.values(secondProvider.ports).every((port) => !Object.values(namespaced.ports).includes(port)));
+  assert.equal(developmentPresentationProviderDeploymentPlan(namespaced).providerRoot, namespaced.root);
+  assert.equal(namespaced.warmSlots, 4);
+  assert.equal(namespaced.hardMaxSlots, 6);
+  const bootstrapOrder = [];
+  assert.throws(() => applyDevelopmentPresentationProvider({
+    env: namespaceEnv, authorizeEffects: true,
+    effects: {
+      snapshotProduction: () => ({}), assertProductionUnchanged: assert.deepEqual,
+      createVolume: () => {}, startDatabase: () => {}, ensureRouteUser: () => {},
+      syncConnections: () => {}, startProvider: () => {},
+      grantOperatorRouteAccess: () => bootstrapOrder.push('access'),
+      openWarmRoutes: () => {
+        bootstrapOrder.push('open');
+        assert.equal(existsSync(namespaced.manifest), false);
+        assert.deepEqual(JSON.parse(readFileSync(namespaced.inventoryPath, 'utf8')).routes, []);
+        throw new Error('bootstrap viewer failure');
+      },
+      quarantine: () => {},
+    },
+  }), /apply quarantined: bootstrap viewer failure/);
+  assert.deepEqual(bootstrapOrder, ['access', 'open']);
+  assert.equal(existsSync(namespaced.manifest), false);
+  const retainedBootstrap = readFileSync(namespaced.inventoryPath, 'utf8');
+  assert.equal(ensureDevelopmentPresentationBootstrapInventory(namespaced), false);
+  assert.equal(readFileSync(namespaced.inventoryPath, 'utf8'), retainedBootstrap);
+  mkdirSync(secondProvider.root, { recursive: true });
+  writeFileSync(secondProvider.manifest, 'existing configured authority');
+  assert.equal(ensureDevelopmentPresentationBootstrapInventory(secondProvider), false);
+  assert.equal(readFileSync(secondProvider.manifest, 'utf8'), 'existing configured authority');
+  assert.equal(existsSync(secondProvider.inventoryPath), false);
+  for (const key of ['routeId', 'slotId', 'user', 'connectionKey', 'displayReservationId', 'viewerProfilePath']) {
+    assert.ok(secondProvider.routes.every((route) => !namespaced.routes.some((other) => other[key] === route[key])));
+  }
+  assert.throws(() => createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv, productionSnapshot: () => ({}), assertProductionUnchanged: () => {},
+  }), /default development identity guards/);
+  const guardedEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({ production: true }),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({ defaultDevelopment: true }),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+  });
+  const guardedBefore = guardedEffects.snapshotProduction();
+  guardedEffects.assertProductionUnchanged(guardedBefore, guardedEffects.snapshotProduction());
+  assert.throws(() => guardedEffects.assertProductionUnchanged(guardedBefore, {
+    ...guardedBefore, defaultDevelopment: { changed: true },
+  }));
   const routeOpenerSource = readFileSync('scripts/open-rdp-guac-route-displays.js', 'utf8');
   assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'set'/);
   assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'open'/);
@@ -52,6 +188,10 @@ try {
   assert.equal(descriptor.environment, 'development');
   assert.equal(descriptor.warmSlots, 4);
   assert.equal(descriptor.hardMaxSlots, 6);
+  assert.deepEqual(descriptor.connectionLimits, {
+    maxConnections: 8,
+    maxConnectionsPerUser: 8,
+  });
   assert.equal(descriptor.routes.length, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.routeId)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.user)).size, 6);
@@ -66,17 +206,97 @@ try {
   assert.equal(descriptor.ports.guacamole, 8093);
   assert.equal(descriptor.ports.guacd, 4823);
   assert.equal(descriptor.ports.postgres, 55433);
-  assert.equal(descriptor.publicOperatorUrl, 'http://127.0.0.1:4948');
+  assert.equal(descriptor.localDiagnosticUrl, 'http://127.0.0.1:4948');
+  assert.equal(descriptor.publicOperatorUrl, 'https://agent-browser-dev.example.test');
+  assert.deepEqual(descriptor.externalIngress, {
+    configured: true,
+    publicOperatorUrl: 'https://agent-browser-dev.example.test',
+    reviewedRevision: 'cooper-test-revision-001',
+    bindingSha256: developmentExternalIngressBinding(env).bindingSha256,
+  });
+  assert.equal(descriptor.externalIngress.bindingSha256.length, 64);
+  const unconfiguredDescriptor = developmentPresentationProviderDescriptor({
+    ...env,
+    AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: '',
+    AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: '',
+  });
+  assert.equal(unconfiguredDescriptor.publicOperatorUrl, null);
+  assert.equal(unconfiguredDescriptor.localDiagnosticUrl, 'http://127.0.0.1:4948');
+  assert.equal(unconfiguredDescriptor.externalIngress.configured, false);
+  const unconfiguredIngressEnv = {
+    ...env,
+    AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: '',
+    AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: '',
+  };
+  assert.throws(
+    () => stageDevelopmentPresentationProviderBundle({ env: unconfiguredIngressEnv }),
+    /staging requires a reviewed public HTTPS external-ingress binding/,
+  );
+  assert.throws(
+    () => applyDevelopmentPresentationProvider({
+      env: unconfiguredIngressEnv,
+      authorizeEffects: true,
+      effects: {},
+    }),
+    /apply requires a reviewed public HTTPS external-ingress binding/,
+  );
+  for (const publicOperatorUrl of [
+    'http://agent-browser-dev.example.test',
+    'https://127.0.0.1',
+    'https://10.1.2.3',
+    'https://172.20.1.2',
+    'https://192.168.1.2',
+    'https://169.254.2.3',
+    'https://provider.local',
+    'https://user:secret@agent-browser-dev.example.test',
+    'https://agent-browser-dev.example.test/remote-view',
+    'https://agent-browser-dev.example.test?route=1',
+    'https://agent-browser-dev.example.test#route',
+  ]) {
+    assert.throws(() => developmentExternalIngressBinding({
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: publicOperatorUrl,
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
+    }), /public HTTPS origin/);
+  }
+  assert.throws(() => developmentExternalIngressBinding({
+    AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: 'https://agent-browser-dev.example.test',
+  }), /requires both/);
+  assert.throws(() => developmentExternalIngressBinding({
+    AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
+  }), /requires both/);
   const currentManifest = developmentPresentationProviderManifest(descriptor);
   const legacyManifest = { ...currentManifest };
   delete legacyManifest.publicOperatorUrl;
   assert.equal(
     developmentPresentationProviderManifestCompatible(legacyManifest, currentManifest),
-    true,
+    false,
   );
   assert.equal(
     developmentPresentationProviderManifestCompatible(
       { ...legacyManifest, composeProject: 'foreign-provider' },
+      currentManifest,
+    ),
+    false,
+  );
+  const legacyV1Manifest = { ...currentManifest };
+  legacyV1Manifest.schemaVersion = 'agent-browser.development-presentation-provider.v1';
+  delete legacyV1Manifest.localDiagnosticUrl;
+  delete legacyV1Manifest.externalIngress;
+  legacyV1Manifest.publicOperatorUrl = descriptor.localDiagnosticUrl;
+  assert.equal(
+    developmentPresentationProviderManifestUpgradeCompatible(legacyV1Manifest, currentManifest),
+    true,
+  );
+  assert.equal(
+    developmentPresentationProviderManifestUpgradeCompatible(
+      { ...legacyV1Manifest, composeProject: 'foreign-provider' },
+      currentManifest,
+    ),
+    false,
+  );
+  assert.equal(
+    developmentPresentationProviderManifestUpgradeCompatible(
+      { ...legacyV1Manifest, publicOperatorUrl: 'http://127.0.0.1:9999' },
       currentManifest,
     ),
     false,
@@ -250,6 +470,14 @@ try {
   assert.equal(statSync(join(descriptor.root, 'init')).mode & 0o777, 0o755);
   assert.equal(existsSync(join(descriptor.root, 'init', '001-initdb.sql')), true);
   assert.equal(existsSync(join(descriptor.root, 'extensions', 'guac-manifest.json')), true);
+  const extensionPath = join(descriptor.root, 'extensions', 'agent-browser-defaults.jar');
+  const extensionEntries = readExtensionArchive(extensionPath);
+  assert.deepEqual(Object.keys(extensionEntries), ['guac-manifest.json', 'agent-browser-defaults.js']);
+  for (const [name, content] of Object.entries(extensionEntries)) {
+    assert.deepEqual(content, readFileSync(join('cli/assets/workstation/guacamole/extensions', name)));
+  }
+  assert.equal(statSync(extensionPath).mode & 0o777, 0o644);
+  assert.match(staged.files['extensions/agent-browser-defaults.jar'], /^[a-f0-9]{64}$/);
   assert.equal(existsSync(join(descriptor.root, 'secrets', 'provider.env')), false);
   assert.equal(existsSync(descriptor.manifest), false);
   const preflight = developmentPresentationProviderSystemPreflight({
@@ -328,6 +556,16 @@ try {
   });
   assert.equal(required.success, false);
   assert.equal(required.status.blocking, true);
+  const requiredWithoutIngress = doctorDevelopmentPresentationProvider({
+    env: {
+      ...env,
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: '',
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: '',
+      AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED: '1',
+    },
+  });
+  assert.equal(requiredWithoutIngress.success, false);
+  assert.match(requiredWithoutIngress.status.isolationError, /no reviewed public HTTPS ingress binding/);
 
   mkdirSync(descriptor.root, { recursive: true });
   writeFileSync(
@@ -338,6 +576,7 @@ try {
   assert.equal(configuredWithoutResources.success, false);
   assert.equal(configuredWithoutResources.status.state, 'not_ready');
   const readyObservation = {
+    extension: { matches: true },
     environment: 'development',
     containers: Object.values(descriptor.services).map((name) => ({
       name,
@@ -355,6 +594,12 @@ try {
         connectionId: String(index + 100),
         connectionName: route.connectionName,
         user: route.user,
+        maxConnections: 8,
+        maxConnectionsPerUser: 8,
+        sharingProfileId: String(index + 200),
+        sharingProfileName: `Agent Browser Shared Session ${route.routeId}`,
+        sharingProfileReadOnly: 'false',
+        sharingProfilePermissionCount: 1,
       })),
     },
     displays: descriptor.routes.slice(0, descriptor.warmSlots).map((route, index) => ({
@@ -367,6 +612,11 @@ try {
   };
   const probed = probeDevelopmentPresentationProvider(descriptor, {
     run(command, args) {
+      if (command === 'curl') return {
+        status: 0,
+        stdout: readFileSync(join(descriptor.root, 'extensions/agent-browser-defaults.js'), 'utf8'),
+        stderr: '',
+      };
       if (command === 'docker' && args[0] === 'inspect') {
         return { status: 0, stdout: `true\t${descriptor.composeProject}\n`, stderr: '' };
       }
@@ -375,7 +625,7 @@ try {
       if (command === 'docker' && args[0] === 'exec') {
         const sql = args.at(-1);
         if (sql.includes('information_schema.tables')) {
-          return { status: 0, stdout: '5\n', stderr: '' };
+          return { status: 0, stdout: '8\n', stderr: '' };
         }
         return {
           status: 0,
@@ -401,15 +651,147 @@ try {
     displaySocketExists: () => true,
   });
   assert.equal(probed.database.schemaReady, true);
+  assert.equal(probed.extension.matches, true);
+  assert.match(probed.extension.expectedSha256, /^[a-f0-9]{64}$/);
   assert.equal(probed.database.routes.length, 6);
   assert.equal(probed.displays.length, 6);
   assert.equal(probed.displays.at(-1).displayReservationId, 'development-display-6');
   assert.equal(probed.secrets.private, true);
+  for (const probeDescriptor of [descriptor, namespaced, {
+    ...namespaced,
+    routes: [{ ...namespaced.routes[0], connectionName: "Fixture O'Brien\\route" }],
+  }]) {
+    let routeQueryObserved = false;
+    const exactRows = probeDescriptor.routes.map((route, index) => ({
+      connectionId: String(index + 100), connectionName: route.connectionName, user: route.user,
+    }));
+    const exactProbe = probeDevelopmentPresentationProvider(probeDescriptor, {
+      run(command, args) {
+        if (command === 'docker' && args[0] === 'exec') {
+          assert.equal(args[1], probeDescriptor.services.postgres);
+          const sql = args.at(-1);
+          if (sql.includes('information_schema.tables')) return { status: 0, stdout: '8\n' };
+          routeQueryObserved = true;
+          const exactNames = probeDescriptor.routes.map((route) =>
+            `E'${route.connectionName.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`).join(', ');
+          assert.ok(sql.includes(`where c.connection_name in (${exactNames})`), sql);
+          assert.doesNotMatch(sql, /c\.connection_name like/i);
+          return { status: 0, stdout: JSON.stringify(exactRows) };
+        }
+        return { status: 0, stdout: '' };
+      },
+      displaySocketExists: () => false,
+    });
+    assert.equal(routeQueryObserved, true);
+    assert.deepEqual(exactProbe.database.routes, exactRows);
+  }
   const configured = doctorDevelopmentPresentationProvider({ env, probe: () => readyObservation });
   assert.equal(configured.success, true);
   assert.equal(configured.status.state, 'configured');
   assert.equal(configured.status.ready, true);
   assert.equal(configured.status.manifest.schemaVersion, DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA);
+  const statusEnvWithoutIngress = { ...env };
+  delete statusEnvWithoutIngress.AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL;
+  delete statusEnvWithoutIngress.AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION;
+  const configuredFromPersistedIngress = doctorDevelopmentPresentationProvider({
+    env: {
+      ...statusEnvWithoutIngress,
+      AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED: '1',
+    },
+    probe: () => readyObservation,
+  });
+  assert.equal(configuredFromPersistedIngress.success, true);
+  assert.equal(configuredFromPersistedIngress.status.state, 'configured');
+  assert.deepEqual(
+    configuredFromPersistedIngress.status.descriptor.externalIngress,
+    descriptor.externalIngress,
+  );
+  let mismatchedProbeCalls = 0;
+  const explicitlyMismatchedIngress = doctorDevelopmentPresentationProvider({
+    env: {
+      ...env,
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-different-revision-002',
+    },
+    probe: () => {
+      mismatchedProbeCalls += 1;
+      return readyObservation;
+    },
+  });
+  assert.equal(explicitlyMismatchedIngress.status.state, 'drifted');
+  assert.equal(mismatchedProbeCalls, 0);
+  const explicitlyEmptyIngress = doctorDevelopmentPresentationProvider({
+    env: {
+      ...statusEnvWithoutIngress,
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: '',
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: '',
+    },
+    probe: () => readyObservation,
+  });
+  assert.equal(explicitlyEmptyIngress.status.state, 'drifted');
+  assert.throws(() => doctorDevelopmentPresentationProvider({
+    env: {
+      ...statusEnvWithoutIngress,
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: descriptor.publicOperatorUrl,
+    },
+  }), /requires both/);
+  const canonicalManifest = developmentPresentationProviderManifest(descriptor);
+  const tamperedIngressManifests = [
+    { ...structuredClone(canonicalManifest), publicOperatorUrl: 'https://other.example.test' },
+    {
+      ...structuredClone(canonicalManifest),
+      publicOperatorUrl: 'https://127.0.0.1',
+      externalIngress: {
+        ...canonicalManifest.externalIngress,
+        publicOperatorUrl: 'https://127.0.0.1',
+      },
+    },
+    {
+      ...structuredClone(canonicalManifest),
+      externalIngress: {
+        ...canonicalManifest.externalIngress,
+        reviewedRevision: 'tampered-revision',
+      },
+    },
+    {
+      ...structuredClone(canonicalManifest),
+      externalIngress: {
+        ...canonicalManifest.externalIngress,
+        bindingSha256: '00'.repeat(32),
+      },
+    },
+  ];
+  for (const tamperedManifest of tamperedIngressManifests) {
+    writeFileSync(descriptor.manifest, `${JSON.stringify(tamperedManifest, null, 2)}\n`);
+    let tamperedProbeCalls = 0;
+    const tampered = doctorDevelopmentPresentationProvider({
+      env: statusEnvWithoutIngress,
+      probe: () => {
+        tamperedProbeCalls += 1;
+        return readyObservation;
+      },
+    });
+    assert.equal(tampered.success, false);
+    assert.equal(tampered.status.state, 'drifted');
+    assert.equal(tamperedProbeCalls, 0);
+  }
+  writeFileSync(descriptor.manifest, `${JSON.stringify(canonicalManifest, null, 2)}\n`);
+  const capacityDrift = structuredClone(readyObservation);
+  capacityDrift.database.routes[0].maxConnections = 4;
+  capacityDrift.database.routes[0].maxConnectionsPerUser = 2;
+  const driftedCapacity = doctorDevelopmentPresentationProvider({ env, probe: () => capacityDrift });
+  assert.equal(driftedCapacity.success, false);
+  assert.equal(
+    driftedCapacity.checks.find((item) => item.name === 'presentation-provider:connection:development-route-1')?.ok,
+    false,
+  );
+  const missingSharingProfile = structuredClone(readyObservation);
+  missingSharingProfile.database.routes[0].sharingProfileId = null;
+  const driftedSharingProfile = doctorDevelopmentPresentationProvider({ env, probe: () => missingSharingProfile });
+  assert.equal(driftedSharingProfile.success, false);
+  assert.equal(
+    driftedSharingProfile.checks.find((item) => item.name === 'presentation-provider:connection:development-route-1')?.ok,
+    false,
+  );
 
   rmSync(descriptor.manifest, { force: true });
   const effectCalls = [];
@@ -425,7 +807,14 @@ try {
       syncConnections: () => effectCalls.push('sync-connections'),
       startProvider: () => effectCalls.push('start-provider'),
       grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
-      openWarmRoutes: () => effectCalls.push('open-warm-routes'),
+      openWarmRoutes: () => {
+        assert.equal(existsSync(descriptor.manifest), false);
+        assert.equal(existsSync(descriptor.inventoryPath), true);
+        const bootstrap = JSON.parse(readFileSync(descriptor.inventoryPath, 'utf8'));
+        assert.equal(bootstrap.schemaVersion, 'agent-browser.development-presentation-inventory.v1');
+        assert.deepEqual(bootstrap.routes, []);
+        effectCalls.push('open-warm-routes');
+      },
       observe: () => readyObservation,
       grantDisplayAccess: (display) => effectCalls.push(`grant:${display.displayReservationId}`),
       publishIngress: () => effectCalls.push('publish-ingress'),
@@ -441,8 +830,10 @@ try {
   const authorityInventory = JSON.parse(readFileSync(descriptor.inventoryPath, 'utf8'));
   assert.equal(
     authorityInventory.routes[0].routeDescriptor.publicOperatorUrl,
-    'http://127.0.0.1:4948',
+    'https://agent-browser-dev.example.test',
   );
+  assert.equal(authorityInventory.localDiagnosticUrl, 'http://127.0.0.1:4948');
+  assert.equal(authorityInventory.externalIngress.bindingSha256, descriptor.externalIngress.bindingSha256);
   assert.match(
     authorityInventory.routes[0].routeDescriptor.localEmbedUrl,
     /^http:\/\/127\.0\.0\.1:8093\/guacamole\/#\/client\//,
@@ -464,6 +855,23 @@ try {
   const restaged = stageDevelopmentPresentationProviderBundle({ env });
   assert.equal(restaged.success, true);
   assert.equal(restaged.state, 'refreshed_configured');
+  assert.equal(restaged.files['extensions/agent-browser-defaults.jar'],
+    staged.files['extensions/agent-browser-defaults.jar'], 'identical inputs produce identical JAR bytes');
+  const updatedAssetRoot = join(fixture, 'updated-guacamole-assets');
+  cpSync('cli/assets/workstation/guacamole', updatedAssetRoot, { recursive: true });
+  const updatedScript = Buffer.concat([extensionEntries['agent-browser-defaults.js'],
+    Buffer.from('\n// provider staging refresh fixture\n')]);
+  writeFileSync(join(updatedAssetRoot, 'extensions', 'agent-browser-defaults.js'), updatedScript);
+  const refreshedBundle = stageDevelopmentPresentationProviderBundle({
+    env: { ...env, AGENT_BROWSER_DEV_GUACAMOLE_ASSET_SOURCE: updatedAssetRoot },
+  });
+  assert.equal(refreshedBundle.state, 'refreshed_configured');
+  assert.notEqual(refreshedBundle.files['extensions/agent-browser-defaults.jar'],
+    staged.files['extensions/agent-browser-defaults.jar']);
+  assert.deepEqual(readExtensionArchive(extensionPath), {
+    'guac-manifest.json': extensionEntries['guac-manifest.json'],
+    'agent-browser-defaults.js': updatedScript,
+  });
   assert.equal(existsSync(descriptor.manifest), true);
   const reconcilePreflight = developmentPresentationProviderSystemPreflight({
     env,
@@ -540,15 +948,15 @@ try {
   assert.deepEqual(reconciled.completedSteps, ['reconcile-provider-authority']);
   assert.deepEqual(effectCalls, []);
 
+  const staleExtension = structuredClone(readyObservation);
+  staleExtension.extension.matches = false;
+  assert.equal(evaluateDevelopmentPresentationProviderObservation(descriptor, staleExtension)
+    .every((check) => check.ok), false,
+  'healthy containers serving the previous extension cannot satisfy provider readiness');
+
   effectCalls.length = 0;
-  const stoppedObservation = structuredClone(readyObservation);
-  stoppedObservation.containers.find((item) =>
-    item.name === descriptor.services.guacamole
-  ).running = false;
-  stoppedObservation.ports.guacamole.listening = false;
-  stoppedObservation.displays = [];
-  let reconcileObservation = stoppedObservation;
-  const recovered = applyDevelopmentPresentationProvider({
+  let capacityObservation = capacityDrift;
+  const capacityReconciled = applyDevelopmentPresentationProvider({
     env,
     authorizeEffects: true,
     deferIngress: true,
@@ -558,31 +966,68 @@ try {
       createVolume: () => effectCalls.push('create-volume'),
       startDatabase: () => effectCalls.push('start-database'),
       ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
-      syncConnections: () => effectCalls.push('sync-connections'),
+      syncConnections: () => {
+        effectCalls.push('sync-connections');
+        capacityObservation = readyObservation;
+      },
       startProvider: () => effectCalls.push('start-provider'),
       grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
-      openWarmRoutes: () => {
-        effectCalls.push('open-warm-routes');
-        reconcileObservation = readyObservation;
-      },
-      observe: () => reconcileObservation,
+      openWarmRoutes: () => effectCalls.push('open-warm-routes'),
+      observe: () => capacityObservation,
       grantDisplayAccess: (display) => effectCalls.push(`grant:${display.displayReservationId}`),
       quarantine: () => effectCalls.push('quarantine'),
     },
   });
-  assert.equal(recovered.state, 'provider_ready_ingress_pending');
-  assert.equal(recovered.providerReady, true);
-  assert.deepEqual(effectCalls, [
-    'create-volume',
-    'start-database',
-    ...descriptor.routes.map((route) => `ensure-user:${route.routeId}`),
-    'sync-connections',
-    'start-provider',
-    'grant-operator-route-access',
-    'open-warm-routes',
-    ...descriptor.routes.slice(0, descriptor.warmSlots)
-      .map((route) => `grant:${route.displayReservationId}`),
-  ]);
+  assert.equal(capacityReconciled.providerReady, true);
+  assert.equal(effectCalls.includes('sync-connections'), true);
+  assert.equal(effectCalls.includes('quarantine'), false);
+
+  effectCalls.length = 0;
+  const stoppedObservation = structuredClone(readyObservation);
+  stoppedObservation.containers.find((item) =>
+    item.name === descriptor.services.guacamole
+  ).running = false;
+  stoppedObservation.ports.guacamole.listening = false;
+  stoppedObservation.displays = [];
+  for (const initialObservation of [stoppedObservation, staleExtension]) {
+    effectCalls.length = 0;
+    let reconcileObservation = initialObservation;
+    const recovered = applyDevelopmentPresentationProvider({
+      env,
+      authorizeEffects: true,
+      deferIngress: true,
+      effects: {
+        snapshotProduction: () => ({ identity: 'production-fixture' }),
+        assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+        createVolume: () => effectCalls.push('create-volume'),
+        startDatabase: () => effectCalls.push('start-database'),
+        ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
+        syncConnections: () => effectCalls.push('sync-connections'),
+        startProvider: () => effectCalls.push('start-provider'),
+        grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
+        openWarmRoutes: () => {
+          effectCalls.push('open-warm-routes');
+          reconcileObservation = readyObservation;
+        },
+        observe: () => reconcileObservation,
+        grantDisplayAccess: (display) => effectCalls.push(`grant:${display.displayReservationId}`),
+        quarantine: () => effectCalls.push('quarantine'),
+      },
+    });
+    assert.equal(recovered.state, 'provider_ready_ingress_pending');
+    assert.equal(recovered.providerReady, true);
+    assert.deepEqual(effectCalls, [
+      'create-volume',
+      'start-database',
+      ...descriptor.routes.map((route) => `ensure-user:${route.routeId}`),
+      'sync-connections',
+      'start-provider',
+      'grant-operator-route-access',
+      'open-warm-routes',
+      ...descriptor.routes.slice(0, descriptor.warmSlots)
+        .map((route) => `grant:${route.displayReservationId}`),
+    ]);
+  }
 
   let configuredQuarantine = null;
   effectCalls.length = 0;

@@ -52,10 +52,12 @@ esac
 
 cargo_cache="none"
 cargo_cache_path=""
+cargo_cache_wrapper=""
 if [[ "$cargo_cache_mode" != "off" ]]; then
   cargo_cache_path="$(command -v sccache 2>/dev/null || true)"
   if [[ -n "$cargo_cache_path" ]]; then
     cargo_cache="sccache"
+    cargo_cache_wrapper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sccache-sanitized.sh"
   elif [[ "$cargo_cache_mode" == "required" ]]; then
     echo "Cargo acceleration unavailable: sccache is required but was not found" >&2
     exit 78
@@ -99,7 +101,10 @@ fi
 
 cargo_environment=(env "CARGO_BUILD_JOBS=$build_jobs")
 if [[ "$cargo_cache" == "sccache" ]]; then
-  cargo_environment+=("RUSTC_WRAPPER=$cargo_cache_path")
+  cargo_environment+=(
+    "AGENT_BROWSER_SCCACHE_EXECUTABLE=$cargo_cache_path"
+    "RUSTC_WRAPPER=$cargo_cache_wrapper"
+  )
 fi
 if [[ "$fast_linker" != "none" ]]; then
   linker_flags="-C link-arg=-fuse-ld=$fast_linker"
@@ -107,6 +112,21 @@ if [[ "$fast_linker" != "none" ]]; then
     linker_flags="${RUSTFLAGS} ${linker_flags}"
   fi
   cargo_environment+=("RUSTFLAGS=$linker_flags")
+fi
+
+kernel_release="$(uname -r 2>/dev/null || true)"
+is_wsl=0
+if [[ "${AGENT_BROWSER_CARGO_FORCE_WSL:-0}" == "1" || "$kernel_release" == *microsoft* || "$kernel_release" == *Microsoft* ]]; then
+  is_wsl=1
+fi
+
+# Host resource admission and user-systemd cgroups govern WSL agent sessions.
+# Native Linux CI runners already have job-level isolation and may be smaller
+# than the WSL reserve, so execute Cargo directly there.
+if [[ "$is_wsl" == "0" && "$probe_only" != "1" ]]; then
+  echo "Running Cargo without WSL admission: jobs=$build_jobs cache=$cargo_cache linker=$fast_linker" >&2
+  "${cargo_environment[@]}" cargo "$@"
+  exit $?
 fi
 
 mkdir -p "$claims_dir"
@@ -248,8 +268,7 @@ if [[ "$probe_only" == "1" ]]; then
   exit 0
 fi
 
-kernel_release="$(uname -r 2>/dev/null || true)"
-if [[ "${AGENT_BROWSER_CARGO_FORCE_WSL:-0}" == "1" || "$kernel_release" == *microsoft* || "$kernel_release" == *Microsoft* ]]; then
+if [[ "$is_wsl" == "1" ]]; then
   memory_high="${AGENT_BROWSER_CARGO_MEMORY_HIGH:-20G}"
   memory_max="${AGENT_BROWSER_CARGO_MEMORY_MAX:-24G}"
   swap_max="${AGENT_BROWSER_CARGO_SWAP_MAX:-4G}"

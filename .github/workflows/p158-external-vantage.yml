@@ -1,4 +1,5 @@
 name: Plan 0158 External Vantage
+run-name: p158-${{ inputs.campaign_run_id }}-${{ inputs.expected_commit }}
 
 on:
   workflow_dispatch:

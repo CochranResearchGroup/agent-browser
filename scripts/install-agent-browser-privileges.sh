@@ -4,6 +4,8 @@ set -euo pipefail
 APPLY=0
 WITH_WORKSTATION_DEPS=0
 UPGRADE_LEASE_AUTHORITY=0
+SEALED_PLAN_DIGEST=""
+SEALED_PLAN_ACTIONS=""
 GROUP_NAME="${AGENT_BROWSER_PRIVILEGED_GROUP:-agent-browser}"
 OPERATOR_USER="${AGENT_BROWSER_PRIVILEGED_USER:-${SUDO_USER:-${USER:-}}}"
 HELPER_SOURCE="${AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE:-scripts/libexec/agent-browser-privileged-helper}"
@@ -41,7 +43,7 @@ trap cleanup_temp_files EXIT
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/install-agent-browser-privileges.sh [--dry-run|--apply] [--with-workstation-deps] [--upgrade-lease-authority]
+Usage: bash scripts/install-agent-browser-privileges.sh [--dry-run|--apply] [--with-workstation-deps] [--upgrade-lease-authority] [--sealed-plan-digest <sha256>] [--sealed-plan-actions <actions>]
 
 Installs the narrow root-owned helper and protected lease-authority service.
 The helper is protected by a sudoers rule for the agent-browser group so later
@@ -53,8 +55,8 @@ explicit reviewed binary source while preserving protected authority state.
 EOF
 }
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
     --)
       ;;
     --apply)
@@ -69,17 +71,75 @@ for arg in "$@"; do
     --upgrade-lease-authority)
       UPGRADE_LEASE_AUTHORITY=1
       ;;
+    --sealed-plan-digest)
+      [[ "$#" -ge 2 ]] || { echo "Missing value for --sealed-plan-digest" >&2; exit 2; }
+      SEALED_PLAN_DIGEST="$2"
+      shift
+      ;;
+    --sealed-plan-actions)
+      [[ "$#" -ge 2 ]] || { echo "Missing value for --sealed-plan-actions" >&2; exit 2; }
+      SEALED_PLAN_ACTIONS="$2"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
       ;;
     *)
-      echo "Unknown argument: $arg" >&2
+      echo "Unknown argument: $1" >&2
       usage >&2
       exit 2
       ;;
   esac
+  shift
 done
+
+EXPECTED_PLAN_ACTIONS="ensure_lease_authority,ensure_privileged_helper"
+if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
+  EXPECTED_PLAN_ACTIONS="$EXPECTED_PLAN_ACTIONS,ensure_workstation_dependencies"
+fi
+if [[ "$UPGRADE_LEASE_AUTHORITY" == "1" ]]; then
+  EXPECTED_PLAN_ACTIONS="$EXPECTED_PLAN_ACTIONS,upgrade_lease_authority"
+fi
+if [[ "$APPLY" == "1" ]]; then
+  if [[ ! "$SEALED_PLAN_DIGEST" =~ ^[a-f0-9]{64}$ ]]; then
+    echo "Apply requires a Rust-sealed privileged effect plan digest." >&2
+    exit 2
+  fi
+  if [[ "$SEALED_PLAN_ACTIONS" != "$EXPECTED_PLAN_ACTIONS" ]]; then
+    echo "Privileged effect actions do not match the sealed Rust plan." >&2
+    exit 2
+  fi
+fi
+
+EFFECT_HELPER_READY=false
+EFFECT_LEASE_AUTHORITY_READY=false
+EFFECT_WORKSTATION_DEPENDENCIES_READY=true
+
+observe_effect_postconditions() {
+  EFFECT_HELPER_READY=false
+  EFFECT_LEASE_AUTHORITY_READY=false
+  EFFECT_WORKSTATION_DEPENDENCIES_READY=true
+  if helper_contract_ready; then
+    EFFECT_HELPER_READY=true
+  fi
+  if lease_authority_contract_ready; then
+    EFFECT_LEASE_AUTHORITY_READY=true
+  fi
+  if [[ "$WITH_WORKSTATION_DEPS" == "1" ]] && ! workstation_deps_ready; then
+    EFFECT_WORKSTATION_DEPENDENCIES_READY=false
+  fi
+  [[ "$EFFECT_HELPER_READY" == "true" \
+    && "$EFFECT_LEASE_AUTHORITY_READY" == "true" \
+    && "$EFFECT_WORKSTATION_DEPENDENCIES_READY" == "true" ]]
+}
+
+emit_effect_receipt() {
+  local outcome="$1"
+  printf 'AGENT_BROWSER_PRIVILEGED_EFFECT_RECEIPT={"schemaVersion":"agent-browser.privileged-host-effect-receipt.v1","planDigest":"%s","actions":"%s","outcome":"%s","helperReady":%s,"leaseAuthorityReady":%s,"workstationDependenciesReady":%s}\n' \
+    "$SEALED_PLAN_DIGEST" "$SEALED_PLAN_ACTIONS" "$outcome" \
+    "$EFFECT_HELPER_READY" "$EFFECT_LEASE_AUTHORITY_READY" "$EFFECT_WORKSTATION_DEPENDENCIES_READY"
+}
 
 if [[ -z "$OPERATOR_USER" || "$OPERATOR_USER" == "root" ]]; then
   echo "Set AGENT_BROWSER_PRIVILEGED_USER to the non-root user that runs agent-browser." >&2
@@ -447,14 +507,10 @@ workstation_deps_ready() {
   id -nG "$OPERATOR_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx docker >/dev/null || return 1
 }
 
-current_install_ready() {
+all_requested_effects_satisfied() {
   getent group "$GROUP_NAME" >/dev/null 2>&1 || return 1
   id -nG "$OPERATOR_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx "$GROUP_NAME" >/dev/null || return 1
-  helper_contract_ready || return 1
-  lease_authority_contract_ready || return 1
-  if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
-    workstation_deps_ready || return 1
-  fi
+  observe_effect_postconditions
 }
 
 lease_authority_upgrade_needed() {
@@ -662,9 +718,10 @@ EOF
   exit 0
 fi
 
-if current_install_ready && ! lease_authority_upgrade_needed; then
+if all_requested_effects_satisfied && ! lease_authority_upgrade_needed; then
   echo "agent-browser privileged helper is already ready."
   echo "No privileged changes were needed."
+  emit_effect_receipt "already_ready"
   exit 0
 fi
 
@@ -828,3 +885,8 @@ if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
   echo "Added $OPERATOR_USER to group docker."
 fi
 echo "Log out and back in or reboot so group membership is active."
+if ! observe_effect_postconditions; then
+  echo "Privileged effect postconditions did not become ready." >&2
+  exit 1
+fi
+emit_effect_receipt "effects_applied"

@@ -157,7 +157,7 @@ fn test_reconciled_service_state_in_repository_preserves_current_fields() {
     fs::create_dir_all(&home).unwrap();
     let store = JsonServiceStateStore::new(home.join("state.json"));
     let repository = LockedServiceStateRepository::new(store.clone());
-    let before = ServiceState {
+    let mut before = ServiceState {
         browsers: BTreeMap::from([(
             "browser-1".to_string(),
             BrowserProcess {
@@ -170,7 +170,38 @@ fn test_reconciled_service_state_in_repository_preserves_current_fields() {
         )]),
         ..ServiceState::default()
     };
+    use crate::native::service_model::{ProfileSeedingHandoffRecord, ProfileSeedingHandoffState};
+    before.profiles.insert(
+        "seed-fixture".to_string(),
+        BrowserProfile {
+            id: "seed-fixture".to_string(),
+            name: "Seeding fixture".to_string(),
+            ..BrowserProfile::default()
+        },
+    );
+    for target in ["stable", "changed", "removed"] {
+        let id = format!("seed-fixture:{target}");
+        before.profile_seeding_handoffs.insert(
+            id.clone(),
+            ProfileSeedingHandoffRecord {
+                id,
+                profile_id: "seed-fixture".to_string(),
+                target_service_id: target.to_string(),
+                state: ProfileSeedingHandoffState::SeedingWaitingForClose,
+                pid: Some(u32::MAX),
+                ..ProfileSeedingHandoffRecord::default()
+            },
+        );
+    }
     let mut persisted_current = before.clone();
+    persisted_current
+        .profile_seeding_handoffs
+        .get_mut("seed-fixture:changed")
+        .unwrap()
+        .pid = Some(12345);
+    persisted_current
+        .profile_seeding_handoffs
+        .remove("seed-fixture:removed");
     persisted_current
         .browsers
         .get_mut("browser-1")
@@ -178,6 +209,9 @@ fn test_reconciled_service_state_in_repository_preserves_current_fields() {
         .profile_id = Some("work-current".to_string());
     store.save(&persisted_current).unwrap();
     let mut reconciled = before.clone();
+    for handoff in reconciled.profile_seeding_handoffs.values_mut() {
+        handoff.state = ProfileSeedingHandoffState::SeedingClosedUnverified;
+    }
     reconciled.browsers.insert(
         "browser-1".to_string(),
         BrowserProcess {
@@ -191,6 +225,21 @@ fn test_reconciled_service_state_in_repository_preserves_current_fields() {
     );
     persist_reconciled_service_state_in_repository(&repository, &before, &reconciled).unwrap();
     let persisted = store.load().unwrap();
+    assert_eq!(
+        persisted.profile_seeding_handoffs["seed-fixture:stable"].state,
+        ProfileSeedingHandoffState::SeedingClosedUnverified
+    );
+    assert_eq!(
+        persisted.profile_seeding_handoffs["seed-fixture:changed"].state,
+        ProfileSeedingHandoffState::SeedingWaitingForClose
+    );
+    assert_eq!(
+        persisted.profile_seeding_handoffs["seed-fixture:changed"].pid,
+        Some(12345)
+    );
+    assert!(!persisted
+        .profile_seeding_handoffs
+        .contains_key("seed-fixture:removed"));
     let browser = &persisted.browsers["browser-1"];
     assert_eq!(browser.profile_id.as_deref(), Some("work-current"));
     assert_eq!(browser.health, ServiceBrowserHealth::Unreachable);

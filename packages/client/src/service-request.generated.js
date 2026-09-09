@@ -31,6 +31,8 @@ export const SERVICE_REQUEST_ACTIONS = [
   "remote_view_open",
   "service_profile_manual_seeding_acquire",
   "service_profile_manual_seeding_close",
+  "service_profile_policy_mutate",
+  "service_profile_tab_evict",
   "service_remote_view_handoff_resolve",
   "service_remote_view_route_preflight",
   "service_remote_view_browser_reattach",
@@ -117,6 +119,7 @@ export const SERVICE_REQUEST_REQUIRED_FIELDS = [
 export const SERVICE_REQUEST_STRING_FIELDS = [
   "action",
   "profileLeasePolicy",
+  "tabId",
   "targetId",
   "script",
   "expression",
@@ -130,6 +133,9 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "serviceName",
   "agentName",
   "taskName",
+  "clientSubjectId",
+  "identityAssurance",
+  "accessDecisionId",
   "targetServiceId",
   "targetService",
   "siteId",
@@ -165,6 +171,7 @@ export const SERVICE_REQUEST_STRING_ARRAY_FIELDS = [
 
 export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "jobTimeoutMs",
+  "serviceStateLockTimeoutMs",
   "profileLeaseWaitTimeoutMs",
   "timeoutMs",
   "maxReturnBytes",
@@ -173,6 +180,7 @@ export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "maxConsoleEntries",
   "maxErrorEntries",
   "maxRequestEntries",
+  "policyRevision",
   "cdpPort",
   "maxBytes",
   "pid"

@@ -123,13 +123,19 @@ fn unique_socket_dir(label: &str) -> PathBuf {
 
 #[tokio::test]
 async fn test_service_config_actions_mutate_persisted_state() {
+    // Keep each dispatcher future off this long scenario's debug-mode stack.
+    // The scenario still exercises the real dispatcher with the default test stack.
+    async fn execute_config_command(cmd: &Value, state: &mut DaemonState) -> Value {
+        Box::pin(super::execute_command(cmd, state)).await
+    }
+
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("service-config-actions-home");
     fs::create_dir_all(&home).unwrap();
     guard.set("HOME", home.to_str().unwrap());
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
     let mut state = DaemonState::new();
-    let upsert_profile = execute_command(
+    let upsert_profile = execute_config_command(
         &json!(
             { "action" : "service_profile_upsert", "id" : "svc-profile-upsert-1",
             "profileId" : "journal-downloader", "profile" : { "name" :
@@ -146,7 +152,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         upsert_profile["data"]["profile"]["id"],
         "journal-downloader"
     );
-    let freshness = execute_command(
+    let freshness = execute_config_command(
         &json!(
             { "action" : "service_profile_freshness_update", "id" :
             "svc-profile-freshness-1", "profileId" : "journal-downloader",
@@ -167,7 +173,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         freshness["data"]["profile"]["authenticatedServiceIds"][0],
         "google"
     );
-    let handoff = execute_command(
+    let handoff = execute_config_command(
         &json!(
             { "action" : "service_profile_seeding_handoff_update", "id" :
             "svc-profile-seeding-handoff-1", "profileId" : "journal-downloader",
@@ -192,7 +198,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         store.load().unwrap().profile_seeding_handoffs["journal-downloader:google"].state,
         ProfileSeedingHandoffState::SeedingLaunchedDetached
     );
-    let upsert_session = execute_command(
+    let upsert_session = execute_config_command(
         &json!(
             { "action" : "service_session_upsert", "id" : "svc-session-upsert-1",
             "sessionId" : "journal-run", "session" : { "serviceName" :
@@ -206,7 +212,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
     assert_eq!(upsert_session["success"], true);
     assert_service_session_upsert_response_contract(&upsert_session["data"]);
     assert_eq!(upsert_session["data"]["session"]["id"], "journal-run");
-    let upsert_policy = execute_command(
+    let upsert_policy = execute_config_command(
         &json!(
             { "action" : "service_site_policy_upsert", "id" : "svc-policy-upsert-1",
             "sitePolicyId" : "google", "sitePolicy" : { "originPattern" :
@@ -218,7 +224,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
     assert_eq!(upsert_policy["success"], true);
     assert_service_site_policy_upsert_response_contract(&upsert_policy["data"]);
     assert_eq!(upsert_policy["data"]["sitePolicy"]["id"], "google");
-    let upsert_provider = execute_command(
+    let upsert_provider = execute_config_command(
         &json!(
             { "action" : "service_provider_upsert", "id" : "svc-provider-upsert-1",
             "providerId" : "manual", "provider" : { "kind" : "manual_approval",
@@ -231,7 +237,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
     assert_eq!(upsert_provider["success"], true);
     assert_service_provider_upsert_response_contract(&upsert_provider["data"]);
     assert_eq!(upsert_provider["data"]["provider"]["id"], "manual");
-    let upsert_browser_capability = execute_command(
+    let upsert_browser_capability = execute_config_command(
         &json!(
             { "action" : "service_browser_capability_registry_upsert", "id" :
             "svc-browser-capability-upsert-1", "collection" : "browserHosts",
@@ -253,7 +259,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         upsert_browser_capability["data"]["counts"]["browserHosts"],
         1
     );
-    let upsert_monitor = execute_command(
+    let upsert_monitor = execute_config_command(
         &json!(
             { "action" : "service_monitor_upsert", "id" : "svc-monitor-upsert-1",
             "monitorId" : "google-login-freshness", "monitor" : { "name" :
@@ -294,7 +300,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         persisted.monitors["google-login-freshness"].name,
         "Google login freshness"
     );
-    let resume_monitor = execute_command(
+    let resume_monitor = execute_config_command(
         &json!(
             { "action" : "service_monitor_resume", "id" : "svc-monitor-resume-1",
             "monitorId" : "google-login-freshness" }
@@ -309,7 +315,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         store.load().unwrap().monitors["google-login-freshness"].state,
         MonitorState::Active
     );
-    let pause_monitor = execute_command(
+    let pause_monitor = execute_config_command(
         &json!(
             { "action" : "service_monitor_pause", "id" : "svc-monitor-pause-1",
             "monitorId" : "google-login-freshness" }
@@ -320,7 +326,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
     assert_eq!(pause_monitor["success"], true);
     assert_service_monitor_state_response_contract(&pause_monitor["data"]);
     assert_eq!(pause_monitor["data"]["state"], "paused");
-    let reset_monitor = execute_command(
+    let reset_monitor = execute_config_command(
         &json!(
             { "action" : "service_monitor_reset_failures", "id" :
             "svc-monitor-reset-1", "monitorId" : "google-login-freshness" }
@@ -354,7 +360,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
     });
     persisted.refresh_derived_views();
     store.save(&persisted).unwrap();
-    let triage_monitor = execute_command(
+    let triage_monitor = execute_config_command(
         &json!(
             { "action" : "service_monitor_triage", "id" : "svc-monitor-triage-1",
             "monitorId" : "google-login-freshness", "by" : "operator", "note" :
@@ -397,7 +403,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
     });
     persisted.refresh_derived_views();
     store.save(&persisted).unwrap();
-    let apply_remedies = execute_command(
+    let apply_remedies = execute_config_command(
         &json!(
             { "action" : "service_remedies_apply", "id" : "svc-remedies-apply-1",
             "escalation" : "monitor_attention", "by" : "operator", "note" :
@@ -413,7 +419,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         apply_remedies["data"]["monitorIds"],
         json!(["google-login-freshness"])
     );
-    let delete_session = execute_command(
+    let delete_session = execute_config_command(
         &json!(
             { "action" : "service_session_delete", "id" : "svc-session-delete-1",
             "sessionId" : "journal-run" }
@@ -425,7 +431,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
     assert_service_session_delete_response_contract(&delete_session["data"]);
     assert_eq!(delete_session["data"]["deleted"], true);
     assert!(!store.load().unwrap().sessions.contains_key("journal-run"));
-    let delete_profile = execute_command(
+    let delete_profile = execute_config_command(
         &json!(
             { "action" : "service_profile_delete", "id" : "svc-profile-delete-1",
             "profileId" : "journal-downloader" }
@@ -441,7 +447,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         .unwrap()
         .profiles
         .contains_key("journal-downloader"));
-    let delete_provider = execute_command(
+    let delete_provider = execute_config_command(
         &json!(
             { "action" : "service_provider_delete", "id" : "svc-provider-delete-1",
             "providerId" : "manual" }
@@ -453,7 +459,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
     assert_service_provider_delete_response_contract(&delete_provider["data"]);
     assert_eq!(delete_provider["data"]["deleted"], true);
     assert!(!store.load().unwrap().providers.contains_key("manual"));
-    let delete_monitor = execute_command(
+    let delete_monitor = execute_config_command(
         &json!(
             { "action" : "service_monitor_delete", "id" : "svc-monitor-delete-1",
             "monitorId" : "google-login-freshness" }
@@ -469,7 +475,7 @@ async fn test_service_config_actions_mutate_persisted_state() {
         .unwrap()
         .monitors
         .contains_key("google-login-freshness"));
-    let delete_policy = execute_command(
+    let delete_policy = execute_config_command(
         &json!(
             { "action" : "service_site_policy_delete", "id" : "svc-policy-delete-1",
             "sitePolicyId" : "google" }

@@ -1528,7 +1528,7 @@ async fn test_remote_view_open_dry_run_plans_route_bound_launch_without_existing
     );
     assert_eq!(
         result["data"]["routeBoundHandoff"]["display"]["displayAllocationId"],
-        "remote-view-display:31"
+        "remote-view-display:route-a"
     );
     assert_eq!(
         result["data"]["routeBoundHandoff"]["operatorVisible"]["state"],
@@ -1536,7 +1536,7 @@ async fn test_remote_view_open_dry_run_plans_route_bound_launch_without_existing
     );
     assert_eq!(
         result["data"]["displayAllocationId"],
-        "remote-view-display:31"
+        "remote-view-display:route-a"
     );
     assert_eq!(
         result["data"]["acquisitionPlan"]["mode"],
@@ -1584,7 +1584,7 @@ async fn test_remote_view_open_dry_run_plans_route_bound_launch_without_existing
     );
     assert_eq!(
         result["data"]["checkoutCommand"]["displayAllocationId"],
-        "remote-view-display:31"
+        "remote-view-display:route-a"
     );
     assert!(state.browser.is_none());
     assert_eq!(

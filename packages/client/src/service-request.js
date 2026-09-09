@@ -78,6 +78,10 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceManualSeedingAcquireOptions} ServiceManualSeedingAcquireOptions
  * @typedef {import('./service-request.generated.js').ServiceManualSeedingCloseHttpOptions} ServiceManualSeedingCloseHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceManualSeedingCloseOptions} ServiceManualSeedingCloseOptions
+ * @typedef {import('./service-request.generated.js').ServiceProfilePolicyMutationHttpOptions} ServiceProfilePolicyMutationHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceProfilePolicyMutationOptions} ServiceProfilePolicyMutationOptions
+ * @typedef {import('./service-request.generated.js').ServiceProfileTabEvictionHttpOptions} ServiceProfileTabEvictionHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceProfileTabEvictionOptions} ServiceProfileTabEvictionOptions
  * @typedef {import('./service-request.generated.js').ServiceBrowserContaminationReportHttpOptions} ServiceBrowserContaminationReportHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceBrowserContaminationReportOptions} ServiceBrowserContaminationReportOptions
  * @typedef {import('./service-request.generated.js').ServiceBrowserRetirementPlanHttpOptions} ServiceBrowserRetirementPlanHttpOptions
@@ -94,6 +98,23 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceViewerLeaseRequestHttpOptions} ServiceViewerLeaseRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceViewerLeaseRequestOptions} ServiceViewerLeaseRequestOptions
  */
+
+export class ServiceRequestHttpError extends Error {
+  /**
+   * @param {number} status
+   * @param {any} response
+   */
+  constructor(status, response) {
+    const failure = getServiceFailureRecourse(response);
+    const code = failure?.code ?? response?.error ?? 'service_request_failed';
+    super(`agent-browser service request failed: ${status} (${code})`);
+    this.name = 'ServiceRequestHttpError';
+    this.status = status;
+    this.code = code;
+    this.failure = failure;
+    this.response = response;
+  }
+}
 
 export {
   SERVICE_REQUEST_ACTIONS,
@@ -299,6 +320,19 @@ export function createServiceTabRequest(input) {
   if (url !== undefined) {
     tabParams.url = url;
   }
+  const routeFields = [
+    'routePoolEntryId',
+    'remoteViewRouteId',
+    'routeId',
+    'viewStreamRouteId',
+    'displayAllocationId',
+    'displayName',
+  ];
+  if (routeFields.some((field) => tabParams[field] !== undefined || request[field] !== undefined)) {
+    throw new TypeError(
+      'service tab request cannot execute remote-view route intent; use requestServiceRemoteViewOpen() to acquire the route and serviceTabHandle',
+    );
+  }
 
   return createServiceRequest({
     ...plannedRequestFields,
@@ -368,6 +402,110 @@ export function requireServiceTabHandle(response) {
 }
 
 /**
+ * Derive the complete retained-tab resume intent from a resolved durable
+ * handoff. The handle remains the authority for route and caller identity;
+ * provider URLs and profile paths are intentionally excluded.
+ *
+ * @param {unknown} response
+ * @returns {{
+ *   serviceName: string,
+ *   agentName: string,
+ *   taskName: string,
+ *   browserId: string,
+ *   sessionName: string,
+ *   runtimeProfile: string,
+ *   targetId: string,
+ *   url: string,
+ *   serviceTabHandle: ServiceTabHandle,
+ * }}
+ */
+export function deriveServiceRemoteViewHandoffResumeIntent(response) {
+  const handle = requireServiceTabHandle(response);
+  const traceFilter = recordFromUnknown(handle.traceFilter);
+  const required = {
+    serviceName: stringOrNull(traceFilter?.serviceName),
+    agentName: stringOrNull(traceFilter?.agentName),
+    taskName: stringOrNull(traceFilter?.taskName),
+    browserId: stringOrNull(handle.browserId),
+    sessionName: stringOrNull(handle.sessionName ?? handle.ownerSessionId),
+    runtimeProfile: stringOrNull(handle.profileId),
+    targetId: stringOrNull(handle.targetId),
+    url: stringOrNull(handle.url),
+  };
+  const missingField = Object.entries(required).find(([, value]) => value === null)?.[0];
+  if (missingField) {
+    throw new TypeError(`durable handoff resume intent is missing ${missingField}`);
+  }
+  return {
+    serviceName: /** @type {string} */ (required.serviceName),
+    agentName: /** @type {string} */ (required.agentName),
+    taskName: /** @type {string} */ (required.taskName),
+    browserId: /** @type {string} */ (required.browserId),
+    sessionName: /** @type {string} */ (required.sessionName),
+    runtimeProfile: /** @type {string} */ (required.runtimeProfile),
+    targetId: /** @type {string} */ (required.targetId),
+    url: /** @type {string} */ (required.url),
+    serviceTabHandle: handle,
+  };
+}
+
+/**
+ * Classify the authority available through a diagnostics response. A complete
+ * control-plane attestation is the only effect-capable result. A valid handle
+ * with incomplete proof remains explicitly observation-only.
+ *
+ * @param {unknown} response
+ * @returns {{
+ *   mode: 'unavailable' | 'observation_only' | 'effect_capable',
+ *   observationCapable: boolean,
+ *   effectCapable: boolean,
+ *   missingProofs: string[],
+ *   reason: string | null,
+ *   serviceTabHandle: ServiceTabHandle | null,
+ * }}
+ */
+export function classifyServiceControlPlaneAuthority(response) {
+  const handle = getServiceTabHandle(response);
+  if (!handle || handle.valid === false) {
+    return {
+      mode: 'unavailable',
+      observationCapable: false,
+      effectCapable: false,
+      missingProofs: [],
+      reason: handle?.staleReason
+        ? `service_tab_handle_unavailable:${handle.staleReason}`
+        : 'service_tab_handle_unavailable',
+      serviceTabHandle: handle,
+    };
+  }
+  const record = recordFromUnknown(response);
+  const data = recordFromUnknown(record?.data) ?? record;
+  const attestation = recordFromUnknown(data?.controlPlaneAttestation);
+  const missingProofs = [
+    ...new Set(
+      Array.isArray(attestation?.missingProofs)
+        ? attestation.missingProofs.filter((proof) => typeof proof === 'string' && proof.length > 0)
+        : [],
+    ),
+  ].sort();
+  const effectCapable = attestation?.complete === true;
+  return {
+    mode: effectCapable ? 'effect_capable' : 'observation_only',
+    observationCapable: true,
+    effectCapable,
+    missingProofs,
+    reason: effectCapable
+      ? null
+      : missingProofs.length > 0
+        ? `missing_control_plane_proof:${missingProofs.join(',')}`
+        : attestation
+          ? 'control_plane_attestation_incomplete'
+          : 'control_plane_attestation_missing',
+    serviceTabHandle: handle,
+  };
+}
+
+/**
  * Extract a service-owned tab handle for refresh. Unlike requireServiceTabHandle,
  * this accepts stale handles so the daemon can classify or repair them.
  *
@@ -386,9 +524,10 @@ function requireRefreshableServiceTabHandle(response) {
 }
 
 /**
- * Preserve the complete routing identity carried by a service-owned tab handle.
+ * Preserve target routing carried by a service-owned tab handle.
  * Explicit caller fields remain authoritative, including independent profile
- * aliases for compatibility with older service clients.
+ * aliases for compatibility with older service clients. Caller identity and
+ * assurance must never be borrowed from the handle owner's profile grant.
  *
  * @param {Partial<ServiceRequest>} request
  * @param {ServiceTabHandle} handle
@@ -400,12 +539,16 @@ function serviceTabHandleRouting(request, handle) {
   const targetId = request.targetId ?? handle.targetId;
   const runtimeProfile = request.runtimeProfile ?? request.profileId ?? handle.profileId;
   const profileId = request.profileId ?? request.runtimeProfile ?? handle.profileId;
+  const clientSubjectId = request.clientSubjectId;
+  const identityAssurance = request.identityAssurance;
   return {
     ...(browserId !== undefined && browserId !== null ? { browserId } : {}),
     ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
     ...(targetId !== undefined && targetId !== null ? { targetId } : {}),
     ...(runtimeProfile !== undefined && runtimeProfile !== null ? { runtimeProfile } : {}),
     ...(profileId !== undefined && profileId !== null ? { profileId } : {}),
+    ...(clientSubjectId !== undefined && clientSubjectId !== null ? { clientSubjectId } : {}),
+    ...(identityAssurance !== undefined && identityAssurance !== null ? { identityAssurance } : {}),
   };
 }
 
@@ -1231,6 +1374,9 @@ export function createServiceRemoteViewRoutePreflightRequest(input) {
 export function createServiceRemoteViewOpenRequest(input) {
   assertPlainObject(input, 'remote-view open request');
   const { params, allowInfrastructureOnlyReadiness: _allowInfrastructureOnlyReadiness, ...request } = input;
+  // Preserve explicit daemon routing as well as the action's handoff metadata.
+  // mergeParams consumes these keys; params alone do not select the host session.
+  const { browserId, sessionName } = request;
   const openParams = mergeParams(params, request, [
     'displayAllocationId',
     'routeId',
@@ -1258,6 +1404,8 @@ export function createServiceRemoteViewOpenRequest(input) {
   return createServiceRequest({
     ...request,
     action: 'remote_view_open',
+    ...(browserId !== undefined ? { browserId } : {}),
+    ...(sessionName !== undefined ? { sessionName } : {}),
     params: openParams,
   });
 }
@@ -1404,6 +1552,67 @@ export function createServiceManualSeedingCloseRequest(input) {
 }
 
 /**
+ * Create a revision-fenced Profile access-policy mutation. Human-facing
+ * callers may use mode plus preset; advanced callers may provide targetPolicy.
+ *
+ * @param {ServiceProfilePolicyMutationOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceProfilePolicyMutationRequest(input) {
+  assertPlainObject(input, 'profile policy mutation request');
+  const { params, ...request } = input;
+  if (typeof request.profileId !== 'string' || request.profileId.trim().length === 0) {
+    throw new TypeError('profile policy mutation request requires profileId');
+  }
+  if (!Number.isInteger(request.expectedRevision) || request.expectedRevision < 1) {
+    throw new TypeError('profile policy mutation request expectedRevision must be a positive integer');
+  }
+  const hasTargetPolicy = request.targetPolicy !== undefined;
+  const hasPreset = request.mode !== undefined || request.preset !== undefined;
+  if (hasTargetPolicy === hasPreset) {
+    throw new TypeError('profile policy mutation request requires targetPolicy or mode and preset');
+  }
+  if (hasPreset && (request.mode === undefined || request.preset === undefined)) {
+    throw new TypeError('profile policy mutation request requires both mode and preset');
+  }
+  const mergedParams = mergeParams(params, request, [
+    'expectedRevision',
+    'mode',
+    'preset',
+    'targetPolicy',
+    'evictionMode',
+    'graceDeadline',
+  ]);
+  return createServiceRequest({
+    ...request,
+    action: 'service_profile_policy_mutate',
+    params: mergedParams,
+  });
+}
+
+/**
+ * Create one exact tab eviction from a persisted lifecycle authorization.
+ *
+ * @param {ServiceProfileTabEvictionOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceProfileTabEvictionRequest(input) {
+  assertPlainObject(input, 'profile tab eviction request');
+  const { params, ...request } = input;
+  for (const field of ['authorizationId', 'tabId']) {
+    if (typeof request[field] !== 'string' || request[field].trim().length === 0) {
+      throw new TypeError(`profile tab eviction request requires ${field}`);
+    }
+  }
+  const mergedParams = mergeParams(params, request, ['authorizationId', 'tabId']);
+  return createServiceRequest({
+    ...request,
+    action: 'service_profile_tab_evict',
+    params: mergedParams,
+  });
+}
+
+/**
  * @param {ServiceBrowserContaminationReportOptions} [input]
  * @returns {ServiceRequest}
  */
@@ -1490,16 +1699,19 @@ export function createServiceViewerLeaseReleaseRequest(input) {
 }
 
 /**
+ * Route and viewer convenience fields are action params only; browser/session
+ * identity remains in the service envelope for routing and provenance.
  * @param {ServiceControllerLeaseTakeoverOptions} input
  * @returns {ServiceRequest}
  */
 export function createServiceControllerLeaseTakeoverRequest(input) {
   assertPlainObject(input, 'controller lease takeover request');
-  const { params, ...request } = input;
+  const { params, routeId, viewerLeaseId, viewerId, viewerName, openMode, expiresAt, ...request } = input;
   return createServiceRequest({
     ...request,
     action: 'service_controller_lease_takeover',
-    params: mergeParams(params, request, [
+    params: mergeParams(params, { routeId, viewerLeaseId, viewerId, viewerName, openMode, expiresAt,
+      browserId: request.browserId }, [
       'routeId',
       'viewerLeaseId',
       'viewerId',
@@ -1533,11 +1745,12 @@ export async function postServiceRequest({ baseUrl, request, profileCapability, 
     signal,
   });
 
+  const payload = await response.json();
   if (!response.ok) {
-    throw new Error(`agent-browser service request failed: ${response.status}`);
+    throw new ServiceRequestHttpError(response.status, payload);
   }
 
-  return response.json();
+  return payload;
 }
 
 /**
@@ -2171,6 +2384,9 @@ export function summarizeServiceRemoteViewOpenProof(response) {
     sessionName,
     tabId,
     profileId,
+    serviceTabHandle: isServiceTabHandle(serviceTabHandle)
+      ? /** @type {ServiceTabHandle} */ (/** @type {unknown} */ (serviceTabHandle))
+      : null,
     visualProof,
     browserBuildState,
     requestedBrowserBuild,
@@ -2374,6 +2590,26 @@ export async function requestServiceManualSeedingClose({ baseUrl, fetch = global
     fetch,
     signal,
     request: createServiceManualSeedingCloseRequest(request),
+  });
+}
+
+/** @param {ServiceProfilePolicyMutationHttpOptions} options */
+export async function requestServiceProfilePolicyMutation({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceProfilePolicyMutationRequest(request),
+  });
+}
+
+/** @param {ServiceProfileTabEvictionHttpOptions} options */
+export async function requestServiceProfileTabEviction({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceProfileTabEvictionRequest(request),
   });
 }
 

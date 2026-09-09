@@ -222,7 +222,7 @@ pub const SERVICE_CHALLENGE_STATE_VALUES: [&str; 6] = [
     "failed",
     "denied",
 ];
-pub const SERVICE_EVENT_KIND_VALUES: [&str; 19] = [
+pub const SERVICE_EVENT_KIND_VALUES: [&str; 20] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
@@ -242,9 +242,10 @@ pub const SERVICE_EVENT_KIND_VALUES: [&str; 19] = [
     "reconciliation_error",
     "incident_acknowledged",
     "incident_resolved",
+    "job_terminal",
 ];
 pub const SERVICE_TRACE_ACTIVITY_SOURCE_VALUES: [&str; 3] = ["event", "job", "metadata"];
-pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 22] = [
+pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 23] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
@@ -264,6 +265,7 @@ pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 22] = [
     "reconciliation_error",
     "incident_acknowledged",
     "incident_resolved",
+    "job_terminal",
     "service_job_timeout",
     "service_job_cancelled",
     "service_job",
@@ -395,6 +397,8 @@ pub fn assert_service_event_record_contract(value: &serde_json::Value) {
             "serviceName",
             "agentName",
             "taskName",
+            "provenance",
+            "terminalOutcome",
             "previousHealth",
             "currentHealth",
             "details",
@@ -1566,6 +1570,8 @@ pub fn assert_service_jobs_response_contract(value: &serde_json::Value) {
             &[
                 "id",
                 "action",
+                "provenance",
+                "terminalOutcome",
                 "serviceName",
                 "agentName",
                 "taskName",
@@ -2424,6 +2430,11 @@ pub struct ServiceState {
     pub(crate) presentation_capacity:
         Option<super::presentation_capacity::PresentationCapacityAuthority>,
     pub profiles: BTreeMap<String, BrowserProfile>,
+    /// Durable, redacted result of materializing missing legacy Profile access
+    /// policies. Ambiguous legacy identity remains observable but nonblocking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) profile_policy_migration:
+        Option<super::service_state_migration::ProfilePolicyMigrationReport>,
     /// Registered service principals and their hashed profile capabilities.
     /// Raw capability material is never retained in Service State.
     #[serde(
@@ -2445,7 +2456,19 @@ pub struct ServiceState {
     /// Idempotent terminal receipts for sealed profile acquisition recoveries.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_recovery_receipts:
-        BTreeMap<String, super::service_profile_recovery::RecoveryReceipt>,
+        BTreeMap<String, super::service_profile_acquisition::RecoveryReceipt>,
+    /// Exact, permission-backed Profile lifecycle authorizations. These bind
+    /// logical eviction intent to a policy revision before a daemon may join
+    /// it with fresh physical target evidence.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) profile_lifecycle_authorizations:
+        BTreeMap<String, super::service_profile_lifecycle::ProfileLifecycleAuthorization>,
+    /// Idempotent minimal receipts for physically proven Profile lifecycle
+    /// effects. Page contents, paths, credentials, and bearer material are
+    /// never retained here.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) profile_lifecycle_effect_receipts:
+        BTreeMap<String, super::service_profile_lifecycle::ProfileLifecycleEffectReceipt>,
     /// Idempotent receipts for exact inert browser-record retirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) browser_retirement_receipts:
@@ -2842,6 +2865,29 @@ impl ServiceState {
         }
     }
 
+    /// Mark only children owned by one closed transport connection as
+    /// reconnectable. Stable subject identity remains attached to each child.
+    pub fn mark_profile_connection_disconnected(&mut self, connection_instance_id: &str) -> usize {
+        let mut changed = 0;
+        for tab in self.tabs.values_mut() {
+            let Some(access) = tab.profile_access.as_mut() else {
+                continue;
+            };
+            if access.connection_instance_id.as_deref() == Some(connection_instance_id)
+                && access.connection_state
+                    == super::service_profile_access_policy::ProfileConnectionState::Active
+            {
+                access.connection_state =
+                    super::service_profile_access_policy::ProfileConnectionState::Disconnected;
+                changed += 1;
+            }
+        }
+        if changed > 0 {
+            self.refresh_service_tab_handles();
+        }
+        changed
+    }
+
     pub fn service_tab_handle(&self, tab_id: &str) -> Option<ServiceTabHandle> {
         let tab = self.tabs.get(tab_id)?;
         let browser = self.browsers.get(&tab.browser_id);
@@ -2885,6 +2931,7 @@ impl ServiceState {
             cleanup_policy,
             lease_heartbeat_expected: lease_state.is_some(),
             owner_session_id: tab.owner_session_id.clone(),
+            profile_access: tab.profile_access.clone(),
             job_id,
             trace_filter: ServiceTabHandleTraceFilter {
                 browser_id: Some(tab.browser_id.clone()),
@@ -3926,6 +3973,8 @@ pub struct ServiceEvent {
     pub service_name: Option<String>,
     pub agent_name: Option<String>,
     pub task_name: Option<String>,
+    pub provenance: Option<super::service_request_provenance::ServiceRequestProvenance>,
+    pub terminal_outcome: Option<super::service_terminal_outcome::ServiceTerminalOutcome>,
     pub previous_health: Option<BrowserHealth>,
     pub current_health: Option<BrowserHealth>,
     pub details: Option<serde_json::Value>,
@@ -4017,6 +4066,7 @@ pub enum ServiceEventKind {
     ReconciliationError,
     IncidentAcknowledged,
     IncidentResolved,
+    JobTerminal,
 }
 
 fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
@@ -4289,6 +4339,9 @@ fn incident_is_newer(candidate: &str, current: &str) -> bool {
 
 fn service_event_is_incident(event: &ServiceEvent) -> bool {
     match event.kind {
+        ServiceEventKind::JobTerminal => event.terminal_outcome.as_ref().is_some_and(|outcome| {
+            outcome.state != super::service_terminal_outcome::ServiceTerminalState::Succeeded
+        }),
         ServiceEventKind::ReconciliationError => true,
         ServiceEventKind::IncidentAcknowledged
         | ServiceEventKind::IncidentResolved
@@ -4852,6 +4905,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
         ServiceEventKind::IncidentResolved => "incident_resolved",
+        ServiceEventKind::JobTerminal => "job_terminal",
     }
 }
 
@@ -4929,6 +4983,9 @@ pub struct BrowserProfile {
     pub profile_origin: ProfileOrigin,
     /// Product-level profile class used for reuse and cleanup decisions.
     pub profile_class: ProfileClass,
+    /// Revisioned authorization policy. Missing legacy values evaluate as the
+    /// trusted single-user `shared-local` preset.
+    pub access_policy: Option<super::service_profile_access_policy::ServiceProfileAccessPolicy>,
     pub user_data_dir: Option<String>,
     pub site_policy_ids: Vec<String>,
     /// Target sites or identity providers this profile is intended to satisfy.
@@ -5960,6 +6017,8 @@ pub struct BrowserTab {
     pub url: Option<String>,
     pub title: Option<String>,
     pub owner_session_id: Option<String>,
+    /// Profile authority inherited when this tab was admitted.
+    pub profile_access: Option<super::service_profile_access_policy::ProfileChildAccess>,
     /// Authenticated principal inherited from the owning session work lease.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) principal_id: Option<String>,
@@ -5988,6 +6047,7 @@ impl Default for BrowserTab {
             url: None,
             title: None,
             owner_session_id: None,
+            profile_access: None,
             principal_id: None,
             principal_provenance: None,
             work_lease_id: None,
@@ -6018,6 +6078,7 @@ pub struct ServiceTabHandle {
     pub cleanup_policy: Option<SessionCleanupPolicy>,
     pub lease_heartbeat_expected: bool,
     pub owner_session_id: Option<String>,
+    pub profile_access: Option<super::service_profile_access_policy::ProfileChildAccess>,
     pub job_id: Option<String>,
     pub trace_filter: ServiceTabHandleTraceFilter,
     pub valid: bool,
@@ -6042,6 +6103,10 @@ pub struct ServiceTabHandleTraceFilter {
 pub struct ServiceJob {
     pub id: String,
     pub action: String,
+    /// Immutable, redacted causal identity captured at runtime-lane ingress.
+    pub provenance: super::service_request_provenance::ServiceRequestProvenance,
+    /// Canonical result attached once the job reaches a terminal state.
+    pub terminal_outcome: Option<super::service_terminal_outcome::ServiceTerminalOutcome>,
     /// Service-level caller label supplied by MCP, CLI, HTTP, or API clients.
     pub service_name: Option<String>,
     /// Agent-level caller label supplied by MCP, CLI, HTTP, or API clients.
@@ -6106,6 +6171,8 @@ impl Default for ServiceJob {
         Self {
             id: String::new(),
             action: String::new(),
+            provenance: super::service_request_provenance::ServiceRequestProvenance::default(),
+            terminal_outcome: None,
             service_name: None,
             agent_name: None,
             task_name: None,
@@ -7164,6 +7231,8 @@ mod tests {
             service_name: Some("JournalDownloader".to_string()),
             agent_name: Some("codex".to_string()),
             task_name: Some("probeACSwebsite".to_string()),
+            provenance: None,
+            terminal_outcome: None,
             previous_health: Some(BrowserHealth::Ready),
             current_health: Some(BrowserHealth::ProcessExited),
             details: Some(json!({"reasonKind": "process_exited"})),
@@ -7576,6 +7645,8 @@ mod tests {
                 "serviceName": "JournalDownloader",
                 "agentName": "codex",
                 "taskName": "probeACSwebsite",
+                "provenance": null,
+                "terminalOutcome": null,
                 "previousHealth": "degraded",
                 "currentHealth": "faulted",
                 "details": null,
@@ -7611,6 +7682,8 @@ mod tests {
                 "serviceName": "JournalDownloader",
                 "agentName": "codex",
                 "taskName": "probeACSwebsite",
+                "provenance": null,
+                "terminalOutcome": null,
                 "previousHealth": "degraded",
                 "currentHealth": "faulted",
                 "details": null,
@@ -7635,6 +7708,30 @@ mod tests {
         let job = json!({
             "id": "job-1",
             "action": "navigate",
+            "provenance": {
+                "schemaVersion": "agent-browser.service-request-provenance.v1",
+                "requestId": "request-1",
+                "jobId": "job-1",
+                "traceId": null,
+                "causedByRequestId": null,
+                "clientSubjectId": null,
+                "identityAssurance": "unknown",
+                "connectionInstanceId": null,
+                "runtimeEnvironmentId": null,
+                "runtimeLaneId": null,
+                "profileId": null,
+                "profileResourceKey": null,
+                "browserId": null,
+                "sessionId": null,
+                "tabId": null,
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "action": "navigate",
+                "policyRevision": null,
+                "accessDecisionId": null
+            },
+            "terminalOutcome": null,
             "serviceName": "JournalDownloader",
             "agentName": "codex",
             "taskName": "probeACSwebsite",
@@ -10593,6 +10690,63 @@ mod tests {
                 .stale_reason
                 .as_deref(),
             Some("lease_released")
+        );
+    }
+
+    #[test]
+    fn closing_one_connection_marks_only_its_profile_children_disconnected() {
+        use super::super::service_profile_access_policy::{
+            ProfileChildAccess, ProfileConnectionState,
+        };
+
+        let child = |connection: &str| ProfileChildAccess {
+            subject_id: Some("client:fieldwork".to_string()),
+            connection_instance_id: Some(connection.to_string()),
+            ..ProfileChildAccess::default()
+        };
+        let mut state = ServiceState {
+            tabs: BTreeMap::from([
+                (
+                    "tab-owned".to_string(),
+                    BrowserTab {
+                        id: "tab-owned".to_string(),
+                        browser_id: "browser-shared".to_string(),
+                        profile_access: Some(child("connection-closing")),
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "tab-independent".to_string(),
+                    BrowserTab {
+                        id: "tab-independent".to_string(),
+                        browser_id: "browser-shared".to_string(),
+                        profile_access: Some(child("connection-surviving")),
+                        ..BrowserTab::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        assert_eq!(
+            state.mark_profile_connection_disconnected("connection-closing"),
+            1
+        );
+        assert_eq!(
+            state.tabs["tab-owned"]
+                .profile_access
+                .as_ref()
+                .unwrap()
+                .connection_state,
+            ProfileConnectionState::Disconnected
+        );
+        assert_eq!(
+            state.tabs["tab-independent"]
+                .profile_access
+                .as_ref()
+                .unwrap()
+                .connection_state,
+            ProfileConnectionState::Active
         );
     }
 

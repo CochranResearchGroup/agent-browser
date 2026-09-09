@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-dashboard-health.v1.schema.json",
+  "title": "agent-browser dashboard health axes",
+  "description": "Independent runtime, convergence, access, and acquisition health axes. Access ambiguity cannot define runtime readiness.",
+  "type": "object",
+  "required": ["schemaVersion", "runtime", "convergence", "access", "acquisition"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.dashboard-health.v1" },
+    "runtime": { "$ref": "#/$defs/runtimeAxis" },
+    "convergence": { "$ref": "#/$defs/runtimeAxis" },
+    "access": { "$ref": "#/$defs/advisoryAxis" },
+    "acquisition": { "$ref": "#/$defs/acquisitionAxis" }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["code", "blocking", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "blocking": { "type": "boolean" },
+        "message": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "runtimeAxis": {
+      "type": "object",
+      "required": ["state", "ready", "findings"],
+      "properties": {
+        "state": { "enum": ["ready", "degraded", "blocked", "unknown"] },
+        "ready": { "type": "boolean" },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+      },
+      "additionalProperties": false
+    },
+    "advisoryAxis": {
+      "type": "object",
+      "required": ["state", "findings"],
+      "properties": {
+        "state": { "enum": ["allowed", "attention", "denied", "unknown"] },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+      },
+      "additionalProperties": false
+    },
+    "acquisitionAxis": {
+      "type": "object",
+      "required": ["state", "requestScoped", "findings"],
+      "properties": {
+        "state": { "enum": ["available", "waiting", "denied", "unknown"] },
+        "requestScoped": { "const": true },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

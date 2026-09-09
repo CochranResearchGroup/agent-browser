@@ -1,11 +1,31 @@
 use serde_json::{json, Value};
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::connection::get_socket_dir;
+
+/// Controls host-wide browser discovery independently of owned socket sessions.
+/// Absence preserves discovery; every explicit value except `enabled` disables
+/// it, including malformed or non-Unicode values.
+fn external_browser_discovery_enabled(value: Option<&OsStr>) -> bool {
+    value.is_none_or(|value| value == OsStr::new("enabled"))
+}
+
+fn append_external_sessions(
+    policy: Option<&OsStr>,
+    sessions: &mut Vec<Value>,
+    session_names: &mut HashSet<String>,
+    ports: &mut HashSet<u16>,
+    discover: impl FnOnce(&mut HashSet<String>, &mut HashSet<u16>) -> Vec<Value>,
+) {
+    if external_browser_discovery_enabled(policy) {
+        sessions.extend(discover(session_names, ports));
+    }
+}
 
 pub(super) fn discover_sessions() -> String {
     let dir = get_socket_dir();
@@ -57,9 +77,14 @@ pub(super) fn discover_sessions() -> String {
         }
     }
 
-    for detected in discover_external_chrome_sessions(&mut session_names, &mut ports) {
-        sessions.push(detected);
-    }
+    let discovery_policy = std::env::var_os("AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY");
+    append_external_sessions(
+        discovery_policy.as_deref(),
+        &mut sessions,
+        &mut session_names,
+        &mut ports,
+        discover_external_chrome_sessions,
+    );
 
     serde_json::to_string(&sessions).unwrap_or_else(|_| "[]".to_string())
 }
@@ -445,6 +470,63 @@ fn session_runtime_process_is_alive(socket_dir: &Path, session: &str) -> bool {
 #[cfg(all(test, target_family = "unix"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn external_discovery_policy_defaults_enabled_and_fails_closed() {
+        assert!(external_browser_discovery_enabled(None));
+        assert!(external_browser_discovery_enabled(Some(OsStr::new(
+            "enabled"
+        ))));
+        for value in ["disabled", "", "true", "ENABLED", " enabled", "enabled "] {
+            assert!(!external_browser_discovery_enabled(Some(OsStr::new(value))));
+        }
+        use std::os::unix::ffi::OsStrExt;
+        assert!(!external_browser_discovery_enabled(Some(
+            OsStr::from_bytes(&[0xff])
+        )));
+    }
+
+    #[test]
+    fn external_discovery_policy_blocks_scanning_and_preserves_owned_sessions() {
+        for value in ["disabled", "invalid", ""] {
+            let owned = json!({ "session": "owned", "port": 43158 });
+            let mut sessions = vec![owned.clone()];
+            let mut names = HashSet::from(["owned".to_string()]);
+            let mut ports = HashSet::from([43158]);
+            append_external_sessions(
+                Some(OsStr::new(value)),
+                &mut sessions,
+                &mut names,
+                &mut ports,
+                |_, _| panic!("Disabled discovery must never scan processes or probe CDP"),
+            );
+            assert_eq!(sessions, vec![owned]);
+            assert_eq!(names, HashSet::from(["owned".to_string()]));
+            assert_eq!(ports, HashSet::from([43158]));
+        }
+        for policy in [None, Some(OsStr::new("enabled"))] {
+            let mut sessions = vec![json!({ "session": "owned" })];
+            let mut names = HashSet::from(["owned".to_string()]);
+            let mut ports = HashSet::from([43158]);
+            let mut calls = 0;
+            append_external_sessions(
+                policy,
+                &mut sessions,
+                &mut names,
+                &mut ports,
+                |names, ports| {
+                    calls += 1;
+                    assert!(names.contains("owned"));
+                    assert!(ports.contains(&43158));
+                    vec![json!({ "session": "foreign", "ownership": "foreign_cdp" })]
+                },
+            );
+            assert_eq!(calls, 1);
+            assert_eq!(sessions.len(), 2);
+            assert_eq!(sessions[0]["session"], "owned");
+            assert_eq!(sessions[1]["session"], "foreign");
+        }
+    }
 
     #[test]
     fn runtime_host_lane_uses_the_singular_host_pid_for_discovery() {

@@ -2,6 +2,15 @@
 
 Monitor agent-browser sessions in real time with a local web dashboard showing a live browser viewport and command activity feed.
 
+Dashboard failures are postmortem evidence. The dashboard observes failed
+mutating HTTP actions without changing their behavior, reports unusable
+Guacamole frames and durable handoffs, and runs a watchdog for CDP feeds that
+connect or declare screencasting without delivering a usable frame. These
+authenticated observations are appended to the service failure journal and
+can be reviewed through <code>GET /api/service/failures?limit=100</code>. The
+reporter never sends the current page URL, iframe URL, raw handoff ID,
+credentials, headers, bearer material, or page content.
+
 ## Usage
 
 The dashboard is bundled into the binary and requires no separate install. Start the server and open any session:
@@ -74,11 +83,26 @@ and CDP work. Provider-backed acceptance sets
 manifest exists, namespace or manifest drift is blocking. Development
 Guacamole, XRDP, display, route, database, secret, cleanup, and ingress effects
 remain a separately reviewed operation.
+Before staging, set <code>AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL</code> to the
+reviewed public HTTPS origin and
+<code>AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION</code> to the immutable
+reviewed Cooper deployment revision or receipt ID. Both are required together,
+and the provider retains their deterministic binding digest. Loopback remains
+a local diagnostic URL and is never an operator handoff. After a v2 provider is
+configured, read-only status and doctor commands reuse its validated persisted
+binding when both variables are absent. Initial staging and provider mutation
+still require the explicit pair. A partial pair fails, and a changed explicit
+pair remains visible as configuration drift.
 Review and stage those effects with
 <code>pnpm development-runtime:provider-plan</code> and
 <code>pnpm development-runtime:provider-stage</code>, then run
 <code>pnpm development-runtime:provider-preflight</code>. The only apply form is
 <code>pnpm development-runtime:provider-apply -- --apply --defer-ingress</code>.
+An installed v1 provider authority is upgradeable only when its loopback URL
+equals the new local diagnostic URL and every remaining provider identity is
+unchanged. Staging and preflight admit that exact additive transition, but
+status remains drifted until explicit apply writes v2 authority. Other drift
+continues to fail closed.
 Publish Cooper ingress only after the provider-ready checkpoint. A green
 provider doctor is not capacity proof; development Service Status must also
 report a non-null <code>presentationCapacity</code> before capacity acceptance.
@@ -231,6 +255,15 @@ workstation reconciliation and install doctor.
 <code>agent-browser doctor remote-view --json</code> include the same
 <code>dashboardRuntime</code> manifest, so CLI and dashboard readbacks describe
 the same installed binary and embedded UI bundle.
+
+The health contract keeps four independent axes: runtime, workstation
+convergence, profile access, and request-scoped acquisition. Only blocking
+runtime or convergence findings produce the dashboard convergence warning.
+Legacy profile identity ambiguity appears as an access advisory. The profile
+editor exposes shared-local, restricted, and exclusive modes plus
+administrator, participant, and observer presets. A profile-config save
+preserves the current access policy; policy changes use their own
+revision-fenced service request.
 
 An available profile tile provides <strong>Open browser</strong>, which opens
 the guided launcher with that exact profile selected and runs its no-launch

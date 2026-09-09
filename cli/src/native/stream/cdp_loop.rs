@@ -1,16 +1,67 @@
 use serde_json::{json, Value};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::{broadcast, watch, Mutex, RwLock};
 
 use crate::native::network;
+use crate::native::service_failure_journal::{
+    append_service_failure_best_effort, ServiceFailureCategory, ServiceFailureRecord,
+    ServiceFailureReferences,
+};
 use agent_browser_cdp::client::CdpClient;
 use agent_browser_cdp::types::{CaptureScreenshotParams, CaptureScreenshotResult};
 
 use super::timestamp_ms;
 
 const INITIAL_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(2);
+const CDP_FRAME_WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FrameWatchdogFailure {
+    NeverReceived,
+    Stalled,
+}
+
+struct FrameWatchdogState {
+    started_at: Instant,
+    last_frame_at: Option<Instant>,
+    outage_reported: bool,
+}
+
+impl FrameWatchdogState {
+    fn new(started_at: Instant, initial_frame_received: bool) -> Self {
+        Self {
+            started_at,
+            last_frame_at: initial_frame_received.then_some(started_at),
+            outage_reported: false,
+        }
+    }
+
+    fn observe_frame(&mut self, observed_at: Instant) {
+        self.last_frame_at = Some(observed_at);
+        self.outage_reported = false;
+    }
+
+    fn poll(&mut self, now: Instant) -> Option<(FrameWatchdogFailure, Duration)> {
+        let elapsed = self
+            .last_frame_at
+            .map(|last| now.saturating_duration_since(last))
+            .unwrap_or_else(|| now.saturating_duration_since(self.started_at));
+        if elapsed < CDP_FRAME_WATCHDOG_INTERVAL || self.outage_reported {
+            return None;
+        }
+        self.outage_reported = true;
+        Some((
+            if self.last_frame_at.is_some() {
+                FrameWatchdogFailure::Stalled
+            } else {
+                FrameWatchdogFailure::NeverReceived
+            },
+            elapsed,
+        ))
+    }
+}
 
 /// Background task that subscribes to CDP events and broadcasts screencast frames in real-time.
 /// Also handles auto-start/stop of screencast based on WebSocket client count.
@@ -28,6 +79,8 @@ pub(super) async fn cdp_event_loop(
     last_tabs: Arc<RwLock<Vec<Value>>>,
     last_engine: Arc<RwLock<String>>,
     recording: Arc<Mutex<bool>>,
+    service_session_id: String,
+    stream_port: u16,
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
     loop {
@@ -71,8 +124,9 @@ pub(super) async fn cdp_event_loop(
                     .send_command_no_params("Runtime.enable", session_id.as_deref())
                     .await;
 
-                if supports_screencast {
-                    let _ = tokio::time::timeout(
+                let mut initial_frame_received = false;
+                let screencast_started = if supports_screencast {
+                    initial_frame_received = tokio::time::timeout(
                         INITIAL_SCREENSHOT_TIMEOUT,
                         broadcast_initial_screenshot(
                             &frame_tx,
@@ -83,8 +137,9 @@ pub(super) async fn cdp_event_loop(
                             &last_frame,
                         ),
                     )
-                    .await;
-                    let _ = client_arc
+                    .await
+                    .unwrap_or(false);
+                    match client_arc
                         .send_command(
                             "Page.startScreencast",
                             Some(json!({
@@ -96,19 +151,35 @@ pub(super) async fn cdp_event_loop(
                             })),
                             session_id.as_deref(),
                         )
-                        .await;
-                }
+                        .await
+                    {
+                        Ok(_) => true,
+                        Err(_) => {
+                            record_cdp_stream_failure(
+                                &service_session_id,
+                                stream_port,
+                                "start_screencast",
+                                "cdp_screencast_start_failed",
+                                "CDP screencast could not be started",
+                                None,
+                            );
+                            false
+                        }
+                    }
+                } else {
+                    false
+                };
 
                 {
                     let mut sc = screencasting.lock().await;
-                    *sc = supports_screencast;
+                    *sc = screencast_started;
                 }
 
                 let rec = *recording.lock().await;
                 let status = json!({
                     "type": "status",
                     "connected": true,
-                    "screencasting": supports_screencast,
+                    "screencasting": screencast_started,
                     "viewportWidth": vw,
                     "viewportHeight": vh,
                     "engine": eng,
@@ -116,11 +187,17 @@ pub(super) async fn cdp_event_loop(
                 });
                 let _ = frame_tx.send(status.to_string());
 
+                let mut watchdog_state =
+                    FrameWatchdogState::new(Instant::now(), initial_frame_received);
+                let mut frame_watchdog = tokio::time::interval(CDP_FRAME_WATCHDOG_INTERVAL);
+                frame_watchdog.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                frame_watchdog.tick().await;
+
                 loop {
                     tokio::select! {
                         changed = shutdown_rx.changed() => {
                             if changed.is_err() || *shutdown_rx.borrow() {
-                                if supports_screencast {
+                                if screencast_started {
                                     let session_id = cdp_session_id.read().await.clone();
                                     let _ = client_arc
                                         .send_command_no_params("Page.stopScreencast", session_id.as_deref())
@@ -169,6 +246,7 @@ pub(super) async fn cdp_event_loop(
                                         }
 
                                         if let Some(data) = evt.params.get("data").and_then(|v| v.as_str()) {
+                                            watchdog_state.observe_frame(Instant::now());
                                             let meta = evt.params.get("metadata");
                                             let msg = json!({
                                                 "type": "frame",
@@ -240,11 +318,29 @@ pub(super) async fn cdp_event_loop(
                                 Err(broadcast::error::RecvError::Closed) => break,
                             }
                         }
+                        _ = frame_watchdog.tick(), if screencast_started => {
+                            if let Some((failure, elapsed)) = watchdog_state.poll(Instant::now()) {
+                                let (code, summary) = match failure {
+                                    FrameWatchdogFailure::Stalled =>
+                                        ("cdp_frame_stream_stalled", "CDP screencast stopped producing frames"),
+                                    FrameWatchdogFailure::NeverReceived =>
+                                        ("cdp_frame_never_received", "CDP screencast produced no frames"),
+                                };
+                                record_cdp_stream_failure(
+                                    &service_session_id,
+                                    stream_port,
+                                    "frame_watchdog",
+                                    code,
+                                    summary,
+                                    Some(elapsed.as_millis().min(u128::from(u64::MAX)) as u64),
+                                );
+                            }
+                        }
                         _ = client_notify.notified() => {
                             let count = *client_count.lock().await;
                             let new_session_id = cdp_session_id.read().await.clone();
                             if count == 0 {
-                                if supports_screencast {
+                                if screencast_started {
                                     let _ = client_arc
                                         .send_command_no_params("Page.stopScreencast", session_id.as_deref())
                                         .await;
@@ -265,7 +361,7 @@ pub(super) async fn cdp_event_loop(
                             let new_vh = *viewport_height.lock().await;
                             let viewport_changed = new_vw != vw || new_vh != vh;
                             if client_changed || session_changed || viewport_changed {
-                                if supports_screencast {
+                                if screencast_started {
                                     let _ = client_arc
                                         .send_command_no_params("Page.stopScreencast", session_id.as_deref())
                                         .await;
@@ -298,6 +394,37 @@ pub(super) async fn cdp_event_loop(
     }
 }
 
+fn record_cdp_stream_failure(
+    service_session_id: &str,
+    stream_port: u16,
+    stage: &str,
+    code: &str,
+    summary: &str,
+    elapsed_ms: Option<u64>,
+) {
+    let mut details = json!({
+        "streamPort": stream_port,
+        "watchdogIntervalMs": CDP_FRAME_WATCHDOG_INTERVAL.as_millis() as u64,
+    });
+    if let Some(elapsed_ms) = elapsed_ms {
+        details["elapsedMs"] = json!(elapsed_ms);
+    }
+    let record = ServiceFailureRecord::new(
+        ServiceFailureCategory::CdpStream,
+        "stream_server",
+        stage,
+        code,
+        summary,
+    )
+    .with_action("cdp_stream")
+    .with_references(ServiceFailureReferences {
+        session_id: Some(service_session_id.to_string()),
+        ..ServiceFailureReferences::default()
+    })
+    .with_details(details);
+    append_service_failure_best_effort(&record);
+}
+
 async fn broadcast_initial_screenshot(
     frame_tx: &broadcast::Sender<String>,
     client: &CdpClient,
@@ -305,7 +432,7 @@ async fn broadcast_initial_screenshot(
     viewport_width: u32,
     viewport_height: u32,
     last_frame: &Arc<RwLock<Option<String>>>,
-) {
+) -> bool {
     let params = CaptureScreenshotParams {
         format: Some("jpeg".to_string()),
         quality: Some(80),
@@ -322,7 +449,7 @@ async fn broadcast_initial_screenshot(
         )
         .await
     else {
-        return;
+        return false;
     };
 
     let msg = json!({
@@ -344,6 +471,7 @@ async fn broadcast_initial_screenshot(
         *lf = Some(msg_str.clone());
     }
     let _ = frame_tx.send(msg_str);
+    true
 }
 
 pub async fn start_screencast(
@@ -390,4 +518,44 @@ pub async fn ack_screencast_frame(
         )
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_watchdog_reports_each_outage_once_and_rearms_after_a_frame() {
+        let started = Instant::now();
+        let mut watchdog = FrameWatchdogState::new(started, false);
+        assert_eq!(
+            watchdog.poll(started + CDP_FRAME_WATCHDOG_INTERVAL),
+            Some((
+                FrameWatchdogFailure::NeverReceived,
+                CDP_FRAME_WATCHDOG_INTERVAL
+            ))
+        );
+        assert_eq!(
+            watchdog.poll(started + CDP_FRAME_WATCHDOG_INTERVAL * 2),
+            None,
+            "one outage must not flood the journal"
+        );
+
+        let resumed = started + CDP_FRAME_WATCHDOG_INTERVAL * 2;
+        watchdog.observe_frame(resumed);
+        assert_eq!(
+            watchdog.poll(resumed + CDP_FRAME_WATCHDOG_INTERVAL),
+            Some((FrameWatchdogFailure::Stalled, CDP_FRAME_WATCHDOG_INTERVAL))
+        );
+    }
+
+    #[test]
+    fn initial_screenshot_counts_as_a_frame_before_continuous_stream_stalls() {
+        let started = Instant::now();
+        let mut watchdog = FrameWatchdogState::new(started, true);
+        assert_eq!(
+            watchdog.poll(started + CDP_FRAME_WATCHDOG_INTERVAL),
+            Some((FrameWatchdogFailure::Stalled, CDP_FRAME_WATCHDOG_INTERVAL))
+        );
+    }
 }

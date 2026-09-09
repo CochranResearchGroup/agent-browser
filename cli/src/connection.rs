@@ -38,6 +38,17 @@ pub struct Response {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// Daemon correlation and recourse must survive socket decoding for MCP clients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<Value>,
+    #[serde(
+        default,
+        rename = "terminalOutcome",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub terminal_outcome: Option<Value>,
 }
 
 #[allow(dead_code)]
@@ -208,6 +219,9 @@ pub(crate) fn generate_daemon_auth_token() -> Result<String, String> {
 }
 
 pub(crate) fn write_daemon_auth_token(session: &str, token: &str) -> Result<(), String> {
+    // Direct supervisor startup bypasses ensure_daemon, including after reboot
+    // has removed the volatile socket directory. Secure it before writing auth.
+    ensure_socket_dir_exists()?;
     let path = get_auth_token_path(session);
     fs::write(&path, token).map_err(|e| format!("Failed to write daemon auth token: {}", e))?;
     set_private_file_permissions(&path)
@@ -421,7 +435,7 @@ pub(crate) fn daemon_ready_through_selected_ingress(session: &str) -> bool {
     }
 }
 
-fn daemon_startup_ready(session: &str) -> bool {
+pub(crate) fn daemon_startup_ready(session: &str) -> bool {
     daemon_ready(session)
         && (!crate::runtime_host::admission_enabled()
             || get_socket_dir().join(format!("{session}.stream")).is_file())

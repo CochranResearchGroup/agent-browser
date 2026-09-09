@@ -3,6 +3,10 @@
 ## Policy
 
 - Delegate only concrete, bounded subtasks that materially advance the active slice.
+- At batch planning, choose the primary route and any independent worker lanes
+  together, using the least expensive capable model for each lane. Start with
+  deterministic tools and repository evidence where they can answer the
+  question directly.
 - At the start of non-trivial work and after material replanning, consider
   whether delegation would create a genuinely useful independent lane. This is
   an execution choice, not a user-approval event.
@@ -12,14 +16,20 @@
   - implementation with a disjoint write surface
   - context-heavy work that benefits from an isolated context window
   - independent validation, audit, or adversarial review
+- If a useful independent lane is available and capacity permits, run it during
+  the batch. Do not delegate merely to fill capacity, repeat exploration, or
+  execute a trivial command.
 - Record a non-delegation reason only when a plan expected a worker or the lack
   of delegation materially affects timing, independence, or evidence. Do not
   create a `not_spawned` receipt for every routine packet.
 - When delegation occurs, leave a durable receipt for consequential work:
   record the bounded lane, available agent/run/session handle, terminal status,
   evidence returned, and the primary agent's reconciliation decision.
-- Keep urgent blocking work local when the next action depends directly on the answer.
+- Keep urgent blocking work local when the next action depends directly on the answer, except for a bounded specialist consultation whose demonstrated capability is more likely to resolve that exact obstacle than local continuation.
 - Give delegated work explicit ownership, expected output, and write scope.
+- Every worker packet must state the exact task, exact write scope, evidence to
+  return, and stop condition. Keep the context compact enough to avoid paying
+  for unrelated history.
 - Prefer subagents for independent sidecar work, verification, or implementation slices with disjoint write sets.
 - Do not spawn parallel work that duplicates context loading or repeats the same exploration without a clear benefit.
 - Reuse prior agent context when the task is a continuation of the same bounded thread.
@@ -42,6 +52,8 @@
   replacement, plan revisions, and successor packets so review discovery does
   not restart accidentally.
 - Keep final integration responsibility with the primary agent even when subagents perform part of the work.
+- The primary agent retains production effects and final acceptance; worker
+  output is evidence to evaluate, not an acceptance decision.
 - Be explicit about whether the repo optimizes for wall-clock speed, token efficiency, or a balance of the two.
 - Treat spawned subagents as asynchronous runtime artifacts, not just informal delegation.
 - Record the subagent run id, session id, transcript path, or equivalent handle when the runtime provides one.
@@ -51,10 +63,12 @@
   unavailable-runtime receipt plus the resulting integration decision.
 - For critical or high-risk delegated work, inspect the transcript or logs instead of relying only on a summarized announce.
 - Prefer subagent closeout that includes status, result, notes, and available runtime, token, or cost metadata.
+- Evaluate the batch by accepted results, elapsed wall time, and rework as well
+  as cheap calls or summed worker effort.
 - Set explicit timeout expectations for long-running, slow-tool, or uncertain delegated work.
 - Give each subagent a stop condition and require it to return partial evidence
   rather than self-extending into adjacent work when the bound is reached.
-- Use lower-cost or lower-reasoning models for bounded sidecar work only when the quality risk is low; keep synthesis, architecture, and final integration on an appropriately capable model.
+- Use `model-selection-and-calibration` for model, reasoning, escalation, and calibration decisions. Architecture decisions may use a bounded specialist; the primary retains integration and acceptance.
 - Treat subagent cleanup and transcript retention as deliberate choices when later evidence or reconciliation may matter.
 
 ## Adoption Notes

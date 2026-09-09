@@ -1,6 +1,14 @@
 # Sessions
 
-Run multiple isolated browser instances:
+Run multiple isolated browser instances.
+
+Native browser commands without attribution use `serviceName=agent-browser-cli`
+and the session name as `agentName`, giving successive CLI connections a stable
+self-declared identity. A first `open` checks `profile_use` and `tab_create`
+before creating its tab. Retained browsers require current tab custody, and
+session labels do not grant access to restricted profiles.
+Owned-tab binding preserves native `eval` arguments and its per-command deadline.
+Explicit Service API evaluation still requires `timeoutMs` and `maxReturnBytes`.
 
 ```bash
 # Different sessions
@@ -26,9 +34,9 @@ agent-browser session
 Set <code>AGENT_BROWSER_RUNTIME_HOST=1</code> for disposable validation of the
 single-host architecture. Named sessions then share one authenticated daemon
 endpoint while retaining independent serialized lanes, stream metadata, and
-lane-scoped close behavior. The migration switch is not yet the default for
-ordinary CLI sessions; the Linux supervisor always uses the shared host.
-Neither path authorizes cleanup of legacy daemons.
+lane-scoped close behavior. Workstation installation selects this shared host
+for ordinary CLI sessions. Without a selected host, install the workstation
+before launching a lane. New legacy per-session daemons are no longer created.
 
 ## Runtime lane supervision
 
@@ -58,6 +66,9 @@ closes and removes only that lane. Other lanes remain active, and the shared
 host stops after the final lane is removed. Runtime profiles, browser storage,
 service state, and unrelated user services remain preserved. Browser work
 begins only after an authenticated effectful request.
+Supervisor startup recreates a missing socket directory after reboot with
+private permissions before writing its authentication token.
+
 After an accepted workstation convergence, repeat <code>supervisor install</code>
 with the lane&apos;s existing fixed port to rebind a stale manifest to the exact
 selected generation. A clean candidate rollback may rebind only while the
@@ -431,3 +442,95 @@ agent-browser set headers '{"X-Custom-Header": "value"}'
     <tr><td><code>AGENT_BROWSER_STATE_EXPIRE_DAYS</code></td><td>Auto-delete states older than N days (default: 30)</td></tr>
   </tbody>
 </table>
+
+## Custom profile continuity
+
+Repeated commands with the same `--session` and `--profile <path>` reuse that
+custom directory. A planned default must not replace an explicit profile path.
+After an exact close proves process exit and lock release, reopening the same
+path resolves its retained profile identity. Conflicting profiles and unresolved
+ownership still fail before browser effects. Closing the last native session leaves
+the shared runtime host available for a later open. Completed owner history does
+not block reopening; unresolved cleanup still does. A session-only reopen
+recovers the unique profile matching its completed owner identity. Ambiguous
+profile records or missing cleanup proof refuse before launch. Preliminary CLI
+launches preserve that profile and caller attribution, and record ownership of
+the first tab for the following command. Rejected preliminary launches retain
+their request ID and structured failure in CLI output.
+
+## Retained process identity diagnostics
+
+Linux runtime services preserve PrivateTmp isolation when inspecting browsers
+retained across runtime generations. If that namespace blocks executable
+observation, a bounded read-only helper runs the same binary through the user
+service manager and verifies the PID, boot and process start identity before
+accepting the result. It does not change browser ownership or access grants.
+If observation still fails, browser health retains
+`processIdentityAssessmentReason` and `processObservationFailure`; access-plan
+`decision.profileReuse.unavailableBrowsers` carries those reasons instead of
+leaving an occupied profile explained only as no compatible browser. Inspect
+that evidence before retrying. A helper timeout or unavailable user manager
+leaves ownership unproven.
+
+A capability binding from an older owner generation remains unproven for that
+capability. A new shared-local client can still reuse an exactly matched current
+browser when the current profile policy admits its stable subject. This does
+not refresh the old capability binding or grant it lifecycle authority.
+Restricted profiles, inconsistent profile identities and future-generation
+bindings still fail admission; registered clients must use guarded rejoin.
+
+Reattaching to the same verified browser preserves its original host, display
+allocation, launch metadata and recorded profile path. A CDP attachment is a
+connection to that browser, not a replacement launch. Preservation requires
+matching current-boot process identity, endpoint and profile; a changed process
+receives fresh metadata.
+
+Reuse requests keep caller-supplied posture constraints without adding defaults
+intended for a replacement launch. For older records whose CDP attachment erased
+the headed host and display fields, an explicitly selected route can recover
+those fields from one matching retained allocation after current owner, process,
+endpoint and X11 window proof. Recovery compares state again before writing and
+leaves permissions, readiness and display-isolation claims unchanged. A failure
+names the predicate as `retained_launch_recovery_failed`.
+
+Remote-headed Xvfb allocation checks both filesystem and Linux abstract X11
+sockets. A live abstract socket reserves its display even when PrivateTmp hides
+the pathname socket. An unreadable abstract-socket census remains unknown and
+cannot authorize allocation or stale-lock cleanup.
+
+If Xvfb exits or times out during startup, the error includes its first 4096
+stderr bytes and a private log path under `~/.agent-browser/tmp/xvfb-launches`.
+The X server writes directly to that private file, so retaining it across a
+runtime restart does not depend on a logging pipe. Unavailable log capture is
+reported with the startup failure and does not itself prevent launch.
+
+A newly installed development lane with an optional, unconfigured presentation
+provider records an empty route inventory so headless work can start. It does
+not report presentation ready. Existing provider inventories and retained routes
+are preserved; a missing inventory for a staged provider remains an error.
+
+Lease rows with an exact terminal owner generation, satisfied cleanup evidence,
+no browser projection and no active subordinate work remain visible as
+`historical` with read actions only. They do not create current lease blockers.
+Mismatched generations, pending transfers and current work remain blocking.
+
+
+## Exact tab cleanup
+
+`tab_close` accepts an explicit `targetId`, `tabId`, or `serviceTabHandle`.
+Conflicting or invalid selectors fail before close; explicit targets never fall
+back to the active tab. Service calls enforce the current child's close
+permission even when only a target selector is supplied.
+
+`tab_handle_release` recovers an identity-verified retained connection when
+needed. Physical close requires browser acknowledgement, target disappearance
+and survival of the observed peer targets. A manager attached to only one owned
+target can close it when the physical browser has other tabs. The actual last
+physical tab remains protected.
+
+Unverified requested cleanup fails and retains the handle for diagnosis. Inspect
+the request's service trace before retrying; never close a peer as a fallback.
+The `closed` number identifies the former attached-tab index;
+`targetRemovalVerified` confirms physical closure. Explicit release-only or
+`closePhysicalTab: false` requests release logical custody without claiming a
+physical close. Failure journal records include request correlation and source location.

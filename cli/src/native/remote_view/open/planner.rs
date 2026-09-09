@@ -6,6 +6,7 @@ pub(crate) fn ensure_remote_view_route_available_for_display(
     route_id: &str,
     display_allocation_id: &str,
     browser_id: &str,
+    session_id: &str,
     allocation: Option<&DisplayAllocation>,
 ) -> Result<(), String> {
     let Some(route) = state.remote_view_routes.get(route_id) else {
@@ -15,6 +16,26 @@ pub(crate) fn ensure_remote_view_route_available_for_display(
         || route.display_allocation_id.as_deref() == Some(display_allocation_id)
         || route.browser_id.as_deref() == Some(browser_id)
     {
+        return Ok(());
+    }
+    let ownerless_warm_route_claimed_by_acquisition = route.state == "ready"
+        && route.browser_id.is_none()
+        && route.session_id.is_none()
+        && allocation.is_some_and(|allocation| {
+            allocation.owner_browser_id.as_deref() == Some(browser_id)
+                && allocation.owner_session_id.as_deref() == Some(session_id)
+        })
+        && state.remote_view_acquisition_leases.values().any(|lease| {
+            super::super::pending_remote_view_acquisition_lease_matches_owner(
+                lease,
+                browser_id,
+                session_id,
+                route_id,
+                display_allocation_id,
+                None,
+            )
+        });
+    if ownerless_warm_route_claimed_by_acquisition {
         return Ok(());
     }
     let current_display_allocation_id = route.display_allocation_id.as_deref().unwrap_or("unknown");

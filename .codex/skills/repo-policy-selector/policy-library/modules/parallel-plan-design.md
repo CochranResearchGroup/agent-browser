@@ -19,6 +19,7 @@ tags:
   including fan-out, join, review, retry, and terminal transitions. A table or
   plan section is sufficient; a graph framework is not required.
 - Do not open parallel lanes just because tools allow delegation; open them only when the work can move independently.
+- This restriction governs parallel fan-out. A sequential bounded specialist consultation may still be justified under `model-selection-and-calibration` when it can resolve a critical-path decision.
 - If a lane becomes coordination-heavy, collapse it back into the critical path or redefine the lane boundary.
 - Declare the intended active-agent concurrency before spawning many subagents or parallel workers.
 - Cap active subagents per plan lane unless the repo explicitly optimizes for `max-dev-speed` and has strong reconciliation rules.
@@ -28,9 +29,10 @@ tags:
 - Put a semantic exit condition and a hard bound on every review, retry, repair,
   or agent-handoff edge that can cycle back to prior work.
 - Reaching a local loop bound ends or reframes that loop; it does not create a
-  user-approval gate by itself. Continue another safe in-scope route when one is
-  available, and escalate only when no meaningful route remains or an exact
-  action-specific boundary requires a user decision.
+  user-approval gate by itself. Continue another safe in-scope route only within
+  the remaining cumulative milestone allowance, and escalate only when no
+  meaningful route remains or an exact action-specific boundary requires a user
+  decision.
 - When a work unit cannot be bounded or has too many coupled write surfaces,
   return it for split/reframe before spawning workers.
 

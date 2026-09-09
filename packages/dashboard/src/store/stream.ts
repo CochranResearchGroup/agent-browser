@@ -14,6 +14,24 @@ import { tabCacheAtom, engineCacheAtom } from "@/store/tabs";
 
 const MAX_EVENTS = 500;
 
+type DashboardStreamLocation = Pick<Location, "protocol" | "host" | "hostname">;
+
+/**
+ * Keep local development sockets direct, but never tell a remote dashboard
+ * client to connect to its own loopback interface. External clients use the
+ * authenticated dashboard ingress WebSocket proxy instead.
+ */
+export function dashboardStreamWebSocketUrl(
+  port: number,
+  location: DashboardStreamLocation = window.location,
+): string {
+  const localHost = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(location.hostname);
+  if (location.protocol === "http:" && localHost) return `ws://localhost:${port}`;
+  const proxied = new URL(`/api/stream/${encodeURIComponent(port)}`, `${location.protocol}//${location.host}`);
+  proxied.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return proxied.toString();
+}
+
 // ---------------------------------------------------------------------------
 // Primitive atoms
 // ---------------------------------------------------------------------------
@@ -95,7 +113,7 @@ function consoleEntryKey(entry: ConsoleEntry): string {
 // Sync hook
 // ---------------------------------------------------------------------------
 
-export function useStreamSync(port: number) {
+export function useStreamSync(port: number, enabled = true) {
   const setConnected = useSetAtom(streamConnectedAtom);
   const setBrowserConnected = useSetAtom(browserConnectedAtom);
   const setScreencasting = useSetAtom(screencastingAtom);
@@ -139,9 +157,10 @@ export function useStreamSync(port: number) {
   }, [port, setConnected, setBrowserConnected, setScreencasting, setRecording, setVpWidth, setVpHeight, setFrame, setEvents, setConsoleLogs, setTabs, setEngine]);
 
   const connect = useCallback(() => {
+    if (!enabled) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(`ws://localhost:${port}`);
+    const ws = new WebSocket(dashboardStreamWebSocketUrl(port));
     wsRef.current = ws;
     setWsRef(ws);
 
@@ -241,14 +260,21 @@ export function useStreamSync(port: number) {
           break;
       }
     };
-  }, [port, setWsRef, setConnected, setBrowserConnected, setScreencasting, setRecording, setVpWidth, setVpHeight, setFrame, setEvents, setConsoleLogs, setTabs, setEngine, setTabCache, setEngineCache]);
+  }, [enabled, port, setWsRef, setConnected, setBrowserConnected, setScreencasting, setRecording, setVpWidth, setVpHeight, setFrame, setEvents, setConsoleLogs, setTabs, setEngine, setTabCache, setEngineCache]);
 
   useEffect(() => {
+    if (!enabled) {
+      setConnected(false);
+      setBrowserConnected(false);
+      setScreencasting(false);
+      setWsRef(null);
+      return;
+    }
     connect();
     return () => {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
       setWsRef(null);
     };
-  }, [connect, setWsRef]);
+  }, [connect, enabled, setBrowserConnected, setConnected, setScreencasting, setWsRef]);
 }

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "agent-browser.p158-historical-failure-seeds.v1",
+  "source": "S-PROD-200",
+  "redactionState": "synthetic_relationship_preserving",
+  "fixtures": [
+    {
+      "fixtureId": "PF01-unproven-identity",
+      "signatureId": "PF01",
+      "historicalSignature": "existing_session_profile_identity_unproven",
+      "observedCount": 14,
+      "actions": ["launch", "remote_view_open", "tab_switch", "view_focus"],
+      "syntheticIdentity": {"subjectAssurance": "self-declared", "principalBindingPresent": false, "profileId": "profile:fixture-shared", "sessionId": "session:fixture-retained", "ownerGeneration": "generation:prior"},
+      "syntheticOutcome": {"phase": "profile_admission", "effectState": "not_started", "retrySafe": false, "failurePresent": false, "provenancePresent": false},
+      "caseIds": ["A08", "A13"]
+    },
+    {
+      "fixtureId": "PF02-inconsistent-identity",
+      "signatureId": "PF02",
+      "historicalSignature": "existing_session_profile_identity_inconsistent",
+      "observedCount": 3,
+      "actions": ["launch", "view_focus"],
+      "syntheticIdentity": {"subjectAssurance": "self-declared", "principalBindingPresent": true, "requestedProfileId": "profile:fixture-a", "retainedProfileId": "profile:fixture-b", "ownerGeneration": "generation:prior"},
+      "syntheticOutcome": {"phase": "profile_admission", "effectState": "not_started", "retrySafe": false, "failurePresent": false, "provenancePresent": false},
+      "caseIds": ["A08", "A13", "X10"]
+    },
+    {
+      "fixtureId": "PF03-xvfb-90-collision",
+      "signatureId": "PF03",
+      "historicalSignature": "xvfb_display_90_automatic_launch_failure",
+      "observedCount": 8,
+      "actions": ["tab_new"],
+      "syntheticIdentity": {"displayName": ":90", "oldPrivateTmpNamespace": "namespace:old", "newPrivateTmpNamespace": "namespace:new", "lockVisibleToNewGeneration": false, "socketVisibleToNewGeneration": false, "oldXvfbStillLive": true},
+      "syntheticOutcome": {"phase": "browser_launch", "effectState": "failed_before_browser_ready", "retrySafe": false, "failurePresent": false, "provenancePresent": false},
+      "caseIds": ["X01", "X02", "X03"]
+    },
+    {
+      "fixtureId": "PF04-service-resource-timeout",
+      "signatureId": "PF04",
+      "historicalSignature": "service_resource_timeout",
+      "observedCount": 5,
+      "actions": ["service_resource_read"],
+      "syntheticIdentity": {"stateSizeClass": "large", "connectionInstanceId": "connection:fixture-slow-reader", "runtimeLaneId": "lane:fixture"},
+      "syntheticOutcome": {"phase": "service_resource_projection", "effectState": "read_only_timeout", "retrySafe": true, "failurePresent": false, "provenancePresent": false},
+      "caseIds": ["A12", "D07", "D10"]
+    },
+    {
+      "fixtureId": "PF05-route-pool-failure",
+      "signatureId": "PF05",
+      "historicalSignature": "route_pool_failure",
+      "observedCount": 4,
+      "actions": ["remote_view_open"],
+      "syntheticIdentity": {"requestedDisplayAllocationId": "display:fixture-requested", "availableRouteCount": 3, "matchingRouteCount": 0, "occupiedControllerCount": 3},
+      "syntheticOutcome": {"phase": "route_checkout", "effectState": "not_started", "retrySafe": false, "failurePresent": false, "provenancePresent": false},
+      "caseIds": ["H07", "H08"]
+    },
+    {
+      "fixtureId": "PF06-presentation-proof-failure",
+      "signatureId": "PF06",
+      "historicalSignature": "presentation_proof_or_authority_failure",
+      "observedCount": 2,
+      "actions": ["remote_view_open", "service_remote_view_browser_reattach"],
+      "syntheticIdentity": {"routeId": "route:fixture", "displayId": "display:fixture", "browserId": "browser:fixture", "visibleWindowProof": false, "presentationCapacityConfigured": false},
+      "syntheticOutcome": {"phase": "operator_visibility_proof", "effectState": "route_or_browser_may_exist", "retrySafe": false, "failurePresent": false, "provenancePresent": false},
+      "caseIds": ["H08", "H10", "X06"]
+    },
+    {
+      "fixtureId": "PF07-other-launch-reattach",
+      "signatureId": "PF07",
+      "historicalSignature": "other_launch_or_reattach_failure",
+      "observedCount": 3,
+      "actions": ["launch", "service_remote_view_browser_reattach"],
+      "syntheticIdentity": {"browserId": "browser:fixture-retained", "processEpoch": "process:prior", "socketEpoch": "socket:prior", "routeEpoch": "route:prior"},
+      "syntheticOutcome": {"phase": "launch_or_reattach", "effectState": "unknown", "retrySafe": false, "failurePresent": false, "provenancePresent": false},
+      "caseIds": ["A07", "A13", "H10", "X10"]
+    },
+    {
+      "fixtureId": "PF08-null-terminal-envelope",
+      "signatureId": "PF08",
+      "historicalSignature": "terminal_job_missing_failure_and_provenance",
+      "observedCount": 39,
+      "actions": ["mixed_failed_or_timed_out_actions"],
+      "syntheticIdentity": {"requestId": "request:fixture", "jobId": "job:fixture", "traceId": null, "runtimeLaneId": null},
+      "syntheticOutcome": {"phase": "terminal_projection", "effectState": "unknown", "retrySafe": false, "failurePresent": false, "provenancePresent": false, "responsePresent": true, "jobPresent": true, "eventPresent": "unknown", "tracePresent": false, "incidentPresent": "unknown", "dashboardProjectionPresent": "unknown"},
+      "caseIds": ["A11", "A12", "A15", "D07"]
+    }
+  ]
+}

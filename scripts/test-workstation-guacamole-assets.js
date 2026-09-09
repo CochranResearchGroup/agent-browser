@@ -27,10 +27,14 @@ assert.equal(manifest.schemaVersion, 1)
 assert.equal(manifest.bundle, 'agent-browser-guacamole-workstation')
 assert.equal(manifest.schema.generatorImage, imageRef('guacamole'))
 
+const manifestHashMismatches = []
 for (const file of manifest.files) {
   const path = join(assetRoot, file.path)
   assert(existsSync(path), `manifest file missing: ${file.path}`)
-  assert.equal(sha256(path), file.sha256, `hash mismatch: ${file.path}`)
+  const actualSha256 = sha256(path)
+  if (actualSha256 !== file.sha256) {
+    manifestHashMismatches.push({ path: file.path, expected: file.sha256, actual: actualSha256 })
+  }
 }
 
 const compose = readFileSync(join(assetRoot, 'compose.yml'), 'utf8')
@@ -93,6 +97,15 @@ const defaultsManifestPath = join(assetRoot, 'extensions/guac-manifest.json')
 const defaultsScriptPath = join(assetRoot, 'extensions/agent-browser-defaults.js')
 const defaultsManifest = JSON.parse(readFileSync(defaultsManifestPath, 'utf8'))
 const defaultsScript = readFileSync(defaultsScriptPath, 'utf8')
+// The stable installation symlink does not change Compose mount configuration.
+// Bind extension content to the web service so changed code triggers recreation.
+const guacamoleService = compose.split('\n  guacamole:\n')[1]?.split('\nvolumes:')[0]
+assert(guacamoleService, 'Guacamole service configuration must exist')
+assert(
+  guacamoleService.includes(`org.agent-browser.defaults-sha256: "${sha256(defaultsScriptPath)}"`),
+  'Guacamole service must bind the exact defaults extension content for upgrade reload',
+)
+assert.equal((compose.match(/org\.agent-browser\.defaults-sha256:/g) || []).length, 1)
 const guacamoleStart = readFileSync(join(assetRoot, 'start-guacamole.sh'), 'utf8')
 
 assert.match(guacamoleStart, /cp -R "\$template_source\/\." "\$writable_template\/"/)
@@ -134,6 +147,345 @@ const migratedOverride = runDefaultsMigration({
   AGENT_BROWSER_GUAC_DEFAULTS_VERSION: '1',
 })
 assert.equal(JSON.parse(migratedOverride.get('GUAC_PREFERENCES')).inputMethod, 'none')
+
+const textInputTemplateKey = 'app/textInput/templates/guacTextInput.html'
+const textInputTemplate = '<div><textarea rows="1" class="target" autocorrect="off" autocapitalize="off" autofocus></textarea></div>'
+function runEmbeddedTextInputTemplate({ embedded, migrated = false }) {
+  const cache = new Map()
+  const calls = []
+  const templateCache = { get: (key) => cache.get(key), put: (key, value) => cache.set(key, value) }
+  const runBlocks = [() => {
+    calls.push('upstream-template-cache')
+    templateCache.put(textInputTemplateKey, textInputTemplate)
+    templateCache.put('unrelated.html', '<textarea autofocus></textarea>')
+  }]
+  const window = {
+    localStorage: {
+      getItem: (key) => migrated && key === 'AGENT_BROWSER_GUAC_DEFAULTS_VERSION' ? '1' : null,
+      setItem() {},
+    },
+    angular: { module(name) {
+      if (name === 'textInput') return { config() {} }
+      assert.equal(name, 'templates-main')
+      return { run(injected) {
+        assert.equal(injected[0], '$templateCache')
+        runBlocks.push(() => { calls.push('extension-template-hook'); injected[1](templateCache) })
+      } }
+    } },
+  }
+  window.parent = embedded ? {} : window
+  vm.runInNewContext(defaultsScript, { window })
+  assert.equal(cache.size, 0, 'extension registration must precede Angular bootstrap')
+  for (const run of runBlocks) run()
+  return { cache, calls }
+}
+for (const migrated of [false, true]) {
+  const embedded = runEmbeddedTextInputTemplate({ embedded: true, migrated })
+  assert.equal(embedded.cache.get(textInputTemplateKey), textInputTemplate.replace(' autofocus', ''))
+  assert.equal(embedded.cache.get('unrelated.html'), '<textarea autofocus></textarea>')
+  assert.deepEqual(embedded.calls, ['upstream-template-cache', 'extension-template-hook'])
+}
+const standalone = runEmbeddedTextInputTemplate({ embedded: false })
+assert.equal(standalone.cache.get(textInputTemplateKey), textInputTemplate)
+assert.deepEqual(standalone.calls, ['upstream-template-cache'])
+
+// Guacamole 1.5.5 also calls target.focus() synchronously in its text-input
+// controller. Removing only the template attribute does not preserve host focus.
+for (const embedded of [true, false]) {
+  for (const throws of [false, true]) {
+    let decorator
+    let focusCalls = 0
+    const nativeFocus = function () { focusCalls += 1 }
+    const target = Object.create({ focus: nativeFocus })
+    const scope = {}
+    const element = { find: () => [target] }
+    const failure = new Error('controller failure')
+    const controller = ['$scope', '$element', function ($scope, $element) {
+      assert.equal($scope, scope)
+      assert.equal($element, element)
+      $scope.focusExplicitly = () => target.focus()
+      target.focus()
+      if (throws) throw failure
+      return 'controller result'
+    }]
+    const directive = { controller }
+    const window = { parent: {}, angular: { module(name) {
+      if (name === 'templates-main') return { run() {} }
+      assert.equal(name, 'textInput')
+      return { config(injected) { injected.at(-1)({ decorator(name, injected) {
+        assert.equal(name, 'guacTextInputDirective')
+        decorator = injected.at(-1)
+      } }) } }
+    } } }
+    if (!embedded) window.parent = window
+    const injector = { invoke(injected, receiver, locals) {
+      return injected.at(-1).apply(receiver, injected.slice(0, -1).map(name => locals[name]))
+    } }
+    vm.runInNewContext(defaultsScript, { window })
+    if (decorator) decorator([directive], injector)
+    const initialize = () => injector.invoke(directive.controller, {}, { $scope: scope, $element: element })
+    if (throws) assert.throws(initialize, error => error === failure)
+    else assert.equal(initialize(), 'controller result')
+    assert.equal(focusCalls, embedded ? 0 : 1, 'embedded controller startup must not steal dashboard focus')
+    assert.equal(Object.hasOwn(target, 'focus'), false, 'restore inherited focus even on controller failure')
+    assert.equal(target.focus, nativeFocus)
+    scope.focusExplicitly()
+    assert.equal(focusCalls, embedded ? 1 : 2, 'explicit input focus must remain functional')
+  }
+}
+
+function createShareAuthSignalHarness({
+  frameName = 'agent-browser-guacamole-share:attempt-safe-123',
+  href = 'https://agent-browser-dev-share.example.test:8443/guacamole/',
+  parentIsSelf = false,
+} = {}) {
+  const messages = []
+  const parent = {
+    postMessage(message, targetOrigin) {
+      messages.push({ message: JSON.parse(JSON.stringify(message)), targetOrigin })
+    },
+  }
+  class FakeXMLHttpRequest {
+    constructor() {
+      this.listeners = new Map()
+      this.status = 0
+    }
+
+    open(method, url) {
+      this.method = method
+      this.url = url
+    }
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener)
+    }
+
+    send() {}
+
+    complete(status) {
+      this.status = status
+      this.listeners.get('loadend')?.call(this)
+    }
+  }
+  let fetchStatus = 200
+  const location = new URL(href)
+  const window = {
+    XMLHttpRequest: FakeXMLHttpRequest,
+    fetch: async () => ({
+      status: fetchStatus,
+      body: 'private-response-body',
+      url: 'https://must-not-cross-frame.example.test/private-response',
+    }),
+    localStorage: {
+      getItem() { return null },
+      setItem() {},
+    },
+    location: {
+      href: location.href,
+      hostname: location.hostname,
+      port: location.port,
+      protocol: location.protocol,
+    },
+    name: frameName,
+    parent,
+  }
+  if (parentIsSelf) window.parent = window
+  vm.runInNewContext(defaultsScript, { URL, window })
+  return {
+    messages,
+    requestWithXhr({
+      body = 'key=private-share-key&token=private-token&opaque=private-request-body',
+      method = 'POST',
+      status = 200,
+      url = '/guacamole/api/tokens?token=private-token',
+    } = {}) {
+      const request = new window.XMLHttpRequest()
+      request.open(method, url)
+      request.send(body)
+      request.complete(status)
+    },
+    async requestWithFetch({
+      body = 'key=private-share-key&token=private-token&opaque=private-request-body',
+      method = 'POST',
+      status = 200,
+      url = '/guacamole/api/tokens?token=private-token',
+      requestObject = false,
+    } = {}) {
+      fetchStatus = status
+      const input = requestObject ? { method, url } : url
+      const init = requestObject ? undefined : { method, body }
+      await window.fetch(input, init)
+    },
+  }
+}
+
+function assertPrivacyBoundedShareAuthMessage(actual, outcome) {
+  assert.deepEqual(actual, {
+    message: {
+      type: 'agent-browser-guacamole-share-auth',
+      attemptId: 'attempt-safe-123',
+      outcome,
+    },
+    targetOrigin: 'https://agent-browser-dev.example.test:8443',
+  })
+  const encoded = JSON.stringify(actual)
+  for (const forbidden of [
+    'private-share-key',
+    'private-token',
+    'private-request-body',
+    'private-response-body',
+    'must-not-cross-frame.example.test',
+    '/guacamole/api/tokens',
+  ]) {
+    assert.equal(encoded.includes(forbidden), false, `share auth message leaked ${forbidden}`)
+  }
+}
+
+for (const transport of ['xhr', 'fetch']) {
+  for (const [status, outcome] of [
+    [200, 'ready'],
+    [400, 'share_key_rejected'],
+    [401, 'share_key_rejected'],
+    [403, 'share_key_rejected'],
+  ]) {
+    const harness = createShareAuthSignalHarness()
+    if (transport === 'xhr') harness.requestWithXhr({ status })
+    else await harness.requestWithFetch({ status })
+    assert.equal(harness.messages.length, 1, `${transport} HTTP ${status} signal count`)
+    assertPrivacyBoundedShareAuthMessage(harness.messages[0], outcome)
+  }
+}
+
+for (const scenario of [
+  {
+    label: 'wrong frame name',
+    harness: createShareAuthSignalHarness({ frameName: 'untrusted-frame' }),
+    request: { status: 403 },
+  },
+  {
+    label: 'top-level document',
+    harness: createShareAuthSignalHarness({ parentIsSelf: true }),
+    request: { status: 403 },
+  },
+  {
+    label: 'non-share origin',
+    harness: createShareAuthSignalHarness({ href: 'https://agent-browser-dev.example.test/guacamole/' }),
+    request: { status: 403 },
+  },
+  {
+    label: 'non-token request',
+    harness: createShareAuthSignalHarness(),
+    request: { status: 403, url: '/guacamole/api/session/data/postgresql/activeConnections' },
+  },
+  {
+    label: 'non-POST token request',
+    harness: createShareAuthSignalHarness(),
+    request: { method: 'GET', status: 403 },
+  },
+  {
+    label: 'server failure',
+    harness: createShareAuthSignalHarness(),
+    request: { status: 500 },
+  },
+]) {
+  scenario.harness.requestWithXhr(scenario.request)
+  assert.deepEqual(scenario.harness.messages, [], `${scenario.label} must not signal the parent`)
+}
+
+const fetchNegative = createShareAuthSignalHarness()
+await fetchNegative.requestWithFetch({ status: 500 })
+await fetchNegative.requestWithFetch({ method: 'GET', status: 403 })
+await fetchNegative.requestWithFetch({
+  status: 403,
+  url: '/guacamole/api/session/data/postgresql/activeConnections',
+})
+await fetchNegative.requestWithFetch({ status: 200, body: 'username=not-a-share-key' })
+await fetchNegative.requestWithFetch({ status: 200, requestObject: true })
+assert.deepEqual(
+  fetchNegative.messages,
+  [],
+  'fetch must ignore 500, non-POST, non-token, keyless, and uninspectable Request-like traffic',
+)
+
+const xhrKeylessSuccess = createShareAuthSignalHarness()
+xhrKeylessSuccess.requestWithXhr({ status: 200, body: 'username=not-a-share-key' })
+assert.deepEqual(
+  xhrKeylessSuccess.messages,
+  [],
+  'XHR token success without a key-bearing POST body must not signal readiness',
+)
+
+// Restricted PostgreSQL share users cannot re-share their tunnel. Exercise
+// the same tunnel-service call used by Guacamole's client UI, including auth
+// changes after decorator registration and unchanged failures for full users.
+async function checkSharedViewerCapabilities({
+  frameName = 'agent-browser-guacamole-share:capability-test',
+  hostname = 'dashboard-share.example.test',
+  embedded = true,
+  expectsGuard = true,
+} = {}) {
+  let decorator
+  let dataSource = 'postgresql-shared'
+  let anonymous = true
+  const calls = []
+  const unavailable = new Error('No readable active connection for tunnel.')
+  const delegate = {
+    getSharingProfiles(tunnel) {
+      calls.push({ receiver: this, tunnel })
+      return Promise.reject(unavailable)
+    },
+    getProtocol() { return 'rdp' },
+  }
+  const window = {
+    parent: {}, name: frameName,
+    location: { hostname, protocol: 'https:', port: '' },
+    angular: { module(name) {
+      if (name === 'templates-main') return { run() {} }
+      if (name === 'textInput') return { config() {} }
+      assert.equal(name, 'rest')
+      return { config(injected) {
+        assert.equal(injected[0], '$provide')
+        injected.at(-1)({ decorator(name, injected) {
+          assert.equal(name, 'tunnelService')
+          decorator = injected.at(-1)
+        } })
+      } }
+    } },
+  }
+  if (!embedded) window.parent = window
+  vm.runInNewContext(defaultsScript, { window })
+  const services = {
+    authenticationService: { getDataSource: () => dataSource, isAnonymous: () => anonymous },
+    $q: { when: (value) => Promise.resolve(value) },
+  }
+  const decorated = decorator ? decorator(delegate, { get: (name) => services[name] }) : delegate
+  if (!expectsGuard) {
+    assert.equal(decorator, undefined)
+    await assert.rejects(decorated.getSharingProfiles('unchanged-tunnel'), (error) => error === unavailable)
+    return
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(await decorated.getSharingProfiles('shared-tunnel'))), {})
+  assert.equal(calls.length, 0, 'restricted sharing must not issue the known-unavailable HTTP request')
+  assert.equal(decorated.getProtocol(), 'rdp')
+  for (const identity of [
+    { source: 'postgresql', anonymous: false },
+    { source: 'postgresql-shared', anonymous: false },
+    { source: 'unknown-shared', anonymous: true },
+    { source: null, anonymous: true },
+  ]) {
+    dataSource = identity.source
+    anonymous = identity.anonymous
+    await assert.rejects(decorated.getSharingProfiles('full-tunnel'), (error) => error === unavailable)
+    assert.equal(calls.at(-1).receiver, delegate)
+    assert.equal(calls.at(-1).tunnel, 'full-tunnel')
+  }
+}
+await checkSharedViewerCapabilities()
+await checkSharedViewerCapabilities({ frameName: '', expectsGuard: false })
+await checkSharedViewerCapabilities({ hostname: 'dashboard.example.test', expectsGuard: false })
+await checkSharedViewerCapabilities({ embedded: false, expectsGuard: false })
+
+assert.deepEqual(manifestHashMismatches, [], 'workstation asset hashes must match the manifest')
 
 const generator = readFileSync(join(assetRoot, 'generate-initdb.sh'), 'utf8')
 assert(generator.includes(`readonly GUACAMOLE_IMAGE='${manifest.schema.generatorImage}'`))

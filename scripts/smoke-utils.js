@@ -1240,7 +1240,11 @@ export function sendRawCommand(context, command) {
 }
 
 export function createMcpStdioClient({ context, args, onFatal }) {
-  const child = spawn(cargoSafeCommand, cargoArgs(args), {
+  const installedCommand = context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD ||
+    process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD;
+  const command = installedCommand || cargoSafeCommand;
+  const commandArgs = installedCommand ? args : cargoArgs(args);
+  const child = spawn(command, commandArgs, {
     cwd: rootDir,
     env: context.env,
     stdio: ['pipe', 'pipe', 'pipe'],

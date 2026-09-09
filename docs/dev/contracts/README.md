@@ -106,6 +106,13 @@ Successful requests return typed takeover metadata and retain a
 `viewer_takeover_requested` service event for later dashboard, HTTP, MCP, and
 service trace inspection.
 
+Profile policy changes use `service_profile_policy_mutate` with a current
+`expectedRevision` and either a human-facing mode and preset or an exact target
+policy. Exact physical cleanup uses `service_profile_tab_evict` with a
+persisted authorization and tab ID. Legacy profiles missing a policy are
+reported through `service-profile-policy-migration.v1.schema.json`; ambiguous
+identity maps to nonblocking shared-local access.
+
 `service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
 wrapper for invoking `service_request` with the same intent object.
 
@@ -731,6 +738,11 @@ the current provider connection as `providerExternalUrl`. Generic service
 clients must never substitute `providerExternalUrl` or a route-binding URL for
 the durable handoff. Software clients that need an operator link use
 `requestServiceRemoteViewHandoff()`, which returns only the handoff identity.
+Automation-capable responses also expose the valid `serviceTabHandle` at the
+top level and under `tab.serviceTabHandle`. Generic `tab_new` rejects route and
+display selectors before job creation; callers use authenticated
+`remote_view_open` for route-bound acquisition. Derived allocation identifiers
+follow stable route identity rather than reusable display numbers.
 Service request action `service_remote_view_handoff_resolve` accepts `params.handoffId`
 and optional `params.allowReopenClosed`. It replays durable intent without stale
 route, display, or Guacamole connection selectors, prefers the recorded target,

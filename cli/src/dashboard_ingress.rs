@@ -17,6 +17,8 @@ use tokio::time::timeout;
 
 pub(crate) const DASHBOARD_INGRESS_SCHEMA_VERSION: &str = "agent-browser.dashboard-ingress.v1";
 const DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
+// PrimaryTask::ready bounds startup at 16 seconds; retain five seconds for delivery.
+const DASHBOARD_INGRESS_PRIMARY_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(21);
 const DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const DASHBOARD_INGRESS_HANDOFF_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(65);
 const DASHBOARD_INGRESS_DEFAULT_SERVICE_JOB_TIMEOUT: Duration = Duration::from_secs(30);
@@ -117,6 +119,82 @@ impl CandidateOperatorJourney {
         }
     }
 
+    fn into_receipt(
+        self,
+        generation_id: &str,
+    ) -> Result<crate::runtime_adoption::PresentationReceipt, String> {
+        let journey = self;
+        if journey.generation_id != generation_id
+            || !journey.authenticated
+            || !journey.runtime_manifest_valid
+            || !journey.operator_surface_ready
+        {
+            return Err(
+                "dashboard candidate operator journey is not ready for selection".to_string(),
+            );
+        }
+        let evidence = journey
+            .evidence
+            .ok_or_else(|| "dashboard candidate presentation evidence is missing".to_string())?;
+        if evidence.required_stream_provider != evidence.observed_stream_provider {
+            return Err("dashboard candidate presented the wrong stream provider".to_string());
+        }
+        for (label, value) in [
+            ("receipt ID", evidence.receipt_id.as_str()),
+            (
+                "coordinator generation",
+                evidence.coordinator_generation.as_str(),
+            ),
+            ("daemon generation", evidence.daemon_generation.as_str()),
+            ("logical browser ID", evidence.logical_browser_id.as_str()),
+            (
+                "process identity",
+                evidence.process_instance_digest.as_str(),
+            ),
+            (
+                "selected target identity",
+                evidence.selected_target_identity_digest.as_str(),
+            ),
+            (
+                "stream provider",
+                evidence.required_stream_provider.as_str(),
+            ),
+            (
+                "display allocation",
+                evidence.display_allocation_id.as_str(),
+            ),
+            ("geometry epoch", evidence.geometry_epoch.as_str()),
+            (
+                "authenticated ingress probe time",
+                evidence.authenticated_ingress_probe_at.as_str(),
+            ),
+        ] {
+            if value.trim().is_empty() {
+                return Err(format!("dashboard candidate {label} is missing"));
+            }
+        }
+        Ok(crate::runtime_adoption::PresentationReceipt {
+            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+            receipt_id: evidence.receipt_id,
+            dashboard_deployment_generation: evidence.dashboard_deployment_generation,
+            coordinator_generation: evidence.coordinator_generation,
+            daemon_generation: evidence.daemon_generation,
+            logical_browser_id: evidence.logical_browser_id,
+            process_instance_digest: evidence.process_instance_digest,
+            selected_target_generation: evidence.selected_target_generation,
+            selected_target_identity_digest: evidence.selected_target_identity_digest,
+            required_stream_provider: evidence.required_stream_provider,
+            display_allocation_id: evidence.display_allocation_id,
+            geometry_epoch: evidence.geometry_epoch,
+            route_generation: evidence.route_generation,
+            guacamole_connection_generation: evidence.guacamole_connection_generation,
+            authenticated_ingress_probe_at: evidence.authenticated_ingress_probe_at,
+            operator_surface_load_result: evidence.operator_surface_load_result,
+            state: crate::runtime_adoption::PresentationState::Ready,
+            reason_codes: Vec::new(),
+        })
+    }
+
     pub(crate) fn ready(evidence: PresentationEvidence) -> Self {
         Self {
             generation_id: evidence.dashboard_deployment_generation.clone(),
@@ -206,75 +284,7 @@ impl DashboardIngressRegistry {
             .candidate_backend
             .as_ref()
             .ok_or_else(|| "dashboard candidate is not staged".to_string())?;
-        if journey.generation_id != candidate.generation_id
-            || !journey.authenticated
-            || !journey.runtime_manifest_valid
-            || !journey.operator_surface_ready
-        {
-            return Err(
-                "dashboard candidate operator journey is not ready for selection".to_string(),
-            );
-        }
-        let evidence = journey
-            .evidence
-            .ok_or_else(|| "dashboard candidate presentation evidence is missing".to_string())?;
-        if evidence.required_stream_provider != evidence.observed_stream_provider {
-            return Err("dashboard candidate presented the wrong stream provider".to_string());
-        }
-        for (label, value) in [
-            ("receipt ID", evidence.receipt_id.as_str()),
-            (
-                "coordinator generation",
-                evidence.coordinator_generation.as_str(),
-            ),
-            ("daemon generation", evidence.daemon_generation.as_str()),
-            ("logical browser ID", evidence.logical_browser_id.as_str()),
-            (
-                "process identity",
-                evidence.process_instance_digest.as_str(),
-            ),
-            (
-                "selected target identity",
-                evidence.selected_target_identity_digest.as_str(),
-            ),
-            (
-                "stream provider",
-                evidence.required_stream_provider.as_str(),
-            ),
-            (
-                "display allocation",
-                evidence.display_allocation_id.as_str(),
-            ),
-            ("geometry epoch", evidence.geometry_epoch.as_str()),
-            (
-                "authenticated ingress probe time",
-                evidence.authenticated_ingress_probe_at.as_str(),
-            ),
-        ] {
-            if value.trim().is_empty() {
-                return Err(format!("dashboard candidate {label} is missing"));
-            }
-        }
-        let receipt = crate::runtime_adoption::PresentationReceipt {
-            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
-            receipt_id: evidence.receipt_id,
-            dashboard_deployment_generation: evidence.dashboard_deployment_generation,
-            coordinator_generation: evidence.coordinator_generation,
-            daemon_generation: evidence.daemon_generation,
-            logical_browser_id: evidence.logical_browser_id,
-            process_instance_digest: evidence.process_instance_digest,
-            selected_target_generation: evidence.selected_target_generation,
-            selected_target_identity_digest: evidence.selected_target_identity_digest,
-            required_stream_provider: evidence.required_stream_provider,
-            display_allocation_id: evidence.display_allocation_id,
-            geometry_epoch: evidence.geometry_epoch,
-            route_generation: evidence.route_generation,
-            guacamole_connection_generation: evidence.guacamole_connection_generation,
-            authenticated_ingress_probe_at: evidence.authenticated_ingress_probe_at,
-            operator_surface_load_result: evidence.operator_surface_load_result,
-            state: crate::runtime_adoption::PresentationState::Ready,
-            reason_codes: Vec::new(),
-        };
+        let receipt = journey.into_receipt(&candidate.generation_id)?;
         let prior = std::mem::replace(&mut self.selected_backend, candidate.clone());
         if prior.generation_id != candidate.generation_id {
             self.rollback_backend = Some(prior.clone());
@@ -334,7 +344,9 @@ impl DashboardIngressRepository {
     }
 
     pub(crate) fn load(&self) -> Result<DashboardIngressRegistry, String> {
-        let _lock = acquire_ingress_lock(&self.path)?;
+        // Writers publish a complete registry with an atomic rename. Readers
+        // therefore consume either the prior committed file or the new one and
+        // must not contend on the exclusive compare-and-swap writer lock.
         load_registry(&self.path)
     }
 
@@ -376,6 +388,25 @@ impl DashboardIngressRepository {
         let receipt = registry.commit_candidate(journey)?;
         write_registry_atomic(&self.path, &registry)?;
         Ok(receipt)
+    }
+
+    /// Records current authenticated presentation without changing backend custody.
+    fn accept_selected_journey(
+        &self,
+        expected_revision: u64,
+        journey: CandidateOperatorJourney,
+    ) -> Result<(), String> {
+        let _lock = acquire_ingress_lock(&self.path)?;
+        let mut registry = load_registry(&self.path)?;
+        require_revision(&registry, expected_revision)?;
+        validate_dashboard_backend(registry.selected_backend())?;
+        let receipt = journey.into_receipt(&registry.selected_backend().generation_id)?;
+        if registry.last_presentation_receipt.as_ref() != Some(&receipt) {
+            registry.last_presentation_receipt = Some(receipt);
+            registry.revision = registry.revision.saturating_add(1);
+            write_registry_atomic(&self.path, &registry)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn rollback_candidate(
@@ -651,6 +682,24 @@ pub(crate) fn selected_dashboard_generation() -> Result<String, String> {
     Ok(repository.load()?.selected_backend().generation_id.clone())
 }
 
+/// Identifies an ordinary selected dashboard by its own executable-bound manifest.
+/// A stale process must not borrow the selected generation merely because it
+/// can read the ingress registry. Shadow candidates retain their explicit identity.
+pub(crate) fn authenticated_selected_dashboard_generation() -> Option<String> {
+    let registry = DashboardIngressRepository::new(DashboardIngressRepository::default_path())
+        .load()
+        .ok()?;
+    selected_dashboard_generation_for_manifest(&registry, &dashboard_runtime_manifest_sha256())
+}
+
+fn selected_dashboard_generation_for_manifest(
+    registry: &DashboardIngressRegistry,
+    manifest_sha256: &str,
+) -> Option<String> {
+    let selected = registry.selected_backend();
+    (selected.runtime_manifest_sha256 == manifest_sha256).then(|| selected.generation_id.clone())
+}
+
 fn dashboard_generation_override(configured: Result<String, std::env::VarError>) -> Option<String> {
     configured
         .ok()
@@ -717,8 +766,8 @@ pub(crate) fn commit_dashboard_candidate_from_handoff(
 /// Commits the staged ingress candidate after that exact dashboard generation
 /// has completed an authenticated, ready durable-handoff resolution.
 ///
-/// Requests served by the selected or a stale dashboard generation are a
-/// no-op. The staged candidate may commit only from service-state evidence
+/// The selected generation records acceptance without changing backend custody;
+/// stale generations remain a no-op. Acceptance requires service-state evidence
 /// that passes the same owner, route, display, target, provider, and
 /// generation checks as the explicit CLI commit path.
 pub(crate) fn commit_authenticated_dashboard_candidate_from_handoff(
@@ -744,17 +793,26 @@ fn commit_authenticated_dashboard_candidate_from_handoff_at_paths(
     let repository = DashboardIngressRepository::new(ingress_path);
     let registry = repository.load()?;
     let state = JsonServiceStateStore::new(service_state_path).load()?;
-    let Some(evidence) = authenticated_candidate_handoff_evidence(
+    if let Some(evidence) = authenticated_candidate_handoff_evidence(
         &registry,
         &state,
         dashboard_generation,
         handoff_id,
-    )?
-    else {
-        return Ok(false);
-    };
-    repository.commit_candidate(registry.revision, CandidateOperatorJourney::ready(evidence))?;
-    Ok(true)
+    )? {
+        repository
+            .commit_candidate(registry.revision, CandidateOperatorJourney::ready(evidence))?;
+        return Ok(true);
+    }
+    if registry.selected_backend().generation_id == dashboard_generation {
+        let evidence =
+            presentation_evidence_for_backend(registry.selected_backend(), &state, handoff_id)?;
+        repository.accept_selected_journey(
+            registry.revision,
+            CandidateOperatorJourney::ready(evidence),
+        )?;
+    }
+    // This boolean continues to mean that a candidate was selected.
+    Ok(false)
 }
 
 fn authenticated_candidate_handoff_evidence(
@@ -777,11 +835,19 @@ fn presentation_evidence_from_durable_handoff(
     state: &crate::native::service_model::ServiceState,
     handoff_id: &str,
 ) -> Result<PresentationEvidence, String> {
-    use crate::native::service_model::ViewStreamProvider;
-
     let candidate = registry
         .candidate_backend()
         .ok_or_else(|| "dashboard candidate is not staged".to_string())?;
+    presentation_evidence_for_backend(candidate, state, handoff_id)
+}
+
+fn presentation_evidence_for_backend(
+    candidate: &DashboardBackend,
+    state: &crate::native::service_model::ServiceState,
+    handoff_id: &str,
+) -> Result<PresentationEvidence, String> {
+    use crate::native::service_model::ViewStreamProvider;
+
     let handoff = state
         .remote_view_handoffs
         .get(handoff_id)
@@ -1108,10 +1174,17 @@ pub(crate) async fn run_dashboard_ingress_server(public_port: u16, fallback_back
         };
         let repository = repository.clone();
         tokio::spawn(async move {
-            let registry = match repository.load() {
+            let registry = match load_ingress_registry_for_request(repository).await {
                 Ok(registry) => registry,
                 Err(error) => {
-                    write_ingress_unavailable(&mut client, "registry_unavailable", &error).await;
+                    write_ingress_unavailable(
+                        &mut client,
+                        "registry_unavailable",
+                        &error,
+                        "dashboard_load",
+                        None,
+                    )
+                    .await;
                     return;
                 }
             };
@@ -1120,14 +1193,31 @@ pub(crate) async fn run_dashboard_ingress_server(public_port: u16, fallback_back
     }
 }
 
+async fn load_ingress_registry_for_request(
+    repository: DashboardIngressRepository,
+) -> Result<DashboardIngressRegistry, String> {
+    tokio::task::spawn_blocking(move || repository.load())
+        .await
+        .map_err(|error| format!("dashboard ingress registry reader failed: {error}"))?
+}
+
 async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngressRegistry) {
     let request = match read_initial_http_request(client).await {
         Ok(request) => request,
         Err(error) => {
-            write_ingress_unavailable(client, "invalid_ingress_request", &error).await;
+            write_ingress_unavailable(
+                client,
+                "invalid_ingress_request",
+                &error,
+                "dashboard_load",
+                None,
+            )
+            .await;
             return;
         }
     };
+    let (request_method, request_path, request_action) =
+        dashboard_ingress_request_identity(&request);
     let retry_safe = request.starts_with(b"GET ")
         || request.starts_with(b"HEAD ")
         || request.starts_with(b"OPTIONS ");
@@ -1147,6 +1237,7 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
         }
     }
     let mut failures = Vec::new();
+    let mut failure_stages = Vec::new();
     let mut mutation_outcome_unknown = false;
     for backend in attempts {
         match attempt_dashboard_backend(backend, &backend_request, first_response_timeout).await {
@@ -1158,6 +1249,7 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
             }
             Err(error) => {
                 mutation_outcome_unknown |= !retry_safe && error.request_may_have_been_delivered();
+                failure_stages.push(error.failure_stage());
                 failures.push(format!("{}: {}", backend.generation_id, error.message()));
             }
         }
@@ -1182,6 +1274,16 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
             registry.selected_backend().generation_id,
             failures.join("; ")
         ),
+        &request_action,
+        Some(serde_json::json!({
+            "requestMethod": request_method,
+            "requestPath": request_path,
+            "retrySafe": retry_safe,
+            "selectedBackendGeneration": registry.selected_backend().generation_id,
+            "fallbackAttempted": registry.fallback_backend().is_some() && retry_safe,
+            "backendFailureStages": failure_stages,
+            "firstResponseTimeoutMs": first_response_timeout.as_millis(),
+        })),
     )
     .await;
 }
@@ -1201,6 +1303,62 @@ impl DashboardBackendAttemptError {
             Self::BeforeDelivery(message) | Self::AfterDelivery(message) => message,
         }
     }
+
+    fn failure_stage(&self) -> &'static str {
+        match self {
+            Self::BeforeDelivery(_) => "before_delivery",
+            Self::AfterDelivery(message) if message == "first response byte timed out" => {
+                "first_response_timeout"
+            }
+            Self::AfterDelivery(_) => "after_delivery",
+        }
+    }
+}
+
+fn dashboard_ingress_request_identity(request: &[u8]) -> (String, String, String) {
+    let request_line = String::from_utf8_lossy(request)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let mut fields = request_line.split_whitespace();
+    let method = fields.next().unwrap_or("UNKNOWN").to_string();
+    let raw_path = fields
+        .next()
+        .unwrap_or("/")
+        .split('?')
+        .next()
+        .unwrap_or("/");
+    let (path, action) = match raw_path {
+        "/api/service/resources" => (raw_path.to_string(), "service_resources".to_string()),
+        "/api/service/status" => (raw_path.to_string(), "service_status".to_string()),
+        "/api/service/contracts" => (raw_path.to_string(), "service_contracts".to_string()),
+        "/api/service/browser-capability-registry" => (
+            raw_path.to_string(),
+            "service_browser_capability_registry".to_string(),
+        ),
+        "/api/service/request" => (raw_path.to_string(), "service_request".to_string()),
+        "/api/session-tabs" => (raw_path.to_string(), "session_tabs".to_string()),
+        "/api/sessions" => (raw_path.to_string(), "sessions_read".to_string()),
+        "/api/models" => (raw_path.to_string(), "models_read".to_string()),
+        "/api/runtime/health" => (raw_path.to_string(), "runtime_health".to_string()),
+        "/api/dashboard-auth/status" => (raw_path.to_string(), "dashboard_auth_status".to_string()),
+        "/api/chat/status" => (raw_path.to_string(), "chat_status".to_string()),
+        "/api/runtime/manifest" => (raw_path.to_string(), "runtime_manifest".to_string()),
+        path if path.starts_with("/remote-view/") => (
+            "/remote-view/<redacted>".to_string(),
+            "remote_view_handoff_load".to_string(),
+        ),
+        path if path.starts_with("/guacamole") => (
+            "/guacamole/<redacted>".to_string(),
+            "guacamole_load".to_string(),
+        ),
+        _ => (
+            "/dashboard/<route>".to_string(),
+            "dashboard_load".to_string(),
+        ),
+    };
+    (method, path, action)
 }
 
 /// Service requests may commit a mutation before the backend writes its first
@@ -1208,13 +1366,18 @@ impl DashboardBackendAttemptError {
 /// timeout plus a small response grace so a committed request is not reported
 /// as a retryable backend failure.
 fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
-    if request.starts_with(b"GET /api/service/status ")
-        || request.starts_with(b"GET /api/service/status?")
+    if request.starts_with(b"GET ")
+        || request.starts_with(b"HEAD ")
+        || request.starts_with(b"OPTIONS ")
     {
-        // A live service projection can take longer than an ordinary dashboard
-        // read while the host is under admitted pressure. Keep this allowance
-        // route-specific so unrelated reads still fail over promptly.
+        // Idempotent dashboard reads can queue behind a large live projection
+        // while the host is under admitted pressure. They are safe to retry,
+        // but must not be declared unavailable before the selected backend's
+        // own bounded read budget can finish.
         return DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT;
+    }
+    if request.starts_with(b"POST /api/guacamole-primary-claim ") {
+        return DASHBOARD_INGRESS_PRIMARY_FIRST_RESPONSE_TIMEOUT;
     }
     if !request.starts_with(b"POST /api/service/request ") {
         return DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT;
@@ -1415,7 +1578,16 @@ async fn proxy_ingress_connection(client: &mut TcpStream, backend: &mut TcpStrea
     let _ = backend.shutdown().await;
 }
 
-async fn write_ingress_unavailable(client: &mut TcpStream, code: &str, message: &str) {
+async fn write_ingress_unavailable(
+    client: &mut TcpStream,
+    code: &str,
+    message: &str,
+    action: &str,
+    details: Option<serde_json::Value>,
+) {
+    crate::native::service_failure_journal::append_service_failure_best_effort(
+        &dashboard_ingress_failure_record(code, action, details),
+    );
     let body = serde_json::json!({
         "success": false,
         "error": code,
@@ -1433,6 +1605,25 @@ async fn write_ingress_unavailable(client: &mut TcpStream, code: &str, message: 
         body.len(), body
     );
     let _ = client.write_all(response.as_bytes()).await;
+}
+
+fn dashboard_ingress_failure_record(
+    code: &str,
+    action: &str,
+    details: Option<serde_json::Value>,
+) -> crate::native::service_failure_journal::ServiceFailureRecord {
+    let record = crate::native::service_failure_journal::ServiceFailureRecord::new(
+        crate::native::service_failure_journal::ServiceFailureCategory::DashboardAction,
+        "dashboard_ingress",
+        "request_proxy",
+        code,
+        "Stable dashboard ingress could not serve the request.",
+    )
+    .with_action(action);
+    match details {
+        Some(details) => record.with_details(details),
+        None => record,
+    }
 }
 
 #[cfg(test)]
@@ -1468,6 +1659,60 @@ mod tests {
             authenticated_ingress_probe_at: "2026-08-15T12:00:00Z".to_string(),
             operator_surface_load_result: "ready".to_string(),
         }
+    }
+
+    #[test]
+    fn ingress_unavailable_response_has_a_postmortem_failure_record() {
+        let record = dashboard_ingress_failure_record(
+            "selected_backend_unavailable",
+            "service_resources",
+            Some(serde_json::json!({
+                "requestMethod": "GET",
+                "requestPath": "/api/service/resources",
+                "firstResponseTimeoutMs": 10_000,
+            })),
+        );
+
+        assert_eq!(
+            record.category,
+            crate::native::service_failure_journal::ServiceFailureCategory::DashboardAction
+        );
+        assert_eq!(record.source, "dashboard_ingress");
+        assert_eq!(record.stage, "request_proxy");
+        assert_eq!(record.code, "selected_backend_unavailable");
+        assert_eq!(record.action.as_deref(), Some("service_resources"));
+        assert_eq!(
+            record.details.as_ref().unwrap()["requestPath"],
+            "/api/service/resources"
+        );
+        assert_eq!(
+            record.details.as_ref().unwrap()["firstResponseTimeoutMs"],
+            10_000
+        );
+    }
+
+    #[test]
+    fn ingress_failure_request_identity_redacts_handoff_and_guacamole_paths() {
+        assert_eq!(
+            dashboard_ingress_request_identity(
+                b"GET /remote-view/private-handoff?token=secret HTTP/1.1\r\n\r\n"
+            ),
+            (
+                "GET".to_string(),
+                "/remote-view/<redacted>".to_string(),
+                "remote_view_handoff_load".to_string(),
+            )
+        );
+        assert_eq!(
+            dashboard_ingress_request_identity(
+                b"GET /guacamole/api/session/data/private-token HTTP/1.1\r\n\r\n"
+            ),
+            (
+                "GET".to_string(),
+                "/guacamole/<redacted>".to_string(),
+                "guacamole_load".to_string(),
+            )
+        );
     }
 
     #[test]
@@ -1705,6 +1950,87 @@ mod tests {
                 .dashboard_deployment_generation,
             "generation-new"
         );
+        assert_eq!(
+            selected_dashboard_generation_for_manifest(
+                &selected,
+                &selected.selected_backend().runtime_manifest_sha256
+            ),
+            Some("generation-new".to_string()),
+        );
+        assert_eq!(
+            selected_dashboard_generation_for_manifest(&selected, "stale-process-manifest"),
+            None
+        );
+        // Controlled activation can select a backend before its first journey.
+        // Acceptance must fill that gap without consuming a different candidate
+        // or changing the retained fallback and rollback custody.
+        let mut missing_acceptance = selected.clone();
+        missing_acceptance.last_presentation_receipt = None;
+        missing_acceptance.candidate_backend = Some(DashboardBackend::new(
+            "generation-future",
+            candidate_port.saturating_add(2),
+            "future-manifest",
+        ));
+        write_registry_atomic(&ingress_path, &missing_acceptance).unwrap();
+        let listener = StdTcpListener::bind(("127.0.0.1", candidate_port)).unwrap();
+        let manifest_server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut connection, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 1024];
+                connection.read(&mut request).unwrap();
+                let body = manifest.to_string();
+                write!(
+                    connection,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body,
+                )
+                .unwrap();
+            }
+        });
+        for _ in 0..2 {
+            assert!(
+                !commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+                    &ingress_path,
+                    &service_state_path,
+                    "generation-new",
+                    "r1",
+                )
+                .unwrap()
+            );
+        }
+        let accepted = repository.load().unwrap();
+        let mut expected = missing_acceptance.clone();
+        expected.last_presentation_receipt = selected.last_presentation_receipt.clone();
+        expected.revision += 1;
+        assert_eq!(
+            accepted, expected,
+            "acceptance preserves custody and is idempotent"
+        );
+        manifest_server.join().unwrap();
+        assert!(
+            !commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+                &ingress_path,
+                &service_state_path,
+                "generation-stale",
+                "r1",
+            )
+            .unwrap()
+        );
+        state.remote_view_routes.get_mut("route-1").unwrap().state = "orphaned".to_string();
+        crate::native::service_store::JsonServiceStateStore::new(&service_state_path)
+            .save(&state)
+            .unwrap();
+        assert!(
+            commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+                &ingress_path,
+                &service_state_path,
+                "generation-new",
+                "r1",
+            )
+            .is_err()
+        );
+        assert_eq!(repository.load().unwrap(), accepted);
         fs::remove_dir_all(fixture_root).unwrap();
 
         state.remote_view_routes.get_mut("route-1").unwrap().state = "orphaned".to_string();
@@ -2304,6 +2630,30 @@ mod tests {
         let _ = fs::remove_file(path);
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn ingress_request_registry_load_does_not_block_on_writer_lock() {
+        let path = temp_registry_path("request-load-writer-lock");
+        let repository = DashboardIngressRepository::new(&path);
+        repository
+            .initialize(DashboardBackend::new("generation-1", 4850, "manifest-1"))
+            .unwrap();
+        let writer_lock = acquire_ingress_lock(&path).unwrap();
+
+        let loaded = tokio::time::timeout(
+            Duration::from_millis(100),
+            load_ingress_registry_for_request(repository.clone()),
+        )
+        .await;
+
+        drop(writer_lock);
+        assert!(
+            matches!(loaded, Ok(Ok(registry)) if registry.selected_backend().generation_id == "generation-1"),
+            "ingress request reads must use the last atomically committed registry without blocking the async runtime"
+        );
+        let _ = fs::remove_file(path.with_extension("json.lock"));
+        let _ = fs::remove_file(path);
+    }
+
     #[tokio::test]
     async fn selected_backend_failure_serves_a_safe_request_from_the_committed_fallback() {
         let fallback_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
@@ -2491,7 +2841,7 @@ mod tests {
     }
 
     #[test]
-    fn service_status_read_gets_a_pressure_tolerant_first_response_timeout() {
+    fn pressure_sensitive_dashboard_reads_get_a_tolerant_first_response_timeout() {
         assert_eq!(
             dashboard_ingress_first_response_timeout(
                 b"GET /api/service/status HTTP/1.1\r\nHost: localhost\r\n\r\n"
@@ -2500,60 +2850,106 @@ mod tests {
         );
         assert_eq!(
             dashboard_ingress_first_response_timeout(
+                b"GET /api/service/resources HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/service/browser-capability-registry HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/session-tabs?port=9222 HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/models HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"HEAD /favicon.ico HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
                 b"GET /api/runtime/manifest HTTP/1.1\r\nHost: localhost\r\n\r\n"
             ),
-            DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT
+            DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT
         );
     }
 
     #[tokio::test]
-    async fn durable_handoff_resolution_waits_for_the_bounded_backend_response() {
-        let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-        let backend_port = backend_listener.local_addr().unwrap().port();
-        let registry = DashboardIngressRegistry::new(DashboardBackend::new(
-            "generation-selected",
-            backend_port,
-            "selected-manifest",
-        ));
-        let backend = tokio::spawn(async move {
-            let (mut connection, _) = backend_listener.accept().await.unwrap();
-            let request = read_initial_http_request(&mut connection).await.unwrap();
-            assert!(request.starts_with(b"POST /api/service/request "));
-            tokio::time::sleep(Duration::from_millis(2_100)).await;
-            let _ = connection
-                .write_all(
-                    b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nready",
-                )
-                .await;
-        });
-        let ingress_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-        let ingress_port = ingress_listener.local_addr().unwrap().port();
-        let ingress = tokio::spawn(async move {
-            let (mut connection, _) = ingress_listener.accept().await.unwrap();
-            proxy_ingress_request(&mut connection, &registry).await;
-        });
-        let body = serde_json::json!({
-            "action": "service_remote_view_handoff_resolve",
-            "params": {"handoffId": "handoff-a"},
-            "jobTimeoutMs": 90_000,
-        })
-        .to_string();
-        let request = format!(
-            "POST /api/service/request HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
-            body.len(),
-            body
-        );
-        let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
-            .await
-            .unwrap();
-        client.write_all(request.as_bytes()).await.unwrap();
-        client.shutdown().await.unwrap();
-        let mut response = Vec::new();
-        client.read_to_end(&mut response).await.unwrap();
+    async fn presentation_startup_waits_for_the_bounded_backend_response() {
+        for (path, payload) in [
+            (
+                "/api/service/request",
+                serde_json::json!({
+                    "action": "service_remote_view_handoff_resolve",
+                    "params": {"handoffId": "handoff-a"},
+                    "jobTimeoutMs": 90_000,
+                }),
+            ),
+            (
+                "/api/guacamole-primary-claim",
+                serde_json::json!({
+                    "operation": "ensure", "routeId": "route-a", "connectionId": "1",
+                }),
+            ),
+        ] {
+            let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let backend_port = backend_listener.local_addr().unwrap().port();
+            let registry = DashboardIngressRegistry::new(DashboardBackend::new(
+                "generation-selected",
+                backend_port,
+                "selected-manifest",
+            ));
+            let backend = tokio::spawn(async move {
+                let (mut connection, _) = backend_listener.accept().await.unwrap();
+                let request = read_initial_http_request(&mut connection).await.unwrap();
+                assert!(request.starts_with(format!("POST {path} ").as_bytes()));
+                tokio::time::sleep(Duration::from_millis(2_100)).await;
+                let _ = connection
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nready",
+                    )
+                    .await;
+            });
+            let ingress_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let ingress_port = ingress_listener.local_addr().unwrap().port();
+            let ingress = tokio::spawn(async move {
+                let (mut connection, _) = ingress_listener.accept().await.unwrap();
+                proxy_ingress_request(&mut connection, &registry).await;
+            });
+            let body = payload.to_string();
+            let request = format!(
+                "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
+                .await
+                .unwrap();
+            client.write_all(request.as_bytes()).await.unwrap();
+            client.shutdown().await.unwrap();
+            let mut response = Vec::new();
+            client.read_to_end(&mut response).await.unwrap();
 
-        backend.await.unwrap();
-        ingress.await.unwrap();
-        assert!(response.ends_with(b"ready"));
+            backend.await.unwrap();
+            ingress.await.unwrap();
+            assert!(
+                response.ends_with(b"ready"),
+                "{path}: {}",
+                String::from_utf8_lossy(&response)
+            );
+        }
     }
 
     #[test]

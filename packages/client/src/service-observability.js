@@ -649,6 +649,8 @@ export async function getServiceAccessPlan({
   readinessProfileId,
   sitePolicyId,
   challengeId,
+  clientSubjectId,
+  identityAssurance,
   browserHost,
   viewStreamProvider,
   controlInputProvider,
@@ -666,6 +668,8 @@ export async function getServiceAccessPlan({
       query: {
         ...options.query,
         serviceName: options.serviceName,
+        clientSubjectId,
+        identityAssurance,
         agentName: options.agentName,
         taskName: options.taskName,
         sessionName: options.sessionName,

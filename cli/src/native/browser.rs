@@ -12,6 +12,9 @@ use super::cdp::chrome::{
 use super::cdp::discovery::discover_cdp_url;
 use super::cdp::lightpanda::{launch_lightpanda, LightpandaLaunchOptions, LightpandaProcess};
 use super::element::{resolve_element_object_id, RefMap};
+use super::service_failure_journal::{
+    append_service_failure_best_effort, ServiceFailureCategory, ServiceFailureRecord,
+};
 use agent_browser_cdp::client::CdpClient;
 use agent_browser_cdp::types::*;
 use std::path::Path;
@@ -187,6 +190,11 @@ fn runtime_handoff_candidate_indices(
 /// Converts common error messages into AI-friendly, actionable descriptions.
 pub fn to_ai_friendly_error(error: &str) -> String {
     let lower = error.to_lowercase();
+    // Contract validation can name timeoutMs without timing out. Preserve the
+    // cause before applying browser-error heuristics or failure classification.
+    if lower.starts_with("evaluate requires ") {
+        return error.to_string();
+    }
     if lower.contains("strict mode violation") {
         return "Element matched multiple results. Use a more specific selector.".to_string();
     }
@@ -518,6 +526,8 @@ impl BrowserProcess {
 pub struct BrowserManager {
     pub client: Arc<CdpClient>,
     browser_process: Option<BrowserProcess>,
+    /// Profile metadata authenticated by retained service-owner recovery.
+    retained_profile: Option<crate::runtime_profile::ResolvedProfile>,
     ws_url: String,
     pages: Vec<PageInfo>,
     active_page_index: usize,
@@ -541,7 +551,32 @@ impl BrowserManager {
     pub(crate) fn owns_launched_browser_process(&self) -> bool {
         self.browser_process.is_some()
     }
+    /// Launch a browser and durably journal any failure before returning it.
     pub async fn launch(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
+        let engine_name = engine.unwrap_or("chrome").to_string();
+        let profile_configured = options.profile.is_some();
+        let headed = !options.headless;
+        let result = Self::launch_inner(options, engine).await;
+        if let Err(error) = result.as_ref() {
+            let record = ServiceFailureRecord::new(
+                ServiceFailureCategory::BrowserLaunch,
+                "browser_manager",
+                "launch",
+                "browser_launch_failed",
+                error,
+            )
+            .with_action("open")
+            .with_details(json!({
+                "engine": engine_name,
+                "profileConfigured": profile_configured,
+                "headed": headed,
+            }));
+            append_service_failure_best_effort(&record);
+        }
+        result
+    }
+
+    async fn launch_inner(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
         let engine = engine.unwrap_or("chrome");
         let bootstrap_mode = if engine == "chrome" {
             CdpBootstrapMode::for_local_launch()?
@@ -596,13 +631,15 @@ impl BrowserManager {
             }
         };
 
-        let manager = if engine == "lightpanda" {
+        let mut manager = if engine == "lightpanda" {
             initialize_lightpanda_manager(ws_url, process).await?
         } else {
             let client = Arc::new(CdpClient::connect(&ws_url).await?);
             let mut manager = Self {
                 client,
                 browser_process: Some(process),
+
+                retained_profile: None,
                 ws_url,
                 pages: Vec::new(),
                 active_page_index: 0,
@@ -652,15 +689,34 @@ impl BrowserManager {
                 .await;
         }
 
-        if let Some(ref path) = download_path {
-            let _ = manager
+        // Establish a stable download destination before exposing a newly owned
+        // Chrome to clients. Individual captures must preserve the context policy.
+        if engine != "lightpanda" {
+            let path = download_path
+                .map(std::path::PathBuf::from)
+                .or_else(|| {
+                    manager
+                        .browser_user_data_dir()
+                        .map(|root| root.join("agent-browser-downloads"))
+                })
+                .ok_or("download_launch_policy_unavailable: owned profile directory missing")?;
+            std::fs::create_dir_all(&path)
+                .map_err(|error| format!("download_launch_policy_unavailable: {error}"))?;
+            let path = path
+                .canonicalize()
+                .map_err(|error| format!("download_launch_policy_unavailable: {error}"))?;
+            manager.download_path = Some(path.to_string_lossy().into_owned());
+            manager
                 .client
                 .send_command(
                     "Browser.setDownloadBehavior",
-                    Some(json!({ "behavior": "allow", "downloadPath": path })),
+                    Some(
+                        json!({ "behavior": "allow", "downloadPath": path, "eventsEnabled": true }),
+                    ),
                     None,
                 )
-                .await;
+                .await
+                .map_err(|error| format!("download_launch_policy_unavailable: {error}"))?;
         }
 
         Ok(manager)
@@ -668,6 +724,60 @@ impl BrowserManager {
 
     pub async fn connect_cdp(url: &str) -> Result<Self, String> {
         Self::connect_cdp_inner(url, false, None).await
+    }
+
+    /// Reconnect only the already-authorized retained target. Unlike ordinary
+    /// discovery, this path never creates a tab or falls back to a peer target.
+    pub(crate) async fn connect_retained_service_tab(
+        url: &str,
+        target_id: &str,
+        verified_profile: crate::runtime_profile::ResolvedProfile,
+    ) -> Result<Self, String> {
+        let ws_url = resolve_cdp_url(url).await?;
+        let client = Arc::new(CdpClient::connect(&ws_url).await?);
+        let result: GetTargetsResult = client
+            .send_command_typed("Target.getTargets", &json!({}), None)
+            .await?;
+        let target = result
+            .target_infos
+            .into_iter()
+            .find(|target| target.target_id == target_id && should_track_target(target))
+            .ok_or_else(|| {
+                "service_tab_recovery_target_missing: original target is absent".to_string()
+            })?;
+        let attached: AttachToTargetResult = client
+            .send_command_typed(
+                "Target.attachToTarget",
+                &AttachToTargetParams {
+                    target_id: target.target_id.clone(),
+                    flatten: true,
+                },
+                None,
+            )
+            .await?;
+        let manager = Self {
+            client,
+            browser_process: None,
+
+            retained_profile: Some(verified_profile),
+            ws_url,
+            pages: vec![PageInfo {
+                target_id: target.target_id,
+                session_id: attached.session_id.clone(),
+                url: target.url,
+                title: target.title,
+                target_type: target.target_type,
+            }],
+            active_page_index: 0,
+            default_timeout_ms: 25_000,
+            download_path: None,
+            ignore_https_errors: false,
+            visited_origins: HashSet::new(),
+            bootstrap_mode: CdpBootstrapMode::Eager,
+            eager_session_ids: HashSet::new(),
+        };
+        manager.enable_domains(&attached.session_id).await?;
+        Ok(manager)
     }
 
     pub async fn connect_cdp_for_handoff(
@@ -679,6 +789,8 @@ impl BrowserManager {
         let mut manager = Self {
             client,
             browser_process: None,
+
+            retained_profile: None,
             ws_url,
             pages: Vec::new(),
             active_page_index: 0,
@@ -718,6 +830,8 @@ impl BrowserManager {
         let mut manager = Self {
             client,
             browser_process: None,
+
+            retained_profile: None,
             ws_url,
             pages: Vec::new(),
             active_page_index: 0,
@@ -1710,53 +1824,43 @@ impl BrowserManager {
         Ok(result)
     }
 
+    /// Close the selected attached target, verifying its disappearance before
+    /// changing local state. Do not initialize or navigate an unrelated peer.
     pub async fn tab_close(&mut self, index: Option<usize>) -> Result<Value, String> {
         let target_index = index.unwrap_or(self.active_page_index);
-
-        if target_index >= self.pages.len() {
-            return Err(format!("Tab index {} out of range", target_index));
-        }
-
-        if self.pages.len() <= 1 {
-            return Err("Cannot close the last tab".to_string());
-        }
-
-        let page = self.pages.remove(target_index);
-        let _ = self
-            .client
-            .send_command_typed::<_, Value>(
-                "Target.closeTarget",
-                &CloseTargetParams {
-                    target_id: page.target_id,
-                },
-                None,
-            )
-            .await;
-
-        if self.active_page_index >= self.pages.len() {
-            self.active_page_index = self.pages.len() - 1;
-        }
-
-        let session_id = self.pages[self.active_page_index].session_id.clone();
-        self.enable_domains(&session_id).await?;
-
-        Ok(json!({ "closed": target_index, "activeIndex": self.active_page_index }))
+        let target_id = self
+            .pages
+            .get(target_index)
+            .ok_or_else(|| format!("Tab index {target_index} out of range"))?
+            .target_id
+            .clone();
+        self.tab_close_target_id_for_release(&target_id).await
     }
 
     pub async fn tab_close_target_id(&mut self, target_id: &str) -> Result<Value, String> {
-        let target_index = page_index_for_target_id(&self.pages, target_id).ok_or_else(|| {
-            format!("Target ID {target_id} was not found in the attached tab list")
-        })?;
-        let result = self.tab_close(Some(target_index)).await?;
-        Ok(json!({
-            "targetId": target_id,
-            "closed": result.get("closed").cloned().unwrap_or(Value::Null),
-            "activeIndex": result.get("activeIndex").cloned().unwrap_or(Value::Null),
-        }))
+        self.tab_close_target_id_for_release(target_id).await
     }
 
-    /// Close one service-owned target without switching to or reinitializing
-    /// another attached tab. Handle release is cleanup, not navigation.
+    async fn physical_page_target_ids(&self) -> Result<HashSet<String>, String> {
+        let result: GetTargetsResult = tokio::time::timeout(
+            Duration::from_secs(2),
+            self.client
+                .send_command_typed("Target.getTargets", &json!({}), None),
+        )
+        .await
+        .map_err(|_| "target inventory timed out".to_string())??;
+        Ok(result
+            .target_infos
+            .into_iter()
+            .filter(|target| matches!(target.target_type.as_str(), "page" | "webview"))
+            .map(|target| target.target_id)
+            .collect())
+    }
+
+    /// Close one attached, authorized target using a fresh browser-wide census.
+    /// A retained manager may attach just one of several physical tabs. CDP
+    /// acknowledgement alone is insufficient: verify removal and peer survival.
+    /// Failures leave the local page projection intact for diagnosis/recovery.
     pub async fn tab_close_target_id_for_release(
         &mut self,
         target_id: &str,
@@ -1764,33 +1868,84 @@ impl BrowserManager {
         let target_index = page_index_for_target_id(&self.pages, target_id).ok_or_else(|| {
             format!("Target ID {target_id} was not found in the attached tab list")
         })?;
-        if self.pages.len() <= 1 {
+        let before = self
+            .physical_page_target_ids()
+            .await
+            .map_err(|error| format!("tab_close_preflight_failed: {error}"))?;
+        if !before.contains(target_id) {
+            return Err(
+                "tab_close_target_missing: requested target is absent; no close sent".to_string(),
+            );
+        }
+        if before.len() <= 1 {
             return Err("Cannot close the last tab".to_string());
         }
-        let page = self.pages.remove(target_index);
-        let close_command = self
-            .client
-            .send_command_typed::<_, Value>(
+        let acknowledgement: Value = tokio::time::timeout(
+            Duration::from_secs(2),
+            self.client.send_command_typed(
                 "Target.closeTarget",
                 &CloseTargetParams {
-                    target_id: page.target_id,
+                    target_id: target_id.to_string(),
                 },
                 None,
-            )
-            .await;
-        if self.active_page_index >= self.pages.len() {
-            self.active_page_index = self.pages.len() - 1;
+            ),
+        )
+        .await
+        .map_err(|_| "tab_close_effect_uncertain: close acknowledgement timed out".to_string())?
+        .map_err(|error| format!("tab_close_effect_uncertain: {error}"))?;
+        if acknowledgement.get("success").and_then(Value::as_bool) != Some(true) {
+            return Err(
+                "tab_close_effect_uncertain: browser did not acknowledge target closure"
+                    .to_string(),
+            );
         }
-        let (close_command_acknowledged, close_command_error) = match close_command {
-            Ok(_) => (true, Value::Null),
-            Err(error) => (false, json!(error)),
-        };
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            let after = tokio::time::timeout_at(deadline, self.physical_page_target_ids())
+                .await
+                .map_err(|_| {
+                    "tab_close_effect_uncertain: target removal verification timed out".to_string()
+                })?
+                .map_err(|error| {
+                    format!("tab_close_effect_uncertain: verification failed: {error}")
+                })?;
+            if before
+                .iter()
+                .any(|id| id != target_id && !after.contains(id))
+            {
+                return Err(
+                    "tab_close_effect_uncertain: an unrelated target also disappeared".to_string(),
+                );
+            }
+            if !after.contains(target_id) {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(
+                    "tab_close_effect_uncertain: intended target remains after acknowledgement"
+                        .to_string(),
+                );
+            }
+            // Chrome acknowledges before asynchronous target destruction. Only
+            // observe here: never resend the close command or select a peer.
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        self.pages.remove(target_index);
+        if target_index < self.active_page_index {
+            self.active_page_index -= 1;
+        }
+        self.active_page_index = self
+            .active_page_index
+            .min(self.pages.len().saturating_sub(1));
         Ok(json!({
             "targetId": target_id,
             "closed": target_index,
             "activeIndex": self.active_page_index,
-            "closeCommandAcknowledged": close_command_acknowledged,
-            "closeCommandError": close_command_error,
+            "closeCommandAcknowledged": true,
+            "closeCommandError": Value::Null,
+            "physicalTabClosed": true,
+            "targetRemovalVerified": true,
+            "unrelatedTargetsPreserved": true,
         }))
     }
 
@@ -2247,12 +2402,22 @@ impl BrowserManager {
         self.browser_process
             .as_ref()
             .and_then(|p| p.runtime_profile())
+            .or_else(|| {
+                self.retained_profile
+                    .as_ref()
+                    .and_then(|profile| profile.runtime_profile.as_deref())
+            })
     }
 
     pub fn browser_user_data_dir(&self) -> Option<&Path> {
         self.browser_process
             .as_ref()
             .and_then(|p| p.user_data_dir())
+            .or_else(|| {
+                self.retained_profile
+                    .as_ref()
+                    .map(|profile| profile.user_data_dir.as_path())
+            })
     }
 
     pub fn browser_stderr_log_path(&self) -> Option<&Path> {
@@ -2409,6 +2574,8 @@ async fn initialize_lightpanda_manager(
         let mut manager = BrowserManager {
             client: Arc::new(client),
             browser_process: None,
+
+            retained_profile: None,
             ws_url: ws_url.clone(),
             pages: Vec::new(),
             active_page_index: 0,
@@ -2898,6 +3065,100 @@ mod tests {
     use tokio::time::sleep;
     use tokio_tungstenite::tungstenite::Message;
 
+    #[tokio::test]
+    async fn exact_tab_close_requires_acknowledged_target_removal_and_preserves_peers() {
+        // Exercise real CDP transport with only the owned target attached, as
+        // happens after retained-handle recovery. Physical peers stay unattached.
+        for (close_ok, delayed, after_ids, expected_ok) in [
+            (true, false, vec!["peer-a", "peer-b"], true),
+            (true, true, vec!["peer-a", "peer-b"], true),
+            (false, false, vec!["peer-a", "owned", "peer-b"], false),
+            (true, false, vec!["peer-a", "owned", "peer-b"], false),
+            (true, false, vec!["peer-b"], false),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let commands = StdArc::new(StdMutex::new(Vec::<Value>::new()));
+            let recorded = commands.clone();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+                let mut inventories = 0;
+                while let Some(Ok(message)) = ws.next().await {
+                    let Ok(text) = message.to_text() else { break };
+                    let Ok(command) = serde_json::from_str::<Value>(text) else {
+                        break;
+                    };
+                    recorded.lock().unwrap().push(command.clone());
+                    let result = match command["method"].as_str().unwrap() {
+                        "Target.getTargets" => {
+                            inventories += 1;
+                            let ids = if inventories == 1 || (delayed && inventories == 2) {
+                                vec!["peer-a", "owned", "peer-b"]
+                            } else {
+                                after_ids.clone()
+                            };
+                            json!({"targetInfos": ids.iter().map(|id| json!({
+                                "targetId":id,"type":"page","title":"","url":"about:blank",
+                                "attached": *id == "owned"
+                            })).collect::<Vec<_>>()})
+                        }
+                        "Target.closeTarget" => {
+                            assert_eq!(command["params"]["targetId"], "owned");
+                            json!({"success":close_ok})
+                        }
+                        other => panic!("unexpected peer command: {other}"),
+                    };
+                    ws.send(Message::Text(
+                        json!({"id":command["id"],"result":result}).to_string(),
+                    ))
+                    .await
+                    .unwrap();
+                }
+            });
+            let client = CdpClient::connect(&format!("ws://{address}"))
+                .await
+                .unwrap();
+            let mut manager = BrowserManager {
+                client: Arc::new(client),
+                browser_process: None,
+
+                retained_profile: None,
+                ws_url: format!("ws://{address}"),
+                pages: vec![PageInfo {
+                    target_id: "owned".into(),
+                    session_id: "owned-session".into(),
+                    url: "about:blank".into(),
+                    title: String::new(),
+                    target_type: "page".into(),
+                }],
+                active_page_index: 0,
+                default_timeout_ms: 1000,
+                download_path: None,
+                ignore_https_errors: false,
+                visited_origins: HashSet::new(),
+                bootstrap_mode: CdpBootstrapMode::Eager,
+                eager_session_ids: HashSet::new(),
+            };
+            let result = manager.tab_close_target_id_for_release("owned").await;
+            assert_eq!(result.is_ok(), expected_ok, "{result:?}");
+            assert_eq!(manager.pages.is_empty(), expected_ok);
+            assert_eq!(
+                commands
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|c| c["method"] == "Target.closeTarget")
+                    .count(),
+                1
+            );
+            if let Ok(result) = result {
+                assert_eq!(result["physicalTabClosed"], true);
+            }
+            server.abort();
+        }
+    }
+
     async fn recording_cdp_client(
         expected_commands: usize,
     ) -> (
@@ -2990,6 +3251,8 @@ mod tests {
         let mut manager = BrowserManager {
             client: Arc::new(client),
             browser_process: None,
+
+            retained_profile: None,
             ws_url: "ws://fixture".to_string(),
             pages: Vec::new(),
             active_page_index: 0,
@@ -3170,6 +3433,8 @@ mod tests {
         let manager = BrowserManager {
             client: Arc::new(client),
             browser_process: None,
+
+            retained_profile: None,
             ws_url: format!("ws://{address}"),
             pages: vec![PageInfo {
                 target_id: "target-1".to_string(),
@@ -3329,6 +3594,15 @@ mod tests {
         assert_eq!(
             to_ai_friendly_error("Timeout waiting for element"),
             "Operation timed out. The page may still be loading or the element may not exist."
+        );
+        let validation = "evaluate requires positive timeoutMs";
+        assert_eq!(to_ai_friendly_error(validation), validation);
+        assert_ne!(
+            crate::native::service_failure::classify_service_failure(&to_ai_friendly_error(
+                validation
+            ))
+            .code,
+            "service_job_timed_out"
         );
     }
 

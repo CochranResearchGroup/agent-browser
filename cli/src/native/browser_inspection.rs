@@ -233,11 +233,15 @@ pub(crate) mod action_commands {
             .filter(|timeout_ms| *timeout_ms > 0)
     }
 
+    /// Preserve native eval semantics after the dispatcher adds an owned target
+    /// handle. Only an explicitly supplied Service handle selects the bounded
+    /// Service API contract. Target authorization precedes either evaluator.
     pub(crate) async fn handle_evaluate(
         cmd: &Value,
         state: &mut DaemonState,
+        explicit_service_handle: bool,
     ) -> Result<Value, String> {
-        if cmd.get("serviceTabHandle").is_some() {
+        if explicit_service_handle {
             return handle_bounded_service_evaluate(cmd, state).await;
         }
         if let Some(ref webdriver) = state.webdriver_backend {

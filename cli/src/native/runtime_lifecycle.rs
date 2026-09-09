@@ -266,7 +266,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
 
     /// Admit an ordinary owner effect, or release the in-memory observation
     /// binding that would otherwise make an exact terminal replacement
-    /// unreachable. The replacement still has to win the registry transition
+    /// unreachable for browser creation. The replacement still has to win the registry transition
     /// in `register_managed_lane` before it receives effect authority.
     pub(crate) fn admit_action_effect(
         &self,
@@ -274,7 +274,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
         action: &str,
         candidate_session: &str,
     ) -> Result<RuntimeEffectAdmission, String> {
-        if action == "remote_view_open"
+        if matches!(action, "remote_view_open" | "tab_new" | "window_new")
             && binding.claim.logical_browser_id == format!("session:{candidate_session}")
         {
             let registry = self.repository.load_snapshot()?.runtime_owner_registry;
@@ -1598,6 +1598,15 @@ mod tests {
         );
 
         let mut wrong_action = RuntimeOwnerBinding::observation_only(binding.claim.clone());
+        for action in ["tab_new", "window_new"] {
+            let mut reopening = RuntimeOwnerBinding::observation_only(binding.claim.clone());
+            assert_eq!(
+                authority
+                    .admit_action_effect(&mut reopening, action, "replacement")
+                    .unwrap(),
+                RuntimeEffectAdmission::TerminalReplacement
+            );
+        }
         assert!(authority
             .admit_action_effect(&mut wrong_action, "navigate", "replacement")
             .is_err());

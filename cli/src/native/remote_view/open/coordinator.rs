@@ -303,9 +303,13 @@ impl RouteBoundOpenOutcome {
             | Self::Reopened { opened: plan }
             | Self::Opened { opened: plan } => Ok(plan.into_value()),
             Self::RolledBack {
+                blocker,
+                compensation,
                 compatibility_error,
-                ..
-            } => Err(compatibility_error),
+            } => Err(format!(
+                "{compatibility_error}; route_bound_blocker_code={}; route_bound_compensation_state={}",
+                blocker.code, compensation.state
+            )),
         }
     }
 }
@@ -383,10 +387,8 @@ pub(crate) async fn handle_remote_view_open(
                 .or_else(|| optional_command_string(cmd, "serviceJobId")),
             attribution,
         )?);
-    let supervisor = RouteBoundOpenSupervisor::system(
-        cmd.get("jobTimeoutMs").and_then(Value::as_u64),
-        state.current_cancellation.clone(),
-    );
+    let supervisor =
+        RouteBoundOpenSupervisor::system_for_command(cmd, state.current_cancellation.clone());
     let repository = DaemonRouteBoundOpenRepository::new()?;
     let mut runtime = DaemonRouteBoundOpenRuntime::new(state);
     RouteBoundOpenCoordinator::open(invocation, &mut runtime, &repository, &supervisor)
@@ -596,10 +598,8 @@ pub(crate) async fn handle_service_remote_view_handoff_resolve(
     }
     let invocation =
         RouteBoundOpenInvocation::durable_resolution(handoff_id, allow_reopen_closed, attribution)?;
-    let supervisor = RouteBoundOpenSupervisor::system(
-        cmd.get("jobTimeoutMs").and_then(Value::as_u64),
-        state.current_cancellation.clone(),
-    );
+    let supervisor =
+        RouteBoundOpenSupervisor::system_for_command(cmd, state.current_cancellation.clone());
     let repository = DaemonRouteBoundOpenRepository::new()?;
     let mut runtime = DaemonRouteBoundOpenRuntime::new(state);
     RouteBoundOpenCoordinator::open(invocation, &mut runtime, &repository, &supervisor)
@@ -611,6 +611,8 @@ pub(crate) enum RouteBoundDirectOpenResult {
     Opened(RouteBoundOpenDocument),
 }
 
+// This internal boundary carries the complete rollback evidence on its error path.
+#[allow(clippy::result_large_err)]
 pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundOpenRepository>(
     request: RouteBoundDirectOpenRequest,
     runtime: &mut R,
@@ -649,6 +651,11 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             .forward(
                 "adopt_retained_browser",
                 runtime.adopt_retained_browser(AdoptRetainedBrowserRequest {
+                    handoff_id: retained_handoff
+                        .as_ref()
+                        .expect("validated retained handoff")
+                        .id
+                        .clone(),
                     source_session,
                     logical_browser_id,
                 }),
@@ -705,7 +712,15 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         );
     if reuse_durable_browser {
         if let Some(retained_handoff) = retained_handoff.as_ref() {
-            apply_available_retained_remote_view_route(&service_state, retained_handoff, &mut cmd);
+            if apply_available_retained_remote_view_route(
+                &service_state,
+                retained_handoff,
+                &mut cmd,
+            ) {
+                // Acquisition consumes the parsed intent, not the command. Keep
+                // both aligned after selecting the proven retained display.
+                intent = normalize_remote_view_open_intent(&cmd)?;
+            }
         }
     }
     let dry_run = request.dry_run;
@@ -1384,6 +1399,8 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
 }
 /// Resolve an opaque remote-view handoff by adopting the exact retained browser
 /// and reacquiring presentation without navigation or provider substitution.
+// This internal boundary carries the complete rollback evidence on its error path.
+#[allow(clippy::result_large_err)]
 pub(crate) async fn execute_durable_resolution<
     R: RouteBoundOpenRuntime,
     P: RouteBoundOpenRepository,
@@ -1460,6 +1477,31 @@ pub(crate) async fn execute_durable_resolution<
             return Ok(RouteBoundOpenOutcome::Planned { plan });
         }
         Ok(RouteBoundDirectOpenResult::Opened(opened)) => opened.into_value(),
+        // Explicit owner and identity refusals need inspection, not automatic
+        // convergence. Preserve the cause for Service recourse and journaling;
+        // the classifier retains uncertainty when CDP attachment already began.
+        Err(error)
+            if matches!(
+                error.runtime_issue.as_ref(),
+                Some(RouteBoundRuntimeIssue::EffectFailed {
+                    operation: "adopt_retained_browser",
+                    message,
+                }) if message.split_once(':').is_some_and(|(code, _)| matches!(code,
+                    "runtime_handoff_orphan_browser_hint_mismatch"
+                    | "runtime_handoff_orphan_owner_present"
+                    | "service_tab_recovery_owner_missing"
+                    | "service_tab_recovery_identity_mismatch"
+                    | "service_tab_recovery_process_unproven"
+                    | "service_tab_recovery_endpoint_unproven"
+                    | "service_tab_recovery_target_missing"
+                    | "service_tab_recovery_attach_failed"
+                    | "runtime_owner_generation_stale"
+                    | "runtime_owner_observation_only"
+                ))
+            ) =>
+        {
+            return Err(error);
+        }
         Err(error)
             if error.runtime_issue.as_ref().is_some_and(|issue| {
                 matches!(
@@ -1493,10 +1535,8 @@ pub(crate) async fn execute_durable_resolution<
             repository.snapshot(supervisor.forward_repository_lock_timeout()),
         )
         .await?;
-    let presentation = presentation_state
-        .remote_view_handoffs
-        .get(&handoff.id)
-        .and_then(|handoff| handoff.presentation_receipt.clone());
+    let resolved_handoff = presentation_state.remote_view_handoffs.get(&handoff.id);
+    let presentation = resolved_handoff.and_then(|handoff| handoff.presentation_receipt.clone());
     let presentation_owner_matches = presentation.as_ref().is_some_and(|receipt| {
         presentation_state
             .runtime_owner_registry
@@ -1551,13 +1591,18 @@ pub(crate) async fn execute_durable_resolution<
         .as_ref()
         .map(|receipt| receipt.target_id.clone())
         .or_else(|| handoff.target_id.clone());
+    let (resolved_tab_id, resolved_target_id) = durable_resolution_response_identity(
+        &opened,
+        resolved_handoff,
+        presentation_target_id.as_deref(),
+    );
     let opened = RouteBoundOpenDocument::from_compatibility(json!(
         { "status" : "ready", "resolved" : true, "reopenedClosedTab" :
         allow_reopen_closed, "handoffId" : handoff.id, "handoffUrl" : opened
         .get("handoffUrl"), "externalUrl" : opened.get("externalUrl"),
         "providerExternalUrl" : opened.get("providerExternalUrl"), "browserId" :
         opened.get("browserId"), "sessionName" : opened.get("sessionName"), "tabId":
-        handoff.tab_id, "targetId": presentation_target_id, "tab" : opened.get("tab"),
+        resolved_tab_id, "targetId": resolved_target_id, "tab" : opened.get("tab"),
         "viewStreamProvider" : handoff.view_stream_provider,
         "requiredViewStreamProvider" : handoff.view_stream_provider,
         "controlInput" : handoff.control_input, "presentationGeneration":
@@ -1568,6 +1613,38 @@ pub(crate) async fn execute_durable_resolution<
     } else {
         Ok(RouteBoundOpenOutcome::Opened { opened })
     }
+}
+
+pub(crate) fn durable_resolution_response_identity(
+    opened: &Value,
+    resolved_handoff: Option<&RemoteViewHandoff>,
+    presentation_target_id: Option<&str>,
+) -> (Option<String>, Option<String>) {
+    let opened_tab = opened.get("tab");
+    let target_id = opened_tab
+        .and_then(|tab| tab.get("targetId"))
+        .and_then(Value::as_str)
+        .or(presentation_target_id)
+        .or_else(|| resolved_handoff.and_then(|handoff| handoff.target_id.as_deref()))
+        .map(str::to_string);
+    let tab_id = opened_tab
+        .and_then(|tab| tab.get("tabId"))
+        .or_else(|| opened_tab.and_then(|tab| tab.get("id")))
+        .or_else(|| opened_tab.and_then(|tab| tab.pointer("/serviceTabHandle/tabId")))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| resolved_handoff.and_then(|handoff| handoff.tab_id.clone()))
+        .filter(|tab_id| {
+            target_id.as_deref().is_none_or(|target_id| {
+                tab_id.strip_prefix("target:").unwrap_or(tab_id) == target_id
+            })
+        })
+        .or_else(|| {
+            target_id
+                .as_ref()
+                .map(|target_id| format!("target:{target_id}"))
+        });
+    (tab_id, target_id)
 }
 
 pub(crate) fn durable_handoff_observation_matches(

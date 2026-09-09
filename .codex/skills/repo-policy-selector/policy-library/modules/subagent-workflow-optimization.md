@@ -27,7 +27,7 @@ tags:
 - When delegation occurs, leave a durable receipt for consequential work:
   record the bounded lane, available agent/run/session handle, terminal status,
   evidence returned, and the primary agent's reconciliation decision.
-- Keep urgent blocking work local when the next action depends directly on the answer.
+- Keep urgent blocking work local when the next action depends directly on the answer, except for a bounded specialist consultation whose demonstrated capability is more likely to resolve that exact obstacle than local continuation.
 - Give delegated work explicit ownership, expected output, and write scope.
 - Prefer subagents for independent sidecar work, verification, or implementation slices with disjoint write sets.
 - Do not spawn parallel work that duplicates context loading or repeats the same exploration without a clear benefit.
@@ -63,7 +63,7 @@ tags:
 - Set explicit timeout expectations for long-running, slow-tool, or uncertain delegated work.
 - Give each subagent a stop condition and require it to return partial evidence
   rather than self-extending into adjacent work when the bound is reached.
-- Use lower-cost or lower-reasoning models for bounded sidecar work only when the quality risk is low; keep synthesis, architecture, and final integration on an appropriately capable model.
+- Use `model-selection-and-calibration` for model, reasoning, escalation, and calibration decisions. Architecture decisions may use a bounded specialist; the primary retains integration and acceptance.
 - Treat subagent cleanup and transcript retention as deliberate choices when later evidence or reconciliation may matter.
 
 ## Adoption Notes

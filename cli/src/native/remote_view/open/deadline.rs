@@ -65,9 +65,11 @@ pub(crate) struct RouteBoundOpenSupervisor {
     pub(crate) deadline: Option<RouteBoundOpenDeadline>,
     pub(crate) cancellation: Option<CancellationToken>,
     pub(crate) clock: Arc<dyn RouteBoundOpenClock>,
+    repository_lock_timeout_ms: u64,
 }
 impl RouteBoundOpenSupervisor {
-    const MAX_REPOSITORY_LOCK_MS: u64 = 1_000;
+    const DEFAULT_REPOSITORY_LOCK_MS: u64 = 1_000;
+    const MAX_REPOSITORY_LOCK_MS: u64 = 300_000;
     pub(crate) fn system(total_ms: Option<u64>, cancellation: Option<CancellationToken>) -> Self {
         Self {
             deadline: total_ms
@@ -77,7 +79,15 @@ impl RouteBoundOpenSupervisor {
             clock: Arc::new(SystemRouteBoundOpenClock {
                 started_at: Instant::now(),
             }),
+            repository_lock_timeout_ms: Self::DEFAULT_REPOSITORY_LOCK_MS,
         }
+    }
+    pub(crate) fn system_for_command(cmd: &Value, cancellation: Option<CancellationToken>) -> Self {
+        Self::system(
+            cmd.get("jobTimeoutMs").and_then(Value::as_u64),
+            cancellation,
+        )
+        .with_repository_lock_timeout(cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64))
     }
     #[cfg(test)]
     pub(crate) fn with_clock(
@@ -91,7 +101,14 @@ impl RouteBoundOpenSupervisor {
                 .map(RouteBoundOpenDeadline::from_total_ms),
             cancellation,
             clock,
+            repository_lock_timeout_ms: Self::DEFAULT_REPOSITORY_LOCK_MS,
         }
+    }
+    pub(crate) fn with_repository_lock_timeout(mut self, timeout_ms: Option<u64>) -> Self {
+        self.repository_lock_timeout_ms = timeout_ms
+            .unwrap_or(Self::DEFAULT_REPOSITORY_LOCK_MS)
+            .clamp(1, Self::MAX_REPOSITORY_LOCK_MS);
+        self
     }
     pub(crate) fn ensure_forward(
         &self,
@@ -128,15 +145,15 @@ impl RouteBoundOpenSupervisor {
     pub(crate) fn forward_repository_lock_timeout(&self) -> Duration {
         Duration::from_millis(
             self.remaining_forward_ms()
-                .unwrap_or(Self::MAX_REPOSITORY_LOCK_MS)
-                .clamp(1, Self::MAX_REPOSITORY_LOCK_MS),
+                .unwrap_or(self.repository_lock_timeout_ms)
+                .clamp(1, self.repository_lock_timeout_ms),
         )
     }
     pub(crate) fn compensation_repository_lock_timeout(&self) -> Duration {
         Duration::from_millis(
             self.remaining_total_ms()
-                .unwrap_or(Self::MAX_REPOSITORY_LOCK_MS)
-                .clamp(1, Self::MAX_REPOSITORY_LOCK_MS),
+                .unwrap_or(self.repository_lock_timeout_ms)
+                .clamp(1, self.repository_lock_timeout_ms),
         )
     }
     pub(crate) async fn forward<T>(

@@ -96,6 +96,7 @@ checkout or pnpm reference:
 ```bash
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
+agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json
 agent-browser install workstation status --json
 agent-browser install workstation recover --transaction-id upgrade-... --json
 agent-browser install workstation finalize --json
@@ -118,6 +119,21 @@ principals, capabilities, runtime owners, or lifecycle identities. Unknown
 successor fields and action types are preserved without effect authority, so
 rollback readers retain newer terminal bookkeeping. An already advertised
 recovery action does not require an upgrade merely to apply it.
+
+Cooperative continuity is the default runtime replacement policy. When an old
+managed runtime cannot complete handoff, run a dry-run with
+<code>--runtime-replacement-policy full-shutdown</code> and review the returned
+<code>runtimeReplacementPlan</code>. It identifies the exact managed session
+lanes and source process, states that live browser state will end, confirms
+profile preservation, and supplies a <code>planDigest</code>. Apply requires the
+same digest through
+<code>--expected-runtime-replacement-plan-digest &lt;sha256&gt;</code>. The
+transaction closes only those reviewed lanes, preserves the profile directory
+and stored credentials, proves a stable browserless census, retires only the
+recorded source process identity, and starts the candidate generation. Open
+tabs and in-memory state are lost. After the first close receipt, recovery is
+forward-only through transaction inspect and resume or recover. External,
+manual-preservation, ambiguous, and unproven processes remain untouched.
 
 The first apply uses one <code>sudo -v</code> authorization boundary for host
 preparation. Before authorization or payload staging, real-host preflight
@@ -336,6 +352,8 @@ one exact guarded <code>close</code> action to normalize the record. There
 is no inferred latest mutation or broad force unlock. A post-commit rollback
 restores the exact state snapshot and previous generation selector or records
 typed operator recovery with rollback evidence retained.
+After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, <code>currentSelectionEvidence</code> reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active or uncertain transactions remain blocking, and historical records are preserved.
+
 The <code>readiness</code> object separates
 <code>payloadReady</code>, <code>selectedGenerationReady</code>,
 <code>runtimeConvergenceReady</code>,
@@ -350,6 +368,19 @@ and the immediately previous healthy rollback generation. It also retains
 exact live-process, supervisor, active-transaction, and open-rollback
 references. Eligible accepted transactions are finalized automatically while
 their durable metadata remains available for audit.
+
+GC also retains the latest transaction's old payload while rollback readiness
+requires it, including failed terminal history. Older terminal history alone
+does not pin payloads; finalization still relinquishes rollback authority.
+
+For a reviewed rollback generation outside an accepted upgrade transaction, use
+`agent-browser install workstation retain-generation <id> --reason "reviewed rollback" --dry-run --json`, then repeat with `--apply`.
+The explicit hold hashes the sealed payload and prevents generation cleanup until
+an explicit `--release --apply` for that same ID. Preview release with
+`--release --dry-run`. Both operations require a reason; neither changes the
+selected generation, runs cleanup, or attests health or upgrade acceptance.
+GC rechecks held payloads under the workstation lock before effects and refuses
+changed or malformed retention evidence. Released receipts remain available.
 
 <code>agent-browser install doctor --json</code> verifies the installed
 binary, controller assets, Guacamole manifest, and Guacamole files against the
@@ -405,6 +436,13 @@ daemons, executable generations, and any active convergence window. A drift
 report does not authorize cleanup by itself. During a bounded upgrade, each
 accepted runtime host must match its recorded PID, process start token, binary
 hash, generation, and socket identity.
+
+Runtime health keeps profile access separate from installation convergence.
+Missing legacy profile policies are materialized deterministically. Ambiguous
+identity maps to nonblocking <code>shared-local</code> access and appears on the
+access axis; it does not make install doctor or the dashboard runtime warning
+fail. Runtime and convergence blockers still fail closed and provide one
+executable next action.
 
 The authenticated runtime-health and Service Status responses project the same
 <code>runtimeLifecycle</code> contract. It distinguishes steady state from a

@@ -137,8 +137,9 @@ use super::service_activity::{handle_service_events, handle_service_incident_act
 use super::service_browser_retirement::handle_service_browser_retirement_command;
 use super::service_config::{
     handle_service_profile_delete, handle_service_profile_freshness_update,
-    handle_service_profile_seeding_handoff_update, handle_service_profile_upsert,
-    handle_service_site_policy_delete, handle_service_site_policy_upsert,
+    handle_service_profile_policy_mutate, handle_service_profile_seeding_handoff_update,
+    handle_service_profile_upsert, handle_service_site_policy_delete,
+    handle_service_site_policy_upsert,
 };
 use super::service_diagnostics::handle_service_diagnostics;
 use super::service_file_transfer::handle_service_file_transfer;
@@ -166,10 +167,11 @@ use super::service_monitors::{
 };
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
+use super::service_profile_acquisition::handle_service_profile_recovery_command;
 use super::service_profile_lease::{
     handle_service_profile_lease_command, handle_service_profile_leases,
 };
-use super::service_profile_recovery::handle_service_profile_recovery_command;
+use super::service_profile_lifecycle::handle_service_profile_tab_evict;
 use super::service_renderer_crash::{
     race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
 };
@@ -283,6 +285,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_browser_retry"
             | "service_remedies_apply"
             | "service_profile_upsert"
+            | "service_profile_policy_mutate"
+            | "service_profile_tab_evict"
             | "service_profile_freshness_update"
             | "service_profile_seeding_handoff_update"
             | "service_profile_delete"
@@ -336,6 +340,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_incidents"
             | "service_events"
             | "tab_handle_refresh"
+            | "tab_close"
             | "tab_handle_release"
             | "file_transfer"
     )
@@ -634,7 +639,70 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         }
         return response;
     }
+    let explicit_service_handle = cmd.get("serviceTabHandle").is_some();
+    let bound_command = if !action_skips_browser_launch(action) {
+        match super::action_runtime::runtime::bind_native_service_tab_command(cmd, state) {
+            Ok(command) => command,
+            Err(error) => return error_response(&id, &format!("{error}; source=native/action_runtime/runtime/cdp_free_execute.rs::bind_native_service_tab_command")),
+        }
+    } else {
+        cmd.clone()
+    };
+    let cmd = &bound_command;
+    let native_handle_command =
+        !action_skips_browser_launch(action) && cmd.get("serviceTabHandle").is_some();
+    if native_handle_command {
+        // A supplied child handle is an exact authority and target boundary for
+        // ordinary native commands too. Never auto-launch around its refusal.
+        if let Err(error) =
+            crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await
+        {
+            return error_response(&id, &error);
+        }
+        let Some(target_id) = cmd["serviceTabHandle"]["targetId"].as_str() else {
+            return error_response(
+                &id,
+                "service_tab_target_selector_conflict: missing handle targetId",
+            );
+        };
+        let conflicting_target = cmd
+            .get("targetId")
+            .is_some_and(|value| value.as_str() != Some(target_id))
+            || cmd.get("tabId").is_some_and(|value| {
+                value.as_str() != Some(format!("target:{target_id}").as_str())
+            });
+        if conflicting_target {
+            return error_response(&id, "service_tab_target_selector_conflict: explicit target differs from authorized handle");
+        }
+        if let Some(manager) = state.browser.as_mut() {
+            if action == "tab_switch" {
+                let requested = cmd
+                    .get("index")
+                    .and_then(Value::as_u64)
+                    .and_then(|index| usize::try_from(index).ok())
+                    .and_then(|index| {
+                        manager
+                            .pages_list()
+                            .get(index)
+                            .map(|page| page.target_id.clone())
+                    });
+                if requested.as_deref() != Some(target_id) {
+                    return error_response(&id, "service_tab_target_selector_conflict: index differs from authorized handle");
+                }
+            }
+            let exact_target_is_active = manager.active_target_id().ok() == Some(target_id);
+            // A pending JavaScript dialog can block the renderer-backed reads in
+            // tab_switch_target_id. The exact already-active target needs no
+            // refresh before Page.handleJavaScriptDialog is dispatched.
+            if action != "dialog" || !exact_target_is_active {
+                if let Err(error) = manager.tab_switch_target_id(target_id).await {
+                    return error_response(&id, &error);
+                }
+            }
+        }
+    }
     let skip_launch = action_skips_browser_launch(action)
+        || native_handle_command
         || (action == "evaluate" && cmd.get("serviceTabHandle").is_some());
     if !skip_launch {
         if let Some(blocker) = active_manual_seeding_cdp_blocker(cmd, state) {
@@ -741,7 +809,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "inspect" => handle_inspect(state).await,
             "title" => handle_title(state).await,
             "content" => handle_content(state).await,
-            "evaluate" => handle_evaluate(cmd, state).await,
+            "evaluate" => handle_evaluate(cmd, state, explicit_service_handle).await,
             "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
             "runtime_handoff_abort" => handle_runtime_handoff_abort(state),
             "runtime_handoff_resume" => handle_runtime_handoff_resume(cmd, state).await,
@@ -911,6 +979,8 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_browser_retry" => handle_service_browser_retry(cmd).await,
             "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
             "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
+            "service_profile_policy_mutate" => handle_service_profile_policy_mutate(cmd).await,
+            "service_profile_tab_evict" => handle_service_profile_tab_evict(cmd, state).await,
             "service_profile_freshness_update" =>
                 handle_service_profile_freshness_update(cmd).await,
             "service_profile_seeding_handoff_update" => {

@@ -41,6 +41,15 @@ import { appendConsoleLogsAtom } from "@/store/stream";
 import type { SessionInfo } from "@/types";
 import { cn } from "@/lib/utils";
 import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { reportDashboardFailure } from "@/lib/failure-observation";
+import {
+  GUACAMOLE_SHARE_FRAME_NAME_PREFIX,
+  classifyGuacamoleShareAuthMessage,
+  confirmGuacamolePrimaryWhenConnected,
+  isConnectedGuacamolePrimaryFrame,
+  resolveGuacamoleViewerFrame,
+  recoverGuacamolePrimary,
+} from "@/lib/guacamole-connection-sharing";
 import {
   deriveWorkspaceViewportReadiness,
   deriveWorkspaceViewportUxState,
@@ -166,6 +175,12 @@ type CdpStreamState = {
   frameReceived: boolean;
   httpFallback: boolean;
   message: string;
+};
+
+type GuacamoleShareFrameAttempt = {
+  attemptId: string;
+  expectedOrigin: string;
+  primaryActiveConnectionId: string;
 };
 
 type GuacamoleMouseState = {
@@ -691,16 +706,22 @@ function WorkspaceCdpStreamCanvas({
   streamUrl,
   canControl,
   refreshNonce,
+  browserId,
+  sessionId,
 }: {
   streamUrl: string;
   canControl: boolean;
   refreshNonce: number;
+  browserId?: string | null;
+  sessionId?: string | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
   const frameSizeRef = useRef({ width: 1280, height: 720 });
+  const lastFrameAtRef = useRef(Date.now());
+  const stallReportedRef = useRef(false);
   const [state, setState] = useState<CdpStreamState>({
     connected: false,
     browserConnected: false,
@@ -731,6 +752,8 @@ function WorkspaceCdpStreamCanvas({
   }, [canControl, state.httpFallback, streamPort]);
 
   const drawFrame = useCallback((base64: string) => {
+    lastFrameAtRef.current = Date.now();
+    stallReportedRef.current = false;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -752,6 +775,29 @@ function WorkspaceCdpStreamCanvas({
       }));
     });
   }, []);
+
+  useEffect(() => {
+    lastFrameAtRef.current = Date.now();
+    stallReportedRef.current = false;
+    const timer = window.setInterval(() => {
+      if (!state.connected || !state.browserConnected || !state.screencasting) return;
+      const elapsedMs = Date.now() - lastFrameAtRef.current;
+      if (elapsedMs < 15_000 || stallReportedRef.current) return;
+      stallReportedRef.current = true;
+      void reportDashboardFailure({
+        category: "cdp_stream",
+        stage: "frame_watchdog",
+        code: state.frameReceived ? "cdp_frame_stream_stalled" : "cdp_frame_never_received",
+        summary: "The dashboard CDP feed was connected and screencasting but delivered no usable frame within the watchdog interval.",
+        action: "stream_frame",
+        browserId,
+        sessionId,
+        streamProvider: "cdp_screencast",
+        elapsedMs,
+      });
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [browserId, refreshNonce, sessionId, state.browserConnected, state.connected, state.frameReceived, state.screencasting]);
 
   useEffect(() => {
     if (state.httpFallback) {
@@ -1300,6 +1346,9 @@ export function WorkspaceRemoteViewport({
   const [error, setError] = useState("");
   const [focusMessage, setFocusMessage] = useState("");
   const [focusPending, setFocusPending] = useState(false);
+  const [operatorController, setOperatorController] = useState<{
+    browserId: string; routeId: string; leaseId: string;
+  } | null>(null);
   const [takeoverPending, setTakeoverPending] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState<string | null>(null);
   const [foreignBorrow, setForeignBorrow] = useState<ForeignCdpBorrowStatus | null>(null);
@@ -1308,6 +1357,10 @@ export function WorkspaceRemoteViewport({
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenFallback, setFullscreenFallback] = useState(false);
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(() => Date.now());
+  const [viewerFrameUrl, setViewerFrameUrl] = useState<string | null>(null);
+  const [viewerShareAttempt, setViewerShareAttempt] = useState<GuacamoleShareFrameAttempt | null>(null);
+  const [primaryRevision, setPrimaryRevision] = useState<string | null>(null);
+  const [sharingResolutionNonce, setSharingResolutionNonce] = useState(0);
   const [tileRefreshNonces, setTileRefreshNonces] = useState<Record<string, number>>({});
   const [automaticAttemptKeys, setAutomaticAttemptKeys] = useState<string[]>([]);
   const [connectionRetryNonce, setConnectionRetryNonce] = useState(0);
@@ -1320,6 +1373,8 @@ export function WorkspaceRemoteViewport({
   const viewportFrameRef = useRef<HTMLIFrameElement | null>(null);
   const focusedKeyRef = useRef("");
   const streamFrameRetryRef = useRef(0);
+  const sharingRecoveryRetryRef = useRef(0);
+  const viewerShareAttemptRef = useRef<GuacamoleShareFrameAttempt | null>(null);
   const automaticAttemptKeyRef = useRef(new Set<string>());
   const touchClickBridgeCleanupRef = useRef<(() => void) | null>(null);
 
@@ -1383,6 +1438,13 @@ export function WorkspaceRemoteViewport({
     ?? { tab: null, tabIndex: null, recoveredFromStaleSelection: false, staleSelectionId: null };
   const streamChoices = selectedProjection?.streamChoices ?? [];
   const stream = selectedProjection?.stream ?? null;
+  const guacamoleSharingStream = useMemo<ServiceViewStream | null>(() => stream ? {
+    connectionId: stream.connectionId,
+    displayAllocationId: stream.displayAllocationId,
+    provider: stream.provider,
+    providerMode: stream.providerMode,
+    routeId: stream.routeId,
+  } : null, [stream?.connectionId, stream?.displayAllocationId, stream?.provider, stream?.providerMode, stream?.routeId]);
   const singleWorkspaceMode = viewportSelection?.mode === "control" ? "control" : "view";
   const sourceResolution = useMemo(
     () => resolveWorkspaceViewSources({ streams: streamChoices, selected: stream, mode: singleWorkspaceMode }),
@@ -1404,7 +1466,7 @@ export function WorkspaceRemoteViewport({
   const streamUrl = resolveWorkspaceStreamUrl(stream);
   const snapshotStream = isCdpSnapshotStream(stream);
   const externalStreamUrl = snapshotStream ? null : resolveWorkspaceStreamUrl(stream, "external");
-  const frameUrl = buildWorkspaceFrameUrl(streamUrl, streamRefreshNonce);
+  const frameUrl = buildWorkspaceFrameUrl(viewerFrameUrl, streamRefreshNonce);
   const snapshotUrl = snapshotStream ? buildCdpSnapshotUrl(streamUrl, tabSelection.tab?.targetId) : null;
   const foreignCdpPort = snapshotStream
     ? selectedDaemonSession?.cdpPort ?? selectedDaemonSession?.port ?? null
@@ -1601,12 +1663,97 @@ export function WorkspaceRemoteViewport({
 
   useEffect(() => {
     streamFrameRetryRef.current = 0;
+    sharingRecoveryRetryRef.current = 0;
     setFrameIssue(null);
   }, [streamUrl]);
 
   useEffect(() => {
     dispatchViewportController({ type: "target_changed", target: viewportTarget });
   }, [viewportTarget, viewportTargetToken]);
+
+  useEffect(() => {
+    setPrimaryRevision(null);
+    if (!streamUrl || !guacamoleSharingStream) {
+      viewerShareAttemptRef.current = null;
+      setViewerShareAttempt(null);
+      setViewerFrameUrl(null);
+      return;
+    }
+    const controller = new AbortController();
+    const targetToken = viewportTargetToken;
+    viewerShareAttemptRef.current = null;
+    setViewerShareAttempt(null);
+    setViewerFrameUrl(null);
+    if (targetToken) {
+      dispatchViewportController({
+        type: "preflight_started",
+        targetToken,
+        message: "Joining the shared remote desktop session.",
+      });
+    }
+    void resolveGuacamoleViewerFrame({
+      dashboardHref: window.location.href,
+      frameUrl: streamUrl,
+      signal: controller.signal,
+      stream: guacamoleSharingStream,
+    }).then((resolution) => {
+      if (controller.signal.aborted) return;
+      const shareAttempt = resolution.mode === "shared"
+        ? {
+          attemptId: resolution.attemptId,
+          expectedOrigin: new URL(resolution.url).origin,
+          primaryActiveConnectionId: resolution.primaryActiveConnectionId,
+        }
+        : null;
+      viewerShareAttemptRef.current = shareAttempt;
+      setViewerShareAttempt(shareAttempt);
+      setViewerFrameUrl(resolution.url);
+      if (resolution.mode === "direct" && resolution.primaryReservation) {
+        const reservation = resolution.primaryReservation;
+        setPrimaryRevision(reservation.revision);
+        void confirmGuacamolePrimaryWhenConnected({
+          reservation, dashboardHref: window.location.href, signal: controller.signal,
+          isConnected: () => isConnectedGuacamolePrimaryFrame(
+            viewportFrameRef.current, resolution.url, reservation.revision,
+          ),
+        }).catch(() => {
+          if (controller.signal.aborted) return;
+          void reportDashboardFailure({
+            category: "guacamole_load", stage: "connection_sharing",
+            code: "guacamole_primary_confirmation_failed",
+            summary: "The connected primary could not retire its startup reservation.",
+            action: "remote_view_load", browserId: browser?.id, profileId: browser?.profileId,
+            routeId: guacamoleSharingStream.routeId,
+          });
+        });
+      }
+    }).catch((cause) => {
+      if (controller.signal.aborted) return;
+      const message = cause instanceof Error ? cause.message : "Guacamole connection sharing failed.";
+      if (targetToken) {
+        dispatchViewportController({
+          type: "preflight_failed",
+          targetToken,
+          status: "error",
+          message,
+        });
+      }
+      void reportDashboardFailure({
+        category: "guacamole_load",
+        stage: "connection_sharing",
+        code: "guacamole_connection_sharing_failed",
+        summary: "The dashboard could not join the existing Guacamole session.",
+        action: "remote_view_load",
+        browserId: browser?.id,
+        profileId: browser?.profileId,
+        sessionId: viewportSelection?.selection.sessionId,
+        routeId: guacamoleSharingStream.routeId,
+        displayId: guacamoleSharingStream.displayAllocationId,
+        streamProvider: guacamoleSharingStream.provider,
+      });
+    });
+    return () => controller.abort();
+  }, [browser?.id, browser?.profileId, guacamoleSharingStream, sharingResolutionNonce, streamUrl, viewportSelection?.selection.sessionId, viewportTargetToken]);
 
   useEffect(() => {
     if (!frameUrl || !canEmbed || !viewportTargetToken) {
@@ -1681,6 +1828,19 @@ export function WorkspaceRemoteViewport({
   }, [canEmbed, frameUrl, viewportTargetToken]);
 
   const handleFrameLoadIssue = useCallback((failure: WorkspaceFrameFailure) => {
+    void reportDashboardFailure({
+      category: "guacamole_load",
+      stage: "workspace_iframe",
+      code: `guacamole_${failure}`,
+      summary: "The dashboard observed an unusable Guacamole or remote-view iframe.",
+      action: "remote_view_load",
+      browserId: browser?.id,
+      profileId: browser?.profileId,
+      sessionId: viewportSelection?.selection.sessionId,
+      routeId: stream?.routeId,
+      displayId: stream?.displayAllocationId,
+      streamProvider: stream?.provider,
+    });
     if (failure === "login-required") {
       setFrameIssue(null);
       if (viewportTargetToken) dispatchViewportController({
@@ -1693,6 +1853,13 @@ export function WorkspaceRemoteViewport({
     }
 
     if (failure === "remote-disconnected" || failure === "taken-over") {
+      if (stream?.providerMode === "simultaneous_view" && sharingRecoveryRetryRef.current < 3) {
+        sharingRecoveryRetryRef.current += 1;
+        setFrameIssue(null);
+        setFocusMessage("The shared viewer closed; electing or joining the current Guacamole primary.");
+        setSharingResolutionNonce((current) => current + 1);
+        return;
+      }
       setFrameIssue({
         kind: failure,
         message: failure === "taken-over"
@@ -1719,7 +1886,63 @@ export function WorkspaceRemoteViewport({
         ? "Guacamole reported that the remote desktop connection closed."
         : "The embedded remote stream failed to load. Refresh the workspace viewport or open the stream externally.",
     });
-  }, [viewportTargetToken]);
+  }, [browser?.id, browser?.profileId, stream?.displayAllocationId, stream?.provider, stream?.routeId, viewportSelection?.selection.sessionId, viewportTargetToken]);
+
+  useEffect(() => {
+    const onGuacamoleShareAuthMessage = (event: MessageEvent) => {
+      const attempt = viewerShareAttemptRef.current;
+      if (!attempt) return;
+      const outcome = classifyGuacamoleShareAuthMessage({
+        attemptId: attempt.attemptId,
+        data: event.data,
+        eventOrigin: event.origin,
+        eventSource: event.source,
+        expectedOrigin: attempt.expectedOrigin,
+        expectedSource: viewportFrameRef.current?.contentWindow,
+      });
+      if (!outcome) return;
+      if (outcome === "ready") {
+        if (viewportTargetToken) {
+          dispatchViewportController({ type: "preflight_succeeded", targetToken: viewportTargetToken });
+        }
+        return;
+      }
+
+      viewerShareAttemptRef.current = null;
+      setViewerShareAttempt(null);
+      setViewerFrameUrl(null);
+      void reportDashboardFailure({
+        category: "guacamole_load",
+        stage: "connection_sharing_redemption",
+        code: "guacamole_share_key_rejected",
+        summary: "The restricted Guacamole sharing key was rejected before the viewer became usable.",
+        action: "remote_view_load",
+        browserId: browser?.id,
+        profileId: browser?.profileId,
+        sessionId: viewportSelection?.selection.sessionId,
+        routeId: stream?.routeId,
+        displayId: stream?.displayAllocationId,
+        streamProvider: stream?.provider,
+      });
+      if (sharingRecoveryRetryRef.current < 3) {
+        sharingRecoveryRetryRef.current += 1;
+        setFrameIssue(null);
+        setFocusMessage("The restricted viewer key expired; electing or joining the current Guacamole primary.");
+        setSharingResolutionNonce((current) => current + 1);
+        return;
+      }
+      if (viewportTargetToken) {
+        dispatchViewportController({
+          type: "preflight_failed",
+          targetToken: viewportTargetToken,
+          status: "error",
+          message: "Guacamole rejected three fresh restricted viewer keys. The browser remains active, but this viewer could not reconnect.",
+        });
+      }
+    };
+    window.addEventListener("message", onGuacamoleShareAuthMessage);
+    return () => window.removeEventListener("message", onGuacamoleShareAuthMessage);
+  }, [browser?.id, browser?.profileId, stream?.displayAllocationId, stream?.provider, stream?.routeId, viewportSelection?.selection.sessionId, viewportTargetToken]);
 
   const onFrameLoad = useCallback(() => {
     const failure = detectWorkspaceFrameFailure(viewportFrameRef.current);
@@ -1751,13 +1974,21 @@ export function WorkspaceRemoteViewport({
   useEffect(() => {
     if (!viewportSelection || viewportSelection.mode !== "control" || snapshotStream) return;
     if (!browser || !stream || !canControl) return;
+    const operatorFocus = stream.provider === "rdp_gateway";
+    if (operatorFocus && (!operatorController
+      || operatorController.browserId !== browser.id
+      || operatorController.routeId !== stream.routeId)) return;
     const tabIndex = tabSelection.tabIndex;
     const targetId = tabSelection.tab?.targetId?.trim();
-    const focusKey = [browser.id, tabSelection.tab?.id ?? "", targetId ?? "", tabIndex ?? "", streamUrl ?? ""].join("|");
+    const focusKey = [browser.id, tabSelection.tab?.id ?? "", targetId ?? "", tabIndex ?? "", streamUrl ?? "", operatorController?.leaseId ?? ""].join("|");
     if (focusedKeyRef.current === focusKey) return;
     focusedKeyRef.current = focusKey;
     const browserForFocus = browser;
     const selectionForFocus = viewportSelection.selection;
+    if (operatorFocus && !targetId) {
+      setFocusMessage("Select a current target before requesting operator focus.");
+      return;
+    }
     if (!targetId && tabIndex === null) {
       setFocusMessage("No stable tab index was available; showing the stream without a queued focus request.");
       return;
@@ -1775,10 +2006,16 @@ export function WorkspaceRemoteViewport({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "view_focus",
+            browserId: browserForFocus.id,
+            ...(sessionName ? { sessionName } : {}),
             serviceName: "agent-browser-dashboard",
             agentName: activeSessionName || "operator",
             taskName: "workspace-viewport-control",
-            params,
+            params: { ...params, ...(operatorFocus && operatorController ? {
+              operatorFocus: true,
+              routeId: operatorController.routeId,
+              controllerLeaseId: operatorController.leaseId,
+            } : {}) },
             jobTimeoutMs: 5000,
           }),
         });
@@ -1800,7 +2037,7 @@ export function WorkspaceRemoteViewport({
     }
 
     void queueFocus();
-  }, [activePort, activeSessionName, browser, canControl, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
+  }, [activePort, activeSessionName, browser, canControl, operatorController, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
 
   useEffect(() => {
     if (!frameUrl || !canRenderFrame || !canControl) return;
@@ -1998,12 +2235,14 @@ export function WorkspaceRemoteViewport({
 
   const reconnectWorkspaceViewer = useCallback(async () => {
     if (!browser || !workspaceRouteId) return;
+    const sessionName = daemonSessionNameForBrowser(browser, viewportSelection?.selection);
     setRecoveryPending("viewer-reconnect");
     setFocusMessage("Requesting a fresh observer lease for this workspace route.");
     try {
       await postWorkspaceRecoveryRequest("service_viewer_lease_request", "workspace-viewport-viewer-reconnect", {
         routeId: workspaceRouteId,
         browserId: browser.id,
+        ...(sessionName ? { sessionName } : {}),
         viewerId: workspaceViewerId,
         viewerName: workspaceViewerId,
         viewerRole: "observer",
@@ -2011,7 +2250,9 @@ export function WorkspaceRemoteViewport({
       });
       streamFrameRetryRef.current = 0;
       setFrameIssue(null);
-      setStreamRefreshNonce(Date.now());
+      // Observer admission does not change the desktop transport. Remounting
+      // here can disconnect an in-flight primary or discard a redeemed share
+      // key while its lease request is completing.
       setFocusMessage("Reconnected the service-owned observer lease.");
       void refreshProjection();
     } catch (err) {
@@ -2019,22 +2260,29 @@ export function WorkspaceRemoteViewport({
     } finally {
       setRecoveryPending(null);
     }
-  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, workspaceRouteId, workspaceViewerId]);
+  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceRouteId, workspaceViewerId]);
 
   const takeoverWorkspaceController = useCallback(async () => {
     if (!browser || !workspaceRouteId) return;
+    const sessionName = daemonSessionNameForBrowser(browser, viewportSelection?.selection);
     setRecoveryPending("controller-takeover");
     setFrameIssue(null);
     setFocusMessage("Requesting explicit controller takeover for this workspace route.");
     try {
-      await postWorkspaceRecoveryRequest("service_controller_lease_takeover", "workspace-viewport-controller-takeover", {
+      const response = await postWorkspaceRecoveryRequest("service_controller_lease_takeover", "workspace-viewport-controller-takeover", {
         routeId: workspaceRouteId,
         browserId: browser.id,
+        ...(sessionName ? { sessionName } : {}),
         viewerId: workspaceViewerId,
         viewerName: workspaceViewerId,
         viewerRole: "controller",
         openMode: "embedded",
       });
+      const lease = (response.data as { viewerLease?: { id?: string; state?: string; viewerRole?: string } } | undefined)?.viewerLease;
+      if (!lease?.id || lease.state !== "controlling" || lease.viewerRole !== "controller") {
+        throw new Error("Controller takeover did not return a current controlling lease.");
+      }
+      setOperatorController({ browserId: browser.id, routeId: workspaceRouteId, leaseId: lease.id });
       streamFrameRetryRef.current = 0;
       setStreamRefreshNonce(Date.now());
       setFocusMessage("Controller lease takeover was accepted and the viewport is reconnecting.");
@@ -2044,7 +2292,7 @@ export function WorkspaceRemoteViewport({
     } finally {
       setRecoveryPending(null);
     }
-  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, workspaceRouteId, workspaceViewerId]);
+  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceRouteId, workspaceViewerId]);
 
   const releaseWorkspaceViewers = useCallback(async () => {
     if (workspaceViewerLeaseIds.length === 0) {
@@ -2053,10 +2301,12 @@ export function WorkspaceRemoteViewport({
     }
     setRecoveryPending("viewer-release");
     setFocusMessage(`Releasing ${workspaceViewerLeaseIds.length} retained viewer lease${workspaceViewerLeaseIds.length === 1 ? "" : "s"}.`);
+    const sessionName = browser ? daemonSessionNameForBrowser(browser, viewportSelection?.selection) : null;
     try {
       for (const viewerLeaseId of workspaceViewerLeaseIds) {
         await postWorkspaceRecoveryRequest("service_viewer_lease_release", "workspace-viewport-viewer-release", {
           viewerLeaseId,
+          ...(sessionName ? { sessionName } : {}),
         });
       }
       setFrameIssue(null);
@@ -2068,15 +2318,28 @@ export function WorkspaceRemoteViewport({
     } finally {
       setRecoveryPending(null);
     }
-  }, [postWorkspaceRecoveryRequest, refreshProjection, workspaceViewerLeaseIds]);
+  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceViewerLeaseIds]);
 
-  const retryWorkspaceConnection = useCallback(() => {
-    automaticAttemptKeyRef.current.clear();
-    setAutomaticAttemptKeys([]);
-    setConnectionRetryNonce((current) => current + 1);
+  const retryWorkspaceConnection = useCallback(async () => {
+    if (recoveryPending) return;
+    setRecoveryPending("viewer-reconnect");
     setFocusMessage("Retrying the browser connection.");
-    refreshWorkspaceViewport();
-  }, [refreshWorkspaceViewport]);
+    try {
+      if (guacamoleSharingStream) {
+        await recoverGuacamolePrimary({ dashboardHref: window.location.href, stream: guacamoleSharingStream });
+        // A recovered tunnel needs a fresh restricted sharing key.
+        setSharingResolutionNonce((current) => current + 1);
+      }
+      automaticAttemptKeyRef.current.clear();
+      setAutomaticAttemptKeys([]);
+      setConnectionRetryNonce((current) => current + 1);
+      refreshWorkspaceViewport();
+    } catch (error) {
+      setFocusMessage(error instanceof Error ? error.message : "Browser connection recovery failed.");
+    } finally {
+      setRecoveryPending(null);
+    }
+  }, [guacamoleSharingStream, recoveryPending, refreshWorkspaceViewport]);
 
   useEffect(() => {
     automaticAttemptKeyRef.current.clear();
@@ -2302,6 +2565,34 @@ export function WorkspaceRemoteViewport({
                         className="workspace-remote-viewport-frame"
                         allow="clipboard-read; clipboard-write; fullscreen; pointer-lock"
                         allowFullScreen
+                        onError={() => void reportDashboardFailure({
+                          category: "guacamole_load",
+                          stage: "tile_iframe",
+                          code: "guacamole_browser_error",
+                          summary: "A tiled dashboard remote-view iframe failed to load.",
+                          action: "remote_view_load",
+                          browserId: tile.browser.id,
+                          profileId: tile.browser.profileId,
+                          routeId: tile.stream?.routeId,
+                          displayId: tile.stream?.displayAllocationId,
+                          streamProvider: tile.stream?.provider,
+                        })}
+                        onLoad={(event) => {
+                          const failure = detectWorkspaceFrameFailure(event.currentTarget);
+                          if (!failure) return;
+                          void reportDashboardFailure({
+                            category: "guacamole_load",
+                            stage: "tile_iframe",
+                            code: `guacamole_${failure}`,
+                            summary: "A tiled dashboard remote-view iframe loaded an unusable state.",
+                            action: "remote_view_load",
+                            browserId: tile.browser.id,
+                            profileId: tile.browser.profileId,
+                            routeId: tile.stream?.routeId,
+                            displayId: tile.stream?.displayAllocationId,
+                            streamProvider: tile.stream?.provider,
+                          });
+                        }}
                       />
                     ) : (
                       <div className="workspace-remote-viewport-empty workspace-remote-viewport-tile-empty">
@@ -2599,6 +2890,8 @@ export function WorkspaceRemoteViewport({
             streamUrl={streamUrl}
             canControl={canControl}
             refreshNonce={streamRefreshNonce}
+            browserId={browser?.id}
+            sessionId={viewportSelection.selection.sessionId}
           />
         ) : stream && canRenderSnapshotStream && snapshotUrl ? (
           <WorkspaceCdpSnapshotViewer
@@ -2611,8 +2904,10 @@ export function WorkspaceRemoteViewport({
           />
         ) : stream && canRenderFrame ? (
           <iframe
-            key={`${streamUrl ?? ""}:${streamRefreshNonce}`}
+            key={`${streamUrl ?? ""}:${streamRefreshNonce}:${viewerShareAttempt?.attemptId ?? primaryRevision ?? "direct"}`}
             ref={viewportFrameRef}
+            data-guacamole-primary-revision={primaryRevision ?? undefined}
+            name={viewerShareAttempt ? `${GUACAMOLE_SHARE_FRAME_NAME_PREFIX}${viewerShareAttempt.attemptId}` : undefined}
             title={`${viewStreamLabel(stream)} ${stream.id ?? ""}`.trim()}
             src={frameUrl ?? undefined}
             className="workspace-remote-viewport-frame"

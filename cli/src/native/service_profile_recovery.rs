@@ -107,8 +107,7 @@ fn recovery_profile_identity_digest(profile: &BrowserProfile) -> Result<String, 
         .user_data_dir
         .as_deref()
         .ok_or_else(|| "profile_recovery_identity_unavailable".to_string())?;
-    let resolved = crate::runtime_profile::resolve_profile(Some(profile_hint), Some(&profile.id))?;
-    crate::runtime_profile::canonical_profile_identity_digest(&resolved.user_data_dir)
+    crate::runtime_profile::resolved_profile_identity_digest(profile_hint, &profile.id)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -328,7 +327,7 @@ fn profile_acquisition_retry_route(
         .runtime_owner_registry
         .owner(&profile_identity_digest)
         .map(|owner| owner.daemon_session_route.clone())
-        .or_else(|| super::service_access::authenticated_cold_session_name(authority, profile))
+        .or_else(|| super::authenticated_cold_session_name(authority, profile))
         .ok_or_else(|| "profile_acquisition_daemon_route_unavailable".to_string())
 }
 
@@ -364,7 +363,7 @@ pub(crate) fn profile_acquisition_daemon_route(command: &Value) -> Result<String
             .profiles
             .get(&authority.profile_id)
             .ok_or_else(|| "profile_acquisition_profile_missing".to_string())?;
-        super::service_access::authenticated_cold_session_name(&authority, profile)
+        super::authenticated_cold_session_name(&authority, profile)
             .ok_or_else(|| "profile_acquisition_daemon_route_unavailable".to_string())
     }
 }

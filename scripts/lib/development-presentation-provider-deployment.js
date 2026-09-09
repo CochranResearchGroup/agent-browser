@@ -15,12 +15,40 @@ import {
   developmentPresentationProviderManifest,
   developmentPresentationProviderDescriptor,
   developmentPresentationProviderManifestCompatible,
+  developmentPresentationProviderManifestUpgradeCompatible,
   evaluateDevelopmentPresentationProviderObservation,
   validateDevelopmentPresentationProviderIsolation,
 } from './development-presentation-provider.js';
 
 export const DEVELOPMENT_PRESENTATION_DEPLOYMENT_SCHEMA =
   'agent-browser.development-presentation-provider-deployment.v1';
+
+/**
+ * Mirrors the workstation installer's two-entry extension JAR. Fixed metadata
+ * keeps source-identical staging byte-identical; Guacamole loads the JAR, not
+ * the adjacent reviewable JavaScript and manifest source files.
+ */
+function packageGuacamoleDefaultsExtension(sourceRoot) {
+  const entries = ['guac-manifest.json', 'agent-browser-defaults.js'].map((name) => [
+    name, readFileSync(join(sourceRoot, 'extensions', name)).toString('base64'),
+  ]);
+  const archive = spawnSync('python3', ['-c', `
+import base64, io, json, sys, zipfile
+output = io.BytesIO()
+with zipfile.ZipFile(output, 'w') as archive:
+    for name, encoded in json.load(sys.stdin):
+        entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+        entry.create_system = 3
+        entry.external_attr = 0o100644 << 16
+        entry.compress_type = zipfile.ZIP_DEFLATED
+        archive.writestr(entry, base64.b64decode(encoded), compresslevel=9)
+sys.stdout.buffer.write(output.getvalue())
+`], { input: JSON.stringify(entries), timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+  if (archive.error || archive.status !== 0 || !archive.stdout?.length) {
+    throw new Error('Development Guacamole extension packaging failed; python3 with zipfile is required');
+  }
+  return archive.stdout;
+}
 
 /**
  * Describes the ordered effect boundary without executing it. Every effect is
@@ -67,9 +95,13 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
     routeUser: route.user,
   }));
   const ingress = {
-    service: 'agent-browser-dev',
+    service: `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`,
     pathPrefix: '/guacamole',
     upstream: `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole`,
+    localDiagnosticUrl: descriptor.localDiagnosticUrl,
+    publicOperatorUrl: descriptor.publicOperatorUrl,
+    reviewedRevision: descriptor.externalIngress.reviewedRevision,
+    bindingSha256: descriptor.externalIngress.bindingSha256,
     publishAfter: 'provider-ready',
   };
   const desired = {
@@ -82,9 +114,13 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
       database: descriptor.database,
       ports: descriptor.ports,
       rdpTarget: descriptor.rdpTarget,
+      connectionLimits: descriptor.connectionLimits,
       warmSlots: descriptor.warmSlots,
       hardMaxSlots: descriptor.hardMaxSlots,
       routes: descriptor.routes,
+      localDiagnosticUrl: descriptor.localDiagnosticUrl,
+      publicOperatorUrl: descriptor.publicOperatorUrl,
+      externalIngress: descriptor.externalIngress,
     },
     ingress,
   };
@@ -110,11 +146,17 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
 export function stageDevelopmentPresentationProviderBundle({ env = process.env } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
   validateDevelopmentPresentationProviderIsolation(descriptor);
+  if (descriptor.externalIngress.configured !== true) {
+    throw new Error('Development provider staging requires a reviewed public HTTPS external-ingress binding');
+  }
   const configured = existsSync(descriptor.manifest);
   if (configured) {
     const manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
     const expected = developmentPresentationProviderManifest(descriptor);
-    if (!developmentPresentationProviderManifestCompatible(manifest, expected)) {
+    if (
+      !developmentPresentationProviderManifestCompatible(manifest, expected) &&
+      !developmentPresentationProviderManifestUpgradeCompatible(manifest, expected)
+    ) {
       throw new Error('Configured development provider manifest drifted');
     }
   }
@@ -131,6 +173,7 @@ export function stageDevelopmentPresentationProviderBundle({ env = process.env }
       throw new Error(`Development Guacamole asset is unavailable: ${join(sourceRoot, required)}`);
     }
   }
+  const defaultsExtension = packageGuacamoleDefaultsExtension(sourceRoot);
   const bundle = renderDevelopmentPresentationProviderBundle(descriptor);
   mkdirSync(descriptor.root, { recursive: true, mode: 0o755 });
   chmodSync(descriptor.root, 0o755);
@@ -151,11 +194,13 @@ export function stageDevelopmentPresentationProviderBundle({ env = process.env }
     chmodSync(dirname(destination), 0o755);
     copyFileAtomic(join(sourceRoot, relativePath), destination, relativePath.endsWith('.sh') ? 0o755 : 0o644);
   }
+  writeFileAtomic(join(descriptor.root, 'extensions/agent-browser-defaults.jar'), defaultsExtension, 0o644);
   const files = [
     ...Object.keys(bundle.files),
     'init/001-initdb.sql',
     'extensions/guac-manifest.json',
     'extensions/agent-browser-defaults.js',
+    'extensions/agent-browser-defaults.jar',
     'start-guacamole.sh',
   ];
   return {
@@ -215,10 +260,16 @@ export function applyDevelopmentPresentationProvider({
   if (!effects) throw new Error('Development presentation provider effect adapter is required');
   const descriptor = developmentPresentationProviderDescriptor(env);
   validateDevelopmentPresentationProviderIsolation(descriptor);
+  if (descriptor.externalIngress.configured !== true) {
+    throw new Error('Development provider apply requires a reviewed public HTTPS external-ingress binding');
+  }
   if (existsSync(descriptor.manifest)) {
     const manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
     const expected = developmentPresentationProviderManifest(descriptor);
-    if (!developmentPresentationProviderManifestCompatible(manifest, expected)) {
+    if (
+      !developmentPresentationProviderManifestCompatible(manifest, expected) &&
+      !developmentPresentationProviderManifestUpgradeCompatible(manifest, expected)
+    ) {
       throw new Error('Configured development provider manifest drifted');
     }
     const productionBefore = effects.snapshotProduction();
@@ -339,6 +390,7 @@ export function applyDevelopmentPresentationProvider({
     completedSteps.push('start-provider');
     effects.grantOperatorRouteAccess(descriptor);
     completedSteps.push('grant-operator-route-access');
+    ensureDevelopmentPresentationBootstrapInventory(descriptor);
     effects.openWarmRoutes(descriptor);
     completedSteps.push('open-warm-routes');
     const stagedObservation = effects.observe(descriptor);
@@ -465,17 +517,36 @@ export function probeDevelopmentPresentationProvider(
   const schemaSql = `select count(*) from information_schema.tables
 where table_schema = 'public' and table_name in
 ('guacamole_user','guacamole_entity','guacamole_connection',
- 'guacamole_connection_parameter','guacamole_connection_permission');`;
+ 'guacamole_connection_parameter','guacamole_connection_permission',
+ 'guacamole_sharing_profile','guacamole_sharing_profile_parameter',
+ 'guacamole_sharing_profile_permission');`;
   const schemaResult = postgresQuery(descriptor, schemaSql, run);
+  // Match the descriptor's exact connections, including parallel namespaces.
+  // Explicit escape strings keep quotes and backslashes literal in PostgreSQL.
+  const connectionNamesSql = descriptor.routes.map((route) =>
+    `E'${route.connectionName.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`).join(', ');
   const routeSql = `select coalesce(json_agg(row_to_json(t)), '[]'::json)
 from (
   select c.connection_id::text as "connectionId",
          c.connection_name as "connectionName",
-         max(case when p.parameter_name = 'username' then p.parameter_value end) as "user"
+         c.max_connections as "maxConnections",
+         c.max_connections_per_user as "maxConnectionsPerUser",
+         max(case when p.parameter_name = 'username' then p.parameter_value end) as "user",
+         max(sp.sharing_profile_id)::text as "sharingProfileId",
+         max(sp.sharing_profile_name) as "sharingProfileName",
+         max(case when spp.parameter_name = 'read-only' then spp.parameter_value end) as "sharingProfileReadOnly",
+         count(distinct spermission.entity_id) as "sharingProfilePermissionCount"
   from guacamole_connection c
   left join guacamole_connection_parameter p on p.connection_id = c.connection_id
-  where c.connection_name like 'Agent Browser Dev RDP Route %'
-  group by c.connection_id, c.connection_name
+  left join guacamole_sharing_profile sp
+    on sp.primary_connection_id = c.connection_id
+   and sp.sharing_profile_name like 'Agent Browser Shared Session %'
+  left join guacamole_sharing_profile_parameter spp
+    on spp.sharing_profile_id = sp.sharing_profile_id
+  left join guacamole_sharing_profile_permission spermission
+    on spermission.sharing_profile_id = sp.sharing_profile_id
+  where c.connection_name in (${connectionNamesSql || 'NULL'})
+  group by c.connection_id, c.connection_name, c.max_connections, c.max_connections_per_user
   order by c.connection_id
 ) t;`;
   const routesResult = postgresQuery(descriptor, routeSql, run);
@@ -514,13 +585,32 @@ from (
   } catch {
     privateSecret = false;
   }
+  // Tomcat retains the loaded extension after the staged JAR changes. Require
+  // the served application to contain the exact staged source before accepting
+  // provider readiness. Report hashes only, never the application body.
+  let expectedExtension = null;
+  try {
+    expectedExtension = readFileSync(join(descriptor.root, 'extensions/agent-browser-defaults.js'), 'utf8');
+  } catch { /* Missing staging is unready. */ }
+  const servedExtension = run('curl', [
+    '-fsS', '--max-time', '5',
+    `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/app.js`,
+  ]);
+  const extension = {
+    matches: Boolean(expectedExtension) && servedExtension.status === 0 &&
+      servedExtension.stdout.includes(expectedExtension),
+    expectedSha256: expectedExtension ? createHash('sha256').update(expectedExtension).digest('hex') : null,
+    responseSha256: servedExtension.status === 0
+      ? createHash('sha256').update(servedExtension.stdout).digest('hex') : null,
+  };
   return {
     environment: 'development',
+    extension,
     containers,
     ports,
     routeUsers,
     database: {
-      schemaReady: schemaResult.status === 0 && Number(schemaResult.stdout.trim()) === 5,
+      schemaReady: schemaResult.status === 0 && Number(schemaResult.stdout.trim()) === 8,
       routes: databaseRoutes,
       error: schemaResult.status === 0 && routesResult.status === 0
         ? null
@@ -548,7 +638,7 @@ function renderEnvironment(descriptor) {
 }
 
 function renderCompose(descriptor) {
-  const volume = 'agent-browser-dev-guacamole-postgres-data';
+  const volume = `${descriptor.services.postgres}-data`;
   const postgresDb = '${POSTGRES_DB:?set POSTGRES_DB in .env}';
   const postgresUser = '${POSTGRES_USER:?set POSTGRES_USER in .env}';
   const postgresPassword =
@@ -727,6 +817,29 @@ function assertChecks(checks, message) {
   if (failed.length) throw new Error(`${message}: ${failed.join(', ')}`);
 }
 
+/** Seed launcher input without publishing configured authority or ready routes. */
+export function ensureDevelopmentPresentationBootstrapInventory(descriptor) {
+  validateDevelopmentPresentationProviderIsolation(descriptor);
+  if (existsSync(descriptor.manifest) || existsSync(descriptor.inventoryPath)) return false;
+  mkdirSync(descriptor.stateDir, { recursive: true, mode: 0o700 });
+  const inventory = {
+    schemaVersion: 'agent-browser.development-presentation-inventory.v1',
+    environment: 'development',
+    localDiagnosticUrl: descriptor.localDiagnosticUrl,
+    externalIngress: descriptor.externalIngress,
+    routes: [],
+  };
+  try {
+    writeFileSync(descriptor.inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`, {
+      mode: 0o600, flag: 'wx',
+    });
+  } catch (error) {
+    if (error.code === 'EEXIST') return false;
+    throw error;
+  }
+  return true;
+}
+
 export function writeProviderAuthority(descriptor, observation) {
   const databaseRoutes = new Map(
     observation.database.routes.map((route) => [route.connectionName, route]),
@@ -753,6 +866,8 @@ export function writeProviderAuthority(descriptor, observation) {
         publicOperatorUrl: descriptor.publicOperatorUrl,
         healthUrl: frameUrl,
         externalUrl: descriptor.publicOperatorUrl,
+        externalIngressRevision: descriptor.externalIngress.reviewedRevision,
+        externalIngressBindingSha256: descriptor.externalIngress.bindingSha256,
       },
       state: displays.get(route.displayReservationId)?.ready === true ? 'ready' : 'absent',
     };
@@ -761,6 +876,8 @@ export function writeProviderAuthority(descriptor, observation) {
   writeFileAtomic(descriptor.inventoryPath, `${JSON.stringify({
     schemaVersion: 'agent-browser.development-presentation-inventory.v1',
     environment: 'development',
+    localDiagnosticUrl: descriptor.localDiagnosticUrl,
+    externalIngress: descriptor.externalIngress,
     routes: inventory,
   }, null, 2)}\n`, 0o600);
   writeFileAtomic(

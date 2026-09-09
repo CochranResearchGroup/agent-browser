@@ -2,6 +2,8 @@
 
 import {
   assertProductionUnchanged,
+  assertDefaultDevelopmentUnchanged,
+  defaultDevelopmentSnapshot,
   developmentCandidateBinary,
   developmentRuntimeStatus,
   doctorDevelopmentRuntime,
@@ -93,6 +95,8 @@ try {
       effects: createDevelopmentPresentationProviderSystemEffects({
         productionSnapshot,
         assertProductionUnchanged,
+        defaultDevelopmentSnapshot,
+        assertDefaultDevelopmentUnchanged,
       }),
     });
   } else if (command === 'provider-scale-out' || command === 'provider-scale-in') {
@@ -106,6 +110,8 @@ try {
     const effects = createDevelopmentPresentationLifecycleSystemEffects({
       productionSnapshot,
       assertProductionUnchanged,
+      defaultDevelopmentSnapshot,
+      assertDefaultDevelopmentUnchanged,
     });
     result = command === 'provider-scale-out'
       ? scaleOutDevelopmentPresentation({ effects })
@@ -214,5 +220,9 @@ Commands:
   provider-scale-out --apply               Activate exactly one admitted elastic presentation slot
   provider-scale-in --apply                Reclaim exactly one unreferenced elastic presentation slot
 
-All commands accept --json.`);
+All commands accept --json.
+Optional AGENT_BROWSER_DEV_NAMESPACE selects a separate development lane.
+It requires explicit DASHBOARD, BACKEND, SHADOW, LANE_STREAM, GUACAMOLE,
+GUACD, and POSTGRES ports using AGENT_BROWSER_DEV_<NAME>_PORT variables.
+Keep the same namespace and port environment for every operation.`);
 }

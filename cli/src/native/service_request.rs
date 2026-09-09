@@ -11,10 +11,14 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 
 use crate::native::remote_view_handoff::apply_remote_view_handoff_route_hints;
-use crate::native::service_access::apply_shared_profile_route_hints_for_service_request_with_principal;
+use crate::native::service_access::apply_shared_profile_route_hints_with_decision;
 use crate::native::service_contracts::{DESKTOP_CAPTURE_HARD_MAX_BYTES, SERVICE_REQUEST_ACTIONS};
+use crate::native::service_failure_journal::{
+    ServiceFailureCategory, ServiceFailureRecord, ServiceFailureReferences,
+};
 use crate::native::service_model::ServiceState;
-use crate::native::service_principal::AuthenticatedServicePrincipal;
+use crate::native::service_principal::{AuthenticatedServicePrincipal, ServicePrincipalProvenance};
+use crate::native::service_profile_access_policy::ServiceProfileAccessDecision;
 
 const PROFILE_LEASE_POLICIES: &[&str] = &["reject", "wait"];
 const REPAIR_POLICIES: &[&str] = &[
@@ -56,6 +60,13 @@ const PROFILE_CLASSES: &[&str] = &[
     "managed_one_time",
     "durable_named",
     "operator_supplied",
+];
+const IDENTITY_ASSURANCE_LEVELS: &[&str] = &[
+    "self-declared",
+    "authenticated-ingress",
+    "registered-capability",
+    "operator",
+    "unknown",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -132,6 +143,13 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
         false,
     ),
     ServiceRequestFieldSpec::field(
+        "serviceStateLockTimeoutMs",
+        FieldKind::PositiveInteger,
+        true,
+        true,
+        false,
+    ),
+    ServiceRequestFieldSpec::field(
         "profileLeasePolicy",
         FieldKind::Enum(PROFILE_LEASE_POLICIES),
         true,
@@ -184,6 +202,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ),
     ServiceRequestFieldSpec::field("serviceTabHandle", FieldKind::Object, true, true, true),
     ServiceRequestFieldSpec::field("targetId", FieldKind::String, true, true, true),
+    ServiceRequestFieldSpec::field("tabId", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("script", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("expression", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("returnByValue", FieldKind::Boolean, true, true, false),
@@ -288,6 +307,22 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("serviceName", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("agentName", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("taskName", FieldKind::String, true, true, true),
+    ServiceRequestFieldSpec::field("clientSubjectId", FieldKind::String, true, true, true),
+    ServiceRequestFieldSpec::field(
+        "identityAssurance",
+        FieldKind::Enum(IDENTITY_ASSURANCE_LEVELS),
+        true,
+        true,
+        true,
+    ),
+    ServiceRequestFieldSpec::field(
+        "policyRevision",
+        FieldKind::PositiveInteger,
+        true,
+        true,
+        false,
+    ),
+    ServiceRequestFieldSpec::field("accessDecisionId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("targetServiceId", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("targetService", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("targetServiceIds", FieldKind::StringArray, true, true, true),
@@ -349,6 +384,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ServiceRequestIssueKind {
     InvalidRequest,
+    OperatorFocusAuthority,
     MissingAction,
     UnsupportedAction,
     UnknownField,
@@ -363,23 +399,170 @@ pub(crate) enum ServiceRequestIssueKind {
     MissingAccountablePrincipal,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ServiceRequestIssue {
     pub kind: ServiceRequestIssueKind,
     message: String,
+    access_decision: Option<Box<ServiceProfileAccessDecision>>,
 }
 
 impl ServiceRequestIssue {
-    fn new(kind: ServiceRequestIssueKind, message: impl Into<String>) -> Self {
+    pub(crate) fn new(kind: ServiceRequestIssueKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             message: message.into(),
+            access_decision: None,
         }
     }
 
     pub(crate) fn message(&self) -> &str {
         &self.message
     }
+
+    pub(crate) fn code(&self) -> &str {
+        if self.access_decision.is_some() {
+            return "profile_access_denied";
+        }
+        match self.kind {
+            ServiceRequestIssueKind::OperatorFocusAuthority => {
+                super::service_failure::operator_focus_failure_code(&self.message)
+                    .unwrap_or("operator_focus_authority_unproven")
+            }
+            ServiceRequestIssueKind::InvalidRequest => "invalid_request",
+            ServiceRequestIssueKind::MissingAction => "missing_action",
+            ServiceRequestIssueKind::UnsupportedAction => "unsupported_action",
+            ServiceRequestIssueKind::UnknownField => "unknown_field",
+            ServiceRequestIssueKind::InvalidFieldType => "invalid_field_type",
+            ServiceRequestIssueKind::InvalidFieldValue => "invalid_field_value",
+            ServiceRequestIssueKind::BlockedManualAction => "blocked_manual_action",
+            ServiceRequestIssueKind::StaleMonitorEvidence => "stale_monitor_evidence",
+            ServiceRequestIssueKind::ForbiddenCdpExecution => "forbidden_cdp_execution",
+            ServiceRequestIssueKind::InvalidServiceTabHandle => "invalid_service_tab_handle",
+            ServiceRequestIssueKind::InvalidBoundedRecipe => "invalid_bounded_recipe",
+            ServiceRequestIssueKind::RouteHintFailure => match self.message.as_str() {
+                "service_access_plan_route_browser_conflict"
+                | "service_access_plan_route_session_conflict" => self.message.as_str(),
+                _ => "route_hint_failure",
+            },
+            ServiceRequestIssueKind::MissingAccountablePrincipal => "missing_accountable_principal",
+        }
+    }
+}
+
+/// Retains the typed pre-dispatch failure and its journal correlation across
+/// transport adapters. No browser effect or job exists at this boundary.
+#[derive(Debug)]
+pub(crate) struct ServiceRequestRejection {
+    issue: ServiceRequestIssue,
+    request_id: String,
+}
+
+impl ServiceRequestRejection {
+    pub(crate) fn record(
+        source: &str,
+        action: Option<&str>,
+        request_id: &str,
+        session_id: &str,
+        issue: ServiceRequestIssue,
+    ) -> Self {
+        let record = service_request_rejection_failure_record(
+            source, action, request_id, session_id, &issue,
+        );
+        #[cfg(not(test))]
+        crate::native::service_failure_journal::append_service_failure_best_effort(&record);
+        #[cfg(test)]
+        let _ = record;
+        Self {
+            issue,
+            request_id: request_id.to_string(),
+        }
+    }
+
+    pub(crate) fn response(&self) -> Value {
+        use crate::native::service_failure::{
+            classify_service_failure, ServiceEffectState, ServiceFailureAxis, ServiceFailurePhase,
+            ServiceRetryDisposition,
+        };
+        let mut failure = classify_service_failure(self.issue.message());
+        if failure.axis == ServiceFailureAxis::Unknown {
+            failure.axis = ServiceFailureAxis::Request;
+            failure.recommended_action = "correct_service_request".to_string();
+            failure.safe_next_actions = vec!["inspect_service_request_schema".to_string()];
+            failure.retry_disposition = ServiceRetryDisposition::DoNotRetry;
+        }
+        if let Some(decision) = self.issue.access_decision.as_ref() {
+            failure.axis = ServiceFailureAxis::ProfileAccess;
+            failure.subject = Some(json!(decision.subject));
+            failure.missing_permission = decision.missing_permission.clone();
+            failure.recommended_action = decision.next_action.action.clone();
+            failure.executable_next_action = Some(json!(decision.next_action));
+            failure.safe_next_actions = vec![decision.next_action.action.clone()];
+            failure.retry_disposition = ServiceRetryDisposition::InspectBeforeRetry;
+            failure.hard_stops = vec![
+                "blind_retry".to_string(),
+                "impersonate_profile_subject".to_string(),
+            ];
+        }
+        failure.code = self.issue.code().to_string();
+        failure.phase = ServiceFailurePhase::IngressValidation;
+        failure.effect_state = ServiceEffectState::NoEffect;
+        let mut response = json!({ "success": false, "id": self.request_id,
+            "error": self.issue.message(), "failure": failure });
+        if let Some(decision) = self.issue.access_decision.as_ref() {
+            response["profileAccessDecision"] = json!(decision);
+        }
+        response
+    }
+}
+
+impl fmt::Display for ServiceRequestRejection {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.issue.message())
+    }
+}
+
+/// Build privacy-bounded evidence for a request rejected before job creation.
+pub(crate) fn service_request_rejection_failure_record(
+    source: &str,
+    action: Option<&str>,
+    request_id: &str,
+    session_id: &str,
+    issue: &ServiceRequestIssue,
+) -> ServiceFailureRecord {
+    let mut record = ServiceFailureRecord::new(
+        ServiceFailureCategory::ServiceAction,
+        source,
+        "ingress_validation",
+        issue.code(),
+        issue.message(),
+    )
+    .with_references(ServiceFailureReferences {
+        request_id: Some(request_id.to_string()),
+        session_id: Some(session_id.to_string()),
+        profile_id: issue
+            .access_decision
+            .as_ref()
+            .and_then(|decision| decision.resource.profile_id.clone()),
+        ..ServiceFailureReferences::default()
+    });
+    if let Some(decision) = issue.access_decision.as_ref() {
+        record = record.with_details(json!({
+            "profileAccessDecision": decision,
+            "effectState": "no_effect",
+            "retryDisposition": "inspect_before_retry",
+        }));
+        if record.details.is_none() {
+            record = record.with_details(json!({
+                "profileAccessDecisionOmitted": "record_size_limit",
+                "effectState": "no_effect",
+                "retryDisposition": "inspect_before_retry",
+            }));
+        }
+    }
+    if let Some(action) = action {
+        record = record.with_action(action);
+    }
+    record
 }
 
 impl fmt::Display for ServiceRequestIssue {
@@ -459,6 +642,15 @@ pub(crate) fn normalize_service_request(
                 "service request requires action",
             )
         })?;
+    let explicit_profile_routing = ["runtimeProfile", "profileId", "profile"]
+        .iter()
+        .any(|field| {
+            request
+                .get(*field)
+                .or_else(|| request.get("params").and_then(|params| params.get(*field)))
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty())
+        });
     if !SERVICE_REQUEST_ACTIONS.contains(&action) {
         return Err(ServiceRequestIssue::new(
             ServiceRequestIssueKind::UnsupportedAction,
@@ -471,6 +663,10 @@ pub(crate) fn normalize_service_request(
     let attribution = derive_service_request_attribution(&input, request)?;
 
     let mut command = json!({ "action": action });
+    if action == "view_focus" {
+        command[crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD] =
+            json!(explicit_profile_routing);
+    }
     if let Some(params) = request.get("params") {
         let params = params.as_object().ok_or_else(|| {
             ServiceRequestIssue::new(
@@ -479,7 +675,13 @@ pub(crate) fn normalize_service_request(
             )
         })?;
         for (key, value) in params {
-            if key != "id" && key != "action" {
+            if !matches!(
+                key.as_str(),
+                "id" | "action"
+                    | "connectionInstanceId"
+                    | "profileChildAccess"
+                    | "operatorFocusProofToken"
+            ) {
                 command[key] = value.clone();
             }
         }
@@ -526,13 +728,15 @@ pub(crate) fn normalize_service_request(
                     apply_remote_view_handoff_route_hints(service_state, &mut command);
                 }
                 RouteHintStage::SharedProfile => {
-                    apply_shared_profile_route_hints_for_service_request_with_principal(
+                    apply_shared_profile_route_hints_with_decision(
                         service_state,
                         &mut command,
                         input.authenticated_principal,
                     )
-                    .map_err(|message| {
-                        ServiceRequestIssue::new(ServiceRequestIssueKind::RouteHintFailure, message)
+                    .map_err(|failure| ServiceRequestIssue {
+                        kind: ServiceRequestIssueKind::RouteHintFailure,
+                        message: failure.message,
+                        access_decision: failure.access_decision,
                     })?;
                 }
             }
@@ -545,6 +749,15 @@ pub(crate) fn normalize_service_request(
 
     let principal_authority = input.authenticated_principal.cloned();
     if let Some(authority) = &principal_authority {
+        // Queue provenance must identify the same validated actor as authorization,
+        // including service actions that do not acquire a browser route. Attribution
+        // labels remain separate; public subject/assurance hints cannot override proof.
+        command["clientSubjectId"] = json!(authority.principal_id);
+        command["identityAssurance"] = json!(match authority.provenance {
+            ServicePrincipalProvenance::RegisteredCapability => "registered-capability",
+            ServicePrincipalProvenance::AuthenticatedTransport => "authenticated-ingress",
+            ServicePrincipalProvenance::UnprovenLegacy => "unknown",
+        });
         command["servicePrincipalId"] = json!(authority.principal_id);
         command["servicePrincipalProvenance"] = json!(authority.provenance.as_str());
         command["serviceProfileCapabilityId"] = json!(authority.capability_id);
@@ -697,6 +910,7 @@ fn validate_safety_gates(
     reject_cdp_free_service_request(action, request)?;
     reject_cdp_attach_service_request(action, request)?;
     reject_external_byop_adopt_request(action, request)?;
+    reject_unexecutable_tab_new_route_intent(action, request)?;
     reject_bounded_evaluate_service_request(action, request)?;
     reject_service_diagnostics_request(action, request)?;
     reject_desktop_capture_request(action, request)?;
@@ -710,6 +924,38 @@ fn validate_safety_gates(
     reject_service_network_capture_request(action, request)?;
     reject_service_file_transfer_request(action, request)?;
     reject_stale_monitor_service_request(request)
+}
+
+/// Reject route-bound intent before a generic tab job can be enqueued.
+///
+/// `tab_new` uses the generic browser auto-launch path, which has no authority
+/// to reserve a presentation route. Callers must use the route-aware
+/// `remote_view_open` action, whose successful result includes a tab handle.
+fn reject_unexecutable_tab_new_route_intent(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "tab_new" {
+        return Ok(());
+    }
+    const ROUTE_FIELDS: &[&str] = &[
+        "routePoolEntryId",
+        "remoteViewRouteId",
+        "routeId",
+        "viewStreamRouteId",
+        "displayAllocationId",
+        "displayName",
+    ];
+    let params = request.get("params").and_then(Value::as_object);
+    if ROUTE_FIELDS.iter().any(|field| {
+        request.contains_key(*field) || params.is_some_and(|value| value.contains_key(*field))
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "tab_new cannot execute remote-view route intent; use authenticated remote_view_open to acquire the route and serviceTabHandle",
+        ));
+    }
+    Ok(())
 }
 
 fn issue(kind: ServiceRequestIssueKind, message: impl Into<String>) -> ServiceRequestIssue {
@@ -1854,6 +2100,34 @@ mod tests {
     }
 
     #[test]
+    fn view_focus_records_whether_profile_routing_was_caller_authored() {
+        let inherited = normalize(json!({
+            "action": "view_focus",
+            "browserId": "session:retained",
+            "sessionName": "retained",
+            "params": {"targetId": "target-1", "index": 1, "maximize": true}
+        }))
+        .unwrap();
+        assert_eq!(
+            inherited.command[crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD],
+            false
+        );
+
+        let explicit = normalize(json!({
+            "action": "view_focus",
+            "browserId": "session:retained",
+            "sessionName": "retained",
+            "runtimeProfile": "caller-selected-profile",
+            "params": {"targetId": "target-1", "index": 1, "maximize": true}
+        }))
+        .unwrap();
+        assert_eq!(
+            explicit.command[crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD],
+            true
+        );
+    }
+
+    #[test]
     fn effectful_request_without_labels_or_fallback_principal_fails_closed() {
         let request = json!({"action": "navigate", "params": {"url": "https://example.com"}});
         let error = normalize_service_request(ServiceRequestNormalization {
@@ -1924,10 +2198,12 @@ mod tests {
         };
 
         let request = json!({
-            "action": "navigate",
+            "action": "service_profile_policy_mutate",
             "serviceName": "CallerSuppliedLabel",
             "agentName": "caller-agent",
-            "taskName": "caller-task"
+            "taskName": "caller-task",
+            "clientSubjectId": "client:caller-label",
+            "identityAssurance": "self-declared"
         });
         let authority = AuthenticatedServicePrincipal {
             principal_id: "principal:registered-service".to_string(),
@@ -1960,6 +2236,23 @@ mod tests {
             "registered_capability"
         );
         assert!(normalized.command.get("profileCapability").is_none());
+        let provenance =
+            crate::native::service_request_provenance::ServiceRequestProvenance::capture(
+                &normalized.command,
+                "request-with-registered-authority",
+                "job-with-registered-authority",
+                "connection-registered",
+                "lane-registered",
+            );
+        assert_eq!(
+            provenance.client_subject_id.as_deref(),
+            Some(authority.principal_id.as_str())
+        );
+        assert_eq!(provenance.identity_assurance, "registered-capability");
+        assert_eq!(
+            provenance.service_name.as_deref(),
+            Some("CallerSuppliedLabel")
+        );
 
         let forged = normalize(json!({
             "action": "navigate",
@@ -2011,13 +2304,23 @@ mod tests {
             capability_revision: 1,
             provenance: ServicePrincipalProvenance::RegisteredCapability,
         };
-        let state = ServiceState {
+        let mut state = ServiceState {
             profiles: BTreeMap::from([(
                 "odollo-fedex".to_string(),
                 BrowserProfile {
                     id: "odollo-fedex".to_string(),
                     target_service_ids: vec!["fedex".to_string()],
                     authenticated_service_ids: vec!["fedex".to_string()],
+                    access_policy: Some(
+                        crate::native::service_profile_access_policy::ServiceProfileAccessPolicy {
+                            profile_id: "odollo-fedex".to_string(),
+                            mode: crate::native::service_profile_access_policy::ProfileAccessMode::Restricted,
+                            default_permissions: vec![
+                                crate::native::service_profile_access_policy::ProfilePermission::TabCreate,
+                            ],
+                            ..crate::native::service_profile_access_policy::ServiceProfileAccessPolicy::default()
+                        },
+                    ),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -2069,6 +2372,65 @@ mod tests {
             error.message(),
             "service_access_plan_request_unavailable:foreign_principal_profile_lease"
         );
+
+        // A real denied policy decision must survive request admission rather
+        // than sending an authenticated caller to request-schema repair.
+        state
+            .profiles
+            .get_mut("odollo-fedex")
+            .unwrap()
+            .access_policy
+            .as_mut()
+            .unwrap()
+            .default_permissions
+            .clear();
+        let denied = normalize_service_request(ServiceRequestNormalization {
+            request: &request,
+            service_state: Some(&state),
+            authenticated_principal: Some(&authority),
+            fallback_principal: None,
+            request_id: "request-denied-profile",
+            effective_session: Some("foreign-fedex"),
+        })
+        .unwrap_err();
+        let record = service_request_rejection_failure_record(
+            "http_service_request",
+            Some("tab_new"),
+            "request-denied-profile",
+            "foreign-fedex",
+            &denied,
+        );
+        let response = ServiceRequestRejection::record(
+            "http_service_request",
+            Some("tab_new"),
+            "request-denied-profile",
+            "foreign-fedex",
+            denied,
+        )
+        .response();
+        assert_eq!(response["failure"]["code"], "profile_access_denied");
+        assert_eq!(response["failure"]["axis"], "profile_access");
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["subject"]["subjectId"],
+            authority.principal_id
+        );
+        assert_eq!(
+            response["failure"]["subject"]["assurance"],
+            "registered-capability"
+        );
+        assert_eq!(response["failure"]["missingPermission"], "tab_create");
+        assert_eq!(
+            response["failure"]["recommendedAction"],
+            "inspect_profile_access_policy"
+        );
+        assert_eq!(response["profileAccessDecision"]["allowed"], false);
+        assert_eq!(response["profileAccessDecision"]["policyRevision"], 1);
+        assert_eq!(record.code, "profile_access_denied");
+        assert_eq!(
+            record.details.as_ref().unwrap()["profileAccessDecision"],
+            response["profileAccessDecision"]
+        );
     }
 
     fn sorted_names(values: impl IntoIterator<Item = String>) -> Vec<String> {
@@ -2114,7 +2476,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 78);
+        assert_eq!(canonical_names.len(), 84);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -2203,6 +2565,12 @@ mod tests {
             "params": {
                 "id": "caller-id",
                 "action": "screenshot",
+                "connectionInstanceId": "caller-connection",
+                "operatorFocusProofToken": "caller-forged-proof",
+                "profileChildAccess": {
+                    "subjectId": "caller-subject",
+                    "permissions": ["profile-admin"]
+                },
                 "url": "https://params.example",
                 "args": ["--from-params"]
             },
@@ -2210,6 +2578,10 @@ mod tests {
         }))
         .unwrap();
         assert!(normalized.command.get("id").is_none());
+        assert!(normalized.command.get("connectionInstanceId").is_none());
+        assert!(normalized.command.get("operatorFocusProofToken").is_none());
+        assert!(normalized.trace.get("operatorFocusProofToken").is_none());
+        assert!(normalized.command.get("profileChildAccess").is_none());
         assert_eq!(normalized.command["action"], "navigate");
         assert_eq!(normalized.command["url"], "https://top.example");
         assert_eq!(normalized.command["args"], json!(["--from-params"]));
@@ -2283,6 +2655,19 @@ mod tests {
         assert_eq!(normalized.command["apply"], false);
         assert_eq!(normalized.command["staleCheckouts"], false);
         assert_eq!(normalized.command["stalePendingAcquisitions"], true);
+    }
+
+    #[test]
+    fn service_state_lock_timeout_is_a_canonical_command_and_trace_field() {
+        let normalized = normalize(json!({
+            "action": "service_remote_view_handoff_resolve",
+            "serviceStateLockTimeoutMs": 30_000,
+            "params": { "handoffId": "handoff-a" }
+        }))
+        .unwrap();
+
+        assert_eq!(normalized.command["serviceStateLockTimeoutMs"], 30_000);
+        assert_eq!(normalized.trace["serviceStateLockTimeoutMs"], 30_000);
     }
 
     #[test]
@@ -2367,6 +2752,59 @@ mod tests {
             "cdpPort": 9222
         }))
         .is_err());
+    }
+
+    #[test]
+    fn route_bearing_tab_new_is_rejected_before_job_creation() {
+        let error = normalize(json!({
+            "action": "tab_new",
+            "params": {
+                "url": "https://example.test/",
+                "routePoolEntryId": "guacamole-rdp-b"
+            }
+        }))
+        .unwrap_err();
+
+        assert_eq!(error.kind, ServiceRequestIssueKind::InvalidBoundedRecipe);
+        assert_eq!(
+            error.message(),
+            "tab_new cannot execute remote-view route intent; use authenticated remote_view_open to acquire the route and serviceTabHandle"
+        );
+        let record = service_request_rejection_failure_record(
+            "mcp_service_request",
+            Some("tab_new"),
+            "mcp-service-request-tab-new-fixture",
+            "default",
+            &error,
+        );
+        assert_eq!(record.category, ServiceFailureCategory::ServiceAction);
+        assert_eq!(record.stage, "ingress_validation");
+        assert_eq!(record.code, "invalid_bounded_recipe");
+        assert_eq!(record.action.as_deref(), Some("tab_new"));
+        assert_eq!(
+            record.references.request_id.as_deref(),
+            Some("mcp-service-request-tab-new-fixture")
+        );
+    }
+
+    #[test]
+    fn route_conflict_failure_record_preserves_the_exact_actionable_code() {
+        for code in [
+            "service_access_plan_route_browser_conflict",
+            "service_access_plan_route_session_conflict",
+        ] {
+            let issue = ServiceRequestIssue::new(ServiceRequestIssueKind::RouteHintFailure, code);
+            let record = service_request_rejection_failure_record(
+                "http_service_request",
+                Some("tab_new"),
+                "request-route-conflict",
+                "shared-profile-route",
+                &issue,
+            );
+
+            assert_eq!(issue.code(), code);
+            assert_eq!(record.code, code);
+        }
     }
 
     #[test]
@@ -3196,30 +3634,28 @@ mod tests {
             json!({"action":"desktop_prompt_observe","browserId":"browser-rdp-1","promptProfileId":"wrong","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe"}),
         ];
         for request in invalid {
-            let message = normalize(request.clone())
-                .unwrap_err()
-                .message()
-                .to_string();
+            let issue = normalize(request.clone()).unwrap_err();
             let body = serde_json::to_string(&request).unwrap();
-            assert_eq!(
-                crate::native::stream::service_request_adapter_fixture(&body).unwrap_err(),
-                json!({
-                    "status": "400 Bad Request",
-                    "body": {"success": false, "error": message}
-                })
-            );
-            assert_eq!(
-                crate::mcp::service_request_adapter_fixture(&request).unwrap_err(),
-                json!({
-                    "jsonrpc": "2.0",
-                    "id": "fixture",
-                    "error": {
-                        "code": -32602,
-                        "message": "Invalid params",
-                        "data": {"message": message}
-                    }
-                })
-            );
+            let http = crate::native::stream::service_request_adapter_fixture(&body).unwrap_err();
+            let mcp = crate::mcp::service_request_adapter_fixture(&request).unwrap_err();
+            assert_eq!(http["status"], "400 Bad Request");
+            assert_eq!(http["body"]["success"], false);
+            assert_eq!(http["body"]["error"], issue.message());
+            assert_eq!(http["body"]["failure"]["code"], issue.code());
+            assert_eq!(http["body"]["failure"]["phase"], "ingress_validation");
+            assert_eq!(http["body"]["failure"]["effectState"], "no_effect");
+            assert!(http["body"]["id"]
+                .as_str()
+                .unwrap()
+                .starts_with("http-service-request-"));
+            assert_eq!(mcp["error"]["code"], -32602);
+            assert_eq!(mcp["error"]["message"], "Invalid params");
+            assert_eq!(mcp["error"]["data"]["message"], issue.message());
+            assert_eq!(mcp["error"]["data"]["failure"], http["body"]["failure"]);
+            assert!(mcp["error"]["data"]["requestId"]
+                .as_str()
+                .unwrap()
+                .starts_with("mcp-service-request-"));
         }
     }
 
