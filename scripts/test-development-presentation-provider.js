@@ -184,7 +184,8 @@ try {
   assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'open'/);
   assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'close'/);
   assert.match(routeOpenerSource, /AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER/);
-  assert.match(routeOpenerSource, /profile\.includes\('\/'\)/);
+  assert.match(routeOpenerSource, /routeViewerProfile\(route, slug\)/);
+  assert.doesNotMatch(routeOpenerSource, /join\(profileRoot, slug\)/);
   assert.equal(descriptor.environment, 'development');
   assert.equal(descriptor.warmSlots, 4);
   assert.equal(descriptor.hardMaxSlots, 6);

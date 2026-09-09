@@ -1928,14 +1928,8 @@ pub(crate) fn plan_terminal_owner_recovery(
         && lifecycle.owner_generation == owner.owner_generation
         && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
         && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
-        && lifecycle
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "exact_process_exited")
-        && lifecycle
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "profile_lock_released")
+        && terminal_process_absence_evidence(lifecycle)
+        && terminal_profile_lock_release_evidence(lifecycle)
         && active_profile_lease_session_ids.is_empty()
         && !current_process_proven
         && owner.pending_transfer.is_none();
@@ -2183,14 +2177,8 @@ fn validate_plan_preconditions(
         && lifecycle.owner_generation == plan.identities.lifecycle_owner_generation
         && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
         && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
-        && lifecycle
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "exact_process_exited")
-        && lifecycle
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "profile_lock_released")
+        && terminal_process_absence_evidence(lifecycle)
+        && terminal_profile_lock_release_evidence(lifecycle)
         && active_profile_lease_session_ids.is_empty()
         && !current_process_proven;
     if !exact {
@@ -2214,6 +2202,25 @@ fn active_profile_lease_session_ids(state: &ServiceState, profile_id: &str) -> V
         })
         .map(|session| session.id.clone())
         .collect()
+}
+
+fn terminal_process_absence_evidence(
+    lifecycle: &crate::runtime_owner_transfer::RuntimeLifecycleRecord,
+) -> bool {
+    lifecycle.terminal_evidence.iter().any(|evidence| {
+        evidence == "exact_process_exited"
+            || evidence.starts_with("service_reconcile_process_group_absent:")
+    })
+}
+
+fn terminal_profile_lock_release_evidence(
+    lifecycle: &crate::runtime_owner_transfer::RuntimeLifecycleRecord,
+) -> bool {
+    lifecycle.terminal_evidence.iter().any(|evidence| {
+        evidence == "profile_lock_released"
+            || evidence == "service_reconcile_profile_lock_absent"
+            || evidence.starts_with("service_reconcile_profile_lock_stale_pid_absent:")
+    })
 }
 
 fn verify_plan_integrity(plan: &RecoveryPlan, seal_key: &[u8]) -> Result<(), String> {
@@ -2876,7 +2883,18 @@ mod tests {
 
     #[tokio::test]
     async fn apply_retries_once_persists_receipt_and_replays_without_effect() {
-        let repository = MemoryRepository::new(state());
+        let mut reconciled_state = state();
+        reconciled_state
+            .runtime_owner_registry
+            .lifecycle_records
+            .values_mut()
+            .next()
+            .unwrap()
+            .terminal_evidence = vec![
+            "service_reconcile_process_group_absent:7136".to_string(),
+            "service_reconcile_profile_lock_absent".to_string(),
+        ];
+        let repository = MemoryRepository::new(reconciled_state);
         let plan = plan_terminal_owner_recovery(
             &repository.load_snapshot().unwrap(),
             intent(),
