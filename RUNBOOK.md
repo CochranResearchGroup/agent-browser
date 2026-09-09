@@ -145,16 +145,24 @@ assertion; it was stopped before a scheduled cycle and no such cycle is claimed.
 ### Git consolidation | 2026-09-08
 
 PR13 merged the three historical Reddit/X incident reports into main at b21c4459.
-Mergefffdbfc8 brought main into this active branch; the X report already matched,
-and the workflow conflict retained the existing run-name without executable changes.
-The clean P0137 and Reddit worktrees were retired after ancestry/content checks;
-original branch refs remain recoverable on origin or through the active branch.
-Ignored build outputs were archived and compared before removal. One worktree remains.
-The full runtime backlog is not merged to main:181 files changed since green
-CI49034e95. Reconcile existing validation by changed surface, then run missing
-integration gates once. This is a Git readiness gap, separate from full A1–A4/AX
-acceptance; installing052848aa does not prove the entire backlog merge-ready.
-The pre-existing incident0156 edits and untracked notes0159/0160 remain untouched.
+PR14 merged the runtime backlog at ba3916ca from exact reviewed head ad120da2.
+[CI run 34309070521](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34309070521)
+passed the required fast gates: version sync, Rust quality, Service Client,
+Dashboard, workstation fixtures, the complete Rust suite and the pinned no-launch
+service smokes. Local validation also covered the live CDP tab-streaming path,
+dashboard and docs builds, generated-client contracts, Guacamole/workstation
+fixtures, and the installed candidate's retained identity and durable handoff.
+
+The clean P0137 and Reddit worktrees were retired after ancestry/content checks.
+Four additional local branches whose tips are ancestors of ba3916ca were deleted
+after the merge. Their work remains reachable from main; remote incident branches
+were retained where squash/merge topology does not establish tip ancestry. The
+active Plan0160 worktree remains because it holds pre-existing incident0156 edits
+and untracked notes0159/0160. Those files remain untouched and outside PR14.
+
+Repository consolidation is complete. Full A1–A4/AX runtime acceptance and the
+deferred standalone CLI download compatibility check remain Plan0160 work; they
+are product acceptance gaps rather than Git integration gaps.
 
 ### Policy adoption and preservation
 
