@@ -576,6 +576,31 @@ pub(crate) fn transition_upgrade_transaction(
 }
 
 pub(crate) fn upgrade_runtime_preservation_proven(transaction: &UpgradeTransaction) -> bool {
+    let bound_replacement_plan_digest =
+        crate::runtime_replacement::plan_from_upgrade_transaction(transaction)
+            .ok()
+            .flatten()
+            .map(|plan| plan.plan_digest);
+    let full_shutdown_proven =
+        crate::runtime_replacement::effect_receipt_from_upgrade_transaction(transaction)
+            .ok()
+            .flatten()
+            .is_some_and(|receipt| {
+                receipt.state
+                    == crate::runtime_replacement::RuntimeReplacementEffectState::SourceAbsent
+                    && receipt.profiles_preserved
+                    && receipt.source_exit_proven
+                    && bound_replacement_plan_digest.as_deref()
+                        == Some(receipt.plan_digest.as_str())
+                    && transaction.runtime_census_digest.is_some()
+                    && transaction
+                        .runtime_host_convergence
+                        .as_ref()
+                        .is_some_and(|convergence| convergence.candidate_host.is_some())
+            });
+    if full_shutdown_proven {
+        return true;
+    }
     let host_convergence_proven =
         transaction
             .runtime_host_convergence
@@ -676,6 +701,7 @@ fn upgrade_transition_allowed(
             | (RollbackAfterCommit, OperatorRecoveryRequired)
             | (Accepted, OperatorRecoveryRequired)
             | (RuntimesTransferring, OperatorRecoveryRequired)
+            | (PresentationsRebinding, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
             | (BlockedAmbiguousRuntime, FailedPreservedOldGeneration)
             | (BlockedInflightEffect, FailedPreservedOldGeneration)

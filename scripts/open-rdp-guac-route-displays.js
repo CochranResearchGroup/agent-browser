@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   canonicalRouteInventory,
@@ -194,6 +194,15 @@ function routeSlug(route, index) {
   return routeLabel(route, index).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `route-${index + 1}`;
 }
 
+function routeViewerProfile(route, slug) {
+  if (route.viewerProfile) return route.viewerProfile;
+  const connectionNumber = Number.parseInt(route.connectionId || '', 10);
+  if (connectionNumber >= 1 && connectionNumber <= 26) {
+    return `rdp-guac-route-${String.fromCharCode(96 + connectionNumber)}-viewer`;
+  }
+  return `rdp-guac-${slug}-viewer`;
+}
+
 function inspectedRoute(inspection, route, index) {
   const inventory = inspection.data?.routeInventory || [];
   return inventory.find((candidate) =>
@@ -340,15 +349,11 @@ function openRoute(route, index) {
     })}`);
   }
 
-  const agentHome = process.env.AGENT_BROWSER_HOME || join(process.env.HOME || '', '.agent-browser');
-  const profileRoot = process.env.AGENT_BROWSER_RDP_ROUTE_VIEWER_PROFILE_ROOT ||
-    join(agentHome, 'guacamole-route-viewers');
-  mkdirSync(profileRoot, { recursive: true });
-  const session = route.viewerSession || `rdp-guac-${slug}-viewer`;
-  const profile = route.viewerProfile || join(profileRoot, slug);
-  if (profile.includes('/') || profile.includes('\\')) {
-    mkdirSync(profile, { recursive: true });
-  }
+  // `--profile` names a registered runtime profile. Passing an absolute
+  // user-data directory here is reinterpreted as `custom:<digest>`, which is
+  // not a valid runtime-profile name and prevents workstation reconciliation.
+  const profile = routeViewerProfile(route, slug);
+  const session = route.viewerSession || profile;
   const executable = route.viewerExecutable ||
     process.env.AGENT_BROWSER_RDP_ROUTE_VIEWER_EXECUTABLE ||
     null;
