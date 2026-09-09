@@ -1582,6 +1582,14 @@ pub(crate) fn canonical_exact_owner_browser_id_for_routes(
                         let profile_path = identity
                             .user_data_dir
                             .clone()
+                            .or_else(|| {
+                                browser.profile_id.as_deref().and_then(|profile_id| {
+                                    state
+                                        .profiles
+                                        .get(profile_id)
+                                        .and_then(|profile| profile.user_data_dir.clone())
+                                })
+                            })
                             .or_else(|| browser.pid.and_then(observed_browser_user_data_dir));
                         browser.pid == Some(identity.process_identity.pid)
                             && crate::native::runtime_lifecycle::digest_json(
@@ -4225,7 +4233,8 @@ mod tests {
     #[test]
     fn exact_owner_route_canonicalizes_historical_browser_alias_across_revocation() {
         use crate::native::service_model::{
-            BrowserProcess, RemoteViewHandoff, ServiceBrowserProcessIdentity, ServiceState,
+            BrowserProcess, BrowserProfile, RemoteViewHandoff, ServiceBrowserProcessIdentity,
+            ServiceState,
         };
         use crate::process_identity::RecordedProcessIdentity;
         use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
@@ -4243,10 +4252,19 @@ mod tests {
         let process_digest =
             crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
         let mut state = ServiceState::default();
+        state.profiles.insert(
+            "default".to_string(),
+            BrowserProfile {
+                id: "default".to_string(),
+                user_data_dir: Some(profile_path.to_string()),
+                ..BrowserProfile::default()
+            },
+        );
         state.browsers.insert(
             current_browser_id.clone(),
             BrowserProcess {
                 id: current_browser_id.clone(),
+                profile_id: Some("default".to_string()),
                 pid: Some(process_identity.pid),
                 active_session_ids: vec![route.to_string()],
                 ..BrowserProcess::default()
@@ -4256,7 +4274,7 @@ mod tests {
             current_browser_id.clone(),
             ServiceBrowserProcessIdentity {
                 process_identity,
-                user_data_dir: Some(profile_path.to_string()),
+                user_data_dir: None,
                 runtime_profile: Some("default".to_string()),
             },
         );

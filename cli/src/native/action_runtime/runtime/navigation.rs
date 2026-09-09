@@ -749,8 +749,24 @@ pub(crate) async fn handle_runtime_handoff_resume(
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
-    persist_adopted_logical_browser_health(state, &logical_browser_id, descriptor.host)?;
-    super::remote_headed::register_current_browser_lifecycle(state)?;
+    if let Err(error) =
+        persist_adopted_logical_browser_health(state, &logical_browser_id, descriptor.host)
+            .and_then(|()| super::remote_headed::register_current_browser_lifecycle(state))
+    {
+        let rollback = handle_runtime_handoff_rollback(
+            &json!({"sourceSession": descriptor.session_name}),
+            state,
+        )
+        .await;
+        return match rollback {
+            Ok(_) => Err(format!(
+                "runtime_handoff_resume_post_commit_failed_reversed:{error}"
+            )),
+            Err(rollback_error) => Err(format!(
+                "runtime_handoff_resume_post_commit_compensation_failed:{error}; rollback={rollback_error}"
+            )),
+        };
+    }
     Ok(json!(
         { "resumed" : true, "sessionName" : descriptor.session_name, "browserPid" :
         descriptor.browser_pid, "cdpUrl" : descriptor.cdp_url, "runtimeProfile" :
