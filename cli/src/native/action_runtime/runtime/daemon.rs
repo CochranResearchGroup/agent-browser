@@ -800,14 +800,24 @@ pub(crate) fn apply_existing_session_profile_selection(
         .profile_id
         .as_deref()
         .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
+    let owner = state
+        .runtime_owner_registry
+        .owner(&binding.claim.profile_identity_digest)
+        .filter(|owner| {
+            crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(owner) == binding.claim
+        })
+        .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
+    let logical_browser_id =
+        crate::runtime_adoption::canonical_exact_owner_browser_id(state, owner)
+            .unwrap_or_else(|| binding.claim.logical_browser_id.clone());
     let browser = state
         .browsers
-        .get(&binding.claim.logical_browser_id)
+        .get(&logical_browser_id)
         .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
     if !session
         .browser_ids
         .iter()
-        .any(|browser_id| browser_id == &binding.claim.logical_browser_id)
+        .any(|browser_id| browser_id == &logical_browser_id)
         || !browser
             .active_session_ids
             .iter()
