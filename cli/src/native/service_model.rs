@@ -2507,6 +2507,51 @@ pub struct ServiceState {
     pub entity_sources: ServiceEntitySources,
 }
 
+/// Keep runtime freshness evidence writable when a configured profile supplies
+/// the static routing policy for the same profile ID.
+fn overlay_persisted_profile_freshness(
+    configured: &mut BrowserProfile,
+    persisted: &BrowserProfile,
+) {
+    for target_service_id in &persisted.target_service_ids {
+        if !configured.target_service_ids.contains(target_service_id) {
+            configured
+                .target_service_ids
+                .push(target_service_id.clone());
+        }
+    }
+    for account_id in &persisted.account_ids {
+        if !configured.account_ids.contains(account_id) {
+            configured.account_ids.push(account_id.clone());
+        }
+    }
+
+    for readiness in &persisted.target_readiness {
+        let target_service_id = &readiness.target_service_id;
+        if let Some(existing) = configured
+            .target_readiness
+            .iter_mut()
+            .find(|existing| existing.target_service_id == *target_service_id)
+        {
+            *existing = readiness.clone();
+        } else {
+            configured.target_readiness.push(readiness.clone());
+        }
+
+        configured
+            .authenticated_service_ids
+            .retain(|existing| existing != target_service_id);
+        if persisted
+            .authenticated_service_ids
+            .contains(target_service_id)
+        {
+            configured
+                .authenticated_service_ids
+                .push(target_service_id.clone());
+        }
+    }
+}
+
 impl ServiceState {
     /// Returns the immutable canonical lease authority projection. Mutations
     /// stay behind the authority kernel so sibling subsystems cannot edit its
@@ -2661,7 +2706,10 @@ impl ServiceState {
             self.route_pool.insert(id, entry);
         }
         self.viewer_leases.extend(configured.viewer_leases);
-        for (id, profile) in configured.profiles {
+        for (id, mut profile) in configured.profiles {
+            if let Some(persisted) = self.profiles.get(&id) {
+                overlay_persisted_profile_freshness(&mut profile, persisted);
+            }
             self.profiles.insert(id.clone(), profile);
             self.entity_sources
                 .profiles
@@ -9897,6 +9945,71 @@ mod tests {
         assert_eq!(
             persisted.browser_capability_registry.browser_hosts[0]["id"],
             "configured-host"
+        );
+    }
+
+    #[test]
+    fn configured_profile_preserves_persisted_freshness_evidence() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "bill-soylei".to_string(),
+                BrowserProfile {
+                    id: "bill-soylei".to_string(),
+                    name: "Persisted BILL".to_string(),
+                    allocation: ProfileAllocationPolicy::PerService,
+                    target_service_ids: vec!["bill".to_string()],
+                    authenticated_service_ids: vec!["bill".to_string()],
+                    account_ids: vec!["soylei".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "bill".to_string(),
+                        state: ProfileReadinessState::Fresh,
+                        evidence: "authenticated_bill_home".to_string(),
+                        recommended_action: "use_profile".to_string(),
+                        last_verified_at: Some("2026-09-09T16:40:40Z".to_string()),
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    shared_service_ids: vec![
+                        "BooksReceipts".to_string(),
+                        "books-receipts".to_string(),
+                    ],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let configured = ServiceState {
+            profiles: BTreeMap::from([(
+                "bill-soylei".to_string(),
+                BrowserProfile {
+                    id: "bill-soylei".to_string(),
+                    name: "Configured BILL".to_string(),
+                    allocation: ProfileAllocationPolicy::SharedService,
+                    target_service_ids: vec!["bill".to_string()],
+                    shared_service_ids: vec![
+                        "BooksReceipts".to_string(),
+                        "books-receipts".to_string(),
+                    ],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        state.overlay_configured_entities(configured);
+
+        let profile = &state.profiles["bill-soylei"];
+        assert_eq!(profile.name, "Configured BILL");
+        assert_eq!(profile.allocation, ProfileAllocationPolicy::SharedService);
+        assert_eq!(profile.account_ids, vec!["soylei"]);
+        assert_eq!(profile.authenticated_service_ids, vec!["bill"]);
+        assert_eq!(profile.target_readiness.len(), 1);
+        assert_eq!(
+            profile.target_readiness[0].evidence,
+            "authenticated_bill_home"
+        );
+        assert_eq!(
+            state.profile_source("bill-soylei"),
+            Some(ServiceEntitySource::Config)
         );
     }
 
