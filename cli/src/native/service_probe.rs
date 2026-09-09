@@ -103,9 +103,23 @@ pub(crate) async fn reattach_verified_retained_target(
         })?;
     RuntimeLifecycleAuthority::new(&repository).authorize_effect(&mut binding)?;
     let snapshot = repository.load_snapshot()?;
+    let owner = snapshot
+        .runtime_owner_registry
+        .owner(&binding.claim.profile_identity_digest)
+        .ok_or_else(|| {
+            "service_tab_recovery_owner_missing: retained owner evidence is unavailable".to_string()
+        })?;
+    if !crate::native::remote_view_handoff::runtime_owner_matches_browser_or_legacy_route_alias(
+        &snapshot, owner, browser_id,
+    ) {
+        return Err(
+            "service_tab_recovery_identity_mismatch: retained browser or Profile binding differs"
+                .to_string(),
+        );
+    }
     let browser = snapshot
         .browsers
-        .get(&binding.claim.logical_browser_id)
+        .get(browser_id)
         .filter(|browser| {
             browser_id == browser.id
                 && browser.profile_id.as_deref().is_some_and(|profile_id| {
@@ -143,12 +157,6 @@ pub(crate) async fn reattach_verified_retained_target(
             "service_tab_recovery_identity_mismatch: configured physical profile differs".into(),
         );
     }
-    let owner = snapshot
-        .runtime_owner_registry
-        .owner(&binding.claim.profile_identity_digest)
-        .ok_or_else(|| {
-            "service_tab_recovery_owner_missing: retained owner evidence is unavailable".to_string()
-        })?;
     let process = browser
         .pid
         .and_then(|pid| crate::process_identity::capture_process_identity(pid, None, None))
