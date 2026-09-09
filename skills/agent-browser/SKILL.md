@@ -598,6 +598,10 @@ closed when neither the retained target nor a current intent-matching target
 exists. Do not send `allowReopenClosed: true` unless the operator
 explicitly asked to reopen a tab recorded as closed. Explicit reopen is the
 separate path that may open and navigate a replacement target.
+Dashboard login uses a secure thirty-day cookie and renews it on each
+authenticated dashboard load. Reuse the same public dashboard hostname and
+browser profile when opening later durable handoff links; another hostname or
+browser profile has a separate cookie.
 Use service request action `service_remote_view_route_preflight`, HTTP
 `GET /api/service/remote-view/route-preflight`, MCP
 `service_remote_view_route_preflight`, or

@@ -255,6 +255,11 @@ The durable handoff sidecar preserves the highest recorded presentation
 generation when an older service writer saves stale state. Concurrent runtime
 updates therefore cannot erase newer ready presentation evidence.
 
+Dashboard login creates a secure cookie for thirty days and renews it on each
+authenticated dashboard load. Later durable handoff links opened with the same
+public dashboard hostname and browser profile reuse that login. Another
+hostname or browser profile has a separate cookie.
+
 Do not run another `remote-view open` only because:
 
 - the Guacamole connection ID changed;

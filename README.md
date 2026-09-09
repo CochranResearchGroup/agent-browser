@@ -2412,6 +2412,10 @@ mode-0600 bootstrap credential file at
 runs use the same credential store. Set `AGENT_BROWSER_DASHBOARD_AUTH_DIR` to
 an isolated directory when a fixture must not read or rewrite the user-scoped
 auth store, bootstrap credentials, or managed environment file.
+Successful login creates a secure, host-wide browser cookie that lasts thirty
+days. Each authenticated dashboard load renews that period, so opening another
+durable remote-view link on the same public dashboard host does not require a
+new login. A different hostname or browser profile has its own cookie.
 
 Authenticated dashboard identity and Guacamole route identity are separate.
 For a hosted Guacamole request, forward authentication keeps the signed-in

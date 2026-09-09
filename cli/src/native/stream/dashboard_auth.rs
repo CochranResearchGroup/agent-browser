@@ -29,7 +29,9 @@ const AUTH_FILE_NAME: &str = "dashboard-auth.json";
 const BOOTSTRAP_CREDENTIAL_FILE_NAME: &str = "dashboard-auth.env";
 const PBKDF2_ITERATIONS: u32 = 120_000;
 const SESSION_COOKIE: &str = "agent_browser_dashboard_session";
-const SESSION_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
+/// Dashboard sessions persist for thirty days and are renewed by the
+/// authenticated status check that runs whenever the dashboard loads.
+const SESSION_TTL_SECONDS: u64 = 30 * 24 * 60 * 60;
 pub(super) const DASHBOARD_ROLE_SUPERUSER: &str = "superuser";
 pub(super) const DASHBOARD_ROLE_OBSERVER: &str = "observer";
 
@@ -194,17 +196,66 @@ pub(super) fn auth_status_response(
             )
         }
     };
-    let identity = authenticate_headers(headers).ok().flatten();
+    let identity = match authenticate_headers(headers) {
+        Ok(identity) => identity,
+        Err(err) => {
+            return json_response(
+                "500 Internal Server Error",
+                json!({
+                    "success": false,
+                    "authenticated": false,
+                    "errorCode": "dashboard_auth_verification_failed",
+                    "error": err,
+                }),
+            )
+        }
+    };
     let mut payload = json!({
         "authenticated": identity.is_some(),
         "user": identity.as_ref().map(identity_json),
         "cookieSecure": secure_cookie,
+        "sessionPersistence": {
+            "maxAgeSeconds": SESSION_TTL_SECONDS,
+            "rollingRefresh": true,
+        },
     });
     if identity.is_some() {
         payload["credentialStore"] = json!(paths.auth_file);
         payload["bootstrapCredentialFile"] = json!(paths.bootstrap_credential_file);
     }
-    json_response("200 OK", payload)
+    let mut response = json_response("200 OK", payload);
+    if let Some(identity) = identity.as_ref() {
+        let store = match load_auth_store() {
+            Ok(store) => store,
+            Err(err) => {
+                return json_response(
+                    "500 Internal Server Error",
+                    json!({
+                        "success": false,
+                        "authenticated": false,
+                        "errorCode": "dashboard_auth_refresh_failed",
+                        "error": err,
+                    }),
+                )
+            }
+        };
+        let cookie = match create_session_cookie(&store, identity, secure_cookie) {
+            Ok(cookie) => cookie,
+            Err(err) => {
+                return json_response(
+                    "500 Internal Server Error",
+                    json!({
+                        "success": false,
+                        "authenticated": false,
+                        "errorCode": "dashboard_auth_refresh_failed",
+                        "error": err,
+                    }),
+                )
+            }
+        };
+        response.headers.push(("Set-Cookie".to_string(), cookie));
+    }
+    response
 }
 
 pub(super) fn login_response(
@@ -972,6 +1023,36 @@ mod tests {
         assert!(verify_session_token(&store, &format!("{token}x"))
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn session_cookie_is_persistent_for_thirty_days() {
+        let user = build_user(
+            "admin",
+            "Default superuser",
+            DASHBOARD_ROLE_SUPERUSER,
+            "secret",
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        let store = DashboardAuthStore {
+            version: 1,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            session_secret: URL_SAFE_NO_PAD.encode([7u8; 32]),
+            users: vec![user],
+        };
+        let identity = DashboardAuthIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: DASHBOARD_ROLE_SUPERUSER.to_string(),
+        };
+
+        let cookie = create_session_cookie(&store, &identity, true).unwrap();
+
+        assert!(cookie.contains("Max-Age=2592000"));
+        assert!(cookie.contains("Path=/"));
+        assert!(cookie.contains("SameSite=Lax"));
+        assert!(cookie.ends_with("; Secure"));
     }
 
     #[test]
