@@ -64,6 +64,7 @@ jobs:
 
       - name: Run Rust tests
         run: scripts/ci/rust-tests.sh
+        timeout-minutes: 30
 
       - name: Run no-launch service smokes
         run: |
