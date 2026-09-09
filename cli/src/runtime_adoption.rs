@@ -1552,19 +1552,29 @@ fn profile_owner_readback(
     })
 }
 
-fn canonical_exact_owner_browser_id(
+pub(crate) fn canonical_exact_owner_browser_id(
     state: &crate::native::service_model::ServiceState,
     owner: &crate::runtime_owner_transfer::ProfileOwner,
+) -> Option<String> {
+    canonical_exact_owner_browser_id_for_routes(state, owner, &[&owner.daemon_session_route])
+}
+
+pub(crate) fn canonical_exact_owner_browser_id_for_routes(
+    state: &crate::native::service_model::ServiceState,
+    owner: &crate::runtime_owner_transfer::ProfileOwner,
+    daemon_session_routes: &[&str],
 ) -> Option<String> {
     let candidates = state
         .browsers
         .values()
         .filter(|browser| {
-            (browser.id == format!("session:{}", owner.daemon_session_route)
+            (daemon_session_routes
+                .iter()
+                .any(|route| browser.id == format!("session:{route}"))
                 || browser
                     .active_session_ids
                     .iter()
-                    .any(|session| session == &owner.daemon_session_route))
+                    .any(|session| daemon_session_routes.iter().any(|route| session == route)))
                 && state
                     .browser_process_identities
                     .get(&browser.id)
@@ -4221,7 +4231,7 @@ mod tests {
         use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
 
         let route = "current-route";
-        let current_browser_id = format!("session:{route}");
+        let current_browser_id = "session:stable-browser".to_string();
         let profile_path = "/tmp/agent-browser-owner-profile";
         let profile_digest = canonical_profile_digest(profile_path).unwrap();
         let process_identity = RecordedProcessIdentity {
@@ -4238,6 +4248,7 @@ mod tests {
             BrowserProcess {
                 id: current_browser_id.clone(),
                 pid: Some(process_identity.pid),
+                active_session_ids: vec![route.to_string()],
                 ..BrowserProcess::default()
             },
         );
@@ -4273,6 +4284,23 @@ mod tests {
                 browser_id: Some("session:historical-route".to_string()),
                 ..RemoteViewHandoff::default()
             },
+        );
+
+        let mut committed_candidate_owner = state
+            .runtime_owner_registry
+            .owner(&profile_digest)
+            .unwrap()
+            .clone();
+        committed_candidate_owner.daemon_session_route = "candidate-route".to_string();
+        assert!(canonical_exact_owner_browser_id(&state, &committed_candidate_owner).is_none());
+        assert_eq!(
+            canonical_exact_owner_browser_id_for_routes(
+                &state,
+                &committed_candidate_owner,
+                &["candidate-route", route],
+            )
+            .as_deref(),
+            Some(current_browser_id.as_str())
         );
 
         let readback = profile_owner_readback(&state).unwrap();

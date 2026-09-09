@@ -705,6 +705,19 @@ pub(crate) async fn handle_runtime_handoff_resume(
         effect_capable: false,
     };
     let repository = runtime_handoff_service_repository()?;
+    let prepared_snapshot = repository.load_snapshot()?;
+    let prepared_owner = prepared_snapshot
+        .runtime_owner_registry
+        .owner(&proposal.request.profile_identity_digest)
+        .ok_or_else(|| {
+            "runtime_handoff_source_owner_missing: prepared owner was not readable".to_string()
+        })?;
+    let logical_browser_id = crate::runtime_adoption::canonical_exact_owner_browser_id_for_routes(
+        &prepared_snapshot,
+        prepared_owner,
+        &[descriptor.session_name.as_str(), state.session_id.as_str()],
+    )
+    .unwrap_or_else(|| proposal.request.logical_browser_id.clone());
     let owner_receipt =
         crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
             .commit_candidate(attachment)?;
@@ -736,11 +749,7 @@ pub(crate) async fn handle_runtime_handoff_resume(
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
-    persist_adopted_logical_browser_health(
-        state,
-        &proposal.request.logical_browser_id,
-        descriptor.host,
-    )?;
+    persist_adopted_logical_browser_health(state, &logical_browser_id, descriptor.host)?;
     Ok(json!(
         { "resumed" : true, "sessionName" : descriptor.session_name, "browserPid" :
         descriptor.browser_pid, "cdpUrl" : descriptor.cdp_url, "runtimeProfile" :
@@ -1437,6 +1446,19 @@ pub(crate) async fn handle_runtime_handoff_rollback(
         );
     }
     let repository = runtime_handoff_service_repository()?;
+    let snapshot = repository.load_snapshot()?;
+    let candidate_owner = snapshot
+        .runtime_owner_registry
+        .owner(&binding.claim.profile_identity_digest)
+        .ok_or_else(|| {
+            "runtime_handoff_rollback_owner_missing: candidate owner is unavailable".to_string()
+        })?;
+    let logical_browser_id = crate::runtime_adoption::canonical_exact_owner_browser_id_for_routes(
+        &snapshot,
+        candidate_owner,
+        &[state.session_id.as_str(), source_session],
+    )
+    .unwrap_or_else(|| binding.claim.logical_browser_id.clone());
     if !crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)? {
         return Err(
             "runtime_handoff_rollback_owner_stale: candidate is no longer authoritative"
@@ -1457,7 +1479,7 @@ pub(crate) async fn handle_runtime_handoff_rollback(
         })?;
     restore_runtime_handoff_service_projection(
         &repository,
-        &binding.claim.logical_browser_id,
+        &logical_browser_id,
         &state.session_id,
         source_session,
     )?;

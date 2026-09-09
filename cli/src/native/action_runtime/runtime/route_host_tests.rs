@@ -4670,6 +4670,97 @@ fn configured_runtime_alias_preserves_exact_owner_selection() {
 }
 
 #[test]
+fn existing_session_selection_recovers_stable_browser_from_legacy_owner_alias() {
+    use crate::native::service_model::ServiceBrowserProcessIdentity;
+    use crate::process_identity::RecordedProcessIdentity;
+
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("legacy-owner-browser-alias");
+    let profile_path = home.join("managed-profile");
+    fs::create_dir_all(&profile_path).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+
+    let route = "carrier-evidence";
+    let stable_browser_id = "session:stable-browser";
+    let process_identity = RecordedProcessIdentity {
+        pid: 4242,
+        start_token: "linux:boot:42".to_string(),
+        executable_path: Some("/opt/chrome/chrome".to_string()),
+        browser_family: Some("chrome".to_string()),
+    };
+    let process_digest = crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
+    let profile_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "owner-legacy-alias".to_string(),
+        profile_identity_digest: profile_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 7,
+        browser_id: "session:historical-route".to_string(),
+        daemon_session_route: route.to_string(),
+        process_instance_digest: process_digest,
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            "managed-profile".to_string(),
+            BrowserProfile {
+                id: "managed-profile".to_string(),
+                user_data_dir: Some(profile_path.display().to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            route.to_string(),
+            BrowserSession {
+                id: route.to_string(),
+                profile_id: Some("managed-profile".to_string()),
+                browser_ids: vec![stable_browser_id.to_string()],
+                ..BrowserSession::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            stable_browser_id.to_string(),
+            BrowserProcess {
+                id: stable_browser_id.to_string(),
+                profile_id: Some("managed-profile".to_string()),
+                pid: Some(4242),
+                active_session_ids: vec![route.to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        browser_process_identities: BTreeMap::from([(
+            stable_browser_id.to_string(),
+            ServiceBrowserProcessIdentity {
+                process_identity,
+                user_data_dir: Some(profile_path.display().to_string()),
+                runtime_profile: Some("managed-profile".to_string()),
+            },
+        )]),
+        runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+            owner,
+        ),
+        ..ServiceState::default()
+    };
+    let mut options = LaunchOptions::default();
+    let selection = apply_existing_session_profile_selection(
+        &mut options,
+        &json!({"action": "navigate", "sessionName": route}),
+        Some(route),
+        &state,
+    )
+    .unwrap();
+
+    assert_eq!(selection, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(options.runtime_profile.as_deref(), Some("managed-profile"));
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
 fn test_retained_profile_route_accepts_exact_current_owner() {
     let state = retained_profile_route_state();
     let command = json!({
