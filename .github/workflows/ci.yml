@@ -67,6 +67,7 @@ jobs:
 
       - name: Run no-launch service smokes
         run: |
+          pnpm test:service-status-fixed-input-harness
           node scripts/smoke-service-contracts-no-launch.js
           node scripts/smoke-mcp-read-no-launch.js
           node scripts/smoke-service-profile-sources.js
