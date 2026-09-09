@@ -504,9 +504,15 @@ BILL and QBO recovery: a healthy shared authenticated profile needs only normal
 relaunch; a shared profile missing authentication enters manual seeding; a live
 profile with legacy-principal lease evidence receives a preserving identity
 repair; and a stopped profile with stale runtime references receives a
-preserving runtime repair. Add foreign-owner rejection, changed-revision
-rejection, idempotent replay and peer-browser survival. No production profile is
-the implementation fixture.
+preserving runtime repair. The BILL fixture must reproduce the combined failure
+where recovery selects a stale owner route and stale Chrome singleton-lock
+metadata then blocks the replacement launch. One plan/apply repair must select
+the current proven owner route, remove only locks proven stale by absent matching
+process identity, preserve the authenticated profile, and complete one bounded
+recovery launch. A live or unproven lock holder must refuse cleanup with exact
+recourse. Add foreign-owner rejection, changed-revision rejection, idempotent
+replay and peer-browser survival. No production profile is the implementation
+fixture.
 
 This amendment changes W1 delivery order. Implement `diagnose` and preserving
 `repair` first because they address the current owner/lease blocker. Implement
