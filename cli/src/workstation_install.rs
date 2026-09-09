@@ -729,6 +729,40 @@ fn resume_install_transaction(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     let (path, mut transaction) = load_guarded_install_transaction(root, guard)?;
+    if matches!(
+        transaction.state,
+        UpgradeTransactionState::OperatorRecoveryRequired
+            | UpgradeTransactionState::FailedPreservedOldGeneration
+    ) && crate::runtime_replacement::requires_forward_recovery(&transaction)?
+    {
+        let receipt =
+            crate::runtime_replacement::effect_receipt_from_upgrade_transaction(&transaction)?
+                .ok_or_else(|| "runtime_replacement_forward_resume_receipt_missing".to_string())?;
+        if receipt.state == crate::runtime_replacement::RuntimeReplacementEffectState::Planned {
+            return Err("runtime_replacement_forward_resume_effect_missing".to_string());
+        }
+        let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        if drain_path.is_file() {
+            let drain: Value = serde_json::from_slice(
+                &fs::read(&drain_path)
+                    .map_err(display_io("read runtime admission drain", &drain_path))?,
+            )
+            .map_err(|error| format!("Runtime admission drain is invalid: {error}"))?;
+            if drain.get("transactionId").and_then(Value::as_str)
+                != Some(transaction.transaction_id.as_str())
+            {
+                return Err("install_transaction_resume_admission_owned_elsewhere".to_string());
+            }
+        }
+        transaction.stop_reason = None;
+        transaction.terminal_result = None;
+        persist_upgrade_transition(
+            &path,
+            &mut transaction,
+            UpgradeTransactionState::RuntimesTransferring,
+            "runtime_replacement_forward_resume",
+        )?;
+    }
     if transaction.state == UpgradeTransactionState::BlockedAmbiguousRuntime {
         install_transaction_effect_free(root, &transaction)?;
         validate_install_transaction_candidate(root, &transaction)?;
@@ -1065,6 +1099,22 @@ fn resume_prepared_payload_transaction(
             | UpgradeTransactionState::PresentationsRebinding
     ) {
         if let Err(error) = resume_activation_from_durable_phase(prepared, &paths, isolated_root) {
+            if crate::runtime_replacement::requires_forward_recovery(&prepared.transaction)
+                .unwrap_or(true)
+            {
+                prepared.transaction.stop_reason = Some(error.clone());
+                prepared.transaction.terminal_result =
+                    Some("forward_runtime_replacement_required".to_string());
+                let transition = persist_upgrade_transition(
+                    &prepared.transaction_path,
+                    &mut prepared.transaction,
+                    UpgradeTransactionState::OperatorRecoveryRequired,
+                    "runtime_replacement_forward_recovery_required_on_resume",
+                );
+                return Err(transition.err().map_or(error.clone(), |transition| {
+                    format!("{error}; recovery receipt failed: {transition}")
+                }));
+            }
             return Err(rollback_resumed_transaction(
                 &paths,
                 prepared,
@@ -1252,7 +1302,7 @@ fn install_transaction_safe_actions(
     use crate::runtime_adoption::UpgradeTransactionState::*;
     if crate::runtime_replacement::requires_forward_recovery(transaction).unwrap_or(true) {
         return match transaction.state {
-            OperatorRecoveryRequired => vec!["inspect", "recover"],
+            OperatorRecoveryRequired => vec!["inspect", "resume"],
             Accepted => vec!["inspect", "finalize"],
             OldGenerationRetirable => vec!["inspect", "review_gc"],
             FailedEffectUncertain => vec!["inspect"],
@@ -5675,6 +5725,7 @@ fn collect_browserless_override_census_with(
     use crate::runtime_adoption::build_stable_runtime_census;
 
     let mut previous = collect_round()?;
+    let mut latest_blockers = Vec::new();
     for _ in 1..MAX_RUNTIME_CENSUS_ROUNDS {
         let current = collect_round()?;
         let previous_census = build_stable_runtime_census(&previous, &previous)?;
@@ -5692,9 +5743,33 @@ fn collect_browserless_override_census_with(
             );
             return Ok(accepted);
         }
+        latest_blockers = current_census
+            .records
+            .iter()
+            .filter(|record| {
+                !matches!(
+                    record.classification,
+                    crate::runtime_adoption::RuntimeClassification::IdleDaemon
+                        | crate::runtime_adoption::RuntimeClassification::StaleMetadata
+                        | crate::runtime_adoption::RuntimeClassification::ExternalObserved
+                        | crate::runtime_adoption::RuntimeClassification::ManualPreserveOnly
+                )
+            })
+            .map(|record| {
+                format!(
+                    "{}:{:?}:{}",
+                    record.logical_browser_id,
+                    record.classification,
+                    record.reason_codes.join("+")
+                )
+            })
+            .collect();
         previous = current;
     }
-    Err("force_browserless_upgrade_owned_or_ambiguous_runtime_present".to_string())
+    Err(format!(
+        "force_browserless_upgrade_owned_or_ambiguous_runtime_present:{}",
+        latest_blockers.join(",")
+    ))
 }
 
 #[cfg(test)]
@@ -12824,7 +12899,7 @@ mod tests {
 
         assert_eq!(
             fs::read_to_string(&args_path).unwrap(),
-            "--json\n--session\ndashboard-service-backend\nstream\nstatus\n"
+            "--json\n--session\ndashboard-service-backend\nstream\nstatus\n--service-state-lock-timeout-ms\n30000\n"
         );
         assert_eq!(
             fs::read_to_string(&claim_path).unwrap(),
@@ -16671,6 +16746,13 @@ mod tests {
         assert_eq!(
             rollback_install_transaction(&root, &guard).unwrap_err(),
             "runtime_replacement_forward_only"
+        );
+
+        transaction.state =
+            crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired;
+        assert_eq!(
+            install_transaction_safe_actions(&transaction),
+            vec!["inspect", "resume"]
         );
 
         transaction.state = crate::runtime_adoption::UpgradeTransactionState::BlockedInflightEffect;

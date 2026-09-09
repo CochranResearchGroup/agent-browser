@@ -702,6 +702,8 @@ fn upgrade_transition_allowed(
             | (Accepted, OperatorRecoveryRequired)
             | (RuntimesTransferring, OperatorRecoveryRequired)
             | (PresentationsRebinding, OperatorRecoveryRequired)
+            | (OperatorRecoveryRequired, RuntimesTransferring)
+            | (FailedPreservedOldGeneration, RuntimesTransferring)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
             | (BlockedAmbiguousRuntime, FailedPreservedOldGeneration)
             | (BlockedInflightEffect, FailedPreservedOldGeneration)
