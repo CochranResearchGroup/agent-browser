@@ -230,6 +230,8 @@ Capacity admission holds an exclusive
 lock only while reconciling claims; Cargo does not hold that lock. A third
 invocation waits with a typed pressure reason, and admission automatically
 drops below two when current resources cannot preserve the reserve.
+On native Linux CI runners, the wrapper skips WSL host admission and cgroups,
+then executes Cargo with the configured build jobs and acceleration settings.
 The wrapper automatically uses `sccache` and `mold` for native Linux builds
 when those exact executables are available. Set `AGENT_BROWSER_CARGO_CACHE=off`
 or `AGENT_BROWSER_CARGO_FAST_LINKER=off` for a deterministic opt-out. Run

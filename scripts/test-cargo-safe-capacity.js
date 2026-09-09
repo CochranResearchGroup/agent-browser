@@ -154,7 +154,7 @@ try {
   });
   assert.equal(executed.status, 0, executed.stderr);
   assert.equal(executed.stdout.trim(), `8|${sanitizedCacheWrapper}|-C link-arg=-fuse-ld=mold`);
-  assert.match(executed.stderr, /cache=sccache linker=mold/);
+  assert.match(executed.stderr, /Running Cargo without WSL admission: jobs=8 cache=sccache linker=mold/);
 
   const observingCache = join(accelerationBin, 'observing-sccache');
   writeFileSync(
