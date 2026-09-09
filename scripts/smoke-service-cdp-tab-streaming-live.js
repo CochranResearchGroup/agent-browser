@@ -27,6 +27,7 @@ if (!process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD && existsSync('/usr/bin/g
 const { session } = context;
 const serviceName = 'CdpTabStreamingSmoke';
 const agentName = 'smoke-agent';
+const taskName = 'cdpTabStreaming';
 const browserId = `session:${session}`;
 const pageA = smokePageUrl('CDP Stream A', '#d7f5ff', '#003044');
 const pageB = smokePageUrl('CDP Stream B', '#ffe8cf', '#482100');
@@ -77,7 +78,7 @@ function frameHash(frame) {
   return createHash('sha256').update(frame.data || '').digest('hex');
 }
 
-async function serviceRequest(action, params, taskName) {
+async function serviceRequest(action, params, operationName) {
   let response;
   try {
     response = await httpJsonWithTimeout(streamPort, 'POST', '/api/service/request', {
@@ -89,7 +90,7 @@ async function serviceRequest(action, params, taskName) {
       jobTimeoutMs: 60000,
     }, 90000);
   } catch (err) {
-    throw new Error(`${action} request '${taskName}' failed: ${err.message}`);
+    throw new Error(`${action} request '${operationName}' failed: ${err.message}`);
   }
   assert(response.success === true, `${action} failed: ${JSON.stringify(response)}`);
   return response;
@@ -169,9 +170,11 @@ function primaryCdpStream(browser) {
   return browser?.viewStreams?.find((stream) => stream.provider === 'cdp_screencast') ?? null;
 }
 
-async function activeUrl() {
-  const response = await httpJson(streamPort, 'GET', '/api/browser/url');
-  assert(response.success === true, `active URL request failed: ${JSON.stringify(response)}`);
+async function activeUrl(tab, operationName) {
+  const response = await serviceRequest('url', {
+    targetId: tab.targetId,
+    sessionName: session,
+  }, operationName);
   return response.data?.url || response.url;
 }
 
@@ -376,11 +379,11 @@ try {
   assert(tabAIndex >= 0 && tabBIndex >= 0, `Could not resolve tab indexes: ${JSON.stringify(tabEntries)}`);
 
   await focusTab(tabB, tabBIndex, 'focusPageB');
-  assert((await activeUrl()).includes('CDP%20Stream%20B'), 'Active URL did not switch to page B');
+  assert((await activeUrl(tabB, 'readPageBUrl')).includes('CDP%20Stream%20B'), 'Active URL did not switch to page B');
   const pageBFrame = await ws.nextFrame('page B focus', pageAFrame.hash);
 
   await focusTab(tabA, tabAIndex, 'focusPageA');
-  assert((await activeUrl()).includes('CDP%20Stream%20A'), 'Active URL did not switch back to page A');
+  assert((await activeUrl(tabA, 'readPageAUrl')).includes('CDP%20Stream%20A'), 'Active URL did not switch back to page A');
   const pageASecondFrame = await ws.nextFrame('page A refocus', pageBFrame.hash);
 
   assert(pageAFrame.hash !== pageBFrame.hash, 'Page B focus did not produce a distinct stream frame');
