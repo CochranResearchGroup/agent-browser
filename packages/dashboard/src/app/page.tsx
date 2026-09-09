@@ -486,7 +486,7 @@ function DashboardAuthGate({ initialSection }: { initialSection: DashboardSectio
   }, []);
 
   if (checking) {
-    return <DashboardLoginScreen busy />;
+    return <DashboardSessionRestoreScreen />;
   }
 
   if (!user) {
@@ -634,7 +634,7 @@ function RemoteViewHandoffGate({
   }
 
   if (resolving) {
-    return <DashboardLoginScreen busy />;
+    return <DashboardSessionRestoreScreen message="Opening remote view" />;
   }
 
   if (resolution?.status === "closed" && resolution.reopenRequired) {
@@ -693,11 +693,33 @@ function RemoteViewHandoffGate({
   return <DashboardExperience initialSection={initialSection} user={user} onLogout={onLogout} />;
 }
 
+function DashboardSessionRestoreScreen({
+  message = "Restoring session",
+}: {
+  message?: string;
+}) {
+  return (
+    <div className="dashboard-root dashboard-login-root">
+      <div className="dashboard-aurora dashboard-aurora-one" />
+      <div className="dashboard-aurora dashboard-aurora-two" />
+      <main className="dashboard-login-main">
+        <section className="dashboard-login-panel" aria-busy="true" aria-live="polite">
+          <div className="dashboard-login-mark">
+            <ShieldCheck className="size-5" />
+          </div>
+          <div className="dashboard-login-heading">
+            <p className="dashboard-login-title">Agent Browser</p>
+            <p className="dashboard-login-subtitle">{message}</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 function DashboardLoginScreen({
-  busy = false,
   onAuthenticated,
 }: {
-  busy?: boolean;
   onAuthenticated?: (user: DashboardAuthUser) => void;
 }) {
   const [username, setUsername] = useState("admin");
@@ -707,7 +729,7 @@ function DashboardLoginScreen({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (busy || submitting || !onAuthenticated) return;
+    if (submitting || !onAuthenticated) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -747,7 +769,7 @@ function DashboardLoginScreen({
             <span>Username</span>
             <input
               autoComplete="username"
-              disabled={busy || submitting}
+              disabled={submitting}
               value={username}
               onChange={(event) => setUsername(event.target.value)}
             />
@@ -756,7 +778,7 @@ function DashboardLoginScreen({
             <span>Password</span>
             <input
               autoComplete="current-password"
-              disabled={busy || submitting}
+              disabled={submitting}
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -766,10 +788,10 @@ function DashboardLoginScreen({
           <Button
             type="submit"
             className="dashboard-primary-action dashboard-login-submit"
-            disabled={busy || submitting || !username || !password}
+            disabled={submitting || !username || !password}
           >
             <ShieldCheck className="size-4" />
-            {busy ? "Checking" : submitting ? "Signing in" : "Sign in"}
+            {submitting ? "Signing in" : "Sign in"}
           </Button>
         </form>
       </main>
