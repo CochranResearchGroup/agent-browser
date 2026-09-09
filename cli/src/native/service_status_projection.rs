@@ -830,7 +830,7 @@ fn bounded_collection(
                     .then_with(|| right_id.cmp(left_id))
             });
             ranked.truncate(limit);
-            ranked.sort_by(|(left, _), (right, _)| left.cmp(right));
+            ranked.sort_by_key(|(left, _)| *left);
             Value::Object(
                 ranked
                     .into_iter()

@@ -611,6 +611,8 @@ pub(crate) enum RouteBoundDirectOpenResult {
     Opened(RouteBoundOpenDocument),
 }
 
+// This internal boundary carries the complete rollback evidence on its error path.
+#[allow(clippy::result_large_err)]
 pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundOpenRepository>(
     request: RouteBoundDirectOpenRequest,
     runtime: &mut R,
@@ -1397,6 +1399,8 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
 }
 /// Resolve an opaque remote-view handoff by adopting the exact retained browser
 /// and reacquiring presentation without navigation or provider substitution.
+// This internal boundary carries the complete rollback evidence on its error path.
+#[allow(clippy::result_large_err)]
 pub(crate) async fn execute_durable_resolution<
     R: RouteBoundOpenRuntime,
     P: RouteBoundOpenRepository,
