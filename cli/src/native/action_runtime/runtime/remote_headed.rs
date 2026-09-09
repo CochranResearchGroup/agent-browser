@@ -678,7 +678,9 @@ fn managed_lane_logical_browser_id(
     {
         return Ok(binding.claim.logical_browser_id.clone());
     }
-    if binding.claim.logical_browser_id != default_browser_id
+    if service_state
+        .browsers
+        .contains_key(&binding.claim.logical_browser_id)
         || service_state.browsers.contains_key(&default_browser_id)
     {
         return Err("runtime_lifecycle_bound_browser_identity_unproven".to_string());
@@ -748,7 +750,7 @@ fn managed_lane_recovers_stable_browser_from_legacy_route_alias() {
             owner_id: "owner-bill".to_string(),
             profile_identity_digest: "1".repeat(64),
             owner_generation: 7,
-            logical_browser_id: "session:handoff-bill".to_string(),
+            logical_browser_id: "session:historical-source-route".to_string(),
             daemon_session_route: daemon_session_route.to_string(),
             process_instance_digest: process_instance_digest.clone(),
         },
@@ -763,6 +765,26 @@ fn managed_lane_recovers_stable_browser_from_legacy_route_alias() {
         )
         .unwrap(),
         browser_id
+    );
+
+    let mut occupied_alias = service_state;
+    occupied_alias.browsers.insert(
+        binding.claim.logical_browser_id.clone(),
+        crate::native::service_model::BrowserProcess {
+            id: binding.claim.logical_browser_id.clone(),
+            active_session_ids: vec!["foreign-route".to_string()],
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        managed_lane_logical_browser_id(
+            daemon_session_route,
+            Some(&binding),
+            &occupied_alias,
+            &process_instance_digest,
+        )
+        .unwrap_err(),
+        "runtime_lifecycle_bound_browser_identity_unproven"
     );
 }
 /// Enforces service-owned profile leases before Chrome starts.
