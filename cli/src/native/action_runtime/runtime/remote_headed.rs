@@ -586,7 +586,7 @@ fn persist_current_browser_projection(
     Ok(())
 }
 
-fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), String> {
+pub(crate) fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), String> {
     let Some(manager) = state.browser.as_ref() else {
         return Ok(());
     };
