@@ -2346,6 +2346,47 @@ mod tests {
     }
 
     #[test]
+    fn candidate_presentation_bootstrap_accepts_exact_historical_owner_alias() {
+        use crate::native::service_model::BrowserProfile;
+
+        let mut state = exact_candidate_presentation_state();
+        let profile_dir = std::env::temp_dir().join(format!(
+            "agent-browser-historical-owner-alias-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&profile_dir).unwrap();
+        state.profiles.insert(
+            "profile-1".to_string(),
+            BrowserProfile {
+                id: "profile-1".to_string(),
+                user_data_dir: Some(profile_dir.to_string_lossy().to_string()),
+                ..BrowserProfile::default()
+            },
+        );
+        state.browsers.get_mut("browser-1").unwrap().profile_id = Some("profile-1".to_string());
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap();
+        owner.browser_id = "session:historical-source-session".to_string();
+        owner.profile_identity_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_dir).unwrap();
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], true);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 1);
+        assert_eq!(
+            prerequisite["eligibleHandoffIds"],
+            serde_json::json!(["r1"])
+        );
+        fs::remove_dir_all(profile_dir).unwrap();
+    }
+
+    #[test]
     fn candidate_presentation_bootstrap_rejects_occupied_legacy_owner_route_alias() {
         let mut state = exact_candidate_presentation_state();
         state

@@ -846,14 +846,21 @@ pub(crate) fn runtime_owner_matches_browser_or_legacy_route_alias(
     if owner.browser_id == browser_id {
         return true;
     }
-    owner.browser_id == format!("session:{}", owner.daemon_session_route)
-        && !state.browsers.contains_key(&owner.browser_id)
+    if state.browsers.contains_key(&owner.browser_id) {
+        return false;
+    }
+    if owner.browser_id == format!("session:{}", owner.daemon_session_route)
         && state.browsers.get(browser_id).is_some_and(|browser| {
             browser
                 .active_session_ids
                 .iter()
                 .any(|session_id| session_id == &owner.daemon_session_route)
         })
+    {
+        return true;
+    }
+    crate::runtime_adoption::canonical_exact_owner_browser_id(state, owner).as_deref()
+        == Some(browser_id)
 }
 
 /// Reapply a retained remote-view route only when current service state proves
