@@ -907,7 +907,10 @@ fn wait_for_replacement(source_backend: &RuntimeHostBackend) -> Result<(u32, u64
                 if pid != source_backend.pid
                     && supervisor.active_state == "active"
                     && supervisor.sub_state == "running"
-                    && supervisor.executable_matches
+                    && supervisor
+                        .manifests
+                        .iter()
+                        .all(|manifest| manifest.executable_sha256 == selected.binary_sha256)
                     && ports_ready
                     && selected.pid == pid
                     && selected.generation_id == source_backend.generation_id

@@ -654,6 +654,28 @@ pub(crate) fn rebind_supervisors_after_accepted_upgrade(
             "selected runtime ingress executable differs from accepted candidate".to_string(),
         );
     }
+    let expected_drop_in = render_selected_runtime_drop_in(&selected.socket_dir)?;
+    let already_rebound = manifests.iter().all(|manifest| {
+        manifest.executable_path == executable_path
+            && manifest.executable_sha256 == executable_sha256
+    }) && fs::read_to_string(selected_runtime_drop_in_path(&paths))
+        .is_ok_and(|current| current == expected_drop_in)
+        && observe_systemd_unit(&manifests[0].session).is_ok_and(|unit| {
+            unit.active_state == "active"
+                && unit.sub_state == "running"
+                && unit.main_pid == Some(selected.pid)
+        });
+    if already_rebound {
+        return Ok(json!({
+            "schemaVersion": SUPERVISOR_SCHEMA_VERSION,
+            "state": "already_rebound",
+            "reboundCount": manifests.len(),
+            "executablePath": executable_path,
+            "socketDir": selected.socket_dir,
+            "browserLaunched": false,
+            "unitStarted": true,
+        }));
+    }
     let rebound = manifests
         .into_iter()
         .map(|mut manifest| {
@@ -679,11 +701,7 @@ pub(crate) fn rebind_supervisors_after_accepted_upgrade(
         fs::create_dir_all(parent)
             .map_err(|error| format!("could not create supervisor drop-in directory: {error}"))?;
     }
-    replace_file(
-        &drop_in,
-        render_selected_runtime_drop_in(&selected.socket_dir)?.as_bytes(),
-        false,
-    )?;
+    replace_file(&drop_in, expected_drop_in.as_bytes(), false)?;
     run_systemctl(&["--user", "daemon-reload"])?;
     run_systemctl(&["--user", "enable", &unit])?;
     Ok(json!({
