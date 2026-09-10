@@ -4282,3 +4282,12 @@ manual recovery:
    Dead superseded socket directories must be removed or explicitly classified
    as inert residue so their mere presence cannot block or impersonate a live
    runtime.
+
+Patched candidate binary SHA256
+`91a09242f225d6e48c3c191e6846d122911a94bdac5a8189801d6c995178fd83`
+was built from commit `ac6dad07` after the source-free installer fixture
+passed. Its browserless dry-run correctly refused because another agent had
+already opened managed browser PID 45449. A reviewed full-shutdown plan could
+close that browser, but doing so would interrupt newly resumed work. Install
+this patched candidate in the next bounded upgrade window and use the automatic
+path as the remaining A3 acceptance test.
