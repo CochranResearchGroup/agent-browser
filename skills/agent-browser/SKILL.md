@@ -114,7 +114,9 @@ If every durable handoff alias is stale, bootstrap may admit one retained RDP
 browser only when its exact ready owner and valid target agree, attachability
 recommends `service_remote_view_browser_reattach`, and one unallocated ready
 route exists. The staged candidate must perform that reattach and produce a
-generation-bound durable handoff receipt before commit.
+generation-bound durable handoff receipt before commit. During the workstation
+admission drain, bind the reattach to the exact current transaction ID and
+revision through `runtimeAdmissionClaim`.
 When service projection metadata omits the runtime-profile name, recover it
 only from one runtime-state record with the same exact process identity and
 DevTools browser endpoint. Treat zero or multiple matches as a hard stop.

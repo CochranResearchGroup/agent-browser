@@ -427,7 +427,9 @@ When old handoff aliases no longer name the current browser, bootstrap can
 instead admit one exact retained RDP browser whose process, target, owner,
 reattach recommendation, and an available ready route all agree. The staged
 candidate must reattach that browser and issue the normal durable handoff
-receipt before commit.
+receipt before commit. While the workstation admission drain is active, this
+reattach must carry the exact current transaction ID and revision as its
+runtime admission claim.
 A ready route, display, or old-generation presentation receipt is not required
 at bootstrap because those replaceable resources must be reacquired and proved
 by the candidate. Apply records a terminal zero-effect preflight block when no

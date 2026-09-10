@@ -3898,3 +3898,30 @@ Before commit, reacquire one durable BILL handoff through the staged candidate.
 After commit, require an active supervisor, one selected listener, no conflicting
 runtime, and unchanged retained browser/profile/owner identity. The broader
 A1/A2/A3/A4/AX plan remains open after this production repair.
+
+### First staged-install rollback and admission-claim repair
+
+state_transition: The first 2981b950 candidate staged and transferred the exact retained owners, then rolled back cleanly because the required reattach action was blocked by its own admission drain.
+acceptance_state: Old generation, owner routes and admission state were restored; a focused source repair passes and the candidate must be rebuilt.
+progress_classification: blocker removed in source
+
+Transaction `upgrade-b1624cb5-e2ff-488c-97f4-e5ac6bac825f` staged candidate
+generation `0.28.0-2981b9502d7d-74a1f74ba662`, transferred the BILL and SoyLei
+contact lanes cooperatively, and reached candidate-ready. The candidate reattach
+request used the exact transferred BILL owner and candidate runtime, but failed
+before a route effect with `runtime_admission_draining`. Request and job ID was
+`mcp-service-request-service_remote_view_browser_reattach-2f935068-8417-48df-a468-b36d0448ddde`.
+No retry occurred in that transaction.
+
+After the five-minute candidate proof window expired, the installer restored the
+old selected generation, rolled both owner transfers back with receipts, stopped
+the candidate host, cleared the admission drain and recorded
+`failed_preserved_old_generation` at revision 12. The failure therefore validates
+rollback, but does not validate installation.
+
+The admission gate now permits `service_remote_view_browser_reattach` only when
+the command carries the exact current workstation transaction ID and revision.
+The same action without a claim or with foreign revision remains blocked. The
+focused drain regression passes. Rebuild and repeat the staged transaction once;
+after reattach, commit the ready durable handoff through the candidate dashboard
+ingress recovery command and then require joined supervisor acceptance.

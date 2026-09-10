@@ -5658,7 +5658,9 @@ target still match. This observation does not write Service State or launch a
 browser. When all durable handoff aliases are stale, bootstrap may instead use
 an exact retained RDP browser whose ready owner, valid target, reattach
 recommendation, and one unallocated ready route agree. Candidate staging still
-requires a generation-bound durable handoff receipt before commit. Apply
+requires a generation-bound durable handoff receipt before commit. The
+reattach must carry the current workstation transaction ID and revision as its
+runtime admission claim while the drain is active. Apply
 records a terminal zero-effect preflight block when neither bootstrap proof is available.
 Fresh and isolated installs do not require a retained
 presentation handoff. A structured

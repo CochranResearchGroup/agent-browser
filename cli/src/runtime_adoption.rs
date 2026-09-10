@@ -479,6 +479,8 @@ pub(crate) fn runtime_admission_drain_path() -> Result<PathBuf, String> {
 /// Rejects ordinary browser effects while an upgrade owns the admission
 /// drain. Exact handoff lifecycle commands remain available so the installer
 /// can transfer or reverse ownership without reopening general admission.
+/// Candidate presentation reattach additionally requires the exact current
+/// workstation transaction claim.
 pub(crate) fn require_runtime_admission(
     drain_path: &Path,
     action: &str,
@@ -513,11 +515,13 @@ fn runtime_admission_claim_matches(
     command: &serde_json::Value,
     drain: &RuntimeAdmissionDrain,
 ) -> bool {
-    matches!(action, "service_reconcile" | "stream_status")
-        && command
-            .pointer("/runtimeAdmissionClaim/transactionId")
-            .and_then(serde_json::Value::as_str)
-            == Some(drain.transaction_id.as_str())
+    matches!(
+        action,
+        "service_reconcile" | "stream_status" | "service_remote_view_browser_reattach"
+    ) && command
+        .pointer("/runtimeAdmissionClaim/transactionId")
+        .and_then(serde_json::Value::as_str)
+        == Some(drain.transaction_id.as_str())
         && command
             .pointer("/runtimeAdmissionClaim/transactionRevision")
             .and_then(serde_json::Value::as_u64)
@@ -3164,6 +3168,23 @@ mod tests {
             }),
         )
         .unwrap();
+        require_runtime_admission(
+            &path,
+            "service_remote_view_browser_reattach",
+            &serde_json::json!({
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .unwrap();
+        assert!(require_runtime_admission(
+            &path,
+            "service_remote_view_browser_reattach",
+            &serde_json::json!({})
+        )
+        .is_err());
         assert!(require_runtime_admission(
             &path,
             "service_reconcile",

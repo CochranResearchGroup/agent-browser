@@ -375,6 +375,8 @@ the bootstrap may instead use an exact retained RDP browser whose ready owner,
 valid target, reattach recommendation, and an unallocated ready route agree.
 This permits staging only. The candidate must reattach the browser and record a
 generation-bound durable handoff receipt before commit.
+While the workstation admission drain is active, bind this reattach to the
+exact current transaction ID and revision through its runtime admission claim.
 
 The installer keeps runtime admission drained while it rewrites runtime-host
 manifests and transfers the selected host to the user supervisor. It records

@@ -162,10 +162,11 @@ lock ownership is admitted for this internal step; foreign or unreadable locks
 remain blocking. Acceptance now occurs only after takeover while the parent drain
 remains active, and final census requires exactly one selected runtime-host
 listener. Stale durable aliases may bootstrap staging from one exact reattachable
-RDP browser, but the candidate must issue a fresh durable handoff before commit.
-Old-runtime BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
-InventoryAdmission with no observed route change and was not retried. Focused
-source tests pass. Production install, doctor and retained-browser proof are open.
+RDP browser, but the candidate must issue a fresh durable handoff before commit. Old-runtime
+BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
+InventoryAdmission with no observed route change and was not retried. Focused source tests pass. Candidate transaction b1624cb5 transferred both exact owners,
+then its reattach hit the admission drain; rollback restored the old generation,
+owners and cleared drain. Reattach now requires the exact transaction claim.
 
 ### Git consolidation | 2026-09-08
 
