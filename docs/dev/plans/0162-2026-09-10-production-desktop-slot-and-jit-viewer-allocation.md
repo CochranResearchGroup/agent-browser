@@ -149,13 +149,19 @@ Use three bounded source packets and one separately measured installation gate.
 Cumulative source implementation, review, validation and documentation target
 is three hours before mandatory replanning.
 
-1. **Packet A, 45 minutes:** W0 and the W1 allocation invariant. Stop if the
-   current state model cannot distinguish provider discovery from admission.
-2. **Packet B, 60 minutes:** W2 logical-browser and JIT viewer lifecycle. Stop
-   after the first architecture ambiguity that would require changing browser
-   ownership semantics owned by Plan 0161.
-3. **Packet C, 75 minutes:** W3 and W4 installer, doctor, migration, public
-   surfaces and selected validation. Freeze one candidate after the complete
+1. **Packet A, 45 minutes:** the primary freezes W0 predicates and owns the W1
+   allocation invariant while one Luna-medium worker writes only the named
+   provider-free regression fixtures. Stop if the current state model cannot
+   distinguish provider discovery from admission.
+2. **Packet B, 60 minutes:** the primary owns W2 logical-browser and JIT viewer
+   semantics. Use no implementation worker unless CodeGraph identifies a
+   disjoint adapter with a frozen interface and test. Stop after the first
+   architecture ambiguity that would require changing browser ownership
+   semantics owned by Plan 0161.
+3. **Packet C, 75 minutes:** the primary owns W3 installer, doctor and migration
+   semantics. After contracts freeze, one Luna-low worker synchronizes only the
+   enumerated generated-client and documentation paths while the primary runs
+   focused source validation. Freeze one candidate after the complete
    changed-surface gates pass.
 4. **Installation gate:** perform one production install and one bounded W5
    acceptance sequence. Do not rebuild or reinstall repeatedly around live
@@ -165,17 +171,34 @@ At two consecutive checkpoints without acceptance progress, consolidate the
 remaining blocker before further implementation. Prior Plan 0124 and Plan 0160
 effort remains historical evidence and is not repeated.
 
-## Worker assignments
+## Worker assignments and model routing
 
-| Lane | Route | Exact scope | Stop condition |
+Optimize for balanced wall-clock and token efficiency. Use deterministic
+CodeGraph, generators and focused repository checks before model work. Worker
+briefs use fresh compact context rather than the conversation history. They
+must enumerate exact files before spawning, prohibit adjacent edits, request a
+patch plus decisive evidence, and return partial evidence at their timeout.
+
+| Lane | Model and effort | Exact scope and parallel primary work | Timeout and stop condition |
 | --- | --- | --- | --- |
-| Critical path | Primary | Domain decisions, Rust allocation owner, integration, production effects and acceptance. | Ownership semantics overlap Plan 0161 or the frozen invariant changes. |
-| Fixture and migration matrix | Fast economical worker | Provider-free legacy/current topology fixtures and expected outcomes in disjoint test files. | Any need to alter production semantics. |
-| Mechanical parity | Cheapest capable worker after contracts freeze | Generated clients, parity registries and required documentation synchronization. | Generator or schema mismatch. |
-| Closed-world review | Fresh economical reviewer | Check only route admission, multi-viewer slot neutrality, migration rollback and client abstraction against the frozen matrix. | One finding set returned. |
+| Critical path | Primary on the current strongest available model | Own domain decisions, Rust allocation and migration semantics, integration, production effects and acceptance. While a fixture or parity worker runs, inspect or implement only the corresponding non-overlapping owner surface. | Reassess at packet bounds, ownership overlap with Plan 0161, or a change to the frozen invariant. |
+| W0 fixture matrix | `gpt-5.6-luna`, medium | After the primary freezes exact predicates, edit only the enumerated provider-free test modules for 3-provider/2-slot mismatch, display renumbering, 3 browsers/3 slots and 1 browser/3 viewers. No production source or snapshots outside the packet. | 30 minutes or first semantic ambiguity; return tests and observed red predicates. |
+| W2 adapter, conditional | `gpt-5.6-terra`, medium | Only if CodeGraph proves a disjoint adapter seam, implement one frozen logical-browser or viewer adapter plus its focused test. The primary continues the Rust capacity owner. | 35 minutes, first interface change, or first failing check outside the assigned adapter. |
+| W4 mechanical parity | `gpt-5.6-luna`, low | After schemas freeze, run deterministic generators and edit only enumerated generated-client, parity-registry and required documentation paths. No contract or behavior decisions. | 30 minutes, generator failure, schema mismatch or need for semantic prose. |
+| Closed-world review | `gpt-5.6-sol`, medium, fresh context | Review one frozen commit against route admission, slot-neutral multi-viewing, migration rollback and client abstraction. Return evidence-shaped findings or an explicit no-finding result; make no edits. | 25 minutes or one complete finding set; no broad discovery or second review pass. |
 
-The primary reviews all worker output and owns shared source integration. No
-worker performs production mutation, installation or live provider cleanup.
+Use at most two workers concurrently with the primary, nesting depth one and no
+worker-created children. Do not spawn a worker merely to wait for Cargo, a
+build, installation or live acceptance. The primary reviews each actual diff
+and decisive result without repeating the worker's investigation, and owns all
+shared-source integration. No worker receives production mutation,
+installation, credential, provider-cleanup or session-management authority.
+
+For each executed worker record its task name, runtime handle, requested model
+and effort, runtime-reported effective model when available, start and finish
+time, terminal status, accepted output, rework and available token or allocation
+metadata in the current checkpoint. Unknown runtime metadata stays unknown;
+requested cheaper routing is not evidence of savings.
 
 ## Evidence and exit
 
@@ -211,4 +234,3 @@ separate acceptance dimension.
 - tenant browser actions, authentication entry or private page capture;
 - formal release; or
 - rerunning Plan 0124's already accepted development campaign.
-
