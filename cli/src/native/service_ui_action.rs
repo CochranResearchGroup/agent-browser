@@ -158,8 +158,8 @@ pub(crate) fn validate_service_ui_step(step: &Value) -> Result<(), String> {
         .and_then(Value::as_str)
         .ok_or_else(|| "ui_action step requires type".to_string())?;
     match step_type {
-        "find" | "click" | "fill" | "type" | "select" | "wait" | "focus" | "clear" | "dialog"
-        | "menu_select" => {}
+        "find" | "click" | "semantic_click" | "fill" | "type" | "select" | "wait" | "focus"
+        | "clear" | "dialog" | "menu_select" => {}
         _ => return Err(format!("unsupported ui_action step type: {step_type}")),
     }
     if matches!(
@@ -172,6 +172,9 @@ pub(crate) fn validate_service_ui_step(step: &Value) -> Result<(), String> {
         .is_none()
     {
         return Err(format!("ui_action {step_type} step requires selector"));
+    }
+    if step_type == "semantic_click" {
+        semantic_role_name_locator(step)?;
     }
     if step_type == "fill" && step.get("value").and_then(Value::as_str).is_none() {
         return Err("ui_action fill step requires value".to_string());
@@ -238,6 +241,7 @@ pub(crate) async fn run_service_ui_step(
     let result = match step_type {
         "find" => run_service_ui_find_step(state, step, timeout_ms, max_text_bytes).await?,
         "click" => handle_click(&cmd, state).await?,
+        "semantic_click" => run_service_ui_semantic_click(state, step).await?,
         "fill" => handle_fill(&cmd, state).await?,
         "type" => handle_type(&cmd, state).await?,
         "select" => handle_select(&cmd, state).await?,
@@ -266,8 +270,207 @@ pub(crate) async fn run_service_ui_step(
         { "index" : index, "type" : step_type, "id" : step.get("id").cloned()
         .unwrap_or(Value::Null), "ok" : true, "startedAt" : started_at, "completedAt"
         : completed_at, "selector" : step.get("selector").cloned()
+        .unwrap_or(Value::Null), "locator" : step.get("locator").cloned()
         .unwrap_or(Value::Null), "result" : result, "page" : page, }
     ))
+}
+
+/// Validates the bounded exact role and accessible-name locator accepted by
+/// `semantic_click`. Additional locator fields and non-exact matching fail
+/// closed so a caller cannot silently select a different live node.
+fn semantic_role_name_locator(step: &Map<String, Value>) -> Result<(&str, &str), String> {
+    let locator = step
+        .get("locator")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "ui_action semantic_click requires locator object".to_string())?;
+    if locator
+        .keys()
+        .any(|key| !matches!(key.as_str(), "strategy" | "role" | "name" | "exact"))
+    {
+        return Err("ui_action semantic_click locator contains unsupported fields".to_string());
+    }
+    if locator.get("strategy").and_then(Value::as_str) != Some("role_name")
+        || locator.get("exact").and_then(Value::as_bool) != Some(true)
+    {
+        return Err("ui_action semantic_click requires exact role_name locator".to_string());
+    }
+    let role = locator
+        .get("role")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 64)
+        .ok_or_else(|| "ui_action semantic_click requires bounded role".to_string())?;
+    if !role
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err("ui_action semantic_click role is invalid".to_string());
+    }
+    let name = locator
+        .get("name")
+        .and_then(Value::as_str)
+        .filter(|value| {
+            !value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control)
+        })
+        .ok_or_else(|| "ui_action semantic_click requires bounded name".to_string())?;
+    Ok((role, name))
+}
+
+#[cfg(test)]
+mod semantic_click_tests {
+    use super::*;
+
+    fn step(locator: Value) -> Value {
+        json!({"type": "semantic_click", "locator": locator})
+    }
+
+    #[test]
+    fn semantic_click_accepts_only_one_exact_role_name_locator() {
+        assert!(validate_service_ui_step(&step(json!({
+            "strategy": "role_name",
+            "role": "menuitem",
+            "name": "Sync with QuickBooks",
+            "exact": true
+        })))
+        .is_ok());
+
+        for invalid in [
+            json!({"strategy": "role_name", "role": "menuitem"}),
+            json!({"strategy": "role_name", "role": "menuitem", "name": "Sync"}),
+            json!({"strategy": "role_name", "role": "menuitem", "name": "Sync", "exact": false}),
+            json!({"strategy": "css", "role": "menuitem", "name": "Sync"}),
+            json!({"strategy": "role_name", "role": "menu item", "name": "Sync"}),
+            json!({"strategy": "role_name", "role": "menuitem", "name": "Sync", "nth": 2}),
+        ] {
+            assert!(validate_service_ui_step(&step(invalid)).is_err());
+        }
+    }
+
+    #[test]
+    fn semantic_click_requires_one_accessibility_match() {
+        let node = json!({
+            "ignored": false,
+            "role": {"value": "menuitem"},
+            "name": {"value": "Lock all fields"},
+            "backendDOMNodeId": 41
+        });
+        assert_eq!(
+            unique_role_name_backend_node_id(
+                &json!({"nodes": [node.clone()]}),
+                "menuitem",
+                "Lock all fields"
+            )
+            .unwrap(),
+            41
+        );
+        assert!(unique_role_name_backend_node_id(
+            &json!({"nodes": []}),
+            "menuitem",
+            "Lock all fields"
+        )
+        .is_err());
+        assert!(unique_role_name_backend_node_id(
+            &json!({"nodes": [node.clone(), node]}),
+            "menuitem",
+            "Lock all fields"
+        )
+        .is_err());
+    }
+}
+
+/// Resolves exactly one live accessibility-tree match to its backend DOM node.
+/// Zero or multiple matches are ambiguous and therefore rejected.
+fn unique_role_name_backend_node_id(
+    ax_tree: &Value,
+    role: &str,
+    name: &str,
+) -> Result<i64, String> {
+    let nodes = ax_tree
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "ui_action semantic_click accessibility tree unavailable".to_string())?;
+    let matches = nodes
+        .iter()
+        .filter(|node| node.get("ignored").and_then(Value::as_bool) != Some(true))
+        .filter(|node| {
+            node.pointer("/role/value")
+                .and_then(Value::as_str)
+                .is_some_and(|value| value.eq_ignore_ascii_case(role))
+                && node.pointer("/name/value").and_then(Value::as_str) == Some(name)
+        })
+        .collect::<Vec<_>>();
+    if matches.len() != 1 {
+        return Err(format!(
+            "ui_action semantic_click expected one role/name match, found {}",
+            matches.len()
+        ));
+    }
+    matches[0]
+        .get("backendDOMNodeId")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| "ui_action semantic_click match has no backend node".to_string())
+}
+
+/// Activates one exact accessibility role/name match and returns a compact
+/// receipt containing the accepted locator and activation confirmation.
+async fn run_service_ui_semantic_click(
+    state: &mut DaemonState,
+    step: &Value,
+) -> Result<Value, String> {
+    let step = step
+        .as_object()
+        .ok_or_else(|| "ui_action semantic_click step must be an object".to_string())?;
+    let (role, name) = semantic_role_name_locator(step)?;
+    let (client, session_id) = {
+        let manager = state.browser.as_ref().ok_or("Browser not launched")?;
+        (
+            manager.client.clone(),
+            manager.active_session_id()?.to_string(),
+        )
+    };
+    let ax_tree = client
+        .send_command(
+            "Accessibility.getFullAXTree",
+            Some(json!({})),
+            Some(&session_id),
+        )
+        .await?;
+    let backend_node_id = unique_role_name_backend_node_id(&ax_tree, role, name)?;
+    let resolved = client
+        .send_command(
+            "DOM.resolveNode",
+            Some(json!({
+                "backendNodeId": backend_node_id,
+                "objectGroup": "agent-browser-semantic-ui-action"
+            })),
+            Some(&session_id),
+        )
+        .await?;
+    let object_id = resolved
+        .pointer("/object/objectId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "ui_action semantic_click could not resolve backend node".to_string())?;
+    let activation = client
+        .send_command(
+            "Runtime.callFunctionOn",
+            Some(json!({
+                "objectId": object_id,
+                "functionDeclaration": "function() { this.focus?.(); this.click(); return true; }",
+                "returnByValue": true,
+                "awaitPromise": false
+            })),
+            Some(&session_id),
+        )
+        .await?;
+    if activation.pointer("/result/value").and_then(Value::as_bool) != Some(true) {
+        return Err("ui_action semantic_click activation was not confirmed".to_string());
+    }
+    Ok(json!({
+        "strategy": "role_name",
+        "role": role,
+        "name": name,
+        "matchCount": 1,
+        "activated": true
+    }))
 }
 pub(crate) async fn run_service_ui_find_step(
     state: &mut DaemonState,

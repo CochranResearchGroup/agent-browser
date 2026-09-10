@@ -1455,7 +1455,7 @@ fn service_mcp_tools() -> Vec<Value> {
                     "uiAction": {
                         "type": "object",
                         "additionalProperties": true,
-                        "description": "Provider-neutral UI recipe for action=ui_action. Include a bounded steps array using generic step types such as find, click, fill, type, select, menu_select, wait, focus, clear, or guarded dialog."
+                        "description": "Provider-neutral UI recipe for action=ui_action. Include a bounded steps array using generic step types such as find, click, exact role/name semantic_click, fill, type, select, menu_select, wait, focus, clear, or guarded dialog."
                     },
                     "networkCapture": {
                         "type": "object",

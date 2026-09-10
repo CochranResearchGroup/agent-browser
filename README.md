@@ -4230,9 +4230,12 @@ service profile without replacing the whole profile. Use
 `runServiceUiAction()` or `requestServiceUiAction()` when the client needs a
 bounded generic UI recipe against the same valid handle instead of direct CDP
 `Input`, `DOM`, or small `Runtime` scripts. The recipe can include `find`,
-`focus`, `fill`, `type`, `select`, `menu_select`, `click`, `wait`, `clear`,
-and guarded `dialog` steps, with provider-specific selectors or labels supplied
-by the client. agent-browser owns the handle validation, action count, timeout,
+`focus`, `fill`, `type`, `select`, `menu_select`, `click`, `semantic_click`,
+`wait`, `clear`, and guarded `dialog` steps, with provider-specific selectors
+or labels supplied by the client. `semantic_click` requires one exact,
+unique accessibility role and name match through a bounded `role_name` locator;
+it rejects missing or duplicate matches before activation. agent-browser owns
+the handle validation, action count, timeout,
 text caps, per-step page evidence, trace linkage, and optional diagnostics on
 failure; the client owns website-specific instructions and business
 interpretation.
