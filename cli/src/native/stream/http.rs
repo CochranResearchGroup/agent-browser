@@ -23,7 +23,9 @@ use crate::native::service_access::{
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_PROFILE_DIAGNOSIS_HTTP_ROUTE,
-    SERVICE_PROFILE_LEASES_HTTP_ROUTE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE,
+    SERVICE_PROFILE_LEASES_HTTP_ROUTE, SERVICE_PROFILE_REPAIR_APPLY_HTTP_ROUTE,
+    SERVICE_PROFILE_REPAIR_PLAN_HTTP_ROUTE, SERVICE_PROFILE_RESET_APPLY_HTTP_ROUTE,
+    SERVICE_PROFILE_RESET_PLAN_HTTP_ROUTE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE,
     SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
 use crate::native::service_lifecycle::{
@@ -263,6 +265,101 @@ pub(super) async fn handle_http_request(
             return;
         }
         let body_str = full_body.as_deref().unwrap_or("");
+        if let Some((encoded_profile_id, operation)) = service_profile_repair_route(path) {
+            let profile_id = match decode_path_segment(encoded_profile_id, "profile repair id") {
+                Ok(profile_id) => profile_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let capability = match profile_capability_bearer(&headers) {
+                Ok(capability) => capability,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "401 Unauthorized").await;
+                    return;
+                }
+            };
+            let mut repair_input = match parse_service_config_body(body_str, "profile repair") {
+                Ok(input) => input,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            if repair_input
+                .get("profileId")
+                .and_then(Value::as_str)
+                .is_some_and(|body_profile_id| body_profile_id != profile_id)
+            {
+                write_json_result(
+                    &mut stream,
+                    Err("profile_recovery_profile_mismatch".to_string()),
+                    "400 Bad Request",
+                )
+                .await;
+                return;
+            }
+            repair_input["profileId"] = json!(profile_id);
+            let repair_body = repair_input.to_string();
+            let (mut command, relay_session) =
+                match service_profile_recovery_http_command(operation, &repair_body, capability) {
+                    Ok(command) => command,
+                    Err(err) => {
+                        write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                        return;
+                    }
+                };
+            command["profileId"] = json!(profile_id);
+            command["action"] = json!(if operation == "plan" {
+                "service_profile_repair_plan"
+            } else {
+                "service_profile_repair_apply"
+            });
+            let result =
+                relay_service_command(relay_session.as_deref().unwrap_or(session_name), command)
+                    .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+        if let Some((encoded_profile_id, operation)) = service_profile_reset_route(path) {
+            let profile_id = match decode_path_segment(encoded_profile_id, "profile reset id") {
+                Ok(profile_id) => profile_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let capability = match profile_capability_bearer(&headers) {
+                Ok(capability) => capability,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "401 Unauthorized").await;
+                    return;
+                }
+            };
+            let input = match parse_service_config_body(body_str, "profile reset") {
+                Ok(input) => input,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let command = match service_profile_reset_http_command(
+                &profile_id,
+                operation,
+                &input,
+                capability,
+            ) {
+                Ok(command) => command,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, command).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
         if matches!(
             path,
             "/api/service/profiles/acquire"
@@ -3417,6 +3514,40 @@ fn service_profile_diagnosis_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
+fn service_profile_repair_route(path: &str) -> Option<(&str, &str)> {
+    for (template, operation) in [
+        (SERVICE_PROFILE_REPAIR_PLAN_HTTP_ROUTE, "plan"),
+        (SERVICE_PROFILE_REPAIR_APPLY_HTTP_ROUTE, "apply"),
+    ] {
+        let (prefix, suffix) = template.split_once("<id>")?;
+        if let Some(profile_id) = path
+            .strip_prefix(prefix)
+            .and_then(|profile_id| profile_id.strip_suffix(suffix))
+            .filter(|profile_id| !profile_id.is_empty() && !profile_id.contains('/'))
+        {
+            return Some((profile_id, operation));
+        }
+    }
+    None
+}
+
+fn service_profile_reset_route(path: &str) -> Option<(&str, &str)> {
+    for (template, operation) in [
+        (SERVICE_PROFILE_RESET_PLAN_HTTP_ROUTE, "plan"),
+        (SERVICE_PROFILE_RESET_APPLY_HTTP_ROUTE, "apply"),
+    ] {
+        let (prefix, suffix) = template.split_once("<id>")?;
+        if let Some(profile_id) = path
+            .strip_prefix(prefix)
+            .and_then(|profile_id| profile_id.strip_suffix(suffix))
+            .filter(|profile_id| !profile_id.is_empty() && !profile_id.contains('/'))
+        {
+            return Some((profile_id, operation));
+        }
+    }
+    None
+}
+
 fn service_profile_seeding_handoff_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/profiles/")
         .and_then(|suffix| suffix.strip_suffix("/seeding-handoff"))
@@ -3667,11 +3798,8 @@ fn service_profile_recovery_http_command(
             command[field] = value.clone();
         }
     }
-    if operation == "plan"
-        && (!command.get("profileId").is_some_and(Value::is_string)
-            || !command.get("expiresAt").is_some_and(Value::is_string))
-    {
-        return Err("profile_recovery_plan_profile_and_expiry_required".to_string());
+    if operation == "plan" && !command.get("profileId").is_some_and(Value::is_string) {
+        return Err("profile_recovery_plan_profile_required".to_string());
     }
     if operation == "acquire" && !command.get("profileId").is_some_and(Value::is_string) {
         return Err("profile_acquisition_profile_required".to_string());
@@ -3691,6 +3819,50 @@ fn service_profile_recovery_http_command(
         return Err("profile_recovery_plan_daemon_route_required".to_string());
     }
     Ok((command, relay_session))
+}
+
+fn service_profile_reset_http_command(
+    profile_id: &str,
+    operation: &str,
+    input: &Value,
+    profile_capability: String,
+) -> Result<Value, String> {
+    if input
+        .get("profileId")
+        .and_then(Value::as_str)
+        .is_some_and(|body_profile_id| body_profile_id != profile_id)
+    {
+        return Err("profile_reset_profile_mismatch".to_string());
+    }
+    let action = match operation {
+        "plan" => "service_profile_reset_plan",
+        "apply" => "service_profile_reset_apply",
+        _ => return Err("profile_reset_operation_invalid".to_string()),
+    };
+    let mut command = json!({
+        "id": format!("http-service-profile-reset-{operation}-{}", uuid::Uuid::new_v4()),
+        "action": action,
+        "profileId": profile_id,
+        "profileCapability": profile_capability,
+    });
+    for field in [
+        "scope",
+        "targetServiceId",
+        "expiresAt",
+        "idempotencyKey",
+        "plan",
+    ] {
+        if let Some(value) = input.get(field) {
+            command[field] = value.clone();
+        }
+    }
+    if operation == "plan" && !command.get("scope").is_some_and(Value::is_string) {
+        return Err("profile_reset_scope_required".to_string());
+    }
+    if operation == "apply" && !command.get("plan").is_some_and(Value::is_object) {
+        return Err("profile_reset_plan_required".to_string());
+    }
+    Ok(command)
 }
 
 fn service_profile_seeding_handoff_update_command(
@@ -5382,6 +5554,22 @@ mod tests {
         assert_eq!(
             service_profile_diagnosis_id("/api/service/profiles/journal-downloader/diagnosis"),
             Some("journal-downloader")
+        );
+        assert_eq!(
+            service_profile_repair_route("/api/service/profiles/journal-downloader/repair/plan"),
+            Some(("journal-downloader", "plan"))
+        );
+        assert_eq!(
+            service_profile_repair_route("/api/service/profiles/journal-downloader/repair/apply"),
+            Some(("journal-downloader", "apply"))
+        );
+        assert_eq!(
+            service_profile_reset_route("/api/service/profiles/journal-downloader/reset/plan"),
+            Some(("journal-downloader", "plan"))
+        );
+        assert_eq!(
+            service_profile_reset_route("/api/service/profiles/journal-downloader/reset/apply"),
+            Some(("journal-downloader", "apply"))
         );
         assert_eq!(
             service_profile_seeding_handoff_id(

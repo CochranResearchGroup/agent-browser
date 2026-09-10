@@ -1753,6 +1753,78 @@ fn format_service_profile_diagnosis_text(data: &serde_json::Value) -> Option<Str
     ))
 }
 
+fn format_service_profile_lifecycle_text(action: &str, data: &serde_json::Value) -> Option<String> {
+    let plan = data
+        .pointer("/outcome/recovery")
+        .or_else(|| data.get("plan"));
+    let receipt = data.get("receipt");
+    let profile_id = receipt
+        .and_then(|value| value.get("profileId"))
+        .or_else(|| plan.and_then(|value| value.get("profileId")))
+        .or_else(|| plan.and_then(|value| value.pointer("/identities/profileId")))
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let state = data
+        .get("state")
+        .and_then(|value| value.as_str())
+        .or_else(|| receipt.and_then(|value| value.get("terminalResult")?.as_str()))
+        .unwrap_or(if plan.is_some() { "planned" } else { "unknown" });
+    let scope = receipt
+        .and_then(|value| value.get("scope"))
+        .or_else(|| plan.and_then(|value| value.get("scope")))
+        .and_then(|value| value.as_str())
+        .unwrap_or("preserving_repair");
+    let preserved = plan
+        .and_then(|value| value.get("preservedData"))
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            "profile_directory,cookies,credentials,extensions,authenticated_site_state".to_string()
+        });
+    let effects = plan
+        .and_then(|value| value.get("proposedEffects"))
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "sealed_plan_actions".to_string());
+    let blocker = data
+        .pointer("/outcome/dominantBlocker/code")
+        .or_else(|| data.pointer("/outcome/dominantBlocker"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let manual_action = receipt
+        .and_then(|value| value.pointer("/seedingHandoff/operatorCommand"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let request_id = data
+        .get("requestId")
+        .or_else(|| data.get("id"))
+        .or_else(|| data.pointer("/trace/requestId"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let job_id = data
+        .get("jobId")
+        .or_else(|| data.pointer("/trace/jobId"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    Some(format!(
+        "Profile lifecycle: action={action} profile={profile_id} state={state} scope={scope}\npreserved={preserved}\neffects={effects}\nblocker={blocker} manual_action={manual_action}\nrequest_id={request_id} job_id={job_id}"
+    ))
+}
+
 fn format_service_profile_lookup_text(data: &serde_json::Value) -> Option<String> {
     let status = value_str(data, "status", "unknown");
     let candidates = data.get("rankedProfiles")?.as_array()?;
@@ -3150,6 +3222,20 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_profile_diagnose") {
             if let Some(output) = format_service_profile_diagnosis_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if matches!(
+            action,
+            Some(
+                "service_profile_repair_plan"
+                    | "service_profile_repair_apply"
+                    | "service_profile_reset_plan"
+                    | "service_profile_reset_apply"
+            )
+        ) {
+            if let Some(output) = format_service_profile_lifecycle_text(action.unwrap(), data) {
                 println!("{}", output);
                 return;
             }
@@ -6495,6 +6581,11 @@ Usage:
   agent-browser service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]
   agent-browser service profiles
   agent-browser service profiles <profile-id> diagnose
+  agent-browser service profiles <profile-id> repair --capability-file /absolute/private/path/profile.cap
+  agent-browser service profiles <profile-id> repair --apply --plan /absolute/path/repair-plan.json --session-name <daemon-route> --capability-file /absolute/private/path/profile.cap
+  agent-browser service profiles <profile-id> reset --scope runtime --capability-file /absolute/private/path/profile.cap
+  agent-browser service profiles <profile-id> reset --scope authentication --target-service-id <id> --capability-file /absolute/private/path/profile.cap
+  agent-browser service profiles <profile-id> reset --scope <runtime|authentication> --apply --plan /absolute/path/reset-plan.json --capability-file /absolute/private/path/profile.cap
   agent-browser service leases
   agent-browser service leases doctor
   agent-browser service leases watch --interval 1000 --count 5
@@ -6576,6 +6667,8 @@ Commands:
   profiles lookup       Rank catalog profiles by identity, hostname, alias, account, auth, freshness, tag, and free text without launching
   profiles <id> diagnose
                         Join current profile, process, owner, lease, Chrome lock, readiness and presentation evidence without launching or changing state
+  profiles <id> repair  Plan by default, or apply one sealed exact-profile repair with --apply, --plan, and the private capability file
+  profiles <id> reset   Plan by default, or apply a sealed runtime or target-authentication reset; profile-data reset is unavailable
   profiles <id> seeding-handoff [target]
                         Show the detached runtime-login command and operator steps for profile seeding
   profiles <id> verify-seeding <target>
@@ -6654,6 +6747,8 @@ Notes:
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, browser health summaries, and recommended actions.
   - service profiles <id> diagnose reports whether the exact profile is ready, repairable, awaiting manual authentication, or blocked by current foreign or ambiguous custody. Historical records remain evidence and do not establish current occupancy by themselves. The same read is available from HTTP GET /api/service/profiles/<id>/diagnosis, MCP agent-browser://profiles/{profile_id}/diagnosis, and getServiceProfileDiagnosis().
+  - service profiles <id> repair plans without effects and applies only an unchanged sealed plan with the private capability. The same operations are available from HTTP POST /api/service/profiles/<id>/repair/plan and /repair/apply, MCP service_profile_repair_plan and service_profile_repair_apply, and planServiceProfileRepair() and applyServiceProfileRepair().
+  - service profiles <id> reset is scoped. Runtime reset retires only a proven inert service-owned lane while preserving profile data and peer lanes. Authentication reset removes only the selected target's retained authentication evidence, never erases browser cookies, and returns a manual-seeding handoff. Full profile-data reset fails closed until backup restore and rollback are supported. HTTP, MCP, and generated clients expose matching plan/apply operations.
   - An unconfigured optional development presentation provider starts with zero routes so headless work remains available; this is not presentation readiness. Staged provider inventory loss remains an error.
   - An older capability binding does not veto an independently permitted shared-local client reusing an exact current browser/profile. It remains unproven for the registered capability; guarded rejoin is required for that authority. Restricted profiles, mismatched identities and future-generation bindings still fail admission.
   - Reattaching to the same verified browser preserves its original host, display allocation, launch metadata and profile path. Preservation requires matching current-boot process identity, endpoint and profile; replacement processes receive fresh metadata.
@@ -7840,12 +7935,12 @@ mod tests {
         format_service_challenges_text, format_service_events_text, format_service_incidents_text,
         format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
-        format_service_profile_diagnosis_text, format_service_profile_seeding_handoff_text,
-        format_service_profiles_text, format_service_providers_text,
-        format_service_prune_retained_text, format_service_repair_retained_text,
-        format_service_sessions_text, format_service_site_policies_text,
-        format_service_status_text, format_service_tabs_text, format_service_trace_text,
-        format_storage_text,
+        format_service_profile_diagnosis_text, format_service_profile_lifecycle_text,
+        format_service_profile_seeding_handoff_text, format_service_profiles_text,
+        format_service_providers_text, format_service_prune_retained_text,
+        format_service_repair_retained_text, format_service_sessions_text,
+        format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
+        format_service_trace_text, format_storage_text,
     };
     use serde_json::json;
 
@@ -8585,6 +8680,29 @@ mod tests {
             format_service_profile_diagnosis_text(&data).unwrap(),
             "Profile diagnosis: profile=shared-books state=repairable blocker=chrome_singleton_lock_proven_stale recourse=service_profile_repair_plan findings=chrome_singleton_lock_proven_stale,runtime_owner_principal_binding_missing"
         );
+    }
+
+    #[test]
+    fn test_format_service_profile_lifecycle_text_names_scope_effects_and_trace() {
+        let data = json!({
+            "state": "reset_available",
+            "requestId": "request-1",
+            "jobId": "job-1",
+            "plan": {
+                "profileId": "qbo",
+                "scope": "authentication",
+                "preservedData": ["profile_directory", "cookies"],
+                "proposedEffects": ["remove_selected_target_authentication_evidence"]
+            }
+        });
+
+        let rendered =
+            format_service_profile_lifecycle_text("service_profile_reset_plan", &data).unwrap();
+
+        assert!(rendered.contains("profile=qbo state=reset_available scope=authentication"));
+        assert!(rendered.contains("preserved=profile_directory,cookies"));
+        assert!(rendered.contains("effects=remove_selected_target_authentication_evidence"));
+        assert!(rendered.contains("request_id=request-1 job_id=job-1"));
     }
 
     #[test]

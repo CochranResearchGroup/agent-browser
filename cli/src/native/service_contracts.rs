@@ -14,6 +14,10 @@ pub const SERVICE_REQUEST_HTTP_ROUTE: &str = "/api/service/request";
 pub const SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE: &str = "/api/service/profiles/<id>/allocation";
 pub const SERVICE_PROFILE_READINESS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/readiness";
 pub const SERVICE_PROFILE_DIAGNOSIS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/diagnosis";
+pub const SERVICE_PROFILE_REPAIR_PLAN_HTTP_ROUTE: &str = "/api/service/profiles/<id>/repair/plan";
+pub const SERVICE_PROFILE_REPAIR_APPLY_HTTP_ROUTE: &str = "/api/service/profiles/<id>/repair/apply";
+pub const SERVICE_PROFILE_RESET_PLAN_HTTP_ROUTE: &str = "/api/service/profiles/<id>/reset/plan";
+pub const SERVICE_PROFILE_RESET_APPLY_HTTP_ROUTE: &str = "/api/service/profiles/<id>/reset/apply";
 pub const SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE: &str =
     "/api/service/profiles/<id>/seeding-handoff";
 pub const SERVICE_PROFILE_LOOKUP_HTTP_ROUTE: &str = "/api/service/profiles/lookup";
@@ -645,6 +649,51 @@ pub fn service_contracts_metadata() -> Value {
                 "noLaunch": true,
                 "responseFields": ["schemaVersion", "diagnosisId", "observedAt", "state", "profile", "runtime", "ownership", "chromeLocks", "readiness", "presentation", "decision", "trace", "findings"],
             },
+            "serviceProfileRepair": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "planSchema": "agent-browser.profile-recovery-plan.v1",
+                "receiptSchema": "agent-browser.profile-recovery-receipt.v1",
+                "http": {
+                    "plan": { "method": "POST", "route": SERVICE_PROFILE_REPAIR_PLAN_HTTP_ROUTE },
+                    "apply": { "method": "POST", "route": SERVICE_PROFILE_REPAIR_APPLY_HTTP_ROUTE },
+                    "capabilityTransport": "header_only",
+                },
+                "mcp": {
+                    "planTool": "service_profile_repair_plan",
+                    "applyTool": "service_profile_repair_apply",
+                    "capabilityField": "profileCapability",
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["planServiceProfileRepair", "applyServiceProfileRepair"],
+                },
+                "preserves": ["profile_directory", "cookies", "credentials", "extensions", "authenticated_site_state"],
+                "boundedLaunchCount": 1,
+            },
+            "serviceProfileReset": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "planSchema": "agent-browser.profile-reset-plan.v1",
+                "receiptSchema": "agent-browser.profile-reset-receipt.v1",
+                "schemaPath": "docs/dev/contracts/service-profile-reset.v1.schema.json",
+                "scopes": ["runtime", "authentication", "profile_data"],
+                "profileDataState": "unavailable_restore_required",
+                "http": {
+                    "plan": { "method": "POST", "route": SERVICE_PROFILE_RESET_PLAN_HTTP_ROUTE },
+                    "apply": { "method": "POST", "route": SERVICE_PROFILE_RESET_APPLY_HTTP_ROUTE },
+                    "capabilityTransport": "header_only",
+                },
+                "mcp": {
+                    "planTool": "service_profile_reset_plan",
+                    "applyTool": "service_profile_reset_apply",
+                    "capabilityField": "profileCapability",
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["planServiceProfileReset", "applyServiceProfileReset"],
+                },
+                "preserves": ["profile_directory", "cookies", "credentials", "extensions"],
+                "browserCookiesErased": false,
+            },
             "serviceProfileSeedingHandoffResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
                 "schemaId": SERVICE_PROFILE_SEEDING_HANDOFF_RESPONSE_SCHEMA_ID,
@@ -1093,6 +1142,34 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceRequest"]["actionCount"],
             SERVICE_REQUEST_ACTIONS.len()
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileRepair"]["http"]["plan"]["route"],
+            SERVICE_PROFILE_REPAIR_PLAN_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileRepair"]["http"]["apply"]["route"],
+            SERVICE_PROFILE_REPAIR_APPLY_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileRepair"]["mcp"]["planTool"],
+            "service_profile_repair_plan"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileRepair"]["boundedLaunchCount"],
+            1
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileReset"]["http"]["plan"]["route"],
+            SERVICE_PROFILE_RESET_PLAN_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileReset"]["profileDataState"],
+            "unavailable_restore_required"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileReset"]["browserCookiesErased"],
+            false
         );
         assert_eq!(
             metadata["contracts"]["serviceDesktopCaptureResponse"]["schemaId"],

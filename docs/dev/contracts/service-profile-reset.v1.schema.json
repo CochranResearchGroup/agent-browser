@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.dev/contracts/service-profile-reset.v1.schema.json",
+  "title": "Agent Browser scoped profile reset",
+  "oneOf": [
+    { "$ref": "#/$defs/plan" },
+    { "$ref": "#/$defs/receipt" }
+  ],
+  "$defs": {
+    "scope": {
+      "enum": ["runtime", "authentication", "profile_data"]
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "planId", "resetId", "createdAt", "expiresAt", "idempotencyKeyDigest", "serviceStateRevision", "runtimeOwnerRevision", "producerBuildIdentity", "principalId", "profileId", "profileIdentityDigest", "scope", "evidenceDigest", "proposedEffects", "preservedData", "integritySeal"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.profile-reset-plan.v1" },
+        "planId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "resetId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "idempotencyKeyDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "serviceStateRevision": { "type": "integer", "minimum": 0 },
+        "runtimeOwnerRevision": { "type": "integer", "minimum": 0 },
+        "producerBuildIdentity": { "type": "object" },
+        "principalId": { "type": "string", "minLength": 1 },
+        "profileId": { "type": "string", "minLength": 1 },
+        "profileIdentityDigest": { "type": "string", "minLength": 1 },
+        "scope": { "$ref": "#/$defs/scope" },
+        "targetServiceId": { "type": "string", "minLength": 1 },
+        "ownerId": { "type": "string", "minLength": 1 },
+        "ownerGeneration": { "type": "integer", "minimum": 1 },
+        "browserId": { "type": "string", "minLength": 1 },
+        "evidenceDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "proposedEffects": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "preservedData": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "integritySeal": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "resetId", "planId", "principalId", "profileId", "producerBuildIdentity", "scope", "terminalResult", "appliedAt", "finalStateRevision", "browserCookiesErased"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.profile-reset-receipt.v1" },
+        "resetId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "planId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "principalId": { "type": "string", "minLength": 1 },
+        "profileId": { "type": "string", "minLength": 1 },
+        "producerBuildIdentity": { "type": "object" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "targetServiceId": { "type": "string", "minLength": 1 },
+        "terminalResult": { "const": "applied" },
+        "appliedAt": { "type": "string", "format": "date-time" },
+        "finalStateRevision": { "type": "integer", "minimum": 0 },
+        "browserCookiesErased": { "const": false },
+        "seedingHandoff": { "type": "object" }
+      }
+    }
+  }
+}

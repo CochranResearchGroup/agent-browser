@@ -52,6 +52,12 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryPlanResponse} ServiceProfileRecoveryPlanResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryApplyResponse} ServiceProfileRecoveryApplyResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryStatusResponse} ServiceProfileRecoveryStatusResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRepairPlanOptions} ServiceProfileRepairPlanOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRepairApplyOptions} ServiceProfileRepairApplyOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileResetPlanOptions} ServiceProfileResetPlanOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileResetApplyOptions} ServiceProfileResetApplyOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileResetPlanResponse} ServiceProfileResetPlanResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileResetApplyResponse} ServiceProfileResetApplyResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquireOptions} ServiceProfileAcquireOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquireResponse} ServiceProfileAcquireResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseMutationResponse} ServiceProfileLeaseMutationResponse
@@ -485,6 +491,65 @@ export function getServiceProfileReadiness({ id, ...options }) {
 export function getServiceProfileDiagnosis({ id, ...options }) {
   assertServiceId(id, 'getServiceProfileDiagnosis');
   return serviceGet(options, `/api/service/profiles/${encodeURIComponent(id)}/diagnosis`);
+}
+
+/** @param {ServiceProfileRepairPlanOptions} options @returns {Promise<ServiceProfileRecoveryPlanResponse>} */
+export function planServiceProfileRepair({
+  id, profileCapability, expiresAt, idempotencyKey, targetServiceIds, serviceName, agentName, taskName, ...options
+}) {
+  assertServiceId(id, 'planServiceProfileRepair');
+  if (!profileCapability) {
+    throw new TypeError('planServiceProfileRepair requires id and profileCapability');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/profiles/${encodeURIComponent(id)}/repair/plan`,
+    { ...(expiresAt ? { expiresAt } : {}), ...(idempotencyKey ? { idempotencyKey } : {}), ...(targetServiceIds ? { targetServiceIds } : {}), ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
+  );
+}
+
+/** @param {ServiceProfileRepairApplyOptions} options @returns {Promise<ServiceProfileRecoveryApplyResponse>} */
+export function applyServiceProfileRepair({ id, profileCapability, plan, ...options }) {
+  assertServiceId(id, 'applyServiceProfileRepair');
+  if (!profileCapability || !plan || typeof plan !== 'object') {
+    throw new TypeError('applyServiceProfileRepair requires id, profileCapability, and plan');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/profiles/${encodeURIComponent(id)}/repair/apply`,
+    { plan },
+  );
+}
+
+/** @param {ServiceProfileResetPlanOptions} options @returns {Promise<ServiceProfileResetPlanResponse>} */
+export function planServiceProfileReset({
+  id, profileCapability, scope, targetServiceId, expiresAt, idempotencyKey, ...options
+}) {
+  assertServiceId(id, 'planServiceProfileReset');
+  if (!profileCapability || !scope) {
+    throw new TypeError('planServiceProfileReset requires id, profileCapability, and scope');
+  }
+  if (scope === 'authentication' && !targetServiceId) {
+    throw new TypeError('authentication profile reset requires targetServiceId');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/profiles/${encodeURIComponent(id)}/reset/plan`,
+    { scope, ...(targetServiceId ? { targetServiceId } : {}), ...(expiresAt ? { expiresAt } : {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+  );
+}
+
+/** @param {ServiceProfileResetApplyOptions} options @returns {Promise<ServiceProfileResetApplyResponse>} */
+export function applyServiceProfileReset({ id, profileCapability, plan, ...options }) {
+  assertServiceId(id, 'applyServiceProfileReset');
+  if (!profileCapability || !plan || typeof plan !== 'object') {
+    throw new TypeError('applyServiceProfileReset requires id, profileCapability, and plan');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/profiles/${encodeURIComponent(id)}/reset/apply`,
+    { plan },
+  );
 }
 
 /**

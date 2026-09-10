@@ -992,7 +992,13 @@ pub(crate) fn owner_binding_in_registry(
 /// Read-only actions stay independent of the user-scoped owner registry so
 /// observation remains available during transfer and in isolated test runs.
 pub(crate) fn action_requires_owner_effect_authority(action: &str) -> bool {
-    action_requires_runtime_admission(action) && action != "service_profile_recovery_apply"
+    action_requires_runtime_admission(action)
+        && !matches!(
+            action,
+            "service_profile_recovery_apply"
+                | "service_profile_repair_apply"
+                | "service_profile_reset_apply"
+        )
 }
 
 /// Return whether an action is effect-capable and must respect the runtime

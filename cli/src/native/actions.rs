@@ -325,6 +325,10 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_profile_lease_recover_apply"
             | "service_profile_diagnose"
             | "service_profile_acquire"
+            | "service_profile_repair_plan"
+            | "service_profile_repair_apply"
+            | "service_profile_reset_plan"
+            | "service_profile_reset_apply"
             | "service_profile_recovery_plan"
             | "service_profile_recovery_apply"
             | "service_profile_recovery_status"
@@ -1046,7 +1050,19 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_profile_recovery_plan" => {
                 handle_service_profile_recovery_command(cmd, state).await
             }
+            "service_profile_repair_plan" => {
+                handle_service_profile_recovery_command(cmd, state).await
+            }
             "service_profile_recovery_apply" => {
+                handle_service_profile_recovery_command(cmd, state).await
+            }
+            "service_profile_repair_apply" => {
+                handle_service_profile_recovery_command(cmd, state).await
+            }
+            "service_profile_reset_plan" => {
+                handle_service_profile_recovery_command(cmd, state).await
+            }
+            "service_profile_reset_apply" => {
                 handle_service_profile_recovery_command(cmd, state).await
             }
             "service_profile_recovery_status" => {
