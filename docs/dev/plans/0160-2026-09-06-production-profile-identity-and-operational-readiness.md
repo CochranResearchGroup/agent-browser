@@ -3981,3 +3981,34 @@ all five presentation capacity settings. Unknown dotenv keys remain ignored and
 ambient environment still wins. Parser tests prove the production path and warm
 minimum are retained; the focused recovery test, formatting and workspace Clippy
 also pass. Rebuild and repeat the exact claimed candidate reattach once.
+
+### Fourth staged-install rollback and physical display qualification
+
+state_transition: The staged candidate reached current production inventory and real operator-window observation, which proved the retained BILL browser was physically on a private display that route A cannot present; bootstrap qualification now requires exact browser, allocation, owner-session and route-display agreement.
+acceptance_state: Transaction rollback and the focused source regression pass; production installation remains pending a disposable route-bound handoff and rebuilt candidate.
+progress_classification: blocker removed in source
+
+Transaction `upgrade-82fd55c4-9e51-4059-987e-4ae7b07e8c08` staged candidate
+generation `0.28.0-abd8ba7aeaa2-996ef4a348cc`, transferred the two current
+retained owners and loaded the production capacity inventory. The first claimed
+request, `mcp-service-request-service_remote_view_browser_reattach-32d042aa-b6ab-43bd-b8f6-90cb38fba44e`, omitted the canonical route display and queued a warm-slot
+recovery without a persisted effect. The corrected request,
+`mcp-service-request-service_remote_view_browser_reattach-420a352d-13d0-47bf-bbfe-c20fa926f93c`, bound route A and display `:10`, then failed exact
+operator-window observation because BILL PID 32799 was physically on private
+display `:92`. Chrome cannot move that live window to another X display.
+
+The installer restored both owners, the old selected generation and an empty
+admission drain, stopped the candidate and recorded
+`failed_preserved_old_generation` at revision 12. The bootstrap predicate had
+incorrectly combined any exact reattachable browser with any available route.
+It now requires the browser display name to equal an available RDP route target,
+and requires its ready display allocation to name the same browser and an active
+owner session. The regression accepts an exact browser already on `:10` and
+rejects the observed `:92` browser with route `:10`.
+
+Next: create one disposable production browser directly on an available static
+Guacamole display and retain its durable handoff. Rebuild the candidate, require
+the installer to select that handoff, resolve it through the staged candidate,
+then verify automatic supervisor takeover and exactly one selected runtime-host
+listener. Preserve the BILL and QBO processes and clean only the disposable proof
+after accepted installed-runtime readback.

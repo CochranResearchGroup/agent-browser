@@ -1035,18 +1035,29 @@ fn candidate_bootstrap_reattachable_browser_ids(
 ) -> Vec<String> {
     use crate::native::service_model::{RemoteViewHandoff, ViewStreamProvider};
 
-    let route_available = state.route_pool.values().any(|entry| {
-        entry.provider == ViewStreamProvider::RdpGateway
-            && entry.state == "available"
-            && entry.current_route_allocation_id.is_none()
-            && entry
-                .readiness
-                .as_ref()
-                .and_then(|value| value.get("state"))
+    let available_route_displays = state
+        .route_pool
+        .values()
+        .filter(|entry| {
+            entry.provider == ViewStreamProvider::RdpGateway
+                && entry.state == "available"
+                && entry.current_route_allocation_id.is_none()
+                && entry
+                    .readiness
+                    .as_ref()
+                    .and_then(|value| value.get("state"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some("ready")
+        })
+        .filter_map(|entry| {
+            entry
+                .target
+                .get("displayName")
                 .and_then(serde_json::Value::as_str)
-                == Some("ready")
-    });
-    if !route_available {
+                .map(str::to_string)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    if available_route_displays.is_empty() {
         return Vec::new();
     }
 
@@ -1054,6 +1065,29 @@ fn candidate_bootstrap_reattachable_browser_ids(
         .browsers
         .values()
         .filter(|browser| {
+            let Some(display_name) = browser.display_name.as_ref() else {
+                return false;
+            };
+            if !available_route_displays.contains(display_name) {
+                return false;
+            }
+            let Some(display) = browser
+                .display_allocation_id
+                .as_ref()
+                .and_then(|id| state.display_allocations.get(id))
+            else {
+                return false;
+            };
+            if display.state != "ready"
+                || display.display_name.as_ref() != Some(display_name)
+                || display.owner_browser_id.as_ref() != Some(&browser.id)
+                || !display
+                    .owner_session_id
+                    .as_ref()
+                    .is_some_and(|id| browser.active_session_ids.contains(id))
+            {
+                return false;
+            }
             browser.view_streams.iter().any(|stream| {
                 stream.provider == ViewStreamProvider::RdpGateway
                     && stream
@@ -2492,8 +2526,10 @@ mod tests {
         let mut state = exact_candidate_presentation_state();
         state.remote_view_handoffs.clear();
         state.remote_view_routes.clear();
-        state.display_allocations.clear();
-        state.browsers.get_mut("browser-1").unwrap().view_streams = vec![ViewStream {
+        let browser = state.browsers.get_mut("browser-1").unwrap();
+        browser.display_name = Some(":10".to_string());
+        browser.display_allocation_id = Some("display-1".to_string());
+        browser.view_streams = vec![ViewStream {
             id: "remote-headed-view".to_string(),
             provider: ViewStreamProvider::RdpGateway,
             attachability: Some(serde_json::json!({
@@ -2502,6 +2538,9 @@ mod tests {
             })),
             ..ViewStream::default()
         }];
+        let display = state.display_allocations.get_mut("display-1").unwrap();
+        display.display_name = Some(":10".to_string());
+        display.route_ids.clear();
         state.route_pool.insert(
             "route-a".to_string(),
             RoutePoolEntry {
@@ -2509,6 +2548,7 @@ mod tests {
                 provider: ViewStreamProvider::RdpGateway,
                 route_id: "guacamole:1".to_string(),
                 state: "available".to_string(),
+                target: serde_json::json!({"displayName": ":10"}),
                 readiness: Some(serde_json::json!({"state": "ready"})),
                 ..RoutePoolEntry::default()
             },
@@ -2526,6 +2566,51 @@ mod tests {
         assert_eq!(
             prerequisite["nextAction"],
             "stage_candidate_then_reattach_eligible_browser"
+        );
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_rejects_browser_on_different_route_display() {
+        use crate::native::service_model::{RoutePoolEntry, ViewStream, ViewStreamProvider};
+
+        let mut state = exact_candidate_presentation_state();
+        state.remote_view_handoffs.clear();
+        state.remote_view_routes.clear();
+        let browser = state.browsers.get_mut("browser-1").unwrap();
+        browser.display_name = Some(":92".to_string());
+        browser.display_allocation_id = Some("display-1".to_string());
+        browser.view_streams = vec![ViewStream {
+            id: "remote-headed-view".to_string(),
+            provider: ViewStreamProvider::RdpGateway,
+            attachability: Some(serde_json::json!({
+                "state": "reattachable_no_route",
+                "recommendedAction": "service_remote_view_browser_reattach"
+            })),
+            ..ViewStream::default()
+        }];
+        let display = state.display_allocations.get_mut("display-1").unwrap();
+        display.display_name = Some(":92".to_string());
+        display.route_ids.clear();
+        state.route_pool.insert(
+            "route-a".to_string(),
+            RoutePoolEntry {
+                id: "route-a".to_string(),
+                provider: ViewStreamProvider::RdpGateway,
+                route_id: "guacamole:1".to_string(),
+                state: "available".to_string(),
+                target: serde_json::json!({"displayName": ":10"}),
+                readiness: Some(serde_json::json!({"state": "ready"})),
+                ..RoutePoolEntry::default()
+            },
+        );
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleReattachableBrowserCount"], 0);
+        assert_eq!(
+            prerequisite["nextAction"],
+            "reconcile_one_adoptable_current_handoff_before_candidate_staging"
         );
     }
 

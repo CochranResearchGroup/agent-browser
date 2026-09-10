@@ -164,9 +164,9 @@ remains active, and final census requires exactly one selected runtime-host
 listener. Stale durable aliases may bootstrap staging from one exact reattachable
 RDP browser, but the candidate must issue a fresh durable handoff before commit. Old-runtime
 BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
-InventoryAdmission with no observed route change and was not retried. Transaction b1624cb5 hit the drain; 5c7bc5c0 passed its claim but cached inventory; b5eb7ee8
-refreshed inventory but exposed the dotenv allowlist dropping its path and capacity.
-All rolled back exactly. The loader now retains them; rebuilt proof is open.
+InventoryAdmission without a route change. Transactions b1624cb5, 5c7bc5c0 and b5eb7ee8 exposed drain, cache and dotenv defects. Attempt 82fd55c4 proved BILL on
+private :92 cannot appear on route A :10. All rolled back exactly. Bootstrap now requires browser, allocation, owner and route-display agreement. A disposable route
+handoff, rebuilt install, supervisor and single-listener proof remain open.
 
 ### Git consolidation | 2026-09-08
 
