@@ -530,3 +530,37 @@ a comprehensive timing run was intentionally stopped when unrelated host Cargo
 pressure reduced admissible concurrency to one. No complete comprehensive-lane
 pass is claimed from that measurement, and no Plan 0161 acceptance criterion
 depends on it.
+
+### Main integration refresh, 2026-09-10
+
+Merge commit `49b40b5c` integrates Plan 0161 with the newer authentication-run
+and runtime-replacement work from `origin/main`. Conflict-focused recovery,
+reset, presentation inventory, candidate bootstrap, durable handoff, route-host,
+and workstation bootstrap tests passed. Strict workspace Clippy, formatting,
+generated-client checks, API/MCP parity, route-confusion gates, and the
+source-free workstation fixture also passed. The merge additionally corrected
+the authentication recipe action and challenge-provider field ledgers exposed
+by those integration gates.
+
+The Rust runner now splits the former 1,988-test native bucket into action,
+browser, service, stream, and remaining-native compartments. Each CLI test
+process receives a disposable home and XDG runtime tree before two balanced
+lanes overlap. This prevents a current workstation admission-drain artifact
+from contaminating provider-free unit tests. The isolated action compartment
+passed 249 tests in 11.36 seconds while that real artifact remained present.
+
+The exact merged candidate SHA-256 is
+`569437b59762ff9a3e6c833c7f435021db552ebad8ae18ea85dfe67fd05af4ab`.
+It is selected in development generation `0.28.0-569437b59762`; installation
+reported production unchanged, every core development doctor axis passed, and
+the three-iteration browser-launch smoke passed. The optional development
+presentation provider remains independently not ready and was not mutated.
+
+Installed headed acceptance on the merged binary used disposable managed
+profiles `p161-bill-headed-final` and `p161-peer-headed-final`. Target PID
+`55091` and peer PID `55463` both opened `about:blank` through
+`remote_headed`. Closing the target preserved the exact peer PID and URL.
+After closing the peer, both PIDs, Service browser and session projections, and
+Chrome singleton locks were absent. The two disposable profile directories and
+their development configuration entries were removed; the directories were
+moved to trash and remain recoverable there.
