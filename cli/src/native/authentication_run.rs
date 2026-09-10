@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-pub(crate) const AUTHENTICATION_RUN_SCHEMA_VERSION: &str = "agent-browser.authentication-run.v1";
+pub(crate) const AUTHENTICATION_RUN_SCHEMA_VERSION: &str = "agent-browser.authentication-run.v2";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -53,6 +53,9 @@ impl AuthenticationRunBinding {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AuthenticationRunState {
     Ready,
+    AwaitingIdentifier,
+    AwaitingPassword,
+    AwaitingPasswordManagerDecision,
     ObservingDelivery,
     AwaitingCandidate,
     Verifying,
@@ -73,10 +76,82 @@ pub(crate) enum AuthenticationChallengeChannel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AuthenticationActionKind {
+    SubmitAccountIdentifier,
     SubmitNativeStoredCredentials,
     SubmitSmsOtp,
     OpenDeviceVerificationLink,
     ConfirmRememberDevice,
+    SavePassword,
+    UpdatePassword,
+    DeclinePasswordPersistence,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SiteLoginState {
+    Authenticated,
+    IdentifierForm,
+    PasswordForm,
+    PasswordManagerSavePrompt,
+    PasswordManagerUpdatePrompt,
+    PasswordManagerUnlockPrompt,
+    PasswordManagerPromptAmbiguous,
+    UnsupportedChallenge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PasswordPersistencePolicy {
+    Save,
+    Update,
+    Never,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SiteLoginObservationReceipt {
+    pub(crate) observer_id: String,
+    pub(crate) target_service_id: String,
+    pub(crate) target_account_ref: String,
+    pub(crate) profile_id: String,
+    pub(crate) browser_id: String,
+    pub(crate) session_name: String,
+    pub(crate) tab_id: String,
+    pub(crate) origin_verified: bool,
+    pub(crate) page_state_fresh: bool,
+    pub(crate) site_state: SiteLoginState,
+    pub(crate) state_instance_id: String,
+    pub(crate) exact_account_authenticated: bool,
+    pub(crate) browser_chrome_semantics_used: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SiteLoginActionReceipt {
+    pub(crate) provider_id: String,
+    pub(crate) effect_id: String,
+    pub(crate) action: AuthenticationActionKind,
+    pub(crate) state_instance_id: String,
+    pub(crate) response_only_material_consumption: bool,
+    pub(crate) secret_material_exposed: bool,
+    pub(crate) browser_chrome_semantics_used: bool,
+    pub(crate) persistence_verified: bool,
+}
+
+pub(crate) trait ResponseOnlySiteLoginAction {
+    fn execute(
+        &mut self,
+        context: &SiteLoginActionContext<'_>,
+    ) -> Result<SiteLoginActionReceipt, AuthenticationActionFailure>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SiteLoginActionContext<'a> {
+    pub(crate) run_id: &'a str,
+    pub(crate) operation_id: &'a str,
+    pub(crate) binding: &'a AuthenticationRunBinding,
+    pub(crate) action: AuthenticationActionKind,
+    pub(crate) state_instance_id: &'a str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -208,7 +283,13 @@ pub(crate) struct AuthenticationRun {
     pub(crate) transition_count: u32,
     pub(crate) used_operation_ids: BTreeSet<String>,
     pub(crate) completed_challenge_ids: BTreeSet<String>,
+    #[serde(default)]
+    pub(crate) completed_site_state_ids: BTreeSet<String>,
     active_challenge: Option<ActiveAuthenticationChallenge>,
+    #[serde(default)]
+    pub(crate) site_observation_receipts: Vec<SiteLoginObservationReceipt>,
+    #[serde(default)]
+    pub(crate) site_action_receipts: Vec<SiteLoginActionReceipt>,
     pub(crate) action_receipts: Vec<AuthenticationActionReceipt>,
     pub(crate) verifier_receipt: Option<AuthenticationVerifierReceipt>,
     pub(crate) transition_receipts: Vec<AuthenticationTransitionReceipt>,
@@ -239,6 +320,10 @@ pub(crate) enum AuthenticationRunError {
     CredentialReplayForbidden,
     SameProfileProofMissing,
     SameProfileProofMismatch,
+    SiteObservationInvalid,
+    SiteStateMismatch,
+    SiteStateReplay,
+    PersistencePolicyMismatch,
     ActionFailed,
     VerifierFailed,
     ExactTargetNotAuthenticated,
@@ -267,11 +352,213 @@ impl AuthenticationRun {
             transition_count: 0,
             used_operation_ids: BTreeSet::new(),
             completed_challenge_ids: BTreeSet::new(),
+            completed_site_state_ids: BTreeSet::new(),
             active_challenge: None,
+            site_observation_receipts: Vec::new(),
+            site_action_receipts: Vec::new(),
             action_receipts: Vec::new(),
             verifier_receipt: None,
             transition_receipts: Vec::new(),
         })
+    }
+
+    pub(crate) fn observe_site_login_state(
+        &mut self,
+        operation_id: &str,
+        receipt: SiteLoginObservationReceipt,
+    ) -> Result<AuthenticationRunState, AuthenticationRunError> {
+        self.require_state(&[
+            AuthenticationRunState::Ready,
+            AuthenticationRunState::AwaitingIdentifier,
+            AuthenticationRunState::AwaitingPassword,
+            AuthenticationRunState::AwaitingPasswordManagerDecision,
+            AuthenticationRunState::Verifying,
+        ])?;
+        self.require_operation_available(operation_id)?;
+        self.require_transition_available()?;
+        if receipt.observer_id.trim().is_empty()
+            || receipt.state_instance_id.trim().is_empty()
+            || !receipt.origin_verified
+            || !receipt.page_state_fresh
+            || receipt.target_service_id != self.binding.target_service_id
+            || receipt.target_account_ref != self.binding.target_account_ref
+            || receipt.profile_id != self.binding.profile_id
+            || receipt.browser_id != self.binding.browser_id
+            || receipt.session_name != self.binding.session_name
+            || receipt.tab_id != self.binding.login_tab_id
+            || (receipt.site_state == SiteLoginState::Authenticated
+                && !receipt.exact_account_authenticated)
+            || (matches!(
+                receipt.site_state,
+                SiteLoginState::PasswordManagerSavePrompt
+                    | SiteLoginState::PasswordManagerUpdatePrompt
+                    | SiteLoginState::PasswordManagerUnlockPrompt
+                    | SiteLoginState::PasswordManagerPromptAmbiguous
+            ) && !receipt.browser_chrome_semantics_used)
+        {
+            return Err(AuthenticationRunError::SiteObservationInvalid);
+        }
+        if self
+            .completed_site_state_ids
+            .contains(&receipt.state_instance_id)
+        {
+            return Err(AuthenticationRunError::SiteStateReplay);
+        }
+        let next_state = match receipt.site_state {
+            SiteLoginState::Authenticated => AuthenticationRunState::Verifying,
+            SiteLoginState::IdentifierForm => AuthenticationRunState::AwaitingIdentifier,
+            SiteLoginState::PasswordForm => AuthenticationRunState::AwaitingPassword,
+            SiteLoginState::PasswordManagerSavePrompt
+            | SiteLoginState::PasswordManagerUpdatePrompt => {
+                AuthenticationRunState::AwaitingPasswordManagerDecision
+            }
+            SiteLoginState::PasswordManagerUnlockPrompt
+            | SiteLoginState::PasswordManagerPromptAmbiguous
+            | SiteLoginState::UnsupportedChallenge => {
+                AuthenticationRunState::OperatorInterventionRequired
+            }
+        };
+        self.used_operation_ids.insert(operation_id.to_string());
+        self.site_observation_receipts.push(receipt.clone());
+        self.transition(
+            operation_id,
+            next_state,
+            "observe_site_login_state",
+            Some(&receipt.state_instance_id),
+        );
+        Ok(next_state)
+    }
+
+    pub(crate) fn submit_account_identifier(
+        &mut self,
+        operation_id: &str,
+        action: &mut impl ResponseOnlySiteLoginAction,
+    ) -> Result<SiteLoginActionReceipt, AuthenticationRunError> {
+        self.require_state(&[AuthenticationRunState::AwaitingIdentifier])?;
+        let state_instance_id = self.current_site_state_instance(SiteLoginState::IdentifierForm)?;
+        self.execute_site_login_action(
+            operation_id,
+            state_instance_id,
+            AuthenticationActionKind::SubmitAccountIdentifier,
+            false,
+            false,
+            action,
+        )
+    }
+
+    pub(crate) fn handle_password_persistence_prompt(
+        &mut self,
+        operation_id: &str,
+        policy: PasswordPersistencePolicy,
+        action: &mut impl ResponseOnlySiteLoginAction,
+    ) -> Result<SiteLoginActionReceipt, AuthenticationRunError> {
+        self.require_state(&[AuthenticationRunState::AwaitingPasswordManagerDecision])?;
+        let observation = self
+            .site_observation_receipts
+            .last()
+            .ok_or(AuthenticationRunError::SiteStateMismatch)?;
+        let expected_action = match (observation.site_state, policy) {
+            (SiteLoginState::PasswordManagerSavePrompt, PasswordPersistencePolicy::Save) => {
+                AuthenticationActionKind::SavePassword
+            }
+            (SiteLoginState::PasswordManagerUpdatePrompt, PasswordPersistencePolicy::Update) => {
+                AuthenticationActionKind::UpdatePassword
+            }
+            (
+                SiteLoginState::PasswordManagerSavePrompt
+                | SiteLoginState::PasswordManagerUpdatePrompt,
+                PasswordPersistencePolicy::Never,
+            ) => AuthenticationActionKind::DeclinePasswordPersistence,
+            _ => return Err(AuthenticationRunError::PersistencePolicyMismatch),
+        };
+        let state_instance_id = observation.state_instance_id.clone();
+        self.execute_site_login_action(
+            operation_id,
+            state_instance_id,
+            expected_action,
+            true,
+            true,
+            action,
+        )
+    }
+
+    fn current_site_state_instance(
+        &self,
+        expected_state: SiteLoginState,
+    ) -> Result<String, AuthenticationRunError> {
+        let observation = self
+            .site_observation_receipts
+            .last()
+            .ok_or(AuthenticationRunError::SiteStateMismatch)?;
+        if observation.site_state != expected_state {
+            return Err(AuthenticationRunError::SiteStateMismatch);
+        }
+        Ok(observation.state_instance_id.clone())
+    }
+
+    fn execute_site_login_action(
+        &mut self,
+        operation_id: &str,
+        state_instance_id: String,
+        expected_action: AuthenticationActionKind,
+        require_browser_chrome: bool,
+        require_persistence_verified: bool,
+        action: &mut impl ResponseOnlySiteLoginAction,
+    ) -> Result<SiteLoginActionReceipt, AuthenticationRunError> {
+        if self.completed_site_state_ids.contains(&state_instance_id) {
+            return Err(AuthenticationRunError::SiteStateReplay);
+        }
+        self.reserve_effect(operation_id)?;
+        let context = SiteLoginActionContext {
+            run_id: &self.run_id,
+            operation_id,
+            binding: &self.binding,
+            action: expected_action,
+            state_instance_id: &state_instance_id,
+        };
+        let receipt = match action.execute(&context) {
+            Ok(receipt) => receipt,
+            Err(_) => {
+                self.transition(
+                    operation_id,
+                    AuthenticationRunState::Blocked,
+                    "site_login_action_failed",
+                    Some(&state_instance_id),
+                );
+                return Err(AuthenticationRunError::ActionFailed);
+            }
+        };
+        if receipt.provider_id.trim().is_empty()
+            || receipt.effect_id.trim().is_empty()
+            || receipt.action != expected_action
+            || receipt.state_instance_id != state_instance_id
+            || !receipt.response_only_material_consumption
+            || receipt.secret_material_exposed
+            || receipt.browser_chrome_semantics_used != require_browser_chrome
+            || receipt.persistence_verified != require_persistence_verified
+        {
+            self.transition(
+                operation_id,
+                AuthenticationRunState::Blocked,
+                "site_login_action_receipt_rejected",
+                Some(&state_instance_id),
+            );
+            return Err(AuthenticationRunError::ActionReceiptInvalid);
+        }
+        self.completed_site_state_ids
+            .insert(state_instance_id.clone());
+        self.site_action_receipts.push(receipt.clone());
+        self.transition(
+            operation_id,
+            if require_browser_chrome {
+                AuthenticationRunState::Verifying
+            } else {
+                AuthenticationRunState::Ready
+            },
+            "execute_site_login_action",
+            Some(&state_instance_id),
+        );
+        Ok(receipt)
     }
 
     pub(crate) fn submit_native_stored_credentials(
@@ -279,7 +566,10 @@ impl AuthenticationRun {
         operation_id: &str,
         action: &mut impl ResponseOnlyAuthenticationAction,
     ) -> Result<AuthenticationActionReceipt, AuthenticationRunError> {
-        self.require_state(&[AuthenticationRunState::Ready])?;
+        self.require_state(&[
+            AuthenticationRunState::Ready,
+            AuthenticationRunState::AwaitingPassword,
+        ])?;
         self.reserve_effect(operation_id)?;
         let context = AuthenticationActionContext {
             run_id: &self.run_id,
@@ -674,6 +964,7 @@ mod tests {
 
     const OTP_CANARY: &str = "SYNTHETIC-OTP-CANARY-NOT-A-REAL-CODE";
     const URL_CANARY: &str = "https://verify.example.invalid/device?token=private-canary";
+    const IDENTIFIER_CANARY: &str = "synthetic-account-identifier-canary@example.invalid";
 
     fn binding() -> AuthenticationRunBinding {
         AuthenticationRunBinding {
@@ -795,6 +1086,97 @@ mod tests {
         }
     }
 
+    fn site_observation(
+        site_state: SiteLoginState,
+        state_instance_id: &str,
+    ) -> SiteLoginObservationReceipt {
+        let binding = binding();
+        SiteLoginObservationReceipt {
+            observer_id: "provider-free-site-observer".to_string(),
+            target_service_id: binding.target_service_id,
+            target_account_ref: binding.target_account_ref,
+            profile_id: binding.profile_id,
+            browser_id: binding.browser_id,
+            session_name: binding.session_name,
+            tab_id: binding.login_tab_id,
+            origin_verified: true,
+            page_state_fresh: true,
+            site_state,
+            state_instance_id: state_instance_id.to_string(),
+            exact_account_authenticated: site_state == SiteLoginState::Authenticated,
+            browser_chrome_semantics_used: matches!(
+                site_state,
+                SiteLoginState::PasswordManagerSavePrompt
+                    | SiteLoginState::PasswordManagerUpdatePrompt
+                    | SiteLoginState::PasswordManagerUnlockPrompt
+                    | SiteLoginState::PasswordManagerPromptAmbiguous
+            ),
+        }
+    }
+
+    struct FakeSiteLoginAction {
+        secret_material: Vec<u8>,
+        receipt: SiteLoginActionReceipt,
+        calls: usize,
+    }
+
+    impl FakeSiteLoginAction {
+        fn identifier(secret: &str, state_instance_id: &str) -> Self {
+            Self {
+                secret_material: secret.as_bytes().to_vec(),
+                receipt: SiteLoginActionReceipt {
+                    provider_id: "sealed-account-reference-provider".to_string(),
+                    effect_id: "identifier-effect-1".to_string(),
+                    action: AuthenticationActionKind::SubmitAccountIdentifier,
+                    state_instance_id: state_instance_id.to_string(),
+                    response_only_material_consumption: true,
+                    secret_material_exposed: false,
+                    browser_chrome_semantics_used: false,
+                    persistence_verified: false,
+                },
+                calls: 0,
+            }
+        }
+
+        fn persistence(action: AuthenticationActionKind, state_instance_id: &str) -> Self {
+            Self {
+                secret_material: Vec::new(),
+                receipt: SiteLoginActionReceipt {
+                    provider_id: "stock-chrome-password-manager".to_string(),
+                    effect_id: "password-persistence-effect-1".to_string(),
+                    action,
+                    state_instance_id: state_instance_id.to_string(),
+                    response_only_material_consumption: true,
+                    secret_material_exposed: false,
+                    browser_chrome_semantics_used: true,
+                    persistence_verified: true,
+                },
+                calls: 0,
+            }
+        }
+    }
+
+    impl Drop for FakeSiteLoginAction {
+        fn drop(&mut self) {
+            self.secret_material.fill(0);
+        }
+    }
+
+    impl ResponseOnlySiteLoginAction for FakeSiteLoginAction {
+        fn execute(
+            &mut self,
+            context: &SiteLoginActionContext<'_>,
+        ) -> Result<SiteLoginActionReceipt, AuthenticationActionFailure> {
+            self.calls += 1;
+            assert_eq!(context.action, self.receipt.action);
+            assert_eq!(context.state_instance_id, self.receipt.state_instance_id);
+            assert!(!context.run_id.is_empty());
+            assert!(!context.operation_id.is_empty());
+            assert_eq!(context.binding.profile_id, "bill-soylei-chrome");
+            Ok(self.receipt.clone())
+        }
+    }
+
     struct FakeVerifier {
         receipt: AuthenticationVerifierReceipt,
         calls: usize,
@@ -854,6 +1236,175 @@ mod tests {
             AuthenticationRun::new("run-1", binding(), 0).unwrap_err(),
             AuthenticationRunError::TransitionBudgetInvalid
         );
+    }
+
+    #[test]
+    fn identifier_and_password_forms_are_distinct_replay_safe_steps() {
+        let mut run = AuthenticationRun::new("run-site-login", binding(), 12).unwrap();
+        assert_eq!(
+            run.observe_site_login_state(
+                "op-observe-identifier",
+                site_observation(SiteLoginState::IdentifierForm, "form-identifier-1"),
+            )
+            .unwrap(),
+            AuthenticationRunState::AwaitingIdentifier
+        );
+        let mut identifier =
+            FakeSiteLoginAction::identifier(IDENTIFIER_CANARY, "form-identifier-1");
+        run.submit_account_identifier("op-submit-identifier", &mut identifier)
+            .unwrap();
+        assert_eq!(identifier.calls, 1);
+        assert_eq!(run.state, AuthenticationRunState::Ready);
+
+        run.observe_site_login_state(
+            "op-observe-password",
+            site_observation(SiteLoginState::PasswordForm, "form-password-1"),
+        )
+        .unwrap();
+        assert_eq!(run.state, AuthenticationRunState::AwaitingPassword);
+        let mut native = FakeResponseOnlyAction::native();
+        run.submit_native_stored_credentials("op-submit-password", &mut native)
+            .unwrap();
+        assert_eq!(run.state, AuthenticationRunState::Verifying);
+
+        let projections = format!("{}|{:?}", serde_json::to_string(&run).unwrap(), run);
+        assert!(!projections.contains(IDENTIFIER_CANARY));
+    }
+
+    #[test]
+    fn password_manager_save_is_semantic_verified_and_instance_fenced() {
+        let mut run = AuthenticationRun::new("run-save-password", binding(), 8).unwrap();
+        let observation =
+            site_observation(SiteLoginState::PasswordManagerSavePrompt, "chrome-prompt-1");
+        run.observe_site_login_state("op-observe-save", observation.clone())
+            .unwrap();
+        assert_eq!(
+            run.state,
+            AuthenticationRunState::AwaitingPasswordManagerDecision
+        );
+        let mut save = FakeSiteLoginAction::persistence(
+            AuthenticationActionKind::SavePassword,
+            "chrome-prompt-1",
+        );
+        let receipt = run
+            .handle_password_persistence_prompt(
+                "op-save-password",
+                PasswordPersistencePolicy::Save,
+                &mut save,
+            )
+            .unwrap();
+        assert_eq!(save.calls, 1);
+        assert!(receipt.browser_chrome_semantics_used);
+        assert!(receipt.persistence_verified);
+        assert_eq!(run.state, AuthenticationRunState::Verifying);
+        assert_eq!(
+            run.observe_site_login_state("op-observe-save-again", observation),
+            Err(AuthenticationRunError::SiteStateReplay)
+        );
+        assert_eq!(save.calls, 1);
+    }
+
+    #[test]
+    fn update_and_never_password_policies_are_closed_distinct_actions() {
+        let cases = [
+            (
+                SiteLoginState::PasswordManagerUpdatePrompt,
+                PasswordPersistencePolicy::Update,
+                AuthenticationActionKind::UpdatePassword,
+                "chrome-update-prompt-1",
+            ),
+            (
+                SiteLoginState::PasswordManagerSavePrompt,
+                PasswordPersistencePolicy::Never,
+                AuthenticationActionKind::DeclinePasswordPersistence,
+                "chrome-save-prompt-never-1",
+            ),
+            (
+                SiteLoginState::PasswordManagerUpdatePrompt,
+                PasswordPersistencePolicy::Never,
+                AuthenticationActionKind::DeclinePasswordPersistence,
+                "chrome-update-prompt-never-1",
+            ),
+        ];
+        for (index, (site_state, policy, expected_action, state_instance_id)) in
+            cases.into_iter().enumerate()
+        {
+            let mut run =
+                AuthenticationRun::new(format!("run-password-policy-{index}"), binding(), 5)
+                    .unwrap();
+            run.observe_site_login_state(
+                &format!("op-observe-{index}"),
+                site_observation(site_state, state_instance_id),
+            )
+            .unwrap();
+            let mut action = FakeSiteLoginAction::persistence(expected_action, state_instance_id);
+            let receipt = run
+                .handle_password_persistence_prompt(
+                    &format!("op-persistence-{index}"),
+                    policy,
+                    &mut action,
+                )
+                .unwrap();
+            assert_eq!(receipt.action, expected_action);
+            assert_eq!(action.calls, 1);
+            assert_eq!(run.state, AuthenticationRunState::Verifying);
+        }
+    }
+
+    #[test]
+    fn password_manager_prompt_ambiguity_requires_operator_without_input() {
+        let mut run = AuthenticationRun::new("run-ambiguous-prompt", binding(), 4).unwrap();
+        run.observe_site_login_state(
+            "op-observe-ambiguous",
+            site_observation(
+                SiteLoginState::PasswordManagerPromptAmbiguous,
+                "chrome-prompt-ambiguous-1",
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            run.state,
+            AuthenticationRunState::OperatorInterventionRequired
+        );
+        assert!(run.site_action_receipts.is_empty());
+    }
+
+    #[test]
+    fn password_persistence_policy_mismatch_stops_before_effect() {
+        let mut run = AuthenticationRun::new("run-policy-mismatch", binding(), 4).unwrap();
+        run.observe_site_login_state(
+            "op-observe-save",
+            site_observation(SiteLoginState::PasswordManagerSavePrompt, "chrome-prompt-1"),
+        )
+        .unwrap();
+        let mut update = FakeSiteLoginAction::persistence(
+            AuthenticationActionKind::UpdatePassword,
+            "chrome-prompt-1",
+        );
+        assert_eq!(
+            run.handle_password_persistence_prompt(
+                "op-update-password",
+                PasswordPersistencePolicy::Update,
+                &mut update,
+            ),
+            Err(AuthenticationRunError::PersistencePolicyMismatch)
+        );
+        assert_eq!(update.calls, 0);
+        assert!(run.site_action_receipts.is_empty());
+    }
+
+    #[test]
+    fn wrong_tab_site_observation_is_rejected_without_transition() {
+        let mut run = AuthenticationRun::new("run-wrong-tab", binding(), 4).unwrap();
+        let mut observation = site_observation(SiteLoginState::IdentifierForm, "form-identifier-1");
+        observation.tab_id = "different-tab".to_string();
+        assert_eq!(
+            run.observe_site_login_state("op-observe-wrong-tab", observation),
+            Err(AuthenticationRunError::SiteObservationInvalid)
+        );
+        assert_eq!(run.state, AuthenticationRunState::Ready);
+        assert_eq!(run.transition_count, 0);
+        assert!(run.site_observation_receipts.is_empty());
     }
 
     #[test]
