@@ -5506,7 +5506,9 @@ fn install_doctor_reports_expected_upgrade_ready(
             {
                 return false;
             }
-            if code == Some("executable_drift") && supervisor_transition_ready {
+            if code == Some("executable_drift")
+                && (supervisor_transition_ready || runtime_host_transition_ready)
+            {
                 return false;
             }
             if runtime_host_transition_ready
@@ -15701,6 +15703,7 @@ mod tests {
             "data": {
                 "issues": [
                     {"code": "workstation_upgrade_transaction_not_terminal"},
+                    {"code": "executable_drift"},
                     {"code": "active_runtime_stale_executable", "session": "runtime-host"},
                     {"code": "daemon_socket_multiple_listeners"},
                 ],
