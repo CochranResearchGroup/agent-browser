@@ -4310,3 +4310,28 @@ workspace Clippy passes, and the complete source-free workstation installer
 fixture passes. Installed acceptance remains open. The current viable browser
 is PID 45449 on profile `soylei-contact-test-20260906`; it belongs to ongoing
 work and was not closed for another full-shutdown install.
+
+### Preserve-mode presentation blocker and repair
+
+Candidate `df877c68` built as SHA256
+`7182cbb6f99a000c2d57dd59794339c0bbf795a62fb506e97baade88092ca742`.
+Its effect-free preserve dry-run found zero eligible handoffs because all 73
+retained aliases lacked a proven current owner. The only viable production
+browser remained the unrelated SoyLei browser on private display `:101`, which
+cannot satisfy a static RDP route-display join.
+
+Route preflight selected available route 3 on display `:12`. A disposable
+`remote_view_open` then failed with terminal `no_effect` and fully compensated
+browser and lease cleanup. Request and job ID
+`http-service-request-remote_view_open-ea74fcc8-5a55-43ac-9c45-f709f5f7a989`
+identified the actual blocker: global production presentation inventory still
+remembered route B as active for a prior browser although the current route and
+display were the matching orphaned pair and the pool entry was warm idle.
+
+The capacity continuity check now accepts both exact completed-release and
+exact reconciled-orphan transitions from active to warm idle when route and
+display states match, the pool entry is available and unallocated, and both
+historical owner fields match the previous browser. Changed bindings and mixed
+route/display states remain blocking. The new regression and all nine
+production inventory tests pass with strict workspace Clippy. This source fix
+must be included in the next candidate before another presentation attempt.

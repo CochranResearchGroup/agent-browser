@@ -320,7 +320,7 @@ impl ProductionInventory {
                     && old.cleanup_obligation_ids.is_empty()
                     && slot.browser_id.is_some()
                     && exact_pending_binding;
-                let exact_completed_release = old.state == PresentationSlotState::Active
+                let exact_completed_inert_owner = old.state == PresentationSlotState::Active
                     && old.browser_id.is_some()
                     && slot.browser_id.is_none()
                     && slot.route_id.as_deref().is_some_and(|route_id| {
@@ -338,15 +338,16 @@ impl ProductionInventory {
                             else {
                                 return false;
                             };
-                            route.state == "released"
-                                && display.state == "released"
+                            matches!(route.state.as_str(), "released" | "orphaned")
+                                && matches!(display.state.as_str(), "released" | "orphaned")
+                                && route.state == display.state
                                 && entry.state == "available"
                                 && entry.current_route_allocation_id.is_none()
                                 && route.browser_id == old.browser_id
                                 && display.owner_browser_id == old.browser_id
                         })
                     });
-                if exact_pending_browser_acquisition || exact_completed_release {
+                if exact_pending_browser_acquisition || exact_completed_inert_owner {
                     continue;
                 }
                 if slot.browser_id != old.browser_id {
@@ -546,6 +547,38 @@ mod tests {
         assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
         assert!(capacity.slots[0].browser_id.is_none());
         assert_eq!(serde_json::to_value(&state).unwrap(), before);
+    }
+
+    #[test]
+    fn production_inventory_accepts_active_capacity_after_owner_becomes_orphaned() {
+        let (inventory, mut state, config) = fixture();
+        let active_capacity = inventory
+            .qualify(&state, config.clone(), "production", "boot-test", |_, _| {
+                true
+            })
+            .unwrap();
+        assert_eq!(
+            active_capacity.slots[0].state,
+            PresentationSlotState::Active
+        );
+        state.presentation_capacity = Some(active_capacity);
+        state.browsers.clear();
+        let repair = crate::native::service_health::reconcile_remote_view_state_with_display_probe(
+            &mut state,
+            |_| true,
+            false,
+        );
+        assert_eq!(repair.orphaned_routes, 1);
+        assert_eq!(repair.orphaned_display_allocations, 1);
+
+        let capacity = inventory
+            .qualify(&state, config, "production", "boot-test", |_, browser| {
+                browser.is_none()
+            })
+            .unwrap();
+
+        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots[0].browser_id.is_none());
     }
 
     #[test]
