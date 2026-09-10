@@ -213,6 +213,22 @@ inventory rows, some inactive with reachable streams. Do not accept a
 disagree. Plan0116 is reopened as the owning upgrade plan; Plan0160 W3 requires
 its installed acceptance after the profile-control critical path.
 
+Execution checkpoint, 2026-09-10: reviewed full shutdown is now installed and
+receipted by transaction `upgrade-87abf98f-7d04-43b3-8614-b3f501a75149`. It
+closed five managed sessions, preserved profiles, proved the old supervisor PID
+absent, selected generation `0.28.0-2c7c64839abc-9b38e8bd5921`, and converged to
+one supervised production listener. This establishes the explicit shutdown
+recovery path, not ordinary browser-preserving transfer acceptance. The live
+incident exposed and source now repairs three additional installer defects:
+forward recovery lacked a usable admission drain and resume edge; post-commit
+doctor rejected the intended quiesced and exact two-host supervisor transition;
+and workstation reconcile used the one-second ordinary Service State lock
+budget. Source through `c8fa12f9` plus `82096fff` contains these repairs. The
+latest qualified binary remains uninstalled because Odollo opened a new owned
+carrier-tracking browser after the browserless window. Preserve that lane and
+install after it closes. Then prove automatic supervisor replacement, exactly
+one production listener, installed doctor, and shared-route BILL/QBO relaunch.
+
 ### Worker assignments
 
 | Lane | Route and owner | Inputs / exact write scope | Output, dependency and stop |

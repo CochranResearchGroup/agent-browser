@@ -3,21 +3,17 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 287 | 2026-09-09
+## Turn 288 | 2026-09-10
 
-Live QBO and BILL recovery found both Guacamole pool entries `available` and
-capacity slots `warm_idle`, while orphaned route rows retained absent browser
-IDs. The installed validator rejected this as
-`browser_missing_outside_pending_acquisition`. QBO and BILL were placed on
-`:10` and `:11` for immediate manual authentication with profiles preserved.
-Plan0161 adds the missing restart fixture; policy0032 treats prolonged denial
-of proven-unoccupied owned resources as an availability defect. The last
-production installation required a hard stop because the old runtime did not
-surrender. Current census has one live production host, but the supervisor is
-inactive with `port_conflict` and seven runtime-inventory rows remain. P116 is
-reopened for old-runtime surrender, automatic supervisor replacement, and
-single production-runtime convergence. Installed A1, A3, A4, remediation, and
-graceful upgrade remain OPEN.
+The reviewed full-shutdown transaction `upgrade-87abf98f-7d04-43b3-8614-b3f501a75149`
+closed five managed sessions, proved old PID 86878 absent, preserved every profile,
+and accepted generation `0.28.0-2c7c64839abc-9b38e8bd5921`. Production has one
+supervised runtime host, PID 57793, and one listener. BILL and QBO are closed with profiles and credentials preserved.
+
+Source through c8fa12f9 repairs exact multi-host surrender, adopted browser aliases,
+interrupted full-shutdown resume, quiesced-supervisor validation and exact two-host convergence. Commit 82096fff gives workstation reconcile a 30-second lock budget.
+Failed candidate transactions retained the old selection and restored its units. Latest qualified binary `4eadfd171dbf3d7b9ac0897ccba989101742290278c6ee58ff7e1ff3d1e819a9`
+remains uninstalled because Odollo opened a new owned `carrier-tracking-lookup` browser. Preserve it. Once closed, rerun the audited browserless install, prove automatic supervisor replacement and one listener, then relaunch BILL and QBO on shared Guacamole routes and finish profile ownership repair. P116 and Plan0160 remain OPEN.
 
 ## Turn 286 | 2026-09-09
 
