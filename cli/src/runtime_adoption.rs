@@ -417,6 +417,13 @@ pub(crate) struct UpgradeTransaction {
 pub(crate) struct UpgradeRuntimeHandoff {
     pub(crate) source_session: String,
     pub(crate) candidate_session: String,
+    /// Exact runtime-host socket directory that prepared this handoff. Older
+    /// transactions omit it and continue to use the ingress fallback backend.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source_socket_dir: Option<String>,
+    /// Distinguishes a shared runtime host from a legacy per-session daemon.
+    #[serde(default)]
+    pub(crate) source_runtime_host: bool,
     pub(crate) source_process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
     pub(crate) mode: BrowserAdoptionMode,
     pub(crate) committed: bool,

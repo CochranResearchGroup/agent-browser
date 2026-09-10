@@ -7012,6 +7012,9 @@ fn candidate_runtime_host_stage_required(
 enum PreparedCooperativeRuntimeTransfer {
     Handoff {
         source_session: String,
+        source_socket_dir: PathBuf,
+        source_is_runtime_host: bool,
+        source_process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
         prepared: Value,
         retired_aliases: Vec<String>,
     },
@@ -7019,6 +7022,13 @@ enum PreparedCooperativeRuntimeTransfer {
         failed_session: String,
         error: RuntimeTransactionCommandFailure,
     },
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeHandoffSource {
+    socket_dir: PathBuf,
+    is_runtime_host: bool,
+    process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
 }
 
 const CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION: &str = "dashboard-service-backend";
@@ -7093,7 +7103,13 @@ fn transfer_discovered_runtimes(
             preserve_runtime_without_live_source(migration);
             continue;
         };
-        if !runtime_transfer_source_ready(source_is_runtime_host, &source_session) {
+        let source = runtime_handoff_source_for_migration(
+            &service_state,
+            migration,
+            &source_socket_dir,
+            source_is_runtime_host,
+        )?;
+        if !runtime_transfer_source_ready_at(&source, &source_session) {
             record_preserved_runtime_lane_sessions(
                 migration,
                 Some(&source_session),
@@ -7107,13 +7123,21 @@ fn transfer_discovered_runtimes(
             &service_state,
             migration,
             &source_session,
-            &source_socket_dir,
-            source_is_runtime_host,
+            &source.socket_dir,
+            source.is_runtime_host,
         ) {
             Ok((source_session, prepared, retired_aliases)) => {
+                let source_process_identity = if source.is_runtime_host {
+                    source.process_identity
+                } else {
+                    crate::connection::load_daemon_process_identity(&source_session).ok()
+                };
                 cooperative_preparations[index] =
                     Some(PreparedCooperativeRuntimeTransfer::Handoff {
                         source_session,
+                        source_socket_dir: source.socket_dir,
+                        source_is_runtime_host: source.is_runtime_host,
+                        source_process_identity,
                         prepared,
                         retired_aliases,
                     });
@@ -7161,12 +7185,8 @@ fn transfer_discovered_runtimes(
         transaction_revision,
         &candidate_socket_dir,
     ) {
-        let cleanup_errors = abort_prepared_runtime_handoffs(
-            &old_binary,
-            &source_socket_dir,
-            source_is_runtime_host,
-            &cooperative_preparations,
-        );
+        let cleanup_errors =
+            abort_prepared_runtime_handoffs(&old_binary, &cooperative_preparations);
         if cleanup_errors.is_empty() {
             return Err(start_error);
         }
@@ -7190,12 +7210,29 @@ fn transfer_discovered_runtimes(
                         migration.logical_browser_id
                     )
                 })?;
-                let (source_session, prepared, retired_aliases) = match preparation {
+                let (
+                    source_session,
+                    source_socket_dir,
+                    source_is_runtime_host,
+                    source_process_identity,
+                    prepared,
+                    retired_aliases,
+                ) = match preparation {
                     PreparedCooperativeRuntimeTransfer::Handoff {
                         source_session,
+                        source_socket_dir,
+                        source_is_runtime_host,
+                        source_process_identity,
                         prepared,
                         retired_aliases,
-                    } => (source_session, prepared, retired_aliases),
+                    } => (
+                        source_session,
+                        source_socket_dir,
+                        source_is_runtime_host,
+                        source_process_identity,
+                        prepared,
+                        retired_aliases,
+                    ),
                     PreparedCooperativeRuntimeTransfer::CandidateFallback {
                         failed_session,
                         error,
@@ -7260,10 +7297,9 @@ fn transfer_discovered_runtimes(
                 handoffs.push(PreparedRuntimeHandoff {
                     source_session: source_session.clone(),
                     candidate_session: candidate_session.clone(),
-                    source_process_identity: crate::connection::load_daemon_process_identity(
-                        &source_session,
-                    )
-                    .ok(),
+                    source_socket_dir: Some(source_socket_dir.display().to_string()),
+                    source_runtime_host: source_is_runtime_host,
+                    source_process_identity,
                     mode: BrowserAdoptionMode::CooperativeTransfer,
                     committed: false,
                     source_finalized: false,
@@ -7339,6 +7375,8 @@ fn transfer_discovered_runtimes(
                 handoffs.push(PreparedRuntimeHandoff {
                     source_session: source_session.clone(),
                     candidate_session: candidate_session.clone(),
+                    source_socket_dir: None,
+                    source_runtime_host: false,
                     source_process_identity: crate::connection::load_daemon_process_identity(
                         &source_session,
                     )
@@ -7406,23 +7444,24 @@ fn transfer_discovered_runtimes(
 
 fn abort_prepared_runtime_handoffs(
     old_binary: &Path,
-    source_socket_dir: &Path,
-    source_is_runtime_host: bool,
     preparations: &[Option<PreparedCooperativeRuntimeTransfer>],
 ) -> Vec<String> {
     preparations
         .iter()
         .filter_map(|preparation| match preparation {
-            Some(PreparedCooperativeRuntimeTransfer::Handoff { source_session, .. }) => {
-                abort_one_prepared_runtime_handoff(
-                    old_binary,
-                    source_socket_dir,
-                    source_is_runtime_host,
-                    source_session,
-                )
-                .err()
-                .map(|error| format!("{source_session}:{error}"))
-            }
+            Some(PreparedCooperativeRuntimeTransfer::Handoff {
+                source_session,
+                source_socket_dir,
+                source_is_runtime_host,
+                ..
+            }) => abort_one_prepared_runtime_handoff(
+                old_binary,
+                source_socket_dir,
+                *source_is_runtime_host,
+                source_session,
+            )
+            .err()
+            .map(|error| format!("{source_session}:{error}")),
             _ => None,
         })
         .collect()
@@ -7760,6 +7799,155 @@ fn runtime_transfer_source_ready(source_is_runtime_host: bool, session: &str) ->
     }
 }
 
+fn runtime_transfer_source_ready_at(source: &RuntimeHandoffSource, session: &str) -> bool {
+    if source.is_runtime_host {
+        #[cfg(unix)]
+        {
+            return std::os::unix::net::UnixStream::connect(
+                source.socket_dir.join("runtime-host.sock"),
+            )
+            .is_ok();
+        }
+        #[cfg(windows)]
+        {
+            let _ = session;
+            return source.socket_dir.join("runtime-host.port").is_file();
+        }
+    }
+    runtime_transfer_source_ready(false, session)
+}
+
+fn runtime_handoff_source_for_migration(
+    service_state: &crate::native::service_model::ServiceState,
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+    fallback_socket_dir: &Path,
+    fallback_is_runtime_host: bool,
+) -> Result<RuntimeHandoffSource, String> {
+    if !fallback_is_runtime_host {
+        return Ok(RuntimeHandoffSource {
+            socket_dir: fallback_socket_dir.to_path_buf(),
+            is_runtime_host: false,
+            process_identity: None,
+        });
+    }
+
+    let inventory = crate::install::daemon_listener_inventory(None);
+    if inventory.get("available").and_then(Value::as_bool) != Some(true) {
+        return Err("runtime_handoff_source_listener_inventory_unavailable".to_string());
+    }
+    let mut hosts = inventory
+        .get("listeners")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|listener| {
+            let pid = listener
+                .get("pid")
+                .and_then(Value::as_u64)
+                .and_then(|pid| u32::try_from(pid).ok())?;
+            let socket_path = PathBuf::from(listener.get("socketPath")?.as_str()?);
+            if socket_path.file_name().and_then(|value| value.to_str()) != Some("runtime-host.sock")
+            {
+                return None;
+            }
+            let socket_dir = socket_path.parent()?.to_path_buf();
+            let identity_path = socket_dir.join("runtime-host.identity.json");
+            let identity: crate::process_identity::RecordedProcessIdentity =
+                serde_json::from_slice(&fs::read(identity_path).ok()?).ok()?;
+            (identity.pid == pid
+                && crate::process_identity::recorded_process_is_running(&identity).ok()?)
+            .then_some(RuntimeHandoffSource {
+                socket_dir,
+                is_runtime_host: true,
+                process_identity: Some(identity),
+            })
+        })
+        .collect::<Vec<_>>();
+    hosts.sort_by(|left, right| left.socket_dir.cmp(&right.socket_dir));
+    hosts.dedup_by(|left, right| left.socket_dir == right.socket_dir);
+    if hosts.is_empty() {
+        return Err("runtime_handoff_source_runtime_host_missing".to_string());
+    }
+
+    let browser_pid = service_state
+        .browsers
+        .get(&migration.logical_browser_id)
+        .and_then(|browser| browser.pid)
+        .or_else(|| {
+            let mut matches = service_state
+                .browsers
+                .values()
+                .filter(|browser| {
+                    browser.active_session_ids.iter().any(|session| {
+                        migration
+                            .session_names
+                            .iter()
+                            .any(|candidate| candidate == session)
+                    })
+                })
+                .filter_map(|browser| browser.pid)
+                .collect::<std::collections::BTreeSet<_>>();
+            (matches.len() == 1).then(|| matches.pop_first()).flatten()
+        });
+    select_runtime_handoff_source(hosts, migration, browser_pid.and_then(process_parent_pid))
+}
+
+fn select_runtime_handoff_source(
+    hosts: Vec<RuntimeHandoffSource>,
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+    browser_parent_pid: Option<u32>,
+) -> Result<RuntimeHandoffSource, String> {
+    if let Some(parent_pid) = browser_parent_pid {
+        let mut matching = hosts.iter().filter(|host| {
+            host.process_identity
+                .as_ref()
+                .is_some_and(|identity| identity.pid == parent_pid)
+        });
+        if let Some(host) = matching.next() {
+            if matching.next().is_none() {
+                return Ok(host.clone());
+            }
+        }
+    }
+
+    let marker_matches = hosts
+        .iter()
+        .filter(|host| {
+            migration.session_names.iter().any(|session| {
+                host.socket_dir.join(format!("{session}.stream")).is_file()
+                    || host.socket_dir.join(format!("{session}.engine")).is_file()
+            })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if let [host] = marker_matches.as_slice() {
+        return Ok(host.clone());
+    }
+    if let [host] = hosts.as_slice() {
+        return Ok(host.clone());
+    }
+    Err(format!(
+        "runtime_handoff_source_host_ambiguous:{}",
+        migration.logical_browser_id
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn process_parent_pid(pid: u32) -> Option<u32> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat.rsplit_once(") ")?
+        .1
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn process_parent_pid(_pid: u32) -> Option<u32> {
+    None
+}
+
 fn prepare_runtime_handoff_with_alias_fallback(
     old_binary: &Path,
     service_state: &crate::native::service_model::ServiceState,
@@ -8024,6 +8212,8 @@ fn adopt_runtime_via_verified_orphan_fallback(
     handoffs.push(PreparedRuntimeHandoff {
         source_session: source_session.to_string(),
         candidate_session: candidate_session.clone(),
+        source_socket_dir: None,
+        source_runtime_host: false,
         source_process_identity: crate::connection::load_daemon_process_identity(source_session)
             .ok(),
         mode: BrowserAdoptionMode::OrphanAdoption,
@@ -9592,11 +9782,18 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
     let preserve_source_runtime_host = source_is_runtime_host && !source_host_retirement_recorded;
     for handoff in &mut prepared.runtime_handoffs {
         if handoff.should_finalize_source() {
+            let handoff_socket_dir = handoff
+                .source_socket_dir
+                .as_deref()
+                .map(Path::new)
+                .unwrap_or(source_backend.socket_dir.as_path());
+            let handoff_is_runtime_host = handoff.source_runtime_host
+                || (handoff.source_socket_dir.is_none() && source_is_runtime_host);
             run_agent_json_detailed_in_socket_dir(
                 &transaction_client,
                 &handoff.source_session,
                 &["handoff", "finalize"],
-                Some((&source_backend.socket_dir, source_is_runtime_host)),
+                Some((handoff_socket_dir, handoff_is_runtime_host)),
             )
             .map_err(|error| error.message)?;
             handoff.source_finalized = true;
@@ -9605,6 +9802,10 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
     if source_is_runtime_host && source_host_retirement_recorded {
         retire_finalized_source_runtime_host(&prepared.transaction, &source_backend)?;
     }
+    retire_additional_finalized_source_runtime_hosts(
+        &prepared.runtime_handoffs,
+        source_backend.socket_dir.as_path(),
+    )?;
     prove_finalized_source_exit(
         &prepared.transaction,
         &prepared.runtime_handoffs,
@@ -9623,6 +9824,68 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
             &prepared.transaction.transaction_id,
             &handoff.source_session,
         )?;
+    }
+    Ok(())
+}
+
+fn retire_additional_finalized_source_runtime_hosts(
+    handoffs: &[PreparedRuntimeHandoff],
+    ingress_source_socket_dir: &Path,
+) -> Result<(), String> {
+    let mut seen = std::collections::BTreeSet::new();
+    for handoff in handoffs
+        .iter()
+        .filter(|handoff| handoff.source_finalized && handoff.source_runtime_host)
+    {
+        let Some(socket_dir) = handoff.source_socket_dir.as_deref().map(Path::new) else {
+            continue;
+        };
+        if socket_dir == ingress_source_socket_dir {
+            continue;
+        }
+        let identity = handoff.source_process_identity.as_ref().ok_or_else(|| {
+            format!(
+                "runtime_source_process_identity_missing:{}",
+                handoff.source_session
+            )
+        })?;
+        if !seen.insert((identity.pid, identity.start_token.clone())) {
+            continue;
+        }
+        retire_exact_finalized_runtime_host(socket_dir, identity)?;
+    }
+    Ok(())
+}
+
+fn retire_exact_finalized_runtime_host(
+    socket_dir: &Path,
+    expected: &crate::process_identity::RecordedProcessIdentity,
+) -> Result<(), String> {
+    let identity_path = socket_dir.join("runtime-host.identity.json");
+    let recorded: crate::process_identity::RecordedProcessIdentity =
+        serde_json::from_slice(&fs::read(&identity_path).map_err(display_io(
+            "read additional source runtime host identity",
+            &identity_path,
+        ))?)
+        .map_err(|error| format!("runtime_additional_source_host_identity_invalid:{error}"))?;
+    if &recorded != expected {
+        return Err("runtime_additional_source_host_identity_changed_before_stop".to_string());
+    }
+    if wait_for_recorded_process_exit(expected, std::time::Duration::from_millis(100))? {
+        return Ok(());
+    }
+    let Some(process) = crate::process_identity::VerifiedProcessTermination::open(expected)? else {
+        return Ok(());
+    };
+    process.signal(crate::process_identity::VerifiedProcessSignal::Terminate)?;
+    if !wait_for_recorded_process_exit(expected, std::time::Duration::from_secs(5))? {
+        process.signal(crate::process_identity::VerifiedProcessSignal::Kill)?;
+    }
+    if !wait_for_recorded_process_exit(expected, std::time::Duration::from_secs(5))? {
+        return Err(format!(
+            "runtime_additional_source_host_exit_timeout:{}",
+            expected.pid
+        ));
     }
     Ok(())
 }
@@ -12916,7 +13179,7 @@ mod tests {
 
         assert_eq!(
             fs::read_to_string(&args_path).unwrap(),
-            "--json\n--session\ndashboard-service-backend\nstream\nstatus\n"
+            "--json\n--session\ndashboard-service-backend\n--service-state-lock-timeout-ms\n30000\nstream\nstatus\n"
         );
         assert_eq!(
             fs::read_to_string(&claim_path).unwrap(),
@@ -15513,6 +15776,8 @@ mod tests {
         let handoffs = vec![PreparedRuntimeHandoff {
             source_session: "cooperative-source".to_string(),
             candidate_session: "cooperative-candidate".to_string(),
+            source_socket_dir: None,
+            source_runtime_host: false,
             source_process_identity: None,
             mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
             committed: true,
@@ -15543,6 +15808,109 @@ mod tests {
     }
 
     #[test]
+    fn multi_host_handoff_selects_the_unique_live_session_marker() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-source-marker-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let first = root.join("first");
+        let second = root.join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        fs::write(second.join("owner-route.engine"), "chrome").unwrap();
+        let mut migration = runtime_migration("browser-a");
+        migration.session_names = vec!["owner-route".to_string()];
+        let selected = select_runtime_handoff_source(
+            vec![
+                RuntimeHandoffSource {
+                    socket_dir: first,
+                    is_runtime_host: true,
+                    process_identity: None,
+                },
+                RuntimeHandoffSource {
+                    socket_dir: second.clone(),
+                    is_runtime_host: true,
+                    process_identity: None,
+                },
+            ],
+            &migration,
+            None,
+        )
+        .unwrap();
+        assert_eq!(selected.socket_dir, second);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn multi_host_handoff_rejects_unproven_source_identity() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-source-ambiguous-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let first = root.join("first");
+        let second = root.join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        let migration = runtime_migration("browser-a");
+        let error = select_runtime_handoff_source(
+            vec![
+                RuntimeHandoffSource {
+                    socket_dir: first,
+                    is_runtime_host: true,
+                    process_identity: None,
+                },
+                RuntimeHandoffSource {
+                    socket_dir: second,
+                    is_runtime_host: true,
+                    process_identity: None,
+                },
+            ],
+            &migration,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(error, "runtime_handoff_source_host_ambiguous:browser-a");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn multi_host_handoff_prefers_browser_parent_over_stale_marker() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-source-parent-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let parent_host = root.join("parent");
+        let stale_host = root.join("stale");
+        fs::create_dir_all(&parent_host).unwrap();
+        fs::create_dir_all(&stale_host).unwrap();
+        fs::write(stale_host.join("owner-route.engine"), "chrome").unwrap();
+        let identity =
+            crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                .unwrap();
+        let mut migration = runtime_migration("browser-a");
+        migration.session_names = vec!["owner-route".to_string()];
+        let selected = select_runtime_handoff_source(
+            vec![
+                RuntimeHandoffSource {
+                    socket_dir: parent_host.clone(),
+                    is_runtime_host: true,
+                    process_identity: Some(identity),
+                },
+                RuntimeHandoffSource {
+                    socket_dir: stale_host,
+                    is_runtime_host: true,
+                    process_identity: None,
+                },
+            ],
+            &migration,
+            Some(std::process::id()),
+        )
+        .unwrap();
+        assert_eq!(selected.socket_dir, parent_host);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn finalized_lane_does_not_require_its_exact_preserved_source_host_to_exit() {
         let root = env::temp_dir().join(format!(
             "agent-browser-preserved-source-host-exit-proof-{}",
@@ -15561,6 +15929,8 @@ mod tests {
         let handoff = PreparedRuntimeHandoff {
             source_session: "source-session".to_string(),
             candidate_session: "candidate-session".to_string(),
+            source_socket_dir: None,
+            source_runtime_host: false,
             source_process_identity: Some(identity.clone()),
             mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
             committed: true,
@@ -16212,6 +16582,8 @@ mod tests {
         let cooperative = PreparedRuntimeHandoff {
             source_session: "source".to_string(),
             candidate_session: "candidate".to_string(),
+            source_socket_dir: None,
+            source_runtime_host: false,
             source_process_identity: None,
             mode: BrowserAdoptionMode::CooperativeTransfer,
             committed: true,
