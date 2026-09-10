@@ -190,6 +190,18 @@ path with current custody checks and existing authority; a process-only unit
 setting alone is not proof of preserving shutdown. If installation cannot fit,
 keep installed acceptance explicitly incomplete.
 
+Operator correction, 2026-09-09: the latest production installation required a
+full hard stop because the ordinary upgrade transition could not preserve and
+transfer the running runtime. Classify that installation as a forced recovery,
+not graceful-upgrade acceptance. Artifact preservation and eventual service
+health do not satisfy this boundary. Before another production candidate is
+called operational, one exact installed upgrade must drain new effects, preserve
+or transfer every current owned browser, profile, tab, lease, display, route,
+handoff, and scheduled client, commit the candidate only after custody succeeds,
+and resume them without manual process termination or state-file repair. An
+injected interruption must retain the old selected generation and usable
+browsers, or roll back deterministically.
+
 ### Worker assignments
 
 | Lane | Route and owner | Inputs / exact write scope | Output, dependency and stop |

@@ -7,16 +7,16 @@ Keep at or below 200 lines under policy0043.
 ## Turn 287 | 2026-09-09
 
 Live QBO and BILL recovery found both Guacamole pool entries `available` and
-both production capacity slots `warm_idle`, while persisted orphaned route rows
-still carried absent browser IDs. The installed validator rejected that
-contradiction as `browser_missing_outside_pending_acquisition`. QBO and BILL
-were placed on `:10` and `:11` for immediate manual authentication, preserving
-their profile directories. Plan0161 now includes the missing restart fixture
-and exact orphan-owner convergence. Policy0032 now treats prolonged denial of a
-proven-owned, proven-unoccupied resource as an availability defect and requires
-desired topology, current occupancy, and history to remain distinct. This is
-`outcome_progress` for diagnosis and `regression` for installed acceptance;
-A1, A3, A4, and the first-class remediation implementation remain OPEN.
+capacity slots `warm_idle`, while orphaned route rows retained absent browser
+IDs. The installed validator rejected this as
+`browser_missing_outside_pending_acquisition`. QBO and BILL were placed on
+`:10` and `:11` for immediate manual authentication with profiles preserved.
+Plan0161 adds the missing restart fixture and orphan-owner convergence;
+policy0032 treats prolonged denial of proven-unoccupied owned resources as an
+availability defect. The operator also corrected the upgrade record: the last
+production installation required a full hard stop and is forced recovery, not
+graceful-upgrade acceptance. Diagnosis made `outcome_progress`; installed A1,
+A3, A4, first-class remediation, and graceful upgrade remain OPEN.
 
 ## Turn 286 | 2026-09-09
 
@@ -90,7 +90,7 @@ not fresh executions on052848aa. N receipts identify the current installation.
 | A1 first-class profile remediation | Plan0161 open / incomplete / no / no | Plan0161; Plan0160 first-class profile remediation amendment | Implement profile diagnose and preserving repair first. The BILL fixture joins stale-owner routing and proven-stale Chrome locks through one recovery launch; also prove legacy-principal repair, foreign-owner rejection, idempotency and peer survival. Scoped reset follows. |
 | A2 local remote-view journey | yes / installed052848aa pass with same-link recovery / yes / synthetic | local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt | Two authenticated viewers, anonymous denial, same-link reconnect and trusted input pass. Preserve initial local-viewers-2wL0BG failure; external vantage remains separate. |
 | A3 current readiness | yes / installed doctor pass / yes / n/a | N/installation-postjourney-doctor.json; N/configuration-freeze.json | Preserve warning dispositions and current evidence; doctor alone does not prove complete operation. |
-| A3 preserving shutdown delivery | scoped / replacement preservation pass / yes / synthetic handle pass | R/activation-receipt.json; R/retained-storage-after.json | Normal graceful restart is not a preserving path. Existing explicit browser-close semantics remain unchanged. |
+| A3 preserving shutdown delivery | scoped / forced recovery only / installed but unaccepted / no | R/activation-receipt.json; operator correction in Turn287 | Last production install required a full hard stop. Prove one ordinary upgrade that preserves or transfers every owned browser and resumes profiles, tabs, leases, routes, handoffs, and scheduled clients without manual termination or state repair. |
 | A4 scheduled/restart continuity | partial / three current steady cycles pass / timer active / incomplete | R/steady-cadence/scheduled-control.json | Normal gaps300.875s,300.398s,300.526s; current configuration and five roots preserved. Startup gap298.8s excluded. Full A1 prerequisites and ordered controlled-restart/next-cycle sequence remain incomplete; no second production restart performed. |
 | AX selected seven cases | surfaces implemented / partial / yes / partial | R/primary-evidence-disposition.json; P/post-r4-ax-acceptance.json | Seven exact returned-ID failure reconstructions remain unjoined. Profile selection, missing binding, changed generation, stale target/transport, Xvfb, journal interruption and failed transition are distinct predicates. |
 | Historical wrong-tab attribution | current repair / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |
