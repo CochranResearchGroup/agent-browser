@@ -1768,14 +1768,22 @@ fn recover_operator_required_upgrade_for_root(
     }
 
     let mut live_process_references = std::collections::BTreeMap::new();
-    collect_process_generation_references(&paths, &mut live_process_references);
+    collect_process_generation_references_excluding_pid(
+        &paths,
+        &mut live_process_references,
+        std::process::id(),
+    );
     if !candidate_matches_preserved_generation
         && live_process_references.contains_key(&transaction.candidate_generation_id)
         && operator_recovery_can_stop_rolled_back_candidate_host(&transaction)
     {
         stop_candidate_runtime_host(&paths, &transaction)?;
         live_process_references.clear();
-        collect_process_generation_references(&paths, &mut live_process_references);
+        collect_process_generation_references_excluding_pid(
+            &paths,
+            &mut live_process_references,
+            std::process::id(),
+        );
     }
     if !candidate_matches_preserved_generation
         && live_process_references.contains_key(&transaction.candidate_generation_id)
@@ -2544,6 +2552,19 @@ fn collect_process_generation_references(
     collect_process_generation_references_from(Path::new("/proc"), paths, references);
 }
 
+fn collect_process_generation_references_excluding_pid(
+    paths: &InstallPaths,
+    references: &mut std::collections::BTreeMap<String, Vec<String>>,
+    excluded_pid: u32,
+) {
+    collect_process_generation_references_from_impl(
+        Path::new("/proc"),
+        paths,
+        references,
+        Some(excluded_pid),
+    );
+}
+
 /// Adds references for exact process executables rooted in an immutable
 /// generation. The proc root is injectable so the cleanup safety boundary is
 /// deterministic without starting or signaling a process in tests.
@@ -2552,15 +2573,21 @@ fn collect_process_generation_references_from(
     paths: &InstallPaths,
     references: &mut std::collections::BTreeMap<String, Vec<String>>,
 ) {
+    collect_process_generation_references_from_impl(proc_root, paths, references, None);
+}
+
+fn collect_process_generation_references_from_impl(
+    proc_root: &Path,
+    paths: &InstallPaths,
+    references: &mut std::collections::BTreeMap<String, Vec<String>>,
+    excluded_pid: Option<u32>,
+) {
     let Ok(entries) = fs::read_dir(proc_root) else {
         return;
     };
     for entry in entries.filter_map(Result::ok).filter(|entry| {
-        entry
-            .file_name()
-            .to_string_lossy()
-            .bytes()
-            .all(|byte| byte.is_ascii_digit())
+        let name = entry.file_name().to_string_lossy().into_owned();
+        name.bytes().all(|byte| byte.is_ascii_digit()) && name.parse::<u32>().ok() != excluded_pid
     }) {
         let Ok(executable) = fs::read_link(entry.path().join("exe")) else {
             continue;
@@ -14307,6 +14334,15 @@ mod tests {
             vec!["session_supervisor"]
         );
         assert_eq!(references["live-process-generation"], vec!["live_process"]);
+
+        let mut excluding_recovery_process = std::collections::BTreeMap::new();
+        collect_process_generation_references_from_impl(
+            &fake_proc,
+            &paths,
+            &mut excluding_recovery_process,
+            Some(4242),
+        );
+        assert!(!excluding_recovery_process.contains_key("live-process-generation"));
 
         fs::remove_dir_all(root).unwrap();
     }

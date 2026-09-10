@@ -14,14 +14,11 @@ Source through c8fa12f9 repairs exact multi-host surrender, adopted browser alia
 interrupted full-shutdown resume, quiesced-supervisor validation and exact two-host convergence. Commit 82096fff gives workstation reconcile a 30-second lock budget.
 Failed candidate transactions retained the old selection and restored its units. Odollo's live `carrier-tracking-lookup` lane is now the preserving acceptance case. Candidate request r54902 created a ready synthetic handoff on route A without disturbing it. Preserve transaction f1042f2c reached runtimes_transferring, but interruption preceded every handoff; guarded resume incorrectly demanded replay evidence and rolled back both browsers. Source now restarts only an exactly effect-free transfer phase. Rebuild once, repeat preserve mode, require unchanged browser identities plus automatic supervisor and one-listener convergence, then relaunch BILL and QBO and finish profile ownership repair. P116 and Plan0160 remain OPEN.
 
-The repaired repeat, transaction 39fc034e, committed both browser handoffs and
-candidate presentation, then rolled back because post-commit doctor assumed an
-exact two-listener transition. This case correctly had old, candidate, and one
-additional receipted source host pending finalization. Source now derives that
-exact set from the transaction and still rejects any unrecorded listener. Both
-browsers and old selection remain usable. Rebuild and make one final preserving
-attempt; acceptance still requires automatic supervisor replacement and one
-production listener after finalization.
+Transaction 39fc034e exposed a hard-coded two-listener validation assumption; source now proves the complete receipted host set.
+Transaction 57c947dc passed that gate and finalized both handoffs, but an exit-time namespace observation race blocked additional-host retirement.
+Rollback removed the candidate socket before stopping its process, and candidate-binary recovery counted itself as live.
+Selected-binary recovery completed; the old supervisor was restarted, one listener is steady, and Odollo diagnostics prove the retained page and full attestation.
+Fix both defects before another preserving attempt. Plan0160 remains OPEN.
 
 ## Turn 286 | 2026-09-09
 
@@ -196,9 +193,7 @@ or automatic runtime stopping. Selector baseline remains v0.1.24 with scoped
 local overrides and adoption feedback in Plan0160; no shared-library replacement.
 Focused auditor tests passed22; legacy migration is not part of this slice.
 
-Preserve unrelated consumer edits to incident0156 and untracked notes0159/0160.
-Earlier exact cleanup of six finished P159 fixtures remains accepted; do not
-repeat it. No production browser/profile/credential/payment cleanup was performed.
+Preserve unrelated consumer edits to incident0156 and untracked notes0159/0160. Earlier exact cleanup of six finished P159 fixtures remains accepted; do not repeat it. No production browser/profile/credential/payment cleanup was performed.
 
 - [Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md)
 - [Earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md)

@@ -252,6 +252,21 @@ unrecorded listener. The convergence-window multiplicity issue is transitional
 only when that exact proof passes. Transaction rollback preserved both browsers
 and restored the old selected generation.
 
+The next repeat, transaction
+`upgrade-57c947dc-0504-42c5-93b0-f14d2ad2e7cc`, passed that host-set gate and
+finalized both browser handoffs. Additional-source retirement then raced the
+source process exit: delegated observation returned missing after the initial
+start-token read, but classified that disappearance as ambiguous. Rollback
+could no longer reverse finalized handoffs, correctly entered operator recovery,
+and retained the candidate. Its cleanup removed the candidate socket directory
+before the candidate process exited; recovery through the candidate binary also
+counted its own process as a live candidate reference. Selected-generation
+recovery completed after the candidate exited, the production supervisor was
+restarted, and fresh diagnostics proved the unchanged Odollo page with complete
+control-plane attestation. Fix exit-race classification and exclude only the
+recovery command's own PID from candidate-process references. The installed
+candidate and automatic supervisor convergence requirements remain unmet.
+
 ### Worker assignments
 
 | Lane | Route and owner | Inputs / exact write scope | Output, dependency and stop |
