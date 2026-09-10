@@ -267,6 +267,16 @@ control-plane attestation. Fix exit-race classification and exclude only the
 recovery command's own PID from candidate-process references. The installed
 candidate and automatic supervisor convergence requirements remain unmet.
 
+Transaction `upgrade-b1698c1b-9379-4dd7-8239-339363c50bdd` reproduced the
+remaining finalization defect after exact three-host validation and both handoff
+commits. Source PID 87803 was absent by the first one-second observation after
+failure, proving that no signal escalation was needed. The exit waiter now
+retries only the exact ambiguous-observation result within its existing grace,
+returns immediately for missing processes, and continues to reject a proven
+start-token or executable mismatch. Selected-generation recovery again completed
+and restored one supervised production listener. A further live install has not
+yet accepted the candidate.
+
 ### Worker assignments
 
 | Lane | Route and owner | Inputs / exact write scope | Output, dependency and stop |

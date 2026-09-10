@@ -10100,13 +10100,32 @@ fn wait_for_recorded_process_exit(
     identity: &crate::process_identity::RecordedProcessIdentity,
     timeout: std::time::Duration,
 ) -> Result<bool, String> {
+    wait_for_recorded_process_exit_with(timeout, || {
+        crate::process_identity::recorded_process_is_running(identity)
+    })
+}
+
+fn wait_for_recorded_process_exit_with(
+    timeout: std::time::Duration,
+    mut process_is_running: impl FnMut() -> Result<bool, String>,
+) -> Result<bool, String> {
     let deadline = std::time::Instant::now() + timeout;
+    let mut last_ambiguous_observation;
     loop {
-        if !crate::process_identity::recorded_process_is_running(identity)? {
-            return Ok(true);
+        match process_is_running() {
+            Ok(false) => return Ok(true),
+            Ok(true) => last_ambiguous_observation = None,
+            Err(error)
+                if error.contains(
+                    "recorded process identity is ambiguous (process_observation_failed)",
+                ) =>
+            {
+                last_ambiguous_observation = Some(error);
+            }
+            Err(error) => return Err(error),
         }
         if std::time::Instant::now() >= deadline {
-            return Ok(false);
+            return last_ambiguous_observation.map_or(Ok(false), Err);
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
@@ -14006,6 +14025,26 @@ mod tests {
             wait_for_recorded_process_exit(&identity, std::time::Duration::from_secs(1)).unwrap()
         );
         child.wait().unwrap();
+    }
+
+    #[test]
+    fn finalized_runtime_host_grace_retries_only_ambiguous_observation() {
+        let ambiguous = "Refusing to signal PID 42 because recorded process identity is ambiguous (process_observation_failed)";
+        let mut observations =
+            std::collections::VecDeque::from([Err(ambiguous.to_string()), Ok(false)]);
+        assert!(
+            wait_for_recorded_process_exit_with(std::time::Duration::from_secs(1), || observations
+                .pop_front()
+                .unwrap())
+            .unwrap()
+        );
+
+        let reused = "Refusing to signal PID 42 because it no longer matches the recorded process identity (process_start_token_mismatch)";
+        let error = wait_for_recorded_process_exit_with(std::time::Duration::from_secs(1), || {
+            Err(reused.to_string())
+        })
+        .unwrap_err();
+        assert_eq!(error, reused);
     }
 
     #[test]

@@ -18,7 +18,8 @@ Transaction 39fc034e exposed a hard-coded two-listener validation assumption; so
 Transaction 57c947dc passed that gate and finalized both handoffs, but an exit-time namespace observation race blocked additional-host retirement.
 Rollback removed the candidate socket before stopping its process, and candidate-binary recovery counted itself as live.
 Selected-binary recovery completed; the old supervisor was restarted, one listener is steady, and Odollo diagnostics prove the retained page and full attestation.
-Fix both defects before another preserving attempt. Plan0160 remains OPEN.
+Transaction b1698c1b reproduced only the transient observer failure; source PID 87803 was already absent at the first one-second check.
+Source now retries only ambiguous observations during the existing grace and still refuses proven PID reuse. Selected recovery restored one supervisor. Plan0160 remains OPEN.
 
 ## Turn 286 | 2026-09-09
 
