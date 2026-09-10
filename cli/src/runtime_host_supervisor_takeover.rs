@@ -557,7 +557,7 @@ pub(crate) fn resume_supervisor_takeover(
             .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
     )
     .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-    if drain.transaction_id != transaction.transaction_id {
+    if drain.transaction_id != takeover_admission_owner_id(&transaction) {
         return Err("runtime_admission_drain_owner_changed".to_string());
     }
 
