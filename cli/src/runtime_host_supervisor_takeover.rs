@@ -418,6 +418,9 @@ fn retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id: &str) -> Resu
             .parent()
             .ok_or_else(|| "superseded_runtime_socket_directory_missing".to_string())?;
         require_runtime_host_process_environment(pid, socket_dir)?;
+        if runtime_host_has_live_browser_child(pid)? {
+            return Err(format!("superseded_runtime_retains_live_browser:{pid}"));
+        }
         let observed = match crate::process_identity::observe_process(pid) {
             ProcessObservation::Observed(observed) => observed,
             ProcessObservation::Missing => continue,
@@ -461,6 +464,38 @@ fn retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id: &str) -> Resu
         }
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn runtime_host_has_live_browser_child(runtime_pid: u32) -> Result<bool, String> {
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+
+    let state = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
+    for browser_pid in state.browsers.values().filter_map(|browser| browser.pid) {
+        let stat = match fs::read_to_string(format!("/proc/{browser_pid}/stat")) {
+            Ok(stat) => stat,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!(
+                    "superseded_runtime_browser_parent_unreadable:{browser_pid}:{error}"
+                ));
+            }
+        };
+        let Some(after_name) = stat.rsplit_once(") ").map(|(_, value)| value) else {
+            return Err(format!(
+                "superseded_runtime_browser_stat_invalid:{browser_pid}"
+            ));
+        };
+        let parent_pid = after_name
+            .split_whitespace()
+            .nth(1)
+            .and_then(|value| value.parse::<u32>().ok())
+            .ok_or_else(|| format!("superseded_runtime_browser_stat_invalid:{browser_pid}"))?;
+        if parent_pid == runtime_pid {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(target_os = "linux")]
@@ -569,6 +604,7 @@ fn execute_takeover(
         plan,
         source_identity,
         takeover_admission_owner_id(transaction),
+        transaction.parent_admission_transaction_id.is_some(),
     )?;
     let process = VerifiedProcessTermination::open(source_identity)?
         .ok_or_else(|| "blocked_selected_process_missing_before_signal".to_string())?;
@@ -576,6 +612,7 @@ fn execute_takeover(
         plan,
         source_identity,
         takeover_admission_owner_id(transaction),
+        transaction.parent_admission_transaction_id.is_some(),
     )?;
     advance_transaction(transaction, SupervisorTakeoverState::SourceRetiring)?;
 
@@ -805,6 +842,7 @@ fn revalidate_source(
     plan: &SupervisorTakeoverPlan,
     source_identity: &RecordedProcessIdentity,
     transaction_id: &str,
+    accepted_upgrade_transition: bool,
 ) -> Result<(), String> {
     let registry =
         RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path()).load()?;
@@ -823,7 +861,9 @@ fn revalidate_source(
         return Err("blocked_identity_changed_before_signal".to_string());
     }
     let census = crate::workstation_install::collect_stable_host_runtime_census()?;
-    if !browserless_census_is_safe(&census) {
+    if !census.activation_allowed
+        || (!accepted_upgrade_transition && !browserless_census_is_safe(&census))
+    {
         return Err("blocked_runtime_census_changed_before_signal".to_string());
     }
     let ports = listener_ports_for_pid(plan.selected_backend.pid)?;
