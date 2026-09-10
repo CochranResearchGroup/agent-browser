@@ -5692,6 +5692,10 @@ dashboard ingress commit command remains a recovery path for an already-ready
 receipt. Durable-handoff resolution prepares the exact retained owner lane
 before using its saved HTTP port after a runtime-host restart. Failed preparation
 returns durable_handoff_owner_prepare_failed before forwarding the request.
+A successful workstation apply rewrites the runtime-host lane manifests for
+the selected executable and completes an identity-bound takeover into the user
+supervisor. Readiness requires one selected supervised host whose PID,
+executable, ingress identity, and configured stream ports pass a fresh census.
 A Ready retained owner reconnects to the exact handoff target after identity checks.
 Recovery preserves its known route and display across pending or orphaned
 presentation when current-boot custody matches; physical ownership and visibility

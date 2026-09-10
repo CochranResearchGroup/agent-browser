@@ -213,6 +213,13 @@ pub(crate) fn apply_supervisor_takeover(
     expected_plan_digest: &str,
 ) -> Result<SupervisorTakeoverOutcome, String> {
     let initial = plan_supervisor_takeover()?;
+    apply_supervisor_takeover_from_plan(initial, expected_plan_digest)
+}
+
+fn apply_supervisor_takeover_from_plan(
+    initial: SupervisorTakeoverPlan,
+    expected_plan_digest: &str,
+) -> Result<SupervisorTakeoverOutcome, String> {
     require_plan_digest(&initial, expected_plan_digest)?;
     if initial.disposition == SupervisorTakeoverDisposition::AlreadySupervised {
         return Ok(outcome_without_transaction(&initial));
@@ -284,6 +291,33 @@ pub(crate) fn apply_supervisor_takeover(
             .unwrap_or(plan.ingress_revision),
         browser_launched: false,
     })
+}
+
+/// Complete the accepted workstation upgrade by placing the selected runtime
+/// host under the rewritten user supervisor, then prove the resulting
+/// supervisor and runtime topology from a fresh census.
+pub(crate) fn ensure_selected_runtime_host_supervised() -> Result<SupervisorTakeoverOutcome, String>
+{
+    let plan = plan_supervisor_takeover()?;
+    let outcome = match plan.disposition {
+        SupervisorTakeoverDisposition::AlreadySupervised => outcome_without_transaction(&plan),
+        SupervisorTakeoverDisposition::ReadyForTakeover => {
+            let plan_digest = plan.plan_digest.clone();
+            apply_supervisor_takeover_from_plan(plan, &plan_digest)?
+        }
+        SupervisorTakeoverDisposition::Blocked => {
+            require_ready_plan(&plan)?;
+            unreachable!("blocked supervisor takeover plan was accepted")
+        }
+    };
+    let verified = plan_supervisor_takeover()?;
+    if verified.disposition != SupervisorTakeoverDisposition::AlreadySupervised {
+        return Err(format!(
+            "runtime_host_supervisor_post_upgrade_verification_failed:{:?}",
+            verified.blockers
+        ));
+    }
+    Ok(outcome)
 }
 
 pub(crate) fn resume_supervisor_takeover(
@@ -641,10 +675,8 @@ fn active_coordination_blocker() -> Result<Option<SupervisorTakeoverBlocker>, St
         }));
     }
     if let Some(home) = dirs::home_dir() {
-        if home
-            .join(".agent-browser/convergence/workstation.lock")
-            .exists()
-        {
+        let workstation_lock = home.join(".agent-browser/convergence/workstation.lock");
+        if workstation_transaction_is_foreign(&workstation_lock, std::process::id()) {
             return Ok(Some(SupervisorTakeoverBlocker {
                 code: "blocked_active_workstation_transaction".to_string(),
                 message: "A workstation convergence transaction is active.".to_string(),
@@ -669,6 +701,16 @@ fn active_coordination_blocker() -> Result<Option<SupervisorTakeoverBlocker>, St
         }
     }
     Ok(None)
+}
+
+fn workstation_transaction_is_foreign(path: &Path, current_pid: u32) -> bool {
+    if !path.exists() {
+        return false;
+    }
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        != Some(current_pid)
 }
 
 fn listener_ports_for_pid(pid: u32) -> Result<BTreeSet<u16>, String> {
@@ -1156,5 +1198,32 @@ mod tests {
         })
         .unwrap();
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn workstation_lock_owned_by_this_installer_allows_supervisor_completion() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-takeover-workstation-lock-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let lock = root.join("workstation.lock");
+        fs::write(&lock, format!("{}\n", std::process::id())).unwrap();
+
+        assert!(!workstation_transaction_is_foreign(
+            &lock,
+            std::process::id()
+        ));
+        assert!(workstation_transaction_is_foreign(
+            &lock,
+            std::process::id().saturating_add(1)
+        ));
+        fs::write(&lock, "unknown-owner\n").unwrap();
+        assert!(workstation_transaction_is_foreign(
+            &lock,
+            std::process::id()
+        ));
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

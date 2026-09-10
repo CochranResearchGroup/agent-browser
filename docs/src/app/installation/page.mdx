@@ -266,6 +266,12 @@ and stops the shadow process. If reconciliation fails, it restores every
 installed unit and authenticated ingress receipt to its exact prior state and
 writes a private diagnostic receipt to
 <code>~/.agent-browser/convergence/workstation-last-failure.json</code>.
+After transaction acceptance, the installer rewrites the runtime-host lane
+manifests for the selected executable, reloads the user units, and completes
+an identity-bound takeover into
+<code>agent-browser-runtime-host.service</code>. A fresh census must prove that
+one selected supervisor PID owns the expected executable, ingress, and stream
+ports. The install remains non-ready when that proof fails.
 Duplicate-profile pressure and executable drift in an inactive optional
 session supervisor remain visible as install-doctor advisories without
 failing workstation route reconciliation. Active supervisor drift remains

@@ -163,8 +163,13 @@ Reruns first stop the managed dashboard, runtime interlock, and backup
 timer while reconciliation is active, then reactivate them after final
 readiness. A failed pass restores every installed unit to its exact prior
 active state and writes
-`~/.agent-browser/convergence/workstation-last-failure.json`. Before Compose
-can recreate Guacamole, reconciliation aligns the
+`~/.agent-browser/convergence/workstation-last-failure.json`. After transaction
+acceptance, the installer also rewrites the runtime-host lane manifests
+for the selected executable and completes an identity-bound takeover into
+`agent-browser-runtime-host.service`. A fresh census must prove one selected
+supervised host, the exact executable, and every configured stream port. A
+failed takeover leaves the installation non-ready with its recovery receipt.
+Before Compose can recreate Guacamole, reconciliation aligns the
 protected PostgreSQL password with any retained database container, preserves
 the other protected values and private file mode, and leaves the database
 unchanged. It reuses the retained Compose project label so existing containers

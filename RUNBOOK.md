@@ -125,48 +125,44 @@ for native policy preservation remains a gap. Do not claim whole-plan completion
 
 ### Validation, rework and bounded delegation
 
-Required format and strict workspace clippy passed. Remote-view documentation
-checks passed; current planning audit retains38 legacy findings, with Plan0160's
-consolidation checks passing. No new executable changes followed these checks.
-The final release build took10m13s. Two worker CI-profile builds took2m32s and
-2m33s; one superseded shallow test compile was stopped. The maintained dialog
-regression remains a gap; preserved real red/green integration evidence is the
-current protection. Production skill received only the two relevant dialog
-comments, preserving other installed guidance.
+Format, strict workspace clippy, remote-view docs and Plan0160 consolidation
+checks passed. The planning audit retains38 legacy findings. The final release
+build took10m13s; two useful worker candidate builds took about2m33s each, and a
+superseded shallow compile was stopped. Preserved real red/green evidence remains
+the dialog regression protection. Production guidance received only relevant text.
 
-Sol worker confirm_report_intake reproduced the installed timeout and supplied
-the minimal repair and pinned final-binary proof. Primary rejected an added
-inactive-target refusal and a shallow helper test, reviewed actual receipts and
-hashes, and independently checked fixture residue. A second bounded fixture lane
-prepared final drivers and ran the pinned dialog; primary ran lifecycle checks.
-Luna worker consolidated_evidence produced a useful inventory, but primary
-rejected incorrect predicate mappings and unnecessary consumer-rejoin gates.
-Requested routes were Luna/medium and Sol/medium; effective model/cost unreported.
-No measured cost savings claimed. No worker or successor reset the global bound.
+Workers reproduced the confirm timeout, prepared bounded fixture drivers and
+consolidated evidence. Primary retained the minimal repair and pinned proof while
+rejecting an inactive-target refusal, a shallow helper test and incorrect predicate
+mappings. Effective worker model cost was unavailable, so no savings are claimed.
 
-First viewer attempt stalled at Checking stream and its missing-retry-button
-assertion obscured the original wait error. The next bounded attempt passed with
-new clients on the same durable link, including reconnect and controller refresh.
-It did not need the added startup-refresh fallback; this is not proof that one
-particular refresh caused recovery. No browser/provider restart or code change
-was made for this startup failure.
+The first viewer stalled at Checking stream; a bounded second attempt passed on
+the same durable link with new clients, reconnect and controller refresh. No
+browser/provider restart or source change established a single cause. Removing an
+unneeded headless Xvfb dependency produced a residue-free cold-session pass. The
+headed fixture also passed after restoring its proven PrivateTmp condition; only
+applicable browser/profile/interaction facts are accepted. Timer evidence excludes
+an overdue startup and one corrected shell sequencing mistake; steady observation
+still requires the next completed invocation without settings changes.
 
-The session-only fixture unnecessarily started Xvfb for headless operation and
-failed before host launch. Exact test Xvfb was stopped and read back absent.
-Removing that headless-only dependency yielded a passing cold-session lifecycle
-with no residue. Its inherited privateDisplay=true receipt field is inapplicable
-to this headless fixture; primary accepts the asserted browser/profile/interaction
-facts only. The older successful headed receipt showed PrivateTmp=yes; restoring
-that exact fixture condition yielded a passing current-binary headed run with
-zero residue. R/headed-fixture-reframe.json records the bounded reframe inside
-the same75-minute allowance; no new runtime/source change was made.
+### Presentation capacity and supervisor completion | 2026-09-09
 
-Three earlier normal cycles on f816 remain scoped old-candidate evidence.
-Restoring the timer started an overdue run; OnActiveSec then produced a298.8s
-completion gap. R/startup-cadence-disposition.json excludes it. The steady observer
-uses the next completed invocation without altering timer or runtime settings.
-A shell sequencing mistake briefly started the timer after a failed readiness
-assertion; it was stopped before a scheduled cycle and no such cycle is claimed.
+Available Guacamole pool entries were blocked by historical browser IDs retained
+on reconciled orphan route/display rows. Qualification now treats that exact
+orphaned plus available plus unallocated combination as warm idle; checked-out
+missing-browser ownership still blocks. Seven inventory tests and reconciliation
+coverage pass.
+
+Accepted workstation upgrades previously stopped, rewrote and enabled the runtime
+host unit but returned unitStarted=false, leaving the candidate unsupervised and
+forcing operator recovery. Apply and guarded resume now complete the existing
+identity-bound takeover and require fresh proof of the supervisor PID, selected
+ingress, executable, ports and conflict-free runtime census. Same-process installer
+lock ownership is admitted for this internal step; foreign or unreadable locks
+remain blocking. Two sequencing tests and the lock regression pass. The optimized
+candidate built in2m25s; its disposable no-launch takeover smoke passed with source
+retirement, supervisor restart, ingress adoption and no browser launch. Production
+state remains unchanged; installed doctor and retained-browser acceptance are open.
 
 ### Git consolidation | 2026-09-08
 

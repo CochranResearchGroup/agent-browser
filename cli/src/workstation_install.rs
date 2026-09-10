@@ -1206,10 +1206,9 @@ fn resume_prepared_payload_transaction(
         ));
     }
     if !isolated_root {
-        crate::session_supervisor::rebind_supervisors_after_accepted_upgrade(&paths.binary)
-            .map_err(|error| {
-                format!("install_transaction_resume_accepted_supervisor_rebind_failed:{error}")
-            })?;
+        complete_accepted_upgrade_supervisor_transition(&paths.binary).map_err(|error| {
+            format!("install_transaction_resume_accepted_supervisor_transition_failed:{error}")
+        })?;
     }
     Ok(())
 }
@@ -3086,17 +3085,15 @@ fn run_workstation_install(args: &[String]) {
             );
         }
         if !isolated_root {
-            if let Err(error) =
-                crate::session_supervisor::rebind_supervisors_after_accepted_upgrade(&paths.binary)
-            {
+            if let Err(error) = complete_accepted_upgrade_supervisor_transition(&paths.binary) {
                 fail(
                     &format!(
-                        "workstation upgrade was accepted but supervisor rebinding failed: {error}"
+                        "workstation upgrade was accepted but supervisor transition failed: {error}"
                     ),
                     parsed.json,
                 );
             }
-            phases.push("session-supervisors-rebound");
+            phases.push("session-supervisors-transitioned");
         }
     }
 
@@ -3172,6 +3169,31 @@ fn run_workstation_install(args: &[String]) {
     if session_refresh_required {
         exit(75);
     }
+}
+
+fn complete_accepted_upgrade_supervisor_transition(executable: &Path) -> Result<Value, String> {
+    complete_accepted_upgrade_supervisor_transition_with(
+        executable,
+        crate::session_supervisor::rebind_supervisors_after_accepted_upgrade,
+        crate::runtime_host_supervisor_takeover::ensure_selected_runtime_host_supervised,
+    )
+}
+
+fn complete_accepted_upgrade_supervisor_transition_with<T: Serialize>(
+    executable: &Path,
+    rebind: impl FnOnce(&Path) -> Result<Value, String>,
+    takeover: impl FnOnce() -> Result<T, String>,
+) -> Result<Value, String> {
+    let rebound = rebind(executable)?;
+    if rebound.get("reboundCount").and_then(Value::as_u64) == Some(0) {
+        return Ok(rebound);
+    }
+    let takeover = serde_json::to_value(takeover()?)
+        .map_err(|error| format!("encode supervisor takeover outcome: {error}"))?;
+    Ok(serde_json::json!({
+        "rebind": rebound,
+        "takeover": takeover,
+    }))
 }
 
 /// Builds the source-free Service State migration preview without creating the
@@ -17112,5 +17134,48 @@ mod tests {
 
             fs::remove_dir_all(root).unwrap();
         }
+    }
+
+    #[test]
+    fn accepted_upgrade_rebinds_then_supervises_when_lane_manifests_exist() {
+        let takeover_calls = std::cell::Cell::new(0_u32);
+        let result = complete_accepted_upgrade_supervisor_transition_with(
+            Path::new("/selected/agent-browser"),
+            |_| Ok(serde_json::json!({"state": "rebound", "reboundCount": 2})),
+            || {
+                takeover_calls.set(takeover_calls.get() + 1);
+                Ok(serde_json::json!({"state": "accepted"}))
+            },
+        )
+        .unwrap();
+
+        assert_eq!(takeover_calls.get(), 1);
+        assert_eq!(
+            result.pointer("/rebind/reboundCount"),
+            Some(&Value::from(2))
+        );
+        assert_eq!(
+            result.pointer("/takeover/state"),
+            Some(&Value::from("accepted"))
+        );
+    }
+
+    #[test]
+    fn accepted_upgrade_skips_takeover_without_lane_manifests() {
+        let result = complete_accepted_upgrade_supervisor_transition_with(
+            Path::new("/selected/agent-browser"),
+            |_| {
+                Ok(serde_json::json!({
+                    "state": "not_configured",
+                    "reboundCount": 0
+                }))
+            },
+            || -> Result<Value, String> {
+                panic!("takeover must not run without a configured supervisor lane")
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result["state"], "not_configured");
     }
 }

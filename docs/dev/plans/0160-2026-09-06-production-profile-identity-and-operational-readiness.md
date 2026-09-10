@@ -3814,3 +3814,49 @@ Next: build the committed candidate, repeat the native HTTP fixture including a
 post-shutdown authority snapshot, then continue consolidated installed qualification
 and the full A1/A2/A3/A4/AX acceptance contract. Original-consumer attestation is
 still unproven; this read-path correction does not establish consumer recovery.
+
+### Orphaned presentation capacity and supervised upgrade completion
+
+state_transition: Source repairs now cover reconciled orphan capacity and automatic supervisor takeover after accepted installation.
+acceptance_state: Focused and optimized fixture validation pass; installed production acceptance remains pending and the full plan remains open.
+progress_classification: progress
+
+Production evidence showed route-pool entries A and B available while their
+orphaned route and display rows retained historical browser IDs. The inventory
+qualifier incorrectly treated those diagnostic IDs as live occupancy and returned
+`browser_missing_outside_pending_acquisition`. Qualification now ignores the
+historical owner only when route and display are both orphaned and the pool entry
+is independently available with no allocation. A checked-out route with a missing
+browser remains blocking. Seven production-inventory tests and the adjacent
+reconciliation regression pass.
+
+The workstation transaction already staged a candidate runtime host and retired
+the old process, but accepted completion only stopped, rewrote, reloaded, and
+enabled `agent-browser-runtime-host.service`; it deliberately returned with
+`unitStarted=false`. This explains the observed inactive supervisor beside a live
+candidate and why operator force recovery was required. Apply and guarded resume
+now invoke the existing identity-bound supervisor takeover after manifest rebinding.
+The installer-owned workstation lock is admitted only for this in-process step;
+a foreign or unreadable lock remains blocking. A fresh post-takeover plan must
+prove the selected PID is the active supervisor main PID, the executable and
+ingress identity agree, configured ports are reachable, and the runtime census has
+no conflict.
+
+Two installer sequencing tests and the same-PID lock regression pass. The optimized
+candidate built in 2m25s at SHA256
+`1e5831212504a565a54f04672fc2e9c0ee007f604dde98d6f663ed9f25dcd313`, and the
+disposable no-launch takeover smoke passed with source retirement, supervisor
+replacement, ingress adoption, accepted transaction, and `browserLaunched=false`.
+The source-free workstation fixture, host-provision fixture, route-confusion gates,
+documentation build, remote-view documentation check, formatting, patch hygiene,
+and workspace Clippy with warnings denied also pass. The unoptimized 422 MB debug
+smoke was stopped after
+repeated executable hashing made it unsuitable for this acceptance; all fixture
+processes were terminated and its temporary directories were removed. No production
+runtime, browser, profile, credential, route, or lease was changed.
+
+Next: complete full changed-surface validation, commit the coherent candidate,
+then install it through the accepted transaction and require doctor readback for
+one supervised production runtime without disrupting the retained QBO and BILL
+browser processes. Graceful retained-browser surrender and the remaining
+A1/A2/A3/A4/AX gates are still open until installed evidence proves them.
