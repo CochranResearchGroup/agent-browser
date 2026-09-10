@@ -4131,3 +4131,40 @@ operator-visible state `ready`. This is a synthetic install proof and carries no
 tenant authentication. Preserve it through candidate transfer, resolve the same
 handoff after staging, then clean it only after accepted installed-runtime,
 supervisor and single-listener readback.
+
+### Accepted graceful production installation
+
+state_transition: The production installer preserved both live browser lanes,
+replaced the supervisor, retired every prior runtime host and converged to one
+selected generation.
+acceptance_state: The graceful upgrade, automatic supervisor replacement and
+runtime multiplicity requirement are accepted. Plan 0160 remains open for the
+profile ownership and deferred A1, A4 and AX requirements.
+progress_classification: accepted installed outcome
+
+Transaction `upgrade-0b9c31b6-5aaf-407e-a75d-931ec27502e4` accepted source
+`84866611` as generation `0.28.0-f01c48c32d6a-850a0203f68d`. Its binary SHA256
+is `f01c48c32d6addd5442719ef456c08f62aa832007f6b8dafce737b25c31b6e68`.
+The installer completed runtime transfer, candidate presentation, payload
+commit, post-commit validation, workstation reconciliation, dashboard
+management and supervisor transition without a broad shutdown.
+
+Installed doctor reports `steady_current`, one runtime host, one dashboard
+process, one executable generation, zero legacy daemons and no multiplicity
+issues. The selected supervisor is PID 45740. Both source runtime-host PIDs are
+absent. The retained Odollo browser remained PID 26188 and its post-install
+diagnostics job
+`http-service-request-diagnostics-8fb51929-a80e-48e6-86aa-cb01f417e10e`
+returned the expected FedEx page with complete control-plane attestation.
+Synthetic browser PID 87885 and durable handoff `r35043` also survived the
+transfer; the same handoff resolved ready through the installed generation.
+
+The synthetic browser was terminated only after acceptance and its process exit
+was verified. Service-mediated cleanup revealed a separate repair case before
+that exact-process cleanup: the transferred owner rejected the old browser alias,
+then `service_browser_close` against the current handoff owner returned
+`service_browser_close_authority_denied: current browser profile is missing`.
+Both failed service requests had no effect. Plan 0161 now includes preservation
+of profile identity across owner transfer and alias-independent exact close.
+Final doctor remained successful with the same single-host topology. Exact
+receipts are under `~/.agent-browser/campaigns/p160/graceful-upgrade-r4/`.

@@ -46,6 +46,15 @@ records. Production inventory then rejected those same warm idle slots with
 repair did not cover this ownership projection, and the pending-acquisition
 qualification added by `d5b07abb` lacked a restart fixture for this state.
 
+The accepted 2026-09-10 graceful upgrade exposed another joined profile case.
+The synthetic browser remained alive under its transferred handoff owner, but
+`service_browser_close` first rejected the original browser alias and then
+reported `current browser profile is missing` when addressed through the exact
+current owner. Both requests had no effect. Diagnosis and preserving repair must
+therefore retain or reconstruct the canonical profile join across owner transfer,
+and exact lifecycle actions must resolve a proven historical alias to the current
+owner without requiring callers to discover the replacement session ID.
+
 QBO supplies the second outcome class. When the profile is structurally healthy
 but authentication is absent or stale, Agent Browser must recommend or apply an
 authentication-evidence reset and enter the existing detached manual-seeding
@@ -304,6 +313,7 @@ an uncertain effect records that uncertainty and returns diagnosis recourse.
 | Idempotent replay | A repeated apply returns the original terminal receipt and creates no second browser or reset. |
 | Interrupted launch | The result records uncertain effect, exact correlation and supported reconciliation without blind retry. |
 | Restart with orphaned route ownership | One reconciliation pass preserves route A and B topology, clears proven-absent active owners, reports both slots warm idle, and admits the next exact QBO and BILL acquisitions without state-file editing. |
+| Transferred owner with missing profile join | Diagnosis names the lost join and current owner; preserving repair restores it, and close through either proven browser alias reaches the same exact current browser. |
 | Profile-data reset attempt in initial delivery | Refused as unavailable until restore and backup acceptance are installed. |
 
 ## Delivery sequence and budget

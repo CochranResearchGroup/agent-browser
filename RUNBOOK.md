@@ -3,23 +3,32 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 288 | 2026-09-10
+## Turn 289 | 2026-09-10
 
-The reviewed full-shutdown transaction `upgrade-87abf98f-7d04-43b3-8614-b3f501a75149`
-closed five managed sessions, proved old PID 86878 absent, preserved every profile,
-and accepted generation `0.28.0-2c7c64839abc-9b38e8bd5921`. Production has one
-supervised runtime host, PID 57793, and one listener. BILL and QBO are closed with profiles and credentials preserved.
+Graceful production upgrade is accepted. Transaction
+`upgrade-0b9c31b6-5aaf-407e-a75d-931ec27502e4` installed source `84866611` as
+generation `0.28.0-f01c48c32d6a-850a0203f68d`, automatically replaced the
+supervisor and retired both prior runtime hosts. Doctor reports
+`steady_current`: one runtime host, one dashboard, one executable generation,
+zero legacy daemons and no multiplicity issue. Candidate SHA256 is
+`f01c48c32d6addd5442719ef456c08f62aa832007f6b8dafce737b25c31b6e68`.
 
-Source through c8fa12f9 repairs exact multi-host surrender, adopted browser aliases,
-interrupted full-shutdown resume, quiesced-supervisor validation and exact two-host convergence. Commit 82096fff gives workstation reconcile a 30-second lock budget.
-Failed candidate transactions retained the old selection and restored its units. Odollo's live `carrier-tracking-lookup` lane is now the preserving acceptance case. Candidate request r54902 created a ready synthetic handoff on route A without disturbing it. Preserve transaction f1042f2c reached runtimes_transferring, but interruption preceded every handoff; guarded resume incorrectly demanded replay evidence and rolled back both browsers. Source now restarts only an exactly effect-free transfer phase. Rebuild once, repeat preserve mode, require unchanged browser identities plus automatic supervisor and one-listener convergence, then relaunch BILL and QBO and finish profile ownership repair. P116 and Plan0160 remain OPEN.
+The Odollo browser PID 26188 survived unchanged and post-install diagnostics
+returned complete control-plane attestation. Durable synthetic handoff r35043
+resolved ready through the installed generation. Its browser PID 87885 also
+survived the transfer and was terminated only after acceptance; exit was
+verified and final doctor remained green. Service cleanup exposed a remaining
+profile-transfer defect: the new owner first rejected the old browser alias,
+then reported its current browser profile missing. Plan0161 owns that repair.
 
-Transaction 39fc034e exposed a hard-coded two-listener validation assumption; source now proves the complete receipted host set.
-Transaction 57c947dc passed that gate and finalized both handoffs, but an exit-time namespace observation race blocked additional-host retirement.
-Rollback removed the candidate socket before stopping its process, and candidate-binary recovery counted itself as live.
-Selected-binary recovery completed; the old supervisor was restarted, one listener is steady, and Odollo diagnostics prove the retained page and full attestation.
-Transaction b1698c1b reproduced only the transient observer failure; source PID 87803 was already absent at the first one-second check.
-Source now retries only ambiguous observations during the existing grace and still refuses proven PID reuse. Selected recovery restored one supervisor. Plan0160 remains OPEN.
+Source commits 2ba75244, 2215a78a, 27b339bd and 84866611 repair effect-free
+transfer resume, complete planned-host validation, recovery self-exclusion and
+transient source-exit observation. The full workstation installer suite passes
+139 tests; format and workspace Clippy pass. Receipts are under
+`~/.agent-browser/campaigns/p160/graceful-upgrade-r4/`. The installer,
+supervisor replacement and runtime convergence concern is complete. Plan0160
+remains OPEN for profile ownership, BILL/QBO recovery and the deferred A1/A4/AX
+work.
 
 ## Turn 286 | 2026-09-09
 
@@ -47,35 +56,6 @@ Private receipt prefixes:
 - P = ~/.local/state/agent-browser/campaigns/p160/publication-028597ea/
 - N = ~/.local/state/agent-browser/campaigns/p160/ownership-round-20260908T175133Z/
 
-### Installed outcome
-
-Source052848aa2855be5bae7bedfc6b77448ec4fe9c53 is committed and pushed on
-plan/profile-permissions-and-request-provenance. Installed generation:
-0.28.0-71834ecdb3d3-5a938052448d; host PID21220.
-Binary SHA256: 71834ecdb3d3fe527a968303e31fb4c6c7f8cbf4ac4387d348b801581fd8bd93.
-Support SHA256: 5a938052448d039141e190660250589f1c78e70c55cf6f297832ed01155b0bfd.
-
-Native download now preserves peer browser download policy and correlates the
-owned frame/GUID with process-bound artifact delivery. waitfordownload is unchanged.
-The previous pending-confirm repair and process-only supervisor default remain
-included. This replacement interrupted only the exact runtime-host process;
-it does not establish graceful shutdown preservation.
-
-N/activation-receipt.json verifies five browser roots, host-unit descendants,
-39 tab-custody records and recovered temporary storage preserved. Pre-install
-synthetic diagnostics returned missing profile_lease; after installation the
-same retained handle returned complete attestation with no missing proofs.
-This does not establish the cause or permanent resolution of the earlier gap.
-The same durable-link local journey passed with two authenticated viewers,
-anonymous denial, reconnect and trusted mouse/keyboard input:
-local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt.
-Controller refresh used the driver's existing same-link recovery; no browser or
-provider restart occurred. N/installation-postjourney-doctor.json exited0; eight advisory warnings remain.
-The interlock timer is restored active. Shared skill sync added only the two
-download comments, with backup and delta hashes under N.
-Immediate rollback is generation0.28.0-ca2134dd8592-7de46dd5e014. Preserve
-0.28.0-0df77d7f2693-f452c93718a3 and0.28.0-b69c4e5a4a60-31faac73c7ec and all holds.
-
 ### Requirement-to-evidence table
 
 I = implemented, Q = qualified, D = installed/integrated, U = user-workflow proof.
@@ -93,7 +73,7 @@ not fresh executions on052848aa. N receipts identify the current installation.
 | A1 first-class profile remediation | Plan0161 open / incomplete / no / no | Plan0161; Plan0160 first-class profile remediation amendment | Implement profile diagnose and preserving repair first. The BILL fixture joins stale-owner routing and proven-stale Chrome locks through one recovery launch; also prove legacy-principal repair, foreign-owner rejection, idempotency and peer survival. Scoped reset follows. |
 | A2 local remote-view journey | yes / installed052848aa pass with same-link recovery / yes / synthetic | local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt | Two authenticated viewers, anonymous denial, same-link reconnect and trusted input pass. Preserve initial local-viewers-2wL0BG failure; external vantage remains separate. |
 | A3 current readiness | yes / installed doctor pass / yes / n/a | N/installation-postjourney-doctor.json; N/configuration-freeze.json | Preserve warning dispositions and current evidence; doctor alone does not prove complete operation. |
-| A3 preserving shutdown delivery | scoped / forced recovery only / installed but unaccepted / no | R/activation-receipt.json; operator correction in Turn287 | Last production install required a full hard stop. Prove one ordinary upgrade that preserves or transfers every owned browser and resumes profiles, tabs, leases, routes, handoffs, and scheduled clients without manual termination or state repair. |
+| A3 preserving shutdown delivery | yes / pass / accepted / synthetic plus retained Odollo | graceful-upgrade-r4; transaction 0b9c31b6 | Installer transferred both live browser lanes, replaced the supervisor and converged three runtime hosts to one selected host without manual shutdown. |
 | A4 scheduled/restart continuity | partial / three current steady cycles pass / timer active / incomplete | R/steady-cadence/scheduled-control.json | Normal gaps300.875s,300.398s,300.526s; current configuration and five roots preserved. Startup gap298.8s excluded. Full A1 prerequisites and ordered controlled-restart/next-cycle sequence remain incomplete; no second production restart performed. |
 | AX selected seven cases | surfaces implemented / partial / yes / partial | R/primary-evidence-disposition.json; P/post-r4-ax-acceptance.json | Seven exact returned-ID failure reconstructions remain unjoined. Profile selection, missing binding, changed generation, stale target/transport, Xvfb, journal interruption and failed transition are distinct predicates. |
 | Historical wrong-tab attribution | current repair / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |
@@ -167,8 +147,8 @@ listener. Stale durable aliases may bootstrap staging from one exact reattachabl
 RDP browser, but the candidate must issue a fresh durable handoff before commit. Old-runtime
 BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
 InventoryAdmission without a route change. Transactions b1624cb5, 5c7bc5c0 and b5eb7ee8 exposed drain, cache and dotenv defects. Attempt 82fd55c4 proved BILL on
-private :92 cannot appear on route A :10. Route display ID and current acquisition-custody repairs now pass live: synthetic handoff r884038 is ready on route A :10.
-Commit, optimized rebuild, install, supervisor and single-listener proof remain open.
+private :92 cannot appear on route A :10. Route display and acquisition-custody
+repairs passed live. Turn289 records accepted install and convergence proof.
 
 ### Git consolidation | 2026-09-08
 
@@ -194,7 +174,9 @@ or automatic runtime stopping. Selector baseline remains v0.1.24 with scoped
 local overrides and adoption feedback in Plan0160; no shared-library replacement.
 Focused auditor tests passed22; legacy migration is not part of this slice.
 
-Preserve unrelated consumer edits to incident0156 and untracked notes0159/0160. Earlier exact cleanup of six finished P159 fixtures remains accepted; do not repeat it. No production browser/profile/credential/payment cleanup was performed.
+Preserve unrelated consumer edits to incident0156 and untracked notes0159/0160.
+Synthetic proof PID87885 was closed after acceptance; no tenant browser, profile,
+credential or payment state was changed.
 
 - [Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md)
 - [Earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md)
