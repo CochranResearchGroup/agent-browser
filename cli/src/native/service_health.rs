@@ -1157,13 +1157,23 @@ fn upsert_browser_display_allocation(
     let Some(display_isolation) = browser.display_isolation.clone() else {
         return;
     };
-    let allocation_id = browser.display_allocation_id.clone().unwrap_or_else(|| {
-        display_allocation_id_for_browser(
-            session_id,
-            &display_isolation,
-            browser.display_name.as_deref(),
-        )
-    });
+    let metadata_display_allocation_ids = metadata
+        .into_iter()
+        .flat_map(|metadata| metadata.view_streams.iter())
+        .filter_map(|stream| stream.display_allocation_id.clone())
+        .collect::<BTreeSet<_>>();
+    let metadata_display_allocation_id = (metadata_display_allocation_ids.len() == 1)
+        .then(|| metadata_display_allocation_ids.into_iter().next())
+        .flatten();
+    let allocation_id = metadata_display_allocation_id
+        .or_else(|| browser.display_allocation_id.clone())
+        .unwrap_or_else(|| {
+            display_allocation_id_for_browser(
+                session_id,
+                &display_isolation,
+                browser.display_name.as_deref(),
+            )
+        });
     let now = current_timestamp();
     let allocation = service_state
         .display_allocations
@@ -5806,6 +5816,59 @@ mod tests {
         assert_eq!(
             allocation.pid_hints.as_ref().unwrap()["browserPid"],
             serde_json::json!(1234)
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn route_bound_browser_record_uses_reserved_display_allocation_id() {
+        let home = temp_home("service-health-route-display-allocation");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+
+        persist_service_browser_record_in_repository(
+            &repository,
+            "route-session",
+            BrowserHost::RemoteHeaded,
+            BrowserHealth::Ready,
+            Some(1234),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                view_streams: vec![ViewStream {
+                    id: "remote-headed-view".to_string(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    display_allocation_id: Some("remote-view-display:guacamole-1".to_string()),
+                    ..ViewStream::default()
+                }],
+                display_isolation: Some("shared_display".to_string()),
+                display_name: Some(":10".to_string()),
+                ..ServiceLaunchMetadata::default()
+            }),
+            None,
+        )
+        .unwrap();
+
+        let state = store.load().unwrap();
+        let browser = &state.browsers["session:route-session"];
+        assert_eq!(
+            browser.display_allocation_id.as_deref(),
+            Some("remote-view-display:guacamole-1")
+        );
+        assert_eq!(
+            browser.view_streams[0].display_allocation_id.as_deref(),
+            Some("remote-view-display:guacamole-1")
+        );
+        let allocation = &state.display_allocations["remote-view-display:guacamole-1"];
+        assert_eq!(allocation.display_name.as_deref(), Some(":10"));
+        assert_eq!(
+            allocation.owner_browser_id.as_deref(),
+            Some("session:route-session")
+        );
+        assert_eq!(
+            allocation.owner_session_id.as_deref(),
+            Some("route-session")
         );
 
         let _ = fs::remove_dir_all(&home);

@@ -4012,3 +4012,20 @@ the installer to select that handoff, resolve it through the staged candidate,
 then verify automatic supervisor takeover and exactly one selected runtime-host
 listener. Preserve the BILL and QBO processes and clean only the disposable proof
 after accepted installed-runtime readback.
+
+The disposable proof preparation then exposed the same identity defect one step
+earlier in ordinary route-bound launch. Old-runtime request `r501886` stopped at
+the known stale-browser inventory check. Candidate request `r418434` cleared that
+check and launched Chrome on `:10`, but launch persistence generated
+`display:shared_display:10` while the reserved route and stream named
+`remote-view-display:guacamole-1`. Production qualification correctly rejected
+`browser_display_allocation_id`. Both requests rolled the route and display back
+and closed only their new disposable browser.
+
+Launch persistence now uses the one exact display allocation ID carried by its
+route-bound view stream. It falls back to a derived ID only when launch metadata
+does not name one. The focused regression proves a new shared browser, its stream
+and the reserved allocation all retain `remote-view-display:guacamole-1`; the
+existing private-display and allocation tests remain green. Rebuild the candidate
+once, create the disposable handoff through its isolated runtime, then proceed to
+the transactional install without another old-runtime launch attempt.
