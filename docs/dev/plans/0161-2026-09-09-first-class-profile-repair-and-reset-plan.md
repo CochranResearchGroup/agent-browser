@@ -38,6 +38,14 @@ singleton-lock metadata blocked the replacement launch. One profile operation
 must diagnose both causes, prove the allowed corrections, preserve the
 authenticated profile and complete one bounded recovery launch.
 
+The 2026-09-09 QBO and BILL recovery exposed a related installed contradiction.
+Service reconciliation marked routes `orphaned` and returned both route-pool
+entries to `available`, but retained the former browser IDs in the active route
+records. Production inventory then rejected those same warm idle slots with
+`browser_missing_outside_pending_acquisition`. The earlier route-pool refresh
+repair did not cover this ownership projection, and the pending-acquisition
+qualification added by `d5b07abb` lacked a restart fixture for this state.
+
 QBO supplies the second outcome class. When the profile is structurally healthy
 but authentication is absent or stale, Agent Browser must recommend or apply an
 authentication-evidence reset and enter the existing detached manual-seeding
@@ -215,6 +223,13 @@ closed registry owned by the existing profile recovery module:
 - perform one recovery launch when the sealed plan declares launch as its final
   transition.
 
+For retained presentation state, reconciliation must distinguish expected
+topology, observed occupancy, and historical ownership. When current boot,
+process, display, route, and lease evidence proves the former browser absent,
+repair clears active route and display ownership atomically while retaining the
+old identifiers in event history. A historical browser ID cannot keep an
+otherwise available route or stored profile unusable.
+
 Apply rechecks profile revision, Service State revision, lease revision, owner
 generation, browser and process identity, boot identity, lock evidence and
 subordinate work. Any changed or ambiguous evidence stops before effects and
@@ -288,6 +303,7 @@ an uncertain effect records that uncertainty and returns diagnosis recourse.
 | QBO-like missing authentication | Diagnosis recommends authentication reset or seeding; reset changes only that target's evidence and returns the seeding handoff. |
 | Idempotent replay | A repeated apply returns the original terminal receipt and creates no second browser or reset. |
 | Interrupted launch | The result records uncertain effect, exact correlation and supported reconciliation without blind retry. |
+| Restart with orphaned route ownership | One reconciliation pass preserves route A and B topology, clears proven-absent active owners, reports both slots warm idle, and admits the next exact QBO and BILL acquisitions without state-file editing. |
 | Profile-data reset attempt in initial delivery | Refused as unavailable until restore and backup acceptance are installed. |
 
 ## Delivery sequence and budget
@@ -386,7 +402,8 @@ does not prevent closing the initial preserving-remediation milestone.
 - using `unsafe_claim_any` as ordinary repair;
 - deleting or recreating profiles to make diagnostics green;
 - automatic blind retry after an uncertain launch;
-- general provider, Guacamole, route-pool or display repair;
+- general provider or Guacamole redesign; exact orphaned route and display
+  ownership convergence required for profile availability remains included;
 - tenant business operations or payment actions;
 - rewriting historical failure evidence; or
 - formal release work.

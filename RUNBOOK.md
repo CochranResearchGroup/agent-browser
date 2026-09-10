@@ -4,6 +4,20 @@ Sole current execution status. Plan0160 owns scope, strategy and frozen acceptan
 This table owns current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 287 | 2026-09-09
+
+Live QBO and BILL recovery found both Guacamole pool entries `available` and
+both production capacity slots `warm_idle`, while persisted orphaned route rows
+still carried absent browser IDs. The installed validator rejected that
+contradiction as `browser_missing_outside_pending_acquisition`. QBO and BILL
+were placed on `:10` and `:11` for immediate manual authentication, preserving
+their profile directories. Plan0161 now includes the missing restart fixture
+and exact orphan-owner convergence. Policy0032 now treats prolonged denial of a
+proven-owned, proven-unoccupied resource as an availability defect and requires
+desired topology, current occupancy, and history to remain distinct. This is
+`outcome_progress` for diagnosis and `regression` for installed acceptance;
+A1, A3, A4, and the first-class remediation implementation remain OPEN.
+
 ## Turn 286 | 2026-09-09
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
