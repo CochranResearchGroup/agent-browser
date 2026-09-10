@@ -192,6 +192,24 @@ pub(crate) fn unit_path(paths: &SessionSupervisorPaths) -> PathBuf {
     paths.unit_dir.join(SUPERVISOR_UNIT_NAME)
 }
 
+fn selected_runtime_drop_in_path(paths: &SessionSupervisorPaths) -> PathBuf {
+    paths
+        .unit_dir
+        .join(format!("{SUPERVISOR_UNIT_NAME}.d"))
+        .join("selected-runtime.conf")
+}
+
+fn render_selected_runtime_drop_in(socket_dir: &Path) -> Result<String, String> {
+    let socket_dir = socket_dir
+        .to_str()
+        .ok_or_else(|| "selected runtime socket directory is not UTF-8".to_string())?;
+    validate_absolute_text_path(socket_dir, "selected runtime socket directory")?;
+    Ok(format!(
+        "[Service]\nEnvironment=AGENT_BROWSER_SOCKET_DIR={}\n",
+        systemd_quote(socket_dir)
+    ))
+}
+
 fn legacy_unit_path(paths: &SessionSupervisorPaths) -> PathBuf {
     paths.unit_dir.join("agent-browser-session@.service")
 }
@@ -626,6 +644,38 @@ pub(crate) fn rebind_supervisors_after_accepted_upgrade(
         .map_err(|error| format!("could not canonicalize selected executable: {error}"))?;
     let executable_path = executable.display().to_string();
     let executable_sha256 = sha256_file(&executable)?;
+    let ingress = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(
+        crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path(),
+    )
+    .load()?;
+    let selected = ingress.selected_backend();
+    if selected.binary_sha256 != executable_sha256 {
+        return Err(
+            "selected runtime ingress executable differs from accepted candidate".to_string(),
+        );
+    }
+    let expected_drop_in = render_selected_runtime_drop_in(&selected.socket_dir)?;
+    let already_rebound = manifests.iter().all(|manifest| {
+        manifest.executable_path == executable_path
+            && manifest.executable_sha256 == executable_sha256
+    }) && fs::read_to_string(selected_runtime_drop_in_path(&paths))
+        .is_ok_and(|current| current == expected_drop_in)
+        && observe_systemd_unit(&manifests[0].session).is_ok_and(|unit| {
+            unit.active_state == "active"
+                && unit.sub_state == "running"
+                && unit.main_pid == Some(selected.pid)
+        });
+    if already_rebound {
+        return Ok(json!({
+            "schemaVersion": SUPERVISOR_SCHEMA_VERSION,
+            "state": "already_rebound",
+            "reboundCount": manifests.len(),
+            "executablePath": executable_path,
+            "socketDir": selected.socket_dir,
+            "browserLaunched": false,
+            "unitStarted": true,
+        }));
+    }
     let rebound = manifests
         .into_iter()
         .map(|mut manifest| {
@@ -646,6 +696,12 @@ pub(crate) fn rebind_supervisors_after_accepted_upgrade(
     for manifest in &rebound {
         write_manifest_and_unit(&paths, manifest)?;
     }
+    let drop_in = selected_runtime_drop_in_path(&paths);
+    if let Some(parent) = drop_in.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("could not create supervisor drop-in directory: {error}"))?;
+    }
+    replace_file(&drop_in, expected_drop_in.as_bytes(), false)?;
     run_systemctl(&["--user", "daemon-reload"])?;
     run_systemctl(&["--user", "enable", &unit])?;
     Ok(json!({
@@ -653,6 +709,7 @@ pub(crate) fn rebind_supervisors_after_accepted_upgrade(
         "state": "rebound",
         "reboundCount": rebound.len(),
         "executablePath": executable_path,
+        "socketDir": selected.socket_dir,
         "browserLaunched": false,
         "unitStarted": false,
     }))
@@ -1526,6 +1583,25 @@ mod tests {
         ] {
             assert!(validate_manifest(&invalid).is_err(), "accepted {invalid:?}");
         }
+    }
+
+    #[test]
+    fn selected_runtime_drop_in_pins_the_exact_socket_directory() {
+        let paths = SessionSupervisorPaths {
+            manifest_dir: PathBuf::from("/tmp/manifests"),
+            unit_dir: PathBuf::from("/tmp/units"),
+        };
+        assert_eq!(
+            selected_runtime_drop_in_path(&paths),
+            PathBuf::from("/tmp/units/agent-browser-runtime-host.service.d/selected-runtime.conf")
+        );
+        assert_eq!(
+            render_selected_runtime_drop_in(Path::new(
+                "/run/user/1000/agent-browser/runtime-hosts/selected"
+            ))
+            .unwrap(),
+            "[Service]\nEnvironment=AGENT_BROWSER_SOCKET_DIR=\"/run/user/1000/agent-browser/runtime-hosts/selected\"\n"
+        );
     }
 
     #[test]

@@ -552,6 +552,74 @@ pub(crate) fn has_current_acquisition_binding(
             || (display.state == "pending" && matches_lease(display.readiness.as_ref())))
 }
 
+/// Recognize exact in-flight acquisition custody after a launch observation
+/// has legitimately replaced transient pending-readiness projections.
+///
+/// The acquisition lease and all durable route, display, pool, browser and boot
+/// identities must still agree. This does not treat historical or incomplete
+/// identifiers as current occupancy.
+pub(crate) fn has_current_acquisition_custody(
+    state: &ServiceState,
+    route: &RemoteViewRoute,
+) -> bool {
+    if !matches!(
+        route.state.as_str(),
+        "pending" | "ready" | "allocating" | "reconnecting"
+    ) {
+        return false;
+    }
+    let matching = state
+        .remote_view_acquisition_leases
+        .values()
+        .filter(|lease| {
+            lease.state == "pending"
+                && matches!(
+                    lease.phase.as_str(),
+                    "reserved"
+                        | "display_ready"
+                        | "browser_attached"
+                        | "tab_acquired"
+                        | "proof_ready"
+                )
+                && lease.boot_epoch.is_some()
+                && lease.boot_epoch == crate::process_identity::current_boot_epoch()
+                && lease.route_id == route.id
+                && Some(&lease.browser_id) == route.browser_id.as_ref()
+                && Some(&lease.session_id) == route.session_id.as_ref()
+                && Some(&lease.display_allocation_id) == route.display_allocation_id.as_ref()
+                && lease.completed_at.is_none()
+                && lease.failed_at.is_none()
+        })
+        .collect::<Vec<_>>();
+    let [lease] = matching.as_slice() else {
+        return false;
+    };
+    let Some(entry) = lease
+        .route_pool_entry_id
+        .as_ref()
+        .and_then(|id| state.route_pool.get(id))
+    else {
+        return false;
+    };
+    let Some(display) = state.display_allocations.get(&lease.display_allocation_id) else {
+        return false;
+    };
+    let Some(browser) = state.browsers.get(&lease.browser_id) else {
+        return false;
+    };
+    Some(&entry.id) == lease.route_pool_entry_id.as_ref()
+        && entry.route_id == route.id
+        && entry.current_route_allocation_id.as_ref() == Some(&route.id)
+        && matches!(entry.state.as_str(), "pending" | "checked_out")
+        && display.owner_browser_id.as_ref() == Some(&lease.browser_id)
+        && display.owner_session_id.as_ref() == Some(&lease.session_id)
+        && display.boot_epoch == lease.boot_epoch
+        && display.route_ids.contains(&route.id)
+        && matches!(display.state.as_str(), "pending" | "ready" | "active")
+        && browser.display_allocation_id.as_ref() == Some(&lease.display_allocation_id)
+        && browser.active_session_ids.contains(&lease.session_id)
+}
+
 fn has_provider_inventory_readiness(readiness: Option<&serde_json::Value>) -> bool {
     readiness
         .and_then(|value| value.get("source"))

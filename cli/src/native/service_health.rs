@@ -1157,13 +1157,23 @@ fn upsert_browser_display_allocation(
     let Some(display_isolation) = browser.display_isolation.clone() else {
         return;
     };
-    let allocation_id = browser.display_allocation_id.clone().unwrap_or_else(|| {
-        display_allocation_id_for_browser(
-            session_id,
-            &display_isolation,
-            browser.display_name.as_deref(),
-        )
-    });
+    let metadata_display_allocation_ids = metadata
+        .into_iter()
+        .flat_map(|metadata| metadata.view_streams.iter())
+        .filter_map(|stream| stream.display_allocation_id.clone())
+        .collect::<BTreeSet<_>>();
+    let metadata_display_allocation_id = (metadata_display_allocation_ids.len() == 1)
+        .then(|| metadata_display_allocation_ids.into_iter().next())
+        .flatten();
+    let allocation_id = metadata_display_allocation_id
+        .or_else(|| browser.display_allocation_id.clone())
+        .unwrap_or_else(|| {
+            display_allocation_id_for_browser(
+                session_id,
+                &display_isolation,
+                browser.display_name.as_deref(),
+            )
+        });
     let now = current_timestamp();
     let allocation = service_state
         .display_allocations
@@ -5812,6 +5822,59 @@ mod tests {
     }
 
     #[test]
+    fn route_bound_browser_record_uses_reserved_display_allocation_id() {
+        let home = temp_home("service-health-route-display-allocation");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+
+        persist_service_browser_record_in_repository(
+            &repository,
+            "route-session",
+            BrowserHost::RemoteHeaded,
+            BrowserHealth::Ready,
+            Some(1234),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                view_streams: vec![ViewStream {
+                    id: "remote-headed-view".to_string(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    display_allocation_id: Some("remote-view-display:guacamole-1".to_string()),
+                    ..ViewStream::default()
+                }],
+                display_isolation: Some("shared_display".to_string()),
+                display_name: Some(":10".to_string()),
+                ..ServiceLaunchMetadata::default()
+            }),
+            None,
+        )
+        .unwrap();
+
+        let state = store.load().unwrap();
+        let browser = &state.browsers["session:route-session"];
+        assert_eq!(
+            browser.display_allocation_id.as_deref(),
+            Some("remote-view-display:guacamole-1")
+        );
+        assert_eq!(
+            browser.view_streams[0].display_allocation_id.as_deref(),
+            Some("remote-view-display:guacamole-1")
+        );
+        let allocation = &state.display_allocations["remote-view-display:guacamole-1"];
+        assert_eq!(allocation.display_name.as_deref(), Some(":10"));
+        assert_eq!(
+            allocation.owner_browser_id.as_deref(),
+            Some("session:route-session")
+        );
+        assert_eq!(
+            allocation.owner_session_id.as_deref(),
+            Some("route-session")
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
     fn protected_owner_projection_is_receipt_linked_observational_and_cleared_with_process() {
         let home = temp_home("service-health-protected-owner-projection");
         let store = JsonServiceStateStore::new(home.join("state.json"));
@@ -8273,18 +8336,16 @@ pub(crate) mod service_commands {
         cmd: &Value,
         state: &mut DaemonState,
     ) -> Result<Value, String> {
-        let browser_id = cmd
+        let requested_browser_id = cmd
             .get("browserId")
             .and_then(Value::as_str)
             .filter(|value| !value.trim().is_empty())
             .ok_or("Missing browserId")?;
-        let active_browser_id = service_browser_id(&state.session_id);
-        if browser_id != active_browser_id {
-            return Err(format!(
-                "service_browser_close can only close the active service browser {}; requested {}",
-                active_browser_id, browser_id
-            ));
-        }
+        let browser_id = service_browser_close_logical_browser_id(
+            requested_browser_id,
+            &state.session_id,
+            state.runtime_owner_binding.as_ref(),
+        )?;
         if state.browser.is_none() {
             return Err(format!(
                 "Service browser {} is not attached to this control plane",
@@ -8299,7 +8360,7 @@ pub(crate) mod service_commands {
             let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
             let profile_id = snapshot
                 .browsers
-                .get(browser_id)
+                .get(&browser_id)
                 .and_then(|browser| browser.profile_id.as_deref())
                 .ok_or(
                     "service_browser_close_authority_denied: current browser profile is missing",
@@ -8346,9 +8407,36 @@ pub(crate) mod service_commands {
         state.close_behavior = crate::native::action_runtime::runtime::CloseBehavior::CloseBrowser;
         let mut result = handle_close(state).await?;
         result["browserId"] = json!(browser_id);
-        result["requestedBrowserId"] = json!(browser_id);
+        result["requestedBrowserId"] = json!(requested_browser_id);
         result["serviceOwned"] = json!(true);
         Ok(result)
+    }
+
+    /// Resolve the stable logical browser ID owned by this daemon route.
+    ///
+    /// Cooperative runtime transfer intentionally preserves the logical browser
+    /// ID while replacing the daemon session route. Lifecycle callers may hold
+    /// either identifier, but only the current effect-capable binding can join
+    /// them. Unrelated and observation-only aliases remain rejected.
+    pub(crate) fn service_browser_close_logical_browser_id(
+        requested_browser_id: &str,
+        daemon_session_id: &str,
+        runtime_owner_binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+    ) -> Result<String, String> {
+        let route_browser_id = service_browser_id(daemon_session_id);
+        let logical_browser_id = runtime_owner_binding
+            .filter(|binding| {
+                binding.effect_capable && binding.claim.daemon_session_route == daemon_session_id
+            })
+            .map(|binding| binding.claim.logical_browser_id.as_str())
+            .unwrap_or(route_browser_id.as_str());
+        if requested_browser_id != route_browser_id && requested_browser_id != logical_browser_id {
+            return Err(format!(
+                "service_browser_close can only close the active service browser {} through route {}; requested {}",
+                logical_browser_id, route_browser_id, requested_browser_id
+            ));
+        }
+        Ok(logical_browser_id.to_string())
     }
     pub(crate) async fn handle_service_browser_repair(cmd: &Value) -> Result<Value, String> {
         let browser_id = cmd

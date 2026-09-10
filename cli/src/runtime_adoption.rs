@@ -417,6 +417,13 @@ pub(crate) struct UpgradeTransaction {
 pub(crate) struct UpgradeRuntimeHandoff {
     pub(crate) source_session: String,
     pub(crate) candidate_session: String,
+    /// Exact runtime-host socket directory that prepared this handoff. Older
+    /// transactions omit it and continue to use the ingress fallback backend.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source_socket_dir: Option<String>,
+    /// Distinguishes a shared runtime host from a legacy per-session daemon.
+    #[serde(default)]
+    pub(crate) source_runtime_host: bool,
     pub(crate) source_process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
     pub(crate) mode: BrowserAdoptionMode,
     pub(crate) committed: bool,
@@ -479,6 +486,8 @@ pub(crate) fn runtime_admission_drain_path() -> Result<PathBuf, String> {
 /// Rejects ordinary browser effects while an upgrade owns the admission
 /// drain. Exact handoff lifecycle commands remain available so the installer
 /// can transfer or reverse ownership without reopening general admission.
+/// Candidate presentation reattach additionally requires the exact current
+/// workstation transaction claim.
 pub(crate) fn require_runtime_admission(
     drain_path: &Path,
     action: &str,
@@ -513,11 +522,13 @@ fn runtime_admission_claim_matches(
     command: &serde_json::Value,
     drain: &RuntimeAdmissionDrain,
 ) -> bool {
-    matches!(action, "service_reconcile" | "stream_status")
-        && command
-            .pointer("/runtimeAdmissionClaim/transactionId")
-            .and_then(serde_json::Value::as_str)
-            == Some(drain.transaction_id.as_str())
+    matches!(
+        action,
+        "service_reconcile" | "stream_status" | "service_remote_view_browser_reattach"
+    ) && command
+        .pointer("/runtimeAdmissionClaim/transactionId")
+        .and_then(serde_json::Value::as_str)
+        == Some(drain.transaction_id.as_str())
         && command
             .pointer("/runtimeAdmissionClaim/transactionRevision")
             .and_then(serde_json::Value::as_u64)
@@ -532,7 +543,7 @@ fn runtime_admission_action_allowed(action: &str) -> bool {
             | "runtime_handoff_prepare"
             | "runtime_handoff_resume"
             | "runtime_handoff_rollback"
-    ) || !crate::runtime_owner_transfer::action_requires_owner_effect_authority(action)
+    ) || !crate::runtime_owner_transfer::action_requires_runtime_admission(action)
 }
 
 /// Advances one durable upgrade transaction through the frozen state machine.
@@ -700,9 +711,10 @@ fn upgrade_transition_allowed(
             | (RollbackAfterCommit, RolledBackAfterCommit)
             | (RollbackAfterCommit, OperatorRecoveryRequired)
             | (Accepted, OperatorRecoveryRequired)
+            | (OperatorRecoveryRequired, Accepted)
+            | (OperatorRecoveryRequired, RuntimesTransferring)
             | (RuntimesTransferring, OperatorRecoveryRequired)
             | (PresentationsRebinding, OperatorRecoveryRequired)
-            | (OperatorRecoveryRequired, RuntimesTransferring)
             | (FailedPreservedOldGeneration, RuntimesTransferring)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
             | (BlockedAmbiguousRuntime, FailedPreservedOldGeneration)
@@ -3016,6 +3028,30 @@ mod tests {
     }
 
     #[test]
+    fn upgrade_transaction_allows_receipted_forward_recovery_to_resume_transfer() {
+        let samples: Value = serde_json::from_str(SCHEMA_SAMPLES).unwrap();
+        let mut transaction: UpgradeTransaction =
+            serde_json::from_value(samples["upgradeTransaction"].clone()).unwrap();
+        transaction.state = UpgradeTransactionState::OperatorRecoveryRequired;
+        let revision = transaction.revision;
+
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::RuntimesTransferring,
+            "runtime_replacement_forward_recovery_resumed",
+            "2026-09-10T07:45:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(
+            transaction.state,
+            UpgradeTransactionState::RuntimesTransferring
+        );
+        assert_eq!(transaction.revision, revision + 1);
+    }
+
+    #[test]
     fn runtime_host_convergence_requires_identity_observation_and_owner_fence() {
         let samples: Value = serde_json::from_str(SCHEMA_SAMPLES).unwrap();
         let mut transaction: UpgradeTransaction =
@@ -3162,6 +3198,12 @@ mod tests {
             .unwrap();
         require_runtime_admission(&path, "runtime_handoff_resume", &serde_json::json!({})).unwrap();
         require_runtime_admission(&path, "snapshot", &serde_json::json!({})).unwrap();
+        assert!(require_runtime_admission(
+            &path,
+            "service_profile_recovery_apply",
+            &serde_json::json!({})
+        )
+        .is_err());
         require_runtime_admission(
             &path,
             "service_reconcile",
@@ -3184,6 +3226,23 @@ mod tests {
             }),
         )
         .unwrap();
+        require_runtime_admission(
+            &path,
+            "service_remote_view_browser_reattach",
+            &serde_json::json!({
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .unwrap();
+        assert!(require_runtime_admission(
+            &path,
+            "service_remote_view_browser_reattach",
+            &serde_json::json!({})
+        )
+        .is_err());
         assert!(require_runtime_admission(
             &path,
             "service_reconcile",

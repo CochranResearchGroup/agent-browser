@@ -19,7 +19,7 @@ Integration: merge
 
 Source baseline: `51da03ee`
 
-Dependencies: [P159]
+Dependencies: [P159, P161, P162]
 
 Overlaps: [P157, P158]
 
@@ -189,6 +189,93 @@ production replacement must use the already qualified preserving interruption
 path with current custody checks and existing authority; a process-only unit
 setting alone is not proof of preserving shutdown. If installation cannot fit,
 keep installed acceptance explicitly incomplete.
+
+Operator correction, 2026-09-09: the latest production installation required a
+full hard stop because the ordinary upgrade transition could not preserve and
+transfer the running runtime. Classify that installation as a forced recovery,
+not graceful-upgrade acceptance. Artifact preservation and eventual service
+health do not satisfy this boundary. Before another production candidate is
+called operational, one exact installed upgrade must drain new effects, preserve
+or transfer every current owned browser, profile, tab, lease, display, route,
+handoff, and scheduled client, commit the candidate only after custody succeeds,
+and resume them without manual process termination or state-file repair. An
+injected interruption must retain the old selected generation and usable
+browsers, or roll back deterministically.
+
+Keep three causal defects separate during repair: the old installation must
+gracefully surrender custody; the installer must replace and restart the
+production supervisor as part of the transaction; and final convergence must
+eliminate duplicate or stale production runtime authorities and listeners.
+Current doctor readback reports one live production runtime-host listener, but
+also an inactive supervisor with `port_conflict` and seven retained runtime
+inventory rows, some inactive with reachable streams. Do not accept a
+`steady_current` multiplicity summary while those lower-level projections
+disagree. Plan0116 is reopened as the owning upgrade plan; Plan0160 W3 requires
+its installed acceptance after the profile-control critical path.
+
+Execution checkpoint, 2026-09-10: reviewed full shutdown is now installed and
+receipted by transaction `upgrade-87abf98f-7d04-43b3-8614-b3f501a75149`. It
+closed five managed sessions, preserved profiles, proved the old supervisor PID
+absent, selected generation `0.28.0-2c7c64839abc-9b38e8bd5921`, and converged to
+one supervised production listener. This establishes the explicit shutdown
+recovery path, not ordinary browser-preserving transfer acceptance. The live
+incident exposed and source now repairs three additional installer defects:
+forward recovery lacked a usable admission drain and resume edge; post-commit
+doctor rejected the intended quiesced and exact two-host supervisor transition;
+and workstation reconcile used the one-second ordinary Service State lock
+budget. Source through `c8fa12f9` plus `82096fff` contains these repairs. Waiting
+for Odollo to close and repeating a browserless install would not prove graceful
+upgrade, so the live carrier-tracking lane is now part of the acceptance case.
+Candidate request `r54902` created a disposable, ready Example Domain handoff on
+route A while Odollo remained live. Preserve transaction
+`upgrade-f1042f2c-6535-4b14-ae90-f16d98bef470` reached
+`runtimes_transferring`, but an interrupted installer had recorded no handoff or
+candidate-host effect. Guarded resume incorrectly required replay evidence for
+that untouched transfer phase, then restored the old selection and both browsers.
+Source now permits transfer restart only when the handoff ledger is empty, no
+candidate host exists, and every lane remains at its effect-free census state.
+Partial transfers still require exact replay receipts. Rebuild once, repeat the
+same preserving case, then require automatic supervisor replacement, exactly one
+production listener, unchanged Odollo and synthetic browser identities, installed
+doctor, and shared-route BILL/QBO relaunch.
+
+The repaired repeat, transaction
+`upgrade-39fc034e-084b-45e5-86e3-f3aa406b086a`, proved cooperative commit for
+both the production host and the separate synthetic source host, plus a ready
+candidate presentation. Post-commit doctor then rolled it back because its
+transition predicate assumed exactly two listeners. This installation correctly
+had three: the selected old host, the candidate host, and the additional exact
+source host whose browser was awaiting finalization. The validator must derive
+the complete expected host set from the convergence record and committed runtime
+handoffs, match every PID and process-start token, and continue rejecting any
+unrecorded listener. The convergence-window multiplicity issue is transitional
+only when that exact proof passes. Transaction rollback preserved both browsers
+and restored the old selected generation.
+
+The next repeat, transaction
+`upgrade-57c947dc-0504-42c5-93b0-f14d2ad2e7cc`, passed that host-set gate and
+finalized both browser handoffs. Additional-source retirement then raced the
+source process exit: delegated observation returned missing after the initial
+start-token read, but classified that disappearance as ambiguous. Rollback
+could no longer reverse finalized handoffs, correctly entered operator recovery,
+and retained the candidate. Its cleanup removed the candidate socket directory
+before the candidate process exited; recovery through the candidate binary also
+counted its own process as a live candidate reference. Selected-generation
+recovery completed after the candidate exited, the production supervisor was
+restarted, and fresh diagnostics proved the unchanged Odollo page with complete
+control-plane attestation. Fix exit-race classification and exclude only the
+recovery command's own PID from candidate-process references. The installed
+candidate and automatic supervisor convergence requirements remain unmet.
+
+Transaction `upgrade-b1698c1b-9379-4dd7-8239-339363c50bdd` reproduced the
+remaining finalization defect after exact three-host validation and both handoff
+commits. Source PID 87803 was absent by the first one-second observation after
+failure, proving that no signal escalation was needed. The exit waiter now
+retries only the exact ambiguous-observation result within its existing grace,
+returns immediately for missing processes, and continues to reject a proven
+start-token or executable mismatch. Selected-generation recovery again completed
+and restored one supervised production listener. A further live install has not
+yet accepted the candidate.
 
 ### Worker assignments
 
@@ -429,7 +516,7 @@ may be erased to manufacture readiness.
 | Criterion | Required outcome on the final installed candidate |
 | --- | --- |
 | A1: reliable profile control, highest priority | Every current profile ownership/identity blocker has an evidence-backed disposition. Authorized named-profile, custom-directory and session-only control passes launch, navigation, interaction, retained reuse, close and reopen in both supported headless and remote-headed production paths. Two independently authenticated clients retain their original authorized handles through an exact disposable host interruption; legitimate foreign, ambiguous or changed identities are denied before effects with useful recourse. No unintended browser, tab, profile or grant replacement masks a pass. |
-| A2: authenticated operator journey | The ordinary authenticated dashboard selects the intended synthetic browser. Its durable remote-view URL reaches `operatorVisible.state=ready`, shows verified synthetic pixels, accepts mouse and keyboard input, and reconnects using the same URL with two concurrent authorized viewers. Browser, profile, target and route ownership stay attributable across transitions; unauthorized viewers are denied. |
+| A2: authenticated operator journey | The ordinary authenticated dashboard selects the intended synthetic browser without choosing a provider route. The Service allocates or reuses one validated desktop slot and opens Guacamole viewing just in time. Its durable remote-view URL reaches `operatorVisible.state=ready`, shows verified synthetic pixels, accepts mouse and keyboard input, and reconnects using the same URL with at least two concurrent authorized viewers without consuming another desktop slot. Browser, profile, target, desktop-slot and route ownership stay attributable across transitions; unauthorized viewers are denied. |
 | A3: maintenance and readiness | Every refreshed doctor finding and ownership-related pressure finding is repaired or explicitly classified with current evidence, consequence and disposition. No unresolved actionable production blocker remains. Supported doctor returns zero, and selected generation, payload, ingress, convergence, operator journey, monitor and rollback readiness reflect real observed state. Historical failures remain inspectable without falsely blocking current readiness. |
 | A4: unattended operation | After A1–A3 pass, restore the intended timer and observe three consecutive normal scheduled cycles plus one controlled runtime restart and its next scheduled cycle. All complete without new ownership/identity errors, route loss, duplicated owners, unsafe cleanup or accumulating owned residue. Original authorized handles and durable URL remain usable after restart. |
 | AX: diagnosis across all four | Each selected failure is traceable from its returned correlation identifier to the first causal decision, relevant ownership evidence, source/build identity, affected operation and safe repair action. Expected projections have zero unexplained missing, duplicate or conflicting records. An operator can reconstruct the cause using the documented diagnosis surface without searching unrelated logs or accessing secrets. |
@@ -450,7 +537,7 @@ mutation remains serial; primary reviews decisive evidence before accepting it.
 | --- | --- | --- | --- |
 | W0 | Refresh exact installed identity, doctor, leases, principal bindings, processes, namespaces, ingress, provider and timer state. Create a private blocker ledger and deployment/evidence manifest. | Every finding has a stable key, affected workflow, provenance and A1–A4 mapping; final-candidate mismatch is explicit. | Planning complete |
 | W1 | Repair profile ownership and identity proof at the actual selection, attachment, relaunch or reconciliation seam. Add causal logging at the failing seam immediately. Likely surfaces: native action runtime, Service ownership/lease model, request diagnostics and focused regressions. | A1 and its AX cases pass; custom profile repair stays covered; evidence binds principal, process and target before effects. | W0 |
-| W2 | Fix remote-headed launch/Xvfb ownership and ordinary durable remote-view failures. Update provider/launch and handoff surfaces only where the reproducer establishes the cause. | A2 passes on the installed candidate, including remote-headed close/reopen; synthetic external evidence and exact cleanup accounted for. | W1; Xvfb ownership diagnosis begins in W0/W1 if it blocks A1 |
+| W2 | Complete remote-headed launch/Xvfb ownership and ordinary durable remote-view acceptance. [Plan 0162](0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md) owns production arbitrary-N desktop admission, logical-browser allocation and just-in-time multi-viewer routing. Update other provider/launch and handoff surfaces only where the reproducer establishes the cause. | A2 passes on the installed candidate, including three-slot topology, route-free browser-tile selection, shared-handoff multi-viewing, remote-headed close/reopen, synthetic external evidence and exact cleanup. | W1 and Plan 0161 preserving-repair source milestone; Xvfb ownership diagnosis begins in W0/W1 if it blocks A1 |
 | W3 | Reconcile remaining maintenance records, monitor readiness and selected-generation/upgrade acceptance through supported product paths. Fix false-positive classification and broken transition software instead of hand-editing green receipts. | A3 passes; every ledger item is resolved or justified; retained failure history remains readable. | W1; A2 for operator acceptance |
 | W4 | Restore timer, observe scheduled cycles, perform controlled restart and verify client/operator continuity. | A4 and associated AX cases pass with before/after census and bounded resource comparison. | A1–A3 |
 | W5 | Join all evidence against final binary and support identities, perform closed-world acceptance audit, update plan and delivery status. | A1–A4 and AX all pass on one accepted final candidate; no unowned cleanup obligations hidden. | W1–W4 |
@@ -458,6 +545,75 @@ mutation remains serial; primary reviews decisive evidence before accepting it.
 W1 takes precedence over unrelated maintenance or presentation polish. Ownership
 findings from W3 that affect profile usability are pulled into W1 immediately.
 Read-only evidence collection for later units may proceed without delaying W1.
+
+## First-class profile remediation amendment, 2026-09-09
+
+Implementation authority: [Plan 0161](0161-2026-09-09-first-class-profile-repair-and-reset-plan.md).
+
+Plan 0161's initial first-class lifecycle is closed on 2026-09-10 with isolated
+installed and headed acceptance. Full Plan 0160 A1 and AX remain open for their
+wider ownership matrix and consumer proof. Destructive profile-data reset is
+separately gated by [Plan 0163](0163-2026-09-10-profile-data-reset-backup-and-restore.md).
+
+Profile repair and reset are product operations, not undocumented compositions
+of lease, browser, profile-config and manual filesystem actions. W1 must expose
+one coherent profile-level lifecycle through CLI, HTTP, MCP, the generated
+client and dashboard. Existing lower-level lease and recovery primitives remain
+implementation details and advanced diagnostics; operators should not need to
+choose among them to make an important stored profile usable again.
+
+The public lifecycle has three distinct operations:
+
+1. `diagnose` is read-only. It joins the exact profile record, aliases and
+   service sharing, target readiness, live browser/process/session/tab identity,
+   lease and principal proof, remote-view posture, stale references and the
+   recommended supported action. It returns a correlation identifier and the
+   evidence behind every blocking or advisory finding.
+2. `repair` preserves the profile directory, credentials, cookies, extensions
+   and authenticated site state. It plans first, then applies an idempotent,
+   exact-profile transition that may reconcile catalog metadata, shared-service
+   membership, current service-owned runtime references, lease bindings and
+   readiness projections only where current evidence proves the correction.
+   A live foreign or ambiguous owner makes the affected transition ineligible;
+   repair must not close, replace or claim it.
+3. `reset` requires an explicit scope and never defaults to deleting profile
+   data. Runtime reset closes and recreates only an exactly proven service-owned
+   browser lane while preserving the stored profile. Authentication reset
+   removes only the selected target service's authentication evidence and
+   starts the detached manual-seeding workflow. Full profile-data reset is a
+   separate destructive scope with a sealed preview, exact profile identity,
+   recoverable backup, explicit confirmation and postcondition receipt. Reset
+   must not be implemented as profile-config deletion or broad directory
+   removal.
+
+Every plan reports preserved data, proposed effects, blockers, rollback or
+recovery material, and whether manual authentication will be required. Every
+apply rechecks the profile revision, owner generation, boot/process identity,
+lease revision and active subordinate work before effects. Results join request,
+job, event and incident records so the returned identifier reaches the first
+causal decision and safe next action.
+
+The first maintained acceptance fixtures cover the real classes exposed by the
+BILL and QBO recovery: a healthy shared authenticated profile needs only normal
+relaunch; a shared profile missing authentication enters manual seeding; a live
+profile with legacy-principal lease evidence receives a preserving identity
+repair; and a stopped profile with stale runtime references receives a
+preserving runtime repair. The BILL fixture must reproduce the combined failure
+where recovery selects a stale owner route and stale Chrome singleton-lock
+metadata then blocks the replacement launch. One plan/apply repair must select
+the current proven owner route, remove only locks proven stale by absent matching
+process identity, preserve the authenticated profile, and complete one bounded
+recovery launch. A live or unproven lock holder must refuse cleanup with exact
+recourse. Add foreign-owner rejection, changed-revision rejection, idempotent
+replay and peer-browser survival. No production profile is the implementation
+fixture.
+
+This amendment changes W1 delivery order. Implement `diagnose` and preserving
+`repair` first because they address the current owner/lease blocker. Implement
+runtime and authentication reset next. Keep full profile-data reset behind its
+destructive acceptance and backup gates; it does not block the preserving
+repair milestone. Update all user-facing surfaces required by AGENTS.md in the
+same implementation batch.
 
 ## Strategy amendment, 2026-09-07
 
@@ -3727,3 +3883,516 @@ Next: build the committed candidate, repeat the native HTTP fixture including a
 post-shutdown authority snapshot, then continue consolidated installed qualification
 and the full A1/A2/A3/A4/AX acceptance contract. Original-consumer attestation is
 still unproven; this read-path correction does not establish consumer recovery.
+
+### Orphaned presentation capacity and supervised upgrade completion
+
+state_transition: Source repairs now cover reconciled orphan capacity and automatic supervisor takeover after accepted installation.
+acceptance_state: Focused and optimized fixture validation pass; installed production acceptance remains pending and the full plan remains open.
+progress_classification: progress
+
+Production evidence showed route-pool entries A and B available while their
+orphaned route and display rows retained historical browser IDs. The inventory
+qualifier incorrectly treated those diagnostic IDs as live occupancy and returned
+`browser_missing_outside_pending_acquisition`. Qualification now ignores the
+historical owner only when route and display are both orphaned and the pool entry
+is independently available with no allocation. A checked-out route with a missing
+browser remains blocking. Seven production-inventory tests and the adjacent
+reconciliation regression pass.
+
+The workstation transaction already staged a candidate runtime host and retired
+the old process, but accepted completion only stopped, rewrote, reloaded, and
+enabled `agent-browser-runtime-host.service`; it deliberately returned with
+`unitStarted=false`. This explains the observed inactive supervisor beside a live
+candidate and why operator force recovery was required. Apply and guarded resume
+now invoke the existing identity-bound supervisor takeover after manifest rebinding.
+The installer-owned workstation lock is admitted only for this in-process step;
+a foreign or unreadable lock remains blocking. A fresh post-takeover plan must
+prove the selected PID is the active supervisor main PID, the executable and
+ingress identity agree, configured ports are reachable, and the runtime census has
+no conflict.
+
+Two installer sequencing tests and the same-PID lock regression pass. The optimized
+candidate built in 2m25s at SHA256
+`1e5831212504a565a54f04672fc2e9c0ee007f604dde98d6f663ed9f25dcd313`, and the
+disposable no-launch takeover smoke passed with source retirement, supervisor
+replacement, ingress adoption, accepted transaction, and `browserLaunched=false`.
+The source-free workstation fixture, host-provision fixture, route-confusion gates,
+documentation build, remote-view documentation check, formatting, patch hygiene,
+and workspace Clippy with warnings denied also pass. The unoptimized 422 MB debug
+smoke was stopped after
+repeated executable hashing made it unsuitable for this acceptance; all fixture
+processes were terminated and its temporary directories were removed. No production
+runtime, browser, profile, credential, route, or lease was changed.
+
+Next: complete full changed-surface validation, commit the coherent candidate,
+then install it through the accepted transaction and require doctor readback for
+one supervised production runtime without disrupting the retained QBO and BILL
+browser processes. Graceful retained-browser surrender and the remaining
+A1/A2/A3/A4/AX gates are still open until installed evidence proves them.
+
+### Stale-handoff bootstrap and joined supervisor acceptance
+
+state_transition: The live retained BILL lane proved exact browser ownership but the old runtime could not reacquire presentation capacity; source now admits that lane for candidate staging and joins supervisor takeover to workstation acceptance.
+acceptance_state: Focused source tests pass; rebuilt-candidate and installed production proof remain pending.
+progress_classification: progress
+
+All 67 durable handoffs referenced superseded browser IDs while the current BILL
+browser remained exact and ready under its current owner. Route A was available,
+ready and unallocated. One supported reattach request reached that exact browser
+but the old installed runtime rejected it with
+`presentation_recovery_not_admitted` and `InventoryAdmission`. Request and job ID
+`mcp-service-request-service_remote_view_browser_reattach-bd44aa98-cf7e-4e57-9937-89aed1822873`
+was recorded as effect uncertain. Immediate readback found route A still
+available and the BILL view stream unchanged, so no retry was made.
+
+Candidate bootstrap can now qualify an exact retained RDP browser when its
+current ready owner, process identity, valid target and reattach recommendation
+agree and an unallocated ready route exists. This only permits staging. The
+candidate must perform the reattach and produce its normal generation-bound
+durable handoff receipt before commit.
+
+The workstation transaction now keeps its admission drain through manifest
+rebinding and an in-process supervisor takeover. The takeover recognizes only
+the exact parent transaction as the drain owner. Supervisor failure moves the
+workstation transaction from post-commit validation through rollback-after-commit
+to operator recovery required instead of persisting a false accepted result.
+Fresh verification requires the supervisor main PID and selected ingress to
+agree and the complete production socket census to contain exactly one selected
+runtime-host listener. Already-active supervision no longer masks a foreign
+configured-port owner.
+
+Next: run the full changed-surface fixture set, build the optimized candidate,
+prove the new bootstrap disposition, then execute the authorized staged install.
+Before commit, reacquire one durable BILL handoff through the staged candidate.
+After commit, require an active supervisor, one selected listener, no conflicting
+runtime, and unchanged retained browser/profile/owner identity. The broader
+A1/A2/A3/A4/AX plan remains open after this production repair.
+
+### First staged-install rollback and admission-claim repair
+
+state_transition: The first 2981b950 candidate staged and transferred the exact retained owners, then rolled back cleanly because the required reattach action was blocked by its own admission drain.
+acceptance_state: Old generation, owner routes and admission state were restored; a focused source repair passes and the candidate must be rebuilt.
+progress_classification: blocker removed in source
+
+Transaction `upgrade-b1624cb5-e2ff-488c-97f4-e5ac6bac825f` staged candidate
+generation `0.28.0-2981b9502d7d-74a1f74ba662`, transferred the BILL and SoyLei
+contact lanes cooperatively, and reached candidate-ready. The candidate reattach
+request used the exact transferred BILL owner and candidate runtime, but failed
+before a route effect with `runtime_admission_draining`. Request and job ID was
+`mcp-service-request-service_remote_view_browser_reattach-2f935068-8417-48df-a468-b36d0448ddde`.
+No retry occurred in that transaction.
+
+After the five-minute candidate proof window expired, the installer restored the
+old selected generation, rolled both owner transfers back with receipts, stopped
+the candidate host, cleared the admission drain and recorded
+`failed_preserved_old_generation` at revision 12. The failure therefore validates
+rollback, but does not validate installation.
+
+The admission gate now permits `service_remote_view_browser_reattach` only when
+the command carries the exact current workstation transaction ID and revision.
+The same action without a claim or with foreign revision remains blocked. The
+focused drain regression passes. Rebuild and repeat the staged transaction once;
+after reattach, commit the ready durable handoff through the candidate dashboard
+ingress recovery command and then require joined supervisor acceptance.
+
+### Second staged-install rollback and fresh inventory qualification
+
+state_transition: The claimed reattach passed upgrade admission, then exposed a stale candidate capacity snapshot; source now requalifies current inventory at the recovery reservation boundary.
+acceptance_state: Second transaction rolled back to the old generation; focused source validation passes and another candidate build is required.
+progress_classification: blocker removed in source
+
+Transaction `upgrade-5c7bc5c0-84e8-4f72-b52f-fc57d9dc5647` staged candidate
+generation `0.28.0-a731124e6b61-52cfee5713c9` and cooperatively transferred three
+current lanes. BILL reattach request and job
+`mcp-service-request-service_remote_view_browser_reattach-73734a93-5b4c-4568-8841-859736a7d876`
+carried the exact transaction ID and revision 10, passed the admission drain,
+then failed at `InventoryAdmission`. No retry occurred.
+
+Readback showed why: the candidate had loaded presentation capacity before the
+owner transfers finished and retained the old
+`browser_missing_outside_pending_acquisition` admission error. At request time,
+the authoritative route A and display A rows were both orphaned, its pool entry
+was available and unallocated, and the current BILL browser remained ready under
+the transferred owner. Those current facts satisfy the repaired production
+inventory qualifier, but the reservation used the earlier cached failure.
+
+Bound recovery now overlays and qualifies the current provider inventory inside
+the same repository mutation that reserves capacity. This removes a stale
+pre-transfer admission error only when current route, display, pool, browser and
+provider probes qualify. Any current mismatch remains blocking. The focused
+reattach test and formatting pass. Rebuild once more, repeat one claimed reattach,
+then commit its ready durable handoff before the joined supervisor transition.
+
+### Third staged-install rollback and dotenv inventory propagation
+
+state_transition: Fresh reservation qualification was present, but the staged runtime could not load the production inventory configuration from the canonical dotenv file; the loader allowlist now carries that configuration.
+acceptance_state: Third transaction rolled back cleanly; dotenv tests pass and a rebuilt candidate remains required.
+progress_classification: blocker removed in source
+
+Transaction `upgrade-b5eb7ee8-c826-4f9b-8ae5-9ffc73fd1352` staged candidate
+generation `0.28.0-3099604f738a-6c98f8ac790c` and transferred the two current
+retained owners. Claimed BILL reattach request and job
+`mcp-service-request-service_remote_view_browser_reattach-ae10600b-fa53-4198-9991-5c2ada4d73a4`
+again stopped at `InventoryAdmission` and was not retried. The transaction then
+restored both owner lanes, selected the old generation, stopped the candidate,
+cleared its admission drain and ended `failed_preserved_old_generation`.
+
+The current route, display and pool facts were already eligible, so the refresh
+path should have cleared the cached error. Inspection found the underlying
+configuration boundary: `~/.agent-browser/.env` contains the production
+inventory path and presentation capacity settings, but Rust `agent_env` omitted
+all of them from its explicit allowlist. Direct and staged runtime-host launches
+therefore could not apply the inventory even though supervised units using
+`EnvironmentFile` could.
+
+The loader now recognizes the production and development inventory paths plus
+all five presentation capacity settings. Unknown dotenv keys remain ignored and
+ambient environment still wins. Parser tests prove the production path and warm
+minimum are retained; the focused recovery test, formatting and workspace Clippy
+also pass. Rebuild and repeat the exact claimed candidate reattach once.
+
+### Fourth staged-install rollback and physical display qualification
+
+state_transition: The staged candidate reached current production inventory and real operator-window observation, which proved the retained BILL browser was physically on a private display that route A cannot present; bootstrap qualification now requires exact browser, allocation, owner-session and route-display agreement.
+acceptance_state: Transaction rollback and the focused source regression pass; production installation remains pending a disposable route-bound handoff and rebuilt candidate.
+progress_classification: blocker removed in source
+
+Transaction `upgrade-82fd55c4-9e51-4059-987e-4ae7b07e8c08` staged candidate
+generation `0.28.0-abd8ba7aeaa2-996ef4a348cc`, transferred the two current
+retained owners and loaded the production capacity inventory. The first claimed
+request, `mcp-service-request-service_remote_view_browser_reattach-32d042aa-b6ab-43bd-b8f6-90cb38fba44e`, omitted the canonical route display and queued a warm-slot
+recovery without a persisted effect. The corrected request,
+`mcp-service-request-service_remote_view_browser_reattach-420a352d-13d0-47bf-bbfe-c20fa926f93c`, bound route A and display `:10`, then failed exact
+operator-window observation because BILL PID 32799 was physically on private
+display `:92`. Chrome cannot move that live window to another X display.
+
+The installer restored both owners, the old selected generation and an empty
+admission drain, stopped the candidate and recorded
+`failed_preserved_old_generation` at revision 12. The bootstrap predicate had
+incorrectly combined any exact reattachable browser with any available route.
+It now requires the browser display name to equal an available RDP route target,
+and requires its ready display allocation to name the same browser and an active
+owner session. The regression accepts an exact browser already on `:10` and
+rejects the observed `:92` browser with route `:10`.
+
+Next: create one disposable production browser directly on an available static
+Guacamole display and retain its durable handoff. Rebuild the candidate, require
+the installer to select that handoff, resolve it through the staged candidate,
+then verify automatic supervisor takeover and exactly one selected runtime-host
+listener. Preserve the BILL and QBO processes and clean only the disposable proof
+after accepted installed-runtime readback.
+
+The disposable proof preparation then exposed the same identity defect one step
+earlier in ordinary route-bound launch. Old-runtime request `r501886` stopped at
+the known stale-browser inventory check. Candidate request `r418434` cleared that
+check and launched Chrome on `:10`, but launch persistence generated
+`display:shared_display:10` while the reserved route and stream named
+`remote-view-display:guacamole-1`. Production qualification correctly rejected
+`browser_display_allocation_id`. Both requests rolled the route and display back
+and closed only their new disposable browser.
+
+Launch persistence now uses the one exact display allocation ID carried by its
+route-bound view stream. It falls back to a derived ID only when launch metadata
+does not name one. The focused regression proves a new shared browser, its stream
+and the reserved allocation all retain `remote-view-display:guacamole-1`; the
+existing private-display and allocation tests remain green. Rebuild the candidate
+once, create the disposable handoff through its isolated runtime, then proceed to
+the transactional install without another old-runtime launch attempt.
+
+Candidate request `r683219` then retained the route-bound display ID and advanced
+to capacity custody validation. That validator compared the pre-launch warm-idle
+slot, which correctly had no browser, with the same slot after the exact pending
+acquisition had launched its named browser. It treated this authorized transition
+as foreign custody drift. Compensation restored the route and display and closed
+only the disposable browser; the isolated candidate runtime was then stopped by
+its verified PID and executable identity.
+
+Production capacity refresh now admits only that narrow transition: the prior
+slot must be warm idle with no browser, lease or cleanup obligation; route and
+display identities must be unchanged; and the new browser must match the current
+boot's complete acquisition lease, pending route, display and pool records. Any
+other browser-ID change remains `production_presentation_inventory_capacity_custody_changed`.
+The focused regression models capacity before and after the exact pending launch
+and passes. Rebuild and rerun the disposable proof once before installation.
+
+Diagnostic request `r718737` added the old and qualified slot facts to the typed
+custody error. It proved the old slot was exactly warm idle and the qualified slot
+was the same route/display with the requested browser, but a browser health
+observation had replaced the transient readiness marker and made the narrower
+pending-binding predicate false. The durable acquisition lease and every custody
+axis still agreed.
+
+The capacity adapter now recognizes either the transient pending markers or one
+unique current-boot acquisition lease with exact route, display, pool, browser and
+session custody. It does not admit orphaned, completed, failed, prior-boot,
+ambiguous or foreign leases. The error retains compact previous and qualified
+slot details for rapid tracing. All seven production-inventory tests pass,
+including readiness-marker replacement and the existing owner-drift cases.
+
+Disposable debug-candidate request `r884038` then completed. Durable handoff
+`r884038` is ready at route A, display `:10`, browser
+`session:p160-install-proof-20260909`, with an exact Example Domain target and
+operator-visible state `ready`. This is a synthetic install proof and carries no
+tenant authentication. Preserve it through candidate transfer, resolve the same
+handoff after staging, then clean it only after accepted installed-runtime,
+supervisor and single-listener readback.
+
+### Accepted graceful production installation
+
+state_transition: The production installer preserved both live browser lanes,
+replaced the supervisor, retired every prior runtime host and converged to one
+selected generation.
+acceptance_state: This exact graceful upgrade and automatic supervisor
+replacement are accepted as one installed result. Repeatable convergence and
+runtime multiplicity recovery remain open with profile ownership and the
+deferred A1, A4 and AX requirements.
+progress_classification: provisional installed acceptance
+
+Transaction `upgrade-0b9c31b6-5aaf-407e-a75d-931ec27502e4` accepted source
+`84866611` as generation `0.28.0-f01c48c32d6a-850a0203f68d`. Its binary SHA256
+is `f01c48c32d6addd5442719ef456c08f62aa832007f6b8dafce737b25c31b6e68`.
+The installer completed runtime transfer, candidate presentation, payload
+commit, post-commit validation, workstation reconciliation, dashboard
+management and supervisor transition without a broad shutdown.
+
+Installed doctor reports `steady_current`, one runtime host, one dashboard
+process, one executable generation, zero legacy daemons and no multiplicity
+issues. The selected supervisor is PID 45740. Both source runtime-host PIDs are
+absent. The retained Odollo browser remained PID 26188 and its post-install
+diagnostics job
+`http-service-request-diagnostics-8fb51929-a80e-48e6-86aa-cb01f417e10e`
+returned the expected FedEx page with complete control-plane attestation.
+Synthetic browser PID 87885 and durable handoff `r35043` also survived the
+transfer; the same handoff resolved ready through the installed generation.
+
+The synthetic browser was terminated only after acceptance and its process exit
+was verified. Service-mediated cleanup revealed a separate repair case before
+that exact-process cleanup: the transferred owner rejected the old browser alias,
+then `service_browser_close` against the current handoff owner returned
+`service_browser_close_authority_denied: current browser profile is missing`.
+Both failed service requests had no effect. Plan 0161 now includes preservation
+of profile identity across owner transfer and alias-independent exact close.
+Final doctor remained successful with the same single-host topology. Exact
+receipts are under `~/.agent-browser/campaigns/p160/graceful-upgrade-r4/`.
+
+### Upgrade resilience amendment
+
+Transaction `upgrade-0b9c31b6-5aaf-407e-a75d-931ec27502e4` accepts one exact
+browser-preserving production upgrade. It does not close the broader resilience
+requirement. The earlier full-shutdown transaction remains evidence that the
+ordinary path had failed before the subsequent repair, and one later pass does
+not prove behavior after every restart, forced termination, or stale-state
+combination.
+
+A3 therefore retains these product requirements:
+
+1. A production install must own supervisor replacement as part of the same
+   transaction. It may report success only after the selected supervisor is
+   active on the accepted generation and all prior production hosts and legacy
+   daemons are absent, or after deterministic rollback restores the old
+   selected generation.
+2. Current process, boot, socket, route, display, profile and lease evidence
+   determines occupancy. Durable historical records remain available for audit
+   but cannot by themselves retain a live authority, consume route capacity, or
+   prevent an exact reconciliation after the recorded process is absent.
+3. Runtime multiplicity is scoped by environment and socket namespace.
+   Independently named development supervisors are reported separately and do
+   not count as duplicate production runtimes. Any second production authority,
+   listener, dashboard or executable generation remains blocking outside the
+   transaction-bound convergence window.
+4. Before final A3 acceptance, run another browser-preserving candidate install
+   from a fixture containing stale historical state and one controlled
+   interruption. Require automatic resume or rollback, retained browser and
+   handoff identity, active selected supervisor, one production listener and a
+   successful supported doctor without manual process termination or direct
+   state-file repair.
+
+This amendment preserves the accepted result for the exact 0b9c transaction
+while keeping repeatability and interrupted-state recovery open. It does not
+authorize another production install before the W1 profile-control batch is
+ready for its final candidate gate.
+
+### Automatic prior-transaction convergence implementation
+
+The working tree now makes a new workstation apply inspect an existing
+admission drain before it creates another candidate transaction. A matching
+interrupted transaction is routed through its exact guarded resume path. A
+matching `operator_recovery_required` transaction is routed through its exact
+recovery path. An exact drain left after terminal acceptance is revalidated and
+cleared before the next candidate begins. Missing, mismatched, unsupported, or
+ambiguous evidence still stops without inventing ownership. Focused tests prove
+the interrupted resume classification, an end-to-end isolated rollback
+recovery, and cleanup after an interruption between acceptance and drain close.
+
+This is source-level progress only. It remains uninstalled and does not satisfy
+the controlled-interruption or repeated production-install acceptance case.
+
+### Full-shutdown recovery installation and remaining upgrade defects
+
+state_transition: Candidate generation
+`0.28.0-5555e03eeeaf-4fb44b4795be` is selected and operational after an exact
+full-shutdown transaction, guarded forward resume, dashboard restart and
+workstation reconciliation.
+acceptance_state: Installed-runtime readiness passes, but unattended graceful
+upgrade acceptance remains open because the installer stopped twice and
+required direct recovery actions.
+progress_classification: operational candidate with installer defects reproduced
+
+The default preserve attempt, transaction
+`upgrade-c806bee2-81b1-4d4b-8911-29146c975109`, rolled back after five minutes
+because no authenticated candidate dashboard presentation arrived. The old
+generation, supervisor and two live browsers remained intact. This proves the
+default path still depends on a timed operator journey and cannot yet serve as
+an unattended upgrade.
+
+The reviewed full-shutdown plan
+`445631345fc66d6c6719a7a04b1f493e7482b0685e0e9ee97760a2dd48b04688`
+named and closed the two remaining managed browsers while preserving their
+profiles. Transaction `upgrade-8d4ce22f-17fb-49a8-ade2-e4b24028dc5d` then
+stopped at `runtime_replacement_post_close_census_not_browserless` with the
+old supervisor still active. Its exact guarded resume completed forward
+recovery, proved the source absent, selected the candidate and replaced runtime
+supervisor PID 45740 with PID 95068.
+
+That resume exposed two product defects:
+
+1. Automatic prior-install convergence routed every
+   `operator_recovery_required` transaction to rollback-style recovery even
+   when a started full shutdown required forward resume. The dispatcher now
+   selects guarded resume when the persisted replacement effect receipt proves
+   forward recovery is required.
+2. The real-host replacement resume used the isolated validation branch and
+   skipped workstation reconciliation. The runtime-host supervisor changed, but
+   both dashboard processes retained the old executable until they were
+   restarted manually. The resume path now runs the same locked workstation
+   reconciliation used by a first-pass real-host install before acceptance.
+
+After the manual dashboard restart and reconciliation, installed binary SHA256
+`5555e03eeeaf7d9c865bcf4f781d8959fd0eee6d2fdc7ccd06f8d9bfabd7a4ef`
+matches the selected generation. Doctor succeeds, reports one runtime host,
+zero stale or diagnostic runtimes, ready dashboard ingress, a ready operator
+journey and `runtimeConvergence.status=converged`.
+
+A3 remains open until a later candidate passes both upgrade modes without
+manual recovery:
+
+1. Preserve mode must complete without an operator visiting the shadow
+   dashboard during a timed window.
+2. Full-shutdown mode must close the exact reviewed managed processes, retire
+   the old supervisor, update the dashboard and runtime-host supervisors, and
+   start the candidate in one invocation.
+3. A forward-recovery restart must automatically resume the exact admission
+   owner and finish the same transaction without a separate transaction command.
+4. Acceptance must prove one production runtime authority and listener.
+   Dead superseded socket directories must be removed or explicitly classified
+   as inert residue so their mere presence cannot block or impersonate a live
+   runtime.
+
+Patched candidate binary SHA256
+`91a09242f225d6e48c3c191e6846d122911a94bdac5a8189801d6c995178fd83`
+was built from commit `ac6dad07` after the source-free installer fixture
+passed. Its browserless dry-run correctly refused because another agent had
+already opened managed browser PID 45449. A reviewed full-shutdown plan could
+close that browser, but doing so would interrupt newly resumed work. Install
+this patched candidate in the next bounded upgrade window and use the automatic
+path as the remaining A3 acceptance test.
+
+### Runtime-host authority reconciliation follow-up
+
+The accepted-upgrade supervisor transition now reconciles the production
+runtime-host namespace from exact process identity records before it evaluates
+the live listener inventory. When a non-selected identity record names a
+process that is proven absent, the installer removes only that host's authority,
+socket, token, version and stream endpoint artifacts. It preserves engine and
+handoff artifacts needed for transfer or diagnosis. The selected runtime,
+unreadable identities and any identity that still matches a live process remain
+untouched.
+
+This closes the source-level gap where a dead or half-started runtime with no
+listener was invisible to listener-only retirement and could later impersonate
+an active installation. The focused takeover suite passes all ten cases, strict
+workspace Clippy passes, and the complete source-free workstation installer
+fixture passes. Installed acceptance remains open. The current viable browser
+is PID 45449 on profile `soylei-contact-test-20260906`; it belongs to ongoing
+work and was not closed for another full-shutdown install.
+
+### Preserve-mode presentation blocker and repair
+
+Candidate `df877c68` built as SHA256
+`7182cbb6f99a000c2d57dd59794339c0bbf795a62fb506e97baade88092ca742`.
+Its effect-free preserve dry-run found zero eligible handoffs because all 73
+retained aliases lacked a proven current owner. The only viable production
+browser remained the unrelated SoyLei browser on private display `:101`, which
+cannot satisfy a static RDP route-display join.
+
+Route preflight selected available route 3 on display `:12`. A disposable
+`remote_view_open` then failed with terminal `no_effect` and fully compensated
+browser and lease cleanup. Request and job ID
+`http-service-request-remote_view_open-ea74fcc8-5a55-43ac-9c45-f709f5f7a989`
+identified the actual blocker: global production presentation inventory still
+remembered route B as active for a prior browser although the current route and
+display were the matching orphaned pair and the pool entry was warm idle.
+
+The capacity continuity check now accepts both exact completed-release and
+exact reconciled-orphan transitions from active to warm idle when route and
+display states match, the pool entry is available and unallocated, and both
+historical owner fields match the previous browser. Changed bindings and mixed
+route/display states remain blocking. The new regression and all nine
+production inventory tests pass with strict workspace Clippy. This source fix
+must be included in the next candidate before another presentation attempt.
+
+### Last30Days retained-browser incident amendment
+
+The bounded Last30Days tick on 2026-09-09 exposed two distinct production
+failure paths on installed source `78dacd60`. They are acceptance evidence for
+the existing A1 and AX work, not one generic browser outage. X completed through
+the same `last30days-facebook` browser. The production supervisor conflict
+reported after the tick has since converged and is not the current blocker.
+
+Two LinkedIn evaluations stopped while validating the explicit runtime profile.
+The follow-on service request synchronously loaded the full Service State
+snapshot before `Runtime.evaluate`; its file-lock waits expired after 2162 ms
+and 1001 ms. That pre-action failure must be classified `no_effect`, rather
+than the coarse `effect_uncertain` result. A follow-on request carrying a sealed,
+revision-bound handle and profile attestation must avoid an unnecessary full
+snapshot read or use an equally strong immutable validation. Production-size
+concurrent shared-profile fixtures must prove bounded completion. When a file
+lock wait does fail, the causal record must retain the holder operation identity
+when known, wait phase, wait duration and exact critical section.
+
+Three Reddit tabs were created successfully, then the immediate handle action
+timed out in `Page.enable` twice and `Runtime.enable` once. A new-target attach
+already enables those domains. Handle selection then called the same bootstrap
+again. Track domain bootstrap by attached target session and skip it for an
+unchanged initialized session; attach or session replacement must still perform
+the bootstrap. Acceptance requires three sequential tab creations followed by
+immediate UI actions without redundant domain enablement or target confusion.
+
+The five returned job IDs were unavailable through the documented job lookup
+after restart and upgrade. Each missing lookup also created a new failed job,
+incident and failure-journal entry. AX therefore additionally requires:
+
+1. exact returned request and job IDs remain inspectable across supported
+   restart, upgrade and ordinary retention or compaction;
+2. lookup falls back to retained journal evidence with build, component, phase,
+   effect certainty and recourse intact; and
+3. a missing diagnostic lookup is read-only and cannot create another request,
+   job, event, incident or failure record.
+
+Current diagnosis reports `last30days-facebook` as `repairable`: generation 80
+is ready, the registered capability, historical lease and profile directory
+remain, the Chrome singleton locks are absent, and the recorded browser,
+process and endpoint are absent. Plan 0161 owns this preserving repair. Agent
+Browser must reconcile only the proven-absent runtime ownership, preserve the
+profile and principal bindings, and return a bounded normal relaunch or manual
+authentication disposition. Last30Days owns provider scheduling, query work,
+accepted-item accounting and honoring terminal retry instructions. It must stop
+the affected provider lane on `inspect_before_retry` or `blind_retry` while
+allowing independent lanes to finish.
+
+No second Last30Days tick is part of Agent Browser acceptance. Before its owner
+authorizes another tick, prove the lock-validation, target-bootstrap,
+restart-safe lookup and missing-browser repair fixtures in isolation, install
+one accepted candidate, and complete the exact preserving repair. A later live
+tick remains a Last30Days repository decision and must use fresh bounded
+authority.

@@ -207,8 +207,23 @@ in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
 scripts/ci/rust-tests.sh
 ```
 
-Runs the CDP library tests plus the CLI unit tests. These are provider-free and
-do not require Chrome.
+Runs the comprehensive provider-free Rust lane. The runner keeps every test
+serial inside its process, gives every CLI process a disposable home and XDG
+runtime tree, and partitions CLI tests into disjoint action, browser, service,
+stream, other native, workstation, and remaining core compartments. Two
+balanced lanes overlap through the existing Cargo admission wrapper. The
+support lane then runs the CDP crate and CLI integration-test binaries.
+First-failure logs remain separate and are printed before each compartment
+result.
+
+Use `scripts/ci/rust-tests.sh --focused <filter>` during implementation or to
+re-run one failed invariant. Use `--compartment <name>` for `transport`,
+`cli-native`, one of the narrower `cli-native-*` groups, `cli-workstation`,
+`cli-core`, or `cli-integration`, and `--list-compartments` for machine-readable
+discovery. The runner defaults
+`RUST_MIN_STACK` to 16 MiB so state-heavy async fixtures do not require
+per-test source wrapping. Override it only through
+`RUST_TEST_STACK_SIZE_BYTES` when measuring a reviewed test-stack change.
 
 On WSL, every Cargo command that can compile code must run through
 `scripts/ci/cargo-safe.sh`. The wrapper admits up to two concurrent repository
@@ -256,7 +271,42 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 ### CI Cadence
 
-Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, Service Client, Rust Quality, and Rust. Service Client runs `pnpm test:browser-capability-registry-draft` and `pnpm test:service-client`, which check the draft browser capability registry sample, generated service client files, JavaScript type coverage, service request helper contracts, service observability helper contracts, managed-profile flow contracts, and the no-launch service-client example broker-first contract without launching Chrome. Dashboard action-surface changes should run `pnpm test:dashboard-inspector-actions` so the Service right-pane inspector keeps selected-record state separate from mutable incident and job actions. Rust Quality runs Linux format and clippy checks before the Rust unit-test job starts, so style or lint failures fail fast without spending time on the unit suite. The Rust job uses `scripts/ci/rust-tests.sh` with Cargo's default test profile to run the CLI tests serially in one harness invocation. This preserves isolation for tests that mutate process-global environment or user-scoped runtime state and prevents uncached runners from recompiling the large CLI test executable for every filter. The Rust test step is bounded to 30 minutes. The fixed-input status producer and generated-client harness runs after that suite. The job then builds one exact-head debug CLI and pins every command-based no-launch smoke to that binary; the smoke step is bounded to 10 minutes. Service request action changes must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`, `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`, HTTP `/api/service/request`, and generated `@agent-browser/client` helpers aligned; the fast parity, client, and Rust gates include no-launch guards for that invariant. The Rust job also runs the no-launch service contract metadata smoke, no-launch MCP resource-read smoke, no-launch profile-source smoke, no-launch site-policy source smoke, and no-launch HTTP and MCP incident-summary smokes after the Rust suite, so the service contracts, MCP read resources, effective profile and site-policy provenance, and grouped incident summary contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci` when intentionally validating the optimized CI profile locally. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
+Ordinary pushes to `main` run the fast CI gates only: Version Sync Check,
+Dashboard, Service Client, Rust Quality, and Rust. Service Client runs
+`pnpm test:browser-capability-registry-draft` and `pnpm test:service-client`,
+which check the draft browser capability registry sample, generated service
+client files, JavaScript type coverage, service request helper contracts,
+service observability helper contracts, managed-profile flow contracts, and
+the no-launch service-client example broker-first contract without launching
+Chrome. Dashboard action-surface changes should run
+`pnpm test:dashboard-inspector-actions` so the Service right-pane inspector
+keeps selected-record state separate from mutable incident and job actions.
+Rust Quality runs Linux format and clippy checks before the Rust test job starts,
+so style or lint failures fail fast without spending time on the unit suite.
+The Rust job uses `scripts/ci/rust-tests.sh` with Cargo's default test profile.
+Each compartment remains serial because tests mutate process-global environment
+or user-scoped runtime state. Every CLI compartment receives a disposable home
+and XDG runtime tree, and only disjoint compartment processes overlap, with
+Cargo admission capped at two. This preserves in-process and filesystem
+isolation while avoiding one monolithic 3,000-test replay. The Rust
+test step is bounded to 30 minutes. The fixed-input status producer and
+generated-client harness runs after that suite. The job then builds one
+exact-head debug CLI and pins every command-based no-launch smoke to that
+binary; the smoke step is bounded to 10 minutes. Service request action changes
+must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`,
+`docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
+HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
+aligned; the fast parity, client, and Rust gates include no-launch guards for
+that invariant. The Rust job also runs the no-launch service contract metadata
+smoke, no-launch MCP resource-read smoke, no-launch profile-source smoke,
+no-launch site-policy source smoke, and no-launch HTTP and MCP incident-summary
+smokes after the Rust suite, so the service contracts, MCP read resources,
+effective profile and site-policy provenance, and grouped incident summary
+contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci`
+when intentionally validating the optimized CI profile locally. The slow gates
+run when the CI workflow is started manually or when the pushed head commit
+message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E
+Tests, Windows Integration Test, and Global Install.
 
 At a completed repair batch, before merge readiness or governed runtime
 effects, match validation to every touched surface since the batch baseline,

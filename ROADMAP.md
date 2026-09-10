@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-02
+Updated: 2026-09-09
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -150,9 +150,18 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
 governs the four remaining production readiness items. Current execution,
 acceptance evidence, cumulative effort, and the next bounded action are owned by
-[RUNBOOK.md](RUNBOOK.md). Profile ownership/identity proof and causal error
-diagnosis remain first, followed by the authenticated operator journey,
-maintenance reconciliation and unattended operation. Plan 0159's bounded completion and installed profile repair do
+[RUNBOOK.md](RUNBOOK.md). First-class profile diagnosis, preserving repair,
+runtime reset, and authentication reset completed through
+[Plan 0161](docs/dev/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md).
+Destructive profile-data reset remains separately gated by
+[Plan 0163](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md).
+The authenticated operator journey now adopts Plan 0124's arbitrary-N capacity through
+[Plan 0162](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md):
+browsers bind to validated desktop slots, while Guacamole viewers join those
+desktops just in time without client route selection. Its initial production
+target is three warm slots and shared viewing of one browser from three
+locations. Maintenance reconciliation and unattended operation follow those
+owner/lease and presentation milestones. Plan 0159's bounded completion and installed profile repair do
 not establish whole production readiness. P158's historical calibration sequence
 remains paused and its incomplete criteria remain visible.
 
@@ -473,21 +482,12 @@ production outside that experimental acceptance boundary.
 
 ## P124 | Scalable Desktop Evidence And Presentation Capacity
 
-State: IN PROGRESS
-Current state: Slice A is source accepted. Provider-free contracts now freeze
-CDP-first evidence selection, paired browser-external evidence, pre-trigger
-staging, full capture-ready identity, passive-viewer and human-controller
-posture, authority-safe restoration, arbitrary-N route and slot inventory,
-four-slot reserves, typed pressure queueing, FIFO plus bounded aging, and exact
-or quarantined lifecycle cleanup. An architecture guard records the existing
-fixed-two migration baseline and rejects new canonical A/B assumptions.
-
-P124 replaces that fixed model with arbitrary-N presentation slots, a four-slot
-warm installed acceptance profile, elastic scale-out to a configured and
-pressure-admitted maximum, a deep Desktop Evidence Episode, human-priority
-admission, capture-ready scene proof, restoration, and exact lifecycle cleanup.
-Ordinary CDP work consumes no presentation slot, while retained browser
-ownership remains independent from presentation capacity.
+State: COMPLETE — DEVELOPMENT ACCEPTED; PRODUCTION ADOPTION IN P162
+Current state: Source and development-runtime acceptance proved arbitrary-N
+presentation inventory, four warm slots, controlled elastic 4 to 6 to 4
+lifecycle convergence, multi-viewer and controller posture, desktop evidence,
+retained-browser preservation and exact cleanup. Production input remained
+outside P124 and is now owned by Plan0162 under Plan0160 A2/A3.
 
 ### Plan
 
@@ -495,10 +495,9 @@ ownership remains independent from presentation capacity.
 
 ### Next Recommendation
 
-Begin Slice B only after advancing the governing plan. Generalize the static
-route inventory to arbitrary N while retaining legacy A/B parsing in one
-compatibility adapter. Do not dynamically provision or remove provider
-resources, and keep the current workstation unchanged.
+Do not rerun P124's accepted development campaign. Plan0161's preserving-repair
+milestone is complete; execute Plan0162 next to adopt configurable desktop slots
+and just-in-time viewer allocation in production.
 
 ## P123 | Exact Profile Compatibility Installed Admission
 
@@ -577,8 +576,12 @@ work for the explicit many-to-many Guacamole/RDP release milestone.
 
 ## P116 | Runtime Adoption And Transactional Upgrade
 
-State: ACCEPTED
-Current state: Plan 0116 is accepted. It converted the August 15 runtime and durable-handoff
+State: OPEN
+Current state: Plan 0116 was reopened on 2026-09-09 after the latest production
+installation required a full hard stop. The existing installation did not
+cooperatively surrender custody, the installer did not establish a healthy
+updated supervisor, and runtime inventory still disagrees with its steady-state
+multiplicity projection. Earlier work converted the August 15 runtime and durable-handoff
 failures into one generation-aware architecture. Current workstation apply can
 commit the new payload before runtime reconciliation, restore only systemd
 active states after later failure, and leave live daemons bound to prior or
@@ -697,10 +700,12 @@ transfer was executed.
 
 ### Next Recommendation
 
-Preserve P116 as the accepted hot-adoption and transactional-upgrade
-foundation. Continue through P117, which owns lifecycle deepening, resource and
-retention convergence, single-host migration, and the separately authorized
-live cleanup gate.
+Retain the implemented P116 foundation, then close the three reopened gates:
+old-runtime surrender before selector commit, automatic production-supervisor
+replacement and restart, and one authoritative production runtime/listener
+projection with no reachable stale production streams. Continue P117 lifecycle
+work only where it supplies those gates or the separately governed convergence
+work.
 
 ## P114 | Terminal Route Quarantine Recovery
 

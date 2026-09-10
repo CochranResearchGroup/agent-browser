@@ -2457,6 +2457,10 @@ pub struct ServiceState {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_recovery_receipts:
         BTreeMap<String, super::service_profile_acquisition::RecoveryReceipt>,
+    /// Idempotent terminal receipts for sealed, explicitly scoped profile resets.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) profile_reset_receipts:
+        BTreeMap<String, super::service_profile_acquisition::ProfileResetReceipt>,
     /// Exact, permission-backed Profile lifecycle authorizations. These bind
     /// logical eviction intent to a policy revision before a daemon may join
     /// it with fresh physical target evidence.

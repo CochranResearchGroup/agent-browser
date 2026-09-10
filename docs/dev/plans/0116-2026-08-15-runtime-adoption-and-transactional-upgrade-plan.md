@@ -2,7 +2,7 @@
 
 Date: 2026-08-15
 
-State: ACCEPTED
+State: OPEN
 
 Lane: P116
 
@@ -38,6 +38,33 @@ runtime has one proven disposition:
 
 Copying files, restarting a dashboard, receiving a ready route record, or
 passing a component doctor is not completion by itself.
+
+## Acceptance Correction, 2026-09-09
+
+The latest production installation required an operator-directed hard stop
+because the existing installation did not surrender runtime custody through the
+supported transition. That result reopens this plan. Forced recovery proves
+that installation can eventually replace files; it does not prove cooperative
+upgrade, supervisor convergence, or single-runtime enforcement.
+
+Treat these as three independent acceptance gates:
+
+1. The selected old runtime drains new effects and cooperatively transfers or
+   releases every owned browser and logical session before selector commit.
+2. Installation stops, updates, reloads, starts, and verifies the production
+   runtime supervisor against the selected generation without leaving a dead
+   unit, stale reachable port, or mismatched stream record.
+3. Post-install census proves exactly one production runtime authority and one
+   production listener, with no reachable stale production session streams.
+   Intentionally isolated development runtimes remain distinguishable by
+   environment and namespace and do not satisfy or violate this production
+   count.
+
+Current readback has one live production runtime-host listener, but its session
+supervisor is inactive and reports `port_conflict`, while runtime inventory
+retains seven session rows, including inactive rows whose streams remain
+reachable. A simultaneous `steady_current` multiplicity verdict is insufficient
+until those projections agree.
 
 ## Maintainer Direction
 

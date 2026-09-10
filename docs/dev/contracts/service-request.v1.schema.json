@@ -57,6 +57,7 @@
         "service_authentication_run_status",
         "service_authentication_run_resume",
         "service_authentication_run_cancel",
+        "service_authentication_recipe_status",
         "tab_list",
         "url",
         "title",
@@ -502,6 +503,26 @@
       "type": "string",
       "minLength": 1,
       "description": "Opaque account reference resolved only inside the sealed authentication provider boundary. It is not a username."
+    },
+    "organizationRef": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque organization reference bound to the sealed authentication provider request."
+    },
+    "challengeProviderId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Registered challenge-provider identifier selected by the authentication recipe."
+    },
+    "challengeProviderTenantRef": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque tenant reference interpreted only by the selected challenge provider."
+    },
+    "challengeProviderAccountRef": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque provider account reference interpreted only by the selected challenge provider."
     },
     "siteRecipeId": {
       "type": "string",

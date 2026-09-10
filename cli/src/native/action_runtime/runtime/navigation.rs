@@ -749,9 +749,13 @@ pub(crate) async fn handle_runtime_handoff_resume(
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
-    if let Err(error) =
-        persist_adopted_logical_browser_health(state, &logical_browser_id, descriptor.host)
-            .and_then(|()| super::remote_headed::register_current_browser_lifecycle(state))
+    if let Err(error) = persist_adopted_logical_browser_health(
+        state,
+        &logical_browser_id,
+        &descriptor.session_name,
+        descriptor.host,
+    )
+    .and_then(|()| super::remote_headed::register_current_browser_lifecycle(state))
     {
         let rollback = handle_runtime_handoff_rollback(
             &json!({"sourceSession": descriptor.session_name}),
@@ -979,7 +983,12 @@ async fn handle_runtime_handoff_orphan_adoption(
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
-    persist_adopted_logical_browser_health(state, &logical_browser_id, browser.host)?;
+    persist_adopted_logical_browser_health(
+        state,
+        &logical_browser_id,
+        source_session,
+        browser.host,
+    )?;
     Ok(json!({
         "resumed": true,
         "replayed": false,
@@ -1254,6 +1263,7 @@ fn durable_orphan_runtime_evidence(
 fn persist_adopted_logical_browser_health(
     state: &DaemonState,
     logical_browser_id: &str,
+    source_session_id: &str,
     host: ServiceBrowserHost,
 ) -> Result<(), String> {
     let manager = state.browser.as_ref().ok_or_else(|| {
@@ -1261,6 +1271,7 @@ fn persist_adopted_logical_browser_health(
     })?;
     let pid = manager.browser_pid().or(state.attached_browser_pid);
     let cdp_endpoint = manager.get_cdp_url().to_string();
+    let active_target_id = manager.active_target_id().ok().map(str::to_string);
     let process_identity = pid.and_then(|pid| {
         crate::process_identity::capture_process_identity(pid, None, None).map(|identity| {
             ServiceBrowserProcessIdentity {
@@ -1276,9 +1287,17 @@ fn persist_adopted_logical_browser_health(
         })
     });
     runtime_handoff_service_repository()?.mutate(|service_state| {
+        let logical_browser_id = retained_runtime_handoff_browser_id(
+            service_state,
+            logical_browser_id,
+            source_session_id,
+            state.attached_runtime_profile.as_deref(),
+            pid,
+            active_target_id.as_deref(),
+        )?;
         let prior_session_ids = service_state
             .browsers
-            .get(logical_browser_id)
+            .get(&logical_browser_id)
             .ok_or_else(|| {
                 "runtime_handoff_logical_browser_missing: owner browser record disappeared"
                     .to_string()
@@ -1290,13 +1309,13 @@ fn persist_adopted_logical_browser_health(
             .collect::<std::collections::BTreeSet<_>>();
         rebind_runtime_handoff_service_projection_in_state(
             service_state,
-            logical_browser_id,
+            &logical_browser_id,
             &prior_session_ids,
             &state.session_id,
         )?;
         let browser = service_state
             .browsers
-            .get_mut(logical_browser_id)
+            .get_mut(&logical_browser_id)
             .ok_or_else(|| {
                 "runtime_handoff_logical_browser_missing: owner browser record disappeared"
                     .to_string()
@@ -1313,6 +1332,64 @@ fn persist_adopted_logical_browser_health(
         }
         Ok(())
     })
+}
+
+fn retained_runtime_handoff_browser_id(
+    service_state: &crate::native::service_model::ServiceState,
+    requested_browser_id: &str,
+    source_session_id: &str,
+    runtime_profile: Option<&str>,
+    browser_pid: Option<u32>,
+    active_target_id: Option<&str>,
+) -> Result<String, String> {
+    if service_state.browsers.contains_key(requested_browser_id) {
+        return Ok(requested_browser_id.to_string());
+    }
+    let Some(runtime_profile) = runtime_profile else {
+        return Err(
+            "runtime_handoff_logical_browser_missing: owner browser record disappeared".to_string(),
+        );
+    };
+    let Some(browser_pid) = browser_pid else {
+        return Err(
+            "runtime_handoff_logical_browser_missing: owner browser record disappeared".to_string(),
+        );
+    };
+    let candidates = service_state
+        .browsers
+        .iter()
+        .filter(|(_, browser)| {
+            browser.pid == Some(browser_pid)
+                && browser.profile_id.as_deref() == Some(runtime_profile)
+                && (browser
+                    .active_session_ids
+                    .iter()
+                    .any(|session_id| session_id == source_session_id)
+                    || service_state.tabs.values().any(|tab| {
+                        tab.browser_id == browser.id
+                            && (tab.session_id.as_deref() == Some(source_session_id)
+                                || tab.owner_session_id.as_deref() == Some(source_session_id))
+                    })
+                    || active_target_id.is_some_and(|active_target_id| {
+                        service_state.tabs.values().any(|tab| {
+                            tab.browser_id == browser.id
+                                && tab.target_id.as_deref() == Some(active_target_id)
+                        })
+                    }))
+        })
+        .map(|(browser_id, _)| browser_id.clone())
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
+        [browser_id] => Ok(browser_id.clone()),
+        [] => Err(
+            "runtime_handoff_logical_browser_missing: owner browser record disappeared"
+                .to_string(),
+        ),
+        _ => Err(
+            "runtime_handoff_logical_browser_ambiguous: multiple retained browser records match the owner process"
+                .to_string(),
+        ),
+    }
 }
 
 fn runtime_handoff_prepared_response(
@@ -2720,6 +2797,111 @@ mod tests {
         assert_eq!(
             state.browsers[logical_browser_id].active_session_ids,
             ["candidate"]
+        );
+    }
+
+    #[test]
+    fn handoff_resolves_durable_browser_id_from_exact_process_profile_and_source_session() {
+        let state = ServiceState {
+            browsers: std::collections::BTreeMap::from([(
+                "session:bill-soylei".to_string(),
+                BrowserProcess {
+                    id: "session:bill-soylei".to_string(),
+                    pid: Some(63366),
+                    profile_id: Some("bill-soylei".to_string()),
+                    active_session_ids: vec!["handoff-owner-route".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        assert_eq!(
+            retained_runtime_handoff_browser_id(
+                &state,
+                "session:handoff-owner-route",
+                "handoff-owner-route",
+                Some("bill-soylei"),
+                Some(63366),
+                None,
+            )
+            .unwrap(),
+            "session:bill-soylei"
+        );
+    }
+
+    #[test]
+    fn handoff_rejects_ambiguous_durable_browser_identity() {
+        let browser = |id: &str| BrowserProcess {
+            id: id.to_string(),
+            pid: Some(63366),
+            profile_id: Some("bill-soylei".to_string()),
+            active_session_ids: vec!["handoff-owner-route".to_string()],
+            ..BrowserProcess::default()
+        };
+        let state = ServiceState {
+            browsers: std::collections::BTreeMap::from([
+                (
+                    "session:bill-soylei".to_string(),
+                    browser("session:bill-soylei"),
+                ),
+                ("session:peer".to_string(), browser("session:peer")),
+            ]),
+            ..ServiceState::default()
+        };
+
+        assert_eq!(
+            retained_runtime_handoff_browser_id(
+                &state,
+                "session:handoff-owner-route",
+                "handoff-owner-route",
+                Some("bill-soylei"),
+                Some(63366),
+                None,
+            )
+            .unwrap_err(),
+            "runtime_handoff_logical_browser_ambiguous: multiple retained browser records match the owner process"
+        );
+    }
+
+    #[test]
+    fn handoff_resolves_durable_browser_after_prior_alias_from_exact_target() {
+        let state = ServiceState {
+            browsers: std::collections::BTreeMap::from([(
+                "session:bill-soylei".to_string(),
+                BrowserProcess {
+                    id: "session:bill-soylei".to_string(),
+                    pid: Some(63366),
+                    profile_id: Some("bill-soylei".to_string()),
+                    active_session_ids: vec!["prior-candidate".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            tabs: std::collections::BTreeMap::from([(
+                "target:bill-home".to_string(),
+                BrowserTab {
+                    id: "target:bill-home".to_string(),
+                    browser_id: "session:bill-soylei".to_string(),
+                    target_id: Some("bill-home".to_string()),
+                    session_id: Some("prior-candidate".to_string()),
+                    owner_session_id: Some("prior-candidate".to_string()),
+                    ..BrowserTab::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        assert_eq!(
+            retained_runtime_handoff_browser_id(
+                &state,
+                "session:handoff-owner-route",
+                "handoff-owner-route",
+                Some("bill-soylei"),
+                Some(63366),
+                Some("bill-home"),
+            )
+            .unwrap(),
+            "session:bill-soylei"
         );
     }
 

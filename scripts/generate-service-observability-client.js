@@ -14,6 +14,7 @@ const schemas = {
   profilesResponse: readSchema('service-profiles-response.v1.schema.json'),
   profileAllocationResponse: readSchema('service-profile-allocation-response.v1.schema.json'),
   profileReadinessResponse: readSchema('service-profile-readiness-response.v1.schema.json'),
+  profileDiagnosisResponse: readSchema('service-profile-diagnosis-response.v1.schema.json'),
   profileSeedingHandoffResponse: readSchema('service-profile-seeding-handoff-response.v1.schema.json'),
   profileLookupResponse: readSchema('service-profile-lookup-response.v1.schema.json'),
   accessPlanResponse: readSchema('service-access-plan-response.v1.schema.json'),
@@ -1193,6 +1194,35 @@ export interface ServiceProfileReadinessResponse {
   [key: string]: unknown;
 }
 
+export type ServiceProfileDiagnosisState = 'ready' | 'repairable' | 'manual_action' | 'blocked' | 'reset_available';
+
+export interface ServiceProfileDiagnosisFinding {
+  code: string;
+  axis: string;
+  severity: string;
+  blocking: boolean;
+  message: string;
+  evidence: string[];
+  recourse: string;
+}
+
+export interface ServiceProfileDiagnosisResponse {
+  schemaVersion: 'agent-browser.profile-diagnosis.v1' | string;
+  diagnosisId: string;
+  observedAt: string;
+  state: ServiceProfileDiagnosisState;
+  profile: Record<string, unknown>;
+  runtime: Record<string, unknown>;
+  ownership: Record<string, unknown>;
+  chromeLocks: Record<string, unknown>;
+  readiness: Record<string, unknown>;
+  presentation: Record<string, unknown>;
+  decision: Record<string, unknown>;
+  trace: Record<string, unknown>;
+  findings: ServiceProfileDiagnosisFinding[];
+  [key: string]: unknown;
+}
+
 export interface ServiceProfileSeedingHandoffResponse {
   profileId: string;
   profileName: string;
@@ -1492,10 +1522,20 @@ export interface ServiceProfileLeaseRecoveryApplyResponse {
   replayed: boolean;
 }
 
+export interface ServiceProducerBuildIdentity extends Record<string, unknown> {
+  packageVersion: string;
+  sourceRevision: string | null;
+  sourceTreeState: string;
+  binarySha256: string | null;
+  supportGenerationId: string | null;
+  supportManifestSha256: string | null;
+  unavailableReasons: string[];
+}
 export interface ServiceProfileRecoveryPlan extends Record<string, unknown> {
   schemaVersion: 'agent-browser.profile-recovery-plan.v1';
   planId: string;
   recoveryId: string;
+  producerBuildIdentity: ServiceProducerBuildIdentity;
   integritySeal: string;
   identities: { principalId: string; profileId: string; daemonSessionRoute: string; [key: string]: unknown };
 }
@@ -1505,9 +1545,17 @@ export interface ServiceProfileRecoveryReceipt extends Record<string, unknown> {
   planId: string;
   principalId: string;
   profileId: string;
+  producerBuildIdentity?: ServiceProducerBuildIdentity;
   terminalResult: string;
 }
-export interface ServiceProfileRecoveryPlanResponse { outcome: { recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown }; }
+export interface ServiceProfileLifecycleTrace {
+  requestId: string | null;
+  jobId: string | null;
+  profileId: string;
+  eventFilter: { profileId: string };
+  incidentFilter: { profileId: string };
+}
+export interface ServiceProfileRecoveryPlanResponse { outcome: { recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown }; trace: ServiceProfileLifecycleTrace; }
 export interface ServiceLeaseResourceKey {
   kind: 'profile' | 'runtime_lane' | 'service_session' | 'tab' | 'viewer' | 'controller' | 'presentation_route' | 'installer_transaction';
   id: string;
@@ -1600,7 +1648,7 @@ export interface ServiceProfileAcquireResponse {
   leaseAcquisitionReceipt?: ServiceLeaseAcquisitionReceipt;
   leaseAcquisitionReplayed?: boolean;
 }
-export interface ServiceProfileRecoveryApplyResponse { outcome: Record<string, unknown>; receipt: ServiceProfileRecoveryReceipt; replayed: boolean; }
+export interface ServiceProfileRecoveryApplyResponse { outcome: Record<string, unknown>; receipt: ServiceProfileRecoveryReceipt; replayed: boolean; trace: ServiceProfileLifecycleTrace; }
 export interface ServiceProfileRecoveryStatusResponse { recoveryId: string; state: string; receipt: ServiceProfileRecoveryReceipt | null; }
 
 export interface ServiceSessionsResponse extends ServiceListResponse<ServiceSessionRecord> {
@@ -2251,6 +2299,55 @@ export interface ServiceProfileRecoveryPlanOptions extends ServiceObservabilityH
   agentName?: string;
   taskName?: string;
 }
+export interface ServiceProfileRepairPlanOptions extends ServiceObservabilityHttpOptions {
+  id: string;
+  profileCapability: string;
+  expiresAt?: string;
+  idempotencyKey?: string;
+  targetServiceIds?: string[];
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+}
+export interface ServiceProfileRepairApplyOptions extends ServiceObservabilityHttpOptions {
+  id: string;
+  profileCapability: string;
+  plan: ServiceProfileRecoveryPlan;
+}
+export interface ServiceProfileResetPlan extends Record<string, unknown> {
+  schemaVersion: 'agent-browser.profile-reset-plan.v1';
+  planId: string;
+  resetId: string;
+  profileId: string;
+  producerBuildIdentity: ServiceProducerBuildIdentity;
+  scope: 'runtime' | 'authentication' | 'profile_data';
+  integritySeal: string;
+}
+export interface ServiceProfileResetReceipt extends Record<string, unknown> {
+  schemaVersion: 'agent-browser.profile-reset-receipt.v1';
+  resetId: string;
+  planId: string;
+  profileId: string;
+  producerBuildIdentity: ServiceProducerBuildIdentity;
+  scope: 'runtime' | 'authentication' | 'profile_data';
+  terminalResult: string;
+  browserCookiesErased: false;
+}
+export interface ServiceProfileResetPlanOptions extends ServiceObservabilityHttpOptions {
+  id: string;
+  profileCapability: string;
+  scope: 'runtime' | 'authentication' | 'profile-data';
+  targetServiceId?: string;
+  expiresAt?: string;
+  idempotencyKey?: string;
+}
+export interface ServiceProfileResetApplyOptions extends ServiceObservabilityHttpOptions {
+  id: string;
+  profileCapability: string;
+  plan: ServiceProfileResetPlan;
+}
+export interface ServiceProfileResetPlanResponse { state: 'reset_available' | 'unavailable'; plan?: ServiceProfileResetPlan; reason?: string; trace: ServiceProfileLifecycleTrace; }
+export interface ServiceProfileResetApplyResponse { receipt: ServiceProfileResetReceipt; replayed: boolean; trace: ServiceProfileLifecycleTrace; }
 export interface ServiceProfileAcquireOptions extends ServiceObservabilityHttpOptions {
   profileId: string;
   profileCapability: string;
@@ -3505,6 +3602,8 @@ export declare function getServiceProfileAllocationForAccessPlan(options: Servic
 export declare function summarizeServiceProfileAllocationBrowserHealth(allocation?: ServiceProfileAllocation | ServiceProfileAllocationResponse | null): ServiceProfileAllocationBrowserHealthSummary;
 /** Read one profile's no-launch target readiness rows. */
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
+/** Read one profile's joined no-launch diagnosis and recourse projection. */
+export declare function getServiceProfileDiagnosis(options: ServiceIdOptions): Promise<ServiceProfileDiagnosisResponse>;
 /** Read the operator-ready detached profile seeding handoff for one profile. */
 export declare function getServiceProfileSeedingHandoff(options: ServiceProfileSeedingHandoffOptions): Promise<ServiceProfileSeedingHandoffResponse>;
 /** Persist lifecycle state for a CDP-free profile seeding handoff. */
@@ -3541,6 +3640,10 @@ export declare function applyServiceProfileLeaseReconciliation(options: ServiceP
 export declare function planServiceProfileLeaseRecovery(options: ServiceProfileLeaseRecoveryPlanOptions): Promise<ServiceProfileLeaseRecoveryPlanResponse>;
 export declare function applyServiceProfileLeaseRecovery(options: ServiceProfileLeaseRecoveryApplyOptions): Promise<ServiceProfileLeaseRecoveryApplyResponse>;
 export declare function planServiceProfileRecovery(options: ServiceProfileRecoveryPlanOptions): Promise<ServiceProfileRecoveryPlanResponse>;
+export declare function planServiceProfileRepair(options: ServiceProfileRepairPlanOptions): Promise<ServiceProfileRecoveryPlanResponse>;
+export declare function applyServiceProfileRepair(options: ServiceProfileRepairApplyOptions): Promise<ServiceProfileRecoveryApplyResponse>;
+export declare function planServiceProfileReset(options: ServiceProfileResetPlanOptions): Promise<ServiceProfileResetPlanResponse>;
+export declare function applyServiceProfileReset(options: ServiceProfileResetApplyOptions): Promise<ServiceProfileResetApplyResponse>;
 export declare function acquireServiceProfile(options: ServiceProfileAcquireOptions): Promise<ServiceProfileAcquireResponse>;
 export declare function applyServiceProfileRecovery(options: ServiceProfileRecoveryApplyOptions): Promise<ServiceProfileRecoveryApplyResponse>;
 export declare function getServiceProfileRecoveryStatus(options: ServiceProfileRecoveryStatusOptions): Promise<ServiceProfileRecoveryStatusResponse>;

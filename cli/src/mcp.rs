@@ -15,9 +15,9 @@ use crate::native::service_contracts::{
     DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
-    SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_LEASES_MCP_RESOURCE,
-    SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE, SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE,
-    SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
+    SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_TEMPLATE,
+    SERVICE_PROFILE_LEASES_MCP_RESOURCE, SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE,
+    SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE, SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
     SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
     SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
@@ -32,6 +32,7 @@ use crate::native::service_model::{
 use crate::native::service_principal::{
     authenticate_profile_capability, AuthenticatedServicePrincipal,
 };
+use crate::native::service_profile_acquisition::diagnose_service_profile;
 use crate::native::service_profile_lease::{
     doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
 };
@@ -63,6 +64,7 @@ const PROFILE_LOOKUP_RESOURCE: &str = "agent-browser://profiles/lookup";
 const PROFILE_LOOKUP_TEMPLATE: &str = "agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}";
 const PROFILE_ALLOCATION_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/allocation";
 const PROFILE_READINESS_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/readiness";
+const PROFILE_DIAGNOSIS_TEMPLATE: &str = SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_TEMPLATE;
 const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
@@ -318,6 +320,12 @@ fn service_mcp_resource_templates() -> Vec<Value> {
             "name": "Service profile readiness",
             "mimeType": "application/json",
             "description": "No-launch target-readiness rows for one service profile"
+        }),
+        json!({
+            "uriTemplate": PROFILE_DIAGNOSIS_TEMPLATE,
+            "name": "Service profile diagnosis",
+            "mimeType": "application/json",
+            "description": "No-launch joined profile, runtime, ownership, Chrome lock, readiness, presentation, and recourse diagnosis"
         }),
         json!({
             "uriTemplate": PROFILE_ALLOCATION_TEMPLATE,
@@ -606,6 +614,17 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
                     "targetReadiness": profile.target_readiness.clone(),
                     "count": profile.target_readiness.len(),
                 })
+            } else if let Some(profile_id) = profile_diagnosis_resource_id(uri) {
+                let observed_at = service_now_timestamp();
+                let correlation_id =
+                    format!("mcp-service-profile-diagnosis-{}", uuid::Uuid::new_v4());
+                serde_json::to_value(diagnose_service_profile(
+                    &state,
+                    &profile_id,
+                    &observed_at,
+                    &correlation_id,
+                )?)
+                .map_err(|error| format!("service_profile_diagnosis_encode_failed:{error}"))?
             } else if let Some(profile_id) = profile_allocation_resource_id(uri) {
                 let allocation = service_profile_allocations(&state)
                     .into_iter()
@@ -976,6 +995,46 @@ fn service_profile_recovery_tool_schema(operation: &str, title: &str) -> Value {
                 ,"automaticRecovery": { "type": "boolean" }
             },
             "required": required
+        }
+    })
+}
+
+fn service_profile_repair_tool_schema(operation: &str, title: &str) -> Value {
+    let mut schema = service_profile_recovery_tool_schema(operation, title);
+    schema["name"] = json!(format!("service_profile_repair_{operation}"));
+    schema["description"] = json!(format!(
+        "{title}. The sealed operation preserves the profile directory, cookies, credentials, extensions, and authenticated site state. The profile capability is ephemeral and never persisted or returned."
+    ));
+    schema["inputSchema"]["required"] = json!(if operation == "plan" {
+        vec!["profileId", "profileCapability"]
+    } else {
+        vec!["profileCapability", "plan"]
+    });
+    schema
+}
+
+fn service_profile_reset_tool_schema(operation: &str, title: &str) -> Value {
+    json!({
+        "name": format!("service_profile_reset_{operation}"),
+        "title": title,
+        "description": format!("{title}. Runtime and authentication scopes preserve the profile directory, cookies, credentials, and extensions. Profile-data reset is unavailable until restore support is installed. The profile capability is ephemeral and never persisted or returned."),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "profileId": { "type": "string" },
+                "profileCapability": { "type": "string", "writeOnly": true },
+                "scope": { "enum": ["runtime", "authentication", "profile-data"] },
+                "targetServiceId": { "type": "string" },
+                "expiresAt": { "type": "string" },
+                "idempotencyKey": { "type": "string" },
+                "plan": { "type": "object" }
+            },
+            "required": if operation == "plan" {
+                vec!["profileId", "profileCapability", "scope"]
+            } else {
+                vec!["profileCapability", "plan"]
+            }
         }
     })
 }
@@ -3418,6 +3477,10 @@ fn service_mcp_tools() -> Vec<Value> {
         service_profile_recovery_tool_schema("plan", "Plan profile acquisition recovery"),
         service_profile_recovery_tool_schema("apply", "Apply profile acquisition recovery"),
         service_profile_recovery_tool_schema("status", "Read profile recovery status"),
+        service_profile_repair_tool_schema("plan", "Plan preserving profile repair"),
+        service_profile_repair_tool_schema("apply", "Apply preserving profile repair"),
+        service_profile_reset_tool_schema("plan", "Plan a scoped profile reset"),
+        service_profile_reset_tool_schema("apply", "Apply a scoped profile reset"),
         json!({
             "name": "service_trace",
             "title": "Read service trace",
@@ -5487,10 +5550,15 @@ fn call_service_mcp_tool(
             call_service_profile_lease_recover(name, arguments, session)
         }
         "service_profile_acquire"
+        | "service_profile_repair_plan"
+        | "service_profile_repair_apply"
         | "service_profile_recovery_plan"
         | "service_profile_recovery_apply"
         | "service_profile_recovery_status" => {
             call_service_profile_recovery(name, arguments, session)
+        }
+        "service_profile_reset_plan" | "service_profile_reset_apply" => {
+            call_service_profile_reset(name, arguments, session)
         }
         "service_session_upsert" => call_service_session_upsert(arguments, session),
         "service_session_delete" => call_service_session_delete(arguments, session),
@@ -6168,9 +6236,14 @@ fn call_service_profile_recovery(
             "service_profile_acquire requires profileId",
         ));
     }
-    if action.ends_with("_plan") && (profile_id.is_none() || expires_at.is_none()) {
+    if action == "service_profile_recovery_plan" && (profile_id.is_none() || expires_at.is_none()) {
         return Err(JsonRpcError::invalid_params(
             "service_profile_recovery_plan requires profileId and expiresAt",
+        ));
+    }
+    if action == "service_profile_repair_plan" && profile_id.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_repair_plan requires profileId",
         ));
     }
     if action.ends_with("_apply") && plan.is_none() {
@@ -6229,6 +6302,58 @@ fn call_service_profile_recovery(
         action,
         plan_route.as_deref().unwrap_or(session),
         trace,
+        command,
+    )
+}
+
+fn call_service_profile_reset(
+    action: &str,
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let profile_capability = required_string_argument(arguments, "profileCapability")?;
+    let profile_id = optional_string_argument(arguments, "profileId")?;
+    let scope = optional_string_argument(arguments, "scope")?;
+    let target_service_id = optional_string_argument(arguments, "targetServiceId")?;
+    let expires_at = optional_string_argument(arguments, "expiresAt")?;
+    let idempotency_key = optional_string_argument(arguments, "idempotencyKey")?;
+    let plan = arguments
+        .get("plan")
+        .filter(|value| value.is_object())
+        .cloned();
+    if action == "service_profile_reset_plan" && (profile_id.is_none() || scope.is_none()) {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_reset_plan requires profileId and scope",
+        ));
+    }
+    if action == "service_profile_reset_apply" && plan.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_reset_apply requires plan",
+        ));
+    }
+    let mut command = json!({
+        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
+        "action": action,
+        "profileCapability": profile_capability,
+    });
+    for (field, value) in [
+        ("profileId", profile_id),
+        ("scope", scope),
+        ("targetServiceId", target_service_id),
+        ("expiresAt", expires_at),
+        ("idempotencyKey", idempotency_key),
+    ] {
+        if let Some(value) = value {
+            command[field] = json!(value);
+        }
+    }
+    if let Some(plan) = plan {
+        command["plan"] = plan;
+    }
+    send_queued_tool_command(
+        action,
+        session,
+        service_tool_trace(None, None, None),
         command,
     )
 }
@@ -11376,6 +11501,14 @@ fn profile_readiness_resource_id(uri: &str) -> Option<String> {
     Some(urlencoding::decode(profile_id).ok()?.into_owned())
 }
 
+fn profile_diagnosis_resource_id(uri: &str) -> Option<String> {
+    let profile_id = uri
+        .strip_prefix("agent-browser://profiles/")?
+        .strip_suffix("/diagnosis")
+        .filter(|id| !id.is_empty() && !id.contains('/'))?;
+    Some(urlencoding::decode(profile_id).ok()?.into_owned())
+}
+
 fn profile_allocation_resource_id(uri: &str) -> Option<String> {
     let profile_id = uri
         .strip_prefix("agent-browser://profiles/")?
@@ -11501,18 +11634,22 @@ mod tests {
         );
         assert_eq!(
             response["data"]["resourceTemplates"][4]["uriTemplate"],
-            PROFILE_ALLOCATION_TEMPLATE
+            PROFILE_DIAGNOSIS_TEMPLATE
         );
         assert_eq!(
             response["data"]["resourceTemplates"][5]["uriTemplate"],
-            PROFILE_SEEDING_HANDOFF_TEMPLATE
+            PROFILE_ALLOCATION_TEMPLATE
         );
         assert_eq!(
             response["data"]["resourceTemplates"][6]["uriTemplate"],
-            SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE
+            PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
         assert_eq!(
             response["data"]["resourceTemplates"][7]["uriTemplate"],
+            SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE
+        );
+        assert_eq!(
+            response["data"]["resourceTemplates"][8]["uriTemplate"],
             SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE
         );
     }
@@ -11589,6 +11726,22 @@ mod tests {
         );
         assert_eq!(
             profile_readiness_resource_id("agent-browser://profiles/google-work/seeding-handoff"),
+            None
+        );
+    }
+
+    #[test]
+    fn profile_diagnosis_resource_id_maps_uri() {
+        assert_eq!(
+            profile_diagnosis_resource_id("agent-browser://profiles/google-work/diagnosis"),
+            Some("google-work".to_string())
+        );
+        assert_eq!(
+            profile_diagnosis_resource_id("agent-browser://profiles/google%20work/diagnosis"),
+            Some("google work".to_string())
+        );
+        assert_eq!(
+            profile_diagnosis_resource_id("agent-browser://profiles/google-work/readiness"),
             None
         );
     }
@@ -11683,10 +11836,14 @@ mod tests {
         );
         assert_eq!(
             response["result"]["resourceTemplates"][4]["uriTemplate"],
-            PROFILE_ALLOCATION_TEMPLATE
+            PROFILE_DIAGNOSIS_TEMPLATE
         );
         assert_eq!(
             response["result"]["resourceTemplates"][5]["uriTemplate"],
+            PROFILE_ALLOCATION_TEMPLATE
+        );
+        assert_eq!(
+            response["result"]["resourceTemplates"][6]["uriTemplate"],
             PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
     }
@@ -11836,6 +11993,46 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("Do not create a duplicate profile"));
+        let profile_repair_plan = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_profile_repair_plan")
+            .expect("service_profile_repair_plan schema should be listed");
+        assert_eq!(
+            profile_repair_plan["inputSchema"]["required"],
+            json!(["profileId", "profileCapability"])
+        );
+        assert!(profile_repair_plan["description"]
+            .as_str()
+            .unwrap()
+            .contains("preserves the profile directory"));
+        let profile_repair_apply = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_profile_repair_apply")
+            .expect("service_profile_repair_apply schema should be listed");
+        assert_eq!(
+            profile_repair_apply["inputSchema"]["required"],
+            json!(["profileCapability", "plan"])
+        );
+        let profile_reset_plan = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_profile_reset_plan")
+            .expect("service_profile_reset_plan schema should be listed");
+        assert_eq!(
+            profile_reset_plan["inputSchema"]["required"],
+            json!(["profileId", "profileCapability", "scope"])
+        );
+        assert_eq!(
+            profile_reset_plan["inputSchema"]["properties"]["scope"]["enum"],
+            json!(["runtime", "authentication", "profile-data"])
+        );
+        let profile_reset_apply = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_profile_reset_apply")
+            .expect("service_profile_reset_apply schema should be listed");
+        assert_eq!(
+            profile_reset_apply["inputSchema"]["required"],
+            json!(["profileCapability", "plan"])
+        );
         let service_job_cancel = tools
             .iter()
             .find(|tool| tool["name"] == "service_job_cancel")
@@ -12718,6 +12915,23 @@ mod tests {
 
         assert_eq!(response["id"], 3);
         assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn service_profile_reset_requires_scope_or_plan_before_daemon_call() {
+        let plan_response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"service_profile_reset_plan","arguments":{"profileId":"qbo","profileCapability":"secret"}}}"#,
+            "default",
+        )
+        .unwrap();
+        assert_eq!(plan_response["error"]["code"], -32602);
+
+        let apply_response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"service_profile_reset_apply","arguments":{"profileCapability":"secret"}}}"#,
+            "default",
+        )
+        .unwrap();
+        assert_eq!(apply_response["error"]["code"], -32602);
     }
 
     #[test]

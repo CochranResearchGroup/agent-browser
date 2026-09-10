@@ -235,6 +235,35 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /aria-label=\{`Diagnose profile \$\{allocation\.profileId\}`\}[\s\S]*Diagnose/,
+  'Every profile allocation row must expose the first-class Diagnose action',
+);
+
+const profileLifecycleDialog = servicePanel.match(
+  /function ProfileLifecycleActionDialog[\s\S]*?\n}\n\nfunction /,
+)?.[0] ?? '';
+for (const helper of [
+  'getServiceProfileDiagnosis',
+  'planServiceProfileRepair',
+  'applyServiceProfileRepair',
+  'planServiceProfileReset',
+  'applyServiceProfileReset',
+]) {
+  assert.match(
+    profileLifecycleDialog,
+    new RegExp(`\\b${helper}\\b`),
+    `Profile lifecycle dialog must use the typed ${helper} helper`,
+  );
+}
+
+assert.match(
+  servicePanel,
+  /Browser cookies are not erased[\s\S]*Full profile-data reset is unavailable until backup restore and rollback are supported/,
+  'Scoped reset confirmation must distinguish authentication evidence from unavailable profile-data reset',
+);
+
+assert.match(
+  servicePanel,
   /<InspectorHero[\s\S]*kicker="Profile"[\s\S]*profileAllocationPrimaryTarget\(allocation\)[\s\S]*profileAllocationPrimaryLogin\(allocation\)[\s\S]*<InspectorSection title="Identity And Routing">[\s\S]*label: "Primary target", value: profileAllocationPrimaryTarget\(allocation\)[\s\S]*label: "Primary login", value: profileAllocationPrimaryLogin\(allocation\)[\s\S]*label: "Browser build", value: allocation\.browserBuild \?\? "service default"[\s\S]*label: "Duplicate launch", value: allocation\.browserIds\?\.length[\s\S]*<ProfileAllocationTokenSection title="Account identities" values=\{allocation\.accountIds\} \/>[\s\S]*<InspectorSection title="Leases And Conflicts">[\s\S]*label: "Profile owner", value: ownerBrowser[\s\S]*label: "Shared clients", value: sharedClients[\s\S]*<InspectorSection title="Related Records">[\s\S]*<ProfileBrowserSummarySection rows=\{allocation\.browserSummaries\} \/>[\s\S]*<InspectorEvidenceDisclosure[\s\S]*Raw allocation/,
   'Profile allocation detail must include duplicate-launch guidance, retained owner, shared clients, browser-summary, and raw allocation evidence',
 );

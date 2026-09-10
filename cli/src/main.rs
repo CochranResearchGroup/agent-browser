@@ -2187,7 +2187,7 @@ fn main() {
         Some("service_profile_acquire") => {
             native::service_profile_acquisition::profile_acquisition_daemon_route(&cmd).map(Some)
         }
-        Some("service_profile_recovery_apply") => {
+        Some("service_profile_recovery_apply" | "service_profile_repair_apply") => {
             native::service_profile_acquisition::profile_recovery_apply_daemon_route(&cmd).map(Some)
         }
         _ => Ok(None),
@@ -3560,6 +3560,9 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
                     | "service_profile_lease_reconcile_apply"
                     | "service_profile_lease_recover_plan"
                     | "service_profile_lease_recover_apply"
+                    | "service_profile_diagnose"
+                    | "service_profile_repair_plan"
+                    | "service_profile_reset_plan"
                     | "service_profile_recovery_plan"
                     | "service_profile_recovery_status"
                     | "service_gc"
@@ -3766,6 +3769,11 @@ mod tests {
             "service_profile_lease_reconcile_apply",
             "service_profile_lease_recover_plan",
             "service_profile_lease_recover_apply",
+            "service_profile_diagnose",
+            "service_profile_repair_plan",
+            "service_profile_repair_apply",
+            "service_profile_reset_plan",
+            "service_profile_reset_apply",
             "service_profile_acquire",
             "service_profile_recovery_plan",
             "service_profile_recovery_apply",

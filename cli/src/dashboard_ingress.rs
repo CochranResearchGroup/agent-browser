@@ -891,8 +891,11 @@ fn presentation_evidence_for_backend(
         .owners
         .values()
         .find(|owner| {
-            owner.browser_id == receipt.logical_browser_id
-                && owner.daemon_session_route == handoff_session
+            crate::native::remote_view_handoff::runtime_owner_controls_browser(
+                state,
+                owner,
+                &receipt.logical_browser_id,
+            ) && owner.daemon_session_route == handoff_session
         })
         .ok_or_else(|| "dashboard candidate durable handoff owner is unavailable".to_string())?;
     if owner.owner_generation != owner_generation
@@ -1002,21 +1005,124 @@ pub(crate) fn candidate_presentation_bootstrap_prerequisite(
             eligible_handoff_ids.push(handoff.id.clone());
         }
     }
-    let ready = !eligible_handoff_ids.is_empty();
+    let eligible_browser_ids = candidate_bootstrap_reattachable_browser_ids(state);
+    let ready = !eligible_handoff_ids.is_empty() || !eligible_browser_ids.is_empty();
+    let next_action = if !eligible_handoff_ids.is_empty() {
+        "stage_candidate_then_resolve_eligible_handoff"
+    } else if ready {
+        "stage_candidate_then_reattach_eligible_browser"
+    } else {
+        "reconcile_one_adoptable_current_handoff_before_candidate_staging"
+    };
     serde_json::json!({
         "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
         "proofPhase": "bootstrap",
         "ready": ready,
         "eligibleHandoffCount": eligible_handoff_ids.len(),
         "eligibleHandoffIds": eligible_handoff_ids,
+        "eligibleReattachableBrowserCount": eligible_browser_ids.len(),
+        "eligibleReattachableBrowserIds": eligible_browser_ids,
         "candidateProofRequiredAfterStaging": true,
         "blockerCounts": blocker_counts,
-        "nextAction": if ready {
-            "stage_candidate_then_resolve_eligible_handoff"
-        } else {
-            "reconcile_one_adoptable_current_handoff_before_candidate_staging"
-        },
+        "nextAction": next_action,
     })
+}
+
+/// Permit candidate staging when durable handoff aliases are stale but one
+/// exact current browser owner can be rebound to an available RDP route by the
+/// staged candidate. This is read-only bootstrap evidence. The candidate must
+/// still produce the ordinary generation-bound durable handoff receipt before
+/// the installation can commit.
+fn candidate_bootstrap_reattachable_browser_ids(
+    state: &crate::native::service_model::ServiceState,
+) -> Vec<String> {
+    use crate::native::service_model::{RemoteViewHandoff, ViewStreamProvider};
+
+    let available_route_displays = state
+        .route_pool
+        .values()
+        .filter(|entry| {
+            entry.provider == ViewStreamProvider::RdpGateway
+                && entry.state == "available"
+                && entry.current_route_allocation_id.is_none()
+                && entry
+                    .readiness
+                    .as_ref()
+                    .and_then(|value| value.get("state"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some("ready")
+        })
+        .filter_map(|entry| {
+            entry
+                .target
+                .get("displayName")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    if available_route_displays.is_empty() {
+        return Vec::new();
+    }
+
+    state
+        .browsers
+        .values()
+        .filter(|browser| {
+            let Some(display_name) = browser.display_name.as_ref() else {
+                return false;
+            };
+            if !available_route_displays.contains(display_name) {
+                return false;
+            }
+            let Some(display) = browser
+                .display_allocation_id
+                .as_ref()
+                .and_then(|id| state.display_allocations.get(id))
+            else {
+                return false;
+            };
+            if display.state != "ready"
+                || display.display_name.as_ref() != Some(display_name)
+                || display.owner_browser_id.as_ref() != Some(&browser.id)
+                || !display
+                    .owner_session_id
+                    .as_ref()
+                    .is_some_and(|id| browser.active_session_ids.contains(id))
+            {
+                return false;
+            }
+            browser.view_streams.iter().any(|stream| {
+                stream.provider == ViewStreamProvider::RdpGateway
+                    && stream
+                        .attachability
+                        .as_ref()
+                        .and_then(|value| value.get("state"))
+                        .and_then(serde_json::Value::as_str)
+                        == Some("reattachable_no_route")
+                    && stream
+                        .attachability
+                        .as_ref()
+                        .and_then(|value| value.get("recommendedAction"))
+                        .and_then(serde_json::Value::as_str)
+                        == Some("service_remote_view_browser_reattach")
+            }) && browser.tab_handles.iter().any(|tab| {
+                if !tab.valid || tab.target_id.as_deref().is_none() {
+                    return false;
+                }
+                let synthetic = RemoteViewHandoff {
+                    state: "ready".to_string(),
+                    browser_id: Some(browser.id.clone()),
+                    target_id: tab.target_id.clone(),
+                    ..RemoteViewHandoff::default()
+                };
+                crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session(
+                    state, &synthetic,
+                )
+                .is_some()
+            })
+        })
+        .map(|browser| browser.id.clone())
+        .collect()
 }
 
 /// Reports whether a staged candidate has satisfied the independently
@@ -2157,9 +2263,9 @@ mod tests {
 
     fn exact_candidate_presentation_state() -> crate::native::service_model::ServiceState {
         use crate::native::service_model::{
-            BrowserHealth, BrowserProcess, DisplayAllocation, DurableHandoffPresentationReceipt,
-            RemoteViewHandoff, RemoteViewRoute, ServiceBrowserProcessIdentity, ServiceState,
-            ServiceTabHandle, ViewStreamProvider,
+            BrowserHealth, BrowserProcess, BrowserSession, DisplayAllocation,
+            DurableHandoffPresentationReceipt, LeaseState, RemoteViewHandoff, RemoteViewRoute,
+            ServiceBrowserProcessIdentity, ServiceState, ServiceTabHandle, ViewStreamProvider,
         };
         use crate::process_identity::RecordedProcessIdentity;
         use crate::runtime_owner_transfer::{
@@ -2252,6 +2358,15 @@ mod tests {
                     process_identity,
                     user_data_dir: None,
                     runtime_profile: Some("profile-1".to_string()),
+                },
+            )]),
+            sessions: std::collections::BTreeMap::from([(
+                "owner-session".to_string(),
+                BrowserSession {
+                    id: "owner-session".to_string(),
+                    lease: LeaseState::Exclusive,
+                    browser_ids: vec!["browser-1".to_string()],
+                    ..BrowserSession::default()
                 },
             )]),
             runtime_owner_registry: RuntimeOwnerRegistry::from_owner(ProfileOwner {
@@ -2509,6 +2624,101 @@ mod tests {
         assert_eq!(prerequisite["ready"], false);
         assert_eq!(prerequisite["eligibleHandoffCount"], 0);
         assert_eq!(prerequisite["blockerCounts"]["current_owner_unproven"], 1);
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_accepts_exact_reattachable_browser_without_stale_handoff() {
+        use crate::native::service_model::{RoutePoolEntry, ViewStream, ViewStreamProvider};
+
+        let mut state = exact_candidate_presentation_state();
+        state.remote_view_handoffs.clear();
+        state.remote_view_routes.clear();
+        let browser = state.browsers.get_mut("browser-1").unwrap();
+        browser.display_name = Some(":10".to_string());
+        browser.display_allocation_id = Some("display-1".to_string());
+        browser.view_streams = vec![ViewStream {
+            id: "remote-headed-view".to_string(),
+            provider: ViewStreamProvider::RdpGateway,
+            attachability: Some(serde_json::json!({
+                "state": "reattachable_no_route",
+                "recommendedAction": "service_remote_view_browser_reattach"
+            })),
+            ..ViewStream::default()
+        }];
+        let display = state.display_allocations.get_mut("display-1").unwrap();
+        display.display_name = Some(":10".to_string());
+        display.route_ids.clear();
+        state.route_pool.insert(
+            "route-a".to_string(),
+            RoutePoolEntry {
+                id: "route-a".to_string(),
+                provider: ViewStreamProvider::RdpGateway,
+                route_id: "guacamole:1".to_string(),
+                state: "available".to_string(),
+                target: serde_json::json!({"displayName": ":10"}),
+                readiness: Some(serde_json::json!({"state": "ready"})),
+                ..RoutePoolEntry::default()
+            },
+        );
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], true);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 0);
+        assert_eq!(prerequisite["eligibleReattachableBrowserCount"], 1);
+        assert_eq!(
+            prerequisite["eligibleReattachableBrowserIds"],
+            serde_json::json!(["browser-1"])
+        );
+        assert_eq!(
+            prerequisite["nextAction"],
+            "stage_candidate_then_reattach_eligible_browser"
+        );
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_rejects_browser_on_different_route_display() {
+        use crate::native::service_model::{RoutePoolEntry, ViewStream, ViewStreamProvider};
+
+        let mut state = exact_candidate_presentation_state();
+        state.remote_view_handoffs.clear();
+        state.remote_view_routes.clear();
+        let browser = state.browsers.get_mut("browser-1").unwrap();
+        browser.display_name = Some(":92".to_string());
+        browser.display_allocation_id = Some("display-1".to_string());
+        browser.view_streams = vec![ViewStream {
+            id: "remote-headed-view".to_string(),
+            provider: ViewStreamProvider::RdpGateway,
+            attachability: Some(serde_json::json!({
+                "state": "reattachable_no_route",
+                "recommendedAction": "service_remote_view_browser_reattach"
+            })),
+            ..ViewStream::default()
+        }];
+        let display = state.display_allocations.get_mut("display-1").unwrap();
+        display.display_name = Some(":92".to_string());
+        display.route_ids.clear();
+        state.route_pool.insert(
+            "route-a".to_string(),
+            RoutePoolEntry {
+                id: "route-a".to_string(),
+                provider: ViewStreamProvider::RdpGateway,
+                route_id: "guacamole:1".to_string(),
+                state: "available".to_string(),
+                target: serde_json::json!({"displayName": ":10"}),
+                readiness: Some(serde_json::json!({"state": "ready"})),
+                ..RoutePoolEntry::default()
+            },
+        );
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleReattachableBrowserCount"], 0);
+        assert_eq!(
+            prerequisite["nextAction"],
+            "reconcile_one_adoptable_current_handoff_before_candidate_staging"
+        );
     }
 
     fn serve_runtime_targets_once(target_id: &str) -> (u16, thread::JoinHandle<()>) {

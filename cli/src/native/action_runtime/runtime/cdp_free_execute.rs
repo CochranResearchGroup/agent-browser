@@ -20,6 +20,7 @@ use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
 };
+use crate::native::service_model::ServiceState;
 use crate::native::service_profile_access_policy::{
     evaluate_profile_child_access, ProfileChildAccess, ProfileChildAccessRequest,
     ProfileIdentityAssurance, ProfilePermission, ServiceProfileAccessPolicy,
@@ -378,6 +379,19 @@ pub(crate) fn service_tab_handle_browser_id(state: &DaemonState) -> String {
         .map(str::to_string)
         .unwrap_or_else(|| service_browser_id(&state.session_id))
 }
+
+fn retained_service_tab_browser_id<'a>(
+    service_state: &'a ServiceState,
+    handle: &Map<String, Value>,
+    session_id: &str,
+) -> Option<&'a str> {
+    let tab_id = handle.get("tabId").and_then(Value::as_str)?;
+    let handle_browser_id = handle.get("browserId").and_then(Value::as_str)?;
+    let tab = service_state.tabs.get(tab_id)?;
+    let session_matches = tab.session_id.as_deref() == Some(session_id)
+        || tab.owner_session_id.as_deref() == Some(session_id);
+    (session_matches && tab.browser_id == handle_browser_id).then_some(tab.browser_id.as_str())
+}
 /// Bind legacy Service browser commands to current child custody before effects.
 /// Browser observations choose a target, but never grant permission to it.
 pub(crate) fn bind_native_service_tab_command(
@@ -500,7 +514,22 @@ pub(crate) fn validate_service_tab_handle_for_daemon(
         format!("service tab handle is stale: {stale_reason}")
     });
     let browser_id = service_tab_handle_browser_id(state);
-    validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))?;
+    if let Err(primary_error) =
+        validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))
+    {
+        // Migrated retained browsers can preserve a durable logical browser id
+        // while the adopted daemon has not recovered its runtime-owner binding.
+        // Accept that id only when current Service State independently binds the
+        // exact handle tab to this daemon session and browser. Never trust the
+        // caller's handle as the fallback authority.
+        let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+        let Some(retained_browser_id) =
+            retained_service_tab_browser_id(&snapshot, handle, &state.session_id)
+        else {
+            return Err(primary_error);
+        };
+        validate_service_tab_handle_route(handle, &state.session_id, Some(retained_browser_id))?;
+    }
     if ["runtimeProfile", "profileId", "profile"]
         .iter()
         .any(|field| {
@@ -946,6 +975,91 @@ mod tests {
             &state,
         )
         .expect("durable owner browser id should be authorized");
+    }
+
+    #[test]
+    fn retained_service_tab_authorizes_durable_browser_id_without_owner_binding() {
+        let state = {
+            let mut state = DaemonState::new();
+            state.session_id = "handoff-owner-route".to_string();
+            state
+        };
+        let mut snapshot = ServiceState::default();
+        snapshot.tabs.insert(
+            "target:tab-1".to_string(),
+            BrowserTab {
+                id: "target:tab-1".to_string(),
+                browser_id: "session:durable-browser".to_string(),
+                target_id: Some("tab-1".to_string()),
+                session_id: Some("handoff-owner-route".to_string()),
+                owner_session_id: Some("handoff-owner-route".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+        let handle = json!({
+            "browserId": "session:durable-browser",
+            "sessionName": "handoff-owner-route",
+            "tabId": "target:tab-1",
+            "targetId": "tab-1",
+            "valid": true,
+        });
+        let handle = handle.as_object().expect("handle object");
+
+        assert_eq!(
+            retained_service_tab_browser_id(&snapshot, handle, &state.session_id),
+            Some("session:durable-browser")
+        );
+        validate_service_tab_handle_route(
+            handle,
+            &state.session_id,
+            retained_service_tab_browser_id(&snapshot, handle, &state.session_id),
+        )
+        .expect("current retained tab should authorize the durable browser id");
+    }
+
+    #[test]
+    fn retained_service_tab_fallback_rejects_peer_browser_or_session() {
+        let mut snapshot = ServiceState::default();
+        snapshot.tabs.insert(
+            "target:tab-1".to_string(),
+            BrowserTab {
+                id: "target:tab-1".to_string(),
+                browser_id: "session:durable-browser".to_string(),
+                session_id: Some("handoff-owner-route".to_string()),
+                owner_session_id: Some("handoff-owner-route".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+
+        let peer_browser = json!({
+            "browserId": "session:peer-browser",
+            "sessionName": "handoff-owner-route",
+            "tabId": "target:tab-1",
+            "valid": true,
+        });
+        assert_eq!(
+            retained_service_tab_browser_id(
+                &snapshot,
+                peer_browser.as_object().expect("handle object"),
+                "handoff-owner-route",
+            ),
+            None
+        );
+
+        let peer_session = json!({
+            "browserId": "session:durable-browser",
+            "sessionName": "peer-route",
+            "tabId": "target:tab-1",
+            "valid": true,
+        });
+        assert_eq!(
+            retained_service_tab_browser_id(
+                &snapshot,
+                peer_session.as_object().expect("handle object"),
+                "peer-route",
+            ),
+            None
+        );
     }
 
     #[test]

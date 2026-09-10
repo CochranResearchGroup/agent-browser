@@ -1726,6 +1726,105 @@ fn format_service_profiles_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_profile_diagnosis_text(data: &serde_json::Value) -> Option<String> {
+    let profile_id = data.pointer("/profile/id")?.as_str()?;
+    let state = data.get("state")?.as_str()?;
+    let blocker = data
+        .pointer("/decision/dominantBlocker")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let recourse = data
+        .pointer("/decision/recourse")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let findings = data
+        .get("findings")
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| row.get("code").and_then(|value| value.as_str()))
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+    Some(format!(
+        "Profile diagnosis: profile={profile_id} state={state} blocker={blocker} recourse={recourse} findings={findings}"
+    ))
+}
+
+fn format_service_profile_lifecycle_text(action: &str, data: &serde_json::Value) -> Option<String> {
+    let plan = data
+        .pointer("/outcome/recovery")
+        .or_else(|| data.get("plan"));
+    let receipt = data.get("receipt");
+    let profile_id = receipt
+        .and_then(|value| value.get("profileId"))
+        .or_else(|| plan.and_then(|value| value.get("profileId")))
+        .or_else(|| plan.and_then(|value| value.pointer("/identities/profileId")))
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let state = data
+        .get("state")
+        .and_then(|value| value.as_str())
+        .or_else(|| receipt.and_then(|value| value.get("terminalResult")?.as_str()))
+        .unwrap_or(if plan.is_some() { "planned" } else { "unknown" });
+    let scope = receipt
+        .and_then(|value| value.get("scope"))
+        .or_else(|| plan.and_then(|value| value.get("scope")))
+        .and_then(|value| value.as_str())
+        .unwrap_or("preserving_repair");
+    let preserved = plan
+        .and_then(|value| value.get("preservedData"))
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            "profile_directory,cookies,credentials,extensions,authenticated_site_state".to_string()
+        });
+    let effects = plan
+        .and_then(|value| value.get("proposedEffects"))
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "sealed_plan_actions".to_string());
+    let blocker = data
+        .pointer("/outcome/dominantBlocker/code")
+        .or_else(|| data.pointer("/outcome/dominantBlocker"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let manual_action = receipt
+        .and_then(|value| value.pointer("/seedingHandoff/operatorCommand"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let request_id = data
+        .get("requestId")
+        .or_else(|| data.get("id"))
+        .or_else(|| data.pointer("/trace/requestId"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let job_id = data
+        .get("jobId")
+        .or_else(|| data.pointer("/trace/jobId"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    Some(format!(
+        "Profile lifecycle: action={action} profile={profile_id} state={state} scope={scope}\npreserved={preserved}\neffects={effects}\nblocker={blocker} manual_action={manual_action}\nrequest_id={request_id} job_id={job_id}"
+    ))
+}
+
 fn format_service_profile_lookup_text(data: &serde_json::Value) -> Option<String> {
     let status = value_str(data, "status", "unknown");
     let candidates = data.get("rankedProfiles")?.as_array()?;
@@ -3117,6 +3216,26 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_profiles") {
             if let Some(output) = format_service_profiles_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_profile_diagnose") {
+            if let Some(output) = format_service_profile_diagnosis_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if matches!(
+            action,
+            Some(
+                "service_profile_repair_plan"
+                    | "service_profile_repair_apply"
+                    | "service_profile_reset_plan"
+                    | "service_profile_reset_apply"
+            )
+        ) {
+            if let Some(output) = format_service_profile_lifecycle_text(action.unwrap(), data) {
                 println!("{}", output);
                 return;
             }
@@ -5619,6 +5738,11 @@ seven-axis readiness projection without private paths or endpoint evidence.
 currentSelectionEvidence reports whether a later selected Linux installation
 proves its payload, dashboard and live host identity despite unrelated failed
 upgrade history. Active and uncertain transactions remain blocking.
+Before a new apply creates another candidate transaction, it reads any existing
+admission drain and automatically resumes or recovers that exact owning
+transaction. It never selects the prior transaction by file recency. Changed,
+ambiguous, or unsupported evidence stops the install with the exact blocker and
+leaves the recorded transaction available for inspection and explicit recovery.
 Every workstation dry-run includes serviceStateMigrationPreview. It reads
 Service State without writing and reports exact changed IDs by record class,
 candidate-led browser contamination, preserved unknown fields, recovery-artifact
@@ -5655,8 +5779,15 @@ health or tab validity lags a retained browser after rollback, bootstrap may
 qualify it through one read-only loopback CDP observation only when the recorded
 process identity, unique ready owner, active session, process digest, and exact
 target still match. This observation does not write Service State or launch a
-browser. Apply records a terminal zero-effect preflight block when no adoptable
-handoff exists. Fresh and isolated installs do not require a retained
+browser. When all durable handoff aliases are stale, bootstrap may instead use
+an exact retained RDP browser whose ready owner, valid target, reattach
+recommendation, and one unallocated ready route agree. Candidate staging still
+requires a generation-bound durable handoff receipt before commit. The
+reattach must carry the current workstation transaction ID and revision as its
+runtime admission claim while the drain is active. Apply
+records a terminal zero-effect preflight block when neither bootstrap proof is available.
+Recovery requalifies current provider inventory before reserving the route.
+Fresh and isolated installs do not require a retained
 presentation handoff. A structured
 handoff never falls back to a stale session label when current owner evidence
 is absent.
@@ -5692,6 +5823,12 @@ dashboard ingress commit command remains a recovery path for an already-ready
 receipt. Durable-handoff resolution prepares the exact retained owner lane
 before using its saved HTTP port after a runtime-host restart. Failed preparation
 returns durable_handoff_owner_prepare_failed before forwarding the request.
+Before a workstation transaction becomes accepted, apply rewrites the
+runtime-host lane manifests for the selected executable and completes an
+identity-bound takeover into the user supervisor while admission remains
+drained. Readiness requires one selected supervised host whose PID, executable,
+ingress identity, configured stream ports, and sole production listener pass a
+fresh census.
 A Ready retained owner reconnects to the exact handoff target after identity checks.
 Recovery preserves its known route and display across pending or orphaned
 presentation when current-boot custody matches; physical ownership and visibility
@@ -6445,6 +6582,12 @@ Usage:
   agent-browser service browser-capability guide [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]
   agent-browser service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]
   agent-browser service profiles
+  agent-browser service profiles <profile-id> diagnose
+  agent-browser service profiles <profile-id> repair --capability-file /absolute/private/path/profile.cap
+  agent-browser service profiles <profile-id> repair --apply --plan /absolute/path/repair-plan.json --session-name <daemon-route> --capability-file /absolute/private/path/profile.cap
+  agent-browser service profiles <profile-id> reset --scope runtime --capability-file /absolute/private/path/profile.cap
+  agent-browser service profiles <profile-id> reset --scope authentication --target-service-id <id> --capability-file /absolute/private/path/profile.cap
+  agent-browser service profiles <profile-id> reset --scope <runtime|authentication> --apply --plan /absolute/path/reset-plan.json --capability-file /absolute/private/path/profile.cap
   agent-browser service leases
   agent-browser service leases doctor
   agent-browser service leases watch --interval 1000 --count 5
@@ -6524,6 +6667,10 @@ Commands:
                         Persist an advisory browserPreferenceBindings row for a primary browser on a site, account, service, or task filter
   profiles              Show retained service profile records and derived allocation state
   profiles lookup       Rank catalog profiles by identity, hostname, alias, account, auth, freshness, tag, and free text without launching
+  profiles <id> diagnose
+                        Join current profile, process, owner, lease, Chrome lock, readiness and presentation evidence without launching or changing state
+  profiles <id> repair  Plan by default, or apply one sealed exact-profile repair with --apply, --plan, and the private capability file
+  profiles <id> reset   Plan by default, or apply a sealed runtime or target-authentication reset; profile-data reset is unavailable
   profiles <id> seeding-handoff [target]
                         Show the detached runtime-login command and operator steps for profile seeding
   profiles <id> verify-seeding <target>
@@ -6601,6 +6748,9 @@ Notes:
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, browser health summaries, and recommended actions.
+  - service profiles <id> diagnose reports whether the exact profile is ready, repairable, awaiting manual authentication, or blocked by current foreign or ambiguous custody. Historical records remain evidence and do not establish current occupancy by themselves. The same read is available from HTTP GET /api/service/profiles/<id>/diagnosis, MCP agent-browser://profiles/{profile_id}/diagnosis, and getServiceProfileDiagnosis().
+  - service profiles <id> repair plans without effects and applies only an unchanged sealed plan with the private capability. The same operations are available from HTTP POST /api/service/profiles/<id>/repair/plan and /repair/apply, MCP service_profile_repair_plan and service_profile_repair_apply, and planServiceProfileRepair() and applyServiceProfileRepair().
+  - service profiles <id> reset is scoped. Runtime reset retires only a proven inert service-owned lane while preserving profile data and peer lanes. Authentication reset removes only the selected target's retained authentication evidence, never erases browser cookies, and returns a manual-seeding handoff. Full profile-data reset fails closed until backup restore and rollback are supported. HTTP, MCP, and generated clients expose matching plan/apply operations.
   - An unconfigured optional development presentation provider starts with zero routes so headless work remains available; this is not presentation readiness. Staged provider inventory loss remains an error.
   - An older capability binding does not veto an independently permitted shared-local client reusing an exact current browser/profile. It remains unproven for the registered capability; guarded rejoin is required for that authority. Restricted profiles, mismatched identities and future-generation bindings still fail admission.
   - Reattaching to the same verified browser preserves its original host, display allocation, launch metadata and profile path. Preservation requires matching current-boot process identity, endpoint and profile; replacement processes receive fresh metadata.
@@ -7601,7 +7751,7 @@ Environment:
   AGENT_BROWSER_CONFIRM_INTERACTIVE Enable interactive confirmation prompts
   AGENT_BROWSER_NO_AUTO_DIALOG   Disable automatic dismissal of alert/beforeunload dialogs
   AGENT_BROWSER_ENGINE           Browser engine: chrome (default), lightpanda
-  AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH  Absolute path to boot-bound production route inventory (capacity only; does not assert visibility)
+  AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH  Absolute path to boot-bound production route inventory; recognized in the CLI dotenv file
                                  Validation failure fences presentation; Service State admissionError reports the cause
   HTTP_PROXY / HTTPS_PROXY       Standard proxy env vars (fallback if AGENT_BROWSER_PROXY not set)
   ALL_PROXY                      SOCKS proxy (fallback for proxy)
@@ -7789,6 +7939,7 @@ mod tests {
         format_service_challenges_text, format_service_events_text, format_service_incidents_text,
         format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
+        format_service_profile_diagnosis_text, format_service_profile_lifecycle_text,
         format_service_profile_seeding_handoff_text, format_service_profiles_text,
         format_service_providers_text, format_service_prune_retained_text,
         format_service_repair_retained_text, format_service_sessions_text,
@@ -8512,6 +8663,50 @@ mod tests {
             rendered,
             "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs readiness=none user_data=/tmp/work-profile\nProfile allocations: 1\n  work state=conflicted action=release_holder_or_redirect_waiting_jobs readiness=none holders=runtime-session waiting=job-1 conflicts=runtime-session services=JournalDownloader agents=codex tasks=probeACSwebsite browsers=browser-1 browser_health=browser-1:process_exited:host=local_headed:cdp=no tabs=tab-1"
         );
+    }
+
+    #[test]
+    fn test_format_service_profile_diagnosis_text_includes_recourse() {
+        let data = json!({
+            "state": "repairable",
+            "profile": {"id": "shared-books"},
+            "decision": {
+                "dominantBlocker": "chrome_singleton_lock_proven_stale",
+                "recourse": "service_profile_repair_plan"
+            },
+            "findings": [
+                {"code": "chrome_singleton_lock_proven_stale"},
+                {"code": "runtime_owner_principal_binding_missing"}
+            ]
+        });
+
+        assert_eq!(
+            format_service_profile_diagnosis_text(&data).unwrap(),
+            "Profile diagnosis: profile=shared-books state=repairable blocker=chrome_singleton_lock_proven_stale recourse=service_profile_repair_plan findings=chrome_singleton_lock_proven_stale,runtime_owner_principal_binding_missing"
+        );
+    }
+
+    #[test]
+    fn test_format_service_profile_lifecycle_text_names_scope_effects_and_trace() {
+        let data = json!({
+            "state": "reset_available",
+            "requestId": "request-1",
+            "jobId": "job-1",
+            "plan": {
+                "profileId": "qbo",
+                "scope": "authentication",
+                "preservedData": ["profile_directory", "cookies"],
+                "proposedEffects": ["remove_selected_target_authentication_evidence"]
+            }
+        });
+
+        let rendered =
+            format_service_profile_lifecycle_text("service_profile_reset_plan", &data).unwrap();
+
+        assert!(rendered.contains("profile=qbo state=reset_available scope=authentication"));
+        assert!(rendered.contains("preserved=profile_directory,cookies"));
+        assert!(rendered.contains("effects=remove_selected_target_authentication_evidence"));
+        assert!(rendered.contains("request_id=request-1 job_id=job-1"));
     }
 
     #[test]

@@ -97,6 +97,16 @@ requireCondition(
   rustTests.includes('test -p agent-browser-cdp'),
   'normal Rust test entrypoint must run CDP crate tests',
 );
+requireCondition(
+  rustTests.includes('run_cli_native') &&
+    rustTests.includes('run_cli_core') &&
+    rustTests.includes('--focused'),
+  'normal Rust test entrypoint must expose disjoint CLI compartments and focused reruns',
+);
+requireCondition(
+  rustTests.includes('RUST_TEST_STACK_SIZE_BYTES') && rustTests.includes('RUST_MIN_STACK'),
+  'normal Rust test entrypoint must declare its state-heavy fixture stack budget',
+);
 
 const workflow = read('.github/workflows/ci.yml');
 const workspaceClippyCommand = ['cargo', 'clippy --workspace --manifest-path Cargo.toml -- -D warnings'].join(' ');

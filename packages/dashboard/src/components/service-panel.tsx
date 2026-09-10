@@ -4,10 +4,15 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   acquireServiceProfile,
+  applyServiceProfileRepair,
+  applyServiceProfileReset,
   applyServiceProfileLeaseRecovery,
   applyServiceProfileLeaseReconciliation,
   createServiceIncidentHandoff,
   createServiceTraceHandoff,
+  getServiceProfileDiagnosis,
+  planServiceProfileRepair,
+  planServiceProfileReset,
   planServiceProfileLeaseRecovery,
   planServiceProfileLeaseReconciliation,
   rejoinServiceProfileLease,
@@ -5041,12 +5046,14 @@ function JobDetailContent({
 function ProfileAllocationRow({
   allocation,
   onSelect,
+  onDiagnose,
   onNavigate,
   rowRef,
   selected,
 }: {
   allocation: ServiceProfileAllocation;
   onSelect: (allocation: ServiceProfileAllocation) => void;
+  onDiagnose: (allocation: ServiceProfileAllocation) => void;
   onNavigate: (allocation: ServiceProfileAllocation, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   rowRef?: (node: HTMLButtonElement | null) => void;
   selected: boolean;
@@ -5061,6 +5068,7 @@ function ProfileAllocationRow({
   const sharedClients = profileAllocationSharedClientSummary(allocation);
   const readinessAttention = profileReadinessNeedsAttention(allocation.targetReadiness);
   return (
+    <div className="relative">
     <button
       type="button"
       ref={rowRef}
@@ -5128,6 +5136,18 @@ function ProfileAllocationRow({
         </div>
       </div>
     </button>
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="absolute right-3 top-3 z-10 h-7 rounded-full px-2 text-[10px]"
+      onClick={() => onDiagnose(allocation)}
+      aria-label={`Diagnose profile ${allocation.profileId}`}
+    >
+      <ScanSearch className="size-3" />
+      Diagnose
+    </Button>
+    </div>
   );
 }
 
@@ -5491,12 +5511,14 @@ function ProfileAllocationDetailDialog({
   error,
   onOpenChange,
   onManageProfileLease,
+  onManageProfileLifecycle,
 }: {
   allocation: ServiceProfileAllocation | null;
   loading: boolean;
   error: string;
   onOpenChange: (open: boolean) => void;
   onManageProfileLease: (allocation: ServiceProfileAllocation, action: ServiceProfileLeaseAction) => void;
+  onManageProfileLifecycle: (allocation: ServiceProfileAllocation, action: ProfileLifecycleAction) => void;
 }) {
   return (
     <Dialog open={!!allocation} onOpenChange={onOpenChange}>
@@ -5518,6 +5540,7 @@ function ProfileAllocationDetailDialog({
               loading={loading}
               error={error}
               onManageProfileLease={onManageProfileLease}
+              onManageProfileLifecycle={onManageProfileLifecycle}
             />
           </>
         )}
@@ -5529,6 +5552,13 @@ function ProfileAllocationDetailDialog({
 type ProfileLeaseActionTarget = {
   allocation: ServiceProfileAllocation;
   action: ServiceProfileLeaseAction;
+};
+
+type ProfileLifecycleAction = "diagnose" | "repair" | "runtime-reset" | "authentication-reset";
+
+type ProfileLifecycleActionTarget = {
+  allocation: ServiceProfileAllocation;
+  action: ProfileLifecycleAction;
 };
 
 function ProfileLeaseActionDialog({
@@ -5811,6 +5841,205 @@ function ProfileLeaseActionDialog({
   );
 }
 
+function ProfileLifecycleActionDialog({
+  target,
+  baseUrl,
+  onOpenChange,
+  onCompleted,
+}: {
+  target: ProfileLifecycleActionTarget | null;
+  baseUrl: string;
+  onOpenChange: (open: boolean) => void;
+  onCompleted: () => Promise<void>;
+}) {
+  const [capability, setCapability] = useState("");
+  const [targetServiceId, setTargetServiceId] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<unknown>(null);
+  const [sealedPlan, setSealedPlan] = useState<Record<string, unknown> | null>(null);
+  const profileId = target?.allocation.profileId;
+  const action = target?.action;
+
+  useEffect(() => {
+    setCapability("");
+    setTargetServiceId(target?.allocation.targetServiceIds?.[0] ?? "");
+    setPending(false);
+    setError("");
+    setResult(null);
+    setSealedPlan(null);
+  }, [target]);
+
+  const close = useCallback(() => {
+    setCapability("");
+    setResult(null);
+    setSealedPlan(null);
+    setError("");
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const runPlan = useCallback(async () => {
+    if (!profileId || !action) return;
+    if (action !== "diagnose" && !capability.trim()) {
+      setError("Enter the private profile capability for this operation.");
+      return;
+    }
+    if (action === "authentication-reset" && !targetServiceId.trim()) {
+      setError("Choose the one target service whose authentication evidence should reset.");
+      return;
+    }
+    setPending(true);
+    setError("");
+    setResult(null);
+    try {
+      let response: unknown;
+      if (action === "diagnose") {
+        response = await getServiceProfileDiagnosis({ baseUrl, id: profileId });
+      } else if (action === "repair") {
+        response = await planServiceProfileRepair({
+          baseUrl,
+          id: profileId,
+          profileCapability: capability.trim(),
+          serviceName: "agent-browser-dashboard",
+          agentName: "dashboard-operator",
+          taskName: "profile-repair-plan",
+        });
+        const plan = (response as { outcome?: { recovery?: Record<string, unknown> } }).outcome?.recovery;
+        setSealedPlan(plan ?? null);
+      } else {
+        response = await planServiceProfileReset({
+          baseUrl,
+          id: profileId,
+          profileCapability: capability.trim(),
+          scope: action === "runtime-reset" ? "runtime" : "authentication",
+          ...(action === "authentication-reset" ? { targetServiceId: targetServiceId.trim() } : {}),
+        });
+        setSealedPlan((response as { plan?: Record<string, unknown> }).plan ?? null);
+      }
+      setResult(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Profile ${action} failed`);
+    } finally {
+      setPending(false);
+    }
+  }, [action, baseUrl, capability, profileId, targetServiceId]);
+
+  const applyPlan = useCallback(async () => {
+    if (!profileId || !action || !sealedPlan || action === "diagnose") return;
+    if (!capability.trim()) {
+      setError("Re-enter the private profile capability before applying this sealed plan.");
+      return;
+    }
+    setPending(true);
+    setError("");
+    try {
+      const response = action === "repair"
+        ? await applyServiceProfileRepair({
+            baseUrl,
+            id: profileId,
+            profileCapability: capability.trim(),
+            plan: sealedPlan as Parameters<typeof applyServiceProfileRepair>[0]["plan"],
+          })
+        : await applyServiceProfileReset({
+            baseUrl,
+            id: profileId,
+            profileCapability: capability.trim(),
+            plan: sealedPlan as Parameters<typeof applyServiceProfileReset>[0]["plan"],
+          });
+      setResult(response);
+      setCapability("");
+      setSealedPlan(null);
+      await onCompleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Profile ${action} apply failed`);
+    } finally {
+      setPending(false);
+    }
+  }, [action, baseUrl, capability, onCompleted, profileId, sealedPlan]);
+
+  const actionLabel = action === "runtime-reset"
+    ? "runtime reset"
+    : action === "authentication-reset"
+      ? "authentication reset"
+      : action ?? "profile action";
+  return (
+    <Dialog open={!!target} onOpenChange={(open) => { if (!open) close(); }}>
+      <DialogContent className="sm:max-w-xl">
+        {target && action && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="capitalize">{actionLabel} for {profileId}</DialogTitle>
+              <DialogDescription>
+                Diagnose is read-only. Repair preserves profile data. Runtime and authentication resets are separately scoped and require a sealed plan.
+              </DialogDescription>
+            </DialogHeader>
+            {action !== "diagnose" && (
+              <label className="grid gap-1.5 text-xs font-semibold">
+                Private profile capability
+                <input
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={capability}
+                  onChange={(event) => setCapability(event.target.value)}
+                  className="h-9 rounded-lg border border-border bg-background px-3 font-mono text-xs outline-none focus:border-ring"
+                  placeholder="Paste for this action only"
+                />
+              </label>
+            )}
+            {action === "authentication-reset" && (
+              <label className="grid gap-1.5 text-xs font-semibold">
+                Target service
+                <select
+                  value={targetServiceId}
+                  onChange={(event) => setTargetServiceId(event.target.value)}
+                  className="h-9 rounded-lg border border-border bg-background px-3 text-xs outline-none focus:border-ring"
+                >
+                  {(target.allocation.targetServiceIds ?? []).map((targetId) => (
+                    <option key={targetId} value={targetId}>{targetId}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {action === "authentication-reset" && (
+              <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                This clears only the selected target&apos;s authentication and freshness evidence. Browser cookies are not erased.
+              </p>
+            )}
+            {action === "runtime-reset" && (
+              <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                Runtime reset retires only the exact proven service-owned lane. Profile data and peer browsers remain preserved.
+              </p>
+            )}
+            {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+            {result != null && (
+              <details open className="rounded-xl border border-border/70 bg-foreground/[0.03] px-3 py-2 text-xs">
+                <summary className="cursor-pointer font-semibold">Diagnosis, plan, and trace evidence</summary>
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[10px]">{formatDetails(result)}</pre>
+              </details>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" disabled={pending} onClick={close}>Close</Button>
+              {sealedPlan && action !== "diagnose" ? (
+                <Button type="button" disabled={pending || !capability.trim()} onClick={applyPlan}>
+                  {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  Apply sealed {actionLabel} plan
+                </Button>
+              ) : (
+                <Button type="button" disabled={pending || (action !== "diagnose" && !capability.trim())} onClick={runPlan}>
+                  {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  {action === "diagnose" ? "Run diagnosis" : `Create ${actionLabel} plan`}
+                </Button>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground">Full profile-data reset is unavailable until backup restore and rollback are supported.</p>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ProfileAllocationDetailContent({
   allocation,
   loading = false,
@@ -5820,6 +6049,7 @@ function ProfileAllocationDetailContent({
   onSelectTabId,
   onSelectJobId,
   onManageProfileLease,
+  onManageProfileLifecycle,
 }: {
   allocation: ServiceProfileAllocation;
   loading?: boolean;
@@ -5829,6 +6059,7 @@ function ProfileAllocationDetailContent({
   onSelectTabId?: (tabId: string) => void;
   onSelectJobId?: (jobId: string) => void;
   onManageProfileLease?: (allocation: ServiceProfileAllocation, action: ServiceProfileLeaseAction) => void;
+  onManageProfileLifecycle?: (allocation: ServiceProfileAllocation, action: ProfileLifecycleAction) => void;
 }) {
   const raw = formatDetails(allocation);
   const holderCount = allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0;
@@ -5867,6 +6098,14 @@ function ProfileAllocationDetailContent({
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>{error}</span>
         </div>
+      )}
+      {onManageProfileLifecycle && (
+        <InspectorActionBar>
+          <Button type="button" size="sm" variant="outline" onClick={() => onManageProfileLifecycle(allocation, "diagnose")}>Diagnose</Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => onManageProfileLifecycle(allocation, "repair")}>Repair</Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => onManageProfileLifecycle(allocation, "runtime-reset")}>Reset runtime</Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => onManageProfileLifecycle(allocation, "authentication-reset")}>Reset authentication</Button>
+        </InspectorActionBar>
       )}
       {(primaryBrowserId || primarySessionId || primaryWaitingJobId || primaryTabId) && (
         <InspectorActionBar>
@@ -7131,6 +7370,7 @@ export function ServicePanel({
   const [selectedProfileAllocationLoading, setSelectedProfileAllocationLoading] = useState(false);
   const [selectedProfileAllocationError, setSelectedProfileAllocationError] = useState("");
   const [profileLeaseActionTarget, setProfileLeaseActionTarget] = useState<ProfileLeaseActionTarget | null>(null);
+  const [profileLifecycleActionTarget, setProfileLifecycleActionTarget] = useState<ProfileLifecycleActionTarget | null>(null);
   const [selectedProfileConfig, setSelectedProfileConfig] = useState<ServiceProfileRecord | null>(null);
   const [profileConfigSaving, setProfileConfigSaving] = useState(false);
   const [profilePolicySaving, setProfilePolicySaving] = useState(false);
@@ -7365,6 +7605,10 @@ export function ServicePanel({
       return;
     }
     setProfileLeaseActionTarget({ allocation, action });
+  }, []);
+
+  const manageProfileLifecycle = useCallback((allocation: ServiceProfileAllocation, action: ProfileLifecycleAction) => {
+    setProfileLifecycleActionTarget({ allocation, action });
   }, []);
 
   const inspectProfileAllocation = useCallback(async (
@@ -8784,6 +9028,7 @@ export function ServicePanel({
         loading={selectedProfileAllocationLoading}
         error={selectedProfileAllocationError}
         onManageProfileLease={manageProfileLease}
+        onManageProfileLifecycle={manageProfileLifecycle}
         onOpenChange={(open) => {
           if (!open) {
             profileAllocationLookupId.current += 1;
@@ -8798,6 +9043,12 @@ export function ServicePanel({
         baseUrl={serviceBase(activePort)}
         agentName={operatorIdentity.trim() || activeSession || "operator"}
         onOpenChange={(open) => { if (!open) setProfileLeaseActionTarget(null); }}
+        onCompleted={async () => { await fetchService(false); }}
+      />
+      <ProfileLifecycleActionDialog
+        target={profileLifecycleActionTarget}
+        baseUrl={serviceBase(activePort)}
+        onOpenChange={(open) => { if (!open) setProfileLifecycleActionTarget(null); }}
         onCompleted={async () => { await fetchService(false); }}
       />
       <RuntimeProfileConfigDialog
@@ -9229,6 +9480,7 @@ export function ServicePanel({
                       key={allocation.profileId || `profile-allocation-${index}`}
                       allocation={allocation}
                       onSelect={inspectProfileAllocation}
+                      onDiagnose={(allocation) => manageProfileLifecycle(allocation, "diagnose")}
                       onNavigate={navigateProfileAllocationRows}
                       rowRef={allocation.profileId ? (node) => setProfileAllocationRowRef(allocation.profileId, node) : undefined}
                       selected={Boolean(allocation.profileId && allocation.profileId === selectedProfileAllocationId)}

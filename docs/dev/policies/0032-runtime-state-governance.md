@@ -20,6 +20,29 @@
 - Be explicit about which runtime artifacts are authoritative versus rebuildable.
 - When runtime state schema changes, migrate it deliberately and record the change rather than silently rewriting old state in incompatible ways.
 - If the runtime state is version controlled, use clear commit hygiene, pruning rules, and archival rules so the state history remains understandable and recoverable.
+
+## Operational Risk And Continuity
+
+- Evaluate runtime protection across authorization, data integrity, availability,
+  recovery time, and operator productivity. Do not describe a refusal as
+  `safe` without naming the concrete hazard it prevents, the evidence for that
+  hazard, and the operational cost of refusing service.
+- Fail closed while current ownership or physical occupancy is genuinely
+  uncertain. Once current boot, process, profile, display, route, and lease
+  evidence positively proves the former owner absent, continued refusal is an
+  availability defect. Reconcile the exact owned resource through a bounded,
+  idempotent transition.
+- Keep desired topology, current observed occupancy, and historical evidence in
+  distinct fields or records. Historical owner identifiers may remain available
+  for diagnosis, but they must not act as current locks or capacity claims.
+- After restart, forced termination, or interrupted acquisition, reconstruct
+  volatile ownership from current evidence before admitting new work. A static
+  inventory may declare expected routes, displays, identities, and capacity; it
+  cannot establish current occupancy by itself.
+- A runtime denial must report the blocked operation, the current evidence, the
+  unavailable-work impact, and one supported recovery action. It must not leave
+  an owned profile indefinitely unusable merely because historical state was
+  retained for audit.
 ## Adoption Notes
 
 Use this module when a repo's user-scoped runtime home contains durable tenant, operator, or environment state that may itself need version control, backup, migration, or cross-machine continuity.

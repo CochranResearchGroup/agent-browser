@@ -18,6 +18,10 @@ use std::time::{Duration, Instant};
 mod build_identity;
 mod pending;
 
+pub(crate) fn current_build_identity() -> Value {
+    build_identity::current()
+}
+
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

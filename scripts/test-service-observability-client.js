@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 
 import {
   acquireServiceLoginProfile,
+  applyServiceProfileRepair,
+  applyServiceProfileReset,
   applyServiceProfileLeaseRecovery,
   applyServiceRemedies,
   createServiceStatusMcpToolCall,
@@ -23,6 +25,7 @@ import {
   getServiceProfileForIdentity,
   getServiceProfileLease,
   getServiceProfileLeases,
+  getServiceProfileDiagnosis,
   getServiceProfileReadiness,
   getServiceProfileSeedingHandoff,
   getServiceRemoteViewRoutePreflight,
@@ -30,6 +33,8 @@ import {
   getServiceTrace,
   lookupServiceProfile,
   pauseServiceMonitor,
+  planServiceProfileRepair,
+  planServiceProfileReset,
   planServiceProfileLeaseRecovery,
   registerExternalProfile,
   registerServiceLoginProfile,
@@ -1128,6 +1133,145 @@ async function main() {
     targetServiceIds: [],
     recommendedActions: [],
   });
+
+  const diagnosis = createFetchRecorder({
+    success: true,
+    data: {
+      schemaVersion: 'agent-browser.profile-diagnosis.v1',
+      diagnosisId: 'diagnosis-1',
+      observedAt: '2026-09-10T10:00:00Z',
+      state: 'repairable',
+      profile: { id: 'work' },
+      runtime: {},
+      ownership: {},
+      chromeLocks: { verdict: 'proven_stale' },
+      readiness: {},
+      presentation: {},
+      decision: { recourse: 'service_profile_repair_plan' },
+      trace: {},
+      findings: [],
+    },
+  });
+  const diagnosisResult = await getServiceProfileDiagnosis({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: diagnosis.fetch,
+    id: 'work profile',
+  });
+  assert.equal(
+    diagnosis.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/work%20profile/diagnosis',
+  );
+  assert.equal(diagnosis.calls[0].init.method, 'GET');
+  assert.equal(diagnosisResult.state, 'repairable');
+  assert.equal(diagnosisResult.decision.recourse, 'service_profile_repair_plan');
+
+  const profileRepairPlan = createFetchRecorder({
+    success: true,
+    data: { schemaVersion: 'agent-browser.profile-recovery-plan.v1' },
+  });
+  await planServiceProfileRepair({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: profileRepairPlan.fetch,
+    id: 'work profile',
+    profileCapability: 'secret-capability',
+    targetServiceIds: ['google'],
+    idempotencyKey: 'repair:work-profile',
+  });
+  assert.equal(
+    profileRepairPlan.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/work%20profile/repair/plan',
+  );
+  assert.equal(profileRepairPlan.calls[0].init.method, 'POST');
+  assert.equal(
+    profileRepairPlan.calls[0].init.headers.authorization,
+    'Bearer secret-capability',
+  );
+  assert.equal(profileRepairPlan.calls[0].body.profileCapability, undefined);
+  assert.deepEqual(profileRepairPlan.calls[0].body.targetServiceIds, ['google']);
+  assert.equal(profileRepairPlan.calls[0].body.idempotencyKey, 'repair:work-profile');
+
+  const profileRepairApply = createFetchRecorder({
+    success: true,
+    data: { schemaVersion: 'agent-browser.profile-recovery-receipt.v1' },
+  });
+  const sealedProfileRepairPlan = {
+    schemaVersion: 'agent-browser.profile-recovery-plan.v1',
+    profileId: 'work profile',
+  };
+  await applyServiceProfileRepair({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: profileRepairApply.fetch,
+    id: 'work profile',
+    profileCapability: 'secret-capability',
+    plan: sealedProfileRepairPlan,
+  });
+  assert.equal(
+    profileRepairApply.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/work%20profile/repair/apply',
+  );
+  assert.equal(profileRepairApply.calls[0].init.method, 'POST');
+  assert.equal(
+    profileRepairApply.calls[0].init.headers.authorization,
+    'Bearer secret-capability',
+  );
+  assert.equal(profileRepairApply.calls[0].body.profileCapability, undefined);
+  assert.deepEqual(profileRepairApply.calls[0].body.plan, sealedProfileRepairPlan);
+
+  const profileResetPlan = createFetchRecorder({
+    success: true,
+    data: { state: 'reset_available', plan: { scope: 'authentication' } },
+  });
+  await planServiceProfileReset({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: profileResetPlan.fetch,
+    id: 'qbo profile',
+    profileCapability: 'secret-capability',
+    scope: 'authentication',
+    targetServiceId: 'qbo',
+  });
+  assert.equal(
+    profileResetPlan.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/qbo%20profile/reset/plan',
+  );
+  assert.equal(profileResetPlan.calls[0].init.headers.authorization, 'Bearer secret-capability');
+  assert.deepEqual(profileResetPlan.calls[0].body, {
+    scope: 'authentication',
+    targetServiceId: 'qbo',
+  });
+
+  const profileResetApply = createFetchRecorder({
+    success: true,
+    data: { receipt: { terminalResult: 'applied', browserCookiesErased: false }, replayed: false },
+  });
+  const sealedResetPlan = {
+    schemaVersion: 'agent-browser.profile-reset-plan.v1',
+    profileId: 'qbo profile',
+    scope: 'authentication',
+  };
+  const resetResult = await applyServiceProfileReset({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: profileResetApply.fetch,
+    id: 'qbo profile',
+    profileCapability: 'secret-capability',
+    plan: sealedResetPlan,
+  });
+  assert.equal(
+    profileResetApply.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/qbo%20profile/reset/apply',
+  );
+  assert.equal(profileResetApply.calls[0].init.headers.authorization, 'Bearer secret-capability');
+  assert.deepEqual(profileResetApply.calls[0].body, { plan: sealedResetPlan });
+  assert.equal(resetResult.receipt.browserCookiesErased, false);
+  assert.throws(
+    () =>
+      planServiceProfileReset({
+        baseUrl: 'http://127.0.0.1:4849',
+        id: 'qbo',
+        profileCapability: 'secret-capability',
+        scope: 'authentication',
+      }),
+    /requires targetServiceId/,
+  );
 
   const handoff = createFetchRecorder({
     success: true,

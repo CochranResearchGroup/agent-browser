@@ -68,7 +68,7 @@
       "properties": {
         "schemaVersion": { "const": "agent-browser.profile-mitigation-action.v1" },
         "actionId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "actionType": { "enum": ["supersede_terminal_owner", "reconcile_exact_principal_profile_identity"] },
+        "actionType": { "enum": ["supersede_terminal_owner", "supersede_inert_owner", "reconcile_exact_principal_profile_identity", "reconcile_legacy_principal", "bind_owner_principal_authority", "repair_owner_generation_binding", "release_expired_ownerless_lease", "adopt_exact_live_browser", "repair_subordinate_profile_binding", "repair_independent_route_identity", "finalize_terminal_installation_bookkeeping", "retire_inert_browser_record"] },
         "effectAuthority": { "const": "exact_profile_graph" },
         "preconditions": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
         "expectedPostconditions": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
@@ -78,7 +78,7 @@
     "recoveryPlan": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "planId", "recoveryId", "createdAt", "expiresAt", "idempotencyKeyDigest", "serviceStateRevision", "identities", "dominantBlocker", "evidence", "actions", "originalIntent", "integritySeal"],
+      "required": ["schemaVersion", "planId", "recoveryId", "createdAt", "expiresAt", "idempotencyKeyDigest", "serviceStateRevision", "runtimeOwnerRevision", "producerBuildIdentity", "identities", "dominantBlocker", "evidence", "actions", "originalIntent", "integritySeal"],
       "properties": {
         "schemaVersion": { "const": "agent-browser.profile-recovery-plan.v1" },
         "planId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
@@ -87,6 +87,8 @@
         "expiresAt": { "type": "string", "format": "date-time" },
         "idempotencyKeyDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "serviceStateRevision": { "type": "integer", "minimum": 0 },
+        "runtimeOwnerRevision": { "type": "integer", "minimum": 0 },
+        "producerBuildIdentity": { "type": "object" },
         "identities": { "$ref": "#/$defs/identityJoins" },
         "dominantBlocker": { "$ref": "#/$defs/dominantBlocker" },
         "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" }, "minItems": 1 },
@@ -98,13 +100,14 @@
     "recoveryReceipt": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "recoveryId", "planId", "principalId", "profileId", "terminalResult", "preconditionComparison", "attemptedOperationIds", "compensationResult", "finalStateRevision", "acquisitionRetryState", "browserId", "daemonSessionRoute"],
+      "required": ["schemaVersion", "recoveryId", "planId", "principalId", "profileId", "producerBuildIdentity", "terminalResult", "preconditionComparison", "attemptedOperationIds", "compensationResult", "finalStateRevision", "acquisitionRetryState", "browserId", "daemonSessionRoute"],
       "properties": {
         "schemaVersion": { "const": "agent-browser.profile-recovery-receipt.v1" },
         "recoveryId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "planId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "principalId": { "type": "string", "minLength": 1 },
         "profileId": { "type": "string", "minLength": 1 },
+        "producerBuildIdentity": { "type": "object" },
         "terminalResult": { "type": "string", "minLength": 1 },
         "preconditionComparison": { "type": "string", "minLength": 1 },
         "attemptedOperationIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },

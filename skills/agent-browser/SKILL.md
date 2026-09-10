@@ -110,6 +110,16 @@ allow its single read-only loopback CDP observation to qualify the retained
 lane only when the exact recorded process identity, unique ready owner, active
 session, process digest, and target all match. This observation must not write
 Service State or launch a duplicate browser.
+If every durable handoff alias is stale, bootstrap may admit one retained RDP
+browser only when its exact ready owner and valid target agree, attachability
+recommends `service_remote_view_browser_reattach`, and one unallocated ready
+route exists. The staged candidate must perform that reattach and produce a
+generation-bound durable handoff receipt before commit. During the workstation
+admission drain, bind the reattach to the exact current transaction ID and
+revision through `runtimeAdmissionClaim`.
+The candidate requalifies current provider inventory immediately before the
+recovery reservation; do not reuse a pre-transfer admission error as current
+route evidence.
 When service projection metadata omits the runtime-profile name, recover it
 only from one runtime-state record with the same exact process identity and
 DevTools browser endpoint. Treat zero or multiple matches as a hard stop.
@@ -163,8 +173,13 @@ Reruns first stop the managed dashboard, runtime interlock, and backup
 timer while reconciliation is active, then reactivate them after final
 readiness. A failed pass restores every installed unit to its exact prior
 active state and writes
-`~/.agent-browser/convergence/workstation-last-failure.json`. Before Compose
-can recreate Guacamole, reconciliation aligns the
+`~/.agent-browser/convergence/workstation-last-failure.json`. After transaction
+acceptance, the installer also rewrites the runtime-host lane manifests
+for the selected executable and completes an identity-bound takeover into
+`agent-browser-runtime-host.service`. A fresh census must prove one selected
+supervised host, the exact executable, and every configured stream port. A
+failed takeover leaves the installation non-ready with its recovery receipt.
+Before Compose can recreate Guacamole, reconciliation aligns the
 protected PostgreSQL password with any retained database container, preserves
 the other protected values and private file mode, and leaves the database
 unchanged. It reuses the retained Compose project label so existing containers
@@ -249,8 +264,11 @@ This branch remains a release no-go
 until the disposable Ubuntu and release gates
 pass.
 
-If status reports `operator_recovery_required`, use only the exact transaction
-that owns the admission drain:
+If apply finds an interrupted transaction that still owns the admission drain,
+it automatically resumes or recovers that exact transaction before creating a
+new candidate transaction. It does not choose by file recency. If automatic
+convergence refuses changed or ambiguous evidence, use only the exact
+transaction reported as the drain owner:
 
 ```bash
 agent-browser install workstation recover --transaction-id <id> --json
@@ -315,6 +333,11 @@ Warning-severity doctor observations remain visible without making the command
 nonzero. Treat a quiescent historical stopped supervisor as advisory, but keep
 active-process or stream evidence, startup failure, executable drift, port
 conflict, and unavailable supervisor status as blocking.
+The workstation transaction remains unaccepted and keeps admission drained
+until runtime-host manifests are rebound, the old exact host surrenders, the
+user supervisor starts the replacement, and a fresh listener census proves one
+selected production runtime host. A merely active supervisor is insufficient
+when another production runtime listener remains.
 
 For disposable validation of the single-host foundation, set
 `AGENT_BROWSER_RUNTIME_HOST=1`. Named sessions then share one authenticated
@@ -1687,6 +1710,11 @@ agent-browser service prune-retained --orphaned-profiles # Preview orphaned cust
 agent-browser service prune-retained --display-allocations # Preview retained display allocation cleanup
 agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
 agent-browser service profiles        # Show retained profiles and allocation state
+agent-browser service profiles <id> diagnose # Read joined ownership and readiness diagnosis without effects
+agent-browser service profiles <id> repair --capability-file <path> # Plan repair without effects
+agent-browser service profiles <id> repair --apply --plan <path> --session-name <route> --capability-file <path>
+agent-browser service profiles <id> reset --scope runtime --capability-file <path> # Plan a data-preserving runtime reset
+agent-browser service profiles <id> reset --scope authentication --target-service-id <id> --capability-file <path>
 agent-browser service profiles lookup --search Twitter # Rank matching profiles and safe next actions
 agent-browser service sessions        # Show retained service session records
 agent-browser service browsers        # Show retained browser health records
@@ -1927,6 +1955,12 @@ Use `service_browser_contamination_report` to inspect retained inert browser row
 The Service dashboard shows the matching first-class lease on each profile allocation and exposes only the actions listed in `authorizedActions`. Its capability field is ephemeral dialog state and is cleared on close or successful mutation. Observation-only leases cannot mutate. Reconciliation remains plan-first, and the dashboard enables apply only when the sealed plan reports `effectCapable: true`.
 
 Software clients can call `summarizeServiceProfileAllocationBrowserHealth()` on `getServiceProfileAllocation()` or any `profileAllocations` row to produce the same compact browser-health labels shown by `agent-browser service profiles`. If the client already has an access-plan response, `getServiceProfileAllocationForAccessPlan()` fetches the broker-selected profile allocation without manually unpacking `selectedProfile.id`. The summary helper returns `compact`, `compactLabels`, ready and non-ready browser IDs, health states, and an inspection recommendation for logs, traces, and operator-facing status output.
+
+Use `agent-browser service profiles <profile-id> diagnose`, HTTP `GET /api/service/profiles/<profile-id>/diagnosis`, MCP `agent-browser://profiles/{profile_id}/diagnosis`, or `getServiceProfileDiagnosis()` before lower-level ownership repair. The read-only diagnosis joins the canonical profile, current process identity, lifecycle owner, principal binding, lease records, Chrome singleton locks, target readiness, streams, and durable handoffs. Its state is `ready`, `repairable`, `manual_action`, or `blocked`. For shared-local profiles, a missing registered principal is advisory and ordinary access continues with the stable self-declared subject. Do not treat retained owner or lock records as current occupancy without matching live evidence.
+
+Use `service profiles <profile-id> repair --capability-file <path>` to plan without effects. Apply only the reviewed sealed plan with `repair --apply --plan <path> --session-name <route> --capability-file <path>`. The apply path rechecks all bound profile, owner, process, route, reference, and lock evidence, attempts one repair, and replays its receipt without another effect. Changed, live, foreign, or ambiguous evidence is a stop condition. HTTP repair plan/apply routes, MCP `service_profile_repair_plan` and `service_profile_repair_apply`, and the generated repair helpers have matching semantics.
+
+Use `service profiles <profile-id> reset --scope runtime --capability-file <path>` only for an exact proven inert service-owned lane. Runtime reset preserves the profile directory, authentication evidence, and peer lanes. Use `--scope authentication --target-service-id <id>` to remove only that target's retained authentication evidence. It never erases browser cookies and returns a manual-seeding handoff. Full profile-data reset is unavailable until backup restore and rollback are supported. Both supported scopes require an unchanged sealed plan before apply; HTTP, MCP, and generated reset helpers expose the same contract.
 
 For `service.browserCapabilityRegistry`, treat configured registry content as the advisory service-state view. Access plans may use preference bindings for browser-build recommendations, and guarded launches may apply a matching local executable only after host ownership, executable existence, profile compatibility, and validation evidence gates pass. Populated preference binding filters are conjunctive, so a site/account primary binding matches only that requested site plus account combination. Use `agent-browser service browser-capability guide --browser-build stock_chrome --target-service-id <site> --account-id <account>` to discover known executable IDs and copyable primary-route commands before mutating state. Use `agent-browser service browser-capability prefer --browser-build stock_chrome --target-service-id <site> --account-id <account> --preferred-executable-id <executable-id>` when an operator wants to persist that primary route without hand-authored registry JSON. Software clients can call `summarizeServiceBrowserPreferenceCommands()` to derive those commands from registry responses and `upsertServiceBrowserPreferenceBinding()` for the same `browserPreferenceBindings` record. A matching failed, stale, incompatible, or operator-override row blocks launch routing even if another row passed, so stale validation or mixed profile compatibility cannot silently select a browser. Use `agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id <id> --runtime-profile <profile> --headed` when an operator wants the same launch-gate decision before opening Chrome; include `--service-name`, `--agent-name`, `--task-name`, `--site-id`, `--login-id`, `--account-id`, `--url`, or `--cdp-free` when those fields are relevant. The preflight does not launch a browser. It evaluates the effective configured service state, including configured browser capability registry records, and a manifest-derived default executable path does not count as an explicit operator override. It prints whether a binding would be applied, the exact skip or pass reason, and the selected compatibility and validation evidence IDs on successful routes. Check `browserCapabilityLaunch` on service sessions or `browser_launch_recorded` event details to see whether a binding was applied or skipped during actual launches. Applied launch diagnostics include the profile compatibility and validation evidence IDs that allowed the route.
 
@@ -3343,6 +3377,8 @@ recovery.
 
 Production recovery inventory uses `AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH`
 (an absolute path) and schema `agent-browser.production-presentation-inventory.v1`.
+The CLI dotenv loader applies this path and the presentation capacity settings
+to direct and staged runtime-host launches from `~/.agent-browser/.env`.
 Set `environment` to `production`, `bootEpoch` to the current boot identity, and
 provide `routes` containing `routePoolEntryId`, `routeId`, `displayAllocationId`,
 `displayName`, `routeUser`, and `connectionId`. Every entry must match existing

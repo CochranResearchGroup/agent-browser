@@ -266,6 +266,12 @@ and stops the shadow process. If reconciliation fails, it restores every
 installed unit and authenticated ingress receipt to its exact prior state and
 writes a private diagnostic receipt to
 <code>~/.agent-browser/convergence/workstation-last-failure.json</code>.
+After transaction acceptance, the installer rewrites the runtime-host lane
+manifests for the selected executable, reloads the user units, and completes
+an identity-bound takeover into
+<code>agent-browser-runtime-host.service</code>. A fresh census must prove that
+one selected supervisor PID owns the expected executable, ingress, and stream
+ports. The install remains non-ready when that proof fails.
 Duplicate-profile pressure and executable drift in an inactive optional
 session supervisor remain visible as install-doctor advisories without
 failing workstation route reconciliation. Active supervisor drift remains
@@ -318,9 +324,13 @@ When a live selected runtime host predates boot-epoch persistence or belongs to
 a prior boot, guarded apply re-observes its exact process, socket, generation,
 and binary and CAS-refreshes only that same selected ingress identity before
 candidate staging. Ambiguous or changed identity still blocks.
-If a rollback reports <code>operator_recovery_required</code>, run
-<code>agent-browser install workstation recover --transaction-id &lt;id&gt;
---json</code> with the exact admission-owning transaction ID from the failure.
+When apply finds an interrupted transaction that still owns the admission
+drain, the installer automatically resumes or recovers that exact transaction
+before it creates a new candidate transaction. It never selects the prior
+transaction by file recency. If automatic convergence refuses changed or
+ambiguous evidence, run <code>agent-browser install workstation recover
+--transaction-id &lt;id&gt; --json</code> with the exact admission-owning
+transaction ID from the failure.
 Recovery fails closed unless the sealed old generation is selected, no
 candidate executable is live, no candidate dashboard route remains, and a
 fresh two-round runtime census is stable. It preserves the transaction ledger,
@@ -362,6 +372,24 @@ The <code>readiness</code> object separates
 <code>rollbackReady</code>. Overall <code>ready</code> remains false while a
 transaction or admission drain is active or any axis is unproved. Accepted
 generations keep rollback authority for 24 hours.
+
+For an existing installation, candidate bootstrap normally uses one current
+durable handoff. If retained handoff aliases point to superseded browser IDs,
+the bootstrap may instead use an exact retained RDP browser whose ready owner,
+valid target, reattach recommendation, and an unallocated ready route agree.
+This permits staging only. The candidate must reattach the browser and record a
+generation-bound durable handoff receipt before commit.
+While the workstation admission drain is active, bind this reattach to the
+exact current transaction ID and revision through its runtime admission claim.
+The candidate requalifies the current provider inventory immediately before
+reserving recovery capacity, after the retained owner transfer has completed.
+
+The installer keeps runtime admission drained while it rewrites runtime-host
+manifests and transfers the selected host to the user supervisor. It records
+the workstation transaction as accepted only after the old exact host exits,
+the replacement supervisor is active, selected ingress agrees, and the daemon
+listener census contains one selected production runtime host.
+
 Use <code>agent-browser install workstation gc --dry-run --json</code> to
 preview reviewed old-generation cleanup. Apply retains the selected generation
 and the immediately previous healthy rollback generation. It also retains

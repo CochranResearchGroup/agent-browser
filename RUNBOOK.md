@@ -1,10 +1,56 @@
 # Runbook
 
-Sole current execution status. Plan0160 owns scope, strategy and frozen acceptance.
-This table owns current requirement status; receipts and archives preserve detail.
+Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 284 | 2026-09-08
+## Turn 291 | 2026-09-10
+
+The Last30Days degraded tick adds A1/AX cases. LinkedIn's lock timeout stopped
+before effects and must retain `no_effect` plus holder context. Reddit created
+tabs, then redundantly enabled CDP domains. Five historical job lookups were
+lost, so AX requires durable read-only lookup. `last30days-facebook` retains its
+owner and profile but no locks or process; Plan0161 W2 owns preserving repair.
+Recovery r348638 is uncertain; diagnosis r513089 proves no launch. Only Last30Days may authorize a later tick. A3, BILL/QBO and PID45449 remain untouched.
+
+Production has three Guacamole routes but two admitted capacity slots; selection
+exposed `presentation_bound_slot_missing`. Plan0162 adopts Plan0124's arbitrary-N
+model: three warm desktops, logical-browser allocation and just-in-time
+multi-viewer streaming. Plan0161 repair remains the critical path; Plan0162
+then supplies Plan0160 A2/A3.
+
+## Turn 289 | 2026-09-10
+
+Graceful production upgrade is accepted. Transaction
+`upgrade-0b9c31b6-5aaf-407e-a75d-931ec27502e4` installed source `84866611` as
+generation `0.28.0-f01c48c32d6a-850a0203f68d`, automatically replaced the
+supervisor and retired both prior runtime hosts. Doctor reports
+`steady_current`: one runtime host, one dashboard, one executable generation,
+zero legacy daemons and no multiplicity issue. Candidate SHA256 is
+`f01c48c32d6addd5442719ef456c08f62aa832007f6b8dafce737b25c31b6e68`.
+
+The Odollo browser PID 26188 survived unchanged and post-install diagnostics
+returned complete control-plane attestation. Durable synthetic handoff r35043
+resolved ready through the installed generation. Its browser PID 87885 also
+survived the transfer and was terminated only after acceptance; exit was
+verified and final doctor remained green. Service cleanup exposed a remaining
+profile-transfer defect: the new owner first rejected the old browser alias,
+then reported its current browser profile missing. Plan0161 owns that repair.
+
+Source commits 2ba75244, 2215a78a, 27b339bd and 84866611 repair effect-free
+transfer resume, complete planned-host validation, recovery self-exclusion and
+transient source-exit observation. The full workstation installer suite passes
+139 tests; format and workspace Clippy pass. Receipts are under
+`~/.agent-browser/campaigns/p160/graceful-upgrade-r4/`. This accepts the exact
+browser-preserving transaction. Upgrade resilience remains open: another
+install must converge automatically after stale records or an interrupted
+shutdown, and production doctor must distinguish isolated development hosts
+from conflicting production authorities. Source now routes a matching prior
+admission owner through exact resume or recovery before creating a new install
+transaction; focused isolated tests pass, but this is not installed acceptance.
+Plan0160 remains OPEN for that A3
+requirement, profile ownership, BILL/QBO recovery and the deferred A1/A4/AX work.
+
+## Turn 286 | 2026-09-09
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Operator authorized candidate installation and deferred standalone CLI compatibility
@@ -15,39 +61,20 @@ priority, with standalone CLI compatibility explicitly deferred to that round.
 Do not restart A4 observation before its prerequisites and complete sequence
 budget are ready. No consumer payment/CSV action or unrelated cleanup.
 
+Operator direction now makes profile remediation a first-class product surface.
+Plan0160 defines the objective and
+[Plan0161](docs/dev/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
+owns the bounded implementation of read-only profile diagnosis, preserving plan/apply repair, and
+explicitly scoped reset across CLI, HTTP, MCP, generated client and dashboard.
+The next implementation milestone is diagnose plus preserving repair for the
+current owner/lease blocker. Runtime and authentication reset follow. Destructive
+profile-data reset remains separately gated and is not required for that first
+milestone. No profile or runtime was changed by this planning amendment.
+
 Private receipt prefixes:
 - R = ~/.local/state/agent-browser/campaigns/p160/consolidated-20260908/
 - P = ~/.local/state/agent-browser/campaigns/p160/publication-028597ea/
 - N = ~/.local/state/agent-browser/campaigns/p160/ownership-round-20260908T175133Z/
-
-### Installed outcome
-
-Source052848aa2855be5bae7bedfc6b77448ec4fe9c53 is committed and pushed on
-plan/profile-permissions-and-request-provenance. Installed generation:
-0.28.0-71834ecdb3d3-5a938052448d; host PID21220.
-Binary SHA256: 71834ecdb3d3fe527a968303e31fb4c6c7f8cbf4ac4387d348b801581fd8bd93.
-Support SHA256: 5a938052448d039141e190660250589f1c78e70c55cf6f297832ed01155b0bfd.
-
-Native download now preserves peer browser download policy and correlates the
-owned frame/GUID with process-bound artifact delivery. waitfordownload is unchanged.
-The previous pending-confirm repair and process-only supervisor default remain
-included. This replacement interrupted only the exact runtime-host process;
-it does not establish graceful shutdown preservation.
-
-N/activation-receipt.json verifies five browser roots, host-unit descendants,
-39 tab-custody records and recovered temporary storage preserved. Pre-install
-synthetic diagnostics returned missing profile_lease; after installation the
-same retained handle returned complete attestation with no missing proofs.
-This does not establish the cause or permanent resolution of the earlier gap.
-The same durable-link local journey passed with two authenticated viewers,
-anonymous denial, reconnect and trusted mouse/keyboard input:
-local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt.
-Controller refresh used the driver's existing same-link recovery; no browser or
-provider restart occurred. N/installation-postjourney-doctor.json exited0; eight advisory warnings remain.
-The interlock timer is restored active. Shared skill sync added only the two
-download comments, with backup and delta hashes under N.
-Immediate rollback is generation0.28.0-ca2134dd8592-7de46dd5e014. Preserve
-0.28.0-0df77d7f2693-f452c93718a3 and0.28.0-b69c4e5a4a60-31faac73c7ec and all holds.
 
 ### Requirement-to-evidence table
 
@@ -63,9 +90,10 @@ not fresh executions on052848aa. N receipts identify the current installation.
 | A1 session-only lifecycle | yes / prior headless and headed pass / yes / synthetic | R/final-session-matrix-results.json; R/final-session-headed-results.json | Five production identities preserved and no fixture residue. Session-only, named and custom lifecycle cases all have prior-binary proof; broader cross-operation/negative joins remain separate. |
 | A1 pending confirm | yes / prior binary pass / yes / original synthetic tab pass | R/installed-modal-acceptance.json; R/final-dialog-bmPf4N | Installed original handle passed labeled confirm status/dismiss and preserved actual page title/marker. Isolated snapshot and wrong-target denial pass. Original consumer retry and cross-target pending-modal routing remain unproven. |
 | A1 lease findings | dispositions / scoped / yes / partial | P/post-r4-ownership-dispositions.json; R/primary-evidence-disposition.json | Keep seven advisory axes separate from ordinary control failures. Complete UI/network/file-transfer after peer-target selection and remaining negative joins with isolated fixtures. |
+| A1 first-class profile remediation | yes / pass / isolated dev installed / synthetic headed | Plan0161 completion checkpoint; b4a160c1; dev generation 0.28.0-0ddc830f9a2e | Diagnose, preserving repair, runtime reset and authentication reset are delivered with BILL combined fixture and exact headed peer-survival proof. Consumer BILL workflow remains separate; destructive profile-data reset is gated by Plan0163. |
 | A2 local remote-view journey | yes / installed052848aa pass with same-link recovery / yes / synthetic | local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt | Two authenticated viewers, anonymous denial, same-link reconnect and trusted input pass. Preserve initial local-viewers-2wL0BG failure; external vantage remains separate. |
 | A3 current readiness | yes / installed doctor pass / yes / n/a | N/installation-postjourney-doctor.json; N/configuration-freeze.json | Preserve warning dispositions and current evidence; doctor alone does not prove complete operation. |
-| A3 preserving shutdown delivery | scoped / replacement preservation pass / yes / synthetic handle pass | R/activation-receipt.json; R/retained-storage-after.json | Normal graceful restart is not a preserving path. Existing explicit browser-close semantics remain unchanged. |
+| A3 preserving shutdown delivery | source follow-up / one exact installed pass / provisional / synthetic plus retained Odollo | graceful-upgrade-r4; transaction 0b9c31b6; Plan0160 automatic convergence checkpoint | Exact transaction transferred both live browser lanes and converged three production hosts to one. Source now auto-resumes or recovers the exact prior admission owner before a new apply. Install and prove the controlled-interruption case, with isolated development namespaces excluded from production multiplicity. |
 | A4 scheduled/restart continuity | partial / three current steady cycles pass / timer active / incomplete | R/steady-cadence/scheduled-control.json | Normal gaps300.875s,300.398s,300.526s; current configuration and five roots preserved. Startup gap298.8s excluded. Full A1 prerequisites and ordered controlled-restart/next-cycle sequence remain incomplete; no second production restart performed. |
 | AX selected seven cases | surfaces implemented / partial / yes / partial | R/primary-evidence-disposition.json; P/post-r4-ax-acceptance.json | Seven exact returned-ID failure reconstructions remain unjoined. Profile selection, missing binding, changed generation, stale target/transport, Xvfb, journal interruption and failed transition are distinct predicates. |
 | Historical wrong-tab attribution | current repair / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |
@@ -99,48 +127,48 @@ for native policy preservation remains a gap. Do not claim whole-plan completion
 
 ### Validation, rework and bounded delegation
 
-Required format and strict workspace clippy passed. Remote-view documentation
-checks passed; current planning audit retains38 legacy findings, with Plan0160's
-consolidation checks passing. No new executable changes followed these checks.
-The final release build took10m13s. Two worker CI-profile builds took2m32s and
-2m33s; one superseded shallow test compile was stopped. The maintained dialog
-regression remains a gap; preserved real red/green integration evidence is the
-current protection. Production skill received only the two relevant dialog
-comments, preserving other installed guidance.
+Format, strict workspace clippy, remote-view docs and Plan0160 consolidation
+checks passed. The planning audit retains38 legacy findings. The final release
+build took10m13s; two useful worker candidate builds took about2m33s each, and a
+superseded shallow compile was stopped. Preserved real red/green evidence remains
+the dialog regression protection. Production guidance received only relevant text.
 
-Sol worker confirm_report_intake reproduced the installed timeout and supplied
-the minimal repair and pinned final-binary proof. Primary rejected an added
-inactive-target refusal and a shallow helper test, reviewed actual receipts and
-hashes, and independently checked fixture residue. A second bounded fixture lane
-prepared final drivers and ran the pinned dialog; primary ran lifecycle checks.
-Luna worker consolidated_evidence produced a useful inventory, but primary
-rejected incorrect predicate mappings and unnecessary consumer-rejoin gates.
-Requested routes were Luna/medium and Sol/medium; effective model/cost unreported.
-No measured cost savings claimed. No worker or successor reset the global bound.
+Workers reproduced the confirm timeout, prepared bounded fixture drivers and
+consolidated evidence. Primary retained the minimal repair and pinned proof while
+rejecting an inactive-target refusal, a shallow helper test and incorrect predicate
+mappings. Effective worker model cost was unavailable, so no savings are claimed.
 
-First viewer attempt stalled at Checking stream and its missing-retry-button
-assertion obscured the original wait error. The next bounded attempt passed with
-new clients on the same durable link, including reconnect and controller refresh.
-It did not need the added startup-refresh fallback; this is not proof that one
-particular refresh caused recovery. No browser/provider restart or code change
-was made for this startup failure.
+The first viewer stalled at Checking stream; a bounded second attempt passed on
+the same durable link with new clients, reconnect and controller refresh. No
+browser/provider restart or source change established a single cause. Removing an
+unneeded headless Xvfb dependency produced a residue-free cold-session pass. The
+headed fixture also passed after restoring its proven PrivateTmp condition; only
+applicable browser/profile/interaction facts are accepted. Timer evidence excludes
+an overdue startup and one corrected shell sequencing mistake; steady observation
+still requires the next completed invocation without settings changes.
 
-The session-only fixture unnecessarily started Xvfb for headless operation and
-failed before host launch. Exact test Xvfb was stopped and read back absent.
-Removing that headless-only dependency yielded a passing cold-session lifecycle
-with no residue. Its inherited privateDisplay=true receipt field is inapplicable
-to this headless fixture; primary accepts the asserted browser/profile/interaction
-facts only. The older successful headed receipt showed PrivateTmp=yes; restoring
-that exact fixture condition yielded a passing current-binary headed run with
-zero residue. R/headed-fixture-reframe.json records the bounded reframe inside
-the same75-minute allowance; no new runtime/source change was made.
+### Presentation capacity and supervisor completion | 2026-09-09
 
-Three earlier normal cycles on f816 remain scoped old-candidate evidence.
-Restoring the timer started an overdue run; OnActiveSec then produced a298.8s
-completion gap. R/startup-cadence-disposition.json excludes it. The steady observer
-uses the next completed invocation without altering timer or runtime settings.
-A shell sequencing mistake briefly started the timer after a failed readiness
-assertion; it was stopped before a scheduled cycle and no such cycle is claimed.
+Available Guacamole pool entries were blocked by historical browser IDs retained
+on reconciled orphan route/display rows. Qualification now treats that exact
+orphaned plus available plus unallocated combination as warm idle; checked-out
+missing-browser ownership still blocks. Seven inventory tests and reconciliation
+coverage pass.
+
+Accepted workstation upgrades previously stopped, rewrote and enabled the runtime
+host unit but returned unitStarted=false, leaving the candidate unsupervised and
+forcing operator recovery. Apply and guarded resume now complete the existing
+identity-bound takeover and require fresh proof of the supervisor PID, selected
+ingress, executable, ports and conflict-free runtime census. Same-process installer
+lock ownership is admitted for this internal step; foreign or unreadable locks
+remain blocking. Acceptance now occurs only after takeover while the parent drain
+remains active, and final census requires exactly one selected runtime-host
+listener. Stale durable aliases may bootstrap staging from one exact reattachable
+RDP browser, but the candidate must issue a fresh durable handoff before commit. Old-runtime
+BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
+InventoryAdmission without a route change. Transactions b1624cb5, 5c7bc5c0 and b5eb7ee8 exposed drain, cache and dotenv defects. Attempt 82fd55c4 proved BILL on
+private :92 cannot appear on route A :10. Route display and acquisition-custody
+repairs passed live. Turn289 records accepted install and convergence proof.
 
 ### Git consolidation | 2026-09-08
 
@@ -174,9 +202,7 @@ or automatic runtime stopping. Selector baseline remains v0.1.24 with scoped
 local overrides and adoption feedback in Plan0160; no shared-library replacement.
 Focused auditor tests passed22; legacy migration is not part of this slice.
 
-Preserve unrelated consumer edits to incident0156 and untracked notes0159/0160.
-Earlier exact cleanup of six finished P159 fixtures remains accepted; do not
-repeat it. No production browser/profile/credential/payment cleanup was performed.
+Preserve unrelated incident0156 and notes0159/0160 edits. Synthetic PID87885 was
+closed after acceptance; no tenant browser, profile, credential or payment changed.
 
-- [Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md)
-- [Earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md)
+[Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).

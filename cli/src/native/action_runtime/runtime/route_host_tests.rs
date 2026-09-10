@@ -1766,20 +1766,30 @@ fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_b
         .save(&state)
         .unwrap();
 
-    let command = json!({
-        "action": "remote_view_open",
-        "runtimeProfile": profile_id,
-        "serviceName": "BooksReceipts",
-        "clientSubjectId": "service:BooksReceipts/agent:codex/task:bill-live",
-        "identityAssurance": "self-declared",
-    });
-    let mut options = LaunchOptions::default();
-    let selection =
-        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+    for action in ["remote_view_open", "tab_new"] {
+        let command = json!({
+            "action": action,
+            "runtimeProfile": profile_id,
+            "serviceName": "BooksReceipts",
+            "clientSubjectId": "service:BooksReceipts/agent:codex/task:bill-live",
+            "identityAssurance": "self-declared",
+        });
+        let mut options = LaunchOptions::default();
+        let selection =
+            apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
 
-    assert_eq!(selection, None);
-    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
-    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+        assert_eq!(selection, None, "action={action}");
+        assert_eq!(
+            options.runtime_profile.as_deref(),
+            Some(profile_id),
+            "action={action}"
+        );
+        assert_eq!(
+            options.profile.as_deref(),
+            user_data_dir.to_str(),
+            "action={action}"
+        );
+    }
     let _ = fs::remove_dir_all(&home);
 }
 

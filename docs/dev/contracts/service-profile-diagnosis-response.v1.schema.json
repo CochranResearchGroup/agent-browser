@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-diagnosis-response.v1.schema.json",
+  "title": "agent-browser service profile diagnosis response",
+  "description": "Stable no-launch joined diagnosis for one stored service profile.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "diagnosisId",
+    "observedAt",
+    "state",
+    "profile",
+    "runtime",
+    "ownership",
+    "chromeLocks",
+    "readiness",
+    "presentation",
+    "decision",
+    "trace",
+    "findings"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.profile-diagnosis.v1" },
+    "diagnosisId": { "type": "string" },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "state": {
+      "enum": ["ready", "repairable", "manual_action", "blocked", "reset_available"]
+    },
+    "profile": { "type": "object", "additionalProperties": true },
+    "runtime": { "type": "object", "additionalProperties": true },
+    "ownership": { "type": "object", "additionalProperties": true },
+    "chromeLocks": { "type": "object", "additionalProperties": true },
+    "readiness": { "type": "object", "additionalProperties": true },
+    "presentation": { "type": "object", "additionalProperties": true },
+    "decision": { "type": "object", "additionalProperties": true },
+    "trace": { "type": "object", "additionalProperties": true },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "axis", "severity", "blocking", "message", "evidence", "recourse"],
+        "properties": {
+          "code": { "type": "string" },
+          "axis": { "type": "string" },
+          "severity": { "type": "string" },
+          "blocking": { "type": "boolean" },
+          "message": { "type": "string" },
+          "evidence": { "type": "array", "items": { "type": "string" } },
+          "recourse": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

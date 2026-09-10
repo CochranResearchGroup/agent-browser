@@ -98,6 +98,8 @@ struct SupervisorTakeoverTransaction {
     replacement_pid: Option<u32>,
     accepted_ingress_revision: Option<u64>,
     failure: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent_admission_transaction_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -115,6 +117,12 @@ pub(crate) struct SupervisorTakeoverOutcome {
 }
 
 pub(crate) fn plan_supervisor_takeover() -> Result<SupervisorTakeoverPlan, String> {
+    plan_supervisor_takeover_with_admission(None)
+}
+
+fn plan_supervisor_takeover_with_admission(
+    parent_admission_transaction_id: Option<&str>,
+) -> Result<SupervisorTakeoverPlan, String> {
     let repository =
         RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path());
     let registry = repository.load()?;
@@ -167,15 +175,21 @@ pub(crate) fn plan_supervisor_takeover() -> Result<SupervisorTakeoverPlan, Strin
         &census,
         &listener_ports,
         already_supervised,
+        parent_admission_transaction_id.is_some(),
         &mut blockers,
     );
+    if let Some(identity) = identity.as_ref() {
+        let listener_inventory =
+            crate::install::daemon_listener_inventory(identity.executable_path.as_deref());
+        validate_authoritative_listener_inventory(&selected, &listener_inventory, &mut blockers);
+    }
 
-    if let Some(blocker) = active_coordination_blocker()? {
+    if let Some(blocker) = active_coordination_blocker(parent_admission_transaction_id)? {
         blockers.push(blocker);
     }
 
-    let p147_capability_ready =
-        current_executable_sha256().is_ok_and(|digest| digest == selected.binary_sha256);
+    let p147_capability_ready = parent_admission_transaction_id.is_some()
+        || current_executable_sha256().is_ok_and(|digest| digest == selected.binary_sha256);
     if !p147_capability_ready {
         push_blocker(
             &mut blockers,
@@ -213,6 +227,14 @@ pub(crate) fn apply_supervisor_takeover(
     expected_plan_digest: &str,
 ) -> Result<SupervisorTakeoverOutcome, String> {
     let initial = plan_supervisor_takeover()?;
+    apply_supervisor_takeover_from_plan(initial, expected_plan_digest, None)
+}
+
+fn apply_supervisor_takeover_from_plan(
+    initial: SupervisorTakeoverPlan,
+    expected_plan_digest: &str,
+    parent_admission_transaction_id: Option<&str>,
+) -> Result<SupervisorTakeoverOutcome, String> {
     require_plan_digest(&initial, expected_plan_digest)?;
     if initial.disposition == SupervisorTakeoverDisposition::AlreadySupervised {
         return Ok(outcome_without_transaction(&initial));
@@ -220,7 +242,7 @@ pub(crate) fn apply_supervisor_takeover(
     require_ready_plan(&initial)?;
 
     let _lock = acquire_takeover_lock()?;
-    let plan = plan_supervisor_takeover()?;
+    let plan = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
     require_plan_digest(&plan, expected_plan_digest)?;
     require_ready_plan(&plan)?;
     let source_identity = plan
@@ -241,6 +263,7 @@ pub(crate) fn apply_supervisor_takeover(
         replacement_pid: None,
         accepted_ingress_revision: None,
         failure: None,
+        parent_admission_transaction_id: parent_admission_transaction_id.map(str::to_string),
     };
     write_transaction(&transaction)?;
 
@@ -257,7 +280,7 @@ pub(crate) fn apply_supervisor_takeover(
             transaction.revision = transaction.revision.saturating_add(1);
             transaction.updated_at = current_timestamp();
             write_transaction(&transaction)?;
-            clear_owned_admission_drain(&transaction.transaction_id)?;
+            clear_takeover_admission_drain(&transaction)?;
         } else {
             transaction.state = SupervisorTakeoverState::OperatorRecoveryRequired;
             transaction.revision = transaction.revision.saturating_add(1);
@@ -284,6 +307,329 @@ pub(crate) fn apply_supervisor_takeover(
             .unwrap_or(plan.ingress_revision),
         browser_launched: false,
     })
+}
+
+/// Complete the accepted workstation upgrade by placing the selected runtime
+/// host under the rewritten user supervisor, then prove the resulting
+/// supervisor and runtime topology from a fresh census.
+pub(crate) fn ensure_selected_runtime_host_supervised_with_admission(
+    parent_admission_transaction_id: Option<&str>,
+) -> Result<SupervisorTakeoverOutcome, String> {
+    if let Some(parent_id) = parent_admission_transaction_id {
+        retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id)?;
+    }
+    let plan = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
+    let outcome = match plan.disposition {
+        SupervisorTakeoverDisposition::AlreadySupervised => outcome_without_transaction(&plan),
+        SupervisorTakeoverDisposition::ReadyForTakeover => {
+            let plan_digest = plan.plan_digest.clone();
+            apply_supervisor_takeover_from_plan(
+                plan,
+                &plan_digest,
+                parent_admission_transaction_id,
+            )?
+        }
+        SupervisorTakeoverDisposition::Blocked => {
+            require_ready_plan(&plan)?;
+            unreachable!("blocked supervisor takeover plan was accepted")
+        }
+    };
+    let verified = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
+    if verified.disposition != SupervisorTakeoverDisposition::AlreadySupervised {
+        return Err(format!(
+            "runtime_host_supervisor_post_upgrade_verification_failed:{:?}",
+            verified.blockers
+        ));
+    }
+    Ok(outcome)
+}
+
+/// Retire exact non-selected production runtime hosts while an accepted
+/// workstation transaction owns admission. Runtime-host shutdown leaves
+/// retained browser processes alive; the selected host re-adopts their
+/// Service State routes after the supervisor restart.
+#[cfg(target_os = "linux")]
+fn retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id: &str) -> Result<(), String> {
+    let drain_path = crate::runtime_adoption::runtime_admission_drain_path()?;
+    let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
+        &fs::read(&drain_path)
+            .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
+    )
+    .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
+    if drain.transaction_id != parent_id {
+        return Err("superseded_runtime_retirement_admission_owner_changed".to_string());
+    }
+
+    let repository =
+        RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path());
+    let registry = repository.load()?;
+    let selected = registry.selected_backend();
+    let namespace = selected
+        .socket_dir
+        .parent()
+        .ok_or_else(|| "selected_runtime_socket_namespace_missing".to_string())?;
+    let mut allowed_hashes = BTreeSet::from([selected.binary_sha256.clone()]);
+    if let Some(fallback) = registry.fallback_backend() {
+        allowed_hashes.insert(fallback.binary_sha256.clone());
+    }
+    allowed_hashes.insert(current_executable_sha256()?);
+    let invoking_path = std::env::current_exe()
+        .map_err(|error| format!("current_executable_unavailable:{error}"))?
+        .canonicalize()
+        .map_err(|error| format!("current_executable_unavailable:{error}"))?;
+
+    reconcile_absent_runtime_host_authority_records(namespace, &selected.socket_dir)?;
+
+    let inventory = crate::install::daemon_listener_inventory(None);
+    if inventory
+        .get("available")
+        .and_then(serde_json::Value::as_bool)
+        != Some(true)
+    {
+        return Err("superseded_runtime_listener_inventory_unavailable".to_string());
+    }
+    let mut retired = BTreeSet::new();
+    for listener in inventory
+        .get("listeners")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(pid) = listener
+            .get("pid")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+        else {
+            continue;
+        };
+        let Some(socket_path) = listener
+            .get("socketPath")
+            .and_then(serde_json::Value::as_str)
+            .map(PathBuf::from)
+        else {
+            continue;
+        };
+        if pid == selected.pid
+            || socket_path.file_name().and_then(|value| value.to_str()) != Some("runtime-host.sock")
+            || socket_path.parent().and_then(Path::parent) != Some(namespace)
+            || !retired.insert(pid)
+        {
+            continue;
+        }
+        let socket_dir = socket_path
+            .parent()
+            .ok_or_else(|| "superseded_runtime_socket_directory_missing".to_string())?;
+        require_runtime_host_process_environment(pid, socket_dir)?;
+        if runtime_host_has_live_browser_child(pid)? {
+            return Err(format!("superseded_runtime_retains_live_browser:{pid}"));
+        }
+        let observed = match crate::process_identity::observe_process(pid) {
+            ProcessObservation::Observed(observed) => observed,
+            ProcessObservation::Missing => continue,
+            ProcessObservation::Failed { reason } => {
+                return Err(format!(
+                    "superseded_runtime_process_unobservable:{pid}:{reason}"
+                ));
+            }
+        };
+        let start_token = observed
+            .start_token
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("superseded_runtime_start_token_missing:{pid}"))?;
+        let executable_hash = sha256_file(Path::new(&format!("/proc/{pid}/exe")))?;
+        let replaced_invoking_path = observed
+            .executable_path
+            .as_deref()
+            .and_then(|path| path.strip_suffix(" (deleted)"))
+            .is_some_and(|path| Path::new(path) == invoking_path);
+        if !allowed_hashes.contains(&executable_hash) && !replaced_invoking_path {
+            return Err(format!("superseded_runtime_binary_unrecognized:{pid}"));
+        }
+        let identity = RecordedProcessIdentity {
+            pid,
+            start_token,
+            executable_path: observed.executable_path,
+            browser_family: observed.browser_family,
+        };
+        let Some(process) = VerifiedProcessTermination::open(&identity)? else {
+            continue;
+        };
+        process.signal(VerifiedProcessSignal::Terminate)?;
+        wait_for_process_exit(&process, SOURCE_EXIT_TIMEOUT)?;
+        if process.is_running()? {
+            process.signal(VerifiedProcessSignal::Kill)?;
+            wait_for_process_exit(&process, SOURCE_EXIT_TIMEOUT)?;
+        }
+        if process.is_running()? {
+            return Err(format!("superseded_runtime_exit_timeout:{pid}"));
+        }
+    }
+    Ok(())
+}
+
+/// Remove only runtime-host authority artifacts whose exact recorded process
+/// identity is absent. Session engine and handoff artifacts remain available
+/// for browser transfer and incident diagnosis. Invalid or unreadable identity
+/// records are retained for explicit diagnosis rather than treated as proof of
+/// absence.
+#[cfg(target_os = "linux")]
+fn reconcile_absent_runtime_host_authority_records(
+    namespace: &Path,
+    selected_socket_dir: &Path,
+) -> Result<Vec<PathBuf>, String> {
+    let entries = match fs::read_dir(namespace) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(format!(
+                "runtime_host_namespace_unreadable:{}:{error}",
+                namespace.display()
+            ));
+        }
+    };
+    let mut reconciled = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "runtime_host_namespace_entry_unreadable:{}:{error}",
+                namespace.display()
+            )
+        })?;
+        let socket_dir = entry.path();
+        if socket_dir == selected_socket_dir || !socket_dir.is_dir() {
+            continue;
+        }
+        let identity_path = socket_dir.join("runtime-host.identity.json");
+        let identity: RecordedProcessIdentity = match fs::read(&identity_path)
+            .ok()
+            .and_then(|body| serde_json::from_slice(&body).ok())
+        {
+            Some(identity) => identity,
+            None => continue,
+        };
+        if VerifiedProcessTermination::open(&identity)?.is_some() {
+            continue;
+        }
+        remove_absent_runtime_host_authority_artifacts(&socket_dir)?;
+        reconciled.push(socket_dir);
+    }
+    Ok(reconciled)
+}
+
+#[cfg(target_os = "linux")]
+fn remove_absent_runtime_host_authority_artifacts(socket_dir: &Path) -> Result<(), String> {
+    const AUTHORITY_FILES: [&str; 7] = [
+        "runtime-host.identity.json",
+        "runtime-host.json",
+        "runtime-host.pid",
+        "runtime-host.sha256",
+        "runtime-host.sock",
+        "runtime-host.token",
+        "runtime-host.version",
+    ];
+    for name in AUTHORITY_FILES {
+        let path = socket_dir.join(name);
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "absent_runtime_host_authority_cleanup_failed:{}:{error}",
+                    path.display()
+                ));
+            }
+        }
+    }
+    for entry in fs::read_dir(socket_dir).map_err(|error| {
+        format!(
+            "absent_runtime_host_directory_unreadable:{}:{error}",
+            socket_dir.display()
+        )
+    })? {
+        let entry = entry.map_err(|error| {
+            format!(
+                "absent_runtime_host_directory_entry_unreadable:{}:{error}",
+                socket_dir.display()
+            )
+        })?;
+        if entry.path().extension().and_then(|value| value.to_str()) == Some("stream") {
+            fs::remove_file(entry.path()).map_err(|error| {
+                format!(
+                    "absent_runtime_host_stream_cleanup_failed:{}:{error}",
+                    entry.path().display()
+                )
+            })?;
+        }
+    }
+    match fs::remove_dir(socket_dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
+        Err(error) => {
+            return Err(format!(
+                "absent_runtime_host_directory_cleanup_failed:{}:{error}",
+                socket_dir.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn runtime_host_has_live_browser_child(runtime_pid: u32) -> Result<bool, String> {
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+
+    let state = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
+    for browser_pid in state.browsers.values().filter_map(|browser| browser.pid) {
+        let stat = match fs::read_to_string(format!("/proc/{browser_pid}/stat")) {
+            Ok(stat) => stat,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!(
+                    "superseded_runtime_browser_parent_unreadable:{browser_pid}:{error}"
+                ));
+            }
+        };
+        let Some(after_name) = stat.rsplit_once(") ").map(|(_, value)| value) else {
+            return Err(format!(
+                "superseded_runtime_browser_stat_invalid:{browser_pid}"
+            ));
+        };
+        let parent_pid = after_name
+            .split_whitespace()
+            .nth(1)
+            .and_then(|value| value.parse::<u32>().ok())
+            .ok_or_else(|| format!("superseded_runtime_browser_stat_invalid:{browser_pid}"))?;
+        if parent_pid == runtime_pid {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+#[cfg(target_os = "linux")]
+fn require_runtime_host_process_environment(pid: u32, socket_dir: &Path) -> Result<(), String> {
+    let bytes = fs::read(format!("/proc/{pid}/environ"))
+        .map_err(|error| format!("superseded_runtime_environment_unreadable:{pid}:{error}"))?;
+    let entries = bytes
+        .split(|byte| *byte == 0)
+        .filter_map(|entry| std::str::from_utf8(entry).ok())
+        .collect::<Vec<_>>();
+    let runtime_host = entries
+        .iter()
+        .any(|entry| *entry == format!("{}=1", crate::runtime_host::RUNTIME_HOST_ENV));
+    let expected_socket = format!("AGENT_BROWSER_SOCKET_DIR={}", socket_dir.display());
+    let socket_matches = entries.iter().any(|entry| *entry == expected_socket);
+    if runtime_host && socket_matches {
+        Ok(())
+    } else {
+        Err(format!("superseded_runtime_environment_mismatch:{pid}"))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn retire_superseded_runtime_hosts_for_accepted_upgrade(_parent_id: &str) -> Result<(), String> {
+    Ok(())
 }
 
 pub(crate) fn resume_supervisor_takeover(
@@ -320,7 +666,7 @@ pub(crate) fn resume_supervisor_takeover(
             .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
     )
     .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-    if drain.transaction_id != transaction.transaction_id {
+    if drain.transaction_id != takeover_admission_owner_id(&transaction) {
         return Err("runtime_admission_drain_owner_changed".to_string());
     }
 
@@ -336,7 +682,7 @@ pub(crate) fn resume_supervisor_takeover(
             advance_transaction(&mut transaction, SupervisorTakeoverState::ReplacementReady)?;
             transaction.accepted_ingress_revision = Some(ingress_revision);
             advance_transaction(&mut transaction, SupervisorTakeoverState::IngressAdopted)?;
-            clear_owned_admission_drain(&transaction.transaction_id)?;
+            clear_takeover_admission_drain(&transaction)?;
             advance_transaction(&mut transaction, SupervisorTakeoverState::Accepted)?;
             Ok(outcome_from_transaction(&transaction))
         }
@@ -363,10 +709,20 @@ fn execute_takeover(
     write_admission_drain(transaction)?;
     advance_transaction(transaction, SupervisorTakeoverState::AdmissionDraining)?;
 
-    revalidate_source(plan, source_identity, &transaction.transaction_id)?;
+    revalidate_source(
+        plan,
+        source_identity,
+        takeover_admission_owner_id(transaction),
+        transaction.parent_admission_transaction_id.is_some(),
+    )?;
     let process = VerifiedProcessTermination::open(source_identity)?
         .ok_or_else(|| "blocked_selected_process_missing_before_signal".to_string())?;
-    revalidate_source(plan, source_identity, &transaction.transaction_id)?;
+    revalidate_source(
+        plan,
+        source_identity,
+        takeover_admission_owner_id(transaction),
+        transaction.parent_admission_transaction_id.is_some(),
+    )?;
     advance_transaction(transaction, SupervisorTakeoverState::SourceRetiring)?;
 
     process.signal(VerifiedProcessSignal::Terminate)?;
@@ -387,7 +743,7 @@ fn execute_takeover(
     advance_transaction(transaction, SupervisorTakeoverState::ReplacementReady)?;
     transaction.accepted_ingress_revision = Some(ingress_revision);
     advance_transaction(transaction, SupervisorTakeoverState::IngressAdopted)?;
-    clear_owned_admission_drain(&transaction.transaction_id)?;
+    clear_takeover_admission_drain(transaction)?;
     advance_transaction(transaction, SupervisorTakeoverState::Accepted)
 }
 
@@ -463,11 +819,14 @@ fn validate_supervisor(
             "No supervised lane manifests are configured.",
         );
     }
-    if !supervisor.executable_matches
-        || supervisor
-            .manifests
-            .iter()
-            .any(|manifest| manifest.executable_sha256 != selected.binary_sha256)
+    // The installer may invoke takeover from its build artifact after it has
+    // copied the same bytes into the immutable selected generation. P147
+    // validates the invoking digest separately, so path equality here would
+    // reject an exact candidate solely because its pathname differs.
+    if supervisor
+        .manifests
+        .iter()
+        .any(|manifest| manifest.executable_sha256 != selected.binary_sha256)
     {
         push_blocker(
             blockers,
@@ -490,12 +849,10 @@ fn validate_runtime_conflicts(
     census: &StableRuntimeCensus,
     listener_ports: &BTreeSet<u16>,
     already_supervised: bool,
+    accepted_upgrade_transition: bool,
     blockers: &mut Vec<SupervisorTakeoverBlocker>,
 ) {
-    if already_supervised {
-        return;
-    }
-    if !browserless_census_is_safe(census) {
+    if !already_supervised && !accepted_upgrade_transition && !browserless_census_is_safe(census) {
         let live = census
             .records
             .iter()
@@ -535,6 +892,48 @@ fn validate_runtime_conflicts(
     }
 }
 
+fn validate_authoritative_listener_inventory(
+    selected: &RuntimeHostBackend,
+    inventory: &serde_json::Value,
+    blockers: &mut Vec<SupervisorTakeoverBlocker>,
+) {
+    if inventory
+        .get("available")
+        .and_then(serde_json::Value::as_bool)
+        != Some(true)
+    {
+        push_blocker(
+            blockers,
+            "blocked_listener_inventory_unavailable",
+            "The production daemon listener census is unavailable.",
+        );
+        return;
+    }
+    let listeners = inventory
+        .get("listeners")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let exact = listeners.len() == 1
+        && listeners[0].get("pid").and_then(serde_json::Value::as_u64)
+            == Some(u64::from(selected.pid))
+        && listeners[0]
+            .get("socketPath")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|path| path.ends_with("/runtime-host.sock"))
+        && listeners[0]
+            .get("socketIdentity")
+            .and_then(serde_json::Value::as_str)
+            == Some(selected.socket_identity.as_str());
+    if !exact {
+        push_blocker(
+            blockers,
+            "blocked_runtime_listener_multiplicity",
+            "Production must have exactly one authoritative runtime-host listener bound to the selected process and socket identity.",
+        );
+    }
+}
+
 fn browserless_census_is_safe(census: &StableRuntimeCensus) -> bool {
     census.activation_allowed
         && census.records.iter().all(|record| {
@@ -552,6 +951,7 @@ fn revalidate_source(
     plan: &SupervisorTakeoverPlan,
     source_identity: &RecordedProcessIdentity,
     transaction_id: &str,
+    accepted_upgrade_transition: bool,
 ) -> Result<(), String> {
     let registry =
         RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path()).load()?;
@@ -570,7 +970,9 @@ fn revalidate_source(
         return Err("blocked_identity_changed_before_signal".to_string());
     }
     let census = crate::workstation_install::collect_stable_host_runtime_census()?;
-    if !browserless_census_is_safe(&census) {
+    if !census.activation_allowed
+        || (!accepted_upgrade_transition && !browserless_census_is_safe(&census))
+    {
         return Err("blocked_runtime_census_changed_before_signal".to_string());
     }
     let ports = listener_ports_for_pid(plan.selected_backend.pid)?;
@@ -614,7 +1016,10 @@ fn wait_for_replacement(source_backend: &RuntimeHostBackend) -> Result<(u32, u64
                 if pid != source_backend.pid
                     && supervisor.active_state == "active"
                     && supervisor.sub_state == "running"
-                    && supervisor.executable_matches
+                    && supervisor
+                        .manifests
+                        .iter()
+                        .all(|manifest| manifest.executable_sha256 == selected.binary_sha256)
                     && ports_ready
                     && selected.pid == pid
                     && selected.generation_id == source_backend.generation_id
@@ -632,19 +1037,26 @@ fn wait_for_replacement(source_backend: &RuntimeHostBackend) -> Result<(u32, u64
     Err("replacement_readiness_or_ingress_adoption_failed".to_string())
 }
 
-fn active_coordination_blocker() -> Result<Option<SupervisorTakeoverBlocker>, String> {
+fn active_coordination_blocker(
+    parent_admission_transaction_id: Option<&str>,
+) -> Result<Option<SupervisorTakeoverBlocker>, String> {
     let drain_path = crate::runtime_adoption::runtime_admission_drain_path()?;
     if drain_path.exists() {
-        return Ok(Some(SupervisorTakeoverBlocker {
-            code: "blocked_active_admission_drain".to_string(),
-            message: "Another runtime transaction owns the admission drain.".to_string(),
-        }));
+        let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
+            &fs::read(&drain_path)
+                .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
+        )
+        .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
+        if admission_drain_conflicts(&drain, parent_admission_transaction_id) {
+            return Ok(Some(SupervisorTakeoverBlocker {
+                code: "blocked_active_admission_drain".to_string(),
+                message: "Another runtime transaction owns the admission drain.".to_string(),
+            }));
+        }
     }
     if let Some(home) = dirs::home_dir() {
-        if home
-            .join(".agent-browser/convergence/workstation.lock")
-            .exists()
-        {
+        let workstation_lock = home.join(".agent-browser/convergence/workstation.lock");
+        if workstation_transaction_is_foreign(&workstation_lock, std::process::id()) {
             return Ok(Some(SupervisorTakeoverBlocker {
                 code: "blocked_active_workstation_transaction".to_string(),
                 message: "A workstation convergence transaction is active.".to_string(),
@@ -669,6 +1081,23 @@ fn active_coordination_blocker() -> Result<Option<SupervisorTakeoverBlocker>, St
         }
     }
     Ok(None)
+}
+
+fn admission_drain_conflicts(
+    drain: &crate::runtime_adoption::RuntimeAdmissionDrain,
+    parent_admission_transaction_id: Option<&str>,
+) -> bool {
+    parent_admission_transaction_id != Some(drain.transaction_id.as_str())
+}
+
+fn workstation_transaction_is_foreign(path: &Path, current_pid: u32) -> bool {
+    if !path.exists() {
+        return false;
+    }
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        != Some(current_pid)
 }
 
 fn listener_ports_for_pid(pid: u32) -> Result<BTreeSet<u16>, String> {
@@ -909,9 +1338,14 @@ fn write_admission_drain(transaction: &SupervisorTakeoverTransaction) -> Result<
                 .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
         )
         .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-        if existing.transaction_id != transaction.transaction_id {
+        if existing.transaction_id != takeover_admission_owner_id(transaction) {
             return Err("blocked_active_admission_drain".to_string());
         }
+        if transaction.parent_admission_transaction_id.is_some() {
+            return Ok(());
+        }
+    } else if transaction.parent_admission_transaction_id.is_some() {
+        return Err("parent_admission_drain_missing".to_string());
     }
     write_private_json_atomic(
         &path,
@@ -923,6 +1357,22 @@ fn write_admission_drain(transaction: &SupervisorTakeoverTransaction) -> Result<
             recorded_at: current_timestamp(),
         },
     )
+}
+
+fn takeover_admission_owner_id(transaction: &SupervisorTakeoverTransaction) -> &str {
+    transaction
+        .parent_admission_transaction_id
+        .as_deref()
+        .unwrap_or(transaction.transaction_id.as_str())
+}
+
+fn clear_takeover_admission_drain(
+    transaction: &SupervisorTakeoverTransaction,
+) -> Result<(), String> {
+    if transaction.parent_admission_transaction_id.is_some() {
+        return Ok(());
+    }
+    clear_owned_admission_drain(&transaction.transaction_id)
 }
 
 fn clear_owned_admission_drain(transaction_id: &str) -> Result<(), String> {
@@ -1100,6 +1550,7 @@ mod tests {
             &safe_census,
             &BTreeSet::new(),
             false,
+            false,
             &mut blockers,
         );
         assert!(blockers.is_empty(), "free configured port must be safe");
@@ -1110,10 +1561,173 @@ mod tests {
             &safe_census,
             &BTreeSet::new(),
             false,
+            false,
             &mut blockers,
         );
         assert_eq!(blockers.len(), 1);
         assert_eq!(blockers[0].code, "blocked_unrelated_port_owner");
+    }
+
+    #[test]
+    fn already_supervised_runtime_still_rejects_unrelated_configured_port_owner() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        let mut blockers = Vec::new();
+
+        validate_runtime_conflicts(
+            &selected,
+            &supervisor(vec![39717]),
+            &census(&[RuntimeClassification::CooperativeLiveOwner]),
+            &BTreeSet::new(),
+            true,
+            false,
+            &mut blockers,
+        );
+
+        assert_eq!(blockers.len(), 1);
+        assert_eq!(blockers[0].code, "blocked_unrelated_port_owner");
+    }
+
+    #[test]
+    fn accepted_upgrade_can_supervise_finalized_retained_browsers() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        let mut blockers = Vec::new();
+
+        validate_runtime_conflicts(
+            &selected,
+            &supervisor(Vec::new()),
+            &census(&[
+                RuntimeClassification::CooperativeLiveOwner,
+                RuntimeClassification::ManualPreserveOnly,
+            ]),
+            &BTreeSet::new(),
+            false,
+            true,
+            &mut blockers,
+        );
+
+        assert!(blockers.is_empty());
+    }
+
+    #[test]
+    fn supervisor_manifest_digest_matches_selected_even_when_invoker_path_differs() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        let mut observation = supervisor(Vec::new());
+        observation.executable_matches = false;
+        let mut blockers = Vec::new();
+
+        validate_supervisor(&selected, &observation, false, &mut blockers);
+
+        assert!(blockers.is_empty());
+    }
+
+    #[test]
+    fn authoritative_listener_validation_rejects_multiple_runtime_hosts() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        let exact = serde_json::json!({
+            "available": true,
+            "listeners": [{
+                "pid": selected.pid,
+                "socketPath": "/run/user/1000/agent-browser/runtime-hosts/current/runtime-host.sock",
+                "socketIdentity": selected.socket_identity,
+            }]
+        });
+        let mut blockers = Vec::new();
+        validate_authoritative_listener_inventory(&selected, &exact, &mut blockers);
+        assert!(blockers.is_empty());
+
+        let multiple = serde_json::json!({
+            "available": true,
+            "listeners": [
+                {
+                    "pid": selected.pid,
+                    "socketPath": "/run/user/1000/agent-browser/runtime-hosts/current/runtime-host.sock",
+                    "socketIdentity": selected.socket_identity,
+                },
+                {
+                    "pid": selected.pid + 1,
+                    "socketPath": "/run/user/1000/agent-browser/runtime-hosts/old/runtime-host.sock",
+                    "socketIdentity": "unix:old",
+                }
+            ]
+        });
+        validate_authoritative_listener_inventory(&selected, &multiple, &mut blockers);
+        assert_eq!(blockers.len(), 1);
+        assert_eq!(blockers[0].code, "blocked_runtime_listener_multiplicity");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn accepted_upgrade_reconciles_only_proven_absent_runtime_host_authority() {
+        let namespace = std::env::temp_dir().join(format!(
+            "agent-browser-absent-runtime-authority-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let selected = namespace.join("selected");
+        let absent = namespace.join("absent");
+        let unknown = namespace.join("unknown");
+        fs::create_dir_all(&selected).unwrap();
+        fs::create_dir_all(&absent).unwrap();
+        fs::create_dir_all(&unknown).unwrap();
+
+        let absent_identity = RecordedProcessIdentity {
+            pid: u32::MAX,
+            start_token: "proven-absent".to_string(),
+            executable_path: Some("/missing/agent-browser".to_string()),
+            browser_family: None,
+        };
+        fs::write(
+            absent.join("runtime-host.identity.json"),
+            serde_json::to_vec(&absent_identity).unwrap(),
+        )
+        .unwrap();
+        for name in [
+            "runtime-host.json",
+            "runtime-host.pid",
+            "runtime-host.sha256",
+            "runtime-host.sock",
+            "runtime-host.token",
+            "runtime-host.version",
+            "fixture.stream",
+        ] {
+            fs::write(absent.join(name), "stale").unwrap();
+        }
+        fs::write(absent.join("retained.engine"), "preserve").unwrap();
+        fs::write(unknown.join("runtime-host.identity.json"), "invalid").unwrap();
+        fs::write(selected.join("runtime-host.identity.json"), "selected").unwrap();
+
+        let reconciled =
+            reconcile_absent_runtime_host_authority_records(&namespace, &selected).unwrap();
+
+        assert_eq!(reconciled, vec![absent.clone()]);
+        assert!(absent.join("retained.engine").is_file());
+        assert!(!absent.join("runtime-host.identity.json").exists());
+        assert!(!absent.join("runtime-host.sock").exists());
+        assert!(!absent.join("fixture.stream").exists());
+        assert!(unknown.join("runtime-host.identity.json").is_file());
+        assert!(selected.join("runtime-host.identity.json").is_file());
+
+        fs::remove_dir_all(namespace).unwrap();
+    }
+
+    #[test]
+    fn nested_takeover_accepts_only_its_parent_admission_drain() {
+        let drain = crate::runtime_adoption::RuntimeAdmissionDrain {
+            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+            transaction_id: "workstation-parent".to_string(),
+            candidate_generation_id: "candidate".to_string(),
+            transaction_revision: 12,
+            recorded_at: "2026-09-09T00:00:00Z".to_string(),
+        };
+
+        assert!(!admission_drain_conflicts(
+            &drain,
+            Some("workstation-parent")
+        ));
+        assert!(admission_drain_conflicts(
+            &drain,
+            Some("another-transaction")
+        ));
+        assert!(admission_drain_conflicts(&drain, None));
     }
 
     #[test]
@@ -1156,5 +1770,32 @@ mod tests {
         })
         .unwrap();
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn workstation_lock_owned_by_this_installer_allows_supervisor_completion() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-takeover-workstation-lock-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let lock = root.join("workstation.lock");
+        fs::write(&lock, format!("{}\n", std::process::id())).unwrap();
+
+        assert!(!workstation_transaction_is_foreign(
+            &lock,
+            std::process::id()
+        ));
+        assert!(workstation_transaction_is_foreign(
+            &lock,
+            std::process::id().saturating_add(1)
+        ));
+        fs::write(&lock, "unknown-owner\n").unwrap();
+        assert!(workstation_transaction_is_foreign(
+            &lock,
+            std::process::id()
+        ));
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

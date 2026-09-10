@@ -83,6 +83,8 @@ const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id
 const SERVICE_PROFILE_LOOKUP_USAGE: &str = "service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
 const SERVICE_PROFILE_LEASES_USAGE: &str = "service leases [doctor|capability-status --principal-id <id> --profile-id <id>|register --principal-id <id> --profile-id <id> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|rotate-capability --principal-id <id> --profile-id <id> --expected-capability-id <id> --expected-registry-revision <n> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|<lease-id> [inspect|explain|rejoin|renew|release|recover plan|recover apply] [--revision <revision>] [--capability-file <absolute-path>] [--expires-at <rfc3339>] [--idempotency-key <key>] [--plan-file <absolute-path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]]";
 const SERVICE_PROFILE_RECOVERY_USAGE: &str = "service recovery <acquire --profile-id <id> --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|plan --profile-id <id> --capability-file <absolute-path> --expires-at <rfc3339> [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|apply --plan-file <absolute-path> --capability-file <absolute-path> --session-name <daemon-route>|status <recovery-id> --capability-file <absolute-path>>";
+const SERVICE_PROFILE_REPAIR_USAGE: &str = "service profiles <profile-id> repair [--apply --plan <absolute-path> --session-name <daemon-route>] --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]";
+const SERVICE_PROFILE_RESET_USAGE: &str = "service profiles <profile-id> reset --scope <runtime|authentication|profile-data> [--target-service-id <id>] [--apply --plan <absolute-path>] --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>]";
 
 const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
 
@@ -540,6 +542,147 @@ fn parse_service_profile_recovery(
                 usage: SERVICE_PROFILE_RECOVERY_USAGE,
             });
         }
+    }
+    Ok(command)
+}
+
+fn parse_service_profile_repair(
+    id: String,
+    profile_id: &str,
+    rest: &[&str],
+    flags: &Flags,
+) -> Result<Value, ParseError> {
+    let mut apply = false;
+    let mut command = json!({
+        "id": id,
+        "action": "service_profile_repair_plan",
+        "profileId": profile_id,
+        "serviceState": flags.service_state.clone(),
+    });
+    if let Some(session_name) = flags.session_name.as_ref() {
+        command["sessionName"] = json!(session_name);
+    }
+    let mut index = 3;
+    while index < rest.len() {
+        if rest[index] == "--apply" {
+            apply = true;
+            command["action"] = json!("service_profile_repair_apply");
+            index += 1;
+            continue;
+        }
+        let (field, label, append) = match rest[index] {
+            "--plan" | "--plan-file" => ("planFile", "--plan", false),
+            "--capability-file" => ("profileCapabilityFile", "--capability-file", false),
+            "--expires-at" => ("expiresAt", "--expires-at", false),
+            "--idempotency-key" => ("idempotencyKey", "--idempotency-key", false),
+            "--session-name" => ("sessionName", "--session-name", false),
+            "--target-service-id" => ("targetServiceIds", "--target-service-id", true),
+            "--service-name" => ("serviceName", "--service-name", false),
+            "--agent-name" => ("agentName", "--agent-name", false),
+            "--task-name" => ("taskName", "--task-name", false),
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for service profile repair: {flag}"),
+                    usage: SERVICE_PROFILE_REPAIR_USAGE,
+                })
+            }
+        };
+        let Some(value) = rest.get(index + 1) else {
+            return Err(ParseError::InvalidValue {
+                message: format!("Missing value for {label}"),
+                usage: SERVICE_PROFILE_REPAIR_USAGE,
+            });
+        };
+        if append {
+            command
+                .as_object_mut()
+                .expect("profile repair command must be an object")
+                .entry(field)
+                .or_insert_with(|| json!([]))
+                .as_array_mut()
+                .expect("profile repair repeated field must be an array")
+                .push(json!(value));
+        } else {
+            command[field] = json!(value);
+        }
+        index += 2;
+    }
+    for field in if apply {
+        &["planFile", "profileCapabilityFile", "sessionName"][..]
+    } else {
+        &["profileCapabilityFile"][..]
+    } {
+        if command.get(field).is_none() {
+            return Err(ParseError::InvalidValue {
+                message: format!("Missing required service profile repair field: {field}"),
+                usage: SERVICE_PROFILE_REPAIR_USAGE,
+            });
+        }
+    }
+    Ok(command)
+}
+
+fn parse_service_profile_reset(
+    id: String,
+    profile_id: &str,
+    rest: &[&str],
+    flags: &Flags,
+) -> Result<Value, ParseError> {
+    let mut apply = false;
+    let mut command = json!({
+        "id": id,
+        "action": "service_profile_reset_plan",
+        "profileId": profile_id,
+        "serviceState": flags.service_state.clone(),
+    });
+    let mut index = 3;
+    while index < rest.len() {
+        if rest[index] == "--apply" {
+            apply = true;
+            command["action"] = json!("service_profile_reset_apply");
+            index += 1;
+            continue;
+        }
+        let (field, label) = match rest[index] {
+            "--scope" => ("scope", "--scope"),
+            "--target-service-id" => ("targetServiceId", "--target-service-id"),
+            "--plan" | "--plan-file" => ("planFile", "--plan"),
+            "--capability-file" => ("profileCapabilityFile", "--capability-file"),
+            "--expires-at" => ("expiresAt", "--expires-at"),
+            "--idempotency-key" => ("idempotencyKey", "--idempotency-key"),
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for service profile reset: {flag}"),
+                    usage: SERVICE_PROFILE_RESET_USAGE,
+                })
+            }
+        };
+        let Some(value) = rest.get(index + 1) else {
+            return Err(ParseError::InvalidValue {
+                message: format!("Missing value for {label}"),
+                usage: SERVICE_PROFILE_RESET_USAGE,
+            });
+        };
+        command[field] = json!(value);
+        index += 2;
+    }
+    for field in if apply {
+        &["planFile", "profileCapabilityFile"][..]
+    } else {
+        &["scope", "profileCapabilityFile"][..]
+    } {
+        if command.get(field).is_none() {
+            return Err(ParseError::InvalidValue {
+                message: format!("Missing required service profile reset field: {field}"),
+                usage: SERVICE_PROFILE_RESET_USAGE,
+            });
+        }
+    }
+    if !apply && command["scope"] == "authentication" && command.get("targetServiceId").is_none() {
+        return Err(ParseError::InvalidValue {
+            message: "Authentication reset requires --target-service-id".to_string(),
+            usage: SERVICE_PROFILE_RESET_USAGE,
+        });
     }
     Ok(command)
 }
@@ -3826,11 +3969,17 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 if rest.get(1) == Some(&"lookup") {
                     return parse_service_profile_lookup(id, &rest, flags);
                 }
+                if rest.len() >= 3 && rest[2] == "repair" {
+                    return parse_service_profile_repair(id, rest[1], &rest, flags);
+                }
+                if rest.len() >= 3 && rest[2] == "reset" {
+                    return parse_service_profile_reset(id, rest[1], &rest, flags);
+                }
                 if rest.len() >= 3 && rest[2] == "seeding-handoff" {
                     if rest.len() > 4 {
                         return Err(ParseError::InvalidValue {
                             message: format!("Unknown argument for service profiles: {}", rest[4]),
-                            usage: "service profiles [<profile-id> <seeding-handoff|verify-seeding> [target-service-id]]",
+                            usage: "service profiles [<profile-id> <diagnose|seeding-handoff|verify-seeding> [target-service-id]]",
                         });
                     }
                     let mut cmd = json!({
@@ -3847,10 +3996,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 if rest.len() >= 3 && rest[2] == "verify-seeding" {
                     return parse_service_profile_verify_seeding(id, &rest, flags);
                 }
+                if rest.len() == 3 && rest[2] == "diagnose" {
+                    return Ok(json!({
+                        "id": id,
+                        "action": "service_profile_diagnose",
+                        "profileId": rest[1],
+                        "serviceState": flags.service_state.clone(),
+                    }));
+                }
                 if rest.len() > 1 {
                     return Err(ParseError::InvalidValue {
                         message: format!("Unknown argument for service profiles: {}", rest[1]),
-                        usage: "service profiles [<profile-id> <seeding-handoff|verify-seeding> [target-service-id]]",
+                        usage: "service profiles [<profile-id> <diagnose|seeding-handoff|verify-seeding> [target-service-id]]",
                     });
                 }
                 Ok(json!({
@@ -9508,6 +9665,71 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_profiles");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_profile_diagnose() {
+        let cmd = parse_command(
+            &args("service profiles shared-books diagnose"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_profile_diagnose");
+        assert_eq!(cmd["profileId"], "shared-books");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_profile_repair_plan_and_apply() {
+        let plan = parse_command(
+            &args(
+                "service profiles shared-books repair --capability-file /tmp/shared-books.cap --target-service-id bill --idempotency-key repair-1",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(plan["action"], "service_profile_repair_plan");
+        assert_eq!(plan["profileId"], "shared-books");
+        assert_eq!(plan["profileCapabilityFile"], "/tmp/shared-books.cap");
+        assert_eq!(plan["targetServiceIds"], json!(["bill"]));
+
+        let apply = parse_command(
+            &args(
+                "service profiles shared-books repair --apply --plan /tmp/repair-plan.json --capability-file /tmp/shared-books.cap --session-name repair-route",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(apply["action"], "service_profile_repair_apply");
+        assert_eq!(apply["profileId"], "shared-books");
+        assert_eq!(apply["planFile"], "/tmp/repair-plan.json");
+        assert_eq!(apply["sessionName"], "repair-route");
+    }
+
+    #[test]
+    fn test_service_profile_reset_plan_and_apply() {
+        let plan = parse_command(
+            &args(
+                "service profiles qbo reset --scope authentication --target-service-id qbo --capability-file /tmp/qbo.cap",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(plan["action"], "service_profile_reset_plan");
+        assert_eq!(plan["profileId"], "qbo");
+        assert_eq!(plan["scope"], "authentication");
+        assert_eq!(plan["targetServiceId"], "qbo");
+
+        let apply = parse_command(
+            &args(
+                "service profiles qbo reset --apply --plan /tmp/reset-plan.json --capability-file /tmp/qbo.cap",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(apply["action"], "service_profile_reset_apply");
+        assert_eq!(apply["planFile"], "/tmp/reset-plan.json");
     }
 
     #[test]

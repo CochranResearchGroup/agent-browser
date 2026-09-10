@@ -150,6 +150,7 @@ fn validate_observation(
     observation: ProcessObservation,
 ) -> Result<ProcessObservation, String> {
     match &observation {
+        ProcessObservation::Missing if after.is_none() => Ok(ProcessObservation::Missing),
         ProcessObservation::Observed(value)
             if value.pid == pid
                 && before.is_some()
@@ -198,12 +199,14 @@ mod tests {
         ] {
             assert!(validate_observation(pid, before, after, observation.clone()).is_err());
         }
-        assert!(validate_observation(
-            42,
-            Some("linux:boot:123"),
-            None,
-            ProcessObservation::Missing
-        )
-        .is_err());
+        assert_eq!(
+            validate_observation(
+                42,
+                Some("linux:boot:123"),
+                None,
+                ProcessObservation::Missing
+            ),
+            Ok(ProcessObservation::Missing)
+        );
     }
 }

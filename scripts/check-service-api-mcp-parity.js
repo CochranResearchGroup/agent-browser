@@ -772,11 +772,17 @@ function expectAnyIncludes(source, needles, message) {
 
 function extractNativeServiceActions(source) {
   const body = extractRustFunctionBody(source, 'pub(crate) async fn execute_command');
-  return sortedUnique(
-    [...body.matchAll(/"(?<action>service_[a-z0-9_]+)"\s*=>/g)].map(
-      (match) => match.groups.action,
-    ),
-  );
+  const actions = [];
+  for (const arm of body.matchAll(
+    /(?<patterns>"service_[a-z0-9_]+"(?:\s*\|\s*"service_[a-z0-9_]+")*)\s*=>/g,
+  )) {
+    actions.push(
+      ...[...arm.groups.patterns.matchAll(/"(?<action>service_[a-z0-9_]+)"/g)].map(
+        (match) => match.groups.action,
+      ),
+    );
+  }
+  return sortedUnique(actions);
 }
 
 function extractNoLaunchServiceActions(source) {

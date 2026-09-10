@@ -123,7 +123,18 @@ impl ProductionInventory {
                 .display_allocations
                 .get(&expected.display_allocation_id)
                 .ok_or_else(|| invalid("display_allocation_missing"))?;
-            let pending_acquisition = has_current_acquisition_binding(state, route);
+            let pending_acquisition = has_current_acquisition_binding(state, route)
+                || has_current_acquisition_custody(state, route);
+            // A completed release intentionally clears the display's active
+            // route list while retaining the former browser and session as
+            // diagnostic history. Once the pool is independently available
+            // with no current allocation, that released trio is a warm idle
+            // slot rather than a broken active binding.
+            let reconciled_released_owner = !pending_acquisition
+                && route.state == "released"
+                && display.state == "released"
+                && entry.state == "available"
+                && entry.current_route_allocation_id.is_none();
             let binding_mismatch = [
                 (
                     "route_pool_provider",
@@ -171,7 +182,10 @@ impl ProductionInventory {
                     "inventory_route_user_empty",
                     expected.route_user.trim().is_empty(),
                 ),
-                ("display_route_ids", !display.route_ids.contains(&route.id)),
+                (
+                    "display_route_ids",
+                    !reconciled_released_owner && !display.route_ids.contains(&route.id),
+                ),
                 (
                     "route_display_browser_owner",
                     route.browser_id != display.owner_browser_id,
@@ -183,11 +197,13 @@ impl ProductionInventory {
                 (
                     "route_state",
                     !matches!(route.state.as_str(), "ready" | "orphaned" | "checked_out")
+                        && !reconciled_released_owner
                         && !pending_acquisition,
                 ),
                 (
                     "display_state",
                     !matches!(display.state.as_str(), "ready" | "active" | "orphaned")
+                        && !reconciled_released_owner
                         && !pending_acquisition,
                 ),
                 (
@@ -208,45 +224,60 @@ impl ProductionInventory {
             if let Some(reason) = binding_mismatch {
                 return Err(invalid(reason));
             }
-            let browser = match route.browser_id.as_ref() {
-                Some(id) if state.browsers.contains_key(id) => {
-                    let browser = &state.browsers[id];
-                    let browser_mismatch = [
-                        (
-                            "browser_display_allocation_id",
-                            browser.display_allocation_id != route.display_allocation_id,
-                        ),
-                        (
-                            "browser_display_name",
-                            browser.display_name != display.display_name,
-                        ),
-                        (
-                            "browser_boot_epoch",
-                            browser.boot_epoch.as_deref() != Some(boot),
-                        ),
-                        (
-                            "browser_active_session",
-                            route.session_id.as_ref().is_none_or(|session| {
-                                !browser.active_session_ids.contains(session)
-                            }),
-                        ),
-                    ]
-                    .into_iter()
-                    .find_map(|(reason, mismatched)| mismatched.then_some(reason));
-                    if let Some(reason) = browser_mismatch {
-                        return Err(invalid(reason));
+            // Reconciliation deliberately retains the former browser and
+            // session identifiers on orphaned route and display rows as
+            // diagnostic history. Once the pool entry is independently
+            // available with no current allocation, those identifiers no
+            // longer describe live occupancy and must not consume capacity.
+            let reconciled_orphan_owner = !pending_acquisition
+                && route.state == "orphaned"
+                && display.state == "orphaned"
+                && entry.state == "available"
+                && entry.current_route_allocation_id.is_none();
+            let browser = if reconciled_released_owner {
+                None
+            } else {
+                match route.browser_id.as_ref() {
+                    Some(id) if state.browsers.contains_key(id) => {
+                        let browser = &state.browsers[id];
+                        let browser_mismatch = [
+                            (
+                                "browser_display_allocation_id",
+                                browser.display_allocation_id != route.display_allocation_id,
+                            ),
+                            (
+                                "browser_display_name",
+                                browser.display_name != display.display_name,
+                            ),
+                            (
+                                "browser_boot_epoch",
+                                browser.boot_epoch.as_deref() != Some(boot),
+                            ),
+                            (
+                                "browser_active_session",
+                                route.session_id.as_ref().is_none_or(|session| {
+                                    !browser.active_session_ids.contains(session)
+                                }),
+                            ),
+                        ]
+                        .into_iter()
+                        .find_map(|(reason, mismatched)| mismatched.then_some(reason));
+                        if let Some(reason) = browser_mismatch {
+                            return Err(invalid(reason));
+                        }
+                        Some(browser)
                     }
-                    Some(browser)
+                    Some(_) if pending_acquisition => None,
+                    Some(_) if reconciled_orphan_owner => None,
+                    Some(_) => return Err(invalid("browser_missing_outside_pending_acquisition")),
+                    None if route.session_id.is_none()
+                        && route.state == "ready"
+                        && display.state == "ready" =>
+                    {
+                        None
+                    }
+                    None => return Err(invalid("route_browser_missing_for_bound_state")),
                 }
-                Some(_) if pending_acquisition => None,
-                Some(_) => return Err(invalid("browser_missing_outside_pending_acquisition")),
-                None if route.session_id.is_none()
-                    && route.state == "ready"
-                    && display.state == "ready" =>
-                {
-                    None
-                }
-                None => return Err(invalid("route_browser_missing_for_bound_state")),
             };
             if !observe(expected, browser) {
                 return Err(format!(
@@ -269,10 +300,67 @@ impl ProductionInventory {
                     s.id == old.id
                         && s.route_id == old.route_id
                         && s.display_allocation_id == old.display_allocation_id
-                        && s.browser_id == old.browser_id
                 }) else {
-                    return Err("production_presentation_inventory_capacity_custody_changed".into());
+                    return Err(format!(
+                        "production_presentation_inventory_capacity_custody_changed:{}",
+                        json!({"reason":"binding_changed","previousSlot":old})
+                    ));
                 };
+                let exact_pending_binding = slot.route_id.as_deref().is_some_and(|route_id| {
+                    state.remote_view_routes.get(route_id).is_some_and(|route| {
+                        (has_current_acquisition_binding(state, route)
+                            || has_current_acquisition_custody(state, route))
+                            && route.browser_id == slot.browser_id
+                    })
+                });
+                let exact_pending_browser_acquisition = old.state
+                    == PresentationSlotState::WarmIdle
+                    && old.browser_id.is_none()
+                    && old.lease_request_id.is_none()
+                    && old.cleanup_obligation_ids.is_empty()
+                    && slot.browser_id.is_some()
+                    && exact_pending_binding;
+                let exact_completed_inert_owner = old.state == PresentationSlotState::Active
+                    && old.browser_id.is_some()
+                    && slot.browser_id.is_none()
+                    && slot.route_id.as_deref().is_some_and(|route_id| {
+                        state.remote_view_routes.get(route_id).is_some_and(|route| {
+                            let Some(display_id) = route.display_allocation_id.as_deref() else {
+                                return false;
+                            };
+                            let Some(display) = state.display_allocations.get(display_id) else {
+                                return false;
+                            };
+                            let Some(entry) = state
+                                .route_pool
+                                .values()
+                                .find(|entry| entry.route_id == route.id)
+                            else {
+                                return false;
+                            };
+                            matches!(route.state.as_str(), "released" | "orphaned")
+                                && matches!(display.state.as_str(), "released" | "orphaned")
+                                && route.state == display.state
+                                && entry.state == "available"
+                                && entry.current_route_allocation_id.is_none()
+                                && route.browser_id == old.browser_id
+                                && display.owner_browser_id == old.browser_id
+                        })
+                    });
+                if exact_pending_browser_acquisition || exact_completed_inert_owner {
+                    continue;
+                }
+                if slot.browser_id != old.browser_id {
+                    return Err(format!(
+                        "production_presentation_inventory_capacity_custody_changed:{}",
+                        json!({
+                            "reason":"browser_changed",
+                            "exactPendingBinding":exact_pending_binding,
+                            "previousSlot":old,
+                            "qualifiedSlot":slot,
+                        })
+                    ));
+                }
                 *slot = old.clone();
             }
         }
@@ -436,6 +524,111 @@ mod tests {
     }
 
     #[test]
+    fn production_inventory_treats_reconciled_orphan_owner_as_warm_idle() {
+        let (inventory, mut state, config) = fixture();
+        state.browsers.clear();
+        let repair = crate::native::service_health::reconcile_remote_view_state_with_display_probe(
+            &mut state,
+            |_| true,
+            false,
+        );
+        assert_eq!(repair.orphaned_routes, 1);
+        assert_eq!(repair.orphaned_display_allocations, 1);
+        assert_eq!(state.remote_view_routes["route"].state, "orphaned");
+        assert_eq!(state.display_allocations["display"].state, "orphaned");
+        assert_eq!(state.route_pool["pool"].state, "available");
+        assert_eq!(state.route_pool["pool"].current_route_allocation_id, None);
+        let before = serde_json::to_value(&state).unwrap();
+
+        let capacity = inventory
+            .qualify(&state, config, "production", "boot-test", |_, _| true)
+            .unwrap();
+
+        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots[0].browser_id.is_none());
+        assert_eq!(serde_json::to_value(&state).unwrap(), before);
+    }
+
+    #[test]
+    fn production_inventory_accepts_active_capacity_after_owner_becomes_orphaned() {
+        let (inventory, mut state, config) = fixture();
+        let active_capacity = inventory
+            .qualify(&state, config.clone(), "production", "boot-test", |_, _| {
+                true
+            })
+            .unwrap();
+        assert_eq!(
+            active_capacity.slots[0].state,
+            PresentationSlotState::Active
+        );
+        state.presentation_capacity = Some(active_capacity);
+        state.browsers.clear();
+        let repair = crate::native::service_health::reconcile_remote_view_state_with_display_probe(
+            &mut state,
+            |_| true,
+            false,
+        );
+        assert_eq!(repair.orphaned_routes, 1);
+        assert_eq!(repair.orphaned_display_allocations, 1);
+
+        let capacity = inventory
+            .qualify(&state, config, "production", "boot-test", |_, browser| {
+                browser.is_none()
+            })
+            .unwrap();
+
+        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots[0].browser_id.is_none());
+    }
+
+    #[test]
+    fn production_inventory_treats_completed_release_as_warm_idle() {
+        let (inventory, mut state, config) = fixture();
+        let active_capacity = inventory
+            .qualify(&state, config.clone(), "production", "boot-test", |_, _| {
+                true
+            })
+            .unwrap();
+        assert_eq!(
+            active_capacity.slots[0].state,
+            PresentationSlotState::Active
+        );
+        state.presentation_capacity = Some(active_capacity);
+        state.remote_view_routes.get_mut("route").unwrap().state = "released".into();
+        let display = state.display_allocations.get_mut("display").unwrap();
+        display.state = "released".into();
+        display.route_ids.clear();
+        let before = serde_json::to_value(&state).unwrap();
+
+        let capacity = inventory
+            .qualify(&state, config, "production", "boot-test", |_, browser| {
+                browser.is_none()
+            })
+            .unwrap();
+
+        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots[0].browser_id.is_none());
+        assert_eq!(serde_json::to_value(&state).unwrap(), before);
+    }
+
+    #[test]
+    fn production_inventory_rejects_missing_browser_for_checked_out_route() {
+        let (inventory, mut state, config) = fixture();
+        state.browsers.clear();
+        state.remote_view_routes.get_mut("route").unwrap().state = "checked_out".into();
+        let entry = state.route_pool.get_mut("pool").unwrap();
+        entry.state = "checked_out".into();
+        entry.current_route_allocation_id = Some("route".into());
+
+        assert_eq!(
+            inventory
+                .qualify(&state, config, "production", "boot-test", |_, _| true)
+                .unwrap_err(),
+            "production_presentation_inventory_binding_mismatch:route:browser_missing_outside_pending_acquisition"
+        );
+    }
+
+    #[test]
     fn production_inventory_preserves_pending_new_browser_acquisition() {
         let (mut inventory, mut state, config) = fixture();
         let boot = crate::process_identity::current_boot_epoch().unwrap();
@@ -483,6 +676,34 @@ mod tests {
             .unwrap();
         assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
         assert!(capacity.slots[0].browser_id.is_none());
+
+        state.presentation_capacity = Some(capacity);
+        state.browsers.insert(
+            "new-browser".into(),
+            BrowserProcess {
+                id: "new-browser".into(),
+                boot_epoch: Some(boot.clone()),
+                display_name: Some(":14".into()),
+                display_allocation_id: Some("display".into()),
+                active_session_ids: vec!["new-session".into()],
+                ..Default::default()
+            },
+        );
+        state.remote_view_routes.get_mut("route").unwrap().readiness =
+            Some(json!({"state":"ready","source":"browser_observation"}));
+        assert!(!has_current_acquisition_binding(
+            &state,
+            &state.remote_view_routes["route"]
+        ));
+        assert!(has_current_acquisition_custody(
+            &state,
+            &state.remote_view_routes["route"]
+        ));
+        let capacity = inventory
+            .qualify(&state, config, "production", &boot, |_, _| true)
+            .unwrap();
+        assert_eq!(capacity.slots[0].state, PresentationSlotState::Active);
+        assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("new-browser"));
     }
 
     #[test]

@@ -35,6 +35,7 @@ use super::service_principal::{
     ServicePrincipalProvenance, ServicePrincipalRegistrationRequest, ServicePrincipalState,
     ServiceProfileCapabilityState,
 };
+use super::service_profile_access_policy::ProfileAccessMode;
 use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
@@ -1946,6 +1947,12 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
                 == Some(profile_id)
     });
     let historical = active.is_empty() && !has_nonterminal_owner;
+    let shared_local_access = state.profiles.get(profile_id).is_some_and(|profile| {
+        profile
+            .access_policy
+            .as_ref()
+            .is_none_or(|policy| policy.mode == ProfileAccessMode::SharedLocal)
+    });
     let mut authorized_actions = READ_ACTIONS.map(ToString::to_string).to_vec();
     if !historical {
         authorized_actions.push("profile_acquire".to_string());
@@ -1964,6 +1971,8 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
         mode: lease_mode(&active),
         state: if historical {
             "historical"
+        } else if shared_local_access {
+            "shared_local_access_available"
         } else {
             "identity_reconciliation_required"
         }
@@ -1982,13 +1991,17 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
                 .filter_map(|session| session.expires_at.as_deref()),
         ),
         cleanup_obligation: None,
-        blocking_identity_axes: if historical {
+        blocking_identity_axes: if historical || shared_local_access {
             Vec::new()
         } else {
             vec!["legacy_principal_unproven".to_string()]
         },
         authorized_actions,
-        recourse: PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
+        recourse: if shared_local_access {
+            PrincipalContinuityRecourse::ContinueWithSelfDeclaredAccess
+        } else {
+            PrincipalContinuityRecourse::ReconcilePrincipalIdentity
+        },
         observation_only: true,
     };
     record.lease_revision = lease_revision(&record);
@@ -2210,8 +2223,13 @@ fn exact_rejoin_target_for_owner(
                 && !matches!(tab.lifecycle, TabLifecycle::Closed | TabLifecycle::Crashed)
         })
         .collect::<Vec<_>>();
+    let browser_ids = session
+        .browser_ids
+        .iter()
+        .chain(std::iter::once(&owner.browser_id))
+        .collect::<std::collections::BTreeSet<_>>();
     if active_tabs.iter().any(|tab| {
-        tab.browser_id != owner.browser_id
+        !browser_ids.contains(&tab.browser_id)
             || tab
                 .principal_id
                 .as_deref()
@@ -3077,7 +3095,15 @@ mod tests {
     fn reconcile_plan_rejoins_missing_binding_and_rejects_changed_custody() {
         let (mut state, authority, _) = state_with_lease();
         state.runtime_owner_registry.principal_bindings.clear();
+        state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap()
+            .browser_id = "session:handoff-adopted".to_string();
         let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.browser_ids = vec!["browser-odollo".to_string()];
         session.principal_id = None;
         session.principal_provenance = None;
         session.work_lease_id = None;
@@ -3452,6 +3478,48 @@ mod tests {
         let doctor = doctor_profile_leases(&state, NOW);
         assert!(!doctor.healthy);
         assert_eq!(doctor.findings[0].code, "legacy_principal_unproven");
+    }
+
+    #[test]
+    fn shared_local_profile_keeps_legacy_principal_advisory_out_of_doctor() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "shared-profile".to_string(),
+                crate::native::service_model::BrowserProfile {
+                    id: "shared-profile".to_string(),
+                    access_policy: Some(
+                        crate::native::service_profile_access_policy::ServiceProfileAccessPolicy::shared_local_default(
+                            "shared-profile",
+                        ),
+                    ),
+                    ..crate::native::service_model::BrowserProfile::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "legacy".to_string(),
+                BrowserSession {
+                    id: "legacy".to_string(),
+                    profile_id: Some("shared-profile".to_string()),
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let leases = profile_leases_for_state(&state, NOW);
+        assert_eq!(leases.len(), 1);
+        assert_eq!(leases[0].state, "shared_local_access_available");
+        assert_eq!(
+            leases[0].recourse,
+            PrincipalContinuityRecourse::ContinueWithSelfDeclaredAccess
+        );
+        assert!(leases[0].observation_only);
+        assert!(leases[0].blocking_identity_axes.is_empty());
+        assert!(leases[0]
+            .authorized_actions
+            .contains(&"profile_acquire".to_string()));
+        assert!(doctor_profile_leases(&state, NOW).healthy);
     }
 
     #[test]

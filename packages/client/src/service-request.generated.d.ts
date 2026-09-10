@@ -48,6 +48,7 @@ export type ServiceRequestAction =
   | "service_authentication_run_status"
   | "service_authentication_run_resume"
   | "service_authentication_run_cancel"
+  | "service_authentication_recipe_status"
   | "tab_list"
   | "url"
   | "title"
@@ -157,6 +158,10 @@ export interface ServiceRequest {
   operationId?: string;
   authenticationRunId?: string;
   accountRef?: string;
+  organizationRef?: string;
+  challengeProviderId?: string;
+  challengeProviderTenantRef?: string;
+  challengeProviderAccountRef?: string;
   siteRecipeId?: string;
   policyDigest?: string;
   idempotencyKey?: string;
