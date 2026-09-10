@@ -430,6 +430,9 @@ candidate must reattach that browser and issue the normal durable handoff
 receipt before commit. While the workstation admission drain is active, this
 reattach must carry the exact current transaction ID and revision as its
 runtime admission claim.
+Recovery requalifies the current provider inventory immediately before route
+reservation so a pre-transfer inventory error cannot survive after the exact
+owner transfer completes.
 A ready route, display, or old-generation presentation receipt is not required
 at bootstrap because those replaceable resources must be reacquired and proved
 by the candidate. Apply records a terminal zero-effect preflight block when no

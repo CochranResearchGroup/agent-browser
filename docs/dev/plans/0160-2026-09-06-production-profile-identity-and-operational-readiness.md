@@ -3925,3 +3925,31 @@ The same action without a claim or with foreign revision remains blocked. The
 focused drain regression passes. Rebuild and repeat the staged transaction once;
 after reattach, commit the ready durable handoff through the candidate dashboard
 ingress recovery command and then require joined supervisor acceptance.
+
+### Second staged-install rollback and fresh inventory qualification
+
+state_transition: The claimed reattach passed upgrade admission, then exposed a stale candidate capacity snapshot; source now requalifies current inventory at the recovery reservation boundary.
+acceptance_state: Second transaction rolled back to the old generation; focused source validation passes and another candidate build is required.
+progress_classification: blocker removed in source
+
+Transaction `upgrade-5c7bc5c0-84e8-4f72-b52f-fc57d9dc5647` staged candidate
+generation `0.28.0-a731124e6b61-52cfee5713c9` and cooperatively transferred three
+current lanes. BILL reattach request and job
+`mcp-service-request-service_remote_view_browser_reattach-73734a93-5b4c-4568-8841-859736a7d876`
+carried the exact transaction ID and revision 10, passed the admission drain,
+then failed at `InventoryAdmission`. No retry occurred.
+
+Readback showed why: the candidate had loaded presentation capacity before the
+owner transfers finished and retained the old
+`browser_missing_outside_pending_acquisition` admission error. At request time,
+the authoritative route A and display A rows were both orphaned, its pool entry
+was available and unallocated, and the current BILL browser remained ready under
+the transferred owner. Those current facts satisfy the repaired production
+inventory qualifier, but the reservation used the earlier cached failure.
+
+Bound recovery now overlays and qualifies the current provider inventory inside
+the same repository mutation that reserves capacity. This removes a stale
+pre-transfer admission error only when current route, display, pool, browser and
+provider probes qualify. Any current mismatch remains blocking. The focused
+reattach test and formatting pass. Rebuild once more, repeat one claimed reattach,
+then commit its ready durable handoff before the joined supervisor transition.

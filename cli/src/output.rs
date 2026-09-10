@@ -5662,6 +5662,7 @@ requires a generation-bound durable handoff receipt before commit. The
 reattach must carry the current workstation transaction ID and revision as its
 runtime admission claim while the drain is active. Apply
 records a terminal zero-effect preflight block when neither bootstrap proof is available.
+Recovery requalifies current provider inventory before reserving the route.
 Fresh and isolated installs do not require a retained
 presentation handoff. A structured
 handoff never falls back to a stale session label when current owner evidence

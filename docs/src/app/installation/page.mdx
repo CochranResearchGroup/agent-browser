@@ -377,6 +377,8 @@ This permits staging only. The candidate must reattach the browser and record a
 generation-bound durable handoff receipt before commit.
 While the workstation admission drain is active, bind this reattach to the
 exact current transaction ID and revision through its runtime admission claim.
+The candidate requalifies the current provider inventory immediately before
+reserving recovery capacity, after the retained owner transfer has completed.
 
 The installer keeps runtime admission drained while it rewrites runtime-host
 manifests and transfers the selected host to the user supervisor. It records

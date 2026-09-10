@@ -117,6 +117,9 @@ route exists. The staged candidate must perform that reattach and produce a
 generation-bound durable handoff receipt before commit. During the workstation
 admission drain, bind the reattach to the exact current transaction ID and
 revision through `runtimeAdmissionClaim`.
+The candidate requalifies current provider inventory immediately before the
+recovery reservation; do not reuse a pre-transfer admission error as current
+route evidence.
 When service projection metadata omits the runtime-profile name, recover it
 only from one runtime-state record with the same exact process identity and
 DevTools browser endpoint. Treat zero or multiple matches as a hard stop.

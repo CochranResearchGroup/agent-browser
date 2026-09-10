@@ -42,6 +42,11 @@ where
     );
     let mut unavailable = None;
     let reservation = repository.mutate(|state| {
+        // A workstation transfer may finish after the candidate loaded its
+        // initial capacity snapshot. Requalify the current route, display and
+        // pool facts under the same lock used to reserve recovery capacity.
+        crate::native::presentation_inventory::overlay_provider_inventory_from_environment(state)
+            .map_err(|error| format!("presentation_inventory_refresh_failed:{error}"))?;
         let Some(mut capacity) = state.presentation_capacity.take() else {
             return Ok(None);
         };

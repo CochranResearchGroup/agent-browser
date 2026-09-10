@@ -164,9 +164,9 @@ remains active, and final census requires exactly one selected runtime-host
 listener. Stale durable aliases may bootstrap staging from one exact reattachable
 RDP browser, but the candidate must issue a fresh durable handoff before commit. Old-runtime
 BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
-InventoryAdmission with no observed route change and was not retried. Focused source tests pass. Candidate transaction b1624cb5 transferred both exact owners,
-then its reattach hit the admission drain; rollback restored the old generation,
-owners and cleared drain. Reattach now requires the exact transaction claim.
+InventoryAdmission with no observed route change and was not retried. Transaction b1624cb5 hit the drain and rolled back. Transaction 5c7bc5c0 passed the exact claim,
+then exposed a cached pre-transfer inventory error and rolled back. Recovery now
+requalifies current inventory under its reservation lock; rebuilt proof is open.
 
 ### Git consolidation | 2026-09-08
 
