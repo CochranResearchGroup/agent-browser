@@ -143,7 +143,7 @@ function selectRecommendations(files, base) {
     }
   } else if (files.some((file) => file.startsWith('cli/src/'))) {
     add(
-      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml <focused-filter> -- --test-threads=1',
+      'scripts/ci/rust-tests.sh --focused <focused-filter>',
       'Rust source changed; replace <focused-filter> with the touched module or contract test',
     );
   }
@@ -484,21 +484,21 @@ function focusedRustTestCommands(files) {
 
   if (files.includes('cli/src/native/service_model.rs')) {
     add(
-      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_model -- --test-threads=1',
+      'scripts/ci/rust-tests.sh --focused service_model',
       'service model wire-shape and contract fixtures changed',
     );
   }
 
   if (files.includes('cli/src/native/service_access.rs')) {
     add(
-      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1',
+      'scripts/ci/rust-tests.sh --focused service_access_plan',
       'access-plan decision model changed',
     );
   }
 
   if (files.includes('cli/src/native/service_health.rs')) {
     add(
-      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_health -- --test-threads=1',
+      'scripts/ci/rust-tests.sh --focused service_health',
       'browser health, recovery, or launch event model changed',
     );
   }
@@ -519,21 +519,21 @@ function focusedRustTestCommands(files) {
 
   if (files.includes('cli/src/native/service_contracts.rs')) {
     add(
-      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1',
+      'scripts/ci/rust-tests.sh --focused service_contracts',
       'service contract metadata changed',
     );
   }
 
   if (files.includes('cli/src/native/service_config.rs')) {
     add(
-      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_config -- --test-threads=1',
+      'scripts/ci/rust-tests.sh --focused service_config',
       'service config mutation model changed',
     );
   }
 
   if (files.includes('cli/src/native/service_monitors.rs')) {
     add(
-      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_monitors -- --test-threads=1',
+      'scripts/ci/rust-tests.sh --focused service_monitors',
       'service monitor state or run-due logic changed',
     );
   }
