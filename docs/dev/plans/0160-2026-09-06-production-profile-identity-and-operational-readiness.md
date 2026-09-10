@@ -550,6 +550,11 @@ Read-only evidence collection for later units may proceed without delaying W1.
 
 Implementation authority: [Plan 0161](0161-2026-09-09-first-class-profile-repair-and-reset-plan.md).
 
+Plan 0161's initial first-class lifecycle is closed on 2026-09-10 with isolated
+installed and headed acceptance. Full Plan 0160 A1 and AX remain open for their
+wider ownership matrix and consumer proof. Destructive profile-data reset is
+separately gated by [Plan 0163](0163-2026-09-10-profile-data-reset-backup-and-restore.md).
+
 Profile repair and reset are product operations, not undocumented compositions
 of lease, browser, profile-config and manual filesystem actions. W1 must expose
 one coherent profile-level lifecycle through CLI, HTTP, MCP, the generated

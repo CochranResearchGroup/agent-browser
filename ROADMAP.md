@@ -150,13 +150,12 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
 governs the four remaining production readiness items. Current execution,
 acceptance evidence, cumulative effort, and the next bounded action are owned by
-[RUNBOOK.md](RUNBOOK.md). First-class profile diagnosis and preserving repair
-are the immediate product milestone for profile ownership and identity proof,
-implemented through
+[RUNBOOK.md](RUNBOOK.md). First-class profile diagnosis, preserving repair,
+runtime reset, and authentication reset completed through
 [Plan 0161](docs/dev/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md).
-Explicitly scoped runtime and authentication reset follow; destructive
-profile-data reset remains separately gated. The authenticated operator journey
-then adopts Plan 0124's arbitrary-N capacity through
+Destructive profile-data reset remains separately gated by
+[Plan 0163](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md).
+The authenticated operator journey now adopts Plan 0124's arbitrary-N capacity through
 [Plan 0162](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md):
 browsers bind to validated desktop slots, while Guacamole viewers join those
 desktops just in time without client route selection. Its initial production
@@ -496,8 +495,8 @@ outside P124 and is now owned by Plan0162 under Plan0160 A2/A3.
 
 ### Next Recommendation
 
-Do not rerun P124's accepted development campaign. Execute Plan0162 after the
-Plan0161 preserving-repair source milestone to adopt configurable desktop slots
+Do not rerun P124's accepted development campaign. Plan0161's preserving-repair
+milestone is complete; execute Plan0162 next to adopt configurable desktop slots
 and just-in-time viewer allocation in production.
 
 ## P123 | Exact Profile Compatibility Installed Admission

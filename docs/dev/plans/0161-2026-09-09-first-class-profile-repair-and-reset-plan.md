@@ -2,7 +2,7 @@
 
 Date: 2026-09-09
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -297,7 +297,7 @@ an uncertain effect records that uncertainty and returns diagnosis recourse.
 | W3 | Implement scoped runtime and authentication reset using the same planner, repository transaction and receipt format. | Runtime reset leaves an exact profile stopped and launchable with peers preserved; authentication reset changes only the selected target and starts seeding. | W1 |
 | W4 | Add dashboard diagnosis, repair and scoped reset flows. Update all user-facing docs required by AGENTS.md. | An operator can understand and execute the supported action without selecting lower-level lease primitives. | W1 through W3 |
 | W5 | Run changed-surface gates, build one candidate, install only under the parent plan's runtime gate, and verify disposable then consumer outcomes. | Final evidence table binds source, binary, support generation and actual outcome; no fixture residue or hidden reset. | W2 through W4 |
-| W6 | Design and implement profile-data reset plus restore as a separately reviewed destructive slice. | Backup, reset, failed-apply rollback and restore pass with disposable profiles. | W5; separate action-specific production authority for any live use |
+| W6 | Design and implement profile-data reset plus restore as a separately reviewed destructive slice. | Moved to [Plan 0163](0163-2026-09-10-profile-data-reset-backup-and-restore.md); `profile_data` remains typed unavailable until that successor passes. | W5; separate action-specific production authority for any live use |
 
 ## Acceptance matrix
 
@@ -485,3 +485,48 @@ and a `blind_retry` hard stop. Immediate read-only diagnosis `r513089` showed th
 same missing browser record, absent process and released locks, so no browser was
 launched. Do not retry or edit state directly. W2 must reconcile this pending
 authority outcome through the same sealed plan before it can launch once.
+
+## Completion checkpoint, 2026-09-10
+
+The initial preserving-remediation milestone is complete. Commit `b4a160c1`
+implements joined diagnosis, sealed preserving repair, scoped runtime and
+authentication reset, revision and owner-generation fencing, idempotent replay,
+trace links, CLI/HTTP/MCP/generated-client parity, dashboard actions, schemas,
+and all required user documentation. Profile-data reset remains deliberately
+unavailable and is now owned by specifically named successor
+[Plan 0163](0163-2026-09-10-profile-data-reset-backup-and-restore.md).
+
+Focused recovery qualification passed 32 cases, including the BILL combined
+stale-owner, proven-stale Chrome lock, browser/session/tab-reference, preserved
+authentication, one-launch, and peer-survival fixture. Runtime reset,
+authentication reset, changed-revision refusal, foreign/live-owner refusal,
+replay, HTTP/MCP parity, service model and contracts, generated client,
+dashboard, documentation builds, formatting, and strict workspace Clippy also
+passed. No production BILL or QBO action ran.
+
+The exact candidate binary SHA-256 is
+`0ddc830f9a2e5d53da0e1996d4b36c5b3c56effdc9bc5eb810da641334ba8c89`.
+It is selected in isolated development generation
+`0.28.0-0ddc830f9a2e`; installation reported production unchanged, development
+doctor passed every core runtime axis, and the three-iteration browser launch
+smoke passed. The optional development presentation provider remains a separate
+not-ready gate and was not mutated for this plan.
+
+Installed headed acceptance used two disposable managed runtime profiles on the
+same exact binary. BILL-shaped target PID `80623` and peer PID `79060` opened
+`about:blank` through `remote_headed`; closing the target preserved the exact
+peer PID and URL read. Final OS census, Service browser/session projection,
+Chrome singleton locks, and disposable profile paths were empty. The first
+client-only Xvfb harness attempt is retained as failed development job
+`r294807`; its uncertain effect was inspected and exactly closed before the
+correct runtime-host-owned private-Xvfb fixture ran.
+
+Commit `15b0d0fc` separately compartmentalizes Rust validation into exact
+`native::`, workstation, core, transport, and integration lanes, exposes
+focused reruns, preserves per-compartment failure output, and sets a declared
+16 MiB test-thread stack. The unit partition accounts for all 3,176 tests with
+zero overlap. Focused stack-heavy fixtures and all integration binaries passed;
+a comprehensive timing run was intentionally stopped when unrelated host Cargo
+pressure reduced admissible concurrency to one. No complete comprehensive-lane
+pass is claimed from that measurement, and no Plan 0161 acceptance criterion
+depends on it.
