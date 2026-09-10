@@ -4137,10 +4137,11 @@ supervisor and single-listener readback.
 state_transition: The production installer preserved both live browser lanes,
 replaced the supervisor, retired every prior runtime host and converged to one
 selected generation.
-acceptance_state: The graceful upgrade, automatic supervisor replacement and
-runtime multiplicity requirement are accepted. Plan 0160 remains open for the
-profile ownership and deferred A1, A4 and AX requirements.
-progress_classification: accepted installed outcome
+acceptance_state: This exact graceful upgrade and automatic supervisor
+replacement are accepted as one installed result. Repeatable convergence and
+runtime multiplicity recovery remain open with profile ownership and the
+deferred A1, A4 and AX requirements.
+progress_classification: provisional installed acceptance
 
 Transaction `upgrade-0b9c31b6-5aaf-407e-a75d-931ec27502e4` accepted source
 `84866611` as generation `0.28.0-f01c48c32d6a-850a0203f68d`. Its binary SHA256
@@ -4168,3 +4169,55 @@ Both failed service requests had no effect. Plan 0161 now includes preservation
 of profile identity across owner transfer and alias-independent exact close.
 Final doctor remained successful with the same single-host topology. Exact
 receipts are under `~/.agent-browser/campaigns/p160/graceful-upgrade-r4/`.
+
+### Upgrade resilience amendment
+
+Transaction `upgrade-0b9c31b6-5aaf-407e-a75d-931ec27502e4` accepts one exact
+browser-preserving production upgrade. It does not close the broader resilience
+requirement. The earlier full-shutdown transaction remains evidence that the
+ordinary path had failed before the subsequent repair, and one later pass does
+not prove behavior after every restart, forced termination, or stale-state
+combination.
+
+A3 therefore retains these product requirements:
+
+1. A production install must own supervisor replacement as part of the same
+   transaction. It may report success only after the selected supervisor is
+   active on the accepted generation and all prior production hosts and legacy
+   daemons are absent, or after deterministic rollback restores the old
+   selected generation.
+2. Current process, boot, socket, route, display, profile and lease evidence
+   determines occupancy. Durable historical records remain available for audit
+   but cannot by themselves retain a live authority, consume route capacity, or
+   prevent an exact reconciliation after the recorded process is absent.
+3. Runtime multiplicity is scoped by environment and socket namespace.
+   Independently named development supervisors are reported separately and do
+   not count as duplicate production runtimes. Any second production authority,
+   listener, dashboard or executable generation remains blocking outside the
+   transaction-bound convergence window.
+4. Before final A3 acceptance, run another browser-preserving candidate install
+   from a fixture containing stale historical state and one controlled
+   interruption. Require automatic resume or rollback, retained browser and
+   handoff identity, active selected supervisor, one production listener and a
+   successful supported doctor without manual process termination or direct
+   state-file repair.
+
+This amendment preserves the accepted result for the exact 0b9c transaction
+while keeping repeatability and interrupted-state recovery open. It does not
+authorize another production install before the W1 profile-control batch is
+ready for its final candidate gate.
+
+### Automatic prior-transaction convergence implementation
+
+The working tree now makes a new workstation apply inspect an existing
+admission drain before it creates another candidate transaction. A matching
+interrupted transaction is routed through its exact guarded resume path. A
+matching `operator_recovery_required` transaction is routed through its exact
+recovery path. An exact drain left after terminal acceptance is revalidated and
+cleared before the next candidate begins. Missing, mismatched, unsupported, or
+ambiguous evidence still stops without inventing ownership. Focused tests prove
+the interrupted resume classification, an end-to-end isolated rollback
+recovery, and cleanup after an interruption between acceptance and drain close.
+
+This is source-level progress only. It remains uninstalled and does not satisfy
+the controlled-interruption or repeated production-install acceptance case.

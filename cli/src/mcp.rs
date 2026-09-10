@@ -15,9 +15,9 @@ use crate::native::service_contracts::{
     DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
-    SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_LEASES_MCP_RESOURCE,
-    SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE, SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE,
-    SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
+    SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_TEMPLATE,
+    SERVICE_PROFILE_LEASES_MCP_RESOURCE, SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE,
+    SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE, SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
     SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
     SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
@@ -32,6 +32,7 @@ use crate::native::service_model::{
 use crate::native::service_principal::{
     authenticate_profile_capability, AuthenticatedServicePrincipal,
 };
+use crate::native::service_profile_acquisition::diagnose_service_profile;
 use crate::native::service_profile_lease::{
     doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
 };
@@ -63,6 +64,7 @@ const PROFILE_LOOKUP_RESOURCE: &str = "agent-browser://profiles/lookup";
 const PROFILE_LOOKUP_TEMPLATE: &str = "agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}";
 const PROFILE_ALLOCATION_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/allocation";
 const PROFILE_READINESS_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/readiness";
+const PROFILE_DIAGNOSIS_TEMPLATE: &str = SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_TEMPLATE;
 const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
@@ -318,6 +320,12 @@ fn service_mcp_resource_templates() -> Vec<Value> {
             "name": "Service profile readiness",
             "mimeType": "application/json",
             "description": "No-launch target-readiness rows for one service profile"
+        }),
+        json!({
+            "uriTemplate": PROFILE_DIAGNOSIS_TEMPLATE,
+            "name": "Service profile diagnosis",
+            "mimeType": "application/json",
+            "description": "No-launch joined profile, runtime, ownership, Chrome lock, readiness, presentation, and recourse diagnosis"
         }),
         json!({
             "uriTemplate": PROFILE_ALLOCATION_TEMPLATE,
@@ -606,6 +614,17 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
                     "targetReadiness": profile.target_readiness.clone(),
                     "count": profile.target_readiness.len(),
                 })
+            } else if let Some(profile_id) = profile_diagnosis_resource_id(uri) {
+                let observed_at = service_now_timestamp();
+                let correlation_id =
+                    format!("mcp-service-profile-diagnosis-{}", uuid::Uuid::new_v4());
+                serde_json::to_value(diagnose_service_profile(
+                    &state,
+                    &profile_id,
+                    &observed_at,
+                    &correlation_id,
+                )?)
+                .map_err(|error| format!("service_profile_diagnosis_encode_failed:{error}"))?
             } else if let Some(profile_id) = profile_allocation_resource_id(uri) {
                 let allocation = service_profile_allocations(&state)
                     .into_iter()
@@ -11319,6 +11338,14 @@ fn profile_readiness_resource_id(uri: &str) -> Option<String> {
     Some(urlencoding::decode(profile_id).ok()?.into_owned())
 }
 
+fn profile_diagnosis_resource_id(uri: &str) -> Option<String> {
+    let profile_id = uri
+        .strip_prefix("agent-browser://profiles/")?
+        .strip_suffix("/diagnosis")
+        .filter(|id| !id.is_empty() && !id.contains('/'))?;
+    Some(urlencoding::decode(profile_id).ok()?.into_owned())
+}
+
 fn profile_allocation_resource_id(uri: &str) -> Option<String> {
     let profile_id = uri
         .strip_prefix("agent-browser://profiles/")?
@@ -11444,18 +11471,22 @@ mod tests {
         );
         assert_eq!(
             response["data"]["resourceTemplates"][4]["uriTemplate"],
-            PROFILE_ALLOCATION_TEMPLATE
+            PROFILE_DIAGNOSIS_TEMPLATE
         );
         assert_eq!(
             response["data"]["resourceTemplates"][5]["uriTemplate"],
-            PROFILE_SEEDING_HANDOFF_TEMPLATE
+            PROFILE_ALLOCATION_TEMPLATE
         );
         assert_eq!(
             response["data"]["resourceTemplates"][6]["uriTemplate"],
-            SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE
+            PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
         assert_eq!(
             response["data"]["resourceTemplates"][7]["uriTemplate"],
+            SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE
+        );
+        assert_eq!(
+            response["data"]["resourceTemplates"][8]["uriTemplate"],
             SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE
         );
     }
@@ -11532,6 +11563,22 @@ mod tests {
         );
         assert_eq!(
             profile_readiness_resource_id("agent-browser://profiles/google-work/seeding-handoff"),
+            None
+        );
+    }
+
+    #[test]
+    fn profile_diagnosis_resource_id_maps_uri() {
+        assert_eq!(
+            profile_diagnosis_resource_id("agent-browser://profiles/google-work/diagnosis"),
+            Some("google-work".to_string())
+        );
+        assert_eq!(
+            profile_diagnosis_resource_id("agent-browser://profiles/google%20work/diagnosis"),
+            Some("google work".to_string())
+        );
+        assert_eq!(
+            profile_diagnosis_resource_id("agent-browser://profiles/google-work/readiness"),
             None
         );
     }
@@ -11626,10 +11673,14 @@ mod tests {
         );
         assert_eq!(
             response["result"]["resourceTemplates"][4]["uriTemplate"],
-            PROFILE_ALLOCATION_TEMPLATE
+            PROFILE_DIAGNOSIS_TEMPLATE
         );
         assert_eq!(
             response["result"]["resourceTemplates"][5]["uriTemplate"],
+            PROFILE_ALLOCATION_TEMPLATE
+        );
+        assert_eq!(
+            response["result"]["resourceTemplates"][6]["uriTemplate"],
             PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
     }

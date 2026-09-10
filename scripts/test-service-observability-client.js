@@ -23,6 +23,7 @@ import {
   getServiceProfileForIdentity,
   getServiceProfileLease,
   getServiceProfileLeases,
+  getServiceProfileDiagnosis,
   getServiceProfileReadiness,
   getServiceProfileSeedingHandoff,
   getServiceRemoteViewRoutePreflight,
@@ -1128,6 +1129,37 @@ async function main() {
     targetServiceIds: [],
     recommendedActions: [],
   });
+
+  const diagnosis = createFetchRecorder({
+    success: true,
+    data: {
+      schemaVersion: 'agent-browser.profile-diagnosis.v1',
+      diagnosisId: 'diagnosis-1',
+      observedAt: '2026-09-10T10:00:00Z',
+      state: 'repairable',
+      profile: { id: 'work' },
+      runtime: {},
+      ownership: {},
+      chromeLocks: { verdict: 'proven_stale' },
+      readiness: {},
+      presentation: {},
+      decision: { recourse: 'service_profile_repair_plan' },
+      trace: {},
+      findings: [],
+    },
+  });
+  const diagnosisResult = await getServiceProfileDiagnosis({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: diagnosis.fetch,
+    id: 'work profile',
+  });
+  assert.equal(
+    diagnosis.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/work%20profile/diagnosis',
+  );
+  assert.equal(diagnosis.calls[0].init.method, 'GET');
+  assert.equal(diagnosisResult.state, 'repairable');
+  assert.equal(diagnosisResult.decision.recourse, 'service_profile_repair_plan');
 
   const handoff = createFetchRecorder({
     success: true,

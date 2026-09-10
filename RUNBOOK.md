@@ -25,10 +25,15 @@ Source commits 2ba75244, 2215a78a, 27b339bd and 84866611 repair effect-free
 transfer resume, complete planned-host validation, recovery self-exclusion and
 transient source-exit observation. The full workstation installer suite passes
 139 tests; format and workspace Clippy pass. Receipts are under
-`~/.agent-browser/campaigns/p160/graceful-upgrade-r4/`. The installer,
-supervisor replacement and runtime convergence concern is complete. Plan0160
-remains OPEN for profile ownership, BILL/QBO recovery and the deferred A1/A4/AX
-work.
+`~/.agent-browser/campaigns/p160/graceful-upgrade-r4/`. This accepts the exact
+browser-preserving transaction. Upgrade resilience remains open: another
+install must converge automatically after stale records or an interrupted
+shutdown, and production doctor must distinguish isolated development hosts
+from conflicting production authorities. Source now routes a matching prior
+admission owner through exact resume or recovery before creating a new install
+transaction; focused isolated tests pass, but this is not installed acceptance.
+Plan0160 remains OPEN for that A3
+requirement, profile ownership, BILL/QBO recovery and the deferred A1/A4/AX work.
 
 ## Turn 286 | 2026-09-09
 
@@ -73,7 +78,7 @@ not fresh executions on052848aa. N receipts identify the current installation.
 | A1 first-class profile remediation | Plan0161 open / incomplete / no / no | Plan0161; Plan0160 first-class profile remediation amendment | Implement profile diagnose and preserving repair first. The BILL fixture joins stale-owner routing and proven-stale Chrome locks through one recovery launch; also prove legacy-principal repair, foreign-owner rejection, idempotency and peer survival. Scoped reset follows. |
 | A2 local remote-view journey | yes / installed052848aa pass with same-link recovery / yes / synthetic | local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt | Two authenticated viewers, anonymous denial, same-link reconnect and trusted input pass. Preserve initial local-viewers-2wL0BG failure; external vantage remains separate. |
 | A3 current readiness | yes / installed doctor pass / yes / n/a | N/installation-postjourney-doctor.json; N/configuration-freeze.json | Preserve warning dispositions and current evidence; doctor alone does not prove complete operation. |
-| A3 preserving shutdown delivery | yes / pass / accepted / synthetic plus retained Odollo | graceful-upgrade-r4; transaction 0b9c31b6 | Installer transferred both live browser lanes, replaced the supervisor and converged three runtime hosts to one selected host without manual shutdown. |
+| A3 preserving shutdown delivery | source follow-up / one exact installed pass / provisional / synthetic plus retained Odollo | graceful-upgrade-r4; transaction 0b9c31b6; Plan0160 automatic convergence checkpoint | Exact transaction transferred both live browser lanes and converged three production hosts to one. Source now auto-resumes or recovers the exact prior admission owner before a new apply. Install and prove the controlled-interruption case, with isolated development namespaces excluded from production multiplicity. |
 | A4 scheduled/restart continuity | partial / three current steady cycles pass / timer active / incomplete | R/steady-cadence/scheduled-control.json | Normal gaps300.875s,300.398s,300.526s; current configuration and five roots preserved. Startup gap298.8s excluded. Full A1 prerequisites and ordered controlled-restart/next-cycle sequence remain incomplete; no second production restart performed. |
 | AX selected seven cases | surfaces implemented / partial / yes / partial | R/primary-evidence-disposition.json; P/post-r4-ax-acceptance.json | Seven exact returned-ID failure reconstructions remain unjoined. Profile selection, missing binding, changed generation, stale target/transport, Xvfb, journal interruption and failed transition are distinct predicates. |
 | Historical wrong-tab attribution | current repair / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |

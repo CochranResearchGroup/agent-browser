@@ -323,6 +323,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_profile_lease_reconcile_apply"
             | "service_profile_lease_recover_plan"
             | "service_profile_lease_recover_apply"
+            | "service_profile_diagnose"
             | "service_profile_acquire"
             | "service_profile_recovery_plan"
             | "service_profile_recovery_apply"
@@ -524,7 +525,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             }
         }
     }
-    if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
+    if crate::runtime_owner_transfer::action_requires_runtime_admission(action) {
         let admission_drain = match crate::runtime_adoption::runtime_admission_drain_path() {
             Ok(path) => path,
             Err(error) => return error_response(&id, &error),
@@ -534,6 +535,8 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         {
             return error_response(&id, &error);
         }
+    }
+    if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
         if let Err(error) = crate::native::runtime_lifecycle::admit_default_action_effect(
             &mut state.runtime_owner_binding,
             action,
@@ -1033,6 +1036,9 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             }
             "service_profile_lease_recover_apply" => {
                 handle_service_profile_lease_command(cmd).await
+            }
+            "service_profile_diagnose" => {
+                handle_service_profile_recovery_command(cmd, state).await
             }
             "service_profile_acquire" => {
                 handle_service_profile_recovery_command(cmd, state).await

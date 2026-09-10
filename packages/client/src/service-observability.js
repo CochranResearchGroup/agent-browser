@@ -100,6 +100,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationBrowserHealthSummary} ServiceProfileAllocationBrowserHealthSummary
  * @typedef {import('./service-observability.generated.js').ServiceProfileReadinessResponse} ServiceProfileReadinessResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileDiagnosisResponse} ServiceProfileDiagnosisResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffOptions} ServiceProfileSeedingHandoffOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffResponse} ServiceProfileSeedingHandoffResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffUpdateOptions} ServiceProfileSeedingHandoffUpdateOptions
@@ -473,6 +474,17 @@ export function summarizeServiceProfileAllocationBrowserHealth(allocation) {
 export function getServiceProfileReadiness({ id, ...options }) {
   assertServiceId(id, 'getServiceProfileReadiness');
   return serviceGet(options, `/api/service/profiles/${encodeURIComponent(id)}/readiness`);
+}
+
+/**
+ * Read one profile's joined no-launch diagnosis and recourse projection.
+ *
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceProfileDiagnosisResponse>}
+ */
+export function getServiceProfileDiagnosis({ id, ...options }) {
+  assertServiceId(id, 'getServiceProfileDiagnosis');
+  return serviceGet(options, `/api/service/profiles/${encodeURIComponent(id)}/diagnosis`);
 }
 
 /**

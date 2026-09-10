@@ -377,6 +377,12 @@ struct InstallTransactionMutationGuard {
     census_digest: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PriorInstallConvergenceAction {
+    Resume(InstallTransactionMutationGuard),
+    Recover { transaction_id: String },
+}
+
 fn parse_install_transaction_mutation_guard(
     args: &[String],
     operation: &str,
@@ -1602,6 +1608,9 @@ fn recover_operator_required_upgrade_for_root(
         && !admission_drain_present;
     let recoverable = match transaction.state {
         UpgradeTransactionState::OperatorRecoveryRequired => admission_drain_present,
+        UpgradeTransactionState::Accepted => {
+            admission_drain_present && transaction.terminal_result.as_deref() == Some("accepted")
+        }
         UpgradeTransactionState::BlockedAmbiguousRuntime => !admission_drain_present,
         UpgradeTransactionState::BlockedInflightEffect => pre_admission_inflight_block,
         UpgradeTransactionState::FailedPreservedOldGeneration => {
@@ -1615,8 +1624,16 @@ fn recover_operator_required_upgrade_for_root(
             transaction.state
         ));
     }
-    if transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
-        && transaction.stop_reason.as_deref() == Some("accepted_supervisor_transition_failed")
+    let accepted_forward_recovery = transaction.state == UpgradeTransactionState::Accepted
+        || (transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
+            && matches!(
+                transaction.stop_reason.as_deref(),
+                Some(
+                    "accepted_supervisor_transition_failed"
+                        | "accepted_admission_drain_not_cleared"
+                )
+            ));
+    if accepted_forward_recovery
         && selected_generation_id(&paths).as_deref()
             == Some(transaction.candidate_generation_id.as_str())
     {
@@ -1629,10 +1646,14 @@ fn recover_operator_required_upgrade_for_root(
                 .generations_dir
                 .join(&transaction.candidate_generation_id),
         )?;
-        let supervisor = complete_accepted_upgrade_supervisor_transition(
-            &selected_executable,
-            &transaction.transaction_id,
-        )?;
+        let supervisor = if isolated_root {
+            serde_json::json!({"state": "isolated_not_configured"})
+        } else {
+            complete_accepted_upgrade_supervisor_transition(
+                &selected_executable,
+                &transaction.transaction_id,
+            )?
+        };
         let dashboard_ingress_path = env::var_os("AGENT_BROWSER_DASHBOARD_INGRESS_STATE")
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join(".agent-browser/dashboard-ingress.json"));
@@ -1650,19 +1671,21 @@ fn recover_operator_required_upgrade_for_root(
                 .pointer("/presentationReceipt/state")
                 .and_then(Value::as_str)
                 == Some("ready");
-        if !dashboard_ready {
+        if !isolated_root && !dashboard_ready {
             return Err("workstation_forward_recovery_dashboard_evidence_not_ready".to_string());
         }
         transaction.dashboard_validation_summary =
             Some("authenticated_candidate_dashboard_and_operator_journey_ready".to_string());
         transaction.terminal_result = Some("accepted".to_string());
         transaction.stop_reason = None;
-        persist_upgrade_transition(
-            &transaction_path,
-            &mut transaction,
-            UpgradeTransactionState::Accepted,
-            "accepted_after_supervisor_transition_recovery",
-        )?;
+        if transaction.state != UpgradeTransactionState::Accepted {
+            persist_upgrade_transition(
+                &transaction_path,
+                &mut transaction,
+                UpgradeTransactionState::Accepted,
+                "accepted_after_supervisor_transition_recovery",
+            )?;
+        }
         if let Err(error) = clear_admission_drain(&drain_path) {
             transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
             persist_upgrade_transition(
@@ -2734,6 +2757,88 @@ fn authorize_browserless_upgrade_override(prerequisite: &mut Value) -> Result<()
     Ok(())
 }
 
+/// Selects the exact recovery path for a prior install that still owns the
+/// production admission drain. A new install must converge that transaction
+/// before it is allowed to create another production generation transaction.
+fn prior_install_convergence_action(
+    root: &Path,
+) -> Result<Option<PriorInstallConvergenceAction>, String> {
+    use crate::runtime_adoption::{
+        RuntimeAdmissionDrain, UpgradeTransaction, UpgradeTransactionState,
+    };
+
+    let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+    let encoded = match fs::read(&drain_path) {
+        Ok(encoded) => encoded,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(display_io(
+                "read prior runtime admission drain",
+                &drain_path,
+            )(error));
+        }
+    };
+    let drain: RuntimeAdmissionDrain = serde_json::from_slice(&encoded)
+        .map_err(|error| format!("Prior runtime admission drain is invalid: {error}"))?;
+    if !valid_upgrade_transaction_id(&drain.transaction_id) {
+        return Err("prior_install_admission_transaction_id_invalid".to_string());
+    }
+    let path = transaction_path(root, &drain.transaction_id);
+    let transaction: UpgradeTransaction = serde_json::from_slice(
+        &fs::read(&path).map_err(display_io("read prior install transaction", &path))?,
+    )
+    .map_err(|error| format!("Prior install transaction is invalid: {error}"))?;
+    if transaction.transaction_id != drain.transaction_id
+        || transaction.candidate_generation_id != drain.candidate_generation_id
+        || drain.transaction_revision > transaction.revision
+    {
+        return Err("prior_install_admission_evidence_mismatch".to_string());
+    }
+
+    match transaction.state {
+        UpgradeTransactionState::Accepted
+        | UpgradeTransactionState::OperatorRecoveryRequired
+        | UpgradeTransactionState::FailedPreservedOldGeneration => {
+            Ok(Some(PriorInstallConvergenceAction::Recover {
+                transaction_id: transaction.transaction_id,
+            }))
+        }
+        UpgradeTransactionState::StateMigrationValidated
+        | UpgradeTransactionState::AdmissionDraining
+        | UpgradeTransactionState::RuntimesTransferring
+        | UpgradeTransactionState::PresentationsRebinding
+        | UpgradeTransactionState::CandidateReady
+        | UpgradeTransactionState::GenerationCommitted
+        | UpgradeTransactionState::PostCommitValidating => Ok(Some(
+            PriorInstallConvergenceAction::Resume(InstallTransactionMutationGuard {
+                transaction_id: transaction.transaction_id,
+                expected_revision: transaction.revision,
+                candidate_generation_id: transaction.candidate_generation_id,
+                census_digest: transaction.runtime_census_digest,
+            }),
+        )),
+        state => Err(format!(
+            "prior_install_admission_state_not_automatically_convergeable:{state:?}"
+        )),
+    }
+}
+
+fn converge_prior_install_before_new_apply(
+    root: &Path,
+    isolated_root: bool,
+) -> Result<Option<Value>, String> {
+    match prior_install_convergence_action(root)? {
+        None => Ok(None),
+        Some(PriorInstallConvergenceAction::Resume(guard)) => {
+            resume_install_transaction(root, &guard).map(Some)
+        }
+        Some(PriorInstallConvergenceAction::Recover { transaction_id }) => {
+            recover_operator_required_upgrade_for_root(root, &transaction_id, isolated_root)
+                .map(Some)
+        }
+    }
+}
+
 fn run_workstation_install(args: &[String]) {
     let parsed = match parse_workstation_install_args(args) {
         Ok(parsed) => parsed,
@@ -2897,6 +3002,17 @@ fn run_workstation_install(args: &[String]) {
     } else {
         None
     };
+    let prior_install_convergence = if parsed.mode == InstallMode::Apply {
+        match converge_prior_install_before_new_apply(&root, isolated_root) {
+            Ok(report) => report,
+            Err(error) => fail(
+                &format!("prior workstation transaction did not converge automatically: {error}"),
+                parsed.json,
+            ),
+        }
+    } else {
+        None
+    };
     let mut apply_quiesced_user_units = None;
     let mut runtime_census_transaction = None;
     let mut host_prepared = false;
@@ -2905,6 +3021,9 @@ fn run_workstation_install(args: &[String]) {
     let mut workstation_ready = false;
     let mut next_action =
         "workstation substrate provisioning is required before service activation".to_string();
+    if prior_install_convergence.is_some() {
+        phases.push("prior-install-transaction-converged");
+    }
     let mut prepared_payload = if parsed.mode == InstallMode::Apply {
         let prepared = match prepare_payload_transaction_with_replacement(
             &root,
@@ -13834,7 +13953,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn operator_recovery_closes_only_a_verified_matching_drain() {
+    fn next_install_automatically_recovers_a_verified_matching_drain() {
         let root = env::temp_dir().join(format!(
             "agent-browser-operator-recovery-{}",
             uuid::Uuid::new_v4()
@@ -13869,9 +13988,9 @@ mod tests {
         let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
         persist_admission_drain(&drain_path, &transaction).unwrap();
 
-        let report =
-            recover_operator_required_upgrade_for_root(&root, &transaction.transaction_id, true)
-                .unwrap();
+        let report = converge_prior_install_before_new_apply(&root, true)
+            .unwrap()
+            .expect("prior transaction should be converged");
 
         assert_eq!(report["changed"], true);
         assert_eq!(report["selectedGenerationId"], old_generation_id);
@@ -13948,6 +14067,58 @@ mod tests {
         );
 
         remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn next_install_clears_an_exact_drain_left_after_acceptance() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-accepted-drain-recovery-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(paths.binary.parent().unwrap()).unwrap();
+        fs::create_dir_all(&paths.legacy_support_dir).unwrap();
+        fs::create_dir_all(&paths.unit_dir).unwrap();
+        fs::write(&paths.binary, b"legacy-binary").unwrap();
+        set_executable(&paths.binary).unwrap();
+        fs::write(paths.legacy_support_dir.join("manifest.json"), b"{}\n").unwrap();
+        for unit in WORKSTATION_GENERATION_UNITS {
+            if unit != "agent-browser-dashboard-backend.service" {
+                fs::write(paths.unit_dir.join(unit), format!("legacy {unit}\n")).unwrap();
+            }
+        }
+        let selected_generation = migrate_legacy_payload_to_generation(&paths).unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            selected_generation.clone(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.old_generation_id = Some(selected_generation.clone());
+        transaction.state = UpgradeTransactionState::Accepted;
+        transaction.revision = 11;
+        transaction.terminal_result = Some("accepted".to_string());
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&drain_path, &transaction).unwrap();
+
+        let report = converge_prior_install_before_new_apply(&root, true)
+            .unwrap()
+            .expect("accepted transaction drain should be converged");
+
+        assert_eq!(report["state"], "accepted");
+        assert_eq!(report["selectedGenerationId"], selected_generation);
+        assert!(!drain_path.exists());
+        let recovered: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
+        assert_eq!(recovered.state, UpgradeTransactionState::Accepted);
+
+        remove_generation_tree(&paths.generations_dir.join(selected_generation)).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -17879,6 +18050,57 @@ mod tests {
 
             fs::remove_dir_all(root).unwrap();
         }
+    }
+
+    #[test]
+    fn prior_install_drain_routes_interrupted_upgrade_to_automatic_convergence() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-prior-install-convergence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::PostCommitValidating;
+        transaction.revision = 9;
+        transaction.runtime_census_digest = Some("c".repeat(64));
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        persist_admission_drain(
+            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
+            &transaction,
+        )
+        .unwrap();
+
+        assert_eq!(
+            prior_install_convergence_action(&root).unwrap(),
+            Some(PriorInstallConvergenceAction::Resume(
+                InstallTransactionMutationGuard {
+                    transaction_id: transaction.transaction_id.clone(),
+                    expected_revision: 9,
+                    candidate_generation_id: "generation-candidate".to_string(),
+                    census_digest: Some("c".repeat(64)),
+                }
+            ))
+        );
+
+        transaction.state = UpgradeTransactionState::OperatorRecoveryRequired;
+        transaction.revision = 10;
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        assert_eq!(
+            prior_install_convergence_action(&root).unwrap(),
+            Some(PriorInstallConvergenceAction::Recover {
+                transaction_id: transaction.transaction_id,
+            })
+        );
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

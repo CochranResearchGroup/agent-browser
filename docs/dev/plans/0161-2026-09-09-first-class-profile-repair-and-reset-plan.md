@@ -425,3 +425,31 @@ the RUNBOOK.md evidence table has no unresolved blocker for diagnose,
 preserving repair, runtime reset or authentication reset, and W6 is either
 completed under its separate destructive boundary or moved into a specifically
 named successor without obscuring the delivered first-class lifecycle.
+
+## Implementation checkpoint, 2026-09-10
+
+W1 diagnosis is implemented in the working tree and remains uninstalled. The
+new read-only producer joins the canonical profile with current process,
+lifecycle owner, principal binding, lease, Chrome singleton lock, target
+readiness, stream and durable-handoff evidence. Shared-local profiles treat a
+missing registered principal as advisory and retain stable self-declared
+access. A foreign profile mismatch dominates any simultaneously repairable
+stale-lock finding and refuses effects.
+
+CLI `service profiles <id> diagnose`, HTTP
+`GET /api/service/profiles/<id>/diagnosis`, MCP
+`agent-browser://profiles/{profile_id}/diagnosis` and generated client
+`getServiceProfileDiagnosis()` share schema
+`agent-browser.profile-diagnosis.v1`. Focused producer tests cover healthy
+shared-local access, transferred-owner profile-join loss, missing
+authentication, stale lock preservation and mixed foreign plus stale-lock
+dominance. Adapter, formatter and client checks remain part of the completed
+batch gate.
+
+Mechanical parity was delegated to worker `/root/profile_diagnosis_parity`
+with requested model `gpt-5.6-luna` at medium effort. The effective runtime
+model and allocation were not exposed. Primary review accepted the HTTP, MCP,
+schema and generated-client patch, corrected concurrent formatter integration,
+and added encoded-ID plus client-helper coverage. W2 preserving repair and W3
+scoped resets remain open; this checkpoint does not make BILL or QBO usable by
+itself and does not authorize a production install.

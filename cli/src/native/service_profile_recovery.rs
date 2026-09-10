@@ -102,7 +102,7 @@ fn protected_existing_owner_disposition(
     }
 }
 
-fn recovery_profile_identity_digest(profile: &BrowserProfile) -> Result<String, String> {
+pub(crate) fn recovery_profile_identity_digest(profile: &BrowserProfile) -> Result<String, String> {
     let profile_hint = profile
         .user_data_dir
         .as_deref()
@@ -1053,6 +1053,7 @@ pub(crate) async fn handle_service_profile_recovery_command(
     daemon_state: &mut DaemonState,
 ) -> Result<Value, String> {
     match required_command_string(command, "action")? {
+        "service_profile_diagnose" => diagnose_profile_command(command),
         "service_profile_acquire" => acquire_profile_command(command, daemon_state).await,
         "service_profile_recovery_plan" => plan_profile_recovery_command(command),
         "service_profile_recovery_status" => status_profile_recovery_command(command),
@@ -1061,6 +1062,21 @@ pub(crate) async fn handle_service_profile_recovery_command(
         }
         action => Err(format!("Unsupported profile recovery command: {action}")),
     }
+}
+
+fn diagnose_profile_command(command: &Value) -> Result<Value, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let profile_id = required_command_string(command, "profileId")?;
+    let observed_at = service_now_timestamp();
+    let correlation_id = required_command_string(command, "id")?;
+    serde_json::to_value(super::diagnosis::diagnose_service_profile(
+        &snapshot,
+        profile_id,
+        &observed_at,
+        correlation_id,
+    )?)
+    .map_err(|error| format!("service_profile_diagnosis_serialization_failed:{error}"))
 }
 
 #[cfg(target_os = "linux")]

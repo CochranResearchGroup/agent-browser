@@ -324,9 +324,13 @@ When a live selected runtime host predates boot-epoch persistence or belongs to
 a prior boot, guarded apply re-observes its exact process, socket, generation,
 and binary and CAS-refreshes only that same selected ingress identity before
 candidate staging. Ambiguous or changed identity still blocks.
-If a rollback reports <code>operator_recovery_required</code>, run
-<code>agent-browser install workstation recover --transaction-id &lt;id&gt;
---json</code> with the exact admission-owning transaction ID from the failure.
+When apply finds an interrupted transaction that still owns the admission
+drain, the installer automatically resumes or recovers that exact transaction
+before it creates a new candidate transaction. It never selects the prior
+transaction by file recency. If automatic convergence refuses changed or
+ambiguous evidence, run <code>agent-browser install workstation recover
+--transaction-id &lt;id&gt; --json</code> with the exact admission-owning
+transaction ID from the failure.
 Recovery fails closed unless the sealed old generation is selected, no
 candidate executable is live, no candidate dashboard route remains, and a
 fresh two-round runtime census is stable. It preserves the transaction ledger,

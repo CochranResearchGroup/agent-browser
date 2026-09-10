@@ -1726,6 +1726,33 @@ fn format_service_profiles_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_profile_diagnosis_text(data: &serde_json::Value) -> Option<String> {
+    let profile_id = data.pointer("/profile/id")?.as_str()?;
+    let state = data.get("state")?.as_str()?;
+    let blocker = data
+        .pointer("/decision/dominantBlocker")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let recourse = data
+        .pointer("/decision/recourse")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let findings = data
+        .get("findings")
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| row.get("code").and_then(|value| value.as_str()))
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+    Some(format!(
+        "Profile diagnosis: profile={profile_id} state={state} blocker={blocker} recourse={recourse} findings={findings}"
+    ))
+}
+
 fn format_service_profile_lookup_text(data: &serde_json::Value) -> Option<String> {
     let status = value_str(data, "status", "unknown");
     let candidates = data.get("rankedProfiles")?.as_array()?;
@@ -3117,6 +3144,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_profiles") {
             if let Some(output) = format_service_profiles_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_profile_diagnose") {
+            if let Some(output) = format_service_profile_diagnosis_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -5619,6 +5652,11 @@ seven-axis readiness projection without private paths or endpoint evidence.
 currentSelectionEvidence reports whether a later selected Linux installation
 proves its payload, dashboard and live host identity despite unrelated failed
 upgrade history. Active and uncertain transactions remain blocking.
+Before a new apply creates another candidate transaction, it reads any existing
+admission drain and automatically resumes or recovers that exact owning
+transaction. It never selects the prior transaction by file recency. Changed,
+ambiguous, or unsupported evidence stops the install with the exact blocker and
+leaves the recorded transaction available for inspection and explicit recovery.
 Every workstation dry-run includes serviceStateMigrationPreview. It reads
 Service State without writing and reports exact changed IDs by record class,
 candidate-led browser contamination, preserved unknown fields, recovery-artifact
@@ -6456,6 +6494,7 @@ Usage:
   agent-browser service browser-capability guide [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]
   agent-browser service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]
   agent-browser service profiles
+  agent-browser service profiles <profile-id> diagnose
   agent-browser service leases
   agent-browser service leases doctor
   agent-browser service leases watch --interval 1000 --count 5
@@ -6535,6 +6574,8 @@ Commands:
                         Persist an advisory browserPreferenceBindings row for a primary browser on a site, account, service, or task filter
   profiles              Show retained service profile records and derived allocation state
   profiles lookup       Rank catalog profiles by identity, hostname, alias, account, auth, freshness, tag, and free text without launching
+  profiles <id> diagnose
+                        Join current profile, process, owner, lease, Chrome lock, readiness and presentation evidence without launching or changing state
   profiles <id> seeding-handoff [target]
                         Show the detached runtime-login command and operator steps for profile seeding
   profiles <id> verify-seeding <target>
@@ -6612,6 +6653,7 @@ Notes:
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, browser health summaries, and recommended actions.
+  - service profiles <id> diagnose reports whether the exact profile is ready, repairable, awaiting manual authentication, or blocked by current foreign or ambiguous custody. Historical records remain evidence and do not establish current occupancy by themselves. The same read is available from HTTP GET /api/service/profiles/<id>/diagnosis, MCP agent-browser://profiles/{profile_id}/diagnosis, and getServiceProfileDiagnosis().
   - An unconfigured optional development presentation provider starts with zero routes so headless work remains available; this is not presentation readiness. Staged provider inventory loss remains an error.
   - An older capability binding does not veto an independently permitted shared-local client reusing an exact current browser/profile. It remains unproven for the registered capability; guarded rejoin is required for that authority. Restricted profiles, mismatched identities and future-generation bindings still fail admission.
   - Reattaching to the same verified browser preserves its original host, display allocation, launch metadata and profile path. Preservation requires matching current-boot process identity, endpoint and profile; replacement processes receive fresh metadata.
@@ -7798,11 +7840,12 @@ mod tests {
         format_service_challenges_text, format_service_events_text, format_service_incidents_text,
         format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
-        format_service_profile_seeding_handoff_text, format_service_profiles_text,
-        format_service_providers_text, format_service_prune_retained_text,
-        format_service_repair_retained_text, format_service_sessions_text,
-        format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
-        format_service_trace_text, format_storage_text,
+        format_service_profile_diagnosis_text, format_service_profile_seeding_handoff_text,
+        format_service_profiles_text, format_service_providers_text,
+        format_service_prune_retained_text, format_service_repair_retained_text,
+        format_service_sessions_text, format_service_site_policies_text,
+        format_service_status_text, format_service_tabs_text, format_service_trace_text,
+        format_storage_text,
     };
     use serde_json::json;
 
@@ -8520,6 +8563,27 @@ mod tests {
         assert_eq!(
             rendered,
             "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs readiness=none user_data=/tmp/work-profile\nProfile allocations: 1\n  work state=conflicted action=release_holder_or_redirect_waiting_jobs readiness=none holders=runtime-session waiting=job-1 conflicts=runtime-session services=JournalDownloader agents=codex tasks=probeACSwebsite browsers=browser-1 browser_health=browser-1:process_exited:host=local_headed:cdp=no tabs=tab-1"
+        );
+    }
+
+    #[test]
+    fn test_format_service_profile_diagnosis_text_includes_recourse() {
+        let data = json!({
+            "state": "repairable",
+            "profile": {"id": "shared-books"},
+            "decision": {
+                "dominantBlocker": "chrome_singleton_lock_proven_stale",
+                "recourse": "service_profile_repair_plan"
+            },
+            "findings": [
+                {"code": "chrome_singleton_lock_proven_stale"},
+                {"code": "runtime_owner_principal_binding_missing"}
+            ]
+        });
+
+        assert_eq!(
+            format_service_profile_diagnosis_text(&data).unwrap(),
+            "Profile diagnosis: profile=shared-books state=repairable blocker=chrome_singleton_lock_proven_stale recourse=service_profile_repair_plan findings=chrome_singleton_lock_proven_stale,runtime_owner_principal_binding_missing"
         );
     }
 

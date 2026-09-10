@@ -543,7 +543,7 @@ fn runtime_admission_action_allowed(action: &str) -> bool {
             | "runtime_handoff_prepare"
             | "runtime_handoff_resume"
             | "runtime_handoff_rollback"
-    ) || !crate::runtime_owner_transfer::action_requires_owner_effect_authority(action)
+    ) || !crate::runtime_owner_transfer::action_requires_runtime_admission(action)
 }
 
 /// Advances one durable upgrade transaction through the frozen state machine.
@@ -3179,6 +3179,12 @@ mod tests {
             .unwrap();
         require_runtime_admission(&path, "runtime_handoff_resume", &serde_json::json!({})).unwrap();
         require_runtime_admission(&path, "snapshot", &serde_json::json!({})).unwrap();
+        assert!(require_runtime_admission(
+            &path,
+            "service_profile_recovery_apply",
+            &serde_json::json!({})
+        )
+        .is_err());
         require_runtime_admission(
             &path,
             "service_reconcile",

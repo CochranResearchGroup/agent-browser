@@ -3830,7 +3830,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     if rest.len() > 4 {
                         return Err(ParseError::InvalidValue {
                             message: format!("Unknown argument for service profiles: {}", rest[4]),
-                            usage: "service profiles [<profile-id> <seeding-handoff|verify-seeding> [target-service-id]]",
+                            usage: "service profiles [<profile-id> <diagnose|seeding-handoff|verify-seeding> [target-service-id]]",
                         });
                     }
                     let mut cmd = json!({
@@ -3847,10 +3847,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 if rest.len() >= 3 && rest[2] == "verify-seeding" {
                     return parse_service_profile_verify_seeding(id, &rest, flags);
                 }
+                if rest.len() == 3 && rest[2] == "diagnose" {
+                    return Ok(json!({
+                        "id": id,
+                        "action": "service_profile_diagnose",
+                        "profileId": rest[1],
+                        "serviceState": flags.service_state.clone(),
+                    }));
+                }
                 if rest.len() > 1 {
                     return Err(ParseError::InvalidValue {
                         message: format!("Unknown argument for service profiles: {}", rest[1]),
-                        usage: "service profiles [<profile-id> <seeding-handoff|verify-seeding> [target-service-id]]",
+                        usage: "service profiles [<profile-id> <diagnose|seeding-handoff|verify-seeding> [target-service-id]]",
                     });
                 }
                 Ok(json!({
@@ -9507,6 +9515,19 @@ mod tests {
         let cmd = parse_command(&args("service profiles"), &default_flags()).unwrap();
 
         assert_eq!(cmd["action"], "service_profiles");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_profile_diagnose() {
+        let cmd = parse_command(
+            &args("service profiles shared-books diagnose"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_profile_diagnose");
+        assert_eq!(cmd["profileId"], "shared-books");
         assert!(cmd["serviceState"].is_object());
     }
 

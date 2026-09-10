@@ -754,16 +754,19 @@ try {
   assert.notEqual(drainBlockedApply.status, 0);
   assert.match(
     `${drainBlockedApply.stdout}${drainBlockedApply.stderr}`,
-    /earlier workstation transaction still owns runtime admission/,
+    /prior workstation transaction did not converge automatically: Prior runtime admission drain is invalid/,
   );
   assert.equal(
     existsSync(join(drainBlockedRoot, '.local', 'lib', 'agent-browser', 'generations')),
     false,
     'an existing admission drain must block before candidate staging',
   );
-  assertTransactionTerminal(
-    join(drainBlockedRoot, '.agent-browser', 'runtime-adoption', 'transactions'),
-    'blocked_inflight_effect',
+  assert.equal(
+    existsSync(
+      join(drainBlockedRoot, '.agent-browser', 'runtime-adoption', 'transactions'),
+    ),
+    false,
+    'an invalid prior drain must not cause a second install transaction',
   );
 
   const lockDir = join(lockedInstallRoot, '.agent-browser', 'convergence');

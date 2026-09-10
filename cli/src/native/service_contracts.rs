@@ -13,6 +13,7 @@ pub const SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE: &str =
 pub const SERVICE_REQUEST_HTTP_ROUTE: &str = "/api/service/request";
 pub const SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE: &str = "/api/service/profiles/<id>/allocation";
 pub const SERVICE_PROFILE_READINESS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/readiness";
+pub const SERVICE_PROFILE_DIAGNOSIS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/diagnosis";
 pub const SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE: &str =
     "/api/service/profiles/<id>/seeding-handoff";
 pub const SERVICE_PROFILE_LOOKUP_HTTP_ROUTE: &str = "/api/service/profiles/lookup";
@@ -70,6 +71,8 @@ pub const SERVICE_PROFILE_LOOKUP_MCP_RESOURCE_TEMPLATE: &str =
     "agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,runtimeProfile,browserBuild}";
 pub const SERVICE_PROFILE_READINESS_MCP_RESOURCE_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/readiness";
+pub const SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_TEMPLATE: &str =
+    "agent-browser://profiles/{profile_id}/diagnosis";
 pub const SERVICE_PROFILE_SEEDING_HANDOFF_MCP_RESOURCE_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 pub const SERVICE_REQUEST_SCHEMA_ID: &str =
@@ -100,6 +103,8 @@ pub const SERVICE_PROFILE_ALLOCATION_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-allocation-response.v1.schema.json";
 pub const SERVICE_PROFILE_READINESS_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-readiness-response.v1.schema.json";
+pub const SERVICE_PROFILE_DIAGNOSIS_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-diagnosis-response.v1.schema.json";
 pub const SERVICE_PROFILE_SEEDING_HANDOFF_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-seeding-handoff-response.v1.schema.json";
 pub const SERVICE_PROFILE_LOOKUP_RESPONSE_SCHEMA_ID: &str =
@@ -621,6 +626,24 @@ pub fn service_contracts_metadata() -> Value {
                     "package": "@agent-browser/client/service-observability",
                     "helpers": ["getServiceProfileReadiness", "summarizeServiceProfileReadiness"],
                 },
+            },
+            "serviceProfileDiagnosisResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_PROFILE_DIAGNOSIS_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-profile-diagnosis-response.v1.schema.json",
+                "http": {
+                    "method": "GET",
+                    "route": SERVICE_PROFILE_DIAGNOSIS_HTTP_ROUTE,
+                },
+                "mcp": {
+                    "resourceTemplate": SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_TEMPLATE,
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["getServiceProfileDiagnosis"],
+                },
+                "noLaunch": true,
+                "responseFields": ["schemaVersion", "diagnosisId", "observedAt", "state", "profile", "runtime", "ownership", "chromeLocks", "readiness", "presentation", "decision", "trace", "findings"],
             },
             "serviceProfileSeedingHandoffResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,

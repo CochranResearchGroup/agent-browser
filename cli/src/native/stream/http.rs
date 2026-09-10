@@ -22,9 +22,9 @@ use crate::native::service_access::{
 };
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
-    SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_PROFILE_LEASES_HTTP_ROUTE,
-    SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE, SERVICE_REQUEST_ACTIONS,
-    SERVICE_REQUEST_HTTP_ROUTE,
+    SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_PROFILE_DIAGNOSIS_HTTP_ROUTE,
+    SERVICE_PROFILE_LEASES_HTTP_ROUTE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE,
+    SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
 use crate::native::service_lifecycle::{
     discover_service_profiles, ProfileDiscoveryRequest, ProfileSelectionRequest,
@@ -40,6 +40,7 @@ use crate::native::service_monitors::{
 use crate::native::service_principal::{
     authenticate_profile_capability, AuthenticatedServicePrincipal,
 };
+use crate::native::service_profile_acquisition::diagnose_service_profile;
 use crate::native::service_profile_lease::{
     doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
 };
@@ -865,6 +866,30 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" {
+        if let Some(encoded_profile_id) = service_profile_diagnosis_id(path) {
+            let profile_id = match decode_path_segment(encoded_profile_id, "profile diagnosis id") {
+                Ok(profile_id) => profile_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let state = load_service_state();
+            let observed_at = service_now_timestamp();
+            let correlation_id = format!("http-service-profile-diagnosis-{}", uuid::Uuid::new_v4());
+            match diagnose_service_profile(&state, &profile_id, &observed_at, &correlation_id) {
+                Ok(data) => {
+                    write_json_value(
+                        &mut stream,
+                        "200 OK",
+                        json!({"success": true, "data": data}),
+                    )
+                    .await
+                }
+                Err(err) => write_json_result(&mut stream, Err(err), "404 Not Found").await,
+            }
+            return;
+        }
         if let Some(encoded_recovery_id) = service_profile_recovery_status_id(path) {
             let recovery_id = match decode_path_segment(encoded_recovery_id, "profile recovery id")
             {
@@ -3385,6 +3410,13 @@ fn service_profile_readiness_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
+fn service_profile_diagnosis_id(path: &str) -> Option<&str> {
+    let (prefix, suffix) = SERVICE_PROFILE_DIAGNOSIS_HTTP_ROUTE.split_once("<id>")?;
+    path.strip_prefix(prefix)
+        .and_then(|profile_id| profile_id.strip_suffix(suffix))
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
 fn service_profile_seeding_handoff_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/profiles/")
         .and_then(|suffix| suffix.strip_suffix("/seeding-handoff"))
@@ -5348,6 +5380,10 @@ mod tests {
             Some("journal-downloader")
         );
         assert_eq!(
+            service_profile_diagnosis_id("/api/service/profiles/journal-downloader/diagnosis"),
+            Some("journal-downloader")
+        );
+        assert_eq!(
             service_profile_seeding_handoff_id(
                 "/api/service/profiles/journal-downloader/seeding-handoff"
             ),
@@ -5447,6 +5483,10 @@ mod tests {
             None
         );
         assert_eq!(
+            service_profile_diagnosis_id("/api/service/profiles/journal/extra/diagnosis"),
+            None
+        );
+        assert_eq!(
             service_profile_seeding_handoff_id(
                 "/api/service/profiles/journal/extra/seeding-handoff"
             ),
@@ -5458,6 +5498,10 @@ mod tests {
         );
         assert_eq!(
             service_profile_readiness_id("/api/service/profiles/journal-downloader"),
+            None
+        );
+        assert_eq!(
+            service_profile_diagnosis_id("/api/service/profiles/journal-downloader"),
             None
         );
         assert_eq!(

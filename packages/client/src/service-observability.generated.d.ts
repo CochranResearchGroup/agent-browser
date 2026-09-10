@@ -1133,6 +1133,35 @@ export interface ServiceProfileReadinessResponse {
   [key: string]: unknown;
 }
 
+export type ServiceProfileDiagnosisState = 'ready' | 'repairable' | 'manual_action' | 'blocked' | 'reset_available';
+
+export interface ServiceProfileDiagnosisFinding {
+  code: string;
+  axis: string;
+  severity: string;
+  blocking: boolean;
+  message: string;
+  evidence: string[];
+  recourse: string;
+}
+
+export interface ServiceProfileDiagnosisResponse {
+  schemaVersion: 'agent-browser.profile-diagnosis.v1' | string;
+  diagnosisId: string;
+  observedAt: string;
+  state: ServiceProfileDiagnosisState;
+  profile: Record<string, unknown>;
+  runtime: Record<string, unknown>;
+  ownership: Record<string, unknown>;
+  chromeLocks: Record<string, unknown>;
+  readiness: Record<string, unknown>;
+  presentation: Record<string, unknown>;
+  decision: Record<string, unknown>;
+  trace: Record<string, unknown>;
+  findings: ServiceProfileDiagnosisFinding[];
+  [key: string]: unknown;
+}
+
 export interface ServiceProfileSeedingHandoffResponse {
   profileId: string;
   profileName: string;
@@ -3452,6 +3481,8 @@ export declare function getServiceProfileAllocationForAccessPlan(options: Servic
 export declare function summarizeServiceProfileAllocationBrowserHealth(allocation?: ServiceProfileAllocation | ServiceProfileAllocationResponse | null): ServiceProfileAllocationBrowserHealthSummary;
 /** Read one profile's no-launch target readiness rows. */
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
+/** Read one profile's joined no-launch diagnosis and recourse projection. */
+export declare function getServiceProfileDiagnosis(options: ServiceIdOptions): Promise<ServiceProfileDiagnosisResponse>;
 /** Read the operator-ready detached profile seeding handoff for one profile. */
 export declare function getServiceProfileSeedingHandoff(options: ServiceProfileSeedingHandoffOptions): Promise<ServiceProfileSeedingHandoffResponse>;
 /** Persist lifecycle state for a CDP-free profile seeding handoff. */

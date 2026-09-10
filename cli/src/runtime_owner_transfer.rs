@@ -992,6 +992,14 @@ pub(crate) fn owner_binding_in_registry(
 /// Read-only actions stay independent of the user-scoped owner registry so
 /// observation remains available during transfer and in isolated test runs.
 pub(crate) fn action_requires_owner_effect_authority(action: &str) -> bool {
+    action_requires_runtime_admission(action) && action != "service_profile_recovery_apply"
+}
+
+/// Return whether an action is effect-capable and must respect the runtime
+/// admission drain. Profile recovery apply owns its authority through a sealed
+/// recovery plan and exact graph compare-and-swap, so it bypasses only the
+/// stale daemon-owner fence while remaining an admitted runtime effect.
+pub(crate) fn action_requires_runtime_admission(action: &str) -> bool {
     !action_is_observation_only(action)
 }
 
@@ -1940,6 +1948,12 @@ mod tests {
         assert!(authorize_action(&authority, &mut old_binding, "tab_list").is_ok());
         assert!(!action_requires_owner_effect_authority("dependent_batch"));
         assert!(!action_requires_owner_effect_authority("service_incidents"));
+        assert!(action_requires_runtime_admission(
+            "service_profile_recovery_apply"
+        ));
+        assert!(!action_requires_owner_effect_authority(
+            "service_profile_recovery_apply"
+        ));
         assert!(action_requires_owner_effect_authority(
             "service_incident_resolve"
         ));

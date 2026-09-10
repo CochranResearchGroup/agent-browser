@@ -33,6 +33,11 @@ use super::{
 #[path = "service_profile_recovery.rs"]
 mod recovery;
 
+#[path = "service_profile_diagnosis.rs"]
+mod diagnosis;
+
+#[allow(unused_imports)]
+pub(crate) use diagnosis::*;
 pub(crate) use recovery::*;
 
 /// Inputs required to choose one profile owner and executable browser route.
