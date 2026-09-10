@@ -5539,6 +5539,8 @@ fn install_doctor_reports_expected_upgrade_ready(
             }
             if runtime_host_transition_ready
                 && (code == Some("daemon_socket_multiple_listeners")
+                    || code
+                        == Some("runtime_multiplicity_convergence_window_multiplicity_exceeded")
                     || (code == Some("active_runtime_stale_executable")
                         && issue.get("session").and_then(Value::as_str) == Some("runtime-host")))
             {
@@ -5608,9 +5610,39 @@ fn expected_upgrade_runtime_host_transition_ready(
                 && host.get("socketIdentity").and_then(Value::as_str)
                     == Some(expected_host.socket_identity.as_str())
         };
-    if hosts.len() != 2
+    let mut additional_source_hosts = Vec::new();
+    for identity in expected
+        .runtime_handoffs
+        .iter()
+        .filter(|handoff| {
+            handoff.committed && !handoff.source_finalized && handoff.source_runtime_host
+        })
+        .filter_map(|handoff| handoff.source_process_identity.as_ref())
+        .filter(|identity| identity.pid != old.pid && identity.pid != candidate.pid)
+    {
+        if !additional_source_hosts.iter().any(
+            |existing: &&crate::process_identity::RecordedProcessIdentity| {
+                existing.pid == identity.pid && existing.start_token == identity.start_token
+            },
+        ) {
+            additional_source_hosts.push(identity);
+        }
+    }
+    let expected_host_count = 2 + additional_source_hosts.len();
+    let exact_additional_host =
+        |host: &Value, identity: &crate::process_identity::RecordedProcessIdentity| {
+            host.get("pid").and_then(Value::as_u64) == Some(u64::from(identity.pid))
+                && host.get("processStartToken").and_then(Value::as_str)
+                    == Some(identity.start_token.as_str())
+        };
+    if hosts.len() != expected_host_count
         || !hosts.iter().any(|host| exact_host(host, old))
         || !hosts.iter().any(|host| exact_host(host, candidate))
+        || additional_source_hosts.iter().any(|identity| {
+            !hosts
+                .iter()
+                .any(|host| exact_additional_host(host, identity))
+        })
     {
         return false;
     }
@@ -5623,13 +5655,18 @@ fn expected_upgrade_runtime_host_transition_ready(
     let listener_pid = |listener: &Value, pid: u32| {
         listener.get("pid").and_then(Value::as_u64) == Some(u64::from(pid))
     };
-    listeners.len() == 2
+    listeners.len() == expected_host_count
         && listeners
             .iter()
             .any(|listener| listener_pid(listener, old.pid))
         && listeners
             .iter()
             .any(|listener| listener_pid(listener, candidate.pid))
+        && additional_source_hosts.iter().all(|identity| {
+            listeners
+                .iter()
+                .any(|listener| listener_pid(listener, identity.pid))
+        })
 }
 
 fn expected_upgrade_supervisor_transition_ready(
@@ -15860,6 +15897,62 @@ mod tests {
         assert!(!install_doctor_reports_expected_upgrade_ready(
             &report,
             &different_socket,
+            &[]
+        ));
+        let mut multi_source_transaction = transaction.clone();
+        multi_source_transaction.runtime_handoffs =
+            vec![crate::runtime_adoption::UpgradeRuntimeHandoff {
+                source_session: "additional-source".to_string(),
+                candidate_session: "additional-candidate".to_string(),
+                source_socket_dir: Some(
+                    "/run/user/1000/agent-browser/runtime-hosts/extra".to_string(),
+                ),
+                source_runtime_host: true,
+                source_process_identity: Some(crate::process_identity::RecordedProcessIdentity {
+                    pid: 43,
+                    start_token: "linux:boot:43".to_string(),
+                    executable_path: Some("/tmp/older-agent-browser".to_string()),
+                    browser_family: None,
+                }),
+                mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+                committed: true,
+                source_finalized: false,
+                irreversible_source_revocation: false,
+            }];
+        let mut multi_source_report = report.clone();
+        multi_source_report["data"]["issues"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "code": "runtime_multiplicity_convergence_window_multiplicity_exceeded"
+            }));
+        multi_source_report["data"]["runtimeMultiplicity"]["runtimeHosts"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "generationId": "generation-old",
+                "pid": 43,
+                "processStartToken": "linux:boot:43",
+                "binarySha256": "d".repeat(64),
+                "socketIdentity": "unix:1:43",
+            }));
+        multi_source_report["data"]["daemonListenerInventory"]["listeners"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"pid": 43}));
+        assert!(install_doctor_reports_expected_upgrade_ready(
+            &multi_source_report,
+            &multi_source_transaction,
+            &[]
+        ));
+        multi_source_transaction.runtime_handoffs[0]
+            .source_process_identity
+            .as_mut()
+            .unwrap()
+            .start_token = "linux:other-boot:43".to_string();
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &multi_source_report,
+            &multi_source_transaction,
             &[]
         ));
         let mut unrelated = report;

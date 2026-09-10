@@ -239,6 +239,19 @@ same preserving case, then require automatic supervisor replacement, exactly one
 production listener, unchanged Odollo and synthetic browser identities, installed
 doctor, and shared-route BILL/QBO relaunch.
 
+The repaired repeat, transaction
+`upgrade-39fc034e-084b-45e5-86e3-f3aa406b086a`, proved cooperative commit for
+both the production host and the separate synthetic source host, plus a ready
+candidate presentation. Post-commit doctor then rolled it back because its
+transition predicate assumed exactly two listeners. This installation correctly
+had three: the selected old host, the candidate host, and the additional exact
+source host whose browser was awaiting finalization. The validator must derive
+the complete expected host set from the convergence record and committed runtime
+handoffs, match every PID and process-start token, and continue rejecting any
+unrecorded listener. The convergence-window multiplicity issue is transitional
+only when that exact proof passes. Transaction rollback preserved both browsers
+and restored the old selected generation.
+
 ### Worker assignments
 
 | Lane | Route and owner | Inputs / exact write scope | Output, dependency and stop |

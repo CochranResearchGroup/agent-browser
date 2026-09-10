@@ -14,6 +14,15 @@ Source through c8fa12f9 repairs exact multi-host surrender, adopted browser alia
 interrupted full-shutdown resume, quiesced-supervisor validation and exact two-host convergence. Commit 82096fff gives workstation reconcile a 30-second lock budget.
 Failed candidate transactions retained the old selection and restored its units. Odollo's live `carrier-tracking-lookup` lane is now the preserving acceptance case. Candidate request r54902 created a ready synthetic handoff on route A without disturbing it. Preserve transaction f1042f2c reached runtimes_transferring, but interruption preceded every handoff; guarded resume incorrectly demanded replay evidence and rolled back both browsers. Source now restarts only an exactly effect-free transfer phase. Rebuild once, repeat preserve mode, require unchanged browser identities plus automatic supervisor and one-listener convergence, then relaunch BILL and QBO and finish profile ownership repair. P116 and Plan0160 remain OPEN.
 
+The repaired repeat, transaction 39fc034e, committed both browser handoffs and
+candidate presentation, then rolled back because post-commit doctor assumed an
+exact two-listener transition. This case correctly had old, candidate, and one
+additional receipted source host pending finalization. Source now derives that
+exact set from the transaction and still rejects any unrecorded listener. Both
+browsers and old selection remain usable. Rebuild and make one final preserving
+attempt; acceptance still requires automatic supervisor replacement and one
+production listener after finalization.
+
 ## Turn 286 | 2026-09-09
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
