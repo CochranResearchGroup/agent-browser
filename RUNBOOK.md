@@ -1,7 +1,6 @@
 # Runbook
 
-Sole current execution status. Plan0160 owns scope, strategy and frozen acceptance.
-This table owns current requirement status; receipts and archives preserve detail.
+Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
 ## Turn 287 | 2026-09-09
@@ -11,12 +10,14 @@ capacity slots `warm_idle`, while orphaned route rows retained absent browser
 IDs. The installed validator rejected this as
 `browser_missing_outside_pending_acquisition`. QBO and BILL were placed on
 `:10` and `:11` for immediate manual authentication with profiles preserved.
-Plan0161 adds the missing restart fixture and orphan-owner convergence;
-policy0032 treats prolonged denial of proven-unoccupied owned resources as an
-availability defect. The operator also corrected the upgrade record: the last
-production installation required a full hard stop and is forced recovery, not
-graceful-upgrade acceptance. Diagnosis made `outcome_progress`; installed A1,
-A3, A4, first-class remediation, and graceful upgrade remain OPEN.
+Plan0161 adds the missing restart fixture; policy0032 treats prolonged denial
+of proven-unoccupied owned resources as an availability defect. The last
+production installation required a hard stop because the old runtime did not
+surrender. Current census has one live production host, but the supervisor is
+inactive with `port_conflict` and seven runtime-inventory rows remain. P116 is
+reopened for old-runtime surrender, automatic supervisor replacement, and
+single production-runtime convergence. Installed A1, A3, A4, remediation, and
+graceful upgrade remain OPEN.
 
 ## Turn 286 | 2026-09-09
 

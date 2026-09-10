@@ -202,6 +202,17 @@ and resume them without manual process termination or state-file repair. An
 injected interruption must retain the old selected generation and usable
 browsers, or roll back deterministically.
 
+Keep three causal defects separate during repair: the old installation must
+gracefully surrender custody; the installer must replace and restart the
+production supervisor as part of the transaction; and final convergence must
+eliminate duplicate or stale production runtime authorities and listeners.
+Current doctor readback reports one live production runtime-host listener, but
+also an inactive supervisor with `port_conflict` and seven retained runtime
+inventory rows, some inactive with reachable streams. Do not accept a
+`steady_current` multiplicity summary while those lower-level projections
+disagree. Plan0116 is reopened as the owning upgrade plan; Plan0160 W3 requires
+its installed acceptance after the profile-control critical path.
+
 ### Worker assignments
 
 | Lane | Route and owner | Inputs / exact write scope | Output, dependency and stop |

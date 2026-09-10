@@ -582,8 +582,12 @@ work for the explicit many-to-many Guacamole/RDP release milestone.
 
 ## P116 | Runtime Adoption And Transactional Upgrade
 
-State: ACCEPTED
-Current state: Plan 0116 is accepted. It converted the August 15 runtime and durable-handoff
+State: OPEN
+Current state: Plan 0116 was reopened on 2026-09-09 after the latest production
+installation required a full hard stop. The existing installation did not
+cooperatively surrender custody, the installer did not establish a healthy
+updated supervisor, and runtime inventory still disagrees with its steady-state
+multiplicity projection. Earlier work converted the August 15 runtime and durable-handoff
 failures into one generation-aware architecture. Current workstation apply can
 commit the new payload before runtime reconciliation, restore only systemd
 active states after later failure, and leave live daemons bound to prior or
@@ -702,10 +706,12 @@ transfer was executed.
 
 ### Next Recommendation
 
-Preserve P116 as the accepted hot-adoption and transactional-upgrade
-foundation. Continue through P117, which owns lifecycle deepening, resource and
-retention convergence, single-host migration, and the separately authorized
-live cleanup gate.
+Retain the implemented P116 foundation, then close the three reopened gates:
+old-runtime surrender before selector commit, automatic production-supervisor
+replacement and restart, and one authoritative production runtime/listener
+projection with no reachable stale production streams. Continue P117 lifecycle
+work only where it supplies those gates or the separately governed convergence
+work.
 
 ## P114 | Terminal Route Quarantine Recovery
 
