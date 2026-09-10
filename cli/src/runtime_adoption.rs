@@ -712,6 +712,7 @@ fn upgrade_transition_allowed(
             | (RollbackAfterCommit, OperatorRecoveryRequired)
             | (Accepted, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, Accepted)
+            | (OperatorRecoveryRequired, RuntimesTransferring)
             | (RuntimesTransferring, OperatorRecoveryRequired)
             | (PresentationsRebinding, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
@@ -3005,6 +3006,30 @@ mod tests {
             transaction.state,
             UpgradeTransactionState::OperatorRecoveryRequired
         );
+    }
+
+    #[test]
+    fn upgrade_transaction_allows_receipted_forward_recovery_to_resume_transfer() {
+        let samples: Value = serde_json::from_str(SCHEMA_SAMPLES).unwrap();
+        let mut transaction: UpgradeTransaction =
+            serde_json::from_value(samples["upgradeTransaction"].clone()).unwrap();
+        transaction.state = UpgradeTransactionState::OperatorRecoveryRequired;
+        let revision = transaction.revision;
+
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::RuntimesTransferring,
+            "runtime_replacement_forward_recovery_resumed",
+            "2026-09-10T07:45:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(
+            transaction.state,
+            UpgradeTransactionState::RuntimesTransferring
+        );
+        assert_eq!(transaction.revision, revision + 1);
     }
 
     #[test]

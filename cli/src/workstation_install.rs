@@ -725,6 +725,23 @@ fn resume_install_transaction(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     let (path, mut transaction) = load_guarded_install_transaction(root, guard)?;
+    if transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
+        && crate::runtime_replacement::plan_from_upgrade_transaction(&transaction)?.is_some()
+        && crate::runtime_replacement::requires_forward_recovery(&transaction)?
+    {
+        transaction.stop_reason = None;
+        transaction.terminal_result = None;
+        persist_upgrade_transition(
+            &path,
+            &mut transaction,
+            UpgradeTransactionState::RuntimesTransferring,
+            "runtime_replacement_forward_recovery_resumed",
+        )?;
+        persist_admission_drain(
+            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
+            &transaction,
+        )?;
+    }
     if transaction.state == UpgradeTransactionState::BlockedAmbiguousRuntime {
         install_transaction_effect_free(root, &transaction)?;
         validate_install_transaction_candidate(root, &transaction)?;
@@ -2931,12 +2948,17 @@ fn run_workstation_install(args: &[String]) {
                     crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired,
                     "runtime_replacement_forward_recovery_required",
                 );
+                let drain = transition.as_ref().ok().and_then(|_| {
+                    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+                        .err()
+                });
                 let message = transition.err().map_or_else(
                     || {
-                        format!(
+                        let base = format!(
                             "{error}; forward recovery required; transaction: {}",
                             prepared.transaction_path.display()
-                        )
+                        );
+                        drain.map_or(base.clone(), |drain| format!("{base}; {drain}"))
                     },
                     |transition| format!("{error}; recovery receipt failed: {transition}"),
                 );
