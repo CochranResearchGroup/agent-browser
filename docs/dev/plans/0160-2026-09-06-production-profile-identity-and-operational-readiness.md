@@ -4335,3 +4335,59 @@ historical owner fields match the previous browser. Changed bindings and mixed
 route/display states remain blocking. The new regression and all nine
 production inventory tests pass with strict workspace Clippy. This source fix
 must be included in the next candidate before another presentation attempt.
+
+### Last30Days retained-browser incident amendment
+
+The bounded Last30Days tick on 2026-09-09 exposed two distinct production
+failure paths on installed source `78dacd60`. They are acceptance evidence for
+the existing A1 and AX work, not one generic browser outage. X completed through
+the same `last30days-facebook` browser. The production supervisor conflict
+reported after the tick has since converged and is not the current blocker.
+
+Two LinkedIn evaluations stopped while validating the explicit runtime profile.
+The follow-on service request synchronously loaded the full Service State
+snapshot before `Runtime.evaluate`; its file-lock waits expired after 2162 ms
+and 1001 ms. That pre-action failure must be classified `no_effect`, rather
+than the coarse `effect_uncertain` result. A follow-on request carrying a sealed,
+revision-bound handle and profile attestation must avoid an unnecessary full
+snapshot read or use an equally strong immutable validation. Production-size
+concurrent shared-profile fixtures must prove bounded completion. When a file
+lock wait does fail, the causal record must retain the holder operation identity
+when known, wait phase, wait duration and exact critical section.
+
+Three Reddit tabs were created successfully, then the immediate handle action
+timed out in `Page.enable` twice and `Runtime.enable` once. A new-target attach
+already enables those domains. Handle selection then called the same bootstrap
+again. Track domain bootstrap by attached target session and skip it for an
+unchanged initialized session; attach or session replacement must still perform
+the bootstrap. Acceptance requires three sequential tab creations followed by
+immediate UI actions without redundant domain enablement or target confusion.
+
+The five returned job IDs were unavailable through the documented job lookup
+after restart and upgrade. Each missing lookup also created a new failed job,
+incident and failure-journal entry. AX therefore additionally requires:
+
+1. exact returned request and job IDs remain inspectable across supported
+   restart, upgrade and ordinary retention or compaction;
+2. lookup falls back to retained journal evidence with build, component, phase,
+   effect certainty and recourse intact; and
+3. a missing diagnostic lookup is read-only and cannot create another request,
+   job, event, incident or failure record.
+
+Current diagnosis reports `last30days-facebook` as `repairable`: generation 80
+is ready, the registered capability, historical lease and profile directory
+remain, the Chrome singleton locks are absent, and the recorded browser,
+process and endpoint are absent. Plan 0161 owns this preserving repair. Agent
+Browser must reconcile only the proven-absent runtime ownership, preserve the
+profile and principal bindings, and return a bounded normal relaunch or manual
+authentication disposition. Last30Days owns provider scheduling, query work,
+accepted-item accounting and honoring terminal retry instructions. It must stop
+the affected provider lane on `inspect_before_retry` or `blind_retry` while
+allowing independent lanes to finish.
+
+No second Last30Days tick is part of Agent Browser acceptance. Before its owner
+authorizes another tick, prove the lock-validation, target-bootstrap,
+restart-safe lookup and missing-browser repair fixtures in isolation, install
+one accepted candidate, and complete the exact preserving repair. A later live
+tick remains a Last30Days repository decision and must use fresh bounded
+authority.

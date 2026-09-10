@@ -3,18 +3,20 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 290 | 2026-09-10
+## Turn 291 | 2026-09-10
 
-Accepted-upgrade transition reconciles dead production host authority from exact PID/start-token absence. It removes authority and stream endpoints, preserves engine/handoff artifacts, and leaves selected, live or
-unproven identities untouched. Ten takeover tests and the complete installer
-fixture pass. Preserve dry-run remains blocked before staging: all retained
-handoffs lack a proven current owner.
+The Last30Days degraded tick adds A1/AX cases. LinkedIn stopped on full-state
+profile validation before page effects; lock timeout must report `no_effect`,
+retain holder context and avoid unnecessary global reads. Reddit created each
+tab, then redundantly enabled CDP domains; tab plus immediate-action fixtures
+must prevent that rebootstrap. All five historical job lookups were lost and
+created new failure records, so AX now requires durable, read-only lookup.
 
-Browser PID 45449 on `soylei-contact-test-20260906` remains live, so no shutdown
-install ran. A disposable view launch found and fully rolled back stale active
-capacity on route B. Source now accepts exact orphaned route/display ownership
-as warm idle; all nine inventory tests and strict Clippy pass. A3 still needs
-installed preserving proof. BILL/QBO repair remains the next Plan0161 P0 packet.
+`last30days-facebook` is repairable: owner and profile data remain, locks and
+browser process are absent. Plan0161 W2 owns exact preserving repair. The
+Last30Days owns provider scheduling and terminal retry behavior. Recovery r348638
+stopped uncertain; diagnosis r513089 proves no launch, so no retry is authorized.
+A3 proof and BILL/QBO repair stay open; browser PID 45449 remains untouched.
 
 ## Turn 289 | 2026-09-10
 
@@ -192,9 +194,7 @@ or automatic runtime stopping. Selector baseline remains v0.1.24 with scoped
 local overrides and adoption feedback in Plan0160; no shared-library replacement.
 Focused auditor tests passed22; legacy migration is not part of this slice.
 
-Preserve unrelated consumer edits to incident0156 and untracked notes0159/0160.
-Synthetic proof PID87885 was closed after acceptance; no tenant browser, profile,
-credential or payment state was changed.
+Preserve unrelated incident0156 and notes0159/0160 edits. Synthetic PID87885 was
+closed after acceptance; no tenant browser, profile, credential or payment changed.
 
-- [Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md)
-- [Earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md)
+[Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).

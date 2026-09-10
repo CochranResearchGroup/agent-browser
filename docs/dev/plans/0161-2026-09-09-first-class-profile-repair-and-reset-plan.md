@@ -453,3 +453,35 @@ schema and generated-client patch, corrected concurrent formatter integration,
 and added encoded-ID plus client-helper coverage. W2 preserving repair and W3
 scoped resets remain open; this checkpoint does not make BILL or QBO usable by
 itself and does not authorize a production install.
+
+## Last30Days preserving-repair fixture, 2026-09-10
+
+Installed diagnosis for `last30days-facebook` returns `repairable` with dominant
+blocker `runtime_browser_record_missing`. Its generation 80 owner is ready; the
+registered `last30days` capability, historical idle lease, shared-service
+bindings, profile directory, cookies and credentials remain. The recorded
+browser has no matching browser record, PID, process or endpoint, and all Chrome
+singleton locks are absent.
+
+W2 must cover this alongside the BILL stale-owner and stale-lock fixture. The
+sealed repair must prove the browser process absent, remove only its stale
+runtime owner and browser references, retain profile data plus capability and
+principal bindings, and return the ordinary bounded relaunch or manual
+authentication decision from current readiness. It must not invent a live
+browser, rewrite authentication evidence, reset profile data or borrow another
+profile lane.
+
+Acceptance requires a no-effect plan, revision-fenced apply, idempotent replay,
+foreign or newly live owner refusal, peer survival, and one bounded launch after
+repair. A launch with uncertain effect terminalizes into diagnosis recourse.
+Only the Last30Days repository may authorize a new provider tick after the
+profile is usable; profile repair itself performs no search, provider action or
+accepted-item mutation.
+
+The installed protected recovery path was attempted once with the exact active
+`last30days` capability. Request and job `r348638` stopped at
+`lease_authority_protocol_pending_effect_reconciliation` with uncertain effect
+and a `blind_retry` hard stop. Immediate read-only diagnosis `r513089` showed the
+same missing browser record, absent process and released locks, so no browser was
+launched. Do not retry or edit state directly. W2 must reconcile this pending
+authority outcome through the same sealed plan before it can launch once.
