@@ -891,8 +891,11 @@ fn presentation_evidence_for_backend(
         .owners
         .values()
         .find(|owner| {
-            owner.browser_id == receipt.logical_browser_id
-                && owner.daemon_session_route == handoff_session
+            crate::native::remote_view_handoff::runtime_owner_controls_browser(
+                state,
+                owner,
+                &receipt.logical_browser_id,
+            ) && owner.daemon_session_route == handoff_session
         })
         .ok_or_else(|| "dashboard candidate durable handoff owner is unavailable".to_string())?;
     if owner.owner_generation != owner_generation
@@ -1138,8 +1141,11 @@ pub(crate) fn candidate_presentation_prerequisite(
             );
         let owner = owner_session.as_deref().and_then(|owner_session| {
             state.runtime_owner_registry.owners.values().find(|owner| {
-                owner.browser_id.as_str() == handoff.browser_id.as_deref().unwrap_or_default()
-                    && owner.daemon_session_route == owner_session
+                crate::native::remote_view_handoff::runtime_owner_controls_browser(
+                    state,
+                    owner,
+                    handoff.browser_id.as_deref().unwrap_or_default(),
+                ) && owner.daemon_session_route == owner_session
             })
         });
         let route = handoff
@@ -2256,9 +2262,9 @@ mod tests {
 
     fn exact_candidate_presentation_state() -> crate::native::service_model::ServiceState {
         use crate::native::service_model::{
-            BrowserHealth, BrowserProcess, DisplayAllocation, DurableHandoffPresentationReceipt,
-            RemoteViewHandoff, RemoteViewRoute, ServiceBrowserProcessIdentity, ServiceState,
-            ServiceTabHandle, ViewStreamProvider,
+            BrowserHealth, BrowserProcess, BrowserSession, DisplayAllocation,
+            DurableHandoffPresentationReceipt, LeaseState, RemoteViewHandoff, RemoteViewRoute,
+            ServiceBrowserProcessIdentity, ServiceState, ServiceTabHandle, ViewStreamProvider,
         };
         use crate::process_identity::RecordedProcessIdentity;
         use crate::runtime_owner_transfer::{
@@ -2353,6 +2359,15 @@ mod tests {
                     runtime_profile: Some("profile-1".to_string()),
                 },
             )]),
+            sessions: std::collections::BTreeMap::from([(
+                "owner-session".to_string(),
+                BrowserSession {
+                    id: "owner-session".to_string(),
+                    lease: LeaseState::Exclusive,
+                    browser_ids: vec!["browser-1".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
             runtime_owner_registry: RuntimeOwnerRegistry::from_owner(ProfileOwner {
                 owner_id: "owner-1".to_string(),
                 profile_identity_digest: "profile-digest".to_string(),
@@ -2417,6 +2432,26 @@ mod tests {
             prerequisite["nextAction"],
             "resolve_eligible_handoff_through_authenticated_candidate"
         );
+    }
+
+    #[test]
+    fn candidate_presentation_prerequisites_accept_transferred_owner_browser_alias() {
+        let mut state = exact_candidate_presentation_state();
+        state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap()
+            .browser_id = "session:handoff-adopted".to_string();
+
+        let bootstrap = candidate_presentation_bootstrap_prerequisite(&state);
+        let strict = candidate_presentation_prerequisite(&state);
+
+        assert_eq!(bootstrap["ready"], true);
+        assert_eq!(bootstrap["eligibleHandoffIds"], serde_json::json!(["r1"]));
+        assert_eq!(strict["ready"], true);
+        assert_eq!(strict["eligibleHandoffIds"], serde_json::json!(["r1"]));
     }
 
     #[test]

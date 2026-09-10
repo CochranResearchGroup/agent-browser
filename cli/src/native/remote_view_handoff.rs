@@ -20,7 +20,7 @@ use super::service_retained_state::reconcile_matching_inactive_terminal_route_qu
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
-use crate::runtime_owner_transfer::ProfileOwnerState;
+use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
 
 pub struct RouteBoundHandoffPlannedResponseInput<'a> {
     pub intent: &'a RemoteViewOpenIntent,
@@ -698,6 +698,30 @@ pub(crate) fn remote_view_handoff_ready_owner_session(
     )
 }
 
+/// Return whether an exact runtime owner controls the physical browser row.
+///
+/// After an adopted browser crosses a runtime handoff, the owner registry can
+/// use the handoff session as its logical browser id while Service State keeps
+/// the retained process under its physical browser id. The active owner
+/// session is the authoritative alias edge between those identities.
+pub(crate) fn runtime_owner_controls_browser(
+    state: &ServiceState,
+    owner: &ProfileOwner,
+    browser_id: &str,
+) -> bool {
+    owner.browser_id == browser_id
+        || state
+            .sessions
+            .get(&owner.daemon_session_route)
+            .is_some_and(|session| {
+                !matches!(
+                    session.lease,
+                    super::service_model::LeaseState::Released
+                        | super::service_model::LeaseState::Expired
+                ) && session.browser_ids.iter().any(|id| id == browser_id)
+            })
+}
+
 /// Resolve the still-effect-capable source owner of an exact pre-commit
 /// transfer so workstation bootstrap can stage the candidate that will first
 /// abort the descriptor-backed transfer and retry it.
@@ -726,7 +750,7 @@ pub(crate) fn remote_view_handoff_recoverable_pending_owner_session(
         .filter(|owner| {
             let pending = owner.pending_transfer.as_ref();
             owner.state == ProfileOwnerState::Ready
-                && owner.browser_id == browser_id
+                && runtime_owner_controls_browser(state, owner, browser_id)
                 && owner.process_instance_digest == process_instance_digest
                 && !owner.daemon_session_route.trim().is_empty()
                 && pending.is_some_and(|proposal| {
@@ -818,7 +842,7 @@ fn unique_ready_handoff_owner_session(
         .filter(|owner| {
             owner.state == ProfileOwnerState::Ready
                 && owner.pending_transfer.is_none()
-                && owner.browser_id == browser_id
+                && runtime_owner_controls_browser(state, owner, browser_id)
                 && owner.process_instance_digest == process_instance_digest
                 && !owner.daemon_session_route.trim().is_empty()
                 && browser
@@ -2131,7 +2155,7 @@ fn finalize_route_bound_handoff_atomic(
                     .map(|receipt| receipt.generation.saturating_add(1))
                     .unwrap_or(1);
                 if let Some(owner) = state.runtime_owner_registry.owners.values().find(|owner| {
-                    owner.browser_id == receipt.logical_browser_id
+                    runtime_owner_controls_browser(state, owner, &receipt.logical_browser_id)
                         && owner.daemon_session_route
                             == handoff.session_name.as_deref().unwrap_or("")
                 }) {
