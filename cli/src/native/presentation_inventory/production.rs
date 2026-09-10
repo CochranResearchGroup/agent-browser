@@ -123,7 +123,8 @@ impl ProductionInventory {
                 .display_allocations
                 .get(&expected.display_allocation_id)
                 .ok_or_else(|| invalid("display_allocation_missing"))?;
-            let pending_acquisition = has_current_acquisition_binding(state, route);
+            let pending_acquisition = has_current_acquisition_binding(state, route)
+                || has_current_acquisition_custody(state, route);
             let binding_mismatch = [
                 (
                     "route_pool_provider",
@@ -281,25 +282,38 @@ impl ProductionInventory {
                         && s.route_id == old.route_id
                         && s.display_allocation_id == old.display_allocation_id
                 }) else {
-                    return Err("production_presentation_inventory_capacity_custody_changed".into());
+                    return Err(format!(
+                        "production_presentation_inventory_capacity_custody_changed:{}",
+                        json!({"reason":"binding_changed","previousSlot":old})
+                    ));
                 };
+                let exact_pending_binding = slot.route_id.as_deref().is_some_and(|route_id| {
+                    state.remote_view_routes.get(route_id).is_some_and(|route| {
+                        (has_current_acquisition_binding(state, route)
+                            || has_current_acquisition_custody(state, route))
+                            && route.browser_id == slot.browser_id
+                    })
+                });
                 let exact_pending_browser_acquisition = old.state
                     == PresentationSlotState::WarmIdle
                     && old.browser_id.is_none()
                     && old.lease_request_id.is_none()
                     && old.cleanup_obligation_ids.is_empty()
                     && slot.browser_id.is_some()
-                    && slot.route_id.as_deref().is_some_and(|route_id| {
-                        state.remote_view_routes.get(route_id).is_some_and(|route| {
-                            has_current_acquisition_binding(state, route)
-                                && route.browser_id == slot.browser_id
-                        })
-                    });
+                    && exact_pending_binding;
                 if exact_pending_browser_acquisition {
                     continue;
                 }
                 if slot.browser_id != old.browser_id {
-                    return Err("production_presentation_inventory_capacity_custody_changed".into());
+                    return Err(format!(
+                        "production_presentation_inventory_capacity_custody_changed:{}",
+                        json!({
+                            "reason":"browser_changed",
+                            "exactPendingBinding":exact_pending_binding,
+                            "previousSlot":old,
+                            "qualifiedSlot":slot,
+                        })
+                    ));
                 }
                 *slot = old.clone();
             }
@@ -567,6 +581,16 @@ mod tests {
                 ..Default::default()
             },
         );
+        state.remote_view_routes.get_mut("route").unwrap().readiness =
+            Some(json!({"state":"ready","source":"browser_observation"}));
+        assert!(!has_current_acquisition_binding(
+            &state,
+            &state.remote_view_routes["route"]
+        ));
+        assert!(has_current_acquisition_custody(
+            &state,
+            &state.remote_view_routes["route"]
+        ));
         let capacity = inventory
             .qualify(&state, config, "production", &boot, |_, _| true)
             .unwrap();

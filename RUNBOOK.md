@@ -165,8 +165,8 @@ listener. Stale durable aliases may bootstrap staging from one exact reattachabl
 RDP browser, but the candidate must issue a fresh durable handoff before commit. Old-runtime
 BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
 InventoryAdmission without a route change. Transactions b1624cb5, 5c7bc5c0 and b5eb7ee8 exposed drain, cache and dotenv defects. Attempt 82fd55c4 proved BILL on
-private :92 cannot appear on route A :10. Disposable launches exposed route display ID drift and rejection of the authorized warm-idle to pending-browser transition;
-exact rollback passed and both are repaired. Rebuild, handoff, install, supervisor and single-listener proof remain open.
+private :92 cannot appear on route A :10. Route display ID and current acquisition-custody repairs now pass live: synthetic handoff r884038 is ready on route A :10.
+Commit, optimized rebuild, install, supervisor and single-listener proof remain open.
 
 ### Git consolidation | 2026-09-08
 

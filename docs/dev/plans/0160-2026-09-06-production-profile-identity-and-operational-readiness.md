@@ -4045,3 +4045,25 @@ boot's complete acquisition lease, pending route, display and pool records. Any
 other browser-ID change remains `production_presentation_inventory_capacity_custody_changed`.
 The focused regression models capacity before and after the exact pending launch
 and passes. Rebuild and rerun the disposable proof once before installation.
+
+Diagnostic request `r718737` added the old and qualified slot facts to the typed
+custody error. It proved the old slot was exactly warm idle and the qualified slot
+was the same route/display with the requested browser, but a browser health
+observation had replaced the transient readiness marker and made the narrower
+pending-binding predicate false. The durable acquisition lease and every custody
+axis still agreed.
+
+The capacity adapter now recognizes either the transient pending markers or one
+unique current-boot acquisition lease with exact route, display, pool, browser and
+session custody. It does not admit orphaned, completed, failed, prior-boot,
+ambiguous or foreign leases. The error retains compact previous and qualified
+slot details for rapid tracing. All seven production-inventory tests pass,
+including readiness-marker replacement and the existing owner-drift cases.
+
+Disposable debug-candidate request `r884038` then completed. Durable handoff
+`r884038` is ready at route A, display `:10`, browser
+`session:p160-install-proof-20260909`, with an exact Example Domain target and
+operator-visible state `ready`. This is a synthetic install proof and carries no
+tenant authentication. Preserve it through candidate transfer, resolve the same
+handoff after staging, then clean it only after accepted installed-runtime,
+supervisor and single-listener readback.
