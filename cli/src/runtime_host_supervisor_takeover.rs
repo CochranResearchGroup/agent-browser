@@ -378,6 +378,8 @@ fn retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id: &str) -> Resu
         .canonicalize()
         .map_err(|error| format!("current_executable_unavailable:{error}"))?;
 
+    reconcile_absent_runtime_host_authority_records(namespace, &selected.socket_dir)?;
+
     let inventory = crate::install::daemon_listener_inventory(None);
     if inventory
         .get("available")
@@ -461,6 +463,113 @@ fn retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id: &str) -> Resu
         }
         if process.is_running()? {
             return Err(format!("superseded_runtime_exit_timeout:{pid}"));
+        }
+    }
+    Ok(())
+}
+
+/// Remove only runtime-host authority artifacts whose exact recorded process
+/// identity is absent. Session engine and handoff artifacts remain available
+/// for browser transfer and incident diagnosis. Invalid or unreadable identity
+/// records are retained for explicit diagnosis rather than treated as proof of
+/// absence.
+#[cfg(target_os = "linux")]
+fn reconcile_absent_runtime_host_authority_records(
+    namespace: &Path,
+    selected_socket_dir: &Path,
+) -> Result<Vec<PathBuf>, String> {
+    let entries = match fs::read_dir(namespace) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(format!(
+                "runtime_host_namespace_unreadable:{}:{error}",
+                namespace.display()
+            ));
+        }
+    };
+    let mut reconciled = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "runtime_host_namespace_entry_unreadable:{}:{error}",
+                namespace.display()
+            )
+        })?;
+        let socket_dir = entry.path();
+        if socket_dir == selected_socket_dir || !socket_dir.is_dir() {
+            continue;
+        }
+        let identity_path = socket_dir.join("runtime-host.identity.json");
+        let identity: RecordedProcessIdentity = match fs::read(&identity_path)
+            .ok()
+            .and_then(|body| serde_json::from_slice(&body).ok())
+        {
+            Some(identity) => identity,
+            None => continue,
+        };
+        if VerifiedProcessTermination::open(&identity)?.is_some() {
+            continue;
+        }
+        remove_absent_runtime_host_authority_artifacts(&socket_dir)?;
+        reconciled.push(socket_dir);
+    }
+    Ok(reconciled)
+}
+
+#[cfg(target_os = "linux")]
+fn remove_absent_runtime_host_authority_artifacts(socket_dir: &Path) -> Result<(), String> {
+    const AUTHORITY_FILES: [&str; 7] = [
+        "runtime-host.identity.json",
+        "runtime-host.json",
+        "runtime-host.pid",
+        "runtime-host.sha256",
+        "runtime-host.sock",
+        "runtime-host.token",
+        "runtime-host.version",
+    ];
+    for name in AUTHORITY_FILES {
+        let path = socket_dir.join(name);
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "absent_runtime_host_authority_cleanup_failed:{}:{error}",
+                    path.display()
+                ));
+            }
+        }
+    }
+    for entry in fs::read_dir(socket_dir).map_err(|error| {
+        format!(
+            "absent_runtime_host_directory_unreadable:{}:{error}",
+            socket_dir.display()
+        )
+    })? {
+        let entry = entry.map_err(|error| {
+            format!(
+                "absent_runtime_host_directory_entry_unreadable:{}:{error}",
+                socket_dir.display()
+            )
+        })?;
+        if entry.path().extension().and_then(|value| value.to_str()) == Some("stream") {
+            fs::remove_file(entry.path()).map_err(|error| {
+                format!(
+                    "absent_runtime_host_stream_cleanup_failed:{}:{error}",
+                    entry.path().display()
+                )
+            })?;
+        }
+    }
+    match fs::remove_dir(socket_dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
+        Err(error) => {
+            return Err(format!(
+                "absent_runtime_host_directory_cleanup_failed:{}:{error}",
+                socket_dir.display()
+            ));
         }
     }
     Ok(())
@@ -1544,6 +1653,60 @@ mod tests {
         validate_authoritative_listener_inventory(&selected, &multiple, &mut blockers);
         assert_eq!(blockers.len(), 1);
         assert_eq!(blockers[0].code, "blocked_runtime_listener_multiplicity");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn accepted_upgrade_reconciles_only_proven_absent_runtime_host_authority() {
+        let namespace = std::env::temp_dir().join(format!(
+            "agent-browser-absent-runtime-authority-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let selected = namespace.join("selected");
+        let absent = namespace.join("absent");
+        let unknown = namespace.join("unknown");
+        fs::create_dir_all(&selected).unwrap();
+        fs::create_dir_all(&absent).unwrap();
+        fs::create_dir_all(&unknown).unwrap();
+
+        let absent_identity = RecordedProcessIdentity {
+            pid: u32::MAX,
+            start_token: "proven-absent".to_string(),
+            executable_path: Some("/missing/agent-browser".to_string()),
+            browser_family: None,
+        };
+        fs::write(
+            absent.join("runtime-host.identity.json"),
+            serde_json::to_vec(&absent_identity).unwrap(),
+        )
+        .unwrap();
+        for name in [
+            "runtime-host.json",
+            "runtime-host.pid",
+            "runtime-host.sha256",
+            "runtime-host.sock",
+            "runtime-host.token",
+            "runtime-host.version",
+            "fixture.stream",
+        ] {
+            fs::write(absent.join(name), "stale").unwrap();
+        }
+        fs::write(absent.join("retained.engine"), "preserve").unwrap();
+        fs::write(unknown.join("runtime-host.identity.json"), "invalid").unwrap();
+        fs::write(selected.join("runtime-host.identity.json"), "selected").unwrap();
+
+        let reconciled =
+            reconcile_absent_runtime_host_authority_records(&namespace, &selected).unwrap();
+
+        assert_eq!(reconciled, vec![absent.clone()]);
+        assert!(absent.join("retained.engine").is_file());
+        assert!(!absent.join("runtime-host.identity.json").exists());
+        assert!(!absent.join("runtime-host.sock").exists());
+        assert!(!absent.join("fixture.stream").exists());
+        assert!(unknown.join("runtime-host.identity.json").is_file());
+        assert!(selected.join("runtime-host.identity.json").is_file());
+
+        fs::remove_dir_all(namespace).unwrap();
     }
 
     #[test]

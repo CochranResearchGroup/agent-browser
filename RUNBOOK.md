@@ -3,6 +3,19 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 290 | 2026-09-10
+
+Accepted-upgrade transition reconciles dead production host authority from exact PID/start-token absence. It removes authority and stream
+endpoints, preserves engine/handoff artifacts, and leaves selected, live or
+unproven identities untouched. Ten takeover tests, format, strict Clippy and
+the complete source-free installer fixture pass; installation remains pending.
+
+Browser PID 45449 on `soylei-contact-test-20260906` remains live, so no shutdown
+install ran. A3 still needs one preserving install with interruption recovery
+and single-supervisor/listener/dashboard/generation proof. BILL and QBO diagnose
+as repairable from missing runtime records and proven-stale locks; BILL retains
+fresh auth evidence. Plan0161 preserving repair remains the next P0 packet.
+
 ## Turn 289 | 2026-09-10
 
 Graceful production upgrade is accepted. Transaction

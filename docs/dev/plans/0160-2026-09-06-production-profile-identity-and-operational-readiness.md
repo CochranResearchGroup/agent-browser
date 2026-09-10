@@ -4291,3 +4291,22 @@ already opened managed browser PID 45449. A reviewed full-shutdown plan could
 close that browser, but doing so would interrupt newly resumed work. Install
 this patched candidate in the next bounded upgrade window and use the automatic
 path as the remaining A3 acceptance test.
+
+### Runtime-host authority reconciliation follow-up
+
+The accepted-upgrade supervisor transition now reconciles the production
+runtime-host namespace from exact process identity records before it evaluates
+the live listener inventory. When a non-selected identity record names a
+process that is proven absent, the installer removes only that host's authority,
+socket, token, version and stream endpoint artifacts. It preserves engine and
+handoff artifacts needed for transfer or diagnosis. The selected runtime,
+unreadable identities and any identity that still matches a live process remain
+untouched.
+
+This closes the source-level gap where a dead or half-started runtime with no
+listener was invisible to listener-only retirement and could later impersonate
+an active installation. The focused takeover suite passes all ten cases, strict
+workspace Clippy passes, and the complete source-free workstation installer
+fixture passes. Installed acceptance remains open. The current viable browser
+is PID 45449 on profile `soylei-contact-test-20260906`; it belongs to ongoing
+work and was not closed for another full-shutdown install.
