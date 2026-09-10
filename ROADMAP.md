@@ -483,21 +483,12 @@ production outside that experimental acceptance boundary.
 
 ## P124 | Scalable Desktop Evidence And Presentation Capacity
 
-State: IN PROGRESS
-Current state: Slice A is source accepted. Provider-free contracts now freeze
-CDP-first evidence selection, paired browser-external evidence, pre-trigger
-staging, full capture-ready identity, passive-viewer and human-controller
-posture, authority-safe restoration, arbitrary-N route and slot inventory,
-four-slot reserves, typed pressure queueing, FIFO plus bounded aging, and exact
-or quarantined lifecycle cleanup. An architecture guard records the existing
-fixed-two migration baseline and rejects new canonical A/B assumptions.
-
-P124 replaces that fixed model with arbitrary-N presentation slots, a four-slot
-warm installed acceptance profile, elastic scale-out to a configured and
-pressure-admitted maximum, a deep Desktop Evidence Episode, human-priority
-admission, capture-ready scene proof, restoration, and exact lifecycle cleanup.
-Ordinary CDP work consumes no presentation slot, while retained browser
-ownership remains independent from presentation capacity.
+State: COMPLETE — DEVELOPMENT ACCEPTED; PRODUCTION ADOPTION IN P162
+Current state: Source and development-runtime acceptance proved arbitrary-N
+presentation inventory, four warm slots, controlled elastic 4 to 6 to 4
+lifecycle convergence, multi-viewer and controller posture, desktop evidence,
+retained-browser preservation and exact cleanup. Production input remained
+outside P124 and is now owned by Plan0162 under Plan0160 A2/A3.
 
 ### Plan
 
@@ -505,10 +496,9 @@ ownership remains independent from presentation capacity.
 
 ### Next Recommendation
 
-Begin Slice B only after advancing the governing plan. Generalize the static
-route inventory to arbitrary N while retaining legacy A/B parsing in one
-compatibility adapter. Do not dynamically provision or remove provider
-resources, and keep the current workstation unchanged.
+Do not rerun P124's accepted development campaign. Execute Plan0162 after the
+Plan0161 preserving-repair source milestone to adopt configurable desktop slots
+and just-in-time viewer allocation in production.
 
 ## P123 | Exact Profile Compatibility Installed Admission
 
