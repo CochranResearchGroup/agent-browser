@@ -223,11 +223,21 @@ incident exposed and source now repairs three additional installer defects:
 forward recovery lacked a usable admission drain and resume edge; post-commit
 doctor rejected the intended quiesced and exact two-host supervisor transition;
 and workstation reconcile used the one-second ordinary Service State lock
-budget. Source through `c8fa12f9` plus `82096fff` contains these repairs. The
-latest qualified binary remains uninstalled because Odollo opened a new owned
-carrier-tracking browser after the browserless window. Preserve that lane and
-install after it closes. Then prove automatic supervisor replacement, exactly
-one production listener, installed doctor, and shared-route BILL/QBO relaunch.
+budget. Source through `c8fa12f9` plus `82096fff` contains these repairs. Waiting
+for Odollo to close and repeating a browserless install would not prove graceful
+upgrade, so the live carrier-tracking lane is now part of the acceptance case.
+Candidate request `r54902` created a disposable, ready Example Domain handoff on
+route A while Odollo remained live. Preserve transaction
+`upgrade-f1042f2c-6535-4b14-ae90-f16d98bef470` reached
+`runtimes_transferring`, but an interrupted installer had recorded no handoff or
+candidate-host effect. Guarded resume incorrectly required replay evidence for
+that untouched transfer phase, then restored the old selection and both browsers.
+Source now permits transfer restart only when the handoff ledger is empty, no
+candidate host exists, and every lane remains at its effect-free census state.
+Partial transfers still require exact replay receipts. Rebuild once, repeat the
+same preserving case, then require automatic supervisor replacement, exactly one
+production listener, unchanged Odollo and synthetic browser identities, installed
+doctor, and shared-route BILL/QBO relaunch.
 
 ### Worker assignments
 

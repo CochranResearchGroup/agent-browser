@@ -718,6 +718,32 @@ fn validate_durable_runtime_handoff_replay(
     Ok(())
 }
 
+/// Return whether an interrupted transfer stopped before recording any owner
+/// or candidate-host effect. This exact state may restart the transfer phase;
+/// every partial transfer must instead replay its durable handoff receipts.
+fn runtime_transfer_phase_is_effect_free(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> bool {
+    transaction.runtime_handoffs.is_empty()
+        && transaction
+            .runtime_host_convergence
+            .as_ref()
+            .is_some_and(|convergence| {
+                convergence.candidate_host.is_none()
+                    && convergence.lanes.iter().all(|lane| {
+                        lane.state
+                            == crate::runtime_adoption::RuntimeLaneTransferState::CensusStable
+                            && lane.candidate_session_name.is_none()
+                            && lane.owner_generation_before.is_none()
+                            && lane.owner_generation_after.is_none()
+                            && lane.rollback_owner_generation.is_none()
+                            && lane.observation_receipt_id.is_none()
+                            && lane.commit_receipt_id.is_none()
+                            && lane.rollback_receipt_id.is_none()
+                    })
+            })
+}
+
 fn resume_install_transaction(
     root: &Path,
     guard: &InstallTransactionMutationGuard,
@@ -7002,6 +7028,7 @@ fn resume_activation_from_durable_phase(
     {
         if crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?
             .is_some()
+            || runtime_transfer_phase_is_effect_free(&prepared.transaction)
         {
             complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
         } else {
@@ -12765,6 +12792,47 @@ mod tests {
         assert!(migration
             .reason_codes
             .contains(&"verified_browser_without_live_source_session_preserved".to_string()));
+    }
+
+    #[test]
+    fn interrupted_transfer_restarts_only_before_any_effect_is_recorded() {
+        let paths = install_paths(Path::new("/tmp/agent-browser-transfer-restart-fixture"));
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-generation".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::RuntimesTransferring;
+        transaction.runtime_host_convergence =
+            Some(crate::runtime_adoption::RuntimeHostConvergenceRecord {
+                schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+                deadline_at: "2026-09-10T09:00:00Z".to_string(),
+                deadline_unix_seconds: 1,
+                queue_transfer_policy: "drain_then_commit".to_string(),
+                old_host: None,
+                candidate_host: None,
+                lanes: vec![crate::runtime_adoption::RuntimeLaneTransferRecord {
+                    session_name: "source".to_string(),
+                    candidate_session_name: None,
+                    source_generation_id: Some("old-generation".to_string()),
+                    candidate_generation_id: "candidate-generation".to_string(),
+                    state: crate::runtime_adoption::RuntimeLaneTransferState::CensusStable,
+                    owner_generation_before: None,
+                    owner_generation_after: None,
+                    rollback_owner_generation: None,
+                    observation_receipt_id: None,
+                    commit_receipt_id: None,
+                    rollback_receipt_id: None,
+                    queued_work_count: 0,
+                }],
+            });
+
+        assert!(runtime_transfer_phase_is_effect_free(&transaction));
+
+        transaction.runtime_host_convergence.as_mut().unwrap().lanes[0].candidate_session_name =
+            Some("candidate".to_string());
+        assert!(!runtime_transfer_phase_is_effect_free(&transaction));
     }
 
     #[test]

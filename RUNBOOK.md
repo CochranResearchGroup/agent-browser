@@ -12,8 +12,7 @@ supervised runtime host, PID 57793, and one listener. BILL and QBO are closed wi
 
 Source through c8fa12f9 repairs exact multi-host surrender, adopted browser aliases,
 interrupted full-shutdown resume, quiesced-supervisor validation and exact two-host convergence. Commit 82096fff gives workstation reconcile a 30-second lock budget.
-Failed candidate transactions retained the old selection and restored its units. Latest qualified binary `4eadfd171dbf3d7b9ac0897ccba989101742290278c6ee58ff7e1ff3d1e819a9`
-remains uninstalled because Odollo opened a new owned `carrier-tracking-lookup` browser. Preserve it. Once closed, rerun the audited browserless install, prove automatic supervisor replacement and one listener, then relaunch BILL and QBO on shared Guacamole routes and finish profile ownership repair. P116 and Plan0160 remain OPEN.
+Failed candidate transactions retained the old selection and restored its units. Odollo's live `carrier-tracking-lookup` lane is now the preserving acceptance case. Candidate request r54902 created a ready synthetic handoff on route A without disturbing it. Preserve transaction f1042f2c reached runtimes_transferring, but interruption preceded every handoff; guarded resume incorrectly demanded replay evidence and rolled back both browsers. Source now restarts only an exactly effect-free transfer phase. Rebuild once, repeat preserve mode, require unchanged browser identities plus automatic supervisor and one-listener convergence, then relaunch BILL and QBO and finish profile ownership repair. P116 and Plan0160 remain OPEN.
 
 ## Turn 286 | 2026-09-09
 
