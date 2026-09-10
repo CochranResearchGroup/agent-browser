@@ -4221,3 +4221,64 @@ recovery, and cleanup after an interruption between acceptance and drain close.
 
 This is source-level progress only. It remains uninstalled and does not satisfy
 the controlled-interruption or repeated production-install acceptance case.
+
+### Full-shutdown recovery installation and remaining upgrade defects
+
+state_transition: Candidate generation
+`0.28.0-5555e03eeeaf-4fb44b4795be` is selected and operational after an exact
+full-shutdown transaction, guarded forward resume, dashboard restart and
+workstation reconciliation.
+acceptance_state: Installed-runtime readiness passes, but unattended graceful
+upgrade acceptance remains open because the installer stopped twice and
+required direct recovery actions.
+progress_classification: operational candidate with installer defects reproduced
+
+The default preserve attempt, transaction
+`upgrade-c806bee2-81b1-4d4b-8911-29146c975109`, rolled back after five minutes
+because no authenticated candidate dashboard presentation arrived. The old
+generation, supervisor and two live browsers remained intact. This proves the
+default path still depends on a timed operator journey and cannot yet serve as
+an unattended upgrade.
+
+The reviewed full-shutdown plan
+`445631345fc66d6c6719a7a04b1f493e7482b0685e0e9ee97760a2dd48b04688`
+named and closed the two remaining managed browsers while preserving their
+profiles. Transaction `upgrade-8d4ce22f-17fb-49a8-ade2-e4b24028dc5d` then
+stopped at `runtime_replacement_post_close_census_not_browserless` with the
+old supervisor still active. Its exact guarded resume completed forward
+recovery, proved the source absent, selected the candidate and replaced runtime
+supervisor PID 45740 with PID 95068.
+
+That resume exposed two product defects:
+
+1. Automatic prior-install convergence routed every
+   `operator_recovery_required` transaction to rollback-style recovery even
+   when a started full shutdown required forward resume. The dispatcher now
+   selects guarded resume when the persisted replacement effect receipt proves
+   forward recovery is required.
+2. The real-host replacement resume used the isolated validation branch and
+   skipped workstation reconciliation. The runtime-host supervisor changed, but
+   both dashboard processes retained the old executable until they were
+   restarted manually. The resume path now runs the same locked workstation
+   reconciliation used by a first-pass real-host install before acceptance.
+
+After the manual dashboard restart and reconciliation, installed binary SHA256
+`5555e03eeeaf7d9c865bcf4f781d8959fd0eee6d2fdc7ccd06f8d9bfabd7a4ef`
+matches the selected generation. Doctor succeeds, reports one runtime host,
+zero stale or diagnostic runtimes, ready dashboard ingress, a ready operator
+journey and `runtimeConvergence.status=converged`.
+
+A3 remains open until a later candidate passes both upgrade modes without
+manual recovery:
+
+1. Preserve mode must complete without an operator visiting the shadow
+   dashboard during a timed window.
+2. Full-shutdown mode must close the exact reviewed managed processes, retire
+   the old supervisor, update the dashboard and runtime-host supervisors, and
+   start the candidate in one invocation.
+3. A forward-recovery restart must automatically resume the exact admission
+   owner and finish the same transaction without a separate transaction command.
+4. Acceptance must prove one production runtime authority and listener.
+   Dead superseded socket directories must be removed or explicitly classified
+   as inert residue so their mere presence cannot block or impersonate a live
+   runtime.

@@ -1181,7 +1181,7 @@ fn resume_prepared_payload_transaction(
             prepared.transaction.state
         ));
     }
-    let validation = if isolated_root || presentation_bypass {
+    let validation = if isolated_root {
         match isolated_post_commit_validation(&paths, prepared) {
             Ok(validation) => validation,
             Err(error) => {
@@ -1191,6 +1191,44 @@ fn resume_prepared_payload_transaction(
                     true,
                     quiesced.as_ref(),
                     "resume_isolated_post_commit_validation_failed",
+                    error,
+                ))
+            }
+        }
+    } else if presentation_bypass {
+        let transitional_source_sessions = permitted_stale_source_sessions(
+            &prepared.runtime_handoffs,
+            &prepared.transaction.runtime_migrations,
+        );
+        if let Err(error) = reconcile_workstation_locked_for_upgrade(
+            root,
+            &paths,
+            Some(&prepared.transaction),
+            &transitional_source_sessions,
+        ) {
+            return Err(rollback_resumed_transaction(
+                &paths,
+                prepared,
+                true,
+                quiesced.as_ref(),
+                "resume_post_commit_reconciliation_failed",
+                error,
+            ));
+        }
+        match isolated_post_commit_validation(&paths, prepared) {
+            Ok(_) => PostCommitValidationReceipt {
+                dashboard_summary: "runtime_replacement_reconciled_selected_generation_validated"
+                    .to_string(),
+                presentation_summary:
+                    "runtime_replacement_stable_census_proved_no_owned_live_browser".to_string(),
+            },
+            Err(error) => {
+                return Err(rollback_resumed_transaction(
+                    &paths,
+                    prepared,
+                    true,
+                    quiesced.as_ref(),
+                    "resume_runtime_replacement_post_commit_readiness_unproven",
                     error,
                 ))
             }
@@ -2796,6 +2834,18 @@ fn prior_install_convergence_action(
     }
 
     match transaction.state {
+        UpgradeTransactionState::OperatorRecoveryRequired
+            if crate::runtime_replacement::requires_forward_recovery(&transaction)? =>
+        {
+            Ok(Some(PriorInstallConvergenceAction::Resume(
+                InstallTransactionMutationGuard {
+                    transaction_id: transaction.transaction_id,
+                    expected_revision: transaction.revision,
+                    candidate_generation_id: transaction.candidate_generation_id,
+                    census_digest: transaction.runtime_census_digest,
+                },
+            )))
+        }
         UpgradeTransactionState::Accepted
         | UpgradeTransactionState::OperatorRecoveryRequired
         | UpgradeTransactionState::FailedPreservedOldGeneration => {
@@ -18096,8 +18146,65 @@ mod tests {
         assert_eq!(
             prior_install_convergence_action(&root).unwrap(),
             Some(PriorInstallConvergenceAction::Recover {
-                transaction_id: transaction.transaction_id,
+                transaction_id: transaction.transaction_id.clone(),
             })
+        );
+
+        let replacement_plan = crate::runtime_replacement::RuntimeReplacementPlan {
+            schema_version: "agent-browser.runtime-replacement-plan.v1".to_string(),
+            plan_digest: "d".repeat(64),
+            policy: crate::runtime_replacement::RuntimeReplacementPolicy::FullShutdown,
+            disposition:
+                crate::runtime_replacement::RuntimeReplacementDisposition::ReadyForFullShutdown,
+            blockers: Vec::new(),
+            ingress_revision: 1,
+            selected_backend: crate::runtime_host_ingress::RuntimeHostBackend {
+                topology: crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+                generation_id: "generation-old".to_string(),
+                socket_dir: root.join("runtime-host"),
+                binary_sha256: "e".repeat(64),
+                host_id: "runtime-host:41".to_string(),
+                pid: 41,
+                socket_identity: "unix:1:2".to_string(),
+            },
+            selected_process_identity: None,
+            census_digest: "c".repeat(64),
+            browsers: Vec::new(),
+            profiles_preserved: true,
+            live_state_will_end: true,
+        };
+        crate::runtime_replacement::bind_upgrade_transaction(&mut transaction, &replacement_plan)
+            .unwrap();
+        transaction.successor_fields.insert(
+            "runtimeReplacementEffectReceipt".to_string(),
+            serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-replacement-effect-receipt.v1",
+                "state": "browsers_closing",
+                "planDigest": replacement_plan.plan_digest,
+                "closedSessions": [],
+                "forcedBrowserIds": [],
+                "finalCensusDigest": null,
+                "sourceExitProven": false,
+                "profilesPreserved": true
+            }),
+        );
+        transaction.revision = 11;
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        persist_admission_drain(
+            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
+            &transaction,
+        )
+        .unwrap();
+        assert_eq!(
+            prior_install_convergence_action(&root).unwrap(),
+            Some(PriorInstallConvergenceAction::Resume(
+                InstallTransactionMutationGuard {
+                    transaction_id: transaction.transaction_id.clone(),
+                    expected_revision: 11,
+                    candidate_generation_id: "generation-candidate".to_string(),
+                    census_digest: Some("c".repeat(64)),
+                }
+            ))
         );
 
         fs::remove_dir_all(root).unwrap();
