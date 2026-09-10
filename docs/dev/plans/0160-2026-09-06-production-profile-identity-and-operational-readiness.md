@@ -4029,3 +4029,19 @@ and the reserved allocation all retain `remote-view-display:guacamole-1`; the
 existing private-display and allocation tests remain green. Rebuild the candidate
 once, create the disposable handoff through its isolated runtime, then proceed to
 the transactional install without another old-runtime launch attempt.
+
+Candidate request `r683219` then retained the route-bound display ID and advanced
+to capacity custody validation. That validator compared the pre-launch warm-idle
+slot, which correctly had no browser, with the same slot after the exact pending
+acquisition had launched its named browser. It treated this authorized transition
+as foreign custody drift. Compensation restored the route and display and closed
+only the disposable browser; the isolated candidate runtime was then stopped by
+its verified PID and executable identity.
+
+Production capacity refresh now admits only that narrow transition: the prior
+slot must be warm idle with no browser, lease or cleanup obligation; route and
+display identities must be unchanged; and the new browser must match the current
+boot's complete acquisition lease, pending route, display and pool records. Any
+other browser-ID change remains `production_presentation_inventory_capacity_custody_changed`.
+The focused regression models capacity before and after the exact pending launch
+and passes. Rebuild and rerun the disposable proof once before installation.

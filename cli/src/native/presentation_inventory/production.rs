@@ -280,10 +280,27 @@ impl ProductionInventory {
                     s.id == old.id
                         && s.route_id == old.route_id
                         && s.display_allocation_id == old.display_allocation_id
-                        && s.browser_id == old.browser_id
                 }) else {
                     return Err("production_presentation_inventory_capacity_custody_changed".into());
                 };
+                let exact_pending_browser_acquisition = old.state
+                    == PresentationSlotState::WarmIdle
+                    && old.browser_id.is_none()
+                    && old.lease_request_id.is_none()
+                    && old.cleanup_obligation_ids.is_empty()
+                    && slot.browser_id.is_some()
+                    && slot.route_id.as_deref().is_some_and(|route_id| {
+                        state.remote_view_routes.get(route_id).is_some_and(|route| {
+                            has_current_acquisition_binding(state, route)
+                                && route.browser_id == slot.browser_id
+                        })
+                    });
+                if exact_pending_browser_acquisition {
+                    continue;
+                }
+                if slot.browser_id != old.browser_id {
+                    return Err("production_presentation_inventory_capacity_custody_changed".into());
+                }
                 *slot = old.clone();
             }
         }
@@ -537,6 +554,24 @@ mod tests {
             .unwrap();
         assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
         assert!(capacity.slots[0].browser_id.is_none());
+
+        state.presentation_capacity = Some(capacity);
+        state.browsers.insert(
+            "new-browser".into(),
+            BrowserProcess {
+                id: "new-browser".into(),
+                boot_epoch: Some(boot.clone()),
+                display_name: Some(":14".into()),
+                display_allocation_id: Some("display".into()),
+                active_session_ids: vec!["new-session".into()],
+                ..Default::default()
+            },
+        );
+        let capacity = inventory
+            .qualify(&state, config, "production", &boot, |_, _| true)
+            .unwrap();
+        assert_eq!(capacity.slots[0].state, PresentationSlotState::Active);
+        assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("new-browser"));
     }
 
     #[test]
