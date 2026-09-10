@@ -2499,6 +2499,15 @@ pub struct ServiceState {
     pub site_policies: BTreeMap<String, SitePolicy>,
     pub providers: BTreeMap<String, ServiceProvider>,
     pub challenges: BTreeMap<String, Challenge>,
+    /// Durable response-only site-authentication runs. These records contain
+    /// opaque references and redacted receipts, never credential or challenge
+    /// material.
+    #[serde(
+        default,
+        skip_serializing_if = "super::service_authentication_run::authentication_run_map_is_empty"
+    )]
+    pub(crate) authentication_runs:
+        BTreeMap<String, super::service_authentication_run::ServiceAuthenticationRunRecord>,
     pub profile_seeding_handoffs: BTreeMap<String, ProfileSeedingHandoffRecord>,
     #[serde(default, skip_serializing_if = "BrowserCapabilityRegistry::is_empty")]
     pub browser_capability_registry: BrowserCapabilityRegistry,

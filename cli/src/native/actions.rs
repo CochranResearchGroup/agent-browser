@@ -134,6 +134,7 @@ use super::service_access::{
     handle_service_profiles,
 };
 use super::service_activity::{handle_service_events, handle_service_incident_activity};
+use super::service_authentication_run::handle_service_authentication_run;
 use super::service_browser_retirement::handle_service_browser_retirement_command;
 use super::service_config::{
     handle_service_profile_delete, handle_service_profile_freshness_update,
@@ -336,6 +337,10 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_site_policies"
             | "service_providers"
             | "service_challenges"
+            | "service_authentication_run_start"
+            | "service_authentication_run_status"
+            | "service_authentication_run_resume"
+            | "service_authentication_run_cancel"
             | "service_jobs"
             | "service_incidents"
             | "service_events"
@@ -1055,6 +1060,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_site_policies" => handle_service_site_policies(cmd).await,
             "service_providers" => handle_service_providers(cmd).await,
             "service_challenges" => handle_service_challenges(cmd).await,
+            "service_authentication_run_start"
+            | "service_authentication_run_status"
+            | "service_authentication_run_resume"
+            | "service_authentication_run_cancel" => handle_service_authentication_run(cmd),
             "service_jobs" => handle_service_jobs(cmd).await,
             "service_incidents" => handle_service_incidents(cmd).await,
             "service_events" => handle_service_events(cmd).await,

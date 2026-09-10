@@ -44,6 +44,10 @@ export type ServiceRequestAction =
   | "service_viewer_lease_heartbeat"
   | "service_viewer_lease_release"
   | "service_controller_lease_takeover"
+  | "service_authentication_run_start"
+  | "service_authentication_run_status"
+  | "service_authentication_run_resume"
+  | "service_authentication_run_cancel"
   | "tab_list"
   | "url"
   | "title"
@@ -151,6 +155,11 @@ export interface ServiceRequest {
   promptProfileId?: string;
   controllerLeaseId?: string;
   operationId?: string;
+  authenticationRunId?: string;
+  accountRef?: string;
+  siteRecipeId?: string;
+  policyDigest?: string;
+  idempotencyKey?: string;
   sessionName?: string;
   handoffId?: string;
   remoteViewHandoffId?: string;
@@ -173,6 +182,8 @@ export interface ServiceRequest {
   policyRevision?: number;
   cdpPort?: number;
   maxBytes?: number;
+  deadlineMs?: number;
+  maxTransitions?: number;
   pid?: number;
   blockedByManualAction?: boolean;
   manualSeedingRequired?: boolean;
@@ -1505,6 +1516,25 @@ export interface ServiceBrowserRepairData {
   incident?: Record<string, unknown> | null;
 }
 
+export interface ServiceAuthenticationRunData {
+  schemaVersion: "agent-browser.service-authentication-run.v1" | string;
+  runId: string;
+  state: string;
+  createdAt: string;
+  deadlineAt: string;
+  requestSha256: string;
+  accountRefSha256?: string | null;
+  targetServiceId: string;
+  profileId: string;
+  browserId: string;
+  sessionName: string;
+  tabId: string;
+  transitionCount: number;
+  actionReceiptCount: number;
+  observationReceiptCount: number;
+  replayed: boolean;
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   cdp_free_launch: ServiceCdpFreeLaunchData;
@@ -1524,6 +1554,10 @@ export interface ServiceRequestActionDataMap {
   desktop_evidence_observe: ServiceDesktopEvidenceObserveData;
   desktop_prompt_observe: ServiceDesktopPromptObserveData;
   desktop_interact: ServiceDesktopInteractData;
+  service_authentication_run_start: ServiceAuthenticationRunData;
+  service_authentication_run_status: ServiceAuthenticationRunData;
+  service_authentication_run_resume: ServiceAuthenticationRunData;
+  service_authentication_run_cancel: ServiceAuthenticationRunData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;

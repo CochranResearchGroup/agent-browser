@@ -84,6 +84,7 @@ const ROUTE_HINT_ORDER: [RouteHintStage; 2] = [
 enum FieldKind {
     String,
     PositiveInteger,
+    BoundedInteger(u64, u64),
     Boolean,
     StringArray,
     Object,
@@ -365,6 +366,25 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("promptProfileId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("controllerLeaseId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("operationId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("authenticationRunId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("accountRef", FieldKind::String, true, false, false),
+    ServiceRequestFieldSpec::field("siteRecipeId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("policyDigest", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("idempotencyKey", FieldKind::String, true, false, false),
+    ServiceRequestFieldSpec::field(
+        "deadlineMs",
+        FieldKind::BoundedInteger(1_000, 600_000),
+        true,
+        true,
+        false,
+    ),
+    ServiceRequestFieldSpec::field(
+        "maxTransitions",
+        FieldKind::BoundedInteger(1, 64),
+        true,
+        true,
+        false,
+    ),
     ServiceRequestFieldSpec::field("recipe", FieldKind::Object, true, true, false),
     ServiceRequestFieldSpec::field("handoffId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("remoteViewHandoffId", FieldKind::String, true, true, false),
@@ -875,6 +895,9 @@ fn validate_field(
     let valid = match spec.kind {
         FieldKind::String => value.is_string(),
         FieldKind::PositiveInteger => value.as_u64().is_some_and(|value| value > 0),
+        FieldKind::BoundedInteger(minimum, maximum) => value
+            .as_u64()
+            .is_some_and(|value| (minimum..=maximum).contains(&value)),
         FieldKind::Boolean => value.is_boolean(),
         FieldKind::StringArray => value
             .as_array()
@@ -889,12 +912,21 @@ fn validate_field(
     let message = match spec.kind {
         FieldKind::String => format!("{} must be a string", spec.name),
         FieldKind::PositiveInteger => format!("{} must be a positive integer", spec.name),
+        FieldKind::BoundedInteger(minimum, maximum) => {
+            format!(
+                "{} must be an integer between {minimum} and {maximum}",
+                spec.name
+            )
+        }
         FieldKind::Boolean => format!("{} must be a boolean", spec.name),
         FieldKind::StringArray => format!("{} must be an array of strings", spec.name),
         FieldKind::Object => format!("{} must be a JSON object", spec.name),
         FieldKind::Enum(values) => format!("{} must be one of {}", spec.name, values.join(", ")),
     };
-    let kind = if matches!(spec.kind, FieldKind::Enum(_)) {
+    let kind = if matches!(
+        spec.kind,
+        FieldKind::Enum(_) | FieldKind::BoundedInteger(_, _)
+    ) {
         ServiceRequestIssueKind::InvalidFieldValue
     } else {
         ServiceRequestIssueKind::InvalidFieldType
@@ -918,12 +950,161 @@ fn validate_safety_gates(
     reject_desktop_evidence_observe_request(action, request)?;
     reject_desktop_prompt_observe_request(action, request)?;
     reject_desktop_interact_request(action, request)?;
+    reject_authentication_run_request(action, request)?;
     reject_service_probe_request(action, request)?;
     reject_tab_handle_refresh_request(action, request)?;
     reject_service_ui_action_request(action, request)?;
     reject_service_network_capture_request(action, request)?;
     reject_service_file_transfer_request(action, request)?;
     reject_stale_monitor_service_request(request)
+}
+
+fn reject_authentication_run_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    let is_start = action == "service_authentication_run_start";
+    let is_status = action == "service_authentication_run_status";
+    let is_resume = action == "service_authentication_run_resume";
+    let is_cancel = action == "service_authentication_run_cancel";
+    if !(is_start || is_status || is_resume || is_cancel) {
+        return Ok(());
+    }
+    const COMMON_FIELDS: &[&str] = &[
+        "action",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "clientSubjectId",
+        "identityAssurance",
+        "jobTimeoutMs",
+        "serviceStateLockTimeoutMs",
+    ];
+    const START_FIELDS: &[&str] = &[
+        "targetServiceId",
+        "accountRef",
+        "profileId",
+        "browserId",
+        "sessionName",
+        "serviceTabHandle",
+        "siteRecipeId",
+        "policyDigest",
+        "idempotencyKey",
+        "deadlineMs",
+        "maxTransitions",
+    ];
+    const EXISTING_FIELDS: &[&str] = &["authenticationRunId", "operationId"];
+    if let Some(field) = request.keys().find(|field| {
+        !COMMON_FIELDS.contains(&field.as_str())
+            && !(is_start && START_FIELDS.contains(&field.as_str()))
+            && !(!is_start && EXISTING_FIELDS.contains(&field.as_str()))
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("{action} does not accept {field}"),
+        ));
+    }
+    for field in ["serviceName", "agentName", "taskName"] {
+        if request
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires {field}"),
+            ));
+        }
+    }
+    if is_start {
+        for field in [
+            "targetServiceId",
+            "accountRef",
+            "profileId",
+            "browserId",
+            "sessionName",
+            "siteRecipeId",
+            "policyDigest",
+            "idempotencyKey",
+        ] {
+            if request
+                .get(field)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+            {
+                return Err(issue(
+                    ServiceRequestIssueKind::InvalidBoundedRecipe,
+                    format!("{action} requires {field}"),
+                ));
+            }
+        }
+        validate_service_tab_handle(request, action, true)?;
+        let policy_digest = request["policyDigest"].as_str().unwrap_or_default();
+        if policy_digest.len() != 64 || !policy_digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires a SHA-256 policyDigest"),
+            ));
+        }
+        if !request
+            .get("deadlineMs")
+            .and_then(Value::as_u64)
+            .is_some_and(|value| (1_000..=600_000).contains(&value))
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires deadlineMs between 1000 and 600000"),
+            ));
+        }
+        if !request
+            .get("maxTransitions")
+            .and_then(Value::as_u64)
+            .is_some_and(|value| (1..=64).contains(&value))
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires maxTransitions between 1 and 64"),
+            ));
+        }
+    } else {
+        if request
+            .get("authenticationRunId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires authenticationRunId"),
+            ));
+        }
+        if is_status && request.contains_key("operationId") {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} does not accept operationId"),
+            ));
+        }
+        if (is_resume || is_cancel)
+            && request
+                .get("operationId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires operationId"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Reject route-bound intent before a generic tab job can be enqueued.
@@ -2476,7 +2657,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 84);
+        assert_eq!(canonical_names.len(), 91);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -2538,6 +2719,11 @@ mod tests {
                 FieldKind::PositiveInteger => {
                     assert_eq!(property["type"], "integer", "{}", spec.name);
                     assert_eq!(property["minimum"], 1, "{}", spec.name);
+                }
+                FieldKind::BoundedInteger(minimum, maximum) => {
+                    assert_eq!(property["type"], "integer", "{}", spec.name);
+                    assert_eq!(property["minimum"], minimum, "{}", spec.name);
+                    assert_eq!(property["maximum"], maximum, "{}", spec.name);
                 }
                 FieldKind::Boolean => assert_eq!(property["type"], "boolean", "{}", spec.name),
                 FieldKind::StringArray => {
@@ -3164,6 +3350,44 @@ mod tests {
                 request["agentName"] = json!("fixture-agent");
                 request["taskName"] = json!("observe-synthetic-prompt");
             }
+            "service_authentication_run_start" => {
+                request = json!({
+                    "action": action,
+                    "serviceName": "books-receipts",
+                    "agentName": "closeout-worker",
+                    "taskName": "bill-auth",
+                    "targetServiceId": "bill",
+                    "accountRef": "opaque-account-1",
+                    "profileId": "bill-soylei",
+                    "browserId": "browser-1",
+                    "sessionName": "bill-soylei",
+                    "serviceTabHandle": test_tab_handle(true),
+                    "siteRecipeId": "bill-login-v1",
+                    "policyDigest": "a".repeat(64),
+                    "idempotencyKey": "auth-idempotency-1",
+                    "deadlineMs": 120000,
+                    "maxTransitions": 32
+                });
+            }
+            "service_authentication_run_status" => {
+                request = json!({
+                    "action": action,
+                    "serviceName": "books-receipts",
+                    "agentName": "closeout-worker",
+                    "taskName": "bill-auth",
+                    "authenticationRunId": "authrun-fixture"
+                });
+            }
+            "service_authentication_run_resume" | "service_authentication_run_cancel" => {
+                request = json!({
+                    "action": action,
+                    "serviceName": "books-receipts",
+                    "agentName": "closeout-worker",
+                    "taskName": "bill-auth",
+                    "authenticationRunId": "authrun-fixture",
+                    "operationId": "operation-fixture"
+                });
+            }
             "probe" => {
                 request["serviceTabHandle"] = test_tab_handle(true);
                 request["probe"] = json!({"detectors": [{"type": "url_title"}]});
@@ -3208,6 +3432,65 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{action}: {error}"));
             assert_eq!(normalized.command["action"], *action);
         }
+    }
+
+    #[test]
+    fn authentication_run_requests_are_closed_and_secret_free() {
+        let start = valid_request_for_action("service_authentication_run_start");
+        let normalized = normalize(start.clone()).unwrap();
+        assert_eq!(normalized.command["accountRef"], "opaque-account-1");
+        assert_eq!(normalized.command["idempotencyKey"], "auth-idempotency-1");
+
+        for (field, value, expected) in [
+            (
+                "username",
+                json!("synthetic-secret-canary"),
+                "unknown service request field: username",
+            ),
+            (
+                "password",
+                json!("synthetic-secret-canary"),
+                "unknown service request field: password",
+            ),
+            (
+                "otp",
+                json!("synthetic-secret-canary"),
+                "unknown service request field: otp",
+            ),
+            (
+                "selector",
+                json!("synthetic-secret-canary"),
+                "unknown service request field: selector",
+            ),
+            (
+                "uiAction",
+                json!({}),
+                "service_authentication_run_start does not accept uiAction",
+            ),
+            (
+                "params",
+                json!({}),
+                "service_authentication_run_start does not accept params",
+            ),
+        ] {
+            let mut request = start.clone();
+            request[field] = value;
+            assert_eq!(normalize(request).unwrap_err().message(), expected);
+        }
+
+        let mut status = valid_request_for_action("service_authentication_run_status");
+        status["operationId"] = json!("not-allowed");
+        assert_eq!(
+            normalize(status).unwrap_err().message(),
+            "service_authentication_run_status does not accept operationId"
+        );
+
+        let mut resume = valid_request_for_action("service_authentication_run_resume");
+        resume.as_object_mut().unwrap().remove("operationId");
+        assert_eq!(
+            normalize(resume).unwrap_err().message(),
+            "service_authentication_run_resume requires operationId"
+        );
     }
 
     #[test]
@@ -3398,6 +3681,7 @@ mod tests {
         match spec.kind {
             FieldKind::String => json!(format!("{}-value", spec.name)),
             FieldKind::PositiveInteger => json!(1),
+            FieldKind::BoundedInteger(minimum, _) => json!(minimum),
             FieldKind::Boolean => json!(false),
             FieldKind::StringArray => json!([format!("{}-value", spec.name)]),
             FieldKind::Object => json!({}),

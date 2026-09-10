@@ -53,6 +53,10 @@
         "service_viewer_lease_heartbeat",
         "service_viewer_lease_release",
         "service_controller_lease_takeover",
+        "service_authentication_run_start",
+        "service_authentication_run_status",
+        "service_authentication_run_resume",
+        "service_authentication_run_cancel",
         "tab_list",
         "url",
         "title",
@@ -488,6 +492,43 @@
       "type": "string",
       "minLength": 1,
       "description": "Required caller-generated opaque idempotency identity for action=desktop_interact. It is not authority or a daemon selector."
+    },
+    "authenticationRunId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque durable AuthenticationRun identifier returned by service_authentication_run_start."
+    },
+    "accountRef": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque account reference resolved only inside the sealed authentication provider boundary. It is not a username."
+    },
+    "siteRecipeId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Versioned repository-owned site-login recipe identifier. Callers cannot supply selectors or input steps."
+    },
+    "policyDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "SHA-256 digest of the approved authentication policy."
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque caller idempotency key. Durable state retains only its SHA-256 digest."
+    },
+    "deadlineMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 600000,
+      "description": "Bounded authentication-run deadline measured from durable creation."
+    },
+    "maxTransitions": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64,
+      "description": "Bounded durable AuthenticationRun transition budget."
     },
     "recipe": {
       "type": "object",

@@ -1232,6 +1232,43 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minLength": 1,
                         "description": "Required caller-generated opaque idempotency identity for action=desktop_interact."
                     },
+                    "authenticationRunId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque durable AuthenticationRun identifier returned by service_authentication_run_start."
+                    },
+                    "accountRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque account reference resolved only inside the sealed authentication provider boundary."
+                    },
+                    "siteRecipeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Versioned repository-owned site-login recipe identifier."
+                    },
+                    "policyDigest": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{64}$",
+                        "description": "SHA-256 digest of the approved authentication policy."
+                    },
+                    "idempotencyKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque caller idempotency key; durable state retains only its digest."
+                    },
+                    "deadlineMs": {
+                        "type": "integer",
+                        "minimum": 1000,
+                        "maximum": 600000,
+                        "description": "Bounded authentication-run deadline."
+                    },
+                    "maxTransitions": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 64,
+                        "description": "Bounded durable AuthenticationRun transition budget."
+                    },
                     "recipe": {
                         "type": "object",
                         "additionalProperties": false,

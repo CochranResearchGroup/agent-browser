@@ -818,6 +818,30 @@ impl AuthenticationRun {
         Ok(receipt)
     }
 
+    pub(crate) fn cancel(&mut self, operation_id: &str) -> Result<(), AuthenticationRunError> {
+        if matches!(
+            self.state,
+            AuthenticationRunState::Authenticated
+                | AuthenticationRunState::OperatorInterventionRequired
+                | AuthenticationRunState::Blocked
+                | AuthenticationRunState::Failed
+                | AuthenticationRunState::Cancelled
+        ) {
+            return Err(AuthenticationRunError::UnexpectedState);
+        }
+        self.require_operation_available(operation_id)?;
+        self.require_transition_available()?;
+        self.used_operation_ids.insert(operation_id.to_string());
+        self.active_challenge = None;
+        self.transition(
+            operation_id,
+            AuthenticationRunState::Cancelled,
+            "cancel",
+            None,
+        );
+        Ok(())
+    }
+
     fn validate_primary_receipt(
         &self,
         receipt: &AuthenticationActionReceipt,
@@ -1405,6 +1429,26 @@ mod tests {
         assert_eq!(run.state, AuthenticationRunState::Ready);
         assert_eq!(run.transition_count, 0);
         assert!(run.site_observation_receipts.is_empty());
+    }
+
+    #[test]
+    fn cancellation_is_durable_terminal_and_cannot_reopen_the_run() {
+        let mut run = AuthenticationRun::new("run-cancel", binding(), 4).unwrap();
+        run.observe_site_login_state(
+            "op-observe-identifier",
+            site_observation(SiteLoginState::IdentifierForm, "form-identifier-1"),
+        )
+        .unwrap();
+        run.cancel("op-cancel").unwrap();
+        assert_eq!(run.state, AuthenticationRunState::Cancelled);
+        assert_eq!(
+            run.cancel("op-cancel-again"),
+            Err(AuthenticationRunError::UnexpectedState)
+        );
+        assert!(run
+            .transition_receipts
+            .iter()
+            .any(|receipt| receipt.action == "cancel"));
     }
 
     #[test]

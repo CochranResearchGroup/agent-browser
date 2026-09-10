@@ -44,6 +44,10 @@ export const SERVICE_REQUEST_ACTIONS = [
   "service_viewer_lease_heartbeat",
   "service_viewer_lease_release",
   "service_controller_lease_takeover",
+  "service_authentication_run_start",
+  "service_authentication_run_status",
+  "service_authentication_run_resume",
+  "service_authentication_run_cancel",
   "tab_list",
   "url",
   "title",
@@ -155,6 +159,11 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "promptProfileId",
   "controllerLeaseId",
   "operationId",
+  "authenticationRunId",
+  "accountRef",
+  "siteRecipeId",
+  "policyDigest",
+  "idempotencyKey",
   "sessionName",
   "handoffId",
   "remoteViewHandoffId",
@@ -183,6 +192,8 @@ export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "policyRevision",
   "cdpPort",
   "maxBytes",
+  "deadlineMs",
+  "maxTransitions",
   "pid"
 ];
 

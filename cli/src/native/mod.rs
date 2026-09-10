@@ -57,6 +57,7 @@ pub(crate) mod desktop_evidence;
 pub(crate) mod desktop_evidence_action;
 #[allow(dead_code)]
 pub(crate) mod desktop_evidence_cdp;
+pub(crate) mod service_authentication_run;
 pub(crate) mod service_connection_lifetime;
 pub(crate) mod service_connection_reconcile;
 // The configured episode is landing adapter by adapter so each live boundary
