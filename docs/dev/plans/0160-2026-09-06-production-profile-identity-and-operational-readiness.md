@@ -3953,3 +3953,31 @@ pre-transfer admission error only when current route, display, pool, browser and
 provider probes qualify. Any current mismatch remains blocking. The focused
 reattach test and formatting pass. Rebuild once more, repeat one claimed reattach,
 then commit its ready durable handoff before the joined supervisor transition.
+
+### Third staged-install rollback and dotenv inventory propagation
+
+state_transition: Fresh reservation qualification was present, but the staged runtime could not load the production inventory configuration from the canonical dotenv file; the loader allowlist now carries that configuration.
+acceptance_state: Third transaction rolled back cleanly; dotenv tests pass and a rebuilt candidate remains required.
+progress_classification: blocker removed in source
+
+Transaction `upgrade-b5eb7ee8-c826-4f9b-8ae5-9ffc73fd1352` staged candidate
+generation `0.28.0-3099604f738a-6c98f8ac790c` and transferred the two current
+retained owners. Claimed BILL reattach request and job
+`mcp-service-request-service_remote_view_browser_reattach-ae10600b-fa53-4198-9991-5c2ada4d73a4`
+again stopped at `InventoryAdmission` and was not retried. The transaction then
+restored both owner lanes, selected the old generation, stopped the candidate,
+cleared its admission drain and ended `failed_preserved_old_generation`.
+
+The current route, display and pool facts were already eligible, so the refresh
+path should have cleared the cached error. Inspection found the underlying
+configuration boundary: `~/.agent-browser/.env` contains the production
+inventory path and presentation capacity settings, but Rust `agent_env` omitted
+all of them from its explicit allowlist. Direct and staged runtime-host launches
+therefore could not apply the inventory even though supervised units using
+`EnvironmentFile` could.
+
+The loader now recognizes the production and development inventory paths plus
+all five presentation capacity settings. Unknown dotenv keys remain ignored and
+ambient environment still wins. Parser tests prove the production path and warm
+minimum are retained; the focused recovery test, formatting and workspace Clippy
+also pass. Rebuild and repeat the exact claimed candidate reattach once.

@@ -3347,6 +3347,8 @@ recovery.
 
 Production recovery inventory uses `AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH`
 (an absolute path) and schema `agent-browser.production-presentation-inventory.v1`.
+The CLI dotenv loader applies this path and the presentation capacity settings
+to direct and staged runtime-host launches from `~/.agent-browser/.env`.
 Set `environment` to `production`, `bootEpoch` to the current boot identity, and
 provide `routes` containing `routePoolEntryId`, `routeId`, `displayAllocationId`,
 `displayName`, `routeUser`, and `connectionId`. Every entry must match existing
