@@ -155,9 +155,14 @@ are the immediate product milestone for profile ownership and identity proof,
 implemented through
 [Plan 0161](docs/dev/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md).
 Explicitly scoped runtime and authentication reset follow; destructive
-profile-data reset remains separately gated. The authenticated operator journey,
-maintenance reconciliation and unattended operation follow that owner/lease
-milestone. Plan 0159's bounded completion and installed profile repair do
+profile-data reset remains separately gated. The authenticated operator journey
+then adopts Plan 0124's arbitrary-N capacity through
+[Plan 0162](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md):
+browsers bind to validated desktop slots, while Guacamole viewers join those
+desktops just in time without client route selection. Its initial production
+target is three warm slots and shared viewing of one browser from three
+locations. Maintenance reconciliation and unattended operation follow those
+owner/lease and presentation milestones. Plan 0159's bounded completion and installed profile repair do
 not establish whole production readiness. P158's historical calibration sequence
 remains paused and its incomplete criteria remain visible.
 

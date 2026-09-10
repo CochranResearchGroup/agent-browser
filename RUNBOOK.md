@@ -5,18 +5,18 @@ Keep at or below 200 lines under policy0043.
 
 ## Turn 291 | 2026-09-10
 
-The Last30Days degraded tick adds A1/AX cases. LinkedIn stopped on full-state
-profile validation before page effects; lock timeout must report `no_effect`,
-retain holder context and avoid unnecessary global reads. Reddit created each
-tab, then redundantly enabled CDP domains; tab plus immediate-action fixtures
-must prevent that rebootstrap. All five historical job lookups were lost and
-created new failure records, so AX now requires durable, read-only lookup.
+The Last30Days degraded tick adds A1/AX cases. LinkedIn's lock timeout stopped
+before effects and must retain `no_effect` plus holder context. Reddit created
+tabs, then redundantly enabled CDP domains. Five historical job lookups were
+lost, so AX requires durable read-only lookup. `last30days-facebook` retains its
+owner and profile but no locks or process; Plan0161 W2 owns preserving repair.
+Recovery r348638 is uncertain; diagnosis r513089 proves no launch. Only Last30Days may authorize a later tick. A3, BILL/QBO and PID45449 remain untouched.
 
-`last30days-facebook` is repairable: owner and profile data remain, locks and
-browser process are absent. Plan0161 W2 owns exact preserving repair. The
-Last30Days owns provider scheduling and terminal retry behavior. Recovery r348638
-stopped uncertain; diagnosis r513089 proves no launch, so no retry is authorized.
-A3 proof and BILL/QBO repair stay open; browser PID 45449 remains untouched.
+Production has three Guacamole routes but two admitted capacity slots; selection
+exposed `presentation_bound_slot_missing`. Plan0162 adopts Plan0124's arbitrary-N
+model: three warm desktops, logical-browser allocation and just-in-time
+multi-viewer streaming. Plan0161 repair remains the critical path; Plan0162
+then supplies Plan0160 A2/A3.
 
 ## Turn 289 | 2026-09-10
 
