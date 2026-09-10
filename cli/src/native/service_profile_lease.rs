@@ -2210,8 +2210,13 @@ fn exact_rejoin_target_for_owner(
                 && !matches!(tab.lifecycle, TabLifecycle::Closed | TabLifecycle::Crashed)
         })
         .collect::<Vec<_>>();
+    let browser_ids = session
+        .browser_ids
+        .iter()
+        .chain(std::iter::once(&owner.browser_id))
+        .collect::<std::collections::BTreeSet<_>>();
     if active_tabs.iter().any(|tab| {
-        tab.browser_id != owner.browser_id
+        !browser_ids.contains(&tab.browser_id)
             || tab
                 .principal_id
                 .as_deref()
@@ -3077,7 +3082,15 @@ mod tests {
     fn reconcile_plan_rejoins_missing_binding_and_rejects_changed_custody() {
         let (mut state, authority, _) = state_with_lease();
         state.runtime_owner_registry.principal_bindings.clear();
+        state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap()
+            .browser_id = "session:handoff-adopted".to_string();
         let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.browser_ids = vec!["browser-odollo".to_string()];
         session.principal_id = None;
         session.principal_provenance = None;
         session.work_lease_id = None;
