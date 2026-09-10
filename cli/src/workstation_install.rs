@@ -4800,6 +4800,8 @@ fn reconcile_authoritative_route_pool(
             "--json",
             "--session",
             &reconcile_session,
+            "--service-state-lock-timeout-ms",
+            "30000",
             "service",
             "reconcile",
             "--authoritative-route-pool-json",
