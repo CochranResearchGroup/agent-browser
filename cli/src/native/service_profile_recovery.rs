@@ -122,6 +122,7 @@ pub(crate) enum ProfileAcquisitionState {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum MitigationActionType {
     SupersedeTerminalOwner,
+    SupersedeInertOwner,
     ReconcileExactPrincipalProfileIdentity,
     ReconcileLegacyPrincipal,
     BindOwnerPrincipalAuthority,
@@ -536,6 +537,21 @@ pub(crate) fn mitigation_action_registry() -> Vec<MitigationActionDescriptor> {
             &[
                 "terminal_cleanup_satisfied",
                 "exact_process_absence_proven",
+                "foreign_lease_absent",
+            ],
+            &["retain_exact_cleanup_obligation_on_uncertain_effect"],
+        ),
+        descriptor(
+            MitigationActionType::SupersedeInertOwner,
+            "supersede_ready_inert_owner",
+            "service_profile_repair_apply",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &["runtime_browser_record_missing"],
+            &[
+                "profile_identity_digest_matches",
+                "owner_generation_matches",
+                "exact_process_absence_proven",
+                "profile_lock_cleanup_safe",
                 "foreign_lease_absent",
             ],
             &["retain_exact_cleanup_obligation_on_uncertain_effect"],
@@ -1957,6 +1973,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         .browsers
         .get(&owner.browser_id)
         .is_some_and(|browser| browser.pid.is_some());
+    let ready_inert_lock_evidence = preserving_profile_lock_evidence(profile);
     let exact_terminal = lifecycle.profile_identity_digest == profile_identity_digest
         && lifecycle.logical_browser_id == owner.browser_id
         && lifecycle.owner_generation == owner.owner_generation
@@ -1967,7 +1984,20 @@ pub(crate) fn plan_terminal_owner_recovery(
         && active_profile_lease_session_ids.is_empty()
         && !current_process_proven
         && owner.pending_transfer.is_none();
-    if !exact_terminal {
+    let exact_ready_inert = lifecycle.profile_identity_digest == profile_identity_digest
+        && lifecycle.logical_browser_id == owner.browser_id
+        && lifecycle.owner_generation == owner.owner_generation
+        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready
+        && lifecycle.cleanup_obligation_state == CleanupObligationState::Owned
+        && terminal_process_absence_evidence(lifecycle)
+        && ready_inert_lock_evidence.is_some()
+        && active_profile_lease_session_ids.is_empty()
+        && !state.browsers.contains_key(&owner.browser_id)
+        && !state
+            .browser_process_identities
+            .contains_key(&owner.browser_id)
+        && owner.pending_transfer.is_none();
+    if !exact_terminal && !exact_ready_inert {
         return Ok(blocked_outcome(owner.browser_id.clone(), lifecycle));
     }
 
@@ -1990,12 +2020,21 @@ pub(crate) fn plan_terminal_owner_recovery(
         presentation_route_id: None,
     };
     let blocker = DominantBlocker {
-        code: "terminal_owner_cleanup_satisfied".to_string(),
+        code: if exact_ready_inert {
+            "runtime_browser_record_missing"
+        } else {
+            "terminal_owner_cleanup_satisfied"
+        }
+        .to_string(),
         recoverable: true,
-        detail: "The exact retained owner is terminal, cleanup is satisfied, and process absence is proven."
-            .to_string(),
+        detail: if exact_ready_inert {
+            "The exact retained owner has no browser or process record, process absence is proven, and the profile lock posture permits preserving repair."
+        } else {
+            "The exact retained owner is terminal, cleanup is satisfied, and process absence is proven."
+        }
+        .to_string(),
     };
-    let evidence = lifecycle
+    let mut evidence = lifecycle
         .terminal_evidence
         .iter()
         .map(|code| RecoveryEvidence {
@@ -2003,21 +2042,45 @@ pub(crate) fn plan_terminal_owner_recovery(
             subject_id: owner.browser_id.clone(),
         })
         .collect::<Vec<_>>();
+    if let Some(code) = ready_inert_lock_evidence {
+        if !evidence.iter().any(|item| item.code == code) {
+            evidence.push(RecoveryEvidence {
+                code,
+                subject_id: owner.browser_id.clone(),
+            });
+        }
+    }
+    let action_type = if exact_ready_inert {
+        MitigationActionType::SupersedeInertOwner
+    } else {
+        MitigationActionType::SupersedeTerminalOwner
+    };
+    let action_name = if exact_ready_inert {
+        "supersede_ready_inert_owner"
+    } else {
+        "supersede_terminal_owner"
+    };
     let action = MitigationAction {
         schema_version: PROFILE_MITIGATION_ACTION_SCHEMA_V1.to_string(),
         action_id: digest_json(&(
-            "supersede_terminal_owner",
+            action_name,
             state.runtime_owner_registry.revision,
             &identities,
         ))?,
-        action_type: MitigationActionType::SupersedeTerminalOwner,
+        action_type,
         effect_authority: RecoveryEffectAuthority::ExactProfileGraph,
         preconditions: vec![
             "service_state_revision_matches".to_string(),
             "profile_identity_digest_matches".to_string(),
             "owner_generation_matches".to_string(),
-            "terminal_cleanup_satisfied".to_string(),
+            if exact_ready_inert {
+                "ready_owner_runtime_inert"
+            } else {
+                "terminal_cleanup_satisfied"
+            }
+            .to_string(),
             "exact_process_absence_proven".to_string(),
+            "profile_lock_cleanup_safe".to_string(),
             "foreign_lease_absent".to_string(),
         ],
         expected_postconditions: vec![
@@ -2198,7 +2261,7 @@ fn validate_plan_preconditions(
         .browsers
         .get(&plan.identities.durable_browser_id)
         .is_some_and(|browser| browser.pid.is_some());
-    let exact = profile_digest == plan.identities.profile_identity_digest
+    let identity_exact = profile_digest == plan.identities.profile_identity_digest
         && plan.original_intent.principal_id == plan.identities.principal_id
         && plan.original_intent.profile_id == plan.identities.profile_id
         && owner.owner_id == plan.identities.lifecycle_owner_id
@@ -2209,12 +2272,26 @@ fn validate_plan_preconditions(
         && owner.pending_transfer.is_none()
         && lifecycle.profile_identity_digest == plan.identities.profile_identity_digest
         && lifecycle.owner_generation == plan.identities.lifecycle_owner_generation
-        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
-        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
         && terminal_process_absence_evidence(lifecycle)
-        && terminal_profile_lock_release_evidence(lifecycle)
         && active_profile_lease_session_ids.is_empty()
         && !current_process_proven;
+    let exact_terminal = lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+        && terminal_profile_lock_release_evidence(lifecycle);
+    let exact_ready_inert = plan
+        .actions
+        .first()
+        .is_some_and(|action| action.action_type == MitigationActionType::SupersedeInertOwner)
+        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready
+        && lifecycle.cleanup_obligation_state == CleanupObligationState::Owned
+        && !state
+            .browsers
+            .contains_key(&plan.identities.durable_browser_id)
+        && !state
+            .browser_process_identities
+            .contains_key(&plan.identities.durable_browser_id)
+        && preserving_profile_lock_evidence(profile).is_some();
+    let exact = identity_exact && (exact_terminal || exact_ready_inert);
     if !exact {
         return Err("profile_recovery_plan_stale".to_string());
     }
@@ -2255,6 +2332,44 @@ fn terminal_profile_lock_release_evidence(
             || evidence == "service_reconcile_profile_lock_absent"
             || evidence.starts_with("service_reconcile_profile_lock_stale_pid_absent:")
     })
+}
+
+fn preserving_profile_lock_evidence(
+    profile: &super::service_model::BrowserProfile,
+) -> Option<String> {
+    let profile_root = std::path::Path::new(profile.user_data_dir.as_deref()?);
+    let lock_path = profile_root.join("SingletonLock");
+    match std::fs::symlink_metadata(&lock_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let all_absent = ["SingletonSocket", "SingletonCookie"].iter().all(|name| {
+                match std::fs::symlink_metadata(profile_root.join(name)) {
+                    Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+                    Ok(_) => false,
+                }
+            });
+            all_absent.then(|| "profile_repair_profile_locks_absent".to_string())
+        }
+        Ok(_) => {
+            #[cfg(unix)]
+            {
+                let pid = std::fs::read_link(&lock_path).ok().and_then(|target| {
+                    target
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .and_then(|name| name.rsplit_once('-').map(|(_, pid)| pid))
+                        .and_then(|pid| pid.parse::<u32>().ok())
+                })?;
+                crate::runtime_profile::profile_lock_process_assessment(profile_root, pid)
+                    .authorizes_cleanup()
+                    .then(|| format!("profile_repair_stale_lock_process_absent:{pid}"))
+            }
+            #[cfg(not(unix))]
+            {
+                None
+            }
+        }
+        Err(_) => None,
+    }
 }
 
 fn verify_plan_integrity(plan: &RecoveryPlan, seal_key: &[u8]) -> Result<(), String> {
@@ -2901,6 +3016,269 @@ mod tests {
             plan.actions[0].action_type,
             MitigationActionType::SupersedeTerminalOwner
         );
+    }
+
+    #[test]
+    fn ready_owner_with_proven_absent_runtime_gets_preserving_repair_plan() {
+        let mut state = state();
+        let lifecycle = state
+            .runtime_owner_registry
+            .lifecycle_records
+            .values_mut()
+            .next()
+            .unwrap();
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+        lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+        lifecycle.terminal_evidence = vec![
+            "service_reconcile_process_group_absent:14768".to_string(),
+            "service_reconcile_profile_lock_absent".to_string(),
+        ];
+        let before = state.clone();
+
+        let outcome = plan_terminal_owner_recovery(
+            &state,
+            intent(),
+            "2026-09-10T12:00:00Z",
+            "2026-09-10T12:05:00Z",
+            "request-ready-owner-missing-runtime",
+            seal_key(),
+        )
+        .unwrap();
+
+        assert_eq!(state, before);
+        assert_eq!(outcome.state, ProfileAcquisitionState::RecoveryAvailable);
+        let plan = outcome.recovery.unwrap();
+        assert_eq!(
+            plan.actions[0].action_type,
+            MitigationActionType::SupersedeInertOwner
+        );
+        assert!(plan
+            .evidence
+            .iter()
+            .any(|evidence| { evidence.code == "service_reconcile_process_group_absent:14768" }));
+        assert!(plan
+            .evidence
+            .iter()
+            .any(|evidence| { evidence.code == "service_reconcile_profile_lock_absent" }));
+    }
+
+    #[tokio::test]
+    async fn ready_inert_owner_repair_launches_once_and_replays_without_effect() {
+        let mut initial = state();
+        let lifecycle = initial
+            .runtime_owner_registry
+            .lifecycle_records
+            .values_mut()
+            .next()
+            .unwrap();
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+        lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+        lifecycle.terminal_evidence = vec![
+            "service_reconcile_process_group_absent:14768".to_string(),
+            "service_reconcile_profile_lock_absent".to_string(),
+        ];
+        let repository = MemoryRepository::new(initial);
+        let plan = plan_terminal_owner_recovery(
+            &repository.load_snapshot().unwrap(),
+            intent(),
+            "2026-09-10T12:00:00Z",
+            "2026-09-10T12:05:00Z",
+            "request-ready-inert-apply",
+            seal_key(),
+        )
+        .unwrap()
+        .recovery
+        .unwrap();
+        let attempts = std::cell::Cell::new(0);
+        let profile_root = std::path::PathBuf::from("/tmp/agent-browser-p137/recovery-contract");
+
+        let first = apply_terminal_owner_recovery(
+            &repository,
+            &plan,
+            "2026-09-10T12:01:00Z",
+            seal_key(),
+            |_| async {
+                attempts.set(attempts.get() + 1);
+                let authority = RuntimeLifecycleAuthority::new(&repository);
+                let binding = authority.register_managed_lane(ManagedLaneRegistration {
+                    logical_browser_id: "session:ready-inert-replacement".to_string(),
+                    profile_root,
+                    daemon_session_route: "ready-inert-replacement-route".to_string(),
+                    process_group_id: Some(14769),
+                    process_identity: crate::process_identity::RecordedProcessIdentity {
+                        pid: 14769,
+                        start_token: "linux:boot:14769".to_string(),
+                        executable_path: Some("/opt/agent-browser/chrome".to_string()),
+                        browser_family: Some("chrome".to_string()),
+                    },
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint: "ws://127.0.0.1:14769/devtools/browser/ready-inert-replacement"
+                        .to_string(),
+                    target_ids: vec!["facebook".to_string()],
+                })?;
+                repository.mutate(|state| {
+                    state
+                        .runtime_owner_registry
+                        .bind_principal_authority(
+                            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                                principal_id: "principal:last30days".to_string(),
+                                profile_id: "last30days-facebook".to_string(),
+                                profile_identity_digest: binding
+                                    .claim
+                                    .profile_identity_digest
+                                    .clone(),
+                                capability_id: "capability:test".to_string(),
+                                provenance: ServicePrincipalProvenance::RegisteredCapability,
+                                owner_generation: binding.claim.owner_generation,
+                            },
+                        )
+                        .map_err(|error| format!("{error:?}"))?;
+                    Ok(())
+                })?;
+                Ok(ProfileAcquisitionRetryResult {
+                    browser_id: binding.claim.logical_browser_id,
+                    daemon_session_route: binding.claim.daemon_session_route,
+                })
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(attempts.get(), 1);
+        assert!(!first.replayed);
+        assert_eq!(first.receipt.terminal_result, "applied");
+        assert_eq!(first.receipt.browser_id, "session:ready-inert-replacement");
+
+        let replay = apply_terminal_owner_recovery(
+            &repository,
+            &plan,
+            "2026-09-10T12:02:00Z",
+            seal_key(),
+            |_| async { panic!("completed ready-inert repair must not launch twice") },
+        )
+        .await
+        .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.receipt, first.receipt);
+        assert_eq!(attempts.get(), 1);
+    }
+
+    #[tokio::test]
+    async fn ready_inert_owner_repair_refuses_new_browser_before_launch() {
+        let mut initial = state();
+        let lifecycle = initial
+            .runtime_owner_registry
+            .lifecycle_records
+            .values_mut()
+            .next()
+            .unwrap();
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+        lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+        lifecycle.terminal_evidence = vec![
+            "service_reconcile_process_group_absent:14768".to_string(),
+            "service_reconcile_profile_lock_absent".to_string(),
+        ];
+        let repository = MemoryRepository::new(initial);
+        let plan = plan_terminal_owner_recovery(
+            &repository.load_snapshot().unwrap(),
+            intent(),
+            "2026-09-10T12:00:00Z",
+            "2026-09-10T12:05:00Z",
+            "request-ready-inert-stale",
+            seal_key(),
+        )
+        .unwrap()
+        .recovery
+        .unwrap();
+        repository
+            .mutate(|state| {
+                state.browsers.insert(
+                    plan.identities.durable_browser_id.clone(),
+                    BrowserProcess {
+                        id: plan.identities.durable_browser_id.clone(),
+                        pid: Some(14770),
+                        ..BrowserProcess::default()
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+        let attempts = std::cell::Cell::new(0);
+
+        let error = apply_terminal_owner_recovery(
+            &repository,
+            &plan,
+            "2026-09-10T12:01:00Z",
+            seal_key(),
+            |_| async {
+                attempts.set(attempts.get() + 1);
+                Err("must not launch".to_string())
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error, "profile_recovery_plan_stale");
+        assert_eq!(attempts.get(), 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ready_inert_owner_plan_seals_stale_lock_proof_without_removing_files() {
+        let profile_root = std::env::temp_dir().join(format!(
+            "agent-browser-p161-stale-lock-plan-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&profile_root).unwrap();
+        let lock_path = profile_root.join("SingletonLock");
+        std::os::unix::fs::symlink("host-4294967295", &lock_path).unwrap();
+        let mut state = state();
+        let profile = state.profiles.get_mut("last30days-facebook").unwrap();
+        profile.user_data_dir = Some(profile_root.to_string_lossy().to_string());
+        let profile_identity_digest = recovery_profile_identity_digest(profile).unwrap();
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap();
+        owner.profile_identity_digest = profile_identity_digest.clone();
+        let owner = state.runtime_owner_registry.owners.pop_first().unwrap().1;
+        state
+            .runtime_owner_registry
+            .owners
+            .insert(profile_identity_digest.clone(), owner);
+        let lifecycle = state
+            .runtime_owner_registry
+            .lifecycle_records
+            .values_mut()
+            .next()
+            .unwrap();
+        lifecycle.profile_identity_digest = profile_identity_digest;
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+        lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+        lifecycle.terminal_evidence =
+            vec!["service_reconcile_process_group_absent:4294967295".to_string()];
+
+        let outcome = plan_terminal_owner_recovery(
+            &state,
+            intent(),
+            "2026-09-10T12:00:00Z",
+            "2026-09-10T12:05:00Z",
+            "request-ready-inert-stale-lock",
+            seal_key(),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.state, ProfileAcquisitionState::RecoveryAvailable);
+        assert!(std::fs::symlink_metadata(&lock_path).is_ok());
+        let plan = outcome.recovery.unwrap();
+        assert!(plan.evidence.iter().any(|evidence| {
+            evidence.code == "profile_repair_stale_lock_process_absent:4294967295"
+        }));
+
+        std::fs::remove_file(&lock_path).unwrap();
+        std::fs::remove_dir(&profile_root).unwrap();
     }
 
     #[test]
