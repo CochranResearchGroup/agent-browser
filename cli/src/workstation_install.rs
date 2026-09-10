@@ -5620,18 +5620,17 @@ fn expected_upgrade_supervisor_transition_ready(
         .pointer("/runtimeMultiplicity/runtimeHosts")
         .and_then(Value::as_array);
     supervisors.is_some_and(|sessions| {
-        !sessions.is_empty()
-            && sessions.iter().all(|session| {
+        sessions.is_empty()
+            || sessions.iter().all(|session| {
                 session
                     .pointer("/manifest/executablePath")
                     .and_then(Value::as_str)
                     .is_some_and(|path| path.ends_with(&expected_suffix))
             })
     }) && supervisor_issues.is_some_and(|issues| {
-        !issues.is_empty()
-            && issues
-                .iter()
-                .all(|issue| issue.get("code").and_then(Value::as_str) == Some("executable_drift"))
+        issues
+            .iter()
+            .all(|issue| issue.get("code").and_then(Value::as_str) == Some("executable_drift"))
     }) && runtime_hosts.is_some_and(|hosts| {
         hosts.len() == 1
             && hosts[0].get("generationId").and_then(Value::as_str)
@@ -13900,6 +13899,13 @@ mod tests {
         });
         assert!(expected_upgrade_supervisor_transition_ready(
             &ready,
+            &transaction
+        ));
+
+        let mut quiesced = ready.clone();
+        quiesced["sessionSupervisors"] = serde_json::json!({"sessions": [], "issues": []});
+        assert!(expected_upgrade_supervisor_transition_ready(
+            &quiesced,
             &transaction
         ));
 
