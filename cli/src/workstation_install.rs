@@ -8390,7 +8390,13 @@ fn run_agent_json_detailed_in_socket_dir_with(
 ) -> Result<Value, RuntimeTransactionCommandFailure> {
     let mut command = Command::new(binary);
     command
-        .args(["--json", "--session", session])
+        .args([
+            "--json",
+            "--session",
+            session,
+            "--service-state-lock-timeout-ms",
+            "30000",
+        ])
         .args(command_args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
