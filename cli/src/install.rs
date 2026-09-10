@@ -2621,7 +2621,8 @@ pub(crate) fn daemon_listener_inventory(
 ) -> serde_json::Value {
     #[cfg(unix)]
     {
-        let socket_dir = get_socket_dir();
+        let selected_socket_dir = get_socket_dir();
+        let socket_dir = daemon_listener_namespace_root(&selected_socket_dir);
         let socket_dir_text = socket_dir.display().to_string();
         let mut command = Command::new("ss");
         command.args(["-xlpn"]);
@@ -2775,6 +2776,7 @@ pub(crate) fn daemon_listener_inventory(
             "available": true,
             "state": state,
             "socketDir": socket_dir_text,
+            "selectedSocketDir": selected_socket_dir,
             "currentExecutableRealpath": current_executable_realpath,
             "listenerCount": listener_count,
             "defaultSocketListenerCount": default_socket_listener_count,
@@ -2801,6 +2803,17 @@ pub(crate) fn daemon_listener_inventory(
             "defaultSocketDeletedExecutableCount": 0,
         })
     }
+}
+
+#[cfg(unix)]
+fn daemon_listener_namespace_root(selected_socket_dir: &Path) -> PathBuf {
+    let ancestors = selected_socket_dir.ancestors().collect::<Vec<_>>();
+    ancestors
+        .iter()
+        .find(|path| path.file_name().and_then(|value| value.to_str()) == Some("runtime-hosts"))
+        .and_then(|path| path.parent())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| selected_socket_dir.to_path_buf())
 }
 
 #[cfg(unix)]
@@ -4428,6 +4441,21 @@ mod tests {
             Path::new("/run/user/1000/agent-browser-dev/runtime-host.sock"),
             production_runtime_dir,
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_listener_inventory_scans_the_whole_production_namespace() {
+        assert_eq!(
+            daemon_listener_namespace_root(Path::new(
+                "/run/user/1000/agent-browser/runtime-hosts/selected"
+            )),
+            PathBuf::from("/run/user/1000/agent-browser")
+        );
+        assert_eq!(
+            daemon_listener_namespace_root(Path::new("/tmp/fixture-agent-browser")),
+            PathBuf::from("/tmp/fixture-agent-browser")
+        );
     }
 
     #[cfg(unix)]

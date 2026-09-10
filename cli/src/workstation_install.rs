@@ -1572,6 +1572,76 @@ fn recover_operator_required_upgrade_for_root(
             transaction.state
         ));
     }
+    if transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
+        && transaction.stop_reason.as_deref() == Some("accepted_supervisor_transition_failed")
+        && selected_generation_id(&paths).as_deref()
+            == Some(transaction.candidate_generation_id.as_str())
+    {
+        let selected_executable = paths
+            .generations_dir
+            .join(&transaction.candidate_generation_id)
+            .join("bin/agent-browser");
+        validate_sealed_generation_tree(
+            &paths
+                .generations_dir
+                .join(&transaction.candidate_generation_id),
+        )?;
+        let supervisor = complete_accepted_upgrade_supervisor_transition(
+            &selected_executable,
+            &transaction.transaction_id,
+        )?;
+        let dashboard_ingress_path = env::var_os("AGENT_BROWSER_DASHBOARD_INGRESS_STATE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| root.join(".agent-browser/dashboard-ingress.json"));
+        let dashboard =
+            crate::dashboard_ingress::dashboard_ingress_status_for_path(&dashboard_ingress_path);
+        let dashboard_ready = dashboard
+            .pointer("/selectedBackend/generationId")
+            .and_then(Value::as_str)
+            == Some(transaction.candidate_generation_id.as_str())
+            && dashboard
+                .pointer("/presentationReceipt/coordinatorGeneration")
+                .and_then(Value::as_str)
+                == Some(transaction.candidate_generation_id.as_str())
+            && dashboard
+                .pointer("/presentationReceipt/state")
+                .and_then(Value::as_str)
+                == Some("ready");
+        if !dashboard_ready {
+            return Err("workstation_forward_recovery_dashboard_evidence_not_ready".to_string());
+        }
+        transaction.dashboard_validation_summary =
+            Some("authenticated_candidate_dashboard_and_operator_journey_ready".to_string());
+        transaction.terminal_result = Some("accepted".to_string());
+        transaction.stop_reason = None;
+        persist_upgrade_transition(
+            &transaction_path,
+            &mut transaction,
+            UpgradeTransactionState::Accepted,
+            "accepted_after_supervisor_transition_recovery",
+        )?;
+        if let Err(error) = clear_admission_drain(&drain_path) {
+            transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
+            persist_upgrade_transition(
+                &transaction_path,
+                &mut transaction,
+                UpgradeTransactionState::OperatorRecoveryRequired,
+                "operator_recovery_required",
+            )?;
+            return Err(error);
+        }
+        return Ok(serde_json::json!({
+            "schemaVersion": "agent-browser.workstation-upgrade-recovery.v1",
+            "success": true,
+            "changed": true,
+            "transactionId": transaction.transaction_id,
+            "state": transaction.state,
+            "selectedGenerationId": transaction.candidate_generation_id,
+            "direction": "forward",
+            "supervisor": supervisor,
+            "admissionDraining": false,
+        }));
+    }
     let old_generation_id = transaction
         .old_generation_id
         .as_deref()

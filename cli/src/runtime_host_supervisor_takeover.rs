@@ -175,6 +175,7 @@ fn plan_supervisor_takeover_with_admission(
         &census,
         &listener_ports,
         already_supervised,
+        parent_admission_transaction_id.is_some(),
         &mut blockers,
     );
     if let Some(identity) = identity.as_ref() {
@@ -187,8 +188,8 @@ fn plan_supervisor_takeover_with_admission(
         blockers.push(blocker);
     }
 
-    let p147_capability_ready =
-        current_executable_sha256().is_ok_and(|digest| digest == selected.binary_sha256);
+    let p147_capability_ready = parent_admission_transaction_id.is_some()
+        || current_executable_sha256().is_ok_and(|digest| digest == selected.binary_sha256);
     if !p147_capability_ready {
         push_blocker(
             &mut blockers,
@@ -314,6 +315,9 @@ fn apply_supervisor_takeover_from_plan(
 pub(crate) fn ensure_selected_runtime_host_supervised_with_admission(
     parent_admission_transaction_id: Option<&str>,
 ) -> Result<SupervisorTakeoverOutcome, String> {
+    if let Some(parent_id) = parent_admission_transaction_id {
+        retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id)?;
+    }
     let plan = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
     let outcome = match plan.disposition {
         SupervisorTakeoverDisposition::AlreadySupervised => outcome_without_transaction(&plan),
@@ -338,6 +342,150 @@ pub(crate) fn ensure_selected_runtime_host_supervised_with_admission(
         ));
     }
     Ok(outcome)
+}
+
+/// Retire exact non-selected production runtime hosts while an accepted
+/// workstation transaction owns admission. Runtime-host shutdown leaves
+/// retained browser processes alive; the selected host re-adopts their
+/// Service State routes after the supervisor restart.
+#[cfg(target_os = "linux")]
+fn retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id: &str) -> Result<(), String> {
+    let drain_path = crate::runtime_adoption::runtime_admission_drain_path()?;
+    let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
+        &fs::read(&drain_path)
+            .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
+    )
+    .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
+    if drain.transaction_id != parent_id {
+        return Err("superseded_runtime_retirement_admission_owner_changed".to_string());
+    }
+
+    let repository =
+        RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path());
+    let registry = repository.load()?;
+    let selected = registry.selected_backend();
+    let namespace = selected
+        .socket_dir
+        .parent()
+        .ok_or_else(|| "selected_runtime_socket_namespace_missing".to_string())?;
+    let mut allowed_hashes = BTreeSet::from([selected.binary_sha256.clone()]);
+    if let Some(fallback) = registry.fallback_backend() {
+        allowed_hashes.insert(fallback.binary_sha256.clone());
+    }
+    allowed_hashes.insert(current_executable_sha256()?);
+    let invoking_path = std::env::current_exe()
+        .map_err(|error| format!("current_executable_unavailable:{error}"))?
+        .canonicalize()
+        .map_err(|error| format!("current_executable_unavailable:{error}"))?;
+
+    let inventory = crate::install::daemon_listener_inventory(None);
+    if inventory
+        .get("available")
+        .and_then(serde_json::Value::as_bool)
+        != Some(true)
+    {
+        return Err("superseded_runtime_listener_inventory_unavailable".to_string());
+    }
+    let mut retired = BTreeSet::new();
+    for listener in inventory
+        .get("listeners")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(pid) = listener
+            .get("pid")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+        else {
+            continue;
+        };
+        let Some(socket_path) = listener
+            .get("socketPath")
+            .and_then(serde_json::Value::as_str)
+            .map(PathBuf::from)
+        else {
+            continue;
+        };
+        if pid == selected.pid
+            || socket_path.file_name().and_then(|value| value.to_str()) != Some("runtime-host.sock")
+            || socket_path.parent().and_then(Path::parent) != Some(namespace)
+            || !retired.insert(pid)
+        {
+            continue;
+        }
+        let socket_dir = socket_path
+            .parent()
+            .ok_or_else(|| "superseded_runtime_socket_directory_missing".to_string())?;
+        require_runtime_host_process_environment(pid, socket_dir)?;
+        let observed = match crate::process_identity::observe_process(pid) {
+            ProcessObservation::Observed(observed) => observed,
+            ProcessObservation::Missing => continue,
+            ProcessObservation::Failed { reason } => {
+                return Err(format!(
+                    "superseded_runtime_process_unobservable:{pid}:{reason}"
+                ));
+            }
+        };
+        let start_token = observed
+            .start_token
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("superseded_runtime_start_token_missing:{pid}"))?;
+        let executable_hash = sha256_file(Path::new(&format!("/proc/{pid}/exe")))?;
+        let replaced_invoking_path = observed
+            .executable_path
+            .as_deref()
+            .and_then(|path| path.strip_suffix(" (deleted)"))
+            .is_some_and(|path| Path::new(path) == invoking_path);
+        if !allowed_hashes.contains(&executable_hash) && !replaced_invoking_path {
+            return Err(format!("superseded_runtime_binary_unrecognized:{pid}"));
+        }
+        let identity = RecordedProcessIdentity {
+            pid,
+            start_token,
+            executable_path: observed.executable_path,
+            browser_family: observed.browser_family,
+        };
+        let Some(process) = VerifiedProcessTermination::open(&identity)? else {
+            continue;
+        };
+        process.signal(VerifiedProcessSignal::Terminate)?;
+        wait_for_process_exit(&process, SOURCE_EXIT_TIMEOUT)?;
+        if process.is_running()? {
+            process.signal(VerifiedProcessSignal::Kill)?;
+            wait_for_process_exit(&process, SOURCE_EXIT_TIMEOUT)?;
+        }
+        if process.is_running()? {
+            return Err(format!("superseded_runtime_exit_timeout:{pid}"));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn require_runtime_host_process_environment(pid: u32, socket_dir: &Path) -> Result<(), String> {
+    let bytes = fs::read(format!("/proc/{pid}/environ"))
+        .map_err(|error| format!("superseded_runtime_environment_unreadable:{pid}:{error}"))?;
+    let entries = bytes
+        .split(|byte| *byte == 0)
+        .filter_map(|entry| std::str::from_utf8(entry).ok())
+        .collect::<Vec<_>>();
+    let runtime_host = entries
+        .iter()
+        .any(|entry| *entry == format!("{}=1", crate::runtime_host::RUNTIME_HOST_ENV));
+    let expected_socket = format!("AGENT_BROWSER_SOCKET_DIR={}", socket_dir.display());
+    let socket_matches = entries.iter().any(|entry| *entry == expected_socket);
+    if runtime_host && socket_matches {
+        Ok(())
+    } else {
+        Err(format!("superseded_runtime_environment_mismatch:{pid}"))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn retire_superseded_runtime_hosts_for_accepted_upgrade(_parent_id: &str) -> Result<(), String> {
+    Ok(())
 }
 
 pub(crate) fn resume_supervisor_takeover(
@@ -525,11 +673,14 @@ fn validate_supervisor(
             "No supervised lane manifests are configured.",
         );
     }
-    if !supervisor.executable_matches
-        || supervisor
-            .manifests
-            .iter()
-            .any(|manifest| manifest.executable_sha256 != selected.binary_sha256)
+    // The installer may invoke takeover from its build artifact after it has
+    // copied the same bytes into the immutable selected generation. P147
+    // validates the invoking digest separately, so path equality here would
+    // reject an exact candidate solely because its pathname differs.
+    if supervisor
+        .manifests
+        .iter()
+        .any(|manifest| manifest.executable_sha256 != selected.binary_sha256)
     {
         push_blocker(
             blockers,
@@ -552,9 +703,10 @@ fn validate_runtime_conflicts(
     census: &StableRuntimeCensus,
     listener_ports: &BTreeSet<u16>,
     already_supervised: bool,
+    accepted_upgrade_transition: bool,
     blockers: &mut Vec<SupervisorTakeoverBlocker>,
 ) {
-    if !already_supervised && !browserless_census_is_safe(census) {
+    if !already_supervised && !accepted_upgrade_transition && !browserless_census_is_safe(census) {
         let live = census
             .records
             .iter()
@@ -1246,6 +1398,7 @@ mod tests {
             &safe_census,
             &BTreeSet::new(),
             false,
+            false,
             &mut blockers,
         );
         assert!(blockers.is_empty(), "free configured port must be safe");
@@ -1255,6 +1408,7 @@ mod tests {
             &supervisor(vec![39717]),
             &safe_census,
             &BTreeSet::new(),
+            false,
             false,
             &mut blockers,
         );
@@ -1273,11 +1427,45 @@ mod tests {
             &census(&[RuntimeClassification::CooperativeLiveOwner]),
             &BTreeSet::new(),
             true,
+            false,
             &mut blockers,
         );
 
         assert_eq!(blockers.len(), 1);
         assert_eq!(blockers[0].code, "blocked_unrelated_port_owner");
+    }
+
+    #[test]
+    fn accepted_upgrade_can_supervise_finalized_retained_browsers() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        let mut blockers = Vec::new();
+
+        validate_runtime_conflicts(
+            &selected,
+            &supervisor(Vec::new()),
+            &census(&[
+                RuntimeClassification::CooperativeLiveOwner,
+                RuntimeClassification::ManualPreserveOnly,
+            ]),
+            &BTreeSet::new(),
+            false,
+            true,
+            &mut blockers,
+        );
+
+        assert!(blockers.is_empty());
+    }
+
+    #[test]
+    fn supervisor_manifest_digest_matches_selected_even_when_invoker_path_differs() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        let mut observation = supervisor(Vec::new());
+        observation.executable_matches = false;
+        let mut blockers = Vec::new();
+
+        validate_supervisor(&selected, &observation, false, &mut blockers);
+
+        assert!(blockers.is_empty());
     }
 
     #[test]

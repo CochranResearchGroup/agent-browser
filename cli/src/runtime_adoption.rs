@@ -704,6 +704,7 @@ fn upgrade_transition_allowed(
             | (RollbackAfterCommit, RolledBackAfterCommit)
             | (RollbackAfterCommit, OperatorRecoveryRequired)
             | (Accepted, OperatorRecoveryRequired)
+            | (OperatorRecoveryRequired, Accepted)
             | (RuntimesTransferring, OperatorRecoveryRequired)
             | (PresentationsRebinding, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
