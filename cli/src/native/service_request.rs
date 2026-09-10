@@ -368,6 +368,22 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("operationId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("authenticationRunId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("accountRef", FieldKind::String, true, false, false),
+    ServiceRequestFieldSpec::field("organizationRef", FieldKind::String, true, false, false),
+    ServiceRequestFieldSpec::field("challengeProviderId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field(
+        "challengeProviderTenantRef",
+        FieldKind::String,
+        true,
+        false,
+        false,
+    ),
+    ServiceRequestFieldSpec::field(
+        "challengeProviderAccountRef",
+        FieldKind::String,
+        true,
+        false,
+        false,
+    ),
     ServiceRequestFieldSpec::field("siteRecipeId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("policyDigest", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("idempotencyKey", FieldKind::String, true, false, false),
@@ -967,7 +983,9 @@ fn reject_authentication_run_request(
     let is_status = action == "service_authentication_run_status";
     let is_resume = action == "service_authentication_run_resume";
     let is_cancel = action == "service_authentication_run_cancel";
-    if !(is_start || is_status || is_resume || is_cancel) {
+    let is_recipe_status = action == "service_authentication_recipe_status";
+    let is_existing_run = is_status || is_resume || is_cancel;
+    if !(is_start || is_existing_run || is_recipe_status) {
         return Ok(());
     }
     const COMMON_FIELDS: &[&str] = &[
@@ -983,6 +1001,10 @@ fn reject_authentication_run_request(
     const START_FIELDS: &[&str] = &[
         "targetServiceId",
         "accountRef",
+        "organizationRef",
+        "challengeProviderId",
+        "challengeProviderTenantRef",
+        "challengeProviderAccountRef",
         "profileId",
         "browserId",
         "sessionName",
@@ -995,9 +1017,10 @@ fn reject_authentication_run_request(
     ];
     const EXISTING_FIELDS: &[&str] = &["authenticationRunId", "operationId"];
     if let Some(field) = request.keys().find(|field| {
-        !COMMON_FIELDS.contains(&field.as_str())
-            && !(is_start && START_FIELDS.contains(&field.as_str()))
-            && !(!is_start && EXISTING_FIELDS.contains(&field.as_str()))
+        !(COMMON_FIELDS.contains(&field.as_str())
+            || is_start && START_FIELDS.contains(&field.as_str())
+            || is_existing_run && EXISTING_FIELDS.contains(&field.as_str())
+            || is_recipe_status && ["targetServiceId", "siteRecipeId"].contains(&field.as_str()))
     }) {
         return Err(issue(
             ServiceRequestIssueKind::InvalidBoundedRecipe,
@@ -1018,10 +1041,29 @@ fn reject_authentication_run_request(
             ));
         }
     }
-    if is_start {
+    if is_recipe_status {
+        for field in ["targetServiceId", "siteRecipeId"] {
+            if request
+                .get(field)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+            {
+                return Err(issue(
+                    ServiceRequestIssueKind::InvalidBoundedRecipe,
+                    format!("{action} requires {field}"),
+                ));
+            }
+        }
+    } else if is_start {
         for field in [
             "targetServiceId",
             "accountRef",
+            "organizationRef",
+            "challengeProviderId",
+            "challengeProviderTenantRef",
+            "challengeProviderAccountRef",
             "profileId",
             "browserId",
             "sessionName",
@@ -3358,12 +3400,16 @@ mod tests {
                     "taskName": "bill-auth",
                     "targetServiceId": "bill",
                     "accountRef": "opaque-account-1",
+                    "organizationRef": "opaque-organization-1",
+                    "challengeProviderId": "im-receipts",
+                    "challengeProviderTenantRef": "opaque-tenant-1",
+                    "challengeProviderAccountRef": "opaque-provider-account-1",
                     "profileId": "bill-soylei",
                     "browserId": "browser-1",
                     "sessionName": "bill-soylei",
                     "serviceTabHandle": test_tab_handle(true),
                     "siteRecipeId": "bill-login-v1",
-                    "policyDigest": "a".repeat(64),
+                    "policyDigest": crate::native::site_login_recipe::site_login_recipe_digest("bill-login-v1").unwrap(),
                     "idempotencyKey": "auth-idempotency-1",
                     "deadlineMs": 120000,
                     "maxTransitions": 32
@@ -3386,6 +3432,16 @@ mod tests {
                     "taskName": "bill-auth",
                     "authenticationRunId": "authrun-fixture",
                     "operationId": "operation-fixture"
+                });
+            }
+            "service_authentication_recipe_status" => {
+                request = json!({
+                    "action": action,
+                    "serviceName": "books-receipts",
+                    "agentName": "closeout-worker",
+                    "taskName": "bill-auth",
+                    "targetServiceId": "bill",
+                    "siteRecipeId": "bill-login-v1"
                 });
             }
             "probe" => {

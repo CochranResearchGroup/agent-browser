@@ -341,6 +341,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_authentication_run_status"
             | "service_authentication_run_resume"
             | "service_authentication_run_cancel"
+            | "service_authentication_recipe_status"
             | "service_jobs"
             | "service_incidents"
             | "service_events"
@@ -1063,7 +1064,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_authentication_run_start"
             | "service_authentication_run_status"
             | "service_authentication_run_resume"
-            | "service_authentication_run_cancel" => handle_service_authentication_run(cmd),
+            | "service_authentication_run_cancel" =>
+                handle_service_authentication_run(cmd, state).await,
+            "service_authentication_recipe_status" =>
+                handle_service_authentication_run(cmd, state).await,
             "service_jobs" => handle_service_jobs(cmd).await,
             "service_incidents" => handle_service_incidents(cmd).await,
             "service_events" => handle_service_events(cmd).await,

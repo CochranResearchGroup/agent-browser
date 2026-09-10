@@ -1517,7 +1517,7 @@ export interface ServiceBrowserRepairData {
 }
 
 export interface ServiceAuthenticationRunData {
-  schemaVersion: "agent-browser.service-authentication-run.v1" | string;
+  schemaVersion: "agent-browser.service-authentication-run.v2" | string;
   runId: string;
   state: string;
   createdAt: string;
@@ -1533,6 +1533,13 @@ export interface ServiceAuthenticationRunData {
   actionReceiptCount: number;
   observationReceiptCount: number;
   replayed: boolean;
+}
+
+export interface ServiceAuthenticationRecipeStatusData {
+  schemaVersion: string;
+  siteRecipeId: string;
+  targetServiceId: string;
+  policyDigest: string;
 }
 
 export interface ServiceRequestActionDataMap {
@@ -1558,6 +1565,7 @@ export interface ServiceRequestActionDataMap {
   service_authentication_run_status: ServiceAuthenticationRunData;
   service_authentication_run_resume: ServiceAuthenticationRunData;
   service_authentication_run_cancel: ServiceAuthenticationRunData;
+  service_authentication_recipe_status: ServiceAuthenticationRecipeStatusData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;

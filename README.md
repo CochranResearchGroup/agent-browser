@@ -1471,6 +1471,23 @@ agent-browser --session-name myapp state load ./my-auth.json
 
 For full details on login flows, OAuth, 2FA, cookie-based auth, and the auth vault, see the [Authentication](docs/src/app/sessions/page.mdx) docs.
 
+### Deterministic service authentication
+
+Service clients can use `service_authentication_recipe_status`, then
+`service_authentication_run_start`, `status`, `resume`, and `cancel` to restore
+a short-lived site session in an exact retained service tab. Runs are bound to
+the original profile, browser, session, tab, organization, vault account, and
+versioned site recipe. Browser effects are recorded before execution; a crash
+returns an unknown-effect error instead of replaying a credential or OTP
+submission.
+
+The `bill-login-v1` recipe supports BILL identifier, password, and SMS OTP
+forms. Set `IM_RECEIPTS_LOCAL_API_BASE_URL` to an HTTP loopback IM Receipts API
+and `IM_RECEIPTS_SEALED_AUTH_CAPABILITY` to its matching capability of at least
+32 characters. The watch is armed before password submission can trigger SMS.
+The OTP crosses only the protected loopback response and is absent from MCP,
+CLI, durable run state, and public status projections.
+
 ## Sessions
 
 Run multiple isolated browser instances.

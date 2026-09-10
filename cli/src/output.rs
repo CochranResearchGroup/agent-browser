@@ -7589,6 +7589,8 @@ Environment:
   AGENT_BROWSER_IOS_UDID         Default iOS device UDID
   AGENT_BROWSER_RUNTIME_PROFILE  Managed runtime profile name
   AGENT_BROWSER_ENV_FILE         Optional dotenv file for agent-browser runtime secrets
+  IM_RECEIPTS_LOCAL_API_BASE_URL Loopback IM Receipts API used by sealed authentication runs
+  IM_RECEIPTS_SEALED_AUTH_CAPABILITY Bearer capability for one-time sealed OTP consumption; minimum 32 characters
   AGENT_BROWSER_USE_REAL_KEYCHAIN Use the real OS keychain instead of mock/basic storage
   AGENT_BROWSER_KEYCHAIN_PASSWORD Password used to unlock the macOS login keychain or Linux GNOME Keyring before launch
   AGENT_BROWSER_CONTENT_BOUNDARIES Wrap page output in boundary markers

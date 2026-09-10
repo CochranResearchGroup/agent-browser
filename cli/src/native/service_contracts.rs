@@ -198,6 +198,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "service_authentication_run_status",
     "service_authentication_run_resume",
     "service_authentication_run_cancel",
+    "service_authentication_recipe_status",
     "tab_list",
     "url",
     "title",

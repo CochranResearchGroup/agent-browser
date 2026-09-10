@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "agent-browser.site-login-recipe.v1",
+  "recipeId": "bill-login-v1",
+  "targetServiceId": "bill",
+  "allowedOrigins": [
+    "https://app.bill.com",
+    "https://login.us.bill.com"
+  ],
+  "authenticatedCompanyPathPrefix": "/companies/",
+  "identifier": {
+    "fieldSelectors": [
+      "input[autocomplete='username']",
+      "input[type='email']",
+      "input[name='username']",
+      "input[name='email']"
+    ],
+    "submitLabels": ["Save"]
+  },
+  "password": {
+    "fieldSelectors": [
+      "input[autocomplete='current-password']",
+      "input[type='password']",
+      "input[name='password']"
+    ],
+    "submitLabels": ["Sign in"]
+  },
+  "smsOtp": {
+    "fieldSelectors": [
+      "input[autocomplete='one-time-code']",
+      "input[name='code']",
+      "input[name='verificationCode']"
+    ],
+    "submitLabels": ["Continue"]
+  },
+  "passwordPersistence": {
+    "policy": "save",
+    "saveLabels": ["Save"],
+    "updateLabels": ["Update"]
+  }
+}

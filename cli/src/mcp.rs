@@ -1242,6 +1242,26 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minLength": 1,
                         "description": "Opaque account reference resolved only inside the sealed authentication provider boundary."
                     },
+                    "organizationRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque organization reference resolved only inside the sealed site-login recipe boundary."
+                    },
+                    "challengeProviderId": {
+                        "type": "string",
+                        "enum": ["im-receipts"],
+                        "description": "Closed response-only challenge provider identifier."
+                    },
+                    "challengeProviderTenantRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque challenge-provider tenant binding."
+                    },
+                    "challengeProviderAccountRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque challenge-provider account binding."
+                    },
                     "siteRecipeId": {
                         "type": "string",
                         "minLength": 1,

@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-pub(crate) const AUTHENTICATION_RUN_SCHEMA_VERSION: &str = "agent-browser.authentication-run.v2";
+pub(crate) const AUTHENTICATION_RUN_SCHEMA_VERSION: &str = "agent-browser.authentication-run.v3";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -18,6 +18,10 @@ pub(crate) struct AuthenticationRunBinding {
     pub(crate) principal_id: String,
     pub(crate) target_service_id: String,
     pub(crate) target_account_ref: String,
+    pub(crate) target_organization_ref: String,
+    pub(crate) challenge_provider_id: String,
+    pub(crate) challenge_provider_tenant_ref: String,
+    pub(crate) challenge_provider_account_ref: String,
     pub(crate) profile_id: String,
     pub(crate) browser_id: String,
     pub(crate) session_name: String,
@@ -35,6 +39,10 @@ impl AuthenticationRunBinding {
             &self.principal_id,
             &self.target_service_id,
             &self.target_account_ref,
+            &self.target_organization_ref,
+            &self.challenge_provider_id,
+            &self.challenge_provider_tenant_ref,
+            &self.challenge_provider_account_ref,
             &self.profile_id,
             &self.browser_id,
             &self.session_name,
@@ -92,6 +100,7 @@ pub(crate) enum SiteLoginState {
     Authenticated,
     IdentifierForm,
     PasswordForm,
+    SmsOtpForm,
     PasswordManagerSavePrompt,
     PasswordManagerUpdatePrompt,
     PasswordManagerUnlockPrompt,
@@ -408,6 +417,7 @@ impl AuthenticationRun {
             SiteLoginState::Authenticated => AuthenticationRunState::Verifying,
             SiteLoginState::IdentifierForm => AuthenticationRunState::AwaitingIdentifier,
             SiteLoginState::PasswordForm => AuthenticationRunState::AwaitingPassword,
+            SiteLoginState::SmsOtpForm => AuthenticationRunState::Ready,
             SiteLoginState::PasswordManagerSavePrompt
             | SiteLoginState::PasswordManagerUpdatePrompt => {
                 AuthenticationRunState::AwaitingPasswordManagerDecision
@@ -620,6 +630,7 @@ impl AuthenticationRun {
     ) -> Result<(), AuthenticationRunError> {
         self.require_state(&[
             AuthenticationRunState::Ready,
+            AuthenticationRunState::AwaitingPassword,
             AuthenticationRunState::Verifying,
         ])?;
         self.require_operation_available(operation_id)?;
@@ -660,6 +671,24 @@ impl AuthenticationRun {
         Ok(())
     }
 
+    pub(crate) fn active_challenge_binding(
+        &self,
+    ) -> Option<(
+        String,
+        AuthenticationChallengeChannel,
+        ProviderWatchReceipt,
+        bool,
+    )> {
+        self.active_challenge.as_ref().map(|challenge| {
+            (
+                challenge.challenge_id.clone(),
+                challenge.channel,
+                challenge.watch.clone(),
+                challenge.delivery_triggered,
+            )
+        })
+    }
+
     pub(crate) fn mark_delivery_triggered(
         &mut self,
         operation_id: &str,
@@ -690,6 +719,76 @@ impl AuthenticationRun {
             Some(challenge_id),
         );
         Ok(())
+    }
+
+    /// Submit stored credentials only after the challenge watch is armed, and
+    /// bind that browser effect to the durable delivery fence in one
+    /// transition. This is the safe path for sites where submitting the
+    /// password itself triggers SMS delivery.
+    pub(crate) fn submit_credentials_and_trigger_delivery(
+        &mut self,
+        operation_id: &str,
+        challenge_id: &str,
+        action: &mut impl ResponseOnlyAuthenticationAction,
+    ) -> Result<AuthenticationActionReceipt, AuthenticationRunError> {
+        self.require_state(&[AuthenticationRunState::ObservingDelivery])?;
+        let challenge = self
+            .active_challenge
+            .as_ref()
+            .ok_or(AuthenticationRunError::ChallengeMissing)?;
+        if challenge.challenge_id != challenge_id {
+            return Err(AuthenticationRunError::ChallengeMismatch);
+        }
+        if !challenge.watch.ready_before_delivery || challenge.delivery_triggered {
+            return Err(AuthenticationRunError::DeliveryWatchNotReady);
+        }
+        let delivery_fence_id = challenge.watch.delivery_fence_id.clone();
+        self.reserve_effect(operation_id)?;
+        let context = AuthenticationActionContext {
+            run_id: &self.run_id,
+            operation_id,
+            binding: &self.binding,
+            action: AuthenticationActionKind::SubmitNativeStoredCredentials,
+            challenge_id: Some(challenge_id),
+            delivery_fence_id: Some(&delivery_fence_id),
+            candidate_count: None,
+        };
+        let receipt = match action.execute(&context) {
+            Ok(receipt) => receipt,
+            Err(_) => {
+                self.transition(
+                    operation_id,
+                    AuthenticationRunState::Blocked,
+                    "credential_delivery_trigger_failed",
+                    Some(challenge_id),
+                );
+                return Err(AuthenticationRunError::ActionFailed);
+            }
+        };
+        if self
+            .validate_credential_delivery_trigger_receipt(&delivery_fence_id, &receipt)
+            .is_err()
+        {
+            self.transition(
+                operation_id,
+                AuthenticationRunState::Blocked,
+                "credential_delivery_trigger_receipt_rejected",
+                Some(challenge_id),
+            );
+            return Err(AuthenticationRunError::ActionReceiptInvalid);
+        }
+        self.active_challenge
+            .as_mut()
+            .expect("challenge was validated above")
+            .delivery_triggered = true;
+        self.action_receipts.push(receipt.clone());
+        self.transition(
+            operation_id,
+            AuthenticationRunState::AwaitingCandidate,
+            "submit_credentials_and_trigger_delivery",
+            Some(challenge_id),
+        );
+        Ok(receipt)
     }
 
     pub(crate) fn consume_challenge(
@@ -862,6 +961,25 @@ impl AuthenticationRun {
         Ok(())
     }
 
+    fn validate_credential_delivery_trigger_receipt(
+        &self,
+        expected_delivery_fence_id: &str,
+        receipt: &AuthenticationActionReceipt,
+    ) -> Result<(), AuthenticationRunError> {
+        self.validate_common_receipt(receipt)?;
+        if receipt.action != AuthenticationActionKind::SubmitNativeStoredCredentials
+            || !receipt.native_credential_store_used
+            || receipt.challenge_material_consumed
+            || !receipt.delivery_watch_ready_before_trigger
+            || receipt.delivery_fence_id.as_deref() != Some(expected_delivery_fence_id)
+            || receipt.candidate_count.is_some()
+            || receipt.same_profile_new_tab.is_some()
+        {
+            return Err(AuthenticationRunError::ActionReceiptInvalid);
+        }
+        Ok(())
+    }
+
     fn validate_challenge_receipt(
         &self,
         expected_action: AuthenticationActionKind,
@@ -998,6 +1116,10 @@ mod tests {
             principal_id: "principal-books".to_string(),
             target_service_id: "bill".to_string(),
             target_account_ref: "soylei".to_string(),
+            target_organization_ref: "soylei-company".to_string(),
+            challenge_provider_id: "im-receipts".to_string(),
+            challenge_provider_tenant_ref: "soylei".to_string(),
+            challenge_provider_account_ref: "google-main".to_string(),
             profile_id: "bill-soylei-chrome".to_string(),
             browser_id: "browser-bill-soylei".to_string(),
             session_name: "bill-soylei".to_string(),
@@ -1076,6 +1198,26 @@ mod tests {
                     response_only_material_consumption: true,
                     delivery_watch_ready_before_trigger: false,
                     delivery_fence_id: None,
+                    candidate_count: None,
+                    same_profile_new_tab: None,
+                },
+                calls: 0,
+            }
+        }
+
+        fn native_delivery_trigger() -> Self {
+            Self {
+                secret_material: Vec::new(),
+                receipt: AuthenticationActionReceipt {
+                    provider_id: "stock-chrome-native-credential-store+im-receipts".to_string(),
+                    effect_id: "native-delivery-effect-1".to_string(),
+                    action: AuthenticationActionKind::SubmitNativeStoredCredentials,
+                    native_credential_store_used: true,
+                    credentials_replayed: false,
+                    challenge_material_consumed: false,
+                    response_only_material_consumption: true,
+                    delivery_watch_ready_before_trigger: true,
+                    delivery_fence_id: Some("fence-1".to_string()),
                     candidate_count: None,
                     same_profile_new_tab: None,
                 },
@@ -1293,6 +1435,45 @@ mod tests {
 
         let projections = format!("{}|{:?}", serde_json::to_string(&run).unwrap(), run);
         assert!(!projections.contains(IDENTIFIER_CANARY));
+    }
+
+    #[test]
+    fn password_submission_can_trigger_delivery_only_after_watch_readiness() {
+        let mut run = AuthenticationRun::new("run-password-trigger", binding(), 12).unwrap();
+        run.observe_site_login_state(
+            "op-observe-password",
+            site_observation(SiteLoginState::PasswordForm, "form-password-trigger"),
+        )
+        .unwrap();
+        run.prepare_watch(
+            "op-watch",
+            "challenge-1",
+            AuthenticationChallengeChannel::SmsOtp,
+            watch(),
+        )
+        .unwrap();
+        let mut action = FakeResponseOnlyAction::native_delivery_trigger();
+        assert_eq!(
+            run.submit_credentials_and_trigger_delivery(
+                "op-submit-and-trigger",
+                "wrong-challenge",
+                &mut action,
+            ),
+            Err(AuthenticationRunError::ChallengeMismatch)
+        );
+        assert_eq!(action.calls, 0);
+        let receipt = run
+            .submit_credentials_and_trigger_delivery(
+                "op-submit-and-trigger",
+                "challenge-1",
+                &mut action,
+            )
+            .unwrap();
+        assert!(receipt.delivery_watch_ready_before_trigger);
+        assert_eq!(run.state, AuthenticationRunState::AwaitingCandidate);
+        assert!(run
+            .active_challenge_binding()
+            .is_some_and(|(_, _, _, delivery_triggered)| delivery_triggered));
     }
 
     #[test]

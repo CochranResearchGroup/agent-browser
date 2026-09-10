@@ -1071,6 +1071,18 @@ Direct local headed Chrome is still materially more reliable than a fresh headle
 
 By default, agent-browser uses a stable runtime profile at `~/.agent-browser/runtime-profiles/default/user-data`. If a user signs in manually once, later runs reuse that state automatically. Use `--runtime-profile <name>` for a named managed profile, or `--profile <path>` for a custom user-data-dir path.
 
+For deterministic service-owned reauthentication, first read the exact recipe
+digest with `service_authentication_recipe_status`. Start a bounded
+`service_authentication_run` with the original valid exclusive
+`serviceTabHandle`, exact organization, vault account, challenge-provider
+tenant and account, and that digest. Resume with a fresh operation ID until the
+run is terminal. Do not replace the retained profile or retry an unknown
+effect. The BILL recipe requires `IM_RECEIPTS_LOCAL_API_BASE_URL` to be HTTP
+loopback and `IM_RECEIPTS_SEALED_AUTH_CAPABILITY` to match the IM Receipts
+server. The provider watch is armed before password submission can trigger SMS;
+OTP material is response-only and must not appear in client requests, logs, or
+durable state.
+
 When the default runtime profile is locked by a live browser PID, do not treat a fresh isolated profile as the generic safe fallback. agent-browser is meant to own session and job management so operators do not have to coordinate which browser is busy. If the task needs existing login state, inspect `agent-browser service status`, `agent-browser runtime status`, or the dashboard service view, then reuse the managed runtime profile through the service/session control plane or attach to the intended browser. Switch to a new isolated profile only for explicitly unauthenticated throwaway QA, or when the operator asked for a separate browser identity. Profile-lock errors include a compact `diagnostic={...}` suffix with the lock PID, matching runtime profile, matching service browser/session when known, and safe reuse, close, inspect, or separate-profile remedies. When a selected managed runtime profile already has a live agent-browser browser with a reachable DevTools port, normal launch commands automatically reuse that browser through the session control plane instead of trying to start a second Chrome on the locked profile. `runtime status` reports `DevTools reachable` so stale runtime-state ports are visible before an attach attempt.
 
 Runtime profiles can also be declared in `agent-browser.json` via

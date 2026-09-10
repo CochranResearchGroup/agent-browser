@@ -60,6 +60,7 @@ pub(crate) mod desktop_evidence_cdp;
 pub(crate) mod service_authentication_run;
 pub(crate) mod service_connection_lifetime;
 pub(crate) mod service_connection_reconcile;
+pub(crate) mod site_login_recipe;
 // The configured episode is landing adapter by adapter so each live boundary
 // can remain fail-closed until the product caller is complete.
 #[allow(dead_code)]
