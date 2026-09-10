@@ -281,6 +281,14 @@ fn protected_profile_acquisition_launch_command(
     daemon_session_route: &str,
     profile_path: &str,
 ) -> Value {
+    profile_acquisition_recovery_launch_command(intent, daemon_session_route, profile_path)
+}
+
+fn profile_acquisition_recovery_launch_command(
+    intent: &ProfileAcquisitionIntent,
+    daemon_session_route: &str,
+    profile_path: &str,
+) -> Value {
     let mut command = profile_acquisition_retry_command(intent, daemon_session_route);
     command["profile"] = json!(profile_path);
     command
@@ -304,6 +312,8 @@ fn profile_acquisition_retry_command_with_claim(
         "taskName": intent.task_name,
         "targetServiceIds": intent.target_service_ids,
         "sessionName": daemon_session_route,
+        "clientSubjectId": intent.principal_id,
+        "identityAssurance": "registered-capability",
         "servicePrincipalId": intent.principal_id,
         "servicePrincipalProvenance": "registered_capability",
     });
@@ -1684,6 +1694,11 @@ async fn apply_profile_recovery_command(
     if daemon_state.browser.is_some() {
         return Err("profile_recovery_daemon_route_not_empty".to_string());
     }
+    let profile_path = snapshot
+        .profiles
+        .get(&plan.identities.profile_id)
+        .and_then(|profile| profile.user_data_dir.clone())
+        .ok_or_else(|| "profile_recovery_profile_identity_unavailable".to_string())?;
     let now = service_now_timestamp();
     let outcome = apply_terminal_owner_recovery(
         &repository,
@@ -1691,8 +1706,11 @@ async fn apply_profile_recovery_command(
         &now,
         raw_capability.as_bytes(),
         |intent| async move {
-            let retry_command =
-                profile_acquisition_retry_command(&intent, &daemon_state.session_id);
+            let retry_command = profile_acquisition_recovery_launch_command(
+                &intent,
+                &daemon_state.session_id,
+                &profile_path,
+            );
             auto_launch(daemon_state, &retry_command).await?;
             if daemon_state.browser.is_none() {
                 return Err("profile_recovery_acquisition_retry_missing_browser".to_string());
@@ -2589,6 +2607,8 @@ mod tests {
         assert_eq!(command["action"], "tab_new");
         assert_eq!(command["sessionName"], "recovery-route");
         assert_eq!(command["profileId"], "last30days-facebook");
+        assert_eq!(command["clientSubjectId"], "principal:last30days");
+        assert_eq!(command["identityAssurance"], "registered-capability");
         assert_eq!(command["servicePrincipalId"], "principal:last30days");
         assert_eq!(
             command["servicePrincipalProvenance"],
@@ -2605,6 +2625,22 @@ mod tests {
 
         assert_eq!(command["serviceName"], "principal:last30days");
         assert_eq!(command["servicePrincipalId"], "principal:last30days");
+    }
+
+    #[test]
+    fn recovery_launch_command_carries_the_exact_profile_path() {
+        let command = profile_acquisition_recovery_launch_command(
+            &intent(),
+            "recovery-route",
+            "/var/lib/agent-browser/profiles/last30days-facebook",
+        );
+
+        assert_eq!(
+            command["profile"],
+            "/var/lib/agent-browser/profiles/last30days-facebook"
+        );
+        assert_eq!(command["profileId"], "last30days-facebook");
+        assert_eq!(command["sessionName"], "recovery-route");
     }
 
     #[derive(Clone)]

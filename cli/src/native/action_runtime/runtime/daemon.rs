@@ -1105,7 +1105,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
 ) -> Result<bool, String> {
     if !matches!(
         command.get("action").and_then(Value::as_str),
-        Some("cdp_free_launch" | "remote_view_open" | "launch" | "navigate")
+        Some("cdp_free_launch" | "remote_view_open" | "launch" | "navigate" | "tab_new")
     ) {
         return Ok(false);
     }
