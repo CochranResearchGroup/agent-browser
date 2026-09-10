@@ -442,6 +442,55 @@ async fn test_service_browser_close_rejects_non_active_browser_without_launch() 
     assert!(daemon_state.browser.is_none());
 }
 
+#[test]
+fn test_service_browser_close_resolves_transferred_owner_aliases() {
+    use crate::native::service_health::service_browser_close_logical_browser_id;
+    use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};
+
+    let binding = RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim {
+        owner_id: "owner-current".to_string(),
+        profile_identity_digest: "profile-digest".to_string(),
+        owner_generation: 6,
+        logical_browser_id: "session:original-browser".to_string(),
+        daemon_session_route: "handoff-current".to_string(),
+        process_instance_digest: "process-digest".to_string(),
+    });
+
+    assert_eq!(
+        service_browser_close_logical_browser_id(
+            "session:original-browser",
+            "handoff-current",
+            Some(&binding),
+        )
+        .unwrap(),
+        "session:original-browser"
+    );
+    assert_eq!(
+        service_browser_close_logical_browser_id(
+            "session:handoff-current",
+            "handoff-current",
+            Some(&binding),
+        )
+        .unwrap(),
+        "session:original-browser"
+    );
+    assert!(service_browser_close_logical_browser_id(
+        "session:foreign-browser",
+        "handoff-current",
+        Some(&binding),
+    )
+    .unwrap_err()
+    .contains("can only close the active service browser"));
+
+    let observation_only = RuntimeOwnerBinding::observation_only(binding.claim);
+    assert!(service_browser_close_logical_browser_id(
+        "session:original-browser",
+        "handoff-current",
+        Some(&observation_only),
+    )
+    .is_err());
+}
+
 #[tokio::test]
 async fn test_close_does_not_persist_not_started_browser_placeholder() {
     let home = unique_socket_dir("service-browser-close-home");

@@ -8336,18 +8336,16 @@ pub(crate) mod service_commands {
         cmd: &Value,
         state: &mut DaemonState,
     ) -> Result<Value, String> {
-        let browser_id = cmd
+        let requested_browser_id = cmd
             .get("browserId")
             .and_then(Value::as_str)
             .filter(|value| !value.trim().is_empty())
             .ok_or("Missing browserId")?;
-        let active_browser_id = service_browser_id(&state.session_id);
-        if browser_id != active_browser_id {
-            return Err(format!(
-                "service_browser_close can only close the active service browser {}; requested {}",
-                active_browser_id, browser_id
-            ));
-        }
+        let browser_id = service_browser_close_logical_browser_id(
+            requested_browser_id,
+            &state.session_id,
+            state.runtime_owner_binding.as_ref(),
+        )?;
         if state.browser.is_none() {
             return Err(format!(
                 "Service browser {} is not attached to this control plane",
@@ -8362,7 +8360,7 @@ pub(crate) mod service_commands {
             let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
             let profile_id = snapshot
                 .browsers
-                .get(browser_id)
+                .get(&browser_id)
                 .and_then(|browser| browser.profile_id.as_deref())
                 .ok_or(
                     "service_browser_close_authority_denied: current browser profile is missing",
@@ -8409,9 +8407,36 @@ pub(crate) mod service_commands {
         state.close_behavior = crate::native::action_runtime::runtime::CloseBehavior::CloseBrowser;
         let mut result = handle_close(state).await?;
         result["browserId"] = json!(browser_id);
-        result["requestedBrowserId"] = json!(browser_id);
+        result["requestedBrowserId"] = json!(requested_browser_id);
         result["serviceOwned"] = json!(true);
         Ok(result)
+    }
+
+    /// Resolve the stable logical browser ID owned by this daemon route.
+    ///
+    /// Cooperative runtime transfer intentionally preserves the logical browser
+    /// ID while replacing the daemon session route. Lifecycle callers may hold
+    /// either identifier, but only the current effect-capable binding can join
+    /// them. Unrelated and observation-only aliases remain rejected.
+    pub(crate) fn service_browser_close_logical_browser_id(
+        requested_browser_id: &str,
+        daemon_session_id: &str,
+        runtime_owner_binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+    ) -> Result<String, String> {
+        let route_browser_id = service_browser_id(daemon_session_id);
+        let logical_browser_id = runtime_owner_binding
+            .filter(|binding| {
+                binding.effect_capable && binding.claim.daemon_session_route == daemon_session_id
+            })
+            .map(|binding| binding.claim.logical_browser_id.as_str())
+            .unwrap_or(route_browser_id.as_str());
+        if requested_browser_id != route_browser_id && requested_browser_id != logical_browser_id {
+            return Err(format!(
+                "service_browser_close can only close the active service browser {} through route {}; requested {}",
+                logical_browser_id, route_browser_id, requested_browser_id
+            ));
+        }
+        Ok(logical_browser_id.to_string())
     }
     pub(crate) async fn handle_service_browser_repair(cmd: &Value) -> Result<Value, String> {
         let browser_id = cmd
