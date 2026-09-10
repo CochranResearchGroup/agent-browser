@@ -2616,7 +2616,9 @@ fn runtime_health_from_inventory_and_supervisors(
     })
 }
 
-fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde_json::Value {
+pub(crate) fn daemon_listener_inventory(
+    current_executable_realpath: Option<&str>,
+) -> serde_json::Value {
     #[cfg(unix)]
     {
         let socket_dir = get_socket_dir();

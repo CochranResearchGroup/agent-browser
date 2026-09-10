@@ -1190,7 +1190,11 @@ fn resume_prepared_payload_transaction(
             }
         }
     };
-    if let Err(error) = accept_prepared_payload_transaction(prepared, validation) {
+    if let Err(error) = accept_prepared_payload_transaction(
+        prepared,
+        validation,
+        (!isolated_root).then_some(paths.binary.as_path()),
+    ) {
         if prepared.transaction.state
             == crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
         {
@@ -1204,11 +1208,6 @@ fn resume_prepared_payload_transaction(
             "resume_transaction_acceptance_failed",
             error,
         ));
-    }
-    if !isolated_root {
-        complete_accepted_upgrade_supervisor_transition(&paths.binary).map_err(|error| {
-            format!("install_transaction_resume_accepted_supervisor_transition_failed:{error}")
-        })?;
     }
     Ok(())
 }
@@ -3065,7 +3064,11 @@ fn run_workstation_install(args: &[String]) {
             isolated_post_commit_validation(&paths, prepared)
                 .unwrap_or_else(|error| fail(&error, parsed.json))
         };
-        if let Err(error) = accept_prepared_payload_transaction(prepared, validation) {
+        if let Err(error) = accept_prepared_payload_transaction(
+            prepared,
+            validation,
+            (!isolated_root).then_some(paths.binary.as_path()),
+        ) {
             if prepared.transaction.state
                 == crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
             {
@@ -3085,14 +3088,6 @@ fn run_workstation_install(args: &[String]) {
             );
         }
         if !isolated_root {
-            if let Err(error) = complete_accepted_upgrade_supervisor_transition(&paths.binary) {
-                fail(
-                    &format!(
-                        "workstation upgrade was accepted but supervisor transition failed: {error}"
-                    ),
-                    parsed.json,
-                );
-            }
             phases.push("session-supervisors-transitioned");
         }
     }
@@ -3171,11 +3166,18 @@ fn run_workstation_install(args: &[String]) {
     }
 }
 
-fn complete_accepted_upgrade_supervisor_transition(executable: &Path) -> Result<Value, String> {
+fn complete_accepted_upgrade_supervisor_transition(
+    executable: &Path,
+    parent_admission_transaction_id: &str,
+) -> Result<Value, String> {
     complete_accepted_upgrade_supervisor_transition_with(
         executable,
         crate::session_supervisor::rebind_supervisors_after_accepted_upgrade,
-        crate::runtime_host_supervisor_takeover::ensure_selected_runtime_host_supervised,
+        || {
+            crate::runtime_host_supervisor_takeover::ensure_selected_runtime_host_supervised_with_admission(
+                Some(parent_admission_transaction_id),
+            )
+        },
     )
 }
 
@@ -9437,6 +9439,7 @@ fn validate_post_commit_transaction(
 fn accept_prepared_payload_transaction(
     prepared: &mut PreparedPayloadTransaction,
     validation: PostCommitValidationReceipt,
+    supervisor_executable: Option<&Path>,
 ) -> Result<(), String> {
     use crate::runtime_adoption::UpgradeTransactionState;
 
@@ -9445,6 +9448,31 @@ fn accept_prepared_payload_transaction(
     }
     finalize_runtime_handoffs(prepared)?;
     prepared.transaction.runtime_handoffs = prepared.runtime_handoffs.clone();
+    if let Some(executable) = supervisor_executable {
+        let transaction_id = prepared.transaction.transaction_id.clone();
+        if let Err(error) =
+            complete_accepted_upgrade_supervisor_transition(executable, &transaction_id)
+        {
+            prepared.transaction.stop_reason =
+                Some("accepted_supervisor_transition_failed".to_string());
+            persist_upgrade_transition(
+                &prepared.transaction_path,
+                &mut prepared.transaction,
+                UpgradeTransactionState::RollbackAfterCommit,
+                "accepted_supervisor_transition_failed",
+            )?;
+            persist_upgrade_transition(
+                &prepared.transaction_path,
+                &mut prepared.transaction,
+                UpgradeTransactionState::OperatorRecoveryRequired,
+                "accepted_supervisor_transition_recovery_required",
+            )?;
+            return Err(format!(
+                "workstation_upgrade_supervisor_transition_failed:{}:{error}",
+                prepared.transaction.transaction_id
+            ));
+        }
+    }
     prepared.transaction.dashboard_validation_summary = Some(validation.dashboard_summary);
     prepared.transaction.presentation_validation_summary = Some(validation.presentation_summary);
     prepared.transaction.terminal_result = Some("accepted".to_string());
@@ -14388,7 +14416,7 @@ mod tests {
             validation.presentation_summary,
             format!("authenticated_operator_journey_receipted:{receipt_id}")
         );
-        accept_prepared_payload_transaction(&mut prepared, validation).unwrap();
+        accept_prepared_payload_transaction(&mut prepared, validation, None).unwrap();
         let finalized = finalize_accepted_upgrade_for_root(&root).unwrap();
         assert_eq!(finalized["changed"], true);
         assert_eq!(finalized["state"], "old_generation_retirable");

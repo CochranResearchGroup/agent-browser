@@ -98,6 +98,8 @@ struct SupervisorTakeoverTransaction {
     replacement_pid: Option<u32>,
     accepted_ingress_revision: Option<u64>,
     failure: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent_admission_transaction_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -115,6 +117,12 @@ pub(crate) struct SupervisorTakeoverOutcome {
 }
 
 pub(crate) fn plan_supervisor_takeover() -> Result<SupervisorTakeoverPlan, String> {
+    plan_supervisor_takeover_with_admission(None)
+}
+
+fn plan_supervisor_takeover_with_admission(
+    parent_admission_transaction_id: Option<&str>,
+) -> Result<SupervisorTakeoverPlan, String> {
     let repository =
         RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path());
     let registry = repository.load()?;
@@ -169,8 +177,13 @@ pub(crate) fn plan_supervisor_takeover() -> Result<SupervisorTakeoverPlan, Strin
         already_supervised,
         &mut blockers,
     );
+    if let Some(identity) = identity.as_ref() {
+        let listener_inventory =
+            crate::install::daemon_listener_inventory(identity.executable_path.as_deref());
+        validate_authoritative_listener_inventory(&selected, &listener_inventory, &mut blockers);
+    }
 
-    if let Some(blocker) = active_coordination_blocker()? {
+    if let Some(blocker) = active_coordination_blocker(parent_admission_transaction_id)? {
         blockers.push(blocker);
     }
 
@@ -213,12 +226,13 @@ pub(crate) fn apply_supervisor_takeover(
     expected_plan_digest: &str,
 ) -> Result<SupervisorTakeoverOutcome, String> {
     let initial = plan_supervisor_takeover()?;
-    apply_supervisor_takeover_from_plan(initial, expected_plan_digest)
+    apply_supervisor_takeover_from_plan(initial, expected_plan_digest, None)
 }
 
 fn apply_supervisor_takeover_from_plan(
     initial: SupervisorTakeoverPlan,
     expected_plan_digest: &str,
+    parent_admission_transaction_id: Option<&str>,
 ) -> Result<SupervisorTakeoverOutcome, String> {
     require_plan_digest(&initial, expected_plan_digest)?;
     if initial.disposition == SupervisorTakeoverDisposition::AlreadySupervised {
@@ -227,7 +241,7 @@ fn apply_supervisor_takeover_from_plan(
     require_ready_plan(&initial)?;
 
     let _lock = acquire_takeover_lock()?;
-    let plan = plan_supervisor_takeover()?;
+    let plan = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
     require_plan_digest(&plan, expected_plan_digest)?;
     require_ready_plan(&plan)?;
     let source_identity = plan
@@ -248,6 +262,7 @@ fn apply_supervisor_takeover_from_plan(
         replacement_pid: None,
         accepted_ingress_revision: None,
         failure: None,
+        parent_admission_transaction_id: parent_admission_transaction_id.map(str::to_string),
     };
     write_transaction(&transaction)?;
 
@@ -264,7 +279,7 @@ fn apply_supervisor_takeover_from_plan(
             transaction.revision = transaction.revision.saturating_add(1);
             transaction.updated_at = current_timestamp();
             write_transaction(&transaction)?;
-            clear_owned_admission_drain(&transaction.transaction_id)?;
+            clear_takeover_admission_drain(&transaction)?;
         } else {
             transaction.state = SupervisorTakeoverState::OperatorRecoveryRequired;
             transaction.revision = transaction.revision.saturating_add(1);
@@ -296,21 +311,26 @@ fn apply_supervisor_takeover_from_plan(
 /// Complete the accepted workstation upgrade by placing the selected runtime
 /// host under the rewritten user supervisor, then prove the resulting
 /// supervisor and runtime topology from a fresh census.
-pub(crate) fn ensure_selected_runtime_host_supervised() -> Result<SupervisorTakeoverOutcome, String>
-{
-    let plan = plan_supervisor_takeover()?;
+pub(crate) fn ensure_selected_runtime_host_supervised_with_admission(
+    parent_admission_transaction_id: Option<&str>,
+) -> Result<SupervisorTakeoverOutcome, String> {
+    let plan = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
     let outcome = match plan.disposition {
         SupervisorTakeoverDisposition::AlreadySupervised => outcome_without_transaction(&plan),
         SupervisorTakeoverDisposition::ReadyForTakeover => {
             let plan_digest = plan.plan_digest.clone();
-            apply_supervisor_takeover_from_plan(plan, &plan_digest)?
+            apply_supervisor_takeover_from_plan(
+                plan,
+                &plan_digest,
+                parent_admission_transaction_id,
+            )?
         }
         SupervisorTakeoverDisposition::Blocked => {
             require_ready_plan(&plan)?;
             unreachable!("blocked supervisor takeover plan was accepted")
         }
     };
-    let verified = plan_supervisor_takeover()?;
+    let verified = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
     if verified.disposition != SupervisorTakeoverDisposition::AlreadySupervised {
         return Err(format!(
             "runtime_host_supervisor_post_upgrade_verification_failed:{:?}",
@@ -370,7 +390,7 @@ pub(crate) fn resume_supervisor_takeover(
             advance_transaction(&mut transaction, SupervisorTakeoverState::ReplacementReady)?;
             transaction.accepted_ingress_revision = Some(ingress_revision);
             advance_transaction(&mut transaction, SupervisorTakeoverState::IngressAdopted)?;
-            clear_owned_admission_drain(&transaction.transaction_id)?;
+            clear_takeover_admission_drain(&transaction)?;
             advance_transaction(&mut transaction, SupervisorTakeoverState::Accepted)?;
             Ok(outcome_from_transaction(&transaction))
         }
@@ -397,10 +417,18 @@ fn execute_takeover(
     write_admission_drain(transaction)?;
     advance_transaction(transaction, SupervisorTakeoverState::AdmissionDraining)?;
 
-    revalidate_source(plan, source_identity, &transaction.transaction_id)?;
+    revalidate_source(
+        plan,
+        source_identity,
+        takeover_admission_owner_id(transaction),
+    )?;
     let process = VerifiedProcessTermination::open(source_identity)?
         .ok_or_else(|| "blocked_selected_process_missing_before_signal".to_string())?;
-    revalidate_source(plan, source_identity, &transaction.transaction_id)?;
+    revalidate_source(
+        plan,
+        source_identity,
+        takeover_admission_owner_id(transaction),
+    )?;
     advance_transaction(transaction, SupervisorTakeoverState::SourceRetiring)?;
 
     process.signal(VerifiedProcessSignal::Terminate)?;
@@ -421,7 +449,7 @@ fn execute_takeover(
     advance_transaction(transaction, SupervisorTakeoverState::ReplacementReady)?;
     transaction.accepted_ingress_revision = Some(ingress_revision);
     advance_transaction(transaction, SupervisorTakeoverState::IngressAdopted)?;
-    clear_owned_admission_drain(&transaction.transaction_id)?;
+    clear_takeover_admission_drain(transaction)?;
     advance_transaction(transaction, SupervisorTakeoverState::Accepted)
 }
 
@@ -526,10 +554,7 @@ fn validate_runtime_conflicts(
     already_supervised: bool,
     blockers: &mut Vec<SupervisorTakeoverBlocker>,
 ) {
-    if already_supervised {
-        return;
-    }
-    if !browserless_census_is_safe(census) {
+    if !already_supervised && !browserless_census_is_safe(census) {
         let live = census
             .records
             .iter()
@@ -566,6 +591,48 @@ fn validate_runtime_conflicts(
                 ),
             );
         }
+    }
+}
+
+fn validate_authoritative_listener_inventory(
+    selected: &RuntimeHostBackend,
+    inventory: &serde_json::Value,
+    blockers: &mut Vec<SupervisorTakeoverBlocker>,
+) {
+    if inventory
+        .get("available")
+        .and_then(serde_json::Value::as_bool)
+        != Some(true)
+    {
+        push_blocker(
+            blockers,
+            "blocked_listener_inventory_unavailable",
+            "The production daemon listener census is unavailable.",
+        );
+        return;
+    }
+    let listeners = inventory
+        .get("listeners")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let exact = listeners.len() == 1
+        && listeners[0].get("pid").and_then(serde_json::Value::as_u64)
+            == Some(u64::from(selected.pid))
+        && listeners[0]
+            .get("socketPath")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|path| path.ends_with("/runtime-host.sock"))
+        && listeners[0]
+            .get("socketIdentity")
+            .and_then(serde_json::Value::as_str)
+            == Some(selected.socket_identity.as_str());
+    if !exact {
+        push_blocker(
+            blockers,
+            "blocked_runtime_listener_multiplicity",
+            "Production must have exactly one authoritative runtime-host listener bound to the selected process and socket identity.",
+        );
     }
 }
 
@@ -666,13 +733,22 @@ fn wait_for_replacement(source_backend: &RuntimeHostBackend) -> Result<(u32, u64
     Err("replacement_readiness_or_ingress_adoption_failed".to_string())
 }
 
-fn active_coordination_blocker() -> Result<Option<SupervisorTakeoverBlocker>, String> {
+fn active_coordination_blocker(
+    parent_admission_transaction_id: Option<&str>,
+) -> Result<Option<SupervisorTakeoverBlocker>, String> {
     let drain_path = crate::runtime_adoption::runtime_admission_drain_path()?;
     if drain_path.exists() {
-        return Ok(Some(SupervisorTakeoverBlocker {
-            code: "blocked_active_admission_drain".to_string(),
-            message: "Another runtime transaction owns the admission drain.".to_string(),
-        }));
+        let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
+            &fs::read(&drain_path)
+                .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
+        )
+        .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
+        if admission_drain_conflicts(&drain, parent_admission_transaction_id) {
+            return Ok(Some(SupervisorTakeoverBlocker {
+                code: "blocked_active_admission_drain".to_string(),
+                message: "Another runtime transaction owns the admission drain.".to_string(),
+            }));
+        }
     }
     if let Some(home) = dirs::home_dir() {
         let workstation_lock = home.join(".agent-browser/convergence/workstation.lock");
@@ -701,6 +777,13 @@ fn active_coordination_blocker() -> Result<Option<SupervisorTakeoverBlocker>, St
         }
     }
     Ok(None)
+}
+
+fn admission_drain_conflicts(
+    drain: &crate::runtime_adoption::RuntimeAdmissionDrain,
+    parent_admission_transaction_id: Option<&str>,
+) -> bool {
+    parent_admission_transaction_id != Some(drain.transaction_id.as_str())
 }
 
 fn workstation_transaction_is_foreign(path: &Path, current_pid: u32) -> bool {
@@ -951,9 +1034,14 @@ fn write_admission_drain(transaction: &SupervisorTakeoverTransaction) -> Result<
                 .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
         )
         .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-        if existing.transaction_id != transaction.transaction_id {
+        if existing.transaction_id != takeover_admission_owner_id(transaction) {
             return Err("blocked_active_admission_drain".to_string());
         }
+        if transaction.parent_admission_transaction_id.is_some() {
+            return Ok(());
+        }
+    } else if transaction.parent_admission_transaction_id.is_some() {
+        return Err("parent_admission_drain_missing".to_string());
     }
     write_private_json_atomic(
         &path,
@@ -965,6 +1053,22 @@ fn write_admission_drain(transaction: &SupervisorTakeoverTransaction) -> Result<
             recorded_at: current_timestamp(),
         },
     )
+}
+
+fn takeover_admission_owner_id(transaction: &SupervisorTakeoverTransaction) -> &str {
+    transaction
+        .parent_admission_transaction_id
+        .as_deref()
+        .unwrap_or(transaction.transaction_id.as_str())
+}
+
+fn clear_takeover_admission_drain(
+    transaction: &SupervisorTakeoverTransaction,
+) -> Result<(), String> {
+    if transaction.parent_admission_transaction_id.is_some() {
+        return Ok(());
+    }
+    clear_owned_admission_drain(&transaction.transaction_id)
 }
 
 fn clear_owned_admission_drain(transaction_id: &str) -> Result<(), String> {
@@ -1156,6 +1260,80 @@ mod tests {
         );
         assert_eq!(blockers.len(), 1);
         assert_eq!(blockers[0].code, "blocked_unrelated_port_owner");
+    }
+
+    #[test]
+    fn already_supervised_runtime_still_rejects_unrelated_configured_port_owner() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        let mut blockers = Vec::new();
+
+        validate_runtime_conflicts(
+            &selected,
+            &supervisor(vec![39717]),
+            &census(&[RuntimeClassification::CooperativeLiveOwner]),
+            &BTreeSet::new(),
+            true,
+            &mut blockers,
+        );
+
+        assert_eq!(blockers.len(), 1);
+        assert_eq!(blockers[0].code, "blocked_unrelated_port_owner");
+    }
+
+    #[test]
+    fn authoritative_listener_validation_rejects_multiple_runtime_hosts() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        let exact = serde_json::json!({
+            "available": true,
+            "listeners": [{
+                "pid": selected.pid,
+                "socketPath": "/run/user/1000/agent-browser/runtime-hosts/current/runtime-host.sock",
+                "socketIdentity": selected.socket_identity,
+            }]
+        });
+        let mut blockers = Vec::new();
+        validate_authoritative_listener_inventory(&selected, &exact, &mut blockers);
+        assert!(blockers.is_empty());
+
+        let multiple = serde_json::json!({
+            "available": true,
+            "listeners": [
+                {
+                    "pid": selected.pid,
+                    "socketPath": "/run/user/1000/agent-browser/runtime-hosts/current/runtime-host.sock",
+                    "socketIdentity": selected.socket_identity,
+                },
+                {
+                    "pid": selected.pid + 1,
+                    "socketPath": "/run/user/1000/agent-browser/runtime-hosts/old/runtime-host.sock",
+                    "socketIdentity": "unix:old",
+                }
+            ]
+        });
+        validate_authoritative_listener_inventory(&selected, &multiple, &mut blockers);
+        assert_eq!(blockers.len(), 1);
+        assert_eq!(blockers[0].code, "blocked_runtime_listener_multiplicity");
+    }
+
+    #[test]
+    fn nested_takeover_accepts_only_its_parent_admission_drain() {
+        let drain = crate::runtime_adoption::RuntimeAdmissionDrain {
+            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+            transaction_id: "workstation-parent".to_string(),
+            candidate_generation_id: "candidate".to_string(),
+            transaction_revision: 12,
+            recorded_at: "2026-09-09T00:00:00Z".to_string(),
+        };
+
+        assert!(!admission_drain_conflicts(
+            &drain,
+            Some("workstation-parent")
+        ));
+        assert!(admission_drain_conflicts(
+            &drain,
+            Some("another-transaction")
+        ));
+        assert!(admission_drain_conflicts(&drain, None));
     }
 
     #[test]

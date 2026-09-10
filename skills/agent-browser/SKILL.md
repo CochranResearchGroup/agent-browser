@@ -110,6 +110,11 @@ allow its single read-only loopback CDP observation to qualify the retained
 lane only when the exact recorded process identity, unique ready owner, active
 session, process digest, and target all match. This observation must not write
 Service State or launch a duplicate browser.
+If every durable handoff alias is stale, bootstrap may admit one retained RDP
+browser only when its exact ready owner and valid target agree, attachability
+recommends `service_remote_view_browser_reattach`, and one unallocated ready
+route exists. The staged candidate must perform that reattach and produce a
+generation-bound durable handoff receipt before commit.
 When service projection metadata omits the runtime-profile name, recover it
 only from one runtime-state record with the same exact process identity and
 DevTools browser endpoint. Treat zero or multiple matches as a hard stop.
@@ -320,6 +325,11 @@ Warning-severity doctor observations remain visible without making the command
 nonzero. Treat a quiescent historical stopped supervisor as advisory, but keep
 active-process or stream evidence, startup failure, executable drift, port
 conflict, and unavailable supervisor status as blocking.
+The workstation transaction remains unaccepted and keeps admission drained
+until runtime-host manifests are rebound, the old exact host surrenders, the
+user supervisor starts the replacement, and a fresh listener census proves one
+selected production runtime host. A merely active supervisor is insufficient
+when another production runtime listener remains.
 
 For disposable validation of the single-host foundation, set
 `AGENT_BROWSER_RUNTIME_HOST=1`. Named sessions then share one authenticated

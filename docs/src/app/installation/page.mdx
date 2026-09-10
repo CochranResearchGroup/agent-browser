@@ -368,6 +368,20 @@ The <code>readiness</code> object separates
 <code>rollbackReady</code>. Overall <code>ready</code> remains false while a
 transaction or admission drain is active or any axis is unproved. Accepted
 generations keep rollback authority for 24 hours.
+
+For an existing installation, candidate bootstrap normally uses one current
+durable handoff. If retained handoff aliases point to superseded browser IDs,
+the bootstrap may instead use an exact retained RDP browser whose ready owner,
+valid target, reattach recommendation, and an unallocated ready route agree.
+This permits staging only. The candidate must reattach the browser and record a
+generation-bound durable handoff receipt before commit.
+
+The installer keeps runtime admission drained while it rewrites runtime-host
+manifests and transfers the selected host to the user supervisor. It records
+the workstation transaction as accepted only after the old exact host exits,
+the replacement supervisor is active, selected ingress agrees, and the daemon
+listener census contains one selected production runtime host.
+
 Use <code>agent-browser install workstation gc --dry-run --json</code> to
 preview reviewed old-generation cleanup. Apply retains the selected generation
 and the immediately previous healthy rollback generation. It also retains

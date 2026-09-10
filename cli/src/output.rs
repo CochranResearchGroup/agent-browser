@@ -5655,8 +5655,12 @@ health or tab validity lags a retained browser after rollback, bootstrap may
 qualify it through one read-only loopback CDP observation only when the recorded
 process identity, unique ready owner, active session, process digest, and exact
 target still match. This observation does not write Service State or launch a
-browser. Apply records a terminal zero-effect preflight block when no adoptable
-handoff exists. Fresh and isolated installs do not require a retained
+browser. When all durable handoff aliases are stale, bootstrap may instead use
+an exact retained RDP browser whose ready owner, valid target, reattach
+recommendation, and one unallocated ready route agree. Candidate staging still
+requires a generation-bound durable handoff receipt before commit. Apply
+records a terminal zero-effect preflight block when neither bootstrap proof is available.
+Fresh and isolated installs do not require a retained
 presentation handoff. A structured
 handoff never falls back to a stale session label when current owner evidence
 is absent.
@@ -5692,10 +5696,12 @@ dashboard ingress commit command remains a recovery path for an already-ready
 receipt. Durable-handoff resolution prepares the exact retained owner lane
 before using its saved HTTP port after a runtime-host restart. Failed preparation
 returns durable_handoff_owner_prepare_failed before forwarding the request.
-A successful workstation apply rewrites the runtime-host lane manifests for
-the selected executable and completes an identity-bound takeover into the user
-supervisor. Readiness requires one selected supervised host whose PID,
-executable, ingress identity, and configured stream ports pass a fresh census.
+Before a workstation transaction becomes accepted, apply rewrites the
+runtime-host lane manifests for the selected executable and completes an
+identity-bound takeover into the user supervisor while admission remains
+drained. Readiness requires one selected supervised host whose PID, executable,
+ingress identity, configured stream ports, and sole production listener pass a
+fresh census.
 A Ready retained owner reconnects to the exact handoff target after identity checks.
 Recovery preserves its known route and display across pending or orphaned
 presentation when current-boot custody matches; physical ownership and visibility

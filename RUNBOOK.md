@@ -159,10 +159,13 @@ forcing operator recovery. Apply and guarded resume now complete the existing
 identity-bound takeover and require fresh proof of the supervisor PID, selected
 ingress, executable, ports and conflict-free runtime census. Same-process installer
 lock ownership is admitted for this internal step; foreign or unreadable locks
-remain blocking. Two sequencing tests and the lock regression pass. The optimized
-candidate built in2m25s; its disposable no-launch takeover smoke passed with source
-retirement, supervisor restart, ingress adoption and no browser launch. Production
-state remains unchanged; installed doctor and retained-browser acceptance are open.
+remain blocking. Acceptance now occurs only after takeover while the parent drain
+remains active, and final census requires exactly one selected runtime-host
+listener. Stale durable aliases may bootstrap staging from one exact reattachable
+RDP browser, but the candidate must issue a fresh durable handoff before commit.
+Old-runtime BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
+InventoryAdmission with no observed route change and was not retried. Focused
+source tests pass. Production install, doctor and retained-browser proof are open.
 
 ### Git consolidation | 2026-09-08
 

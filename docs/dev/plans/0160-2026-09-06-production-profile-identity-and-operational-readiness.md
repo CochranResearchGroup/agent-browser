@@ -3860,3 +3860,41 @@ then install it through the accepted transaction and require doctor readback for
 one supervised production runtime without disrupting the retained QBO and BILL
 browser processes. Graceful retained-browser surrender and the remaining
 A1/A2/A3/A4/AX gates are still open until installed evidence proves them.
+
+### Stale-handoff bootstrap and joined supervisor acceptance
+
+state_transition: The live retained BILL lane proved exact browser ownership but the old runtime could not reacquire presentation capacity; source now admits that lane for candidate staging and joins supervisor takeover to workstation acceptance.
+acceptance_state: Focused source tests pass; rebuilt-candidate and installed production proof remain pending.
+progress_classification: progress
+
+All 67 durable handoffs referenced superseded browser IDs while the current BILL
+browser remained exact and ready under its current owner. Route A was available,
+ready and unallocated. One supported reattach request reached that exact browser
+but the old installed runtime rejected it with
+`presentation_recovery_not_admitted` and `InventoryAdmission`. Request and job ID
+`mcp-service-request-service_remote_view_browser_reattach-bd44aa98-cf7e-4e57-9937-89aed1822873`
+was recorded as effect uncertain. Immediate readback found route A still
+available and the BILL view stream unchanged, so no retry was made.
+
+Candidate bootstrap can now qualify an exact retained RDP browser when its
+current ready owner, process identity, valid target and reattach recommendation
+agree and an unallocated ready route exists. This only permits staging. The
+candidate must perform the reattach and produce its normal generation-bound
+durable handoff receipt before commit.
+
+The workstation transaction now keeps its admission drain through manifest
+rebinding and an in-process supervisor takeover. The takeover recognizes only
+the exact parent transaction as the drain owner. Supervisor failure moves the
+workstation transaction from post-commit validation through rollback-after-commit
+to operator recovery required instead of persisting a false accepted result.
+Fresh verification requires the supervisor main PID and selected ingress to
+agree and the complete production socket census to contain exactly one selected
+runtime-host listener. Already-active supervision no longer masks a foreign
+configured-port owner.
+
+Next: run the full changed-surface fixture set, build the optimized candidate,
+prove the new bootstrap disposition, then execute the authorized staged install.
+Before commit, reacquire one durable BILL handoff through the staged candidate.
+After commit, require an active supervisor, one selected listener, no conflicting
+runtime, and unchanged retained browser/profile/owner identity. The broader
+A1/A2/A3/A4/AX plan remains open after this production repair.

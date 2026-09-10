@@ -423,6 +423,11 @@ Before a real-host upgrade enters effects, dry-run reports
 `candidatePresentationPrerequisite` with `proofPhase=bootstrap`. It is ready
 when one opaque durable handoff identifies an exact healthy browser process,
 target, and unique current owner session that the staged candidate can adopt.
+When old handoff aliases no longer name the current browser, bootstrap can
+instead admit one exact retained RDP browser whose process, target, owner,
+reattach recommendation, and an available ready route all agree. The staged
+candidate must reattach that browser and issue the normal durable handoff
+receipt before commit.
 A ready route, display, or old-generation presentation receipt is not required
 at bootstrap because those replaceable resources must be reacquired and proved
 by the candidate. Apply records a terminal zero-effect preflight block when no
@@ -456,13 +461,14 @@ shadow process. If reconciliation fails, it restores each previously installed
 unit and authenticated ingress receipt to its exact prior state and writes a
 private diagnostic receipt to
 `~/.agent-browser/convergence/workstation-last-failure.json`.
-After transaction acceptance, the installer rewrites the runtime-host lane
+Before transaction acceptance, the installer rewrites the runtime-host lane
 manifests for the selected executable, reloads the user units, and completes
 an identity-bound supervisor takeover. It retires only the exact selected
 unsupervised host, starts `agent-browser-runtime-host.service`, and requires a
 fresh census to prove that the supervisor PID, selected ingress, executable,
-and configured stream ports agree. The installation fails instead of
-reporting readiness when that single-runtime state is not established.
+configured stream ports, and sole production runtime-host listener agree. The
+workstation admission drain remains active through this step. The transaction
+becomes accepted only after the supervised single-runtime state is established.
 Duplicate-profile pressure and executable drift in an inactive optional
 session supervisor remain visible as install-doctor advisories, but they do not
 fail workstation route reconciliation. Drift in an active supervisor remains
