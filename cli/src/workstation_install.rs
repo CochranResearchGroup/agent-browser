@@ -5817,8 +5817,24 @@ fn install_doctor_reports_expected_upgrade_ready(
     let supervisor_transition_ready = expected_upgrade_supervisor_transition_ready(data, expected);
     let runtime_host_transition_ready =
         expected_upgrade_runtime_host_transition_ready(data, expected);
+    let upgrade_projection_absent = upgrade
+        .pointer("/latestTransaction/transactionId")
+        .and_then(Value::as_str)
+        .is_none()
+        && upgrade
+            .pointer("/latestTransaction/state")
+            .and_then(Value::as_str)
+            .is_none()
+        && upgrade
+            .get("admissionDraining")
+            .and_then(Value::as_bool)
+            .is_none()
+        && upgrade
+            .get("selectedGenerationId")
+            .and_then(Value::as_str)
+            .is_none();
     let quiesced_projection_compatible =
-        upgrade.is_null() && transaction_issue_count == 0 && supervisor_transition_ready;
+        upgrade_projection_absent && transaction_issue_count == 0 && supervisor_transition_ready;
     if !exact_upgrade_projection && !quiesced_projection_compatible {
         return false;
     }
@@ -16844,7 +16860,8 @@ mod tests {
             {"code": "profile_lease_legacy_principal_unproven"},
             {"code": "runtime_monitor_not_ready"},
         ]);
-        quiesced_older_candidate["data"]["liveDashboardRuntime"] = Value::Null;
+        quiesced_older_candidate["data"]["liveDashboardRuntime"] =
+            serde_json::json!({"workstationUpgrade": {}});
         quiesced_older_candidate["data"]["runtimeMultiplicity"] = serde_json::json!({
             "runtimeHosts": [{"generationId": "generation-new"}],
             "legacyDaemons": [],
