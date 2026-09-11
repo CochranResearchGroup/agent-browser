@@ -5827,6 +5827,17 @@ fn install_doctor_reports_expected_upgrade_ready(
     if !exact_upgrade_projection && !quiesced_projection_compatible {
         return false;
     }
+    if quiesced_projection_compatible {
+        return issues.iter().all(|issue| {
+            matches!(
+                issue.get("code").and_then(Value::as_str),
+                Some("executable_drift")
+                    | Some("runtime_monitor_not_ready")
+                    | Some("profile_lease_legacy_principal_unproven")
+                    | Some("profile_lease_owner_generation_or_binding_mismatch")
+            )
+        });
+    }
     let remaining_issues = issues
         .iter()
         .filter(|issue| {
