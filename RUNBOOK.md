@@ -5,7 +5,7 @@ Keep at or below 200 lines under policy0043.
 
 ## Turn 297 | 2026-09-11
 
-[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is OPEN. W0 isolated P168 from the active Odollo-owned Rust edits. Closed-world review proves P165, P144, P155, P156, P166, P167, P157, and both documentation branches have no unrepresented source work; their exact Git closure follows the published review checkpoint without closing residual operational plans. P0240 is the only source-bearing candidate: `semantic_click` and one geometry test clarification require reconstruction on current `main`. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect is authorized.
+[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is OPEN. W0 isolated P168 from active Odollo-owned Rust edits. W1 and W2 published the custody review at `9a61432a`, closed the integrated P165 worktree, removed four exact local and remote branch pairs, and removed four integrated remote-only refs without closing residual operational plans. P0240 remains the only source-bearing candidate: `semantic_click` and one geometry test clarification require reconstruction on current `main`. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect is authorized.
 
 ## Turn 296 | 2026-09-11
 

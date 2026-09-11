@@ -8,7 +8,7 @@ Consolidation: required
 
 Lane: P157
 
-Branch: plan/profile-permissions-and-request-provenance
+Branch: unallocated; create from current `main` when execution resumes
 
 Target: main
 

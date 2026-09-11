@@ -8,7 +8,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: e542997d527ea405867e56cf4952566877404fd5
+    checkpoint: 9a61432a4ea4aebc0a5028e49231c91f5e3d00ec
     remote_ref: refs/remotes/origin/maintenance/plan-0168-repository-closeout
     integration_receipt: null
     integration: merge
@@ -25,7 +25,7 @@ lanes:
     plan_state: OPEN
     custody_state: INTEGRATED
     checkpoint: 5ee95d670e52c1157f0f94b90d176e4066d1cd2f
-    remote_ref: refs/remotes/origin/fix/bill-login-email-continue
+    remote_ref: null
     integration_receipt: 5ee95d670e52c1157f0f94b90d176e4066d1cd2f
     integration: merge
     dependencies: []
@@ -41,7 +41,7 @@ lanes:
     plan_state: OPEN
     custody_state: INTEGRATED
     checkpoint: cccf3636d5fb097b24e25bf1cc448470fc664c93
-    remote_ref: refs/remotes/origin/plan/profile-permissions-and-request-provenance
+    remote_ref: null
     integration_receipt: ad673377e5505676ceebe74a24f56c3f96e6e65d
     integration: merge
     dependencies: [P144]
@@ -57,7 +57,7 @@ lanes:
     plan_state: OPEN
     custody_state: INTEGRATED
     checkpoint: ae5ad34cccd545b41ed60b803fbd8f03aaa66dd7
-    remote_ref: refs/remotes/origin/plan/lease-authority-coordination
+    remote_ref: null
     integration_receipt: 74883c6c3655744f04a2ffeb7894d23ba2c75aa2
     integration: merge
     dependencies: []

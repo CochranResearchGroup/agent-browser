@@ -12,7 +12,9 @@ Branch: `maintenance/plan-0168-repository-closeout`
 
 Target: `main`
 
-Integration: short-lived branch through the protected `main` workflow
+Integration: merge
+
+Integration model: short-lived branch through the protected `main` workflow
 
 Related plans: [Plan 0144](0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), [Plan 0155](0155-2026-09-02-durable-handoff-resume-intent-plan.md), [Plan 0156](0156-2026-09-02-full-runtime-shutdown-replacement-plan.md), [Plan 0157](0157-2026-09-02-profile-permissions-and-request-provenance-plan.md), [Plan 0161](0161-2026-09-09-first-class-profile-repair-and-reset-plan.md), [Plan 0162](0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [Plan 0165](0165-2026-09-11-bill-identifier-form-drift-repair.md), [Plan 0166](0166-2026-09-11-repository-custody-and-timed-out-connection-release.md), and [Plan 0167](0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md)
 
@@ -99,6 +101,27 @@ P168 now owns only
 `origin/main` at `2618ddb2c97cedbcc453a9f9584063a7c721eca3`. No foreign file was
 stashed, reset, committed, copied, or overwritten. The P168 worktree contains
 only its plan, roadmap, and runbook changes at this checkpoint.
+
+## W1 and W2 closure checkpoint
+
+W1 and W2 are complete. Checkpoint `9a61432a` published the closed-world
+review, corrected the planning and lane metadata parsers, removed closed P155,
+P156, P166, and P167 entries from the active catalog, and separated integrated
+Git custody from the still-open P144, P157, and P165 plan outcomes.
+
+After a fresh cleanliness, tip, process-cwd, patch-equivalence, and ancestry
+readback, the campaign removed the clean Plan 0165 worktree; deleted the exact
+local P165, P157, Last30days X, and Reddit branches; and deleted their matching
+remote refs. It also deleted the already-integrated remote-only
+`feature/p0240-sealed-auth`, `integration/plan-0161`,
+`maintenance/consolidate-field-notes-20260908`, and
+`plan/lease-authority-coordination` refs. P0240 runtime-compatible custody was
+not changed.
+
+P165 remains open for its sealed authentication gate. P144 remains open for
+public mutation and daemon effect admission. Plan 0158 remains open under its
+existing postmortem-only authority. Plan 0162 remains open and now explicitly
+requires a fresh current-main branch if execution resumes.
 
 ## Frozen decisions
 

@@ -43,6 +43,34 @@ No P0240 residual is accepted for integration until it is reconstructed on
 current `main`, its current contract counts and generated surfaces are
 reconciled, and all selected validation passes.
 
+## Executed closure
+
+The review checkpoint was published at `9a61432a`. A fresh pre-deletion census
+found the Plan 0165 worktree clean and found no process cwd beneath either the
+Plan 0165 or P0240 worktree. Local and remote tips matched for every branch
+closed below.
+
+Removed worktree:
+
+- `/home/ecochran76/workspace.local/agent-browser-bill-login-continue`
+
+Removed local and remote branches:
+
+- `fix/bill-login-email-continue` at `5ee95d67`;
+- `plan/profile-permissions-and-request-provenance` at `cccf3636`;
+- `docs/last30days-x-identity-rejection-20260903` at `6f198a8b`; and
+- `docs/reddit-handoff-errors-20260902` at `cc0cd29c`.
+
+Removed remote-only branches whose exact tips were ancestors of `origin/main`:
+
+- `feature/p0240-sealed-auth` at `a76e3223`;
+- `integration/plan-0161` at `68a59645`;
+- `maintenance/consolidate-field-notes-20260908` at `5d82be62`; and
+- `plan/lease-authority-coordination` at `ae5ad34c`.
+
+These removals are recoverable from the named commits and integrated history.
+The P0240 runtime-compatible worktree and branch remain intact for W3.
+
 ## Negative effects
 
 This review performed no production installation, browser or profile mutation,

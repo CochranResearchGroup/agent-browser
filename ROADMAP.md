@@ -14,8 +14,8 @@ State: OPEN
 Current state: W0 established clean P168 custody without touching the two
 Odollo-owned Rust edits on canonical `main`. Closed-world review proves P165,
 P144, P155, P156, P166, P167, P157, and both documentation branches have no
-unrepresented source work. Their Git and catalog closure is ready after the
-review checkpoint. P165, P144, Plan 0158, and Plan 0162 retain their separate
+unrepresented source work. Their reviewed worktree and refs are now closed.
+P165, P144, Plan 0158, and Plan 0162 retain their separate
 open operational or future-source gates. P0240 remains the only source-bearing
 candidate: three commits are patch-equivalent, one formatting commit is
 superseded, and the geometry-fixture and exact semantic-click changes require
