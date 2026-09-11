@@ -7,6 +7,25 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P168 | Worktree, Branch, Merge, And Closure Campaign
+
+State: OPEN
+
+Current state: Three worktrees and six local branches remain after Plan 0167.
+Plan 0165 has no unique commits and is eligible for Git-custody closeout after
+its catalog state is corrected, while its sealed authentication acceptance
+stays open. P0240 retains eight unique commits, P157 retains four, and two
+documentation branches retain three more in total. P144, P155, and P156 have
+integrated checkpoints but stale custody projections. The canonical worktree
+also acquired uncommitted Rust edits on two shared paths after the inventory.
+Those edits are positively attributed to an active Odollo-owned Codex process
+and remain untouched. P168 now runs from a clean dedicated worktree based on
+`2618ddb2`.
+[Plan 0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md)
+defines the review, selective merge, catalog repair, and exact-ref closure
+campaign. It authorizes no production, browser, profile, credential, provider,
+tenant, X, RuFresh, or release effect.
+
 ## P167 | Production-Scale Service State Lock Attribution And Critical-Section Repair
 
 State: CLOSED
