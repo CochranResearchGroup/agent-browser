@@ -1058,6 +1058,11 @@ fn rehydrate_prepared_payload_transaction(
                 recorded_at: runtime_adoption_timestamp(),
             });
         write_private_json_atomic(&transaction_path, &transaction)?;
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        if admission_drain_path.is_file() {
+            persist_admission_drain(&admission_drain_path, &transaction)?;
+        }
     }
     let runtime_handoffs = transaction.runtime_handoffs.clone();
     let dashboard_candidate = rehydrate_dashboard_candidate(root, &transaction)?;
