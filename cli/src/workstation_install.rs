@@ -5824,7 +5824,7 @@ fn install_doctor_reports_expected_upgrade_ready(
         })
         .cloned()
         .collect::<Vec<_>>();
-    transaction_issue_count == 1 && install_doctor_issues_are_advisory(data, &remaining_issues)
+    transaction_issue_count <= 1 && install_doctor_issues_are_advisory(data, &remaining_issues)
 }
 
 fn expected_upgrade_runtime_host_transition_ready(
@@ -16230,6 +16230,19 @@ mod tests {
 
         assert!(install_doctor_reports_expected_upgrade_ready(
             &report,
+            &transaction,
+            &[]
+        ));
+        let mut older_candidate_report = report.clone();
+        older_candidate_report["data"]["issues"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|issue| {
+                issue.get("code").and_then(Value::as_str)
+                    != Some("workstation_upgrade_transaction_not_terminal")
+            });
+        assert!(install_doctor_reports_expected_upgrade_ready(
+            &older_candidate_report,
             &transaction,
             &[]
         ));
