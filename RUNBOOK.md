@@ -5,7 +5,7 @@ Keep at or below 200 lines under policy0043.
 
 ## Turn 297 | 2026-09-11
 
-[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is OPEN. W0 isolated P168 from active Odollo-owned Rust edits. W1 and W2 published the custody review at `9a61432a`, closed the integrated P165 worktree, removed four exact local and remote branch pairs, and removed four integrated remote-only refs without closing residual operational plans. W3 reconstructed the two accepted P0240 residuals; all selected gates passed, PR 30 merged as `de614fbe`, and both P0240 worktrees plus their local and remote refs are closed. W4 found no P157 residual beyond behavior already represented by `ad673377`. W5 needs only P168 integration and final readback. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect is authorized.
+[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is CLOSED. W1 and W2 closed the integrated P165 worktree, four local and remote branch pairs, and four integrated remote-only refs without closing residual operational plans. W3 integrated the two accepted P0240 residuals through PR 30 at `de614fbe`; all selected gates passed, and both P0240 worktrees plus their refs are closed. W4 found no P157 residual beyond `ad673377`. PR 31 merged the campaign record as `9f711ebc`; PR 32 closes P168 catalog custody before exact maintenance-ref deletion. The two canonical Rust edits remain attributable Odollo custody. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect occurred.
 
 ## Turn 296 | 2026-09-11
 

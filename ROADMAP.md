@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P168 | Worktree, Branch, Merge, And Closure Campaign
 
-State: OPEN
+State: CLOSED
 
 Current state: W0 established clean P168 custody without touching the two
 Odollo-owned Rust edits on canonical `main`. Closed-world review proves P165,
@@ -20,8 +20,9 @@ open operational or future-source gates. PR 30 merged the two accepted P0240
 residuals as `de614fbe`; its original and integration worktrees plus their local
 and remote branches are closed. Three commits were patch-equivalent, one
 formatting commit was superseded, and its historical qualification commits
-remain recoverable by ID. Only P168 protected-main integration and final
-readback remain.
+remain recoverable by ID. PR 31 merged the campaign custody record as
+`9f711ebc`; PR 32 closes the plan and active-lane entry. The canonical
+Odollo-owned dirty paths remain separate attributable custody.
 [Plan 0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md)
 defines the review, selective merge, catalog repair, and exact-ref closure
 campaign. It authorizes no production, browser, profile, credential, provider,

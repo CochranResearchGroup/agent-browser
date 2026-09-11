@@ -2,7 +2,7 @@
 
 Date: 2026-09-11
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -157,8 +157,24 @@ on `SIGTERM`. The preflight then found both P0240 worktrees clean and idle. The
 campaign removed both worktrees, their local branches, and their matching
 remote branches. Their named commits and PR 30 remain the recovery locators.
 
-W5 now requires only protected-main integration of the P168 custody record,
-followed by a final main, remote, worktree, branch, catalog, and audit readback.
+PR 31 merged the P168 custody record as
+`9f711ebcccf6393fcf1ff22778fba4b3450c3224`. The final closeout packet removes
+P168 from the active catalog, moves the surviving open lanes' plan authority to
+`origin/main`, and closes this plan through the protected-main workflow.
+
+## W5 closure
+
+W5 is complete subject only to mechanical deletion of this exact closeout
+worktree and branch after the final protected-main merge receipt exists. The
+final branch-local audit is green after P168 leaves the catalog. Surviving P165,
+P157, and P144 entries describe integrated Git custody and separate open plan
+outcomes from `origin/main`; they require no historical branch or worktree.
+
+The final intended inventory is canonical `main` only. Its two Odollo-owned
+uncommitted Rust paths remain attributable foreign custody and are not modified
+by this campaign. Pull request 32 is the final plan-state, catalog, roadmap,
+runbook, and closeout-note integration receipt. After it merges, the exact P168
+worktree and local and remote maintenance refs are eligible for deletion.
 
 ## Frozen decisions
 
