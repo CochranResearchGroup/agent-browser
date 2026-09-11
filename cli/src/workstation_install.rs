@@ -5620,18 +5620,65 @@ fn verify_final_doctors(
                 last_failure = None;
                 break;
             }
-            last_failure = Some((output.status.to_string(), doctor_issue_codes(&payload)));
+            let evidence = expected_upgrade
+                .map(|transaction| expected_upgrade_doctor_diagnostics(&payload, transaction))
+                .unwrap_or_else(|| "not_applicable".to_string());
+            last_failure = Some((
+                output.status.to_string(),
+                doctor_issue_codes(&payload),
+                evidence,
+            ));
             if attempt + 1 < attempts {
                 std::thread::sleep(POST_COMMIT_DOCTOR_RETRY_INTERVAL);
             }
         }
-        if let Some((status, issue_codes)) = last_failure {
+        if let Some((status, issue_codes, evidence)) = last_failure {
             return Err(format!(
-                "{label} did not report ready after {attempts} attempt(s) (status {status}; issueCodes={issue_codes})"
+                "{label} did not report ready after {attempts} attempt(s) (status {status}; issueCodes={issue_codes}; transitionEvidence={evidence})"
             ));
         }
     }
     Ok(())
+}
+
+fn expected_upgrade_doctor_diagnostics(
+    payload: &Value,
+    expected: &crate::runtime_adoption::UpgradeTransaction,
+) -> String {
+    let data = payload.get("data").unwrap_or(&Value::Null);
+    let upgrade = data
+        .pointer("/liveDashboardRuntime/workstationUpgrade")
+        .unwrap_or(&Value::Null);
+    let transaction_issue_count = data
+        .get("issues")
+        .and_then(Value::as_array)
+        .map(|issues| {
+            issues
+                .iter()
+                .filter(|issue| {
+                    issue.get("code").and_then(Value::as_str)
+                        == Some("workstation_upgrade_transaction_not_terminal")
+                })
+                .count()
+        })
+        .unwrap_or(0);
+    format!(
+        "transactionIdMatch={},state={:?},draining={:?},selectedMatch={},transactionIssueCount={},dashboardTransition={},supervisorTransition={},runtimeHostTransition={}",
+        upgrade
+            .pointer("/latestTransaction/transactionId")
+            .and_then(Value::as_str)
+            == Some(expected.transaction_id.as_str()),
+        upgrade
+            .pointer("/latestTransaction/state")
+            .and_then(Value::as_str),
+        upgrade.get("admissionDraining").and_then(Value::as_bool),
+        upgrade.get("selectedGenerationId").and_then(Value::as_str)
+            == Some(expected.candidate_generation_id.as_str()),
+        transaction_issue_count,
+        expected_upgrade_shadow_dashboard_transition_ready(upgrade, expected),
+        expected_upgrade_supervisor_transition_ready(data, expected),
+        expected_upgrade_runtime_host_transition_ready(data, expected),
+    )
 }
 
 fn doctor_issue_codes(payload: &Value) -> String {
