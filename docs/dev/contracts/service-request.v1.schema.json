@@ -263,7 +263,7 @@
     "uiAction": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Provider-neutral UI recipe for action=ui_action. For desktop_evidence_observe passkey_chooser it is restricted to maxActions 1 and exactly one selector-based click. Other ui_action requests use a bounded steps array with supported find, click, fill, type, select, menu_select, wait, focus, clear, and dialog steps. Dialog accept or dismiss requires an allowedDialogLabels match."
+      "description": "Provider-neutral UI recipe for action=ui_action. For desktop_evidence_observe passkey_chooser it is restricted to maxActions 1 and exactly one selector-based click. Other ui_action requests use a bounded steps array with supported find, click, semantic_click, fill, type, select, menu_select, wait, focus, clear, and dialog steps. semantic_click requires one bounded exact role_name locator and rejects zero or multiple accessibility-tree matches. Dialog accept or dismiss requires an allowedDialogLabels match."
     },
     "networkCapture": {
       "type": "object",
