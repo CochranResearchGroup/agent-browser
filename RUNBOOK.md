@@ -6,20 +6,20 @@ Keep at or below 200 lines under policy0043.
 ## Turn 295 | 2026-09-11
 
 Plan0165 installed generation `0.28.0-c0cc081c1c6b-8e9cb639ccc3`; current-form
-and shared-task-lease repairs are on `origin/main`. Retained run
-`authrun-b590b4d0e78e3b6c3e309ab1` remains `awaiting_identifier`, transition 1,
-one observation, zero actions, and no pending effect. Resume request/job
-`mcp-service-request-service_authentication_run_resume-7b0fd3bf-459d-4be7-9bb1-59960b05ac62`
-found no Auth Vault profile `bill-soylei` and returned `effect_uncertain` plus
-`blind_retry`; no retry or provider/accounting effect followed. Restore the
-sealed vault entry and resolve that exact outcome before resuming or replacing.
+and shared-task-lease repairs are on `origin/main`. The retained BILL run remains
+`awaiting_identifier`; resume found no `bill-soylei` Auth Vault profile and
+returned `effect_uncertain` plus `blind_retry`. No retry or provider/accounting
+effect followed. Restore the sealed vault entry before resuming or replacing.
+
+[Plan0167](docs/dev/plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md) is OPEN on `maintenance/plan-0167-service-state-lock` for Plan0142's production-scale lock-attribution gap.
+It requires an at-least 8 MiB multi-process red regression before repair. No X
+or RuFresh replay, production install, cleanup, or provider effect is authorized.
 
 ## Turn 294 | 2026-09-11
 
-Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF
-now releases exact connection custody while accepted work finishes independently.
-Provider-free lifecycle, docs and strict Rust gates pass. P0240 and P157 remain
-preserved, Plan0162 is unblocked, and no Odollo or RuFresh action was repeated.
+Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF now releases exact connection custody while accepted work finishes independently.
+Provider-free gates pass; P0240 and P157 remain preserved, Plan0162 is unblocked,
+and no Odollo or RuFresh action was repeated.
 
 ## Turn 293 | 2026-09-11
 
