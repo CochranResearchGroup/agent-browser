@@ -513,7 +513,13 @@ admission, the installer first resumes that exact transaction or runs its
 recorded recovery path. It creates the new candidate transaction only after
 the prior transaction has reopened admission. It never chooses a transaction
 from file recency or creates a second blocked transaction around the same
-drain. If automatic convergence cannot prove the recorded identity, inspect the
+drain. A committed or finalized runtime handoff is a forward-only ownership
+effect. Its transaction advertises `resume`, refuses `rollback`, and preserves
+the candidate plus admission drain when later candidate presentation or
+readiness fails. Do not use workstation `recover` for that state; copy the
+guard fields from `inspect` into the exact guarded `resume` command. If
+automatic convergence cannot prove the recorded identity before any forward
+effect, inspect the
 reported transaction and run `agent-browser install workstation recover
 --transaction-id <id> --json` with the exact admission-owning transaction ID.
 Recovery fails
