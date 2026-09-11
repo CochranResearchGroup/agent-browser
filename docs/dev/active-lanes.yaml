@@ -7,14 +7,14 @@ lanes:
     branch: maintenance/plan-0166-connection-release
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: ad6125963d24bb3846495b5bf7af24e92b8121e7
-    remote_ref: null
+    custody_state: INTEGRATION_READY
+    checkpoint: a7efaef92668d7e7f46aa14564da783b8463a589
+    remote_ref: refs/remotes/origin/maintenance/plan-0166-connection-release
     integration_receipt: null
     integration: merge
-    dependencies: [P165]
+    dependencies: []
     overlaps: [P157]
-    reconciled_overlaps: [P157_preserve_open_source_ref]
+    reconciled_overlaps: [P157_preserve_open_source_ref, P165_integrated_source_preserved]
     updated_at: 2026-09-11
   - id: P165
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects

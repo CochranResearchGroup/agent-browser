@@ -148,11 +148,11 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 ### Next Recommendation
 
 [Plan 0166](docs/dev/plans/0166-2026-09-11-repository-custody-and-timed-out-connection-release.md)
-is the maintenance gate before new Plan 0162 implementation. It first restores
-truthful worktree and branch custody, then reproduces and repairs the reported
-deadline case where an exited CLI leaves its exact task-owned connection active.
-It permits no Odollo retry, new browser or profile, tenant action, or production
-installation; the completed RuFresh no-result remains valid.
+is qualified and awaiting protected `main` integration. Repository custody is
+reconciled, and client EOF now releases the exact task-owned connection without
+cancelling or replaying its accepted job. It permits no Odollo retry, new
+browser or profile, tenant action, or production installation; the completed
+RuFresh no-result remains valid.
 
 [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
 governs the four remaining production readiness items. Current execution,

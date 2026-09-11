@@ -5,10 +5,10 @@ Keep at or below 200 lines under policy0043.
 
 ## Turn 294 | 2026-09-11
 
-Plan0166 is OPEN. M0 restored canonical `main`, removed five clean integrated
-worktrees and four merged local branches, and trashed one exact orphaned test
-profile after exact process termination. Four worktrees remain; Plan0165 and
-P0240 stay active, P157 is paused, and no Odollo effect occurred.
+Plan0166 is OPEN and qualified at source checkpoint `a7efaef9`. M0 removed five
+integrated worktrees, four merged branches and one exact orphaned test fixture.
+Provider-free EOF, live-owner, timeout and dependent-batch gates pass; docs and
+strict Rust gates pass. P0240 and P157 stay preserved, and no Odollo effect ran.
 
 ## Turn 293 | 2026-09-11
 

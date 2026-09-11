@@ -58,9 +58,7 @@ stale origin tracking ref to prune. Four worktrees remain: canonical `main`, the
 active Plan 0165 operation, the unique P0240 runtime-compatible lane, and this
 Plan 0166 branch. P157 remains preserved as a paused published ref.
 
-The report does not yet distinguish a client transport deadline from the
-control plane's coordinated worker deadline. Current source inspection suggests,
-but does not yet prove, this ordering:
+M1 and CodeGraph inspection confirmed this ordering:
 
 1. one CLI connection submits the complete dependent batch;
 2. the daemon records that connection as active and awaits the queued response;
@@ -72,15 +70,43 @@ but does not yet prove, this ordering:
    connection is still persisted as active and receives
    `owner_connection_still_active`.
 
-Likely source owners are `cli/src/main.rs` dependent-batch submission,
-`cli/src/native/daemon.rs` connection lifetime,
-`cli/src/native/control_plane.rs` request coordination,
-`cli/src/native/service_profile_access_policy.rs` child admission, and
-`cli/src/native/service_model.rs` persisted disconnection. CodeGraph was not
-initialized in the current `main` worktree during planning, so these are
-source-read hypotheses rather than graph-backed impact claims. The executor
-must initialize or synchronize the expected derived index before structural
-impact analysis, then prove the actual failure path with a focused fixture.
+`cli/src/native/daemon.rs::handle_connection` awaited
+`ControlPlaneHandle::submit_from_connection` before reading the transport
+again. A client-side read deadline therefore could close the socket while the
+daemon remained unable to observe EOF; its disconnect guard stayed alive and
+the exact connection remained `active`. The control-plane worker already owned
+the submitted request, so releasing the response receiver neither cancelled nor
+replayed it. Existing child-access policy correctly denied a different active
+connection and correctly admitted only the same stable subject after a proven
+disconnect.
+
+Read-only Service status for Odollo's `carrier-tracking-lookup` task showed the
+two retained task tabs and their service handles had already converged to
+`connectionState: disconnected`. No replacement browser, profile, connection,
+or page action was created. The completed RuFresh no-result was not retried.
+
+## Execution checkpoint
+
+M2 first reproduced the defect on the pre-fix source: the daemon-level
+`disconnected_client_releases_connection_while_command_is_running` fixture
+timed out while a provider-free two-command batch continued. M3 moved transport
+reading into a bounded reader task and selected client EOF independently of the
+queued response. The exact disconnect guard now drops promptly, while the
+accepted batch continues in the existing worker and persists one successful
+terminal job. Lifecycle exit actions retain their must-finish response path.
+
+M4 changed no JSON, HTTP, MCP, or generated-client schema. Help, README, the
+agent skill, docs site, and inline comments now state the existing safe recourse:
+release only the dead transport's custody, inspect the retained job, and never
+replay automatically.
+
+Source checkpoint `a7efaef9` is qualified against `origin/main` `5c247f9d`.
+The focused regression, format, strict workspace Clippy, docs production build,
+remote-view documentation check, and `cli-native-other` compartment passed. The
+compartment result was 716 passed, 57 intentionally ignored, and zero failed.
+No development candidate was required because the behavior is fully exercised
+at the daemon transport seam without Chrome. Production installation and live
+Odollo execution remain outside this plan's authority.
 
 ## Consolidated batch
 
