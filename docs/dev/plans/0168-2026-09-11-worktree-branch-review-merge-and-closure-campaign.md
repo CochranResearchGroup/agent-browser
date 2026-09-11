@@ -123,6 +123,32 @@ public mutation and daemon effect admission. Plan 0158 remains open under its
 existing postmortem-only authority. Plan 0162 remains open and now explicitly
 requires a fresh current-main branch if execution resumes.
 
+## W3 residual integration checkpoint
+
+W3 classified all eight P0240 commits. The first three are patch-equivalent to
+`main`; `45360140` is formatting-only and superseded; and `67a2b98f` plus
+`0bb7fc56` are historical candidate notes tied to an obsolete installed
+baseline. The only current source residuals were `1104e16e` and `022d820d`.
+
+Fresh branch `integration/p0168-p0240-residual` reconstructs those residuals
+from current `origin/main`. Commit `2a5545db` disambiguates the geometry-epoch
+test literal. Commit `7f2b7083` adds an exact `semantic_click` step, requires an
+explicit exact role/name locator, rejects zero or multiple accessibility-tree
+matches, validates recipes before queueing, and documents every required
+user-facing surface. Pull request 30 is the protected-main integration receipt
+and is configured to merge after required checks pass.
+
+Selected validation passed: Rust formatting; workspace clippy with warnings
+denied; 2 semantic-click, 26 desktop-capture, and 62 service-request focused
+tests; service API/MCP parity; generated service-client contracts and type
+coverage; no-launch service collections; the docs production build;
+remote-view documentation; and all six workstation fixtures selected by the
+changed-path auditor. Initial eight-job Cargo attempts could not create worker
+threads at 949 of 1,024 shared slice tasks. The exact gates passed with one
+build job and compiler caching disabled. The installed shared skill remains
+unchanged until normal source integration and publication; no runtime effect
+was used as acceptance evidence.
+
 ## Frozen decisions
 
 ### Review is closed-world and deletion is last

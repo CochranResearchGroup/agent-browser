@@ -17,9 +17,10 @@ P144, P155, P156, P166, P167, P157, and both documentation branches have no
 unrepresented source work. Their reviewed worktree and refs are now closed.
 P165, P144, Plan 0158, and Plan 0162 retain their separate
 open operational or future-source gates. P0240 remains the only source-bearing
-candidate: three commits are patch-equivalent, one formatting commit is
-superseded, and the geometry-fixture and exact semantic-click changes require
-current-main reconstruction and validation.
+candidate: its geometry-fixture and exact semantic-click residuals passed
+current-main validation and await protected-main integration through PR 30;
+three commits are patch-equivalent, one formatting commit is
+superseded, and its two historical qualification notes remain branch evidence.
 [Plan 0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md)
 defines the review, selective merge, catalog repair, and exact-ref closure
 campaign. It authorizes no production, browser, profile, credential, provider,

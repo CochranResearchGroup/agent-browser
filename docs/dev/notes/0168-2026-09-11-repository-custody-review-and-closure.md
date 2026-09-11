@@ -71,6 +71,32 @@ Removed remote-only branches whose exact tips were ancestors of `origin/main`:
 These removals are recoverable from the named commits and integrated history.
 The P0240 runtime-compatible worktree and branch remain intact for W3.
 
+## P0240 qualified residual
+
+The published P0240 branch was not rebased or rewritten. A fresh worktree at
+`/home/ecochran76/workspace.local/agent-browser-p0168-p0240` reconstructed its
+two accepted residuals on current `main`:
+
+- `2a5545db` carries the geometry-epoch fixture clarification from `1104e16e`;
+- `7f2b7083` carries and hardens exact semantic click from `022d820d`.
+
+The semantic action now requires `exact: true`, refuses unsupported locator
+fields, requires exactly one live accessibility-tree match, validates before
+job creation, and returns locator and activation evidence. README, CLI help,
+the repository agent skill, the service schema, MCP description, inline docs,
+and the docs site describe the behavior. Pull request 30 is the integration
+receipt and is set to merge after required checks pass.
+
+Provider-free validation passed for Rust formatting, clippy, focused semantic
+click, desktop capture and service request tests, service contract and client
+parity, no-launch service collections, the docs build, documentation contracts,
+and the selector-nominated workstation fixtures. The first unconstrained Cargo
+attempts failed before project compilation because the shared Cargo slice was
+at 949 of 1,024 tasks. The same gates passed with one Cargo build job and cache
+disabled. The repository and installed user-scoped skills differ only because
+the accepted source change has not yet been published into that installed
+surface; Plan 0168 did not overwrite it.
+
 ## Negative effects
 
 This review performed no production installation, browser or profile mutation,
