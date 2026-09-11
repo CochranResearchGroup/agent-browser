@@ -5706,7 +5706,7 @@ and unrelated family evidence.
 Its temporary candidate session is scoped to the upgrade transaction, so a
 retry cannot reuse a candidate daemon left by an earlier failed transaction.
 A committed or finalized runtime handoff is forward-only. Transaction inspect
-then advertises resume and refuses rollback; later candidate presentation or
+then advertises resume and refuses rollback; later candidate deployment
 readiness failure retains the candidate and admission drain for exact guarded
 resume rather than routing through workstation recover.
 If service projection metadata omits the runtime-profile name, orphan adoption
@@ -5785,11 +5785,12 @@ process identity, unique ready owner, active session, process digest, and exact
 target still match. This observation does not write Service State or launch a
 browser. When all durable handoff aliases are stale, bootstrap may instead use
 an exact retained RDP browser whose ready owner, valid target, reattach
-recommendation, and one unallocated ready route agree. Candidate staging still
-requires a generation-bound durable handoff receipt before commit. The
+recommendation, and one unallocated ready route agree. Candidate staging reports
+this evidence for the independent operator-presentation axis, but missing
+evidence does not block executable deployment. The
 reattach must carry the current workstation transaction ID and revision as its
 runtime admission claim while the drain is active. Apply
-records a terminal zero-effect preflight block when neither bootstrap proof is available.
+continues while reporting when neither bootstrap proof is available.
 Recovery requalifies current provider inventory before reserving the route.
 Fresh and isolated installs do not require a retained
 presentation handoff. A structured
@@ -5816,13 +5817,11 @@ Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. The shadow stays backend-only while all old-generation cooperative
 lanes complete handoff prepare. A no-browser stream-status bootstrap starts the
 transaction runtime host only after that batch finishes, preventing
-cross-generation Service State lock contention. After runtime transfer it waits
-up to five minutes for an authenticated
-candidate handoff resolution. A ready response served by the staged candidate
-automatically commits that exact generation after revalidating its presentation
-receipt. Failure to prove presentation rolls back the staged candidate and
-preserves the selected generation. Stable ingress stays on the old backend until that receipt exists,
-then moves to the managed candidate backend on the next port. The explicit
+cross-generation Service State lock contention. After runtime transfer it
+commits the executable-bound candidate once that candidate's own live manifest
+is healthy. Operator presentation remains an independent readiness axis and may
+converge later. A ready response served by the selected candidate records its
+generation-bound presentation receipt without changing backend custody. The explicit
 dashboard ingress commit command remains a recovery path for an already-ready
 receipt. Durable-handoff resolution prepares the exact retained owner lane
 before using its saved HTTP port after a runtime-host restart. Failed preparation

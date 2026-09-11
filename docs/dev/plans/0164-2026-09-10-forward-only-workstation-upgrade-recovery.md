@@ -8,7 +8,7 @@ Consolidation: required
 
 Lane: production workstation upgrade repair
 
-Branch: fix/forward-only-workstation-upgrade
+Branch: main
 
 Target: main
 
@@ -34,10 +34,13 @@ cleanup, provider mutation, release publication, or tenant effects.
 Production transaction
 `upgrade-bc9935eb-9425-426b-a8bf-fe8e2d00fc14` has one committed,
 unfinalized cooperative runtime handoff and one live candidate runtime host.
-Its presentation timeout attempted rollback, the rollback could not reverse the
-committed owner transfer, and the transaction entered
-`operator_recovery_required`. Inspection incorrectly exposes `recover`, whose
-old-generation preservation path correctly refuses the still-live candidate.
+Its original presentation timeout attempted rollback, the rollback could not
+reverse the committed owner transfer, and the transaction entered
+`operator_recovery_required`. The first repair corrected that classification
+and made inspection expose `resume`. Live resume then exposed two additional
+upgrade defects: a newer controller synthesized an older candidate's dashboard
+asset identity from its own embedded assets, and installation blocked on an
+operator-presentation receipt that the current profile state cannot produce.
 
 The selected production generation remains the old generation. The active
 admission drain belongs to this exact transaction. No further rollback or
@@ -51,16 +54,19 @@ This batch contains one interdependent outcome:
    forward effect;
 2. make guarded actions, automatic prior-install convergence, and failure
    handling consistently select forward resume after that effect;
-3. reconstruct candidate dashboard custody when resuming the durable phase;
-4. retain authenticated candidate presentation as readiness evidence without
-   invoking rollback after the forward boundary; and
-5. prove the repaired behavior locally, merge it, resume the exact stranded
+3. reconstruct candidate dashboard custody when resuming the durable phase and
+   observe the candidate's own executable-bound manifest;
+4. commit a healthy dashboard deployment independently of authenticated
+   operator presentation, while retaining presentation as a visible readiness
+   axis that may converge later; and
+5. prove the repaired behavior locally, resume the exact stranded
    transaction, then perform one repaired production reinstall and verify one
    supervisor-owned runtime topology.
 
 Changing provider capacity, weakening runtime identity checks, bypassing the
-authenticated presentation receipt, and deleting retained generations are
-outside this batch.
+truthfulness of presentation receipts, and deleting retained generations are
+outside this batch. No receipt is synthesized: an absent operator journey stays
+reported as absent and no longer blocks executable deployment.
 
 ## Delivery sequence and budget
 
@@ -71,19 +77,18 @@ outside this batch.
    dashboard reconstruction. Implement the minimal durable replay path.
 3. Add one regression proving presentation failure preserves forward recovery
    rather than calling rollback. Implement the minimal failure transition.
-4. Run focused tests during repair, then one changed-surface qualification and
-   one optimized candidate build after source freeze.
-5. Merge the qualified commits to `main`. Use the repaired controller to resume
+4. Add candidate-owned manifest and health-only deployment regressions, then
+   decouple installation readiness from the still-visible presentation axis.
+5. Run focused tests during repair, then one changed-surface qualification and
+   one optimized candidate build after source freeze. Use the repaired controller to resume
    the exact existing transaction with compare-and-swap evidence. Perform at
    most one subsequent repaired-candidate production reinstall.
 
 The complete batch is bounded to 90 minutes of active work, four vertical TDD
-cycles, one review/rework cycle, and two production forward transactions. The
-first guarded resume demonstrated that dashboard rehydration rejected the
-already-removed candidate before restaging, so that exact live red result
-authorizes one affected-surface requalification and one replacement optimized
-build. Any further source failure stops the production path for disposition.
-Any live mismatch in transaction identity, revision, candidate digest,
+cycles plus two live-derived regression cycles, one review/rework cycle, and
+two production forward transactions. Prior optimized builds are diagnostic;
+only one final source-frozen build may be installed. Any live mismatch in
+transaction identity, revision, candidate digest,
 admission-drain ownership, or process identity stops effects without rollback.
 
 ## Worker assignments
@@ -100,6 +105,8 @@ must remain with the primary.
 | Forward-only classification | Focused red then green Rust test | Committed cooperative ownership exposes only `inspect` and `resume`; rollback returns a typed forward-only refusal |
 | Durable replay | Focused isolated resume test | Exact operator-recovery transaction returns to its durable phase without requiring a full-shutdown receipt |
 | Presentation failure | Focused failure-path test | Candidate and drain are retained in forward recovery; no rollback transition is recorded |
+| Candidate manifest identity | Focused dashboard test | A newer controller accepts the sealed candidate's own live embedded-asset manifest only when its executable path and digest match |
+| Presentation decoupling | Focused ingress and post-commit tests | Healthy deployment selects the candidate with `operatorJourneyReady=false`; no presentation receipt is invented |
 | Source qualification | Validation selector, format, strict workspace Clippy, focused installer tests | All touched Rust surfaces pass once on the frozen source |
 | Installed production state | Transaction receipts, binary digest, supervisor and process census, install doctor | Repaired generation is selected, exactly one production runtime host and one dashboard generation remain, and no duplicate fixture process exists |
 

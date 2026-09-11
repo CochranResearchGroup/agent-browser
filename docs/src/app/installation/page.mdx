@@ -236,10 +236,9 @@ Before a real-host upgrade enters effects, dry-run reports
 <code>proofPhase=bootstrap</code>. It is ready when one opaque durable handoff
 identifies an exact healthy browser process, target, and unique current owner
 session that the staged candidate can adopt. A ready route, display, or
-old-generation presentation receipt is not required at bootstrap because the
-candidate must reacquire and prove those replaceable resources. Apply records
-a terminal zero-effect preflight block when no adoptable handoff exists. Fresh
-installs and isolated development installs are exempt. Structured handoffs
+old-generation presentation receipt is not required at bootstrap. Missing
+adoptable presentation evidence remains visible but does not block deployment.
+Structured handoffs
 never fall back to stale session labels when current owner evidence is missing.
 
 On real-host apply, the installer starts the candidate dashboard backend on
@@ -247,12 +246,12 @@ the second port after stable ingress and stages it before admission drain.
 The shadow remains backend-only while every old-generation cooperative lane
 completes handoff prepare. A no-browser `stream status` bootstrap starts the
 transaction runtime host only after that batch finishes, preventing cross-generation
-Service State lock contention. After runtime transfer reaches candidate readiness, apply waits up to five
-minutes for an authenticated candidate journey. Resolving an opaque durable
-handoff to a ready operator surface through the staged candidate automatically
-commits that exact generation. The commit rechecks the candidate-bound receipt
-against the current runtime owner, route, display, target, provider, and
-deployment generation. If proof is not established before the deadline, the
+Service State lock contention. After runtime transfer reaches candidate readiness,
+apply commits the executable-bound candidate after its own live manifest is
+healthy. Operator-presentation readiness remains separate and may converge
+later. Resolving an opaque durable handoff through the selected candidate
+records that exact generation's presentation receipt without changing backend
+custody. If deployment health is not established, the
 installer rolls back the staged candidate and preserves the selected installed
 generation. <code>agent-browser dashboard ingress commit
 --expected-revision &lt;revision&gt; --handoff-id &lt;id&gt;</code> remains an explicit
@@ -330,7 +329,8 @@ before it creates a new candidate transaction. It never selects the prior
 transaction by file recency. A committed or finalized runtime handoff is a
 forward-only ownership effect. Inspect advertises <code>resume</code>, refuses
 <code>rollback</code>, and retains the candidate plus matching admission drain
-when later candidate presentation or readiness fails. Do not use workstation
+when later candidate deployment readiness fails. Missing operator presentation
+is nonblocking. Do not use workstation
 <code>recover</code> for that state. If automatic convergence refuses changed or
 ambiguous evidence, run <code>agent-browser install workstation recover
 --transaction-id &lt;id&gt; --json</code> with the exact admission-owning
@@ -374,15 +374,17 @@ The <code>readiness</code> object separates
 <code>upgradeTransactionState</code>,
 <code>dashboardIngressReady</code>, <code>operatorJourneyReady</code>, and
 <code>rollbackReady</code>. Overall <code>ready</code> remains false while a
-transaction or admission drain is active or any axis is unproved. Accepted
+transaction or admission drain is active or any deployment axis is unproved.
+<code>operatorJourneyReady</code> remains independently visible and does not
+block installation readiness. Accepted
 generations keep rollback authority for 24 hours.
 
 For an existing installation, candidate bootstrap normally uses one current
 durable handoff. If retained handoff aliases point to superseded browser IDs,
 the bootstrap may instead use an exact retained RDP browser whose ready owner,
 valid target, reattach recommendation, and an unallocated ready route agree.
-This permits staging only. The candidate must reattach the browser and record a
-generation-bound durable handoff receipt before commit.
+This is advisory presentation evidence. The candidate may reattach the browser
+and record a generation-bound durable handoff receipt after deployment.
 While the workstation admission drain is active, bind this reattach to the
 exact current transaction ID and revision through its runtime admission claim.
 The candidate requalifies the current provider inventory immediately before

@@ -426,8 +426,8 @@ target, and unique current owner session that the staged candidate can adopt.
 When old handoff aliases no longer name the current browser, bootstrap can
 instead admit one exact retained RDP browser whose process, target, owner,
 reattach recommendation, and an available ready route all agree. The staged
-candidate must reattach that browser and issue the normal durable handoff
-receipt before commit. While the workstation admission drain is active, this
+candidate may reattach that browser and issue a durable handoff receipt for the
+independent operator-presentation axis. While the workstation admission drain is active, this
 reattach must carry the exact current transaction ID and revision as its
 runtime admission claim.
 Recovery requalifies the current provider inventory immediately before route
@@ -435,10 +435,9 @@ reservation so a pre-transfer inventory error cannot survive after the exact
 owner transfer completes.
 A ready route, display, or old-generation presentation receipt is not required
 at bootstrap because those replaceable resources must be reacquired and proved
-by the candidate. Apply records a terminal zero-effect preflight block when no
-adoptable handoff exists. Fresh installs and isolated development installs are
-exempt. Structured handoffs never fall back to stale session labels when
-current owner evidence is missing.
+by the candidate. Missing adoptable presentation evidence remains visible but
+does not block deployment. Structured handoffs never fall back to stale session
+labels when current owner evidence is missing.
 
 On real-host apply, the installer starts the candidate dashboard backend on
 the second port after the stable ingress port and stages it in the ingress
@@ -446,14 +445,11 @@ registry before admission drain. The shadow remains backend-only while every
 old-generation cooperative lane completes handoff prepare. Only then does a
 no-browser `stream status` bootstrap start the transaction runtime host, so old
 prepare and candidate mutation phases never contend for Service State. After
-runtime transfer reaches candidate readiness, apply waits up to five minutes for an authenticated candidate
-journey. Resolving an opaque durable handoff to a ready operator surface
-through the staged candidate automatically commits that exact generation.
-The commit rechecks its candidate-bound presentation receipt against the
-current runtime owner, route, display, target, provider, and deployment
-generation. If proof is not established before the deadline, the installer
-rolls back the staged candidate and preserves the selected installed
-generation. `agent-browser dashboard ingress commit --expected-revision
+runtime transfer reaches candidate readiness, apply commits the executable-bound
+candidate after its own live manifest is healthy. Operator-presentation
+readiness remains separate and may converge later. Resolving an opaque durable
+handoff through the selected candidate records that exact generation's
+presentation receipt without changing backend custody. `agent-browser dashboard ingress commit --expected-revision
 <revision> --handoff-id <id>` remains an explicit recovery command for a ready
 receipt that was recorded before automatic selection completed.
 The file-based `--evidence <presentation-evidence.json>` form remains available
@@ -515,8 +511,8 @@ the prior transaction has reopened admission. It never chooses a transaction
 from file recency or creates a second blocked transaction around the same
 drain. A committed or finalized runtime handoff is a forward-only ownership
 effect. Its transaction advertises `resume`, refuses `rollback`, and preserves
-the candidate plus admission drain when later candidate presentation or
-readiness fails. Do not use workstation `recover` for that state; copy the
+the candidate plus admission drain when later candidate deployment readiness
+fails. Missing operator presentation is nonblocking. Do not use workstation `recover` for that state; copy the
 guard fields from `inspect` into the exact guarded `resume` command. If
 automatic convergence cannot prove the recorded identity before any forward
 effect, inspect the
@@ -554,8 +550,9 @@ After an unrelated failed upgrade preserved its old generation, a later selected
 Its `readiness` object separates `payloadReady`, `selectedGenerationReady`,
 `runtimeConvergenceReady`, `upgradeTransactionState`,
 `dashboardIngressReady`, `operatorJourneyReady`, and `rollbackReady`. Overall
-`ready` remains false while a transaction or admission drain is active or any
-axis is unproved. An accepted generation retains rollback authority for 24
+`ready` remains false while a transaction or admission drain is active or a
+deployment axis is unproved. `operatorJourneyReady` is reported independently
+and does not block installation readiness. An accepted generation retains rollback authority for 24
 hours. Generation GC then finalizes the accepted transaction automatically
 after rechecking the locked ledger. The transaction remains durable history,
 but no longer pins every generation it names.

@@ -113,8 +113,9 @@ Service State or launch a duplicate browser.
 If every durable handoff alias is stale, bootstrap may admit one retained RDP
 browser only when its exact ready owner and valid target agree, attachability
 recommends `service_remote_view_browser_reattach`, and one unallocated ready
-route exists. The staged candidate must perform that reattach and produce a
-generation-bound durable handoff receipt before commit. During the workstation
+route exists. The staged candidate may perform that reattach and produce a
+generation-bound durable handoff receipt for the independent presentation axis.
+During the workstation
 admission drain, bind the reattach to the exact current transaction ID and
 revision through `runtimeAdmissionClaim`.
 The candidate requalifies current provider inventory immediately before the
@@ -214,23 +215,21 @@ admission drain is closed. Upgrade dry-run also reports
 `candidatePresentationPrerequisite` with `proofPhase=bootstrap`. It is ready
 when one opaque durable handoff identifies an exact healthy browser process,
 target, and unique current owner session that a staged candidate can adopt.
-Bootstrap does not require a ready route, display, or old-generation receipt;
-the staged candidate must reacquire those replaceable resources and produce
-its own authenticated receipt. Apply records a terminal zero-effect preflight
-block when no adoptable handoff qualifies. Fresh and isolated installs are
-exempt. Never retry the upgrade or route a structured handoff through its old
-session label when bootstrap is unready; reconcile exact current ownership or
-establish one fresh reviewed handoff first. Real-host apply starts a candidate
+Bootstrap does not require a ready route, display, or old-generation receipt.
+Missing adoptable presentation evidence remains visible but does not block
+deployment. Never route a structured handoff through its old session label;
+reconcile exact current ownership before relying on operator presentation.
+Real-host apply starts a candidate
 dashboard on the second port after ingress. The shadow stays backend-only while
 all old-generation cooperative lanes complete handoff prepare. The candidate
 runtime host starts through a no-browser stream-status bootstrap only after
 that prepare batch finishes, preventing legacy source and candidate mutation
-phases from contending for Service State. Apply then waits up to five minutes after
-runtime transfer for an authenticated candidate journey. Resolving an opaque
-durable handoff to a ready operator surface through the staged candidate
-automatically commits that exact generation after rechecking its receipt
-against the current owner, route, display, target, provider, and deployment
-generation. If proof fails, rollback removes the staged candidate and preserves
+phases from contending for Service State. Apply commits the executable-bound
+candidate after its own live manifest becomes healthy. Operator presentation
+remains an independent readiness axis that may converge later. Resolving an
+opaque durable handoff through the selected candidate records a
+generation-bound presentation receipt without changing backend custody. If
+deployment health fails, rollback removes the staged candidate and preserves
 the selected generation. Use `dashboard
 ingress commit --expected-revision <revision> --handoff-id <id>` only as an
 explicit recovery command when the ready receipt landed before automatic
@@ -269,8 +268,9 @@ it automatically resumes or recovers that exact transaction before creating a
 new candidate transaction. It does not choose by file recency. If automatic
 convergence finds a committed or finalized runtime handoff, the transaction is
 forward-only: use its guarded `resume` action and never workstation `recover`
-or guarded `rollback`. Candidate presentation or readiness failure retains the
-candidate and matching drain for that exact resume. If automatic convergence
+or guarded `rollback`. Candidate deployment readiness failure retains the
+candidate and matching drain for that exact resume. Missing operator
+presentation is nonblocking. If automatic convergence
 refuses changed or ambiguous evidence before a forward effect, use only the exact
 transaction reported as the drain owner:
 

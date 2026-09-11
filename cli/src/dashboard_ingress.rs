@@ -298,6 +298,27 @@ impl DashboardIngressRegistry {
         Ok(receipt)
     }
 
+    /// Selects a live, executable-bound candidate without claiming that an
+    /// authenticated operator journey has completed. Presentation readiness
+    /// remains independently observable and may be attached later.
+    pub(crate) fn commit_candidate_deployment(&mut self) -> Result<(), String> {
+        let candidate = self
+            .candidate_backend
+            .as_ref()
+            .ok_or_else(|| "dashboard candidate is not staged".to_string())?;
+        let prior = std::mem::replace(&mut self.selected_backend, candidate.clone());
+        if prior.generation_id != candidate.generation_id {
+            self.rollback_backend = Some(prior.clone());
+            self.rollback_presentation_receipt = self.last_presentation_receipt.clone();
+        }
+        self.fallback_backend = Some(prior);
+        self.candidate_backend = None;
+        self.fallback_presentation_receipt = self.last_presentation_receipt.take();
+        self.last_presentation_receipt = None;
+        self.revision = self.revision.saturating_add(1);
+        Ok(())
+    }
+
     fn rollback_selected_candidate(&mut self, expected_generation: &str) -> Result<(), String> {
         if self.selected_backend.generation_id != expected_generation {
             return Err("dashboard selected generation changed before rollback".to_string());
@@ -388,6 +409,22 @@ impl DashboardIngressRepository {
         let receipt = registry.commit_candidate(journey)?;
         write_registry_atomic(&self.path, &registry)?;
         Ok(receipt)
+    }
+
+    pub(crate) fn commit_candidate_deployment(
+        &self,
+        expected_revision: u64,
+    ) -> Result<DashboardIngressRegistry, String> {
+        let _lock = acquire_ingress_lock(&self.path)?;
+        let mut registry = load_registry(&self.path)?;
+        require_revision(&registry, expected_revision)?;
+        let candidate = registry
+            .candidate_backend()
+            .ok_or_else(|| "dashboard candidate is not staged".to_string())?;
+        validate_dashboard_backend(candidate)?;
+        registry.commit_candidate_deployment()?;
+        write_registry_atomic(&self.path, &registry)?;
+        Ok(registry)
     }
 
     /// Records current authenticated presentation without changing backend custody.
@@ -1030,9 +1067,8 @@ pub(crate) fn candidate_presentation_bootstrap_prerequisite(
 
 /// Permit candidate staging when durable handoff aliases are stale but one
 /// exact current browser owner can be rebound to an available RDP route by the
-/// staged candidate. This is read-only bootstrap evidence. The candidate must
-/// still produce the ordinary generation-bound durable handoff receipt before
-/// the installation can commit.
+/// staged candidate. This is read-only bootstrap evidence for the independent
+/// operator-presentation axis and never blocks an executable-bound deployment.
 fn candidate_bootstrap_reattachable_browser_ids(
     state: &crate::native::service_model::ServiceState,
 ) -> Vec<String> {
@@ -1533,12 +1569,53 @@ fn request_with_connection_close(request: &[u8]) -> Vec<u8> {
 }
 
 pub(crate) fn validate_dashboard_backend(backend: &DashboardBackend) -> Result<(), String> {
-    let address = SocketAddr::from(([127, 0, 0, 1], backend.port));
+    let manifest = read_dashboard_runtime_manifest(backend.port, &backend.generation_id)?;
+    let observed_sha256 = format!("{:x}", Sha256::digest(manifest.to_string().as_bytes()));
+    if observed_sha256 != backend.runtime_manifest_sha256 {
+        return Err(format!(
+            "dashboard candidate manifest changed: expected {}, observed {observed_sha256}",
+            backend.runtime_manifest_sha256
+        ));
+    }
+    Ok(())
+}
+
+/// Observe a candidate's own embedded dashboard manifest while binding it to
+/// the sealed executable identity recorded by the upgrade transaction. A newer
+/// controller must not synthesize an older candidate's asset manifest from its
+/// own embedded dashboard bytes.
+pub(crate) fn observe_dashboard_backend(
+    port: u16,
+    generation_id: &str,
+    expected_executable: &Path,
+    expected_executable_sha256: &str,
+) -> Result<DashboardBackend, String> {
+    let manifest = read_dashboard_runtime_manifest(port, generation_id)?;
+    if manifest
+        .pointer("/executable/path")
+        .and_then(serde_json::Value::as_str)
+        != Some(expected_executable.to_string_lossy().as_ref())
+        || manifest
+            .pointer("/executable/sha256")
+            .and_then(serde_json::Value::as_str)
+            != Some(expected_executable_sha256)
+    {
+        return Err("dashboard candidate executable identity mismatch".to_string());
+    }
+    let manifest_sha256 = format!("{:x}", Sha256::digest(manifest.to_string().as_bytes()));
+    Ok(DashboardBackend::new(generation_id, port, manifest_sha256))
+}
+
+fn read_dashboard_runtime_manifest(
+    port: u16,
+    generation_id: &str,
+) -> Result<serde_json::Value, String> {
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
     let mut stream =
         StdTcpStream::connect_timeout(&address, Duration::from_secs(2)).map_err(|error| {
             format!(
                 "dashboard candidate generation {} is unavailable: {error}",
-                backend.generation_id
+                generation_id
             )
         })?;
     stream
@@ -1576,14 +1653,7 @@ pub(crate) fn validate_dashboard_backend(backend: &DashboardBackend) -> Result<(
     {
         return Err("dashboard candidate runtime manifest schema is invalid".to_string());
     }
-    let observed_sha256 = format!("{:x}", Sha256::digest(manifest.to_string().as_bytes()));
-    if observed_sha256 != backend.runtime_manifest_sha256 {
-        return Err(format!(
-            "dashboard candidate manifest changed: expected {}, observed {observed_sha256}",
-            backend.runtime_manifest_sha256
-        ));
-    }
-    Ok(())
+    Ok(manifest)
 }
 
 async fn read_initial_http_request(client: &mut TcpStream) -> Result<Vec<u8>, String> {
@@ -1878,6 +1948,21 @@ mod tests {
             registry.fallback_backend().unwrap().generation_id,
             "generation-old"
         );
+    }
+
+    #[test]
+    fn healthy_deployment_commit_selects_candidate_without_claiming_presentation() {
+        let old = DashboardBackend::new("generation-old", 4850, "old-manifest");
+        let candidate = DashboardBackend::new("generation-new", 4851, "new-manifest");
+        let mut registry = DashboardIngressRegistry::new(old.clone());
+        registry.stage_candidate(candidate.clone()).unwrap();
+
+        registry.commit_candidate_deployment().unwrap();
+
+        assert_eq!(registry.selected_backend(), &candidate);
+        assert_eq!(registry.fallback_backend(), Some(&old));
+        assert!(registry.candidate_backend().is_none());
+        assert!(registry.last_presentation_receipt().is_none());
     }
 
     #[test]
@@ -3286,6 +3371,51 @@ mod tests {
             expected_sha256,
         ))
         .unwrap();
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn candidate_manifest_observation_uses_the_candidate_asset_identity() {
+        let listener = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let executable =
+            PathBuf::from("/opt/agent-browser/generations/candidate/bin/agent-browser");
+        let executable_sha256 = "a".repeat(64);
+        let manifest = serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-manifest.v1",
+            "packageVersion": "0.28.0",
+            "executable": {
+                "path": executable,
+                "sha256": executable_sha256,
+            },
+            "dashboard": {
+                "sha256": "candidate-embedded-assets",
+            }
+        });
+        let body = manifest.to_string();
+        let expected_manifest_sha256 = format!("{:x}", Sha256::digest(body.as_bytes()));
+        let server = thread::spawn(move || {
+            let (mut connection, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 512];
+            let _ = connection.read(&mut request).unwrap();
+            write!(
+                connection,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        });
+
+        let observed = observe_dashboard_backend(
+            port,
+            "generation-candidate",
+            Path::new("/opt/agent-browser/generations/candidate/bin/agent-browser"),
+            &"a".repeat(64),
+        )
+        .unwrap();
+        assert_eq!(observed.generation_id, "generation-candidate");
+        assert_eq!(observed.runtime_manifest_sha256, expected_manifest_sha256);
         server.join().unwrap();
     }
 

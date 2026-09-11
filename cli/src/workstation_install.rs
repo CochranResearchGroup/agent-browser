@@ -53,7 +53,6 @@ const MIN_WORKSTATION_FREE_DISK_BYTES: u64 = 6 * 1024 * 1024 * 1024;
 // binding. That bounded recovery may itself consume 20 seconds, so the installer
 // must leave additional time for process startup and runtime-manifest hashing.
 const DASHBOARD_CANDIDATE_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
-const DASHBOARD_PRESENTATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 const DASHBOARD_CANDIDATE_POLL_INTERVAL: std::time::Duration =
     std::time::Duration::from_millis(250);
 // Candidate ownership transfer can overlap a maintenance reconciliation of the
@@ -1220,22 +1219,7 @@ fn resume_prepared_payload_transaction(
             ));
         }
     }
-    if prepared.transaction.state == UpgradeTransactionState::CandidateReady
-        && !isolated_root
-        && !presentation_bypass
-    {
-        if let Err(error) =
-            wait_for_dashboard_candidate_commit(prepared, DASHBOARD_PRESENTATION_TIMEOUT)
-        {
-            return Err(rollback_resumed_transaction(
-                &paths,
-                prepared,
-                false,
-                quiesced.as_ref(),
-                "resume_candidate_dashboard_presentation_unproven",
-                error,
-            ));
-        }
+    if prepared.transaction.state == UpgradeTransactionState::CandidateReady && !isolated_root {
         match quiesce_existing_user_units(&paths) {
             Ok(snapshot) => quiesced = Some(snapshot),
             Err(error) => {
@@ -2383,7 +2367,6 @@ fn workstation_upgrade_readiness(
         && selected_generation_ready
         && runtime_convergence_ready
         && dashboard_ingress_ready
-        && operator_journey_ready
         && rollback_ready
         && transaction_terminal
         && !admission_draining;
@@ -2834,13 +2817,15 @@ fn workstation_candidate_presentation_prerequisite(
         Ok(state) => {
             let mut prerequisite =
                 crate::dashboard_ingress::candidate_presentation_bootstrap_prerequisite(&state);
-            prerequisite["required"] = Value::Bool(true);
+            prerequisite["required"] = Value::Bool(false);
+            prerequisite["installationBlocking"] = Value::Bool(false);
             prerequisite
         }
         Err(error) => serde_json::json!({
             "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
             "proofPhase": "bootstrap",
-            "required": true,
+            "required": false,
+            "installationBlocking": false,
             "ready": false,
             "eligibleHandoffCount": 0,
             "eligibleHandoffIds": [],
@@ -3108,31 +3093,6 @@ fn run_workstation_install(args: &[String]) {
         }
         fail(&error, parsed.json);
     }
-    if parsed.mode == InstallMode::Apply
-        && candidate_presentation_prerequisite
-            .get("required")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && candidate_presentation_prerequisite
-            .get("ready")
-            .and_then(Value::as_bool)
-            != Some(true)
-    {
-        let mut error = format!(
-            "candidate_dashboard_bootstrap_prerequisite_unready: {}",
-            candidate_presentation_prerequisite
-        );
-        if let Ok(path) = record_terminal_zero_effect_upgrade_transaction(
-            &root,
-            &paths,
-            &parsed,
-            crate::runtime_adoption::UpgradeTransactionState::BlockedCandidateIncompatible,
-            "candidate_dashboard_bootstrap_prerequisite_unready",
-        ) {
-            error.push_str(&format!("; transaction: {}", path.display()));
-        }
-        fail(&error, parsed.json);
-    }
     let _install_lock = if parsed.mode == InstallMode::Apply {
         match WorkstationLock::acquire(&root) {
             Ok(lock) => Some(lock),
@@ -3304,25 +3264,6 @@ fn run_workstation_install(args: &[String]) {
             "presentations-rebound",
             "candidate-ready",
         ]);
-        if !isolated_root && !browserless_upgrade_override_applied {
-            if let Err(error) =
-                wait_for_dashboard_candidate_commit(prepared, DASHBOARD_PRESENTATION_TIMEOUT)
-            {
-                let rollback = rollback_prepared_payload_transaction(
-                    &paths,
-                    prepared,
-                    false,
-                    "candidate_dashboard_presentation_unproven",
-                );
-                fail(
-                    &rollback
-                        .err()
-                        .map_or(error.clone(), |rollback| format!("{error}; {rollback}")),
-                    parsed.json,
-                );
-            }
-            phases.push("candidate-presentation-receipted");
-        }
         if !isolated_root {
             match quiesce_existing_user_units(&paths) {
                 Ok(quiesced) => apply_quiesced_user_units = Some(quiesced),
@@ -6025,23 +5966,10 @@ fn expected_upgrade_shadow_dashboard_transition_ready(
         .get("dashboardIngressReady")
         .and_then(Value::as_bool)
         == Some(true)
-        && ingress.get("operatorJourneyReady").and_then(Value::as_bool) == Some(true)
         && ingress
             .pointer("/selectedBackend/generationId")
             .and_then(Value::as_str)
             == Some(expected.candidate_generation_id.as_str())
-        && ingress
-            .pointer("/presentationReceipt/dashboardDeploymentGeneration")
-            .and_then(Value::as_str)
-            == Some(expected.candidate_generation_id.as_str())
-        && ingress
-            .pointer("/presentationReceipt/state")
-            .and_then(Value::as_str)
-            == Some("ready")
-        && ingress
-            .pointer("/presentationReceipt/receiptId")
-            .and_then(Value::as_str)
-            .is_some_and(|receipt| !receipt.trim().is_empty())
 }
 
 /// Remote-view doctor derives `remoteControl.ready` from install-doctor
@@ -6530,7 +6458,7 @@ fn commit_prepared_service_state_migration(
         return Ok(());
     }
     // A no-change plan has no Service State bytes to commit. Runtime transfer
-    // and authenticated candidate presentation legitimately advance the live
+    // and candidate runtime activity legitimately advance the live
     // state after the snapshot, so treating that evolution as migration drift
     // would make the required acceptance journey self-defeating.
     if migration.status == "staged_validated_no_change" {
@@ -6744,6 +6672,7 @@ fn record_blocked_upgrade_transaction(
     Ok(path)
 }
 
+#[cfg(test)]
 fn record_terminal_zero_effect_upgrade_transaction(
     root: &Path,
     paths: &InstallPaths,
@@ -9886,12 +9815,12 @@ fn prepare_dashboard_candidate_for_transaction(
         .checked_add(2)
         .ok_or_else(|| "dashboard candidate shadow port is unavailable".to_string())?;
     let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
-    let backend = crate::dashboard_ingress::DashboardBackend::new(
-        prepared.transaction.candidate_generation_id.clone(),
+    let candidate_generation_id = prepared.transaction.candidate_generation_id.clone();
+    let candidate_binary_sha256 = prepared.transaction.candidate_binary_sha256.clone();
+    let pending_backend = crate::dashboard_ingress::DashboardBackend::new(
+        candidate_generation_id.clone(),
         shadow_port,
-        crate::dashboard_ingress::dashboard_runtime_manifest_sha256_for_executable(
-            &candidate_binary,
-        )?,
+        "pending-candidate-manifest",
     );
     let runtime_socket_dir =
         candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
@@ -9913,12 +9842,24 @@ fn prepare_dashboard_candidate_for_transaction(
         .unwrap_or_else(|| root.join(".agent-browser/dashboard-ingress.json"));
     prepared.dashboard_candidate = Some(PreparedDashboardCandidate {
         child: Some(child),
-        backend: backend.clone(),
+        backend: pending_backend,
         ingress_path: ingress_path.clone(),
         staged_revision: 0,
     });
 
-    wait_for_dashboard_backend(&backend, prepared, DASHBOARD_CANDIDATE_START_TIMEOUT)?;
+    let backend = wait_for_dashboard_candidate_identity(
+        &candidate_binary,
+        &candidate_binary_sha256,
+        shadow_port,
+        &candidate_generation_id,
+        prepared,
+        DASHBOARD_CANDIDATE_START_TIMEOUT,
+    )?;
+    prepared
+        .dashboard_candidate
+        .as_mut()
+        .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
+        .backend = backend.clone();
     let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
     let registry = if ingress_path.is_file() {
         repository.load()?
@@ -9936,6 +9877,44 @@ fn prepare_dashboard_candidate_for_transaction(
         .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
         .staged_revision = staged.revision;
     Ok(())
+}
+
+fn wait_for_dashboard_candidate_identity(
+    candidate_binary: &Path,
+    candidate_binary_sha256: &str,
+    shadow_port: u16,
+    generation_id: &str,
+    prepared: &mut PreparedPayloadTransaction,
+    timeout: std::time::Duration,
+) -> Result<crate::dashboard_ingress::DashboardBackend, String> {
+    let started = std::time::Instant::now();
+    loop {
+        let last_error = match crate::dashboard_ingress::observe_dashboard_backend(
+            shadow_port,
+            generation_id,
+            candidate_binary,
+            candidate_binary_sha256,
+        ) {
+            Ok(backend) => return Ok(backend),
+            Err(error) => error,
+        };
+        if let Some(status) = prepared
+            .dashboard_candidate
+            .as_mut()
+            .and_then(|candidate| candidate.child.as_mut())
+            .and_then(|child| child.try_wait().ok().flatten())
+        {
+            return Err(format!(
+                "candidate dashboard generation {generation_id} exited before manifest identity was proven with {status}: {last_error}"
+            ));
+        }
+        if started.elapsed() >= timeout {
+            return Err(format!(
+                "candidate dashboard generation {generation_id} did not prove its sealed executable manifest on port {shadow_port}: {last_error}"
+            ));
+        }
+        std::thread::sleep(DASHBOARD_CANDIDATE_POLL_INTERVAL);
+    }
 }
 
 fn candidate_dashboard_command(
@@ -9999,6 +9978,7 @@ fn wait_for_dashboard_backend(
 
 /// Waits after runtime transfer for an independently authenticated journey to
 /// commit the staged shadow backend. The installer never fabricates evidence.
+#[cfg(test)]
 fn wait_for_dashboard_candidate_commit(
     prepared: &mut PreparedPayloadTransaction,
     timeout: std::time::Duration,
@@ -10051,7 +10031,8 @@ fn wait_for_dashboard_candidate_commit(
 }
 
 /// Moves ingress from the proven shadow process to the managed candidate unit
-/// only after the latter serves the identical runtime manifest.
+/// after the latter serves the identical runtime manifest. A presentation
+/// receipt is preserved when available, but is not an installation commit gate.
 fn promote_dashboard_candidate_to_managed_backend(
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
@@ -10088,15 +10069,18 @@ fn promote_dashboard_candidate_to_managed_backend(
             receipt.dashboard_deployment_generation == candidate.backend.generation_id
                 && receipt.state == crate::runtime_adoption::PresentationState::Ready
         })
-        .ok_or_else(|| "candidate dashboard presentation receipt disappeared".to_string())?
-        .clone();
+        .cloned();
     let staged = repository.stage_candidate(registry.revision, managed_backend)?;
-    repository.commit_candidate(
-        staged.revision,
-        crate::dashboard_ingress::CandidateOperatorJourney::ready(
-            crate::dashboard_ingress::PresentationEvidence::from_ready_receipt(&receipt)?,
-        ),
-    )?;
+    if let Some(receipt) = receipt {
+        repository.commit_candidate(
+            staged.revision,
+            crate::dashboard_ingress::CandidateOperatorJourney::ready(
+                crate::dashboard_ingress::PresentationEvidence::from_ready_receipt(&receipt)?,
+            ),
+        )?;
+    } else {
+        repository.commit_candidate_deployment(staged.revision)?;
+    }
     stop_prepared_dashboard_candidate(prepared)
 }
 
@@ -10147,7 +10131,6 @@ fn validate_post_commit_transaction(
         "selectedGenerationReady",
         "runtimeConvergenceReady",
         "dashboardIngressReady",
-        "operatorJourneyReady",
         "rollbackReady",
     ] {
         if status
@@ -10171,18 +10154,26 @@ fn validate_post_commit_transaction(
         .pointer("/dashboardIngress/presentationReceipt/receiptId")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty());
-    if dashboard_generation != Some(prepared.transaction.candidate_generation_id.as_str())
-        || receipt_generation != Some(prepared.transaction.candidate_generation_id.as_str())
-        || receipt_state != Some("ready")
-        || receipt_id.is_none()
-    {
-        return Err("post_commit_candidate_operator_journey_unproven".to_string());
+    if dashboard_generation != Some(prepared.transaction.candidate_generation_id.as_str()) {
+        return Err("post_commit_candidate_dashboard_generation_unproven".to_string());
     }
-    let receipt_id = receipt_id.expect("receipt presence checked");
-    Ok(PostCommitValidationReceipt {
-        dashboard_summary: format!("candidate_dashboard_generation_receipted:{receipt_id}"),
-        presentation_summary: format!("authenticated_operator_journey_receipted:{receipt_id}"),
-    })
+    match (receipt_generation, receipt_state, receipt_id) {
+        (None, None, None) => Ok(PostCommitValidationReceipt {
+            dashboard_summary: "candidate_dashboard_generation_health_validated".to_string(),
+            presentation_summary: "operator_journey_deferred_nonblocking".to_string(),
+        }),
+        (Some(generation), Some("ready"), Some(receipt_id))
+            if generation == prepared.transaction.candidate_generation_id =>
+        {
+            Ok(PostCommitValidationReceipt {
+                dashboard_summary: format!("candidate_dashboard_generation_receipted:{receipt_id}"),
+                presentation_summary: format!(
+                    "authenticated_operator_journey_receipted:{receipt_id}"
+                ),
+            })
+        }
+        _ => Err("post_commit_candidate_operator_journey_receipt_invalid".to_string()),
+    }
 }
 
 fn accept_prepared_payload_transaction(
@@ -12646,7 +12637,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn workstation_upgrade_preflight_requires_one_exact_presentation_handoff() {
+    fn workstation_upgrade_preflight_reports_missing_presentation_without_blocking() {
         use std::os::unix::fs::symlink;
 
         let root = env::temp_dir().join(format!(
@@ -12659,7 +12650,8 @@ mod tests {
 
         let prerequisite = workstation_candidate_presentation_prerequisite(&root, &paths, false);
 
-        assert_eq!(prerequisite["required"], true);
+        assert_eq!(prerequisite["required"], false);
+        assert_eq!(prerequisite["installationBlocking"], false);
         assert_eq!(prerequisite["ready"], false);
         assert_eq!(prerequisite["eligibleHandoffCount"], 0);
         assert_eq!(
@@ -12765,7 +12757,8 @@ mod tests {
         let prerequisite = workstation_candidate_presentation_prerequisite(&root, &paths, false);
 
         assert_eq!(prerequisite["proofPhase"], "bootstrap");
-        assert_eq!(prerequisite["required"], true);
+        assert_eq!(prerequisite["required"], false);
+        assert_eq!(prerequisite["installationBlocking"], false);
         assert_eq!(prerequisite["ready"], true);
         assert_eq!(
             prerequisite["eligibleHandoffIds"],
@@ -12798,7 +12791,7 @@ mod tests {
     }
 
     #[test]
-    fn workstation_legacy_mutable_install_requires_presentation_handoff() {
+    fn workstation_legacy_mutable_install_reports_presentation_without_blocking() {
         let root = env::temp_dir().join(format!(
             "agent-browser-legacy-presentation-prerequisite-{}",
             uuid::Uuid::new_v4()
@@ -12809,7 +12802,8 @@ mod tests {
 
         let prerequisite = workstation_candidate_presentation_prerequisite(&root, &paths, false);
 
-        assert_eq!(prerequisite["required"], true);
+        assert_eq!(prerequisite["required"], false);
+        assert_eq!(prerequisite["installationBlocking"], false);
         assert_eq!(prerequisite["ready"], false);
         assert_eq!(prerequisite["eligibleHandoffCount"], 0);
 
@@ -15264,6 +15258,10 @@ mod tests {
         assert_eq!(active["ready"], false);
 
         transaction.state = crate::runtime_adoption::UpgradeTransactionState::Accepted;
+        let ingress = serde_json::json!({
+            "dashboardIngressReady": true,
+            "operatorJourneyReady": false,
+        });
         let accepted = workstation_upgrade_readiness(
             &paths,
             Some(generation_id),
@@ -15271,6 +15269,7 @@ mod tests {
             false,
             &ingress,
         );
+        assert_eq!(accepted["operatorJourneyReady"], false);
         assert_eq!(accepted["ready"], true);
 
         transaction.state =
@@ -15291,7 +15290,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn post_commit_validation_requires_a_matching_live_candidate_presentation_receipt() {
+    fn post_commit_validation_accepts_live_candidate_with_deferred_presentation() {
         use std::net::TcpListener;
         use std::os::unix::fs::{symlink, PermissionsExt};
 
@@ -15374,31 +15373,8 @@ mod tests {
                 ),
             )
             .unwrap();
-        let receipt_id = "presentation-receipt-candidate";
         repository
-            .commit_candidate(
-                staged.revision,
-                crate::dashboard_ingress::CandidateOperatorJourney::ready(
-                    crate::dashboard_ingress::PresentationEvidence {
-                        receipt_id: receipt_id.to_string(),
-                        dashboard_deployment_generation: candidate_generation.to_string(),
-                        coordinator_generation: candidate_generation.to_string(),
-                        daemon_generation: candidate_generation.to_string(),
-                        logical_browser_id: "browser-fixture".to_string(),
-                        process_instance_digest: "d".repeat(64),
-                        selected_target_generation: 9,
-                        selected_target_identity_digest: "e".repeat(64),
-                        required_stream_provider: "rdp".to_string(),
-                        observed_stream_provider: "rdp".to_string(),
-                        display_allocation_id: "display-fixture".to_string(),
-                        geometry_epoch: "geometry-fixture".to_string(),
-                        route_generation: 4,
-                        guacamole_connection_generation: Some(5),
-                        authenticated_ingress_probe_at: runtime_adoption_timestamp(),
-                        operator_surface_load_result: "ready".to_string(),
-                    },
-                ),
-            )
+            .commit_candidate_deployment(staged.revision)
             .unwrap();
         server.join().unwrap();
 
@@ -15421,11 +15397,11 @@ mod tests {
         let validation = validate_post_commit_transaction(&root, &paths, &prepared).unwrap();
         assert_eq!(
             validation.dashboard_summary,
-            format!("candidate_dashboard_generation_receipted:{receipt_id}")
+            "candidate_dashboard_generation_health_validated"
         );
         assert_eq!(
             validation.presentation_summary,
-            format!("authenticated_operator_journey_receipted:{receipt_id}")
+            "operator_journey_deferred_nonblocking"
         );
         accept_prepared_payload_transaction(&mut prepared, validation, None).unwrap();
         let finalized = finalize_accepted_upgrade_for_root(&root).unwrap();
@@ -16671,7 +16647,7 @@ mod tests {
     }
 
     #[test]
-    fn transaction_validation_accepts_only_the_proven_shadow_dashboard_transition() {
+    fn transaction_validation_accepts_the_healthy_shadow_without_presentation() {
         let root = env::temp_dir().join(format!(
             "agent-browser-upgrade-shadow-dashboard-doctor-{}",
             uuid::Uuid::new_v4()
@@ -16724,7 +16700,9 @@ mod tests {
         let mut journey_missing = report.clone();
         journey_missing["data"]["liveDashboardRuntime"]["workstationUpgrade"]["dashboardIngress"]
             ["operatorJourneyReady"] = Value::Bool(false);
-        assert!(!install_doctor_reports_expected_upgrade_ready(
+        journey_missing["data"]["liveDashboardRuntime"]["workstationUpgrade"]["dashboardIngress"]
+            ["presentationReceipt"] = Value::Null;
+        assert!(install_doctor_reports_expected_upgrade_ready(
             &journey_missing,
             &transaction,
             &[]
