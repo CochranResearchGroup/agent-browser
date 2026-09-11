@@ -2826,7 +2826,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         action_type,
         effect_authority: RecoveryEffectAuthority::ExactProfileGraph,
         preconditions: vec![
-            "service_state_revision_matches".to_string(),
+            "exact_profile_graph_matches".to_string(),
             "profile_identity_digest_matches".to_string(),
             "owner_generation_matches".to_string(),
             if exact_ready_inert {
@@ -3067,9 +3067,11 @@ fn validate_plan_preconditions(
     if now >= expires_at {
         return Err("profile_recovery_plan_expired".to_string());
     }
-    if state.state_revision != plan.service_state_revision
-        || state.runtime_owner_registry.revision != plan.runtime_owner_revision
-    {
+    // Service request/job bookkeeping advances the global envelope revision
+    // between a plan response and its subsequent apply request. The recovery
+    // authority is the exact profile graph below plus the independently
+    // revisioned runtime-owner registry, not unrelated control-plane history.
+    if state.runtime_owner_registry.revision != plan.runtime_owner_revision {
         return Err("profile_recovery_plan_stale".to_string());
     }
     let profile = state
@@ -4805,6 +4807,40 @@ mod tests {
             .unwrap()
             .profile_recovery_receipts
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn unrelated_service_envelope_revision_does_not_stale_exact_profile_plan() {
+        let repository = MemoryRepository::new(state());
+        let plan = plan_terminal_owner_recovery(
+            &repository.load_snapshot().unwrap(),
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-control-plane-revision",
+            seal_key(),
+        )
+        .unwrap()
+        .recovery
+        .unwrap();
+        repository
+            .mutate(|state| {
+                state.state_revision += 1;
+                Ok(())
+            })
+            .unwrap();
+
+        let error = apply_terminal_owner_recovery(
+            &repository,
+            &plan,
+            "2026-08-28T12:01:00Z",
+            seal_key(),
+            |_| async { Err("profile_launch_reached".to_string()) },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error, "profile_launch_reached");
     }
 
     #[tokio::test]

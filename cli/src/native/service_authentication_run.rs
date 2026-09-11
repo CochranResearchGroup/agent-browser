@@ -4,9 +4,7 @@
 //! It intentionally does not accept selectors, usernames, passwords, one-time
 //! codes, message bodies, verification URLs, or generic UI recipes.
 
-use super::action_runtime::runtime::{
-    validate_service_tab_handle_for_current_session, DaemonState,
-};
+use super::action_runtime::runtime::{validate_service_tab_handle_route_for_daemon, DaemonState};
 use super::authentication_run::{
     AuthenticationActionFailure, AuthenticationActionKind, AuthenticationActionReceipt,
     AuthenticationChallengeChannel, AuthenticationRun, AuthenticationRunBinding,
@@ -411,7 +409,7 @@ async fn select_exact_run_target(
     let handle_map = handle_value
         .as_object()
         .ok_or_else(|| "authentication_run_handle_invalid".to_string())?;
-    validate_service_tab_handle_for_current_session(handle_map, &daemon.session_id)?;
+    validate_service_tab_handle_route_for_daemon(handle_map, daemon)?;
     let target_id = handle
         .target_id
         .as_deref()
@@ -608,6 +606,8 @@ enum PasswordSubmissionSource {
     BrowserAutofill,
 }
 
+const BROWSER_AUTOFILL_VAULT_MARKER: &str = "__AGENT_BROWSER_BROWSER_AUTOFILL__";
+
 impl PasswordSubmissionSource {
     fn provider_id(self) -> &'static str {
         match self {
@@ -623,7 +623,7 @@ fn password_submission_source(
     recipe: &SiteLoginRecipe,
     vault_password: &str,
 ) -> PasswordSubmissionSource {
-    if vault_password.is_empty()
+    if vault_password == BROWSER_AUTOFILL_VAULT_MARKER
         && recipe.password_value_source == PasswordValueSource::VaultOrBrowserAutofill
     {
         PasswordSubmissionSource::BrowserAutofill
@@ -1678,11 +1678,15 @@ mod tests {
     }
 
     #[test]
-    fn empty_vault_password_selects_closed_browser_autofill_without_changing_vault_behavior() {
+    fn vault_marker_selects_closed_browser_autofill_without_changing_vault_behavior() {
         let recipe = load_site_login_recipe("bill-login-v1").unwrap();
         assert_eq!(
-            password_submission_source(&recipe, ""),
+            password_submission_source(&recipe, BROWSER_AUTOFILL_VAULT_MARKER),
             PasswordSubmissionSource::BrowserAutofill
+        );
+        assert_eq!(
+            password_submission_source(&recipe, ""),
+            PasswordSubmissionSource::Vault
         );
         assert_eq!(
             password_submission_source(&recipe, "nonempty-vault-secret"),

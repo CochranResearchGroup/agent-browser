@@ -62,10 +62,38 @@ The bounded remediation adds one BILL-recipe password source:
 password selector is visible, contains a nonempty browser-provided value, and
 has exactly one allowed submit control. It returns only boolean/count evidence,
 never the value. The Auth Vault entry supplies the username only; an empty vault
-password is never filled or submitted. Existing nonempty vault-password behavior
+password is represented by a fixed non-secret browser-autofill marker that is
+never filled or submitted. Existing real vault-password behavior
 and every origin, state-instance, effect fence, SMS-watch, and replay guard stay
 unchanged. No generic password-manager extraction or cross-site autofill API is
 included.
+
+Fieldwork after candidate installation exposed a second bounded runtime defect:
+the profile-repair plan sealed the global Service State revision, while the
+planning and applying control-plane job receipts themselves advance that global
+revision. Consequently every otherwise exact plan/apply sequence failed closed
+as `profile_recovery_plan_stale`. Recovery now seals and revalidates the exact
+profile identity, runtime-owner revision and generation, lifecycle, process,
+lock, browser, and conflicting-lease graph; unrelated control-plane envelope
+history no longer invalidates the plan. Relevant graph drift remains a hard
+pre-effect failure.
+
+The next consumer replay exposed a third exact alias defect: Authentication Run
+target selection used the current-session-only handle validator, rejecting the
+durable browser ID after a runtime handoff even though the generic daemon-aware
+validator already authorizes that ID from the current runtime-owner binding.
+Authentication Run now uses the same daemon-aware route validator; unrelated
+browser IDs and mismatched session routes remain rejected before effects.
+
+Commit `9f14cb05` is integrated on `origin/main`, and its release candidate is
+built at SHA-256 `61a50901a56c3403aeb0ac49cef5c0416cddd64cf4fa5482e31b670c3cd4eb40`.
+Installation is blocked before transaction creation by repeated
+`service_state_lock_timeout` failures, including with the dashboard service
+fully stopped. The dashboard was restored and the preserved BILL browser
+remains current at PID 37560. Installed SHA-256 is still
+`cfd2e4dc749adcbbee026becd7f9f3b23944f95ee7605273fc4f6c4fad4ca188`.
+The next action is lock-owner diagnosis, not another install or authentication
+retry.
 
 ## Delivery sequence and budget
 
