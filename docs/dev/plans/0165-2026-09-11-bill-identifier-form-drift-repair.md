@@ -85,6 +85,16 @@ validator already authorizes that ID from the current runtime-owner binding.
 Authentication Run now uses the same daemon-aware route validator; unrelated
 browser IDs and mismatched session routes remain rejected before effects.
 
+Commit `9f14cb05` is integrated on `origin/main`, and its release candidate is
+built at SHA-256 `61a50901a56c3403aeb0ac49cef5c0416cddd64cf4fa5482e31b670c3cd4eb40`.
+Installation is blocked before transaction creation by repeated
+`service_state_lock_timeout` failures, including with the dashboard service
+fully stopped. The dashboard was restored and the preserved BILL browser
+remains current at PID 37560. Installed SHA-256 is still
+`cfd2e4dc749adcbbee026becd7f9f3b23944f95ee7605273fc4f6c4fad4ca188`.
+The next action is lock-owner diagnosis, not another install or authentication
+retry.
+
 ## Delivery sequence and budget
 
 1. Produce focused red and green classifier evidence.
