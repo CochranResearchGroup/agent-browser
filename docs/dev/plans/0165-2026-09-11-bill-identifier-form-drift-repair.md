@@ -67,6 +67,16 @@ and every origin, state-instance, effect fence, SMS-watch, and replay guard stay
 unchanged. No generic password-manager extraction or cross-site autofill API is
 included.
 
+Fieldwork after candidate installation exposed a second bounded runtime defect:
+the profile-repair plan sealed the global Service State revision, while the
+planning and applying control-plane job receipts themselves advance that global
+revision. Consequently every otherwise exact plan/apply sequence failed closed
+as `profile_recovery_plan_stale`. Recovery now seals and revalidates the exact
+profile identity, runtime-owner revision and generation, lifecycle, process,
+lock, browser, and conflicting-lease graph; unrelated control-plane envelope
+history no longer invalidates the plan. Relevant graph drift remains a hard
+pre-effect failure.
+
 ## Delivery sequence and budget
 
 1. Produce focused red and green classifier evidence.
