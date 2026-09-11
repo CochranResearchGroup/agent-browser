@@ -217,8 +217,8 @@ fn exact_handle_binding(
             "owner_session_id",
         ),
         (
-            current.lease_state == Some(LeaseState::Exclusive),
-            "exclusive_lease",
+            authentication_task_lease_is_controlled(current.lease_state),
+            "controlled_lease",
         ),
         (
             current.trace_filter.service_name.as_deref() == Some(&intent.service_name),
@@ -270,6 +270,13 @@ fn exact_handle_binding(
         site_recipe_id: intent.site_recipe_id.clone(),
         policy_digest: intent.policy_digest.clone(),
     })
+}
+
+fn authentication_task_lease_is_controlled(lease_state: Option<LeaseState>) -> bool {
+    matches!(
+        lease_state,
+        Some(LeaseState::Shared | LeaseState::Exclusive)
+    )
 }
 
 fn start_run_in_state(
@@ -388,7 +395,7 @@ fn exact_current_handle(
         && current.profile_id == expected.profile_id
         && current.lease_id == expected.lease_id
         && current.owner_session_id == expected.owner_session_id
-        && current.lease_state == Some(LeaseState::Exclusive);
+        && authentication_task_lease_is_controlled(current.lease_state);
     if !matches {
         return Err("authentication_run_service_tab_handle_changed".to_string());
     }
@@ -1469,6 +1476,32 @@ mod tests {
         let encoded = serde_json::to_value(&state).unwrap();
         let decoded: ServiceState = serde_json::from_value(encoded).unwrap();
         assert_eq!(decoded.authentication_runs, state.authentication_runs);
+    }
+
+    #[test]
+    fn shared_task_lease_is_accepted_but_released_lease_is_rejected() {
+        let mut shared = service_state();
+        shared.sessions.get_mut("session-1").unwrap().lease = LeaseState::Shared;
+        let shared_command = start_command(&shared);
+        start_run_in_state(
+            &mut shared,
+            parse_start_intent(&shared_command).unwrap(),
+            "2026-09-10T12:00:00Z",
+        )
+        .unwrap();
+
+        let mut released = service_state();
+        released.sessions.get_mut("session-1").unwrap().lease = LeaseState::Released;
+        let released_command = start_command(&released);
+        assert_eq!(
+            start_run_in_state(
+                &mut released,
+                parse_start_intent(&released_command).unwrap(),
+                "2026-09-10T12:00:00Z",
+            )
+            .unwrap_err(),
+            "authentication_run_service_tab_handle_mismatch:supplied_valid"
+        );
     }
 
     #[test]

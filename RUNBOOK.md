@@ -8,9 +8,7 @@ Keep at or below 200 lines under policy0043.
 [Plan0165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
 is OPEN for one consumer-blocking BILL form drift. The observed identifier
 surface uses `input#login-email-input[name='loginEmail']` with `Continue`; the installed
-closed recipe stopped two sealed runs before credential or challenge-provider effects. The bounded repair retains legacy `Save`, permits one source-frozen production
-build and workstation install, preserves `bill-soylei`, and stops downstream
-work at read-only consumer inspection.
+closed recipe stopped two sealed runs before credential or challenge-provider effects. The joined repair also aligns Authentication Run with the broker's exact-tab shared task lease while rejecting inactive and human-takeover leases. It retains legacy `Save`, preserves `bill-soylei`, and stops downstream work at read-only consumer inspection.
 
 ## Turn 292 | 2026-09-10
 

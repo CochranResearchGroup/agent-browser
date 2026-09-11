@@ -37,10 +37,14 @@ profile remain available on the installed generation recorded in `RUNBOOK.md`.
 
 ## Consolidated batch
 
-The batch contains one repair: accept the exact tenant-neutral selector
+The batch contains two joined consumer repairs: accept the exact tenant-neutral selector
 `input#login-email-input[name='loginEmail']` and the identifier control label
 `Continue`, while preserving the existing selector and `Save` variants. A
-single classifier regression protects both forms. No broader login provider or
+single classifier regression protects both forms. The normal shared-profile
+broker path also returns a `shared` task lease beneath the exclusive profile
+owner; Authentication Run accepts that service-serialized exact-tab lease as
+well as the legacy `exclusive` task lease, while continuing to reject released,
+expired, conflicted, and human-takeover leases. No broader login provider or
 website interaction feature is included.
 
 ## Delivery sequence and budget
@@ -69,7 +73,7 @@ runtime custody are one serialized critical path.
 | Requirement | Evidence | Exit condition |
 | --- | --- | --- |
 | Current form support | Focused red then green classifier test | Exact `loginEmail` plus `Continue` classifies as identifier form |
-| Compatibility | Same focused test | Existing email-selector plus `Save` form remains accepted |
+| Compatibility | Focused form and task-lease tests | Existing email-selector plus `Save` remains accepted; shared or exclusive exact-tab task leases work and inactive leases fail closed |
 | Source qualification | Authentication-focused tests, format, validation selector, diff check | All required touched-surface checks pass |
 | Installed repair | Workstation transaction and exact binary/generation readback | Candidate is selected without profile or browser replacement |
 | Consumer outcome | Sealed run receipt and retained URL/title read | Exact BILL organization authenticates in `bill-soylei` |
