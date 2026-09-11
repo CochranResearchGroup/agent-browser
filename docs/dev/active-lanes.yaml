@@ -1,25 +1,9 @@
 schema_version: 1
 lanes:
-  - id: P168
-    objective: Review, reconcile, merge, and close current worktree and branch custody without discarding unique work
-    plan: docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md
-    plan_ref: refs/heads/maintenance/plan-0168-repository-closeout
-    branch: maintenance/plan-0168-repository-closeout
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 2b85d0a6a9ea212dcd0d8f3de29a8e1abd2b9082
-    remote_ref: refs/remotes/origin/maintenance/plan-0168-repository-closeout
-    integration_receipt: null
-    integration: merge
-    dependencies: []
-    overlaps: [P165, P157, P144]
-    reconciled_overlaps: [P165, P157, P144]
-    updated_at: 2026-09-11
   - id: P165
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
     plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md
-    plan_ref: refs/heads/maintenance/plan-0168-repository-closeout
+    plan_ref: refs/remotes/origin/main
     branch: fix/bill-login-email-continue
     target: main
     plan_state: OPEN
@@ -35,7 +19,7 @@ lanes:
   - id: P157
     objective: Complete frozen-candidate adversarial acceptance for profile permissions, runtime convergence, remote handoffs, dashboard truth, and causal logging
     plan: docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md
-    plan_ref: refs/heads/maintenance/plan-0168-repository-closeout
+    plan_ref: refs/remotes/origin/main
     branch: plan/profile-permissions-and-request-provenance
     target: main
     plan_state: OPEN
@@ -51,7 +35,7 @@ lanes:
   - id: P144
     objective: Replace inferred profile lease authority with one canonical fenced authority kernel
     plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md
-    plan_ref: refs/heads/maintenance/plan-0168-repository-closeout
+    plan_ref: refs/remotes/origin/main
     branch: plan/lease-authority-coordination
     target: main
     plan_state: OPEN

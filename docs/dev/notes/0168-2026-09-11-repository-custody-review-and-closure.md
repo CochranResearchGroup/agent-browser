@@ -118,9 +118,26 @@ After prune, only canonical `main` and the P168 closeout worktree remained.
 The original P0240 historical note commits are recoverable by their commit IDs;
 the accepted source is recoverable through PR 30 and `de614fbe`.
 
+## Final closeout
+
+PR 31 merged the campaign review and P0240 closure record as
+`9f711ebcccf6393fcf1ff22778fba4b3450c3224`. The final catalog retains only
+P165, P157, and P144. Each has integrated Git custody, no historical remote ref,
+and an open operational or future-source plan read from `origin/main`.
+
+PR 32 is the final plan-state and catalog receipt. After it merges, only the
+canonical `main` worktree is intended to survive. Its uncommitted
+`cli/src/commands.rs` and
+`cli/src/native/action_runtime/runtime/navigation.rs` remain owned by the
+foreign Odollo agent and are neither campaign residue nor safe cleanup targets.
+The exact P168 worktree and local and remote maintenance refs become eligible
+for deletion only after that receipt is durable.
+
 ## Negative effects
 
-This review performed no production installation, browser or profile mutation,
-credential or Auth Vault mutation, provider or tenant action, X or RuFresh
-retry, formal release, or process termination. The observed Odollo-owned
+This campaign performed no production installation, browser or profile
+mutation, credential or Auth Vault mutation, provider or tenant action, X or
+RuFresh retry, formal release, or foreign-process termination. It terminated
+only its exact isolated no-launch fixture daemon after the cleanup gate found
+that passing test had left PID 94587 running. The observed Odollo-owned
 installation was foreign to P168 and is not claimed as campaign evidence.
