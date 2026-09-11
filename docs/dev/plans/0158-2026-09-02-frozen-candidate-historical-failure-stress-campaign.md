@@ -25,6 +25,13 @@ interrupted execution. Do not resume calibration, diagnostics, repair,
 installation, production changes, or reopening from an automatic continuation
 or the historical next-action text below.
 
+Git custody note: Plan 0168 verified that the branch's first three post-PR14
+commits are patch-equivalent to `main`. The final workstation-install repair is
+represented on `main` by `ad673377`; its branch-only difference is formatting
+and test argument ordering. The historical branch is eligible for exact ref
+closure without closing this installed-acceptance plan. Any resumed execution
+must create a fresh branch from current `main`.
+
 Historical execution authority: PLAN, DIAGNOSTIC HARNESS IMPLEMENTATION, PROVIDER-FREE FIXTURES,
 ISOLATED DEVELOPMENT-RUNTIME STRESS, EXTERNALLY INGRESSED STAGING
 PRESENTATION, DISPOSABLE BROWSER AND PROFILE EFFECTS, AND REDACTED EVIDENCE

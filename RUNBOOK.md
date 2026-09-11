@@ -3,18 +3,13 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 297 | 2026-09-11
+
+[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is OPEN. W0 isolated P168 from active Odollo-owned Rust edits. W1 and W2 published the custody review at `9a61432a`, closed the integrated P165 worktree, removed four exact local and remote branch pairs, and removed four integrated remote-only refs without closing residual operational plans. W3 reconstructed the two accepted P0240 residuals; all selected gates passed, PR 30 merged as `de614fbe`, and both P0240 worktrees plus their local and remote refs are closed. W4 found no P157 residual beyond behavior already represented by `ad673377`. W5 needs only P168 integration and final readback. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect is authorized.
+
 ## Turn 296 | 2026-09-11
 
-Plan0167 is CLOSED through PR29 at `14fb3db0`. The repair adds privacy-safe cross-process Service State holder attribution and moves pure
-mutation plus transaction preparation outside exclusive ownership, retaining
-revision fencing and one repository-owned stale replay. The 9,642,672-byte
-two-writer and two-reader regression completed in 709 to 739 ms across six
-samples with zero commit wait and 358 to 380 ms exclusive holds; the ordinary
-one-second deadline is unchanged. The complete Rust suite and selected public,
-documentation, client, and workstation gates pass. No Plan0167 command retried
-X or RuFresh, installed production, mutated production Service State, changed a
-provider or tenant, or terminated a process. Production installation, shared
-skill publication, installed doctor, and X evaluation remain separate gates.
+Plan0167 is CLOSED through PR29 at `14fb3db0`. Its 9,642,672-byte two-writer and two-reader regression completed in 709 to 739 ms across six samples with zero commit wait and 358 to 380 ms exclusive holds; the ordinary one-second deadline is unchanged. The complete Rust suite and selected public, documentation, client, and workstation gates pass. No Plan0167 command retried X or RuFresh, installed production, mutated production Service State, changed a provider or tenant, or terminated a process. Production installation, shared skill publication, installed doctor, and X evaluation remain separate gates.
 
 ## Turn 295 | 2026-09-11
 
@@ -23,10 +18,6 @@ and shared-task-lease repairs are on `origin/main`. The retained BILL run remain
 `awaiting_identifier`; resume found no `bill-soylei` Auth Vault profile and
 returned `effect_uncertain` plus `blind_retry`. No retry or provider/accounting
 effect followed. Restore the sealed vault entry before resuming or replacing.
-
-[Plan0167](docs/dev/plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md) is OPEN on `maintenance/plan-0167-service-state-lock` for Plan0142's production-scale lock-attribution gap.
-It requires an at-least 8 MiB multi-process red regression before repair. No X
-or RuFresh replay, production install, cleanup, or provider effect is authorized.
 
 ## Turn 294 | 2026-09-11
 

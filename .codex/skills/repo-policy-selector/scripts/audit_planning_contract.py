@@ -10,13 +10,13 @@ import re
 from pathlib import Path
 
 
-ROADMAP_HEADING_RE = re.compile(r"^##\s+P\d{2}\s+\|\s+.+$")
+ROADMAP_HEADING_RE = re.compile(r"^##\s+P\d+\s+\|\s+.+$")
 ROADMAP_LANE_HEADING_PREFIX_RE = re.compile(r"^##\s+P\d+")
 RUNBOOK_TURN_RE = re.compile(r"^##\s+Turn\s+\d+\s+\|\s+\d{4}-\d{2}-\d{2}$")
 RUNBOOK_TURN_HEADING_PREFIX_RE = re.compile(r"^##\s+Turn\b", re.IGNORECASE)
 PLAN_FILE_RE = re.compile(r"^\d{4}-\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")
 PLAN_STATE_RE = re.compile(r"(?im)^(?:state|status)\s*:\s*(PLANNED|OPEN|CLOSED|CANCELLED)\s*$")
-ROADMAP_LANE_RE = re.compile(r"(?im)^(?:roadmap|lane|phase)\s*:\s*(P\d{2})\b")
+ROADMAP_LANE_RE = re.compile(r"(?im)^(?:roadmap|lane|phase)\s*:\s*(P\d+)\b")
 CURRENT_STATE_RE = re.compile(r"(?im)^##\s+Current State\s*$|^(?:current state)\s*:", re.MULTILINE)
 GOAL_BOUND_PATTERNS = {
     "max_work_unit_attempts": re.compile(r"(?im)^max_work_unit_attempts\s*:\s*[1-9]\d*\s*$"),

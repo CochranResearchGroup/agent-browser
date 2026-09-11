@@ -6,13 +6,13 @@ State: OPEN
 
 Consolidation: required
 
-Lane: sealed authentication consumer repair
+Lane: P165
 
-Branch: `fix/bill-login-email-continue`
+Branch: fix/bill-login-email-continue
 
-Target: `main`
+Target: main
 
-Integration: short-lived branch, then fast-forward or reviewed merge to `main`
+Integration: merge
 
 Parent: Books Receipts Plan 0240 consumer acceptance
 
@@ -94,6 +94,18 @@ remains current at PID 37560. Installed SHA-256 is still
 `cfd2e4dc749adcbbee026becd7f9f3b23944f95ee7605273fc4f6c4fad4ca188`.
 The next action is lock-owner diagnosis, not another install or authentication
 retry.
+
+## Git custody review
+
+Plan 0168 verified that branch tip `5ee95d670e52c1157f0f94b90d176e4066d1cd2f`
+is an ancestor of `origin/main`, has zero unique commits, is published at the
+same local and remote tip, and has a clean assigned worktree. Git custody is
+therefore integrated and eligible for exact worktree and ref closure.
+
+This does not close Plan 0165. The retained authentication run, sealed Auth
+Vault entry, and consumer acceptance remain governed operational gates. A
+future execution resumes from current runtime evidence on a new exact branch
+only if source work is required.
 
 ## Delivery sequence and budget
 

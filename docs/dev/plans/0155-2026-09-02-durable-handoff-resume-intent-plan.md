@@ -4,6 +4,9 @@ Date: 2026-09-02
 
 State: CLOSED
 
+Integration receipt: PR 14, merge
+`ba3916cab2a712bc46abe74b79d590695962c207`
+
 Lane: P155
 
 Branch: `fieldwork/research-gov-deterministic-automation`
@@ -139,6 +142,6 @@ state changed.
 Material blocker: none for this source slice. Live Research.gov effects remain
 withheld by the separately owned incomplete profile-lease attestation.
 
-Next action: integrate the source checkpoint through the normal branch flow,
-then resume read-only Research.gov fieldwork unless canonical lease authority
-becomes effect-capable.
+Next action: source integration is complete through PR 14. Any later
+Research.gov fieldwork remains separately governed by current profile and lease
+authority.

@@ -209,6 +209,28 @@ class PlanningContractAuditTests(unittest.TestCase):
 
         self.assertTrue(report["ok"], report["problems"])
 
+    def test_roadmap_contract_accepts_three_digit_lane_ids(self):
+        root = self.make_repo(("planning-discipline", "roadmap-runbook-governance"))
+        plans = root / "docs/dev/plans"
+        plans.mkdir(parents=True)
+        plan_name = "0168-2026-09-11-closeout.md"
+        (plans / plan_name).write_text(
+            "State: OPEN\nLane: P168\n## Current State\nReady.\n",
+            encoding="utf-8",
+        )
+        (root / "ROADMAP.md").write_text(
+            f"# Roadmap\n\n## P168 | Closeout\nState: OPEN\nCurrent State: Ready\n{plan_name}\n",
+            encoding="utf-8",
+        )
+        (root / "RUNBOOK.md").write_text(
+            f"# Runbook\n\n## Turn 1 | 2026-09-11\n{plan_name}\n",
+            encoding="utf-8",
+        )
+
+        report = self.audit.audit_repo(root)
+
+        self.assertTrue(report["ok"], report["problems"])
+
     def test_active_only_excludes_closed_and_unclassified_legacy_plans(self):
         root = self.make_repo(("planning-discipline",))
         plans = root / "docs/dev/plans"
