@@ -30,10 +30,19 @@ or accounting effect.
 
 ## Current state
 
-The installed recipe classifies the visible `loginEmail` field with a
-`Continue` control as `unsupported_challenge`. Two prior bounded runs stopped
-before credential or challenge-provider effects. The retained browser and
-profile remain available on the installed generation recorded in `RUNBOOK.md`.
+The recipe and shared-task-lease repairs are integrated at `5c247f9d` and
+installed as generation `0.28.0-c0cc081c1c6b-8e9cb639ccc3`. Focused tests,
+the full Authentication Run suite, formatting, and strict Clippy pass. The
+retained `bill-soylei` browser profile was relaunched without reset or reseed.
+
+The live run now recognizes the visible `loginEmail` plus `Continue` form and
+is durably paused at `awaiting_identifier`, transition 1, with one observation,
+zero action receipts, and no pending effect. Its exact resume failed before a
+credential action because Auth Vault profile `bill-soylei` does not exist. The
+provider returned `effect_uncertain` plus hard stop `blind_retry`, so the live
+sequence stopped without retry. Restoring or explicitly seeding that separate
+sealed-vault entry is the remaining consumer gate; browser profile continuity
+does not prove Auth Vault continuity.
 
 ## Consolidated batch
 

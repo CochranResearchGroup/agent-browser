@@ -3,6 +3,17 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 295 | 2026-09-11
+
+Plan0165 installed generation `0.28.0-c0cc081c1c6b-8e9cb639ccc3`; current-form
+and shared-task-lease repairs are on `origin/main`. Retained run
+`authrun-b590b4d0e78e3b6c3e309ab1` remains `awaiting_identifier`, transition 1,
+one observation, zero actions, and no pending effect. Resume request/job
+`mcp-service-request-service_authentication_run_resume-7b0fd3bf-459d-4be7-9bb1-59960b05ac62`
+found no Auth Vault profile `bill-soylei` and returned `effect_uncertain` plus
+`blind_retry`; no retry or provider/accounting effect followed. Restore the
+sealed vault entry and resolve that exact outcome before resuming or replacing.
+
 ## Turn 294 | 2026-09-11
 
 Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF
@@ -15,17 +26,6 @@ preserved, Plan0162 is unblocked, and no Odollo or RuFresh action was repeated.
 [Plan0165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
 is OPEN for one consumer-blocking BILL form drift. Its identifier is
 `input#login-email-input[name='loginEmail']` with `Continue`; two installed sealed runs stopped before credential or challenge-provider effects. The joined repair aligns Authentication Run with the broker's exact-tab shared task lease while rejecting inactive and human-takeover leases. It retains legacy `Save`, preserves `bill-soylei`, and stops downstream work at read-only consumer inspection.
-
-## Turn 292 | 2026-09-10
-
-Plan0164 is COMPLETE. Forward-only installer repair through `8070505d` prevents
-rollback after committed ownership, generation, or service-state effects;
-older-candidate doctor projections and runtime-monitor backoff now converge
-across upgrades. Missing operator presentation remains visible but nonblocking.
-
-Final transaction `upgrade-4026dffd-af10-4f33-a519-2a430929fb6e` accepted its
-generation; doctor and the singular runtime census passed. Exact fixture
-PID39694 was removed, no rollback was used, and Plan0160 remains OPEN.
 
 ## Turn 291 | 2026-09-10
 
