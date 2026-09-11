@@ -1091,8 +1091,13 @@ fn rehydrate_dashboard_candidate(
                 .fallback_backend()
                 .filter(|backend| backend.generation_id == transaction.candidate_generation_id)
         })
-        .cloned()
-        .ok_or_else(|| "install_transaction_dashboard_candidate_missing".to_string())?;
+        .cloned();
+    let Some(backend) = backend else {
+        if install_transaction_requires_forward_completion(transaction)? {
+            return Ok(None);
+        }
+        return Err("install_transaction_dashboard_candidate_missing".to_string());
+    };
     Ok(Some(PreparedDashboardCandidate {
         child: None,
         backend,
@@ -18388,6 +18393,47 @@ mod tests {
         assert!(prepared.admission_drain_path.is_file());
 
         remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn forward_resume_restages_a_missing_dashboard_candidate() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-forward-dashboard-restage-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let ingress_path = root.join(".agent-browser/dashboard-ingress.json");
+        crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path)
+            .initialize(crate::dashboard_ingress::DashboardBackend::new(
+                "generation-old",
+                4849,
+                "old-manifest",
+            ))
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::RuntimesTransferring;
+        transaction.runtime_handoffs = vec![crate::runtime_adoption::UpgradeRuntimeHandoff {
+            source_session: "retained-source".to_string(),
+            candidate_session: "handoff-candidate".to_string(),
+            source_socket_dir: Some("/run/user/1000/agent-browser/source".to_string()),
+            source_runtime_host: true,
+            source_process_identity: None,
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            committed: true,
+            source_finalized: false,
+            irreversible_source_revocation: false,
+        }];
+
+        assert!(rehydrate_dashboard_candidate(&root, &transaction)
+            .unwrap()
+            .is_none());
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

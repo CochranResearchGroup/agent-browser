@@ -77,10 +77,13 @@ outside this batch.
    the exact existing transaction with compare-and-swap evidence. Perform at
    most one subsequent repaired-candidate production reinstall.
 
-The complete batch is bounded to 90 minutes of active work, three vertical TDD
-cycles, one review/rework cycle, one optimized build, and two production forward
-transactions. Any source failure after the build reopens only the affected
-checks. Any live mismatch in transaction identity, revision, candidate digest,
+The complete batch is bounded to 90 minutes of active work, four vertical TDD
+cycles, one review/rework cycle, and two production forward transactions. The
+first guarded resume demonstrated that dashboard rehydration rejected the
+already-removed candidate before restaging, so that exact live red result
+authorizes one affected-surface requalification and one replacement optimized
+build. Any further source failure stops the production path for disposition.
+Any live mismatch in transaction identity, revision, candidate digest,
 admission-drain ownership, or process identity stops effects without rollback.
 
 ## Worker assignments
