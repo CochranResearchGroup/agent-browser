@@ -3680,19 +3680,28 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
     let receipt_path = root.join(".agent-browser/convergence/runtime-monitor.json");
     let previous = read_runtime_monitor_receipt(&receipt_path)?;
     let now = runtime_monitor_epoch_seconds();
+    let executor_binary_sha256 = workstation_file_sha256(&paths.binary)?;
+    let same_executor = previous
+        .as_ref()
+        .and_then(|value| value.get("executorBinarySha256"))
+        .and_then(Value::as_str)
+        == Some(executor_binary_sha256.as_str());
     let previous_failures = previous
         .as_ref()
         .and_then(|value| value.get("consecutiveFailures"))
         .and_then(Value::as_u64)
+        .filter(|_| same_executor)
         .unwrap_or(0);
     let next_eligible = previous
         .as_ref()
         .and_then(|value| value.get("nextEligibleAtEpochSeconds"))
         .and_then(Value::as_u64)
+        .filter(|_| same_executor)
         .unwrap_or(0);
-    if next_eligible > now {
+    if runtime_monitor_backoff_applies(previous.as_ref(), &executor_binary_sha256, now) {
         let report = serde_json::json!({
             "schemaVersion": "agent-browser.runtime-monitor.v1",
+            "executorBinarySha256": executor_binary_sha256,
             "success": true,
             "state": "backoff",
             "skipped": true,
@@ -3799,6 +3808,7 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
         Ok(effects) => {
             let report = serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-monitor.v1",
+                "executorBinarySha256": executor_binary_sha256,
                 "success": true,
                 "state": "healthy",
                 "skipped": false,
@@ -3818,6 +3828,7 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
         Err(error) if runtime_monitor_blocked_by_active_upgrade(&root, &error) => {
             let report = serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-monitor.v1",
+                "executorBinarySha256": executor_binary_sha256,
                 "success": true,
                 "state": "healthy",
                 "skipped": true,
@@ -3853,6 +3864,7 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
             }));
             let report = serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-monitor.v1",
+                "executorBinarySha256": executor_binary_sha256,
                 "success": false,
                 "state": if incident.is_some() { "incident" } else { "degraded" },
                 "skipped": false,
@@ -3902,6 +3914,20 @@ fn runtime_monitor_epoch_seconds() -> u64 {
 fn runtime_monitor_backoff_seconds(consecutive_failures: u64) -> u64 {
     let exponent = consecutive_failures.saturating_sub(1).min(3) as u32;
     300_u64.saturating_mul(2_u64.saturating_pow(exponent))
+}
+
+fn runtime_monitor_backoff_applies(
+    previous: Option<&Value>,
+    executor_sha256: &str,
+    now: u64,
+) -> bool {
+    previous.is_some_and(|receipt| {
+        receipt.get("executorBinarySha256").and_then(Value::as_str) == Some(executor_sha256)
+            && receipt
+                .get("nextEligibleAtEpochSeconds")
+                .and_then(Value::as_u64)
+                .is_some_and(|next_eligible| next_eligible > now)
+    })
 }
 
 fn runtime_monitor_blocked_by_active_upgrade(root: &Path, error: &str) -> bool {
@@ -13138,6 +13164,30 @@ mod tests {
         assert_eq!(runtime_monitor_backoff_seconds(3), 1200);
         assert_eq!(runtime_monitor_backoff_seconds(4), 2400);
         assert_eq!(runtime_monitor_backoff_seconds(99), 2400);
+    }
+
+    #[test]
+    fn runtime_monitor_backoff_is_scoped_to_the_executing_binary() {
+        let receipt = serde_json::json!({
+            "executorBinarySha256": "older-binary",
+            "nextEligibleAtEpochSeconds": 200,
+        });
+
+        assert!(runtime_monitor_backoff_applies(
+            Some(&receipt),
+            "older-binary",
+            100
+        ));
+        assert!(!runtime_monitor_backoff_applies(
+            Some(&receipt),
+            "replacement-binary",
+            100
+        ));
+        assert!(!runtime_monitor_backoff_applies(
+            Some(&serde_json::json!({"nextEligibleAtEpochSeconds": 200})),
+            "replacement-binary",
+            100
+        ));
     }
 
     #[test]
