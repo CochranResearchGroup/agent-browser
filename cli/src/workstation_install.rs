@@ -5792,23 +5792,20 @@ fn install_doctor_reports_expected_upgrade_ready(
     let Some(data) = payload.get("data") else {
         return false;
     };
-    let Some(upgrade) = data.pointer("/liveDashboardRuntime/workstationUpgrade") else {
-        return false;
-    };
-    if upgrade
+    let upgrade = data
+        .pointer("/liveDashboardRuntime/workstationUpgrade")
+        .unwrap_or(&Value::Null);
+    let exact_upgrade_projection = upgrade
         .pointer("/latestTransaction/transactionId")
         .and_then(Value::as_str)
-        != Some(expected.transaction_id.as_str())
-        || upgrade
+        == Some(expected.transaction_id.as_str())
+        && upgrade
             .pointer("/latestTransaction/state")
             .and_then(Value::as_str)
-            != Some("post_commit_validating")
-        || upgrade.get("admissionDraining").and_then(Value::as_bool) != Some(true)
-        || upgrade.get("selectedGenerationId").and_then(Value::as_str)
-            != Some(expected.candidate_generation_id.as_str())
-    {
-        return false;
-    }
+            == Some("post_commit_validating")
+        && upgrade.get("admissionDraining").and_then(Value::as_bool) == Some(true)
+        && upgrade.get("selectedGenerationId").and_then(Value::as_str)
+            == Some(expected.candidate_generation_id.as_str());
 
     let Some(issues) = data.get("issues").and_then(Value::as_array) else {
         return false;
@@ -5825,6 +5822,11 @@ fn install_doctor_reports_expected_upgrade_ready(
     let supervisor_transition_ready = expected_upgrade_supervisor_transition_ready(data, expected);
     let runtime_host_transition_ready =
         expected_upgrade_runtime_host_transition_ready(data, expected);
+    let quiesced_projection_compatible =
+        upgrade.is_null() && transaction_issue_count == 0 && supervisor_transition_ready;
+    if !exact_upgrade_projection && !quiesced_projection_compatible {
+        return false;
+    }
     let remaining_issues = issues
         .iter()
         .filter(|issue| {
@@ -16242,6 +16244,7 @@ mod tests {
             "a".repeat(64),
             "b".repeat(64),
         );
+        transaction.old_generation_id = Some("generation-old".to_string());
         transaction.state = crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating;
         let report = serde_json::json!({
             "success": false,
@@ -16769,6 +16772,7 @@ mod tests {
             "a".repeat(64),
             "b".repeat(64),
         );
+        transaction.old_generation_id = Some("generation-old".to_string());
         transaction.state = crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating;
         let report = serde_json::json!({
             "success": false,
@@ -16824,6 +16828,23 @@ mod tests {
             Value::String("another-generation".to_string());
         assert!(!install_doctor_reports_expected_upgrade_ready(
             &wrong_generation,
+            &transaction,
+            &[]
+        ));
+
+        let mut quiesced_older_candidate = journey_missing;
+        quiesced_older_candidate["data"]["issues"] = serde_json::json!([
+            {"code": "executable_drift"},
+            {"code": "profile_lease_legacy_principal_unproven"},
+            {"code": "runtime_monitor_not_ready"},
+        ]);
+        quiesced_older_candidate["data"]["liveDashboardRuntime"] = Value::Null;
+        quiesced_older_candidate["data"]["runtimeMultiplicity"] = serde_json::json!({
+            "runtimeHosts": [{"generationId": "generation-new"}],
+            "legacyDaemons": [],
+        });
+        assert!(install_doctor_reports_expected_upgrade_ready(
+            &quiesced_older_candidate,
             &transaction,
             &[]
         ));
