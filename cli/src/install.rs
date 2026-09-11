@@ -1860,6 +1860,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
         {
             issues.push(json!({
                 "code": "dashboard_operator_journey_not_ready",
+                "severity": "warning",
                 "message": "the selected dashboard generation does not have a matching authenticated operator-journey receipt",
                 "state": ingress.get("state").cloned().unwrap_or(Value::Null)
             }));
@@ -1949,7 +1950,6 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
             "selectedGenerationReady",
             "runtimeConvergenceReady",
             "dashboardIngressReady",
-            "operatorJourneyReady",
             "rollbackReady",
         ];
         let unready_axes = readiness_axes
@@ -5160,9 +5160,12 @@ mod tests {
             daemon_listener_inventory: &empty_daemon_listener_inventory(),
         });
 
-        assert!(issues
+        let issue = issues
             .iter()
-            .any(|issue| issue["code"] == "dashboard_operator_journey_not_ready"));
+            .find(|issue| issue["code"] == "dashboard_operator_journey_not_ready")
+            .expect("missing operator journey remains visible");
+        assert_eq!(issue["severity"], "warning");
+        assert!(install_doctor_issues_allow_success(&issues));
     }
 
     #[test]
@@ -5226,6 +5229,28 @@ mod tests {
             readiness_issue["unreadyAxes"],
             json!(["runtimeConvergenceReady"])
         );
+
+        let mut presentation_deferred = live_dashboard_runtime;
+        presentation_deferred["workstationUpgrade"]["readiness"]["runtimeConvergenceReady"] =
+            Value::Bool(true);
+        presentation_deferred["workstationUpgrade"]["readiness"]["operatorJourneyReady"] =
+            Value::Bool(false);
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &presentation_deferred,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
+        });
+        assert!(issues
+            .iter()
+            .all(|issue| issue["code"] != "workstation_upgrade_readiness_not_ready"));
     }
 
     #[test]
