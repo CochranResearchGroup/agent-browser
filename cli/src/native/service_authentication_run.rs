@@ -608,6 +608,8 @@ enum PasswordSubmissionSource {
     BrowserAutofill,
 }
 
+const BROWSER_AUTOFILL_VAULT_MARKER: &str = "__AGENT_BROWSER_BROWSER_AUTOFILL__";
+
 impl PasswordSubmissionSource {
     fn provider_id(self) -> &'static str {
         match self {
@@ -623,7 +625,7 @@ fn password_submission_source(
     recipe: &SiteLoginRecipe,
     vault_password: &str,
 ) -> PasswordSubmissionSource {
-    if vault_password.is_empty()
+    if vault_password == BROWSER_AUTOFILL_VAULT_MARKER
         && recipe.password_value_source == PasswordValueSource::VaultOrBrowserAutofill
     {
         PasswordSubmissionSource::BrowserAutofill
@@ -1678,11 +1680,15 @@ mod tests {
     }
 
     #[test]
-    fn empty_vault_password_selects_closed_browser_autofill_without_changing_vault_behavior() {
+    fn vault_marker_selects_closed_browser_autofill_without_changing_vault_behavior() {
         let recipe = load_site_login_recipe("bill-login-v1").unwrap();
         assert_eq!(
-            password_submission_source(&recipe, ""),
+            password_submission_source(&recipe, BROWSER_AUTOFILL_VAULT_MARKER),
             PasswordSubmissionSource::BrowserAutofill
+        );
+        assert_eq!(
+            password_submission_source(&recipe, ""),
+            PasswordSubmissionSource::Vault
         );
         assert_eq!(
             password_submission_source(&recipe, "nonempty-vault-secret"),

@@ -62,7 +62,8 @@ The bounded remediation adds one BILL-recipe password source:
 password selector is visible, contains a nonempty browser-provided value, and
 has exactly one allowed submit control. It returns only boolean/count evidence,
 never the value. The Auth Vault entry supplies the username only; an empty vault
-password is never filled or submitted. Existing nonempty vault-password behavior
+password is represented by a fixed non-secret browser-autofill marker that is
+never filled or submitted. Existing real vault-password behavior
 and every origin, state-instance, effect fence, SMS-watch, and replay guard stay
 unchanged. No generic password-manager extraction or cross-site autofill API is
 included.
