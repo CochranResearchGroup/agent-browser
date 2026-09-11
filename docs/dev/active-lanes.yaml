@@ -6,11 +6,11 @@ lanes:
     plan_ref: refs/heads/maintenance/plan-0166-connection-release
     branch: maintenance/plan-0166-connection-release
     target: main
-    plan_state: OPEN
-    custody_state: INTEGRATION_READY
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     checkpoint: a7efaef92668d7e7f46aa14564da783b8463a589
-    remote_ref: refs/remotes/origin/maintenance/plan-0166-connection-release
-    integration_receipt: null
+    remote_ref: null
+    integration_receipt: 6030c71bc4a558f8207f439b52a4c0f65586f44e
     integration: merge
     dependencies: []
     overlaps: [P157]
@@ -24,9 +24,9 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: ad6125963d24bb3846495b5bf7af24e92b8121e7
+    checkpoint: 5c247f9d32e948c8eca4b224230d4fad9690ac25
     remote_ref: refs/remotes/origin/fix/bill-login-email-continue
-    integration_receipt: ad6125963d24bb3846495b5bf7af24e92b8121e7
+    integration_receipt: 5c247f9d32e948c8eca4b224230d4fad9690ac25
     integration: merge
     dependencies: []
     overlaps: [P166]

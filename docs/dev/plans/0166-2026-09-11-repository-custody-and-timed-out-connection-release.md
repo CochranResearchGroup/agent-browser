@@ -2,7 +2,7 @@
 
 Date: 2026-09-11
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -107,6 +107,11 @@ compartment result was 716 passed, 57 intentionally ignored, and zero failed.
 No development candidate was required because the behavior is fully exercised
 at the daemon transport seam without Chrome. Production installation and live
 Odollo execution remain outside this plan's authority.
+
+PR 27 integrated the qualified repair into `main` at
+`6030c71bc4a558f8207f439b52a4c0f65586f44e`. The merge does not install a
+production binary or authorize a live retry. Plan 0162 is unblocked by this
+maintenance gate and retains its own execution authority and acceptance scope.
 
 ## Consolidated batch
 
@@ -239,7 +244,7 @@ affected gates.
 | Isolated installed behavior | Development manifest, doctor, three browser-launch smokes, and process census if a candidate is built | Development identity is healthy, disposable fixture residue is absent, and production state is untouched |
 | Scope preservation | Runbook closeout and incident locator | No Odollo retry or tenant effect occurred, and the RuFresh no-result remains accepted evidence |
 
-This plan is complete only when the source repair is integrated into `main`,
-the repository has truthful retained custody, and all applicable exit evidence
-is recorded. A completed plan packet is not production installation authority
-and does not close Plan 0160 or Plan 0162.
+This plan completed on 2026-09-11 when PR 27 integrated the source repair into
+`main`, the repository retained truthful custody, and the applicable exit
+evidence above was recorded. Completion is not production installation
+authority and does not close Plan 0160 or Plan 0162.
