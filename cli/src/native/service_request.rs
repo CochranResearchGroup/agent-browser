@@ -2066,6 +2066,10 @@ fn reject_service_ui_action_request(
             "ui_action requires positive timeoutMs",
         ));
     }
+    for step in steps {
+        super::service_ui_action::validate_service_ui_step(step)
+            .map_err(|message| issue(ServiceRequestIssueKind::InvalidBoundedRecipe, message))?;
+    }
     Ok(())
 }
 
@@ -3456,7 +3460,7 @@ mod tests {
             }
             "ui_action" => {
                 request["serviceTabHandle"] = test_tab_handle(true);
-                request["uiAction"] = json!({"steps": [{"type": "find"}]});
+                request["uiAction"] = json!({"steps": [{"type": "find", "selector": "#fixture"}]});
                 request["timeoutMs"] = json!(1000);
             }
             "network_capture" => {
@@ -3627,6 +3631,11 @@ mod tests {
                 json!({"action":"ui_action","serviceTabHandle":handle.clone(),"uiAction":{"steps":[{}]}}),
                 ServiceRequestIssueKind::InvalidBoundedRecipe,
                 "ui_action requires positive timeoutMs",
+            ),
+            (
+                json!({"action":"ui_action","serviceTabHandle":handle.clone(),"uiAction":{"steps":[{"type":"semantic_click","locator":{"strategy":"role_name","role":"menuitem","name":"Sync","exact":false}}]},"timeoutMs":1000}),
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                "ui_action semantic_click requires exact role_name locator",
             ),
             (
                 json!({"action":"network_capture","serviceTabHandle":handle.clone(),"networkCapture":{"maxEvents":1}}),

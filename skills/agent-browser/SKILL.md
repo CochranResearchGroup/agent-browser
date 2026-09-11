@@ -1472,7 +1472,11 @@ request `action: "ui_action"` over raw CDP `Input`, `DOM`, or small `Runtime`
 scripts. The request must use a valid `serviceTabHandle`, a positive
 `timeoutMs`, and a nonempty `uiAction.steps` recipe. Supported generic step
 types include `find`, `focus`, `fill`, `type`, `select`, `menu_select`,
-`click`, `wait`, `clear`, and guarded `dialog`. Keep website-specific
+`click`, `semantic_click`, `wait`, `clear`, and guarded `dialog`.
+`semantic_click` requires a locator shaped as
+`{"strategy":"role_name","role":"...","name":"...","exact":true}` and
+fails unless the live accessibility tree contains exactly one matching node.
+Keep website-specific
 selectors, text, and extraction instructions in the caller-owned recipe;
 agent-browser owns handle validation, action limits, timeout bounds, text caps,
 per-step evidence, trace linkage, and optional diagnostics on failure.

@@ -1137,7 +1137,19 @@ mod tests {
         assert_eq!(result.frame_receipt.retention, "ephemeral");
         assert!(!result.frame_receipt.persisted);
         assert_eq!(result.image_bytes, one_pixel_png());
-        let expected_geometry_epoch = digest_text("browser-1\0display-1\0route-1\01\01\01000");
+        let expected_geometry_epoch = digest_text(concat!(
+            "browser-1",
+            "\0",
+            "display-1",
+            "\0",
+            "route-1",
+            "\0",
+            "1",
+            "\0",
+            "1",
+            "\0",
+            "1000"
+        ));
         let expected_context_id = format!(
             "desktop-context-{}",
             &digest_text(&format!(
