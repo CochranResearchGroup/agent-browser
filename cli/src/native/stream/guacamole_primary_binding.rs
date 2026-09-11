@@ -339,7 +339,7 @@ mod tests {
 
         fn mutate<R>(
             &self,
-            _: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+            _: impl FnMut(&mut ServiceState) -> Result<R, String>,
         ) -> Result<R, String> {
             panic!("primary binding admission must not mutate Service authority")
         }
@@ -668,7 +668,7 @@ mod tests {
             }
             fn mutate<R>(
                 &self,
-                _: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+                _: impl FnMut(&mut ServiceState) -> Result<R, String>,
             ) -> Result<R, String> {
                 panic!("guard must not mutate authority")
             }

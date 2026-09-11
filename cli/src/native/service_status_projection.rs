@@ -1367,7 +1367,7 @@ pub(crate) mod action_commands {
 
             fn mutate<R>(
                 &self,
-                mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+                mut mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
             ) -> Result<R, String> {
                 self.mutation_count.fetch_add(1, Ordering::SeqCst);
                 let mut state = self.state.lock().unwrap();

@@ -3294,7 +3294,7 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
                 crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
                     crate::runtime_owner_transfer::ProfileOwner {
                         owner_id: "owner:appeared-after-claim".to_string(),
-                        profile_identity_digest,
+                        profile_identity_digest: profile_identity_digest.clone(),
                         state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
                         owner_generation: 1,
                         browser_id: "browser:foreign".to_string(),

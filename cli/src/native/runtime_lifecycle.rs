@@ -144,7 +144,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
     ) -> Result<RuntimeLifecycleTransition, String> {
         self.repository.mutate(|state| {
             let mut registry = state.runtime_owner_registry.clone();
-            let transition = apply_transition(&mut registry, intent)?;
+            let transition = apply_transition(&mut registry, intent.clone())?;
             state.runtime_owner_registry = registry;
             Ok(transition)
         })
@@ -1220,7 +1220,7 @@ mod tests {
 
         fn mutate<T>(
             &self,
-            mutator: impl FnOnce(&mut ServiceState) -> Result<T, String>,
+            mut mutator: impl FnMut(&mut ServiceState) -> Result<T, String>,
         ) -> Result<T, String> {
             let mut state = self.state.lock().unwrap();
             mutator(&mut state)
@@ -1476,7 +1476,7 @@ mod tests {
                     RuntimeLifecycleRecord {
                         logical_browser_id: current.browser_id.clone(),
                         boot_epoch: None,
-                        profile_identity_digest,
+                        profile_identity_digest: profile_identity_digest.clone(),
                         owner_generation: current.owner_generation,
                         lifecycle_state: RuntimeLaneLifecycleState::Ready,
                         cleanup_obligation_state: CleanupObligationState::Owned,

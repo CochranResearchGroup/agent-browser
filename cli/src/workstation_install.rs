@@ -18715,7 +18715,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_post_commit_rollback_restores_generation_and_state() {
+    fn exact_post_commit_rollback_is_forward_only_and_preserves_committed_state() {
         let root = env::temp_dir().join(format!(
             "agent-browser-exact-post-commit-rollback-{}",
             uuid::Uuid::new_v4()
@@ -18748,20 +18748,24 @@ mod tests {
         };
         drop(prepared);
 
-        let rolled_back = rollback_install_transaction(&root, &guard).unwrap();
         assert_eq!(
-            rolled_back
-                .pointer("/transaction/state")
-                .and_then(Value::as_str),
-            Some("failed_preserved_old_generation")
+            rollback_install_transaction(&root, &guard).unwrap_err(),
+            "install_transaction_forward_only"
         );
-        assert_eq!(selected_generation_id(&install_paths(&root)), None);
-        assert!(!root.join(".agent-browser/service/state.json").exists());
-        let transaction_path = transaction_path(&root, &guard.transaction_id);
-        let legacy_projection: Value =
-            serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
-        assert!(legacy_projection.get("runtimeHandoffs").is_none());
-        assert!(legacy_projection.get("serviceStateMigration").is_none());
+        assert_eq!(
+            selected_generation_id(&install_paths(&root)).as_deref(),
+            Some(guard.candidate_generation_id.as_str())
+        );
+        assert!(root.join(".agent-browser/service/state.json").is_file());
+        let (_, persisted) = load_guarded_install_transaction(&root, &guard).unwrap();
+        assert_eq!(
+            persisted.state,
+            crate::runtime_adoption::UpgradeTransactionState::GenerationCommitted
+        );
+        assert!(persisted
+            .service_state_migration
+            .as_ref()
+            .is_some_and(|migration| migration.committed));
 
         remove_generation_tree(&root).unwrap();
     }

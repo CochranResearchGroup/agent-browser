@@ -928,7 +928,7 @@ pub fn upsert_profile_in_repository(
     id: &str,
     body: Value,
 ) -> Result<BrowserProfile, String> {
-    repository.mutate(|state| upsert_profile(state, id, body))
+    repository.mutate(|state| upsert_profile(state, id, body.clone()))
 }
 
 pub fn update_profile_freshness_in_repository(
@@ -936,7 +936,7 @@ pub fn update_profile_freshness_in_repository(
     id: &str,
     update: ProfileFreshnessUpdate,
 ) -> Result<BrowserProfile, String> {
-    repository.mutate(|state| update_profile_freshness(state, id, update))
+    repository.mutate(|state| update_profile_freshness(state, id, update.clone()))
 }
 
 pub fn update_profile_seeding_handoff_in_repository(
@@ -944,7 +944,7 @@ pub fn update_profile_seeding_handoff_in_repository(
     id: &str,
     update: ProfileSeedingHandoffUpdate,
 ) -> Result<ProfileSeedingHandoffRecord, String> {
-    repository.mutate(|state| update_profile_seeding_handoff(state, id, update))
+    repository.mutate(|state| update_profile_seeding_handoff(state, id, update.clone()))
 }
 
 pub fn delete_profile_in_repository(
@@ -1010,12 +1010,12 @@ pub(crate) fn mutate_profile_policy_in_repository(
             &current,
             ProfilePolicyMutationRequest {
                 expected_revision: input.expected_revision,
-                target: input.target,
+                target: input.target.clone(),
                 subject_id: input.subject_id,
                 assurance: input.assurance,
                 incompatible_occupancy,
                 eviction_mode: input.eviction_mode,
-                grace_deadline: input.grace_deadline,
+                grace_deadline: input.grace_deadline.clone(),
                 now: input.now,
             },
         )
@@ -1064,7 +1064,7 @@ pub fn upsert_session_in_repository(
     id: &str,
     body: Value,
 ) -> Result<BrowserSession, String> {
-    repository.mutate(|state| upsert_session(state, id, body))
+    repository.mutate(|state| upsert_session(state, id, body.clone()))
 }
 
 pub fn delete_session_in_repository(
@@ -1079,7 +1079,7 @@ pub fn upsert_site_policy_in_repository(
     id: &str,
     body: Value,
 ) -> Result<SitePolicy, String> {
-    repository.mutate(|state| upsert_site_policy(state, id, body))
+    repository.mutate(|state| upsert_site_policy(state, id, body.clone()))
 }
 
 pub fn delete_site_policy_in_repository(
@@ -1094,7 +1094,7 @@ pub fn upsert_provider_in_repository(
     id: &str,
     body: Value,
 ) -> Result<ServiceProvider, String> {
-    repository.mutate(|state| upsert_provider(state, id, body))
+    repository.mutate(|state| upsert_provider(state, id, body.clone()))
 }
 
 pub fn delete_provider_in_repository(
@@ -1109,7 +1109,7 @@ pub fn upsert_monitor_in_repository(
     id: &str,
     body: Value,
 ) -> Result<SiteMonitor, String> {
-    repository.mutate(|state| upsert_monitor(state, id, body))
+    repository.mutate(|state| upsert_monitor(state, id, body.clone()))
 }
 
 pub fn upsert_browser_capability_registry_record_in_repository(
@@ -1118,8 +1118,9 @@ pub fn upsert_browser_capability_registry_record_in_repository(
     id: &str,
     body: Value,
 ) -> Result<(Value, BrowserCapabilityRegistry, Value), String> {
-    repository
-        .mutate(|state| upsert_browser_capability_registry_record(state, collection, id, body))
+    repository.mutate(|state| {
+        upsert_browser_capability_registry_record(state, collection, id, body.clone())
+    })
 }
 
 pub fn delete_monitor_in_repository(

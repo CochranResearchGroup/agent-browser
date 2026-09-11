@@ -15,7 +15,7 @@ pub const MAX_SERVICE_JOBS: usize = 200;
 /// use this conservative fallback during reconciliation.
 pub const DEFAULT_SERVICE_JOB_TIMEOUT_MS: u64 = 15 * 60 * 1_000;
 
-pub fn mutate_persisted_service_jobs(mutator: impl FnOnce(&mut ServiceState)) {
+pub fn mutate_persisted_service_jobs(mutator: impl FnMut(&mut ServiceState)) {
     if let Ok(repository) = LockedServiceStateRepository::default_json() {
         let _ = mutate_service_jobs_in_repository(&repository, mutator);
     }
@@ -23,7 +23,7 @@ pub fn mutate_persisted_service_jobs(mutator: impl FnOnce(&mut ServiceState)) {
 
 pub fn mutate_service_jobs_in_repository(
     repository: &impl ServiceStateRepository,
-    mutator: impl FnOnce(&mut ServiceState),
+    mut mutator: impl FnMut(&mut ServiceState),
 ) -> Result<(), String> {
     repository.mutate(|state| {
         mutator(state);

@@ -541,6 +541,7 @@ pub(crate) async fn handle_service_profile_manual_seeding_close(
         )
         .await?
     };
+    let closed_at = service_remote_view_timestamp();
     let lifecycle = repository.mutate(|service_state| {
         update_profile_seeding_handoff(
             service_state,
@@ -548,7 +549,7 @@ pub(crate) async fn handle_service_profile_manual_seeding_close(
             ProfileSeedingHandoffUpdate {
                 target_service_id: Some(target_service_id.clone()),
                 state: Some(ProfileSeedingHandoffState::SeedingClosedUnverified),
-                closed_at: Some(service_remote_view_timestamp()),
+                closed_at: Some(closed_at.clone()),
                 actor: Some("agent-browser".to_string()),
                 note: Some("exact_manual_seeding_browser_closed".to_string()),
                 ..ProfileSeedingHandoffUpdate::default()

@@ -1833,9 +1833,9 @@ pub(crate) fn persist_external_byop_adopted_tab(
             browser_id: Some(browser_id.clone()),
             profile_id: Some(profile_id.to_string()),
             session_id: Some(session_id.to_string()),
-            service_name,
-            agent_name,
-            task_name,
+            service_name: service_name.clone(),
+            agent_name: agent_name.clone(),
+            task_name: task_name.clone(),
             details: Some(json!(
                 { "action" : "external_byop_adopt", "targetId" : target_id,
                 "tabId" : tab_id, "url" : url, }

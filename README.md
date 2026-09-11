@@ -3584,6 +3584,24 @@ access plan and reuse a browser only when that current plan supplies both the
 exact `browserId` and `sessionName`. Neither condition permits a blind retry or
 a duplicate profile lane.
 
+Exclusive Service State writers publish a bounded holder sidecar beside the
+selected state file while they own the cross-process file lock. A file-lock
+timeout appends a validated holder status, PID plus process-start identity,
+build generation, operation, mode, phase, monotonic wait and elapsed-hold
+timing, acquisition wall time, and available coarse state counts when that
+evidence is current;
+missing, stale, corrupt, or racy evidence is reported as unknown or stale.
+The sidecar contains no URLs, profile paths, page data, credentials, or request
+payloads and is removed by the exact holder before normal lock release. This
+diagnostic never grants retry, cleanup, takeover, or force-unlock authority.
+
+JSON-backed mutations prepare their candidate and serialized transaction
+outside exclusive ownership, then revision-fence the short commit interval. A
+single stale candidate may be replayed by the repository against a fresh
+snapshot. That is an internal state-transaction retry only: browser, tab,
+route, provider, and tenant effects remain outside the replayable closure and
+are never retried by this mechanism. Unknown top-level fields are preserved.
+
 Validate an explicitly selected Service State file with the installed
 candidate before using those bytes as runtime state:
 

@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P167
+    objective: Attribute and repair production-scale cross-process Service State lock contention without extending the ordinary timeout
+    plan: docs/dev/plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md
+    plan_ref: refs/heads/maintenance/plan-0167-service-state-lock
+    branch: maintenance/plan-0167-service-state-lock
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 7cfc1fd2c31a394eca5c378f6fa3b26d23b96b81
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: []
+    overlaps: [P157]
+    reconciled_overlaps: [P157_preserve_paused_ref_reconcile_before_public_surface_edits]
+    updated_at: 2026-09-11
   - id: P166
     objective: Reconcile repository custody and repair timed-out task-owned connection release without weakening live-owner protection
     plan: docs/dev/plans/0166-2026-09-11-repository-custody-and-timed-out-connection-release.md

@@ -1026,6 +1026,7 @@ fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
     idempotency_key: &str,
     seal_key: &[u8],
 ) -> Result<LeaseClaimAcquisitionOutcome, String> {
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     repository.mutate(|state| {
         let authority = authenticate_profile_capability(
             &state.service_principals,
@@ -1057,7 +1058,7 @@ fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
             expires_at: claim_expires_at.to_string(),
             transition_deadline: None,
             recovery_controller_id: None,
-            boot_epoch: crate::process_identity::current_boot_epoch(),
+            boot_epoch: boot_epoch.clone(),
             owner_generation,
         };
         if let Some(replayed) = state
@@ -3636,7 +3637,7 @@ mod tests {
 
         fn mutate<T>(
             &self,
-            mutator: impl FnOnce(&mut ServiceState) -> Result<T, String>,
+            mut mutator: impl FnMut(&mut ServiceState) -> Result<T, String>,
         ) -> Result<T, String> {
             let mut state = self.0.lock().unwrap();
             let mut candidate = state.clone();
@@ -4728,8 +4729,8 @@ mod tests {
         let foreign = ready_state("principal:foreign", true);
         repository
             .mutate(|state| {
-                state.runtime_owner_registry = foreign.runtime_owner_registry;
-                state.browsers = foreign.browsers;
+                state.runtime_owner_registry = foreign.runtime_owner_registry.clone();
+                state.browsers = foreign.browsers.clone();
                 Ok(())
             })
             .unwrap();

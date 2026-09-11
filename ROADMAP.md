@@ -1,11 +1,28 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-09
+Updated: 2026-09-11
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P167 | Production-Scale Service State Lock Attribution And Critical-Section Repair
+
+State: OPEN
+
+Current state: A 2026-09-11 Last30days X evaluation timed out after 1,002 ms
+waiting for the shared Service State file lock. Fifteen retained failures span
+10 actions and 10 installed builds, so the leading diagnosis is shared
+production-scale contention rather than an X-specific defect. The observed
+state was 6,536,547 bytes, while closed Plan 0142 accepted an approximately
+3.15 MB threaded burst and a separate raw cross-process lock-holder test. Its
+32-entry holder telemetry is process-local and cannot identify the historical
+contender. [Plan 0167](docs/dev/plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md)
+is an active corrective successor for durable cross-process attribution, an
+at-least 8 MiB multi-process regression, and measured critical-section repair.
+It authorizes no X retry, production installation, production-state mutation,
+process cleanup, provider effect, or RuFresh replay.
 
 ## P157 | Profile Permissions And Request Provenance
 

@@ -2516,6 +2516,11 @@ pub struct ServiceState {
     #[serde(default, skip_serializing_if = "BrowserCapabilityRegistry::is_empty")]
     pub browser_capability_registry: BrowserCapabilityRegistry,
     pub default_browser_build: Option<BrowserBuild>,
+    /// Forward-compatible top-level fields written by newer Service State
+    /// producers. Older writers round-trip these values without interpreting
+    /// or granting authority from them.
+    #[serde(flatten)]
+    pub(crate) unknown_fields: BTreeMap<String, Value>,
     #[serde(skip)]
     pub entity_sources: ServiceEntitySources,
 }

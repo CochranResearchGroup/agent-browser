@@ -779,6 +779,23 @@ shows active lock holders, recent wait and hold phases, timeout counters, and
 recovered process-lock poisoning. It contains no Service State paths or request
 payloads, is never persisted, and does not grant retry permission.
 
+An exclusive file-lock holder also publishes a bounded sidecar beside the
+selected Service State file. A <code>service_state_lock_timeout</code> may append
+a validated holder status, PID plus process-start identity, build generation,
+operation, lock mode, current phase, and coarse state counts. Missing, stale,
+corrupt, or racy evidence remains explicitly unknown or stale. Current holder
+evidence also includes monotonic lock wait and elapsed-hold timing plus the
+acquisition wall time. The sidecar
+contains no URLs, profile paths, page data, credentials, or request payloads,
+and the exact holder removes it before normal release. It is diagnostic only:
+never force-unlock, terminate, take over, or retry from this evidence.
+
+The JSON repository prepares and serializes pure candidate state outside the
+exclusive file lock, then revision-fences the short durable commit. It may
+replay one stale in-memory mutation against a fresh snapshot. Browser, tab,
+route, provider, and tenant effects must remain outside that closure and are
+not retried. Unknown top-level fields round-trip without gaining authority.
+
 Use the CLI when a human or shell script needs a direct operational view:
 
 ```bash

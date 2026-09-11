@@ -1323,9 +1323,9 @@ fn persist_adopted_logical_browser_health(
         browser.host = host;
         browser.health = ServiceBrowserHealth::Ready;
         browser.pid = pid;
-        browser.cdp_endpoint = Some(cdp_endpoint);
+        browser.cdp_endpoint = Some(cdp_endpoint.clone());
         browser.last_error = None;
-        if let Some(process_identity) = process_identity {
+        if let Some(process_identity) = process_identity.clone() {
             service_state
                 .browser_process_identities
                 .insert(logical_browser_id.to_string(), process_identity);
