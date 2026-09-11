@@ -5784,11 +5784,6 @@ fn install_doctor_reports_expected_upgrade_ready(
     expected: &crate::runtime_adoption::UpgradeTransaction,
     transitional_source_sessions: &[String],
 ) -> bool {
-    use crate::runtime_adoption::UpgradeTransactionState;
-
-    if expected.state != UpgradeTransactionState::PostCommitValidating {
-        return false;
-    }
     let Some(data) = payload.get("data") else {
         return false;
     };
