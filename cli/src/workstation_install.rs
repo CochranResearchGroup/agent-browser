@@ -9730,25 +9730,45 @@ fn commit_prepared_payload_transaction(
 fn commit_candidate_runtime_host_ingress(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
-    if transaction
+    let expected_candidate = transaction
         .runtime_host_convergence
         .as_ref()
         .and_then(|convergence| convergence.candidate_host.as_ref())
-        .is_none()
-    {
+        .cloned();
+    let Some(expected_candidate) = expected_candidate else {
         return Ok(());
-    }
+    };
     let repository = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(
         crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path(),
     );
-    let registry = repository.load()?;
+    let mut registry = repository.load()?;
     if registry.selected_backend().generation_id == transaction.candidate_generation_id {
         return Ok(());
     }
-    if registry
-        .candidate_backend()
-        .is_none_or(|candidate| candidate.generation_id != transaction.candidate_generation_id)
+    if registry.candidate_backend().is_none()
+        && install_transaction_requires_forward_completion(transaction)?
     {
+        let socket_dir = candidate_runtime_host_socket_dir(&transaction.transaction_id)?;
+        let (observed_candidate, backend) = capture_runtime_host_identity(
+            &socket_dir,
+            &transaction.candidate_generation_id,
+            &transaction.candidate_binary_sha256,
+            expected_candidate.observation_only,
+        )?;
+        if observed_candidate != expected_candidate {
+            return Err(
+                "runtime host ingress candidate identity changed before restage".to_string(),
+            );
+        }
+        registry =
+            repository.stage_candidate(registry.revision, &transaction.transaction_id, backend)?;
+    }
+    if registry.candidate_backend().is_none_or(|candidate| {
+        candidate.generation_id != transaction.candidate_generation_id
+            || candidate.pid != expected_candidate.pid
+            || candidate.binary_sha256 != expected_candidate.binary_sha256
+            || candidate.socket_identity != expected_candidate.socket_identity
+    }) {
         return Err("runtime host ingress candidate changed before commit".to_string());
     }
     repository.commit_candidate(
