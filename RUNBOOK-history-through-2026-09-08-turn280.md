@@ -192,6 +192,19 @@ Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 - `reconcile-rejoin/`, `missing-binding-sim-UOeTwk`,
   `primary-endpoint-sim-Xrh9tr`: lease and diagnostic-wire source/receiver proof.
 
+## Policy adoption and preservation
+
+Policy commit e2b506b2 adds consolidation, separate evidence stages, candidate
+freeze, semantic compaction, full delivery budgets and economical task routing.
+Policies0010/0021/0028/0042/0043/0044/0045 and AGENTS.md carry the rules. The audit
+helper checks declared consolidation structure, not evidence truth, model savings
+or automatic runtime stopping. Selector baseline remains v0.1.24 with scoped
+local overrides and adoption feedback in Plan0160; no shared-library replacement.
+Focused auditor tests passed22; legacy migration is not part of this slice.
+
+Preserve unrelated incident0156 and notes0159/0160 edits. Synthetic PID87885 was
+closed after acceptance; no tenant browser, profile, credential or payment changed.
+
 ## History index
 
 - [Complete previous runbook, through Turn 213](RUNBOOK-history-through-2026-09-02.md)

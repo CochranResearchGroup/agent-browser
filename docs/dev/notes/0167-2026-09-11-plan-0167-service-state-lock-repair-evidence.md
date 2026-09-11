@@ -2,7 +2,7 @@
 
 Date: 2026-09-11
 
-Status: SOURCE QUALIFIED; INTEGRATION PENDING
+Status: ACCEPTED AND INTEGRATED
 
 Plan: [Plan 0167](../plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md)
 
@@ -11,6 +11,9 @@ Branch: `maintenance/plan-0167-service-state-lock`
 Batch baseline: `7cfc1fd2c31a394eca5c378f6fa3b26d23b96b81`
 
 Qualified source: `2135def23d4b820dbae4a5d88a38f96724db2592`
+
+Integration receipt: PR 29, merge
+`14fb3db060d8fb644665b0181ac8f2860b0af3f2`
 
 ## Scope and custody
 
@@ -174,7 +177,7 @@ binary `agent_browser-0bbcc91e17ee36cb`.
 
 ## Remaining gates
 
-Source integration into protected `main` remains pending. Production
+Source integration into protected `main` completed through PR 29. Production
 installation, shared skill publication, installed doctor, and any consumer X
 evaluation are separate, unauthorized gates. A later X result cannot change
 this source acceptance, and this acceptance does not predict that X will

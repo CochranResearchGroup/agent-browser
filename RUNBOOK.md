@@ -3,6 +3,19 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 296 | 2026-09-11
+
+Plan0167 is CLOSED through PR29 at `14fb3db0`. The repair adds privacy-safe cross-process Service State holder attribution and moves pure
+mutation plus transaction preparation outside exclusive ownership, retaining
+revision fencing and one repository-owned stale replay. The 9,642,672-byte
+two-writer and two-reader regression completed in 709 to 739 ms across six
+samples with zero commit wait and 358 to 380 ms exclusive holds; the ordinary
+one-second deadline is unchanged. The complete Rust suite and selected public,
+documentation, client, and workstation gates pass. No Plan0167 command retried
+X or RuFresh, installed production, mutated production Service State, changed a
+provider or tenant, or terminated a process. Production installation, shared
+skill publication, installed doctor, and X evaluation remain separate gates.
+
 ## Turn 295 | 2026-09-11
 
 Plan0165 installed generation `0.28.0-c0cc081c1c6b-8e9cb639ccc3`; current-form
@@ -183,18 +196,5 @@ and untracked notes0159/0160. Those files remain untouched and outside PR14.
 Repository consolidation is complete. Full A1–A4/AX runtime acceptance and the
 deferred standalone CLI download compatibility check remain Plan0160 work; they
 are product acceptance gaps rather than Git integration gaps.
-
-### Policy adoption and preservation
-
-Policy commit e2b506b2 adds consolidation, separate evidence stages, candidate
-freeze, semantic compaction, full delivery budgets and economical task routing.
-Policies0010/0021/0028/0042/0043/0044/0045 and AGENTS.md carry the rules. The audit
-helper checks declared consolidation structure, not evidence truth, model savings
-or automatic runtime stopping. Selector baseline remains v0.1.24 with scoped
-local overrides and adoption feedback in Plan0160; no shared-library replacement.
-Focused auditor tests passed22; legacy migration is not part of this slice.
-
-Preserve unrelated incident0156 and notes0159/0160 edits. Synthetic PID87885 was
-closed after acceptance; no tenant browser, profile, credential or payment changed.
 
 [Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).

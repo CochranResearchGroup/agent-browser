@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P167 | Production-Scale Service State Lock Attribution And Critical-Section Repair
 
-State: OPEN
+State: CLOSED
 
 Current state: A 2026-09-11 Last30days X evaluation timed out after 1,002 ms
 waiting for the shared Service State file lock. Fifteen retained failures span
@@ -22,7 +22,14 @@ contender. [Plan 0167](docs/dev/plans/0167-2026-09-11-production-scale-service-s
 is an active corrective successor for durable cross-process attribution, an
 at-least 8 MiB multi-process regression, and measured critical-section repair.
 It authorizes no X retry, production installation, production-state mutation,
-process cleanup, provider effect, or RuFresh replay.
+process cleanup, provider effect, or RuFresh replay. PR 29 integrated the
+source repair at `14fb3db0`. A 9,642,672-byte, two-writer and two-reader
+regression now completes in 709 to 739 ms across six samples, with zero commit
+wait and 358 to 380 ms exclusive holds. Durable holder telemetry fails closed
+through lock-token, PID, and process-start validation. The ordinary one-second
+deadline is unchanged. Provider-free qualification is green; production
+installation, shared skill publication, installed doctor, and X evaluation
+remain separately gated.
 
 ## P157 | Profile Permissions And Request Provenance
 

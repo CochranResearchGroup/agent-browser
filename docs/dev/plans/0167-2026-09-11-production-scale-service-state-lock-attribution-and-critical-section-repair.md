@@ -2,7 +2,7 @@
 
 Date: 2026-09-11
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -21,6 +21,9 @@ Related acceptance: [Plan 0142 final acceptance](../notes/0147-2026-08-29-plan-0
 Related program: [Plan 0160](0160-2026-09-06-production-profile-identity-and-operational-readiness.md), A1 and AX
 
 Current execution status: [RUNBOOK.md](../../../RUNBOOK.md)
+
+Integration receipt: PR 29, merge
+`14fb3db060d8fb644665b0181ac8f2860b0af3f2`
 
 ## Objective and authority
 
@@ -379,3 +382,14 @@ required changed-surface gates are green, and the exact remaining production
 installation and consumer replay gates are recorded as incomplete or separately
 authorized. Source completion does not prove that X succeeds, and a later X
 retry does not belong to this plan.
+
+Plan 0167 completed on 2026-09-11 through PR 29. The integrated source adds
+validated cross-process holder attribution, revision-fenced prepared commits,
+one repository-owned stale replay, unknown-field preservation, and a
+9,642,672-byte two-writer and two-reader regression. The qualified candidate
+completed in 709 to 739 ms across six samples with zero commit wait and 358 to
+380 ms exclusive holds while retaining the ordinary one-second deadline. The
+complete low-pressure Rust suite, selected focused families, public contract
+checks, documentation build, and workstation fixtures passed. Production
+installation, shared skill publication, installed doctor, and X evaluation
+remain separate unauthorized gates; RuFresh was not repeated.

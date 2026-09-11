@@ -6,15 +6,15 @@ lanes:
     plan_ref: refs/heads/maintenance/plan-0167-service-state-lock
     branch: maintenance/plan-0167-service-state-lock
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 7cfc1fd2c31a394eca5c378f6fa3b26d23b96b81
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 2135def23d4b820dbae4a5d88a38f96724db2592
     remote_ref: null
-    integration_receipt: null
+    integration_receipt: 14fb3db060d8fb644665b0181ac8f2860b0af3f2
     integration: merge
     dependencies: []
     overlaps: [P157]
-    reconciled_overlaps: [P157_preserve_paused_ref_reconcile_before_public_surface_edits]
+    reconciled_overlaps: [P157_preserve_paused_ref_reconcile_before_public_surface_edits, P165_current_origin_main_merged_before_final_qualification]
     updated_at: 2026-09-11
   - id: P166
     objective: Reconcile repository custody and repair timed-out task-owned connection release without weakening live-owner protection
