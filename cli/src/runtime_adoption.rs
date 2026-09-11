@@ -713,6 +713,7 @@ fn upgrade_transition_allowed(
             | (Accepted, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, Accepted)
             | (OperatorRecoveryRequired, RuntimesTransferring)
+            | (RuntimesTransferring, PostCommitValidating)
             | (
                 AdmissionDraining
                     | RuntimesTransferring
@@ -3031,6 +3032,29 @@ mod tests {
         assert_eq!(
             transaction.state,
             UpgradeTransactionState::OperatorRecoveryRequired
+        );
+    }
+
+    #[test]
+    fn durable_post_commit_resume_can_restore_the_validation_phase() {
+        let samples: Value = serde_json::from_str(SCHEMA_SAMPLES).unwrap();
+        let mut transaction: UpgradeTransaction =
+            serde_json::from_value(samples["upgradeTransaction"].clone()).unwrap();
+        transaction.state = UpgradeTransactionState::RuntimesTransferring;
+
+        let revision = transaction.revision;
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::PostCommitValidating,
+            "install_transaction_post_commit_resume",
+            "2026-09-10T00:00:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(
+            transaction.state,
+            UpgradeTransactionState::PostCommitValidating
         );
     }
 

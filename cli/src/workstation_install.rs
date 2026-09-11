@@ -829,6 +829,25 @@ fn resume_install_transaction(
             &transaction,
         )?;
     }
+    if transaction.state == UpgradeTransactionState::RuntimesTransferring
+        && selected_generation_id(&install_paths(root)).as_deref()
+            == Some(transaction.candidate_generation_id.as_str())
+        && transaction
+            .service_state_migration
+            .as_ref()
+            .is_some_and(|migration| migration.committed)
+    {
+        persist_upgrade_transition(
+            &path,
+            &mut transaction,
+            UpgradeTransactionState::PostCommitValidating,
+            "install_transaction_post_commit_resume",
+        )?;
+        persist_admission_drain(
+            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
+            &transaction,
+        )?;
+    }
     if transaction.state == UpgradeTransactionState::BlockedAmbiguousRuntime {
         install_transaction_effect_free(root, &transaction)?;
         validate_install_transaction_candidate(root, &transaction)?;
