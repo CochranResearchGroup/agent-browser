@@ -267,7 +267,11 @@ pass.
 If apply finds an interrupted transaction that still owns the admission drain,
 it automatically resumes or recovers that exact transaction before creating a
 new candidate transaction. It does not choose by file recency. If automatic
-convergence refuses changed or ambiguous evidence, use only the exact
+convergence finds a committed or finalized runtime handoff, the transaction is
+forward-only: use its guarded `resume` action and never workstation `recover`
+or guarded `rollback`. Candidate presentation or readiness failure retains the
+candidate and matching drain for that exact resume. If automatic convergence
+refuses changed or ambiguous evidence before a forward effect, use only the exact
 transaction reported as the drain owner:
 
 ```bash

@@ -498,14 +498,41 @@ fn verify_install_transaction_census(
     Ok(())
 }
 
+/// Return whether this transaction has crossed an ownership-effect seam that
+/// cannot be treated as an effect-free or rollback-first upgrade. Full runtime
+/// replacement receipts and ordinary cooperative lane transfers share this
+/// forward-only invariant even though they use different durable records.
+fn install_transaction_requires_forward_completion(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<bool, String> {
+    use crate::runtime_adoption::RuntimeLaneTransferState;
+
+    if crate::runtime_replacement::requires_forward_recovery(transaction)? {
+        return Ok(true);
+    }
+    Ok(transaction.runtime_handoffs.iter().any(|handoff| {
+        handoff.committed || handoff.source_finalized || handoff.irreversible_source_revocation
+    }) || transaction
+        .runtime_host_convergence
+        .as_ref()
+        .is_some_and(|convergence| {
+            convergence.lanes.iter().any(|lane| {
+                matches!(
+                    lane.state,
+                    RuntimeLaneTransferState::Committed | RuntimeLaneTransferState::Finalized
+                )
+            })
+        }))
+}
+
 fn install_transaction_effect_free(
     root: &Path,
     transaction: &crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
     use crate::runtime_adoption::RuntimeLaneTransferState;
 
-    if crate::runtime_replacement::requires_forward_recovery(transaction).unwrap_or(true) {
-        return Err("runtime_replacement_forward_only".to_string());
+    if install_transaction_requires_forward_completion(transaction).unwrap_or(true) {
+        return Err("install_transaction_forward_only".to_string());
     }
     if transaction
         .service_state_migration
@@ -598,8 +625,8 @@ fn rollback_install_transaction(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     let (path, mut transaction) = load_guarded_install_transaction(root, guard)?;
-    if crate::runtime_replacement::requires_forward_recovery(&transaction).unwrap_or(true) {
-        return Err("runtime_replacement_forward_only".to_string());
+    if install_transaction_requires_forward_completion(&transaction).unwrap_or(true) {
+        return Err("install_transaction_forward_only".to_string());
     }
     verify_install_transaction_census(&transaction)?;
     if transaction.state == UpgradeTransactionState::RolledBackBeforeCommit {
@@ -765,14 +792,17 @@ fn resume_install_transaction(
         transaction.state,
         UpgradeTransactionState::OperatorRecoveryRequired
             | UpgradeTransactionState::FailedPreservedOldGeneration
-    ) && crate::runtime_replacement::plan_from_upgrade_transaction(&transaction)?.is_some()
-        && crate::runtime_replacement::requires_forward_recovery(&transaction)?
+    ) && install_transaction_requires_forward_completion(&transaction)?
     {
-        let receipt =
-            crate::runtime_replacement::effect_receipt_from_upgrade_transaction(&transaction)?
-                .ok_or_else(|| "runtime_replacement_forward_resume_receipt_missing".to_string())?;
-        if receipt.state == crate::runtime_replacement::RuntimeReplacementEffectState::Planned {
-            return Err("runtime_replacement_forward_resume_effect_missing".to_string());
+        if crate::runtime_replacement::plan_from_upgrade_transaction(&transaction)?.is_some() {
+            let receipt =
+                crate::runtime_replacement::effect_receipt_from_upgrade_transaction(&transaction)?
+                    .ok_or_else(|| {
+                        "runtime_replacement_forward_resume_receipt_missing".to_string()
+                    })?;
+            if receipt.state == crate::runtime_replacement::RuntimeReplacementEffectState::Planned {
+                return Err("runtime_replacement_forward_resume_effect_missing".to_string());
+            }
         }
         let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
         if drain_path.is_file() {
@@ -793,7 +823,7 @@ fn resume_install_transaction(
             &path,
             &mut transaction,
             UpgradeTransactionState::RuntimesTransferring,
-            "runtime_replacement_forward_resume",
+            "install_transaction_forward_resume",
         )?;
         persist_admission_drain(
             &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
@@ -1084,6 +1114,29 @@ fn resume_prepared_payload_transaction(
     let mut paths = install_paths(root);
     let mut quiesced = None;
 
+    if !isolated_root
+        && !presentation_bypass
+        && prepared.dashboard_candidate.is_none()
+        && matches!(
+            prepared.transaction.state,
+            UpgradeTransactionState::RuntimesTransferring
+                | UpgradeTransactionState::PresentationsRebinding
+                | UpgradeTransactionState::CandidateReady
+        )
+        && install_transaction_requires_forward_completion(&prepared.transaction)?
+    {
+        if let Err(error) = prepare_dashboard_candidate_for_transaction(root, args, prepared) {
+            return Err(rollback_resumed_transaction(
+                &paths,
+                prepared,
+                false,
+                quiesced.as_ref(),
+                "resume_forward_candidate_dashboard_shadow_failed",
+                error,
+            ));
+        }
+    }
+
     if prepared.transaction.state == UpgradeTransactionState::StateMigrationValidated
         && !isolated_root
     {
@@ -1373,7 +1426,7 @@ fn install_transaction_safe_actions(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
 ) -> Vec<&'static str> {
     use crate::runtime_adoption::UpgradeTransactionState::*;
-    if crate::runtime_replacement::requires_forward_recovery(transaction).unwrap_or(true) {
+    if install_transaction_requires_forward_completion(transaction).unwrap_or(true) {
         return match transaction.state {
             OperatorRecoveryRequired => vec!["inspect", "resume"],
             Accepted => vec!["inspect", "finalize"],
@@ -2877,7 +2930,7 @@ fn prior_install_convergence_action(
 
     match transaction.state {
         UpgradeTransactionState::OperatorRecoveryRequired
-            if crate::runtime_replacement::requires_forward_recovery(&transaction)? =>
+            if install_transaction_requires_forward_completion(&transaction)? =>
         {
             Ok(Some(PriorInstallConvergenceAction::Resume(
                 InstallTransactionMutationGuard {
@@ -10493,6 +10546,22 @@ fn rollback_prepared_payload_transaction(
 ) -> Result<(), String> {
     use crate::runtime_adoption::UpgradeTransactionState;
 
+    prepared.transaction.runtime_handoffs = prepared.runtime_handoffs.clone();
+    if install_transaction_requires_forward_completion(&prepared.transaction)? {
+        prepared.transaction.stop_reason = Some(stop_reason.to_string());
+        prepared.transaction.terminal_result = Some("forward_completion_required".to_string());
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            UpgradeTransactionState::OperatorRecoveryRequired,
+            "forward_completion_required",
+        )?;
+        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+        return Err(format!(
+            "install_transaction_forward_only:{}:{stop_reason}",
+            prepared.transaction.transaction_id
+        ));
+    }
     prepared.transaction.stop_reason = Some(stop_reason.to_string());
     let rollback_state = if after_generation_commit {
         UpgradeTransactionState::RollbackAfterCommit
@@ -11071,6 +11140,7 @@ type PreparedRuntimeHandoff = crate::runtime_adoption::UpgradeRuntimeHandoff;
 impl PreparedRuntimeHandoff {
     fn should_finalize_source(&self) -> bool {
         self.committed
+            && !self.source_finalized
             && self.mode == crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer
     }
 
@@ -17812,7 +17882,7 @@ mod tests {
         );
         assert_eq!(
             rollback_install_transaction(&root, &guard).unwrap_err(),
-            "runtime_replacement_forward_only"
+            "install_transaction_forward_only"
         );
 
         transaction.state =
@@ -17826,7 +17896,54 @@ mod tests {
         write_private_json_atomic(&path, &transaction).unwrap();
         assert_eq!(
             close_install_transaction(&root, &guard).unwrap_err(),
-            "runtime_replacement_forward_only"
+            "install_transaction_forward_only"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn committed_cooperative_handoff_is_forward_only_for_guarded_actions() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-forward-only-cooperative-handoff-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state =
+            crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired;
+        transaction.runtime_handoffs = vec![crate::runtime_adoption::UpgradeRuntimeHandoff {
+            source_session: "retained-source".to_string(),
+            candidate_session: "handoff-candidate".to_string(),
+            source_socket_dir: Some("/run/user/1000/agent-browser/source".to_string()),
+            source_runtime_host: true,
+            source_process_identity: None,
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            committed: true,
+            source_finalized: false,
+            irreversible_source_revocation: false,
+        }];
+        let path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&path, &transaction).unwrap();
+        let guard = InstallTransactionMutationGuard {
+            transaction_id: transaction.transaction_id.clone(),
+            expected_revision: transaction.revision,
+            candidate_generation_id: transaction.candidate_generation_id.clone(),
+            census_digest: None,
+        };
+
+        assert_eq!(
+            install_transaction_safe_actions(&transaction),
+            vec!["inspect", "resume"]
+        );
+        assert_eq!(
+            rollback_install_transaction(&root, &guard).unwrap_err(),
+            "install_transaction_forward_only"
         );
 
         fs::remove_dir_all(root).unwrap();
@@ -18147,6 +18264,133 @@ mod tests {
     }
 
     #[test]
+    fn committed_cooperative_handoff_resumes_from_last_proven_candidate_phase() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-forward-resume-cooperative-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let env_guard = EnvGuard::new(&["AGENT_BROWSER_WORKSTATION_ROOT"]);
+        env_guard.set("AGENT_BROWSER_WORKSTATION_ROOT", root.to_str().unwrap());
+        let paths = install_paths(&root);
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+        let mut prepared = prepare_payload_transaction(&root, &paths, &args, true).unwrap();
+        activate_prepared_payload_transaction(&mut prepared, &paths, true).unwrap();
+        prepared.transaction.runtime_handoffs =
+            vec![crate::runtime_adoption::UpgradeRuntimeHandoff {
+                source_session: "retained-source".to_string(),
+                candidate_session: "handoff-candidate".to_string(),
+                source_socket_dir: Some("/run/user/1000/agent-browser/source".to_string()),
+                source_runtime_host: true,
+                source_process_identity: None,
+                mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+                committed: true,
+                source_finalized: true,
+                irreversible_source_revocation: false,
+            }];
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            crate::runtime_adoption::UpgradeTransactionState::RollbackBeforeCommit,
+            "rollback_before_commit",
+        )
+        .unwrap();
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired,
+            "operator_recovery_required",
+        )
+        .unwrap();
+        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction).unwrap();
+        let guard = InstallTransactionMutationGuard {
+            transaction_id: prepared.transaction.transaction_id.clone(),
+            expected_revision: prepared.transaction.revision,
+            candidate_generation_id: prepared.transaction.candidate_generation_id.clone(),
+            census_digest: prepared.transaction.runtime_census_digest.clone(),
+        };
+        drop(prepared);
+
+        let resumed = resume_install_transaction(&root, &guard).unwrap();
+        assert_eq!(
+            resumed
+                .pointer("/transaction/state")
+                .and_then(Value::as_str),
+            Some("accepted")
+        );
+
+        remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn candidate_failure_after_committed_handoff_preserves_forward_recovery() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-forward-failure-cooperative-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let env_guard = EnvGuard::new(&["AGENT_BROWSER_WORKSTATION_ROOT"]);
+        env_guard.set("AGENT_BROWSER_WORKSTATION_ROOT", root.to_str().unwrap());
+        let paths = install_paths(&root);
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+        let mut prepared = prepare_payload_transaction(&root, &paths, &args, true).unwrap();
+        activate_prepared_payload_transaction(&mut prepared, &paths, true).unwrap();
+        prepared.runtime_handoffs = vec![crate::runtime_adoption::UpgradeRuntimeHandoff {
+            source_session: "retained-source".to_string(),
+            candidate_session: "handoff-candidate".to_string(),
+            source_socket_dir: Some("/run/user/1000/agent-browser/source".to_string()),
+            source_runtime_host: true,
+            source_process_identity: None,
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            committed: true,
+            source_finalized: false,
+            irreversible_source_revocation: false,
+        }];
+        prepared.transaction.runtime_handoffs = prepared.runtime_handoffs.clone();
+
+        let error = rollback_prepared_payload_transaction(
+            &paths,
+            &mut prepared,
+            false,
+            "candidate_dashboard_presentation_unproven",
+        )
+        .unwrap_err();
+
+        assert!(error.contains("install_transaction_forward_only"));
+        assert_eq!(
+            prepared.transaction.state,
+            crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
+        );
+        assert_eq!(
+            prepared.transaction.terminal_result.as_deref(),
+            Some("forward_completion_required")
+        );
+        assert!(prepared.runtime_handoffs[0].committed);
+        assert!(prepared
+            .transaction
+            .checkpoints
+            .iter()
+            .all(|checkpoint| checkpoint.name != "rollback_before_commit"));
+        assert!(prepared.admission_drain_path.is_file());
+
+        remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
     fn exact_resume_from_admission_drain_reaches_isolated_acceptance() {
         let root = env::temp_dir().join(format!(
             "agent-browser-exact-resume-admission-{}",
@@ -18343,6 +18587,36 @@ mod tests {
             Some(PriorInstallConvergenceAction::Recover {
                 transaction_id: transaction.transaction_id.clone(),
             })
+        );
+
+        transaction.runtime_handoffs = vec![crate::runtime_adoption::UpgradeRuntimeHandoff {
+            source_session: "retained-source".to_string(),
+            candidate_session: "handoff-candidate".to_string(),
+            source_socket_dir: Some("/run/user/1000/agent-browser/source".to_string()),
+            source_runtime_host: true,
+            source_process_identity: None,
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            committed: true,
+            source_finalized: false,
+            irreversible_source_revocation: false,
+        }];
+        transaction.revision = 11;
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        persist_admission_drain(
+            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
+            &transaction,
+        )
+        .unwrap();
+        assert_eq!(
+            prior_install_convergence_action(&root).unwrap(),
+            Some(PriorInstallConvergenceAction::Resume(
+                InstallTransactionMutationGuard {
+                    transaction_id: transaction.transaction_id.clone(),
+                    expected_revision: 11,
+                    candidate_generation_id: "generation-candidate".to_string(),
+                    census_digest: Some("c".repeat(64)),
+                }
+            ))
         );
 
         let replacement_plan = crate::runtime_replacement::RuntimeReplacementPlan {

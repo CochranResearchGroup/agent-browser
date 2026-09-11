@@ -713,8 +713,15 @@ fn upgrade_transition_allowed(
             | (Accepted, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, Accepted)
             | (OperatorRecoveryRequired, RuntimesTransferring)
-            | (RuntimesTransferring, OperatorRecoveryRequired)
-            | (PresentationsRebinding, OperatorRecoveryRequired)
+            | (
+                AdmissionDraining
+                    | RuntimesTransferring
+                    | PresentationsRebinding
+                    | CandidateReady
+                    | GenerationCommitted
+                    | PostCommitValidating,
+                OperatorRecoveryRequired
+            )
             | (FailedPreservedOldGeneration, RuntimesTransferring)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
             | (BlockedAmbiguousRuntime, FailedPreservedOldGeneration)

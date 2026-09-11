@@ -327,7 +327,11 @@ candidate staging. Ambiguous or changed identity still blocks.
 When apply finds an interrupted transaction that still owns the admission
 drain, the installer automatically resumes or recovers that exact transaction
 before it creates a new candidate transaction. It never selects the prior
-transaction by file recency. If automatic convergence refuses changed or
+transaction by file recency. A committed or finalized runtime handoff is a
+forward-only ownership effect. Inspect advertises <code>resume</code>, refuses
+<code>rollback</code>, and retains the candidate plus matching admission drain
+when later candidate presentation or readiness fails. Do not use workstation
+<code>recover</code> for that state. If automatic convergence refuses changed or
 ambiguous evidence, run <code>agent-browser install workstation recover
 --transaction-id &lt;id&gt; --json</code> with the exact admission-owning
 transaction ID from the failure.
