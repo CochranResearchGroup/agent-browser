@@ -16,6 +16,12 @@ Target: main
 
 Integration: merge
 
+Source integration receipt: `74883c6c3655744f04a2ffeb7894d23ba2c75aa2`
+
+Git custody: the recorded checkpoint `ae5ad34c` is integrated. Plan 0168 may
+close the historical branch without closing the remaining public mutation and
+daemon effect-admission work in this plan.
+
 Integration model: cohesive validated checkpoints on a short-lived topic
 branch, followed by a merge to `main`.
 

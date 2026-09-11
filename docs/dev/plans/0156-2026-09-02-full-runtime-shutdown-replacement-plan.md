@@ -2,7 +2,10 @@
 
 Date: 2026-09-02
 
-State: SOURCE COMPLETE
+State: CLOSED
+
+Integration receipt: PR 14, merge
+`ba3916cab2a712bc46abe74b79d590695962c207`
 
 Lane: P156
 
@@ -220,7 +223,7 @@ signaling it, which proves the foreign and conflicting owner fence remains
 active in the installed candidate. The current production dry-run is ready but
 was not applied. Its reviewed digest was not retained as standing authority.
 
-Final result: P156 is source complete and integration ready at checkpoint
+Final result: P156 is source complete and integrated through PR 14 at checkpoint
 `3bfb1c49`. Production installation and any full shutdown of Research.gov or
 other live managed lanes require a new current dry-run review and explicit
-operator authority outside this plan.
+operator authority outside this closed source plan.

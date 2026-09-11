@@ -5,7 +5,7 @@ Keep at or below 200 lines under policy0043.
 
 ## Turn 297 | 2026-09-11
 
-[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is OPEN for closed-world worktree, branch, catalog, merge, and closure maintenance. W0 attributed the canonical worktree's two Rust edits to an active Odollo-owned Codex process and left them untouched. P168 now has a clean dedicated worktree from `2618ddb2`. P165 Git custody may close independently of its open sealed-authentication gate. P0240, P157, and both unique documentation branches remain preserved pending per-commit review. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect is authorized.
+[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is OPEN. W0 isolated P168 from the active Odollo-owned Rust edits. Closed-world review proves P165, P144, P155, P156, P166, P167, P157, and both documentation branches have no unrepresented source work; their exact Git closure follows the published review checkpoint without closing residual operational plans. P0240 is the only source-bearing candidate: `semantic_click` and one geometry test clarification require reconstruction on current `main`. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect is authorized.
 
 ## Turn 296 | 2026-09-11
 

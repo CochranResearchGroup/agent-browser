@@ -11,16 +11,15 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 State: OPEN
 
-Current state: Three worktrees and six local branches remain after Plan 0167.
-Plan 0165 has no unique commits and is eligible for Git-custody closeout after
-its catalog state is corrected, while its sealed authentication acceptance
-stays open. P0240 retains eight unique commits, P157 retains four, and two
-documentation branches retain three more in total. P144, P155, and P156 have
-integrated checkpoints but stale custody projections. The canonical worktree
-also acquired uncommitted Rust edits on two shared paths after the inventory.
-Those edits are positively attributed to an active Odollo-owned Codex process
-and remain untouched. P168 now runs from a clean dedicated worktree based on
-`2618ddb2`.
+Current state: W0 established clean P168 custody without touching the two
+Odollo-owned Rust edits on canonical `main`. Closed-world review proves P165,
+P144, P155, P156, P166, P167, P157, and both documentation branches have no
+unrepresented source work. Their Git and catalog closure is ready after the
+review checkpoint. P165, P144, Plan 0158, and Plan 0162 retain their separate
+open operational or future-source gates. P0240 remains the only source-bearing
+candidate: three commits are patch-equivalent, one formatting commit is
+superseded, and the geometry-fixture and exact semantic-click changes require
+current-main reconstruction and validation.
 [Plan 0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md)
 defines the review, selective merge, catalog repair, and exact-ref closure
 campaign. It authorizes no production, browser, profile, credential, provider,
@@ -65,6 +64,10 @@ acquisition owner, validates every projection through a semantic contract
 oracle, keeps protected lease exchange behind one cohesive client, and makes
 the Rust install domain the sole owner of convergence truth consumed by the
 dashboard.
+Plan 0168 verified that the four commits remaining on the historical P157 ref
+are patch-equivalent or behaviorally represented on `main`. That ref may close
+without closing Plan 0158 or Plan 0162. Any resumed implementation must start
+from current `main` on a fresh registered branch.
 W1 is source complete at `5166dabf`. One typed Profile acquisition owner now
 computes reuse, lifecycle replacement, the dominant blocker, deterministic
 route names, and the executable request. Service Access projects that result,
@@ -293,7 +296,7 @@ acceptance criteria remain in force.
 
 ## P156 | Full Runtime Shutdown Replacement
 
-State: SOURCE COMPLETE
+State: CLOSED
 Current state: the installation deadlock exposed by Research.gov fieldwork has
 been separated into a provider-neutral product lane. W1 through W6 are source
 complete. `preserve` remains the default; `full-shutdown` apply requires a
@@ -302,7 +305,9 @@ digest-bound managed lanes, escalates only through exact process identities,
 preserves profiles and stored credentials, retires the exact source host, and
 resumes forward from durable receipts. The exact candidate is installed in the
 isolated development runtime, doctor is fully green, and the three-cycle launch
-smoke passes. No production shutdown was applied.
+smoke passes. No production shutdown was applied. PR 14 integrated checkpoints
+`e46d9f75` and `3bfb1c49` through `ba3916ca`; the historical source lane is
+closed.
 
 ### Plan
 
@@ -310,20 +315,20 @@ smoke passes. No production shutdown was applied.
 
 ### Next Recommendation
 
-Integrate checkpoints `e46d9f75` and `3bfb1c49` through the normal branch flow.
 Any production full shutdown requires a new current plan digest and explicit
-operator review outside this completed source lane.
+operator review outside this closed source lane.
 
 ## P155 | Durable Handoff Resume Intent
 
-State: SOURCE COMPLETE
+State: CLOSED
 Current state: Research.gov fieldwork produced two provider-neutral client
 helpers. A resolved durable handoff now yields the exact retained route,
 managed profile, target, URL, caller attribution, and valid tab handle without
 exposing provider URLs or profile paths. Diagnostics now classify explicitly
 as unavailable, observation-only, or effect-capable; only complete control
 plane attestation admits navigation or input. The source checkpoint is
-`804519f0` and all selected provider-free gates pass.
+`804519f0` and all selected provider-free gates pass. PR 14 integrated the
+checkpoint through `ba3916ca`; the source lane is closed.
 
 ### Plan
 
@@ -331,8 +336,7 @@ plane attestation admits navigation or input. The source checkpoint is
 
 ### Next Recommendation
 
-Integrate the source checkpoint through the normal branch flow. Continue
-Research.gov observation through durable handoff `r580584`; do not navigate or
+Continue Research.gov observation through durable handoff `r580584`; do not navigate or
 enter data until canonical profile-lease proof makes diagnostics
 effect-capable.
 
@@ -410,7 +414,9 @@ or viewer reconnection.
 ## P144 | Lease Authority Coordination And Revocation
 
 State: IN PROGRESS
-Current state: retained historical lease records are nonblocking. Slice B now
+Current state: checkpoint `ae5ad34c` is integrated through merge `74883c6c`,
+so its historical branch may close without closing the lane. Retained
+historical lease records are nonblocking. Slice B now
 persists a canonical active-claim map with revision compare-and-swap, fencing,
 strict recovery metadata, and repository-level atomic acquisition. Access
 planning and profile-lease doctor consume current claims without relying on a
