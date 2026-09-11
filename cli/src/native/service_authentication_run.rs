@@ -21,8 +21,8 @@ use super::service_store::{
 };
 use super::service_trace::service_now_timestamp;
 use super::site_login_recipe::{
-    classify_site_page, load_site_login_recipe, site_login_recipe_digest, SiteLoginRecipe,
-    SitePageEvidence,
+    classify_site_page, load_site_login_recipe, site_login_recipe_digest, PasswordValueSource,
+    SiteLoginRecipe, SitePageEvidence,
 };
 use super::{auth, interaction};
 use chrono::{DateTime, Duration, Utc};
@@ -538,6 +538,100 @@ async fn fill_and_submit(
     click_exact_label(daemon, labels).await
 }
 
+async fn submit_browser_autofilled_password(
+    daemon: &mut DaemonState,
+    selector: &str,
+    labels: &[String],
+) -> Result<(), String> {
+    let selector_json = serde_json::to_string(selector)
+        .map_err(|error| format!("authentication_run_selector_encode_failed:{error}"))?;
+    let labels_json = serde_json::to_string(labels)
+        .map_err(|error| format!("authentication_run_labels_encode_failed:{error}"))?;
+    let script = format!(
+        r#"(async () => {{
+          const selector = {selector_json};
+          const allowed = new Set({labels_json});
+          const visible = (el) => {{
+            if (!el) return false;
+            const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
+            return r.width > 0 && r.height > 0 && s.display !== 'none' &&
+              s.visibility !== 'hidden' && !el.disabled;
+          }};
+          const fields = [...document.querySelectorAll(selector)].filter(visible);
+          if (fields.length !== 1 || !(fields[0] instanceof HTMLInputElement) ||
+              fields[0].type !== 'password') {{
+            return {{submitted: false, fieldCount: fields.length,
+              passwordPresent: false, submitMatchCount: 0}};
+          }}
+          const field = fields[0];
+          field.focus();
+          for (let attempt = 0; attempt < 20 && field.value.length === 0; attempt++) {{
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }}
+          const passwordPresent = field.value.length > 0;
+          if (!passwordPresent) return {{submitted: false, fieldCount: 1,
+            passwordPresent: false, submitMatchCount: 0}};
+          const matches = [...document.querySelectorAll('button,input[type=submit],[role=button]')]
+            .filter(visible)
+            .filter((el) => allowed.has((el.innerText || el.value || el.getAttribute('aria-label') || '').trim()));
+          if (matches.length !== 1) return {{submitted: false, fieldCount: 1,
+            passwordPresent: true, submitMatchCount: matches.length}};
+          matches[0].focus(); matches[0].click();
+          return {{submitted: true, fieldCount: 1, passwordPresent: true,
+            submitMatchCount: 1}};
+        }})()"#
+    );
+    let value = daemon
+        .browser
+        .as_ref()
+        .ok_or_else(|| "authentication_run_retained_browser_not_running".to_string())?
+        .evaluate_with_timeout(&script, 5_000)
+        .await?;
+    if value.get("submitted").and_then(Value::as_bool) == Some(true) {
+        return Ok(());
+    }
+    if value.get("passwordPresent").and_then(Value::as_bool) != Some(true) {
+        return Err("authentication_run_browser_autofill_password_missing".to_string());
+    }
+    Err(format!(
+        "authentication_run_submit_control_ambiguous:{}",
+        value
+            .get("submitMatchCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+    ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PasswordSubmissionSource {
+    Vault,
+    BrowserAutofill,
+}
+
+impl PasswordSubmissionSource {
+    fn provider_id(self) -> &'static str {
+        match self {
+            Self::Vault => "agent-browser.bill-login-v1.vault+im-receipts",
+            Self::BrowserAutofill => {
+                "agent-browser.bill-login-v1.browser-autofill+vault-identifier+im-receipts"
+            }
+        }
+    }
+}
+
+fn password_submission_source(
+    recipe: &SiteLoginRecipe,
+    vault_password: &str,
+) -> PasswordSubmissionSource {
+    if vault_password.is_empty()
+        && recipe.password_value_source == PasswordValueSource::VaultOrBrowserAutofill
+    {
+        PasswordSubmissionSource::BrowserAutofill
+    } else {
+        PasswordSubmissionSource::Vault
+    }
+}
+
 struct OneShotSiteAction(Result<SiteLoginActionReceipt, AuthenticationActionFailure>);
 impl ResponseOnlySiteLoginAction for OneShotSiteAction {
     fn execute(
@@ -1002,21 +1096,34 @@ async fn resume_authentication_run(
                 AuthenticationActionKind::SubmitNativeStoredCredentials,
                 &classified.state_instance_id,
             )?;
-            let outcome = match fill_and_submit(
-                daemon,
-                &selector,
-                &credentials.password,
-                &recipe.password.submit_labels,
-            )
-            .await
-            {
+            let password_source = password_submission_source(&recipe, &credentials.password);
+            let submission = match password_source {
+                PasswordSubmissionSource::Vault => {
+                    fill_and_submit(
+                        daemon,
+                        &selector,
+                        &credentials.password,
+                        &recipe.password.submit_labels,
+                    )
+                    .await
+                }
+                PasswordSubmissionSource::BrowserAutofill => {
+                    submit_browser_autofilled_password(
+                        daemon,
+                        &selector,
+                        &recipe.password.submit_labels,
+                    )
+                    .await
+                }
+            };
+            let outcome = match submission {
                 Ok(()) => fence_im_receipts_watch(&record.run.binding, &watch.watch_id)
                     .await
                     .map(|_| ()),
                 Err(error) => Err(error),
             };
             let action_result = outcome.map(|_| AuthenticationActionReceipt {
-                provider_id: "agent-browser.bill-login-v1.vault+im-receipts".to_string(),
+                provider_id: password_source.provider_id().to_string(),
                 effect_id: effect_id(
                     &run_id,
                     &operation_id,
@@ -1568,6 +1675,27 @@ mod tests {
                 format!("authentication_run_forbidden_field:{field}")
             );
         }
+    }
+
+    #[test]
+    fn empty_vault_password_selects_closed_browser_autofill_without_changing_vault_behavior() {
+        let recipe = load_site_login_recipe("bill-login-v1").unwrap();
+        assert_eq!(
+            password_submission_source(&recipe, ""),
+            PasswordSubmissionSource::BrowserAutofill
+        );
+        assert_eq!(
+            password_submission_source(&recipe, "nonempty-vault-secret"),
+            PasswordSubmissionSource::Vault
+        );
+        assert_eq!(
+            PasswordSubmissionSource::BrowserAutofill.provider_id(),
+            "agent-browser.bill-login-v1.browser-autofill+vault-identifier+im-receipts"
+        );
+        assert_eq!(
+            PasswordSubmissionSource::Vault.provider_id(),
+            "agent-browser.bill-login-v1.vault+im-receipts"
+        );
     }
 }
 

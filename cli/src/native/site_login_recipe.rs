@@ -22,8 +22,15 @@ pub(crate) struct SiteLoginRecipe {
     pub(crate) authenticated_company_path_prefix: String,
     pub(crate) identifier: SiteFormRecipe,
     pub(crate) password: SiteFormRecipe,
+    pub(crate) password_value_source: PasswordValueSource,
     pub(crate) sms_otp: SiteFormRecipe,
     pub(crate) password_persistence: PasswordPersistenceRecipe,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PasswordValueSource {
+    VaultOrBrowserAutofill,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +95,7 @@ fn validate_recipe(recipe: &SiteLoginRecipe) -> Result<(), String> {
         || recipe.sms_otp.field_selectors.is_empty()
         || recipe.identifier.submit_labels != ["Save", "Continue"]
         || recipe.password.submit_labels != ["Sign in"]
+        || recipe.password_value_source != PasswordValueSource::VaultOrBrowserAutofill
         || recipe.sms_otp.submit_labels != ["Continue"]
         || recipe.password_persistence.policy != PasswordPersistencePolicy::Save
     {

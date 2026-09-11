@@ -25,6 +25,7 @@
     ],
     "submitLabels": ["Sign in"]
   },
+  "passwordValueSource": "vault_or_browser_autofill",
   "smsOtp": {
     "fieldSelectors": [
       "input[autocomplete='one-time-code']",

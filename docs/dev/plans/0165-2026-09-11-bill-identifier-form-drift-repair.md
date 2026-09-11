@@ -40,9 +40,10 @@ is durably paused at `awaiting_identifier`, transition 1, with one observation,
 zero action receipts, and no pending effect. Its exact resume failed before a
 credential action because Auth Vault profile `bill-soylei` does not exist. The
 provider returned `effect_uncertain` plus hard stop `blind_retry`, so the live
-sequence stopped without retry. Restoring or explicitly seeding that separate
-sealed-vault entry is the remaining consumer gate; browser profile continuity
-does not prove Auth Vault continuity.
+sequence stopped without retry. Read-only metadata proves the preserved Chrome
+profile has one BILL password-manager login while no live BILL password exists
+in the environment or Auth Vault. The remaining repair must keep that password
+inside Chrome rather than extracting or duplicating it.
 
 ## Consolidated batch
 
@@ -56,6 +57,16 @@ well as the legacy `exclusive` task lease, while continuing to reject released,
 expired, conflicted, and human-takeover leases. No broader login provider or
 website interaction feature is included.
 
+The bounded remediation adds one BILL-recipe password source:
+`browser_autofill`. The sealed provider may submit only when the exact closed
+password selector is visible, contains a nonempty browser-provided value, and
+has exactly one allowed submit control. It returns only boolean/count evidence,
+never the value. The Auth Vault entry supplies the username only; an empty vault
+password is never filled or submitted. Existing nonempty vault-password behavior
+and every origin, state-instance, effect fence, SMS-watch, and replay guard stay
+unchanged. No generic password-manager extraction or cross-site autofill API is
+included.
+
 ## Delivery sequence and budget
 
 1. Produce focused red and green classifier evidence.
@@ -63,8 +74,11 @@ website interaction feature is included.
    and diff checks against the frozen source.
 3. Commit and integrate the repair, build one production candidate, and apply
    it once through `install workstation`.
-4. Verify installed identity and retained profile/browser continuity, then run
-   one sealed BILL reauthentication and a read-only consumer inspection.
+4. Verify installed identity and retained profile/browser continuity, seed the
+   identifier-only `bill-soylei` Auth Vault entry without a password value,
+   then inspect the paused run before one sealed resume.
+5. On authentication success, perform the read-only consumer inspection. On
+   any uncertain or changed state, stop without retry.
 
 Overall active-work ceiling is 45 minutes. The batch permits one source-frozen
 production build, one workstation install transaction, one sealed
