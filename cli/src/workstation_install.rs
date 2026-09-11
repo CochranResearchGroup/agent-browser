@@ -5689,6 +5689,11 @@ fn install_doctor_issues_are_advisory(data: &Value, issues: &[Value]) -> bool {
         code == Some("service_duplicate_profile_pressure")
             || issue.get("code").and_then(Value::as_str)
                 == Some("active_runtime_manual_preservation")
+            || matches!(
+                code,
+                Some("profile_lease_legacy_principal_unproven")
+                    | Some("profile_lease_owner_generation_or_binding_mismatch")
+            )
             || (issue.get("severity").and_then(Value::as_str) == Some("warning")
                 && code.is_some_and(|code| code.starts_with("profile_lease_")))
             || (inactive_supervisors && supervisor_issues.contains(issue))
@@ -16178,6 +16183,7 @@ mod tests {
                     {"code": "runtime_monitor_not_ready"},
                     {"code": "runtime_pressure_ownership_unknown"},
                     {"code": "service_duplicate_profile_pressure"},
+                    {"code": "profile_lease_legacy_principal_unproven"},
                 ],
                 "serviceResources": {
                     "available": true,
