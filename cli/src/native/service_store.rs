@@ -5,14 +5,16 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::fs::{self, File, OpenOptions};
+use std::io::{Seek, SeekFrom, Write};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, TryLockError};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::process_identity::{observe_process, ProcessObservation};
 use crate::runtime_owner_transfer::{RuntimeLifecycleRecord, RuntimeOwnerRegistry};
 
 use super::service_model::{RemoteViewHandoff, ServiceState};
@@ -39,6 +41,7 @@ static SERVICE_STATE_COMMAND_LOCK_TIMEOUT_TOKEN: AtomicU64 = AtomicU64::new(1);
 const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
 const MAX_SERVICE_STATE_COMMAND_LOCK_TIMEOUT_MS: u64 = 300_000;
 const SERVICE_STATE_LOCK_RECENT_CAPACITY: usize = 32;
+const SERVICE_STATE_LOCK_HOLDER_SCHEMA_VERSION: &str = "agent-browser.service-state-lock-holder.v1";
 pub(crate) const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -88,6 +91,36 @@ struct ServiceStateLockTelemetryState {
     active: Vec<ActiveServiceStateLock>,
     recent: VecDeque<ServiceStateLockActivity>,
     counters: ServiceStateLockCounters,
+}
+
+/// Privacy-bounded cross-process evidence for the current exclusive file-lock
+/// holder. This sidecar is intentionally independent from Service State so a
+/// blocked contender can read it without acquiring the contested lock.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DurableServiceStateLockHolder {
+    schema_version: String,
+    holder_token: String,
+    pid: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    start_token: Option<String>,
+    executable_generation: String,
+    operation: String,
+    mode: String,
+    phase: String,
+    acquired_at_unix_ms: u128,
+    wait_ms: u64,
+    hold_elapsed_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    state_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    state_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    job_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    session_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    profile_count: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -181,9 +214,14 @@ pub trait ServiceStateStore {
 
 pub trait ServiceStateRepository {
     fn load_snapshot(&self) -> Result<ServiceState, String>;
+
+    /// Apply a pure in-memory state transformation. Durable repositories may
+    /// replay the closure once against a newer revision when a concurrent
+    /// writer commits while this candidate is being prepared. Callers must do
+    /// external I/O before or after this closure, never inside it.
     fn mutate<R>(
         &self,
-        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+        mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
     ) -> Result<R, String>;
 }
 
@@ -394,6 +432,8 @@ impl ServiceStateStore for JsonServiceStateStore {
         &self,
         state: &ServiceState,
     ) -> Result<Option<ServiceStateTransaction>, String> {
+        #[cfg(test)]
+        wait_for_production_scale_prepare_barrier()?;
         prepare_service_state_transaction(state).map(Some)
     }
 
@@ -404,6 +444,28 @@ impl ServiceStateStore for JsonServiceStateStore {
     fn save_prepared(&self, transaction: &ServiceStateTransaction) -> Result<(), String> {
         commit_service_state_transaction(self, transaction)
     }
+}
+
+#[cfg(test)]
+fn wait_for_production_scale_prepare_barrier() -> Result<(), String> {
+    let Some(ready_path) = std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_READY_PATH")
+    else {
+        return Ok(());
+    };
+    let release_path = PathBuf::from(
+        std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_RELEASE_PATH")
+            .ok_or_else(|| "production_scale_prepare_release_path_missing".to_string())?,
+    );
+    fs::write(PathBuf::from(ready_path), b"ready")
+        .map_err(|error| format!("production_scale_prepare_ready_write_failed:{error}"))?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !release_path.exists() {
+        if Instant::now() >= deadline {
+            return Err("production_scale_helper_release_timeout".to_string());
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    Ok(())
 }
 
 /// Parse one Service State document with the same bounded-stack reader used by
@@ -493,7 +555,7 @@ where
 
     fn mutate<R>(
         &self,
-        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+        mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
     ) -> Result<R, String> {
         self.mutate_with_lock_timeout(self.lock_timeout, mutator)
     }
@@ -539,20 +601,20 @@ where
     pub(crate) fn mutate_with_lock_timeout<R>(
         &self,
         timeout: Duration,
-        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+        mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
     ) -> Result<R, String> {
         self.mutate_if_with_lock_timeout(timeout, |_| true, mutator)
             .map(|result| result.expect("unconditional mutation is always admitted"))
     }
 
-    /// Evaluate a mutation predicate against the current snapshot under the same
-    /// exclusive lock as the update. A false predicate performs no save and does
-    /// not advance the authority revision. Pending transaction recovery retains
-    /// its ordinary load semantics.
+    /// Evaluate a mutation predicate against the same baseline used to prepare
+    /// the update. A false predicate performs no save and does not advance the
+    /// authority revision. One stale candidate is replayed from a fresh load;
+    /// transaction recovery retains its ordinary load semantics.
     pub(crate) fn mutate_if<R>(
         &self,
-        predicate: impl FnOnce(&ServiceState) -> bool,
-        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+        predicate: impl FnMut(&ServiceState) -> bool,
+        mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
     ) -> Result<Option<R>, String> {
         self.mutate_if_with_lock_timeout(self.lock_timeout, predicate, mutator)
     }
@@ -560,8 +622,8 @@ where
     fn mutate_if_with_lock_timeout<R>(
         &self,
         timeout: Duration,
-        predicate: impl FnOnce(&ServiceState) -> bool,
-        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+        mut predicate: impl FnMut(&ServiceState) -> bool,
+        mut mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
     ) -> Result<Option<R>, String> {
         let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
@@ -570,51 +632,80 @@ where
                 .store
                 .state_path()
                 .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
-            let _file_guard = acquire_service_state_file_lock_until(
-                path,
-                ServiceStateFileLockMode::Exclusive,
-                deadline,
-                "prepared_mutation",
-            )?;
-            let process_guard =
-                acquire_service_state_process_lock(lock, deadline, "prepared_mutation")?;
-            let baseline = if self.store.recovery_required() {
-                self.store.load()?
-            } else {
-                self.store.load_without_recovery()?
-            };
-            if !predicate(&baseline) {
-                return Ok(None);
+            for attempt in 0..2 {
+                let baseline = self.load_snapshot_with_lock_timeout(timeout)?;
+                if !predicate(&baseline) {
+                    return Ok(None);
+                }
+                let baseline_revision = baseline.state_revision;
+                let mut candidate = baseline;
+                candidate.state_revision = baseline_revision
+                    .checked_add(1)
+                    .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+                let result = mutator(&mut candidate)?;
+                let transaction = self
+                    .store
+                    .prepare_save(&candidate)?
+                    .ok_or_else(|| "service_state_prepared_save_missing".to_string())?;
+
+                let commit_deadline = Instant::now() + timeout.max(Duration::from_millis(1));
+                let mut file_guard = acquire_service_state_file_lock_until(
+                    path,
+                    ServiceStateFileLockMode::Exclusive,
+                    commit_deadline,
+                    "prepared_commit",
+                )?;
+                let process_guard =
+                    acquire_service_state_process_lock(lock, commit_deadline, "prepared_commit")?;
+                file_guard.set_state_summary(&candidate, Some(transaction.state_payload.len()));
+                file_guard.set_phase("load_current");
+                let current = if self.store.recovery_required() {
+                    self.store.load()?
+                } else {
+                    self.store.load_without_recovery()?
+                };
+                if current.state_revision != baseline_revision {
+                    if attempt == 0 {
+                        record_service_state_lock_terminal(
+                            "file",
+                            "prepared_commit",
+                            "exclusive",
+                            "stale_candidate_replay",
+                            Duration::ZERO,
+                        );
+                        continue;
+                    }
+                    return Err(format!(
+                        "service_state_stale_revision: expected={baseline_revision}; actual={}",
+                        current.state_revision
+                    ));
+                }
+                drop(process_guard);
+                file_guard.set_phase("commit_prepared");
+                self.store.save_prepared(&transaction)?;
+                return Ok(Some(result));
             }
-            let baseline_revision = baseline.state_revision;
-            let mut candidate = baseline;
-            candidate.state_revision = baseline_revision
-                .checked_add(1)
-                .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
-            drop(process_guard);
-            let result = mutator(&mut candidate)?;
-            let transaction = self
-                .store
-                .prepare_save(&candidate)?
-                .ok_or_else(|| "service_state_prepared_save_missing".to_string())?;
-            self.store.save_prepared(&transaction)?;
-            return Ok(Some(result));
+            unreachable!("prepared mutation loop returns after at most one stale retry");
         }
 
         if let Some(path) = self.store.state_path() {
-            let _file_guard = acquire_service_state_file_lock_until(
+            let mut file_guard = acquire_service_state_file_lock_until(
                 path,
                 ServiceStateFileLockMode::Exclusive,
                 deadline,
                 "mutate",
             )?;
             let process_guard = acquire_service_state_process_lock(lock, deadline, "mutate")?;
+            file_guard.set_phase("load");
             let mut state = self.store.load()?;
+            file_guard.set_state_summary(&state, None);
             if !predicate(&state) {
                 return Ok(None);
             }
+            file_guard.set_phase("mutate");
             let result = mutator(&mut state)?;
             drop(process_guard);
+            file_guard.set_phase("serialize_commit");
             self.store.save(&state)?;
             return Ok(Some(result));
         }
@@ -908,7 +999,7 @@ pub fn load_default_service_state_snapshot() -> Result<ServiceState, String> {
 /// service-state control point used by queued service mutations and job audit
 /// updates until a dedicated service database exists.
 pub fn mutate_default_service_state<R>(
-    mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+    mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
 ) -> Result<R, String> {
     LockedServiceStateRepository::default_json()?.mutate(mutator)
 }
@@ -1513,7 +1604,7 @@ fn commit_service_state_transaction(
     clear_service_state_transaction(&transaction_path)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ServiceStateFileLockMode {
     Shared,
     Exclusive,
@@ -1531,6 +1622,48 @@ impl ServiceStateFileLockMode {
 struct ServiceStateFileGuard {
     file: File,
     token: u64,
+    acquired_at: Instant,
+    holder: Option<(PathBuf, DurableServiceStateLockHolder)>,
+}
+
+impl ServiceStateFileGuard {
+    fn set_phase(&mut self, phase: &'static str) {
+        let Some((path, holder)) = self.holder.as_mut() else {
+            return;
+        };
+        holder.phase = phase.to_string();
+        holder.hold_elapsed_ms = elapsed_millis(self.acquired_at.elapsed());
+        if persist_durable_service_state_lock_holder(path, holder).is_err() {
+            record_service_state_lock_terminal(
+                "file",
+                "holder_phase_update",
+                "exclusive",
+                "holder_telemetry_write_failed",
+                Duration::ZERO,
+            );
+        }
+    }
+
+    fn set_state_summary(&mut self, state: &ServiceState, state_bytes: Option<usize>) {
+        let Some((path, holder)) = self.holder.as_mut() else {
+            return;
+        };
+        holder.hold_elapsed_ms = elapsed_millis(self.acquired_at.elapsed());
+        holder.state_bytes = state_bytes.map(|value| value.min(u64::MAX as usize) as u64);
+        holder.state_revision = Some(state.state_revision);
+        holder.job_count = Some(state.jobs.len().min(u64::MAX as usize) as u64);
+        holder.session_count = Some(state.sessions.len().min(u64::MAX as usize) as u64);
+        holder.profile_count = Some(state.profiles.len().min(u64::MAX as usize) as u64);
+        if persist_durable_service_state_lock_holder(path, holder).is_err() {
+            record_service_state_lock_terminal(
+                "file",
+                "holder_state_summary_update",
+                "exclusive",
+                "holder_telemetry_write_failed",
+                Duration::ZERO,
+            );
+        }
+    }
 }
 
 impl Deref for ServiceStateFileGuard {
@@ -1543,6 +1676,9 @@ impl Deref for ServiceStateFileGuard {
 
 impl Drop for ServiceStateFileGuard {
     fn drop(&mut self) {
+        if let Some((path, holder)) = self.holder.as_ref() {
+            clear_durable_service_state_lock_holder(path, &holder.holder_token);
+        }
         record_service_state_lock_released(self.token);
     }
 }
@@ -1553,6 +1689,184 @@ fn service_state_lock_path(path: &Path) -> PathBuf {
         .and_then(|name| name.to_str())
         .unwrap_or(SERVICE_STATE_FILENAME);
     path.with_file_name(format!("{file_name}.lock"))
+}
+
+fn service_state_lock_holder_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(SERVICE_STATE_FILENAME);
+    path.with_file_name(format!("{file_name}.lock-holder.json"))
+}
+
+fn current_service_state_lock_holder(
+    operation: &'static str,
+    mode: ServiceStateFileLockMode,
+    wait: Duration,
+) -> DurableServiceStateLockHolder {
+    let pid = std::process::id();
+    let start_token = match observe_process(pid) {
+        ProcessObservation::Observed(identity) => identity.start_token,
+        ProcessObservation::Missing | ProcessObservation::Failed { .. } => None,
+    };
+    let local_token = SERVICE_STATE_LOCK_TOKEN.fetch_add(1, Ordering::Relaxed);
+    let executable_generation = format!(
+        "{}:{}",
+        env!("CARGO_PKG_VERSION"),
+        option_env!("AGENT_BROWSER_BUILD_SOURCE_REVISION").unwrap_or("unknown")
+    );
+    DurableServiceStateLockHolder {
+        schema_version: SERVICE_STATE_LOCK_HOLDER_SCHEMA_VERSION.to_string(),
+        holder_token: format!(
+            "{pid}:{}:{local_token}",
+            start_token.as_deref().unwrap_or("unknown")
+        ),
+        pid,
+        start_token,
+        executable_generation,
+        operation: operation.to_string(),
+        mode: mode.as_str().to_string(),
+        phase: "holding".to_string(),
+        acquired_at_unix_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+        wait_ms: elapsed_millis(wait),
+        hold_elapsed_ms: 0,
+        state_bytes: None,
+        state_revision: None,
+        job_count: None,
+        session_count: None,
+        profile_count: None,
+    }
+}
+
+fn persist_durable_service_state_lock_holder(
+    path: &Path,
+    holder: &DurableServiceStateLockHolder,
+) -> Result<(), String> {
+    let payload = format!(
+        "{}\n",
+        serde_json::to_string_pretty(holder)
+            .map_err(|error| format!("Failed to serialize Service State lock holder: {error}"))?
+    );
+    let temp_path = write_temporary(path, &payload, "Service State lock holder")?;
+    replace_from_temporary(&temp_path, path, "Service State lock holder")
+}
+
+fn persist_service_state_lock_token(file: &mut File, holder_token: &str) -> Result<(), String> {
+    file.seek(SeekFrom::Start(0))
+        .map_err(|error| format!("Failed to seek Service State lock token: {error}"))?;
+    file.set_len(0)
+        .map_err(|error| format!("Failed to truncate Service State lock token: {error}"))?;
+    file.write_all(format!("{holder_token}\n").as_bytes())
+        .map_err(|error| format!("Failed to write Service State lock token: {error}"))?;
+    file.sync_data()
+        .map_err(|error| format!("Failed to sync Service State lock token: {error}"))
+}
+
+fn clear_durable_service_state_lock_holder(path: &Path, holder_token: &str) {
+    let current = fs::read_to_string(path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<DurableServiceStateLockHolder>(&raw).ok());
+    if current
+        .as_ref()
+        .is_some_and(|holder| holder.holder_token == holder_token)
+    {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn durable_service_state_lock_holder_attribution(state_path: &Path) -> String {
+    let path = service_state_lock_holder_path(state_path);
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return "holder_status=unknown_missing".to_string()
+        }
+        Err(_) => return "holder_status=unknown_unreadable".to_string(),
+    };
+    let holder = match serde_json::from_str::<DurableServiceStateLockHolder>(&raw) {
+        Ok(holder) if holder.schema_version == SERVICE_STATE_LOCK_HOLDER_SCHEMA_VERSION => holder,
+        Ok(_) => return "holder_status=unknown_schema".to_string(),
+        Err(_) => return "holder_status=unknown_corrupt".to_string(),
+    };
+    let lock_token = match fs::read_to_string(service_state_lock_path(state_path)) {
+        Ok(token) if !token.trim().is_empty() => token,
+        Ok(_) => return "holder_status=unknown_lock_token_missing".to_string(),
+        Err(_) => return "holder_status=unknown_lock_token_unreadable".to_string(),
+    };
+    if lock_token.trim() != holder.holder_token {
+        return "holder_status=unknown_token_mismatch".to_string();
+    }
+    match observe_process(holder.pid) {
+        ProcessObservation::Observed(identity)
+            if holder.start_token.is_some() && holder.start_token == identity.start_token =>
+        {
+            let state_bytes = holder
+                .state_bytes
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let state_revision = holder
+                .state_revision
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let job_count = holder
+                .job_count
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let session_count = holder
+                .session_count
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let profile_count = holder
+                .profile_count
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            format!(
+                "holder_status=active; holder_pid={}; holder_start_token={}; holder_generation={}; holder_operation={}; holder_mode={}; holder_phase={}; holder_token={}; holder_acquired_at_unix_ms={}; holder_wait_ms={}; holder_hold_elapsed_ms={}; holder_state_bytes={}; holder_state_revision={}; holder_job_count={}; holder_session_count={}; holder_profile_count={}",
+                holder.pid,
+                holder.start_token.as_deref().unwrap_or("unknown"),
+                holder.executable_generation,
+                holder.operation,
+                holder.mode,
+                holder.phase,
+                holder.holder_token,
+                holder.acquired_at_unix_ms,
+                holder.wait_ms,
+                holder.hold_elapsed_ms,
+                state_bytes,
+                state_revision,
+                job_count,
+                session_count,
+                profile_count,
+            )
+        }
+        ProcessObservation::Observed(identity)
+            if holder.start_token.is_none() || identity.start_token.is_none() =>
+        {
+            format!(
+                "holder_status=unknown_identity; holder_pid={}; holder_generation={}; holder_operation={}; holder_mode={}; holder_phase={}",
+                holder.pid,
+                holder.executable_generation,
+                holder.operation,
+                holder.mode,
+                holder.phase
+            )
+        }
+        ProcessObservation::Observed(_) => format!(
+            "holder_status=stale_identity; holder_pid={}; holder_operation={}",
+            holder.pid, holder.operation
+        ),
+        ProcessObservation::Missing => format!(
+            "holder_status=stale_missing; holder_pid={}; holder_operation={}",
+            holder.pid, holder.operation
+        ),
+        ProcessObservation::Failed { .. } => format!(
+            "holder_status=unknown_observation; holder_pid={}; holder_operation={}",
+            holder.pid, holder.operation
+        ),
+    }
 }
 
 fn acquire_service_state_file_lock(
@@ -1584,7 +1898,7 @@ fn acquire_service_state_file_lock_until(
         })?;
     }
     let lock_path = service_state_lock_path(state_path);
-    let file = OpenOptions::new()
+    let mut file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
@@ -1604,13 +1918,46 @@ fn acquire_service_state_file_lock_until(
         };
         match result {
             Ok(()) => {
-                let token = record_service_state_lock_acquired(
-                    "file",
-                    operation,
-                    mode.as_str(),
-                    started.elapsed(),
-                );
-                return Ok(ServiceStateFileGuard { file, token });
+                let wait = started.elapsed();
+                let token =
+                    record_service_state_lock_acquired("file", operation, mode.as_str(), wait);
+                let holder = if mode == ServiceStateFileLockMode::Exclusive {
+                    let holder_path = service_state_lock_holder_path(state_path);
+                    let holder = current_service_state_lock_holder(operation, mode, wait);
+                    if let Err(error) =
+                        persist_service_state_lock_token(&mut file, &holder.holder_token)
+                    {
+                        record_service_state_lock_terminal(
+                            "file",
+                            operation,
+                            mode.as_str(),
+                            "holder_lock_token_write_failed",
+                            wait,
+                        );
+                        record_service_state_lock_released(token);
+                        return Err(error);
+                    }
+                    if persist_durable_service_state_lock_holder(&holder_path, &holder).is_ok() {
+                        Some((holder_path, holder))
+                    } else {
+                        record_service_state_lock_terminal(
+                            "file",
+                            operation,
+                            mode.as_str(),
+                            "holder_telemetry_write_failed",
+                            started.elapsed(),
+                        );
+                        None
+                    }
+                } else {
+                    None
+                };
+                return Ok(ServiceStateFileGuard {
+                    file,
+                    token,
+                    acquired_at: Instant::now(),
+                    holder,
+                });
             }
             Err(std::fs::TryLockError::WouldBlock) if Instant::now() >= deadline => {
                 record_service_state_lock_timeout(
@@ -1619,9 +1966,20 @@ fn acquire_service_state_file_lock_until(
                     mode.as_str(),
                     started.elapsed(),
                 );
+                let holder_attribution = match file.try_lock_shared() {
+                    Err(std::fs::TryLockError::WouldBlock) => {
+                        durable_service_state_lock_holder_attribution(state_path)
+                    }
+                    Ok(()) => {
+                        let _ = file.unlock();
+                        "holder_status=unknown_released_race".to_string()
+                    }
+                    Err(_) => "holder_status=unknown_lock_probe".to_string(),
+                };
                 return Err(format!(
-                    "service_state_lock_timeout: file lock; waited_ms={}",
-                    started.elapsed().as_millis()
+                    "service_state_lock_timeout: file lock; waited_ms={}; {}",
+                    started.elapsed().as_millis(),
+                    holder_attribution
                 ));
             }
             Err(std::fs::TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(2)),
@@ -1647,8 +2005,8 @@ fn acquire_service_state_file_lock_until(
 mod tests {
     use super::*;
     use crate::native::service_model::{
-        BrowserHealth, BrowserHost, BrowserProcess, DisplayAllocation, RemoteViewAcquisitionLease,
-        RemoteViewHandoff, SitePolicy,
+        BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        DisplayAllocation, RemoteViewAcquisitionLease, RemoteViewHandoff, SitePolicy,
     };
     use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
     use crate::test_utils::EnvGuard;
@@ -2154,6 +2512,75 @@ mod tests {
     }
 
     #[test]
+    fn durable_holder_records_safe_timing_and_coarse_state_summary_only() {
+        let path = unique_state_path("service-state-durable-holder-summary");
+        let mut state = ServiceState::default();
+        state.jobs.insert(
+            "private-job-marker".to_string(),
+            crate::native::service_model::ServiceJob {
+                id: "private-job-marker".to_string(),
+                result: Some(serde_json::json!({
+                    "url": "https://private.example.invalid/secret"
+                })),
+                ..crate::native::service_model::ServiceJob::default()
+            },
+        );
+        state.sessions.insert(
+            "private-session-marker".to_string(),
+            BrowserSession {
+                id: "private-session-marker".to_string(),
+                ..BrowserSession::default()
+            },
+        );
+        state.profiles.insert(
+            "private-profile-marker".to_string(),
+            BrowserProfile {
+                id: "private-profile-marker".to_string(),
+                name: "private-profile-marker".to_string(),
+                user_data_dir: Some("/private/profile/path".to_string()),
+                ..BrowserProfile::default()
+            },
+        );
+
+        let mut guard = acquire_service_state_file_lock_until(
+            &path,
+            ServiceStateFileLockMode::Exclusive,
+            Instant::now() + Duration::from_millis(20),
+            "durable_holder_summary_fixture",
+        )
+        .expect("fixture file lock should be acquired");
+        guard.set_state_summary(&state, Some(9_642_672));
+        guard.set_phase("commit_prepared");
+
+        let holder_path = service_state_lock_holder_path(&path);
+        let raw = fs::read_to_string(&holder_path).expect("holder sidecar should be readable");
+        let holder: DurableServiceStateLockHolder =
+            serde_json::from_str(&raw).expect("holder sidecar should be valid JSON");
+        assert_eq!(holder.state_bytes, Some(9_642_672));
+        assert_eq!(holder.state_revision, Some(0));
+        assert_eq!(holder.job_count, Some(1));
+        assert_eq!(holder.session_count, Some(1));
+        assert_eq!(holder.profile_count, Some(1));
+        assert_eq!(holder.phase, "commit_prepared");
+        for private_marker in [
+            "private-job-marker",
+            "private-session-marker",
+            "private-profile-marker",
+            "private.example.invalid",
+            "/private/profile/path",
+        ] {
+            assert!(
+                !raw.contains(private_marker),
+                "leaked {private_marker}: {raw}"
+            );
+        }
+
+        drop(guard);
+        assert!(!holder_path.exists());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
     fn process_lock_diagnostics_cleanup_and_recover_after_unwind() {
         let lock = Box::leak(Box::new(Mutex::new(())));
         let panic_result = std::panic::catch_unwind(|| {
@@ -2554,6 +2981,277 @@ mod tests {
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
+    fn production_scale_state() -> ServiceState {
+        let mut state = ServiceState::default();
+        let payload = "x".repeat(45_000);
+        for index in 0..200 {
+            let id = format!("retained-job-{index:03}");
+            state.jobs.insert(
+                id.clone(),
+                crate::native::service_model::ServiceJob {
+                    id,
+                    action: ["launch", "snapshot", "click", "tab_new"][index % 4].to_string(),
+                    result: Some(serde_json::json!({ "boundedFixturePayload": payload.clone() })),
+                    ..crate::native::service_model::ServiceJob::default()
+                },
+            );
+        }
+        for index in 0..261 {
+            let id = format!("retained-session-{index:03}");
+            state.sessions.insert(
+                id.clone(),
+                BrowserSession {
+                    id,
+                    ..BrowserSession::default()
+                },
+            );
+        }
+        for index in 0..91 {
+            let id = format!("retained-profile-{index:03}");
+            state.profiles.insert(
+                id.clone(),
+                BrowserProfile {
+                    id: id.clone(),
+                    name: id,
+                    ..BrowserProfile::default()
+                },
+            );
+        }
+        state.unknown_fields.insert(
+            "futureSyntheticAuthorityMetadata".to_string(),
+            serde_json::json!({ "opaqueRevision": 7, "interpreted": false }),
+        );
+        state
+    }
+
+    #[test]
+    fn production_scale_mutation_helper() {
+        let Some(state_path) = std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_STATE_PATH")
+        else {
+            return;
+        };
+        let outcome_path = PathBuf::from(
+            std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_OUTCOME_PATH")
+                .expect("production-scale helper outcome path should be supplied"),
+        );
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(
+            PathBuf::from(state_path),
+        ));
+        let mut mutator_invocations = 0_u64;
+        let outcome = repository.mutate(|state| {
+            mutator_invocations += 1;
+            state.jobs.insert(
+                "slow-preparation-effect".to_string(),
+                crate::native::service_model::ServiceJob {
+                    id: "slow-preparation-effect".to_string(),
+                    action: "snapshot".to_string(),
+                    ..crate::native::service_model::ServiceJob::default()
+                },
+            );
+            Ok(())
+        });
+        let outcome = match outcome {
+            Ok(()) => format!("ok:{mutator_invocations}"),
+            Err(error) => format!("error:{error}"),
+        };
+        fs::write(outcome_path, outcome).expect("helper outcome should be recorded");
+    }
+
+    #[test]
+    fn production_scale_snapshot_helper() {
+        let Some(state_path) =
+            std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_READER_STATE_PATH")
+        else {
+            return;
+        };
+        let outcome_path = PathBuf::from(
+            std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_READER_OUTCOME_PATH")
+                .expect("production-scale reader outcome path should be supplied"),
+        );
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(
+            PathBuf::from(state_path),
+        ));
+        let outcome = repository.load_snapshot().and_then(|state| {
+            if state.jobs.len() < 200 || state.sessions.len() < 261 || state.profiles.len() < 91 {
+                return Err("production_scale_reader_observed_incomplete_state".to_string());
+            }
+            Ok(format!("ok:{}", state.state_revision))
+        });
+        fs::write(
+            outcome_path,
+            outcome.unwrap_or_else(|error| format!("error:{error}")),
+        )
+        .expect("reader outcome should be recorded");
+    }
+
+    #[test]
+    fn production_scale_independent_mutations_do_not_timeout_behind_slow_preparation() {
+        const MINIMUM_FIXTURE_BYTES: u64 = 8 * 1024 * 1024;
+
+        let path = unique_state_path("production-scale-cross-process-mutation");
+        let ready_path = path.with_extension("helper-ready");
+        let release_path = path.with_extension("helper-release");
+        let outcome_path = path.with_extension("helper-outcome");
+        let store = JsonServiceStateStore::new(&path);
+        store
+            .save(&production_scale_state())
+            .expect("production-scale fixture should save");
+        let fixture_bytes = fs::metadata(&path)
+            .expect("production-scale fixture should exist")
+            .len();
+        assert!(
+            fixture_bytes >= MINIMUM_FIXTURE_BYTES,
+            "production-scale fixture was {fixture_bytes} bytes"
+        );
+
+        let mut child = std::process::Command::new(
+            std::env::current_exe().expect("current Rust test executable should resolve"),
+        )
+        .args([
+            "--exact",
+            "native::service_store::tests::production_scale_mutation_helper",
+            "--nocapture",
+        ])
+        .env("AGENT_BROWSER_TEST_PRODUCTION_SCALE_STATE_PATH", &path)
+        .env(
+            "AGENT_BROWSER_TEST_PRODUCTION_SCALE_READY_PATH",
+            &ready_path,
+        )
+        .env(
+            "AGENT_BROWSER_TEST_PRODUCTION_SCALE_RELEASE_PATH",
+            &release_path,
+        )
+        .env(
+            "AGENT_BROWSER_TEST_PRODUCTION_SCALE_OUTCOME_PATH",
+            &outcome_path,
+        )
+        .spawn()
+        .expect("production-scale mutation helper should start");
+
+        let ready_deadline = Instant::now() + Duration::from_secs(10);
+        while !ready_path.exists() {
+            assert!(
+                Instant::now() < ready_deadline,
+                "production-scale mutation helper did not become ready"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+
+        let mut readers = Vec::new();
+        for index in 0..2 {
+            let reader_outcome_path = path.with_extension(format!("reader-{index}-outcome"));
+            let child = std::process::Command::new(
+                std::env::current_exe().expect("current Rust test executable should resolve"),
+            )
+            .args([
+                "--exact",
+                "native::service_store::tests::production_scale_snapshot_helper",
+                "--nocapture",
+            ])
+            .env(
+                "AGENT_BROWSER_TEST_PRODUCTION_SCALE_READER_STATE_PATH",
+                &path,
+            )
+            .env(
+                "AGENT_BROWSER_TEST_PRODUCTION_SCALE_READER_OUTCOME_PATH",
+                &reader_outcome_path,
+            )
+            .spawn()
+            .expect("production-scale snapshot reader should start");
+            readers.push((child, reader_outcome_path));
+        }
+
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+        let started = Instant::now();
+        let contender = repository.mutate(|state| {
+            state.jobs.insert(
+                "contender-effect".to_string(),
+                crate::native::service_model::ServiceJob {
+                    id: "contender-effect".to_string(),
+                    action: "click".to_string(),
+                    ..crate::native::service_model::ServiceJob::default()
+                },
+            );
+            Ok(())
+        });
+        let elapsed = started.elapsed();
+
+        fs::write(&release_path, b"release").expect("helper should be released");
+        assert!(child.wait().expect("helper should exit").success());
+        for (mut reader, outcome_path) in readers {
+            assert!(reader
+                .wait()
+                .expect("snapshot reader should exit")
+                .success());
+            let outcome = fs::read_to_string(outcome_path)
+                .expect("snapshot reader should record its outcome");
+            assert!(outcome.starts_with("ok:"), "{outcome}");
+        }
+        let helper_outcome = fs::read_to_string(&outcome_path)
+            .expect("helper should record its terminal mutation outcome");
+        let diagnostics = service_state_lock_diagnostics();
+        let contender_commit = diagnostics
+            .recent
+            .iter()
+            .rev()
+            .find(|activity| {
+                activity.lock_kind == "file"
+                    && activity.operation == "prepared_commit"
+                    && activity.mode == "exclusive"
+                    && activity.phase == "released"
+            })
+            .expect("contender commit lock activity should be retained");
+        let contender_commit_hold_ms = contender_commit
+            .hold_ms
+            .expect("released contender commit should expose hold duration");
+        let contender_commit_wait_ms = contender_commit.wait_ms;
+        let final_state = store
+            .load()
+            .expect("final production-scale state should load");
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+
+        assert!(
+            contender.is_ok(),
+            "production-scale contender failed after {} ms: {}",
+            elapsed.as_millis(),
+            contender.expect_err("failed contender should retain its exact error")
+        );
+        assert_eq!(
+            helper_outcome, "ok:2",
+            "the stale prepared candidate should replay exactly once"
+        );
+        assert_eq!(final_state.state_revision, 2);
+        assert!(final_state.jobs.contains_key("contender-effect"));
+        assert!(final_state.jobs.contains_key("slow-preparation-effect"));
+        assert_eq!(
+            final_state
+                .jobs
+                .keys()
+                .filter(|id| id.as_str() == "slow-preparation-effect")
+                .count(),
+            1
+        );
+        assert!(
+            elapsed < Duration::from_millis(900),
+            "production-scale contender used insufficient one-second headroom: {} ms",
+            elapsed.as_millis()
+        );
+        assert!(
+            contender_commit_hold_ms < 500,
+            "production-scale exclusive commit held for {contender_commit_hold_ms} ms"
+        );
+        assert_eq!(
+            final_state
+                .unknown_fields
+                .get("futureSyntheticAuthorityMetadata"),
+            Some(&serde_json::json!({ "opaqueRevision": 7, "interpreted": false }))
+        );
+        eprintln!(
+            "production_scale_cross_process_receipt fixture_bytes={fixture_bytes} contender_elapsed_ms={} commit_wait_ms={contender_commit_wait_ms} commit_hold_ms={contender_commit_hold_ms} helper_outcome={helper_outcome}",
+            elapsed.as_millis(),
+        );
+    }
+
     #[test]
     fn cross_process_file_lock_helper() {
         let Some(state_path) = std::env::var_os("AGENT_BROWSER_TEST_LOCK_HELPER_STATE_PATH") else {
@@ -2573,6 +3271,9 @@ mod tests {
         )
         .expect("child process should acquire the fixture file lock");
         fs::write(&ready_path, b"ready").expect("child should publish lock readiness");
+        if std::env::var_os("AGENT_BROWSER_TEST_LOCK_HELPER_EXIT_WITHOUT_DROP").is_some() {
+            std::process::exit(0);
+        }
         let deadline = Instant::now() + Duration::from_secs(5);
         while !release_path.exists() {
             assert!(
@@ -2601,6 +3302,7 @@ mod tests {
         .env("AGENT_BROWSER_TEST_LOCK_HELPER_RELEASE_PATH", &release_path)
         .spawn()
         .expect("cross-process lock helper should start");
+        let child_pid = child.id();
         let ready_deadline = Instant::now() + Duration::from_secs(5);
         while !ready_path.exists() {
             assert!(
@@ -2618,12 +3320,146 @@ mod tests {
             })
             .expect_err("independent process lock must block mutation entry");
         assert!(error.starts_with("service_state_lock_timeout: file lock; waited_ms="));
+        match observe_process(child_pid) {
+            ProcessObservation::Observed(identity) if identity.start_token.is_some() => {
+                assert!(error.contains("holder_status=active"), "{error}");
+                assert!(
+                    error.contains(&format!("holder_pid={child_pid}")),
+                    "{error}"
+                );
+                for field in [
+                    "holder_acquired_at_unix_ms=",
+                    "holder_wait_ms=",
+                    "holder_hold_elapsed_ms=",
+                    "holder_state_bytes=unknown",
+                    "holder_state_revision=unknown",
+                    "holder_job_count=unknown",
+                    "holder_session_count=unknown",
+                    "holder_profile_count=unknown",
+                ] {
+                    assert!(error.contains(field), "missing {field}: {error}");
+                }
+            }
+            ProcessObservation::Observed(_) => {
+                assert!(error.contains("holder_status=unknown_identity"), "{error}");
+            }
+            ProcessObservation::Missing => {
+                assert!(error.contains("holder_status=stale_missing"), "{error}");
+            }
+            ProcessObservation::Failed { .. } => {
+                assert!(error.contains("holder_status=unknown_"), "{error}");
+            }
+        }
+        assert!(
+            error.contains("holder_operation=direct_file_lock"),
+            "{error}"
+        );
+        assert!(error.contains("holder_phase=holding"), "{error}");
+        assert!(error.contains("holder_generation="), "{error}");
 
         fs::write(&release_path, b"release").expect("parent should release helper lock");
         assert!(child.wait().expect("lock helper should exit").success());
         assert!(
+            !service_state_lock_holder_path(&path).exists(),
+            "released helper must clear its exact holder sidecar"
+        );
+        assert!(
             !path.exists(),
             "blocked mutation must not create Service State"
+        );
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn crashed_file_lock_holder_is_stale_and_a_successor_clears_its_residue() {
+        let path = unique_state_path("crashed-file-lock-holder");
+        let ready_path = path.with_extension("helper-ready");
+        let release_path = path.with_extension("unused-helper-release");
+        let mut child = std::process::Command::new(
+            std::env::current_exe().expect("current Rust test executable should resolve"),
+        )
+        .args([
+            "--exact",
+            "native::service_store::tests::cross_process_file_lock_helper",
+            "--nocapture",
+        ])
+        .env("AGENT_BROWSER_TEST_LOCK_HELPER_STATE_PATH", &path)
+        .env("AGENT_BROWSER_TEST_LOCK_HELPER_READY_PATH", &ready_path)
+        .env("AGENT_BROWSER_TEST_LOCK_HELPER_RELEASE_PATH", &release_path)
+        .env("AGENT_BROWSER_TEST_LOCK_HELPER_EXIT_WITHOUT_DROP", "1")
+        .spawn()
+        .expect("crashing lock helper should start");
+        let ready_deadline = Instant::now() + Duration::from_secs(5);
+        while !ready_path.exists() {
+            assert!(
+                Instant::now() < ready_deadline,
+                "crashing lock helper did not become ready"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(child.wait().expect("crashing helper should exit").success());
+
+        let stale = durable_service_state_lock_holder_attribution(&path);
+        assert!(stale.starts_with("holder_status=stale_missing;"), "{stale}");
+        let guard = acquire_service_state_file_lock(&path, ServiceStateFileLockMode::Exclusive)
+            .expect("successor should acquire the OS-released lock");
+        drop(guard);
+        assert!(!service_state_lock_holder_path(&path).exists());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn durable_file_lock_holder_attribution_fails_closed_for_untrusted_sidecars() {
+        let path = unique_state_path("file-lock-holder-attribution");
+        let holder_path = service_state_lock_holder_path(&path);
+        fs::create_dir_all(path.parent().unwrap()).expect("fixture directory should exist");
+
+        fs::write(&holder_path, b"not-json").expect("corrupt holder fixture should write");
+        assert_eq!(
+            durable_service_state_lock_holder_attribution(&path),
+            "holder_status=unknown_corrupt"
+        );
+
+        let stale = DurableServiceStateLockHolder {
+            schema_version: SERVICE_STATE_LOCK_HOLDER_SCHEMA_VERSION.to_string(),
+            holder_token: "stale-holder".to_string(),
+            pid: std::process::id(),
+            start_token: Some("definitely-not-this-process".to_string()),
+            executable_generation: "fixture-generation".to_string(),
+            operation: "prepared_commit".to_string(),
+            mode: "exclusive".to_string(),
+            phase: "holding".to_string(),
+            acquired_at_unix_ms: 0,
+            wait_ms: 0,
+            hold_elapsed_ms: 0,
+            state_bytes: None,
+            state_revision: None,
+            job_count: None,
+            session_count: None,
+            profile_count: None,
+        };
+        fs::write(
+            &holder_path,
+            serde_json::to_vec(&stale).expect("stale holder should serialize"),
+        )
+        .expect("stale holder fixture should write");
+        fs::write(service_state_lock_path(&path), b"stale-holder\n")
+            .expect("matching lock token fixture should write");
+        let attribution = durable_service_state_lock_holder_attribution(&path);
+        assert!(attribution.starts_with("holder_status=stale_identity;"));
+        assert!(attribution.contains("holder_operation=prepared_commit"));
+
+        fs::write(service_state_lock_path(&path), b"different-holder\n")
+            .expect("mismatched lock token fixture should write");
+        assert_eq!(
+            durable_service_state_lock_holder_attribution(&path),
+            "holder_status=unknown_token_mismatch"
+        );
+
+        fs::remove_file(&holder_path).expect("holder fixture should be removable");
+        assert_eq!(
+            durable_service_state_lock_holder_attribution(&path),
+            "holder_status=unknown_missing"
         );
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }

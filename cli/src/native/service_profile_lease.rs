@@ -2723,7 +2723,7 @@ mod tests {
         let repository = LockedServiceStateRepository::default_json().unwrap();
         repository
             .mutate(|current| {
-                *current = state;
+                *current = state.clone();
                 Ok(())
             })
             .unwrap();

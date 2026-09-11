@@ -294,7 +294,7 @@ where
                 .presentation_capacity
                 .as_mut()
                 .ok_or_else(|| "presentation capacity is missing".to_string())?
-                .quarantine_slot(&reserved.presentation_slot_id, obligation)
+                .quarantine_slot(&reserved.presentation_slot_id, obligation.clone())
         });
     }
 }
@@ -1330,7 +1330,7 @@ mod tests {
 
         fn mutate<T>(
             &self,
-            mutator: impl FnOnce(&mut ServiceState) -> Result<T, String>,
+            mut mutator: impl FnMut(&mut ServiceState) -> Result<T, String>,
         ) -> Result<T, String> {
             let mut state = self.0.lock().unwrap();
             let mut candidate = state.clone();

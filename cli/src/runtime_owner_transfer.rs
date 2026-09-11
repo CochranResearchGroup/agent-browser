@@ -1257,7 +1257,7 @@ mod tests {
 
         fn mutate<R>(
             &self,
-            mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+            mut mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
         ) -> Result<R, String> {
             let mut state = self.state.lock().unwrap();
             mutator(&mut state)

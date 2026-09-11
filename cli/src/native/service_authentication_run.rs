@@ -1400,8 +1400,8 @@ pub(crate) async fn handle_service_authentication_run(
         "service_authentication_run_start" => {
             let intent = parse_start_intent(command)?;
             let created_at = service_now_timestamp();
-            let (record, replayed) =
-                repository.mutate(|state| start_run_in_state(state, intent, &created_at))?;
+            let (record, replayed) = repository
+                .mutate(|state| start_run_in_state(state, intent.clone(), &created_at))?;
             Ok(run_projection(&record, replayed))
         }
         "service_authentication_run_status" => {

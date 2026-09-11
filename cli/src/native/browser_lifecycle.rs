@@ -123,12 +123,12 @@ pub(crate) mod action_commands {
                 timestamp: observed_at.clone(),
                 kind: ServiceEventKind::TabLifecycleChanged,
                 message: format!("Service tab '{}' opened.", tab_id),
-                browser_id: Some(browser_id),
+                browser_id: Some(browser_id.clone()),
                 profile_id: handle.profile_id.clone(),
                 session_id: Some(session_id.to_string()),
-                service_name,
-                agent_name,
-                task_name,
+                service_name: service_name.clone(),
+                agent_name: agent_name.clone(),
+                task_name: task_name.clone(),
                 details: Some(json!(
                     { "action" : "tab_new", "targetId" : target_id, "tabId" :
                     tab_id, "url" : url, }
@@ -1160,9 +1160,9 @@ pub(crate) mod action_commands {
                 browser_id: Some(browser_id.to_string()),
                 profile_id: profile_id.map(ToString::to_string),
                 session_id: optional_command_string(cmd, "sessionName"),
-                service_name,
-                agent_name,
-                task_name,
+                service_name: service_name.clone(),
+                agent_name: agent_name.clone(),
+                task_name: task_name.clone(),
                 details: Some(json!(
                     { "action" : "tab_handle_refresh", "decision" : decision,
                     "repairPolicy" : cmd.get("repairPolicy").cloned()
@@ -1348,9 +1348,9 @@ pub(crate) mod action_commands {
                 browser_id: Some(browser_id.to_string()),
                 profile_id,
                 session_id: Some(session_name.to_string()),
-                service_name,
-                agent_name,
-                task_name,
+                service_name: service_name.clone(),
+                agent_name: agent_name.clone(),
+                task_name: task_name.clone(),
                 details: Some(json!(
                     { "streamId" : stream_id, "provider" : provider, "openMode" :
                     open_mode, "reason" : reason, "targetId" : target_id, "index"

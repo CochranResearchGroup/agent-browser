@@ -34,6 +34,7 @@ pub(crate) fn mutate_service_viewer_lease(
         optional_command_string(cmd, "viewerRole").unwrap_or_else(|| "observer".to_string());
     let wants_controller = controller_takeover || requested_role == "controller";
     let now = service_remote_view_timestamp();
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
     let profile_policy_before = controller_takeover
@@ -171,7 +172,7 @@ pub(crate) fn mutate_service_viewer_lease(
         };
         let lease = ViewerLease {
             id: viewer_lease_id.clone(),
-            boot_epoch: crate::process_identity::current_boot_epoch(),
+            boot_epoch: boot_epoch.clone(),
             route_id: Some(route_id.clone()),
             browser_id: Some(browser_id.clone()),
             viewer_id: Some(viewer_id),

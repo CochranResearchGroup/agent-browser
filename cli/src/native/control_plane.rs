@@ -910,6 +910,8 @@ fn persist_process_exited_browser_health_in_repository(
     repository: &impl ServiceStateRepository,
     state: &DaemonState,
 ) -> Result<Option<crate::runtime_owner_transfer::ProfileOwner>, String> {
+    let observed_at = current_timestamp();
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     repository.mutate(|service_state| {
         let id = service_browser_id(&state.session_id);
         let previous = service_state.browsers.get(&id).cloned();
@@ -926,7 +928,7 @@ fn persist_process_exited_browser_health_in_repository(
 
         let mut browser = BrowserProcess {
             id: id.clone(),
-            boot_epoch: crate::process_identity::current_boot_epoch(),
+            boot_epoch: boot_epoch.clone(),
             profile_id: previous
                 .as_ref()
                 .and_then(|browser| browser.profile_id.clone()),
@@ -966,7 +968,7 @@ fn persist_process_exited_browser_health_in_repository(
             crate::native::service_principal::authenticated_session_work_authority(
                 service_state,
                 &state.session_id,
-                &current_timestamp(),
+                &observed_at,
             )
             .and_then(|_| {
                 let binding = service_state
@@ -998,7 +1000,7 @@ fn persist_process_exited_browser_health_in_repository(
                 allocation.state = "orphaned".to_string();
                 allocation.owner_browser_id = Some(id.clone());
                 allocation.owner_session_id = Some(state.session_id.clone());
-                allocation.updated_at = Some(current_timestamp());
+                allocation.updated_at = Some(observed_at.clone());
                 allocation.readiness = Some(json!({
                     "state": "orphaned",
                     "reason": "browser_process_exited"
@@ -1033,7 +1035,7 @@ fn service_state_waiting_profile_lease_job_count(service_state: &ServiceState) -
 /// Persist a bounded audit record for each control-plane request.
 fn persist_service_job(job: ServiceJob) {
     mutate_persisted_service_jobs(|state| {
-        state.jobs.insert(job.id.clone(), job);
+        state.jobs.insert(job.id.clone(), job.clone());
     });
 }
 
@@ -1357,7 +1359,7 @@ fn persist_service_job_terminal(
         };
         job.completed_at = Some(outcome.completed_at.clone());
         job.result = Some(service_job_persisted_result(request, response));
-        job.error = error;
+        job.error = error.clone();
         job.failure = outcome.failure.clone();
         job.terminal_outcome = Some(outcome.clone());
         job.display_allocation_id = allocation_refs.display_allocation_id.clone();
@@ -1366,7 +1368,7 @@ fn persist_service_job_terminal(
         job.viewer_lease_id = allocation_refs.viewer_lease_id.clone();
         job.controller_lease_id = allocation_refs.controller_lease_id.clone();
         if emit_event {
-            service_state.events.push(event);
+            service_state.events.push(event.clone());
             if service_state.events.len() > MAX_SERVICE_EVENTS {
                 let excess = service_state.events.len() - MAX_SERVICE_EVENTS;
                 service_state.events.drain(0..excess);
@@ -2610,7 +2612,7 @@ mod tests {
 
         fn mutate<R>(
             &self,
-            mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+            mut mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
         ) -> Result<R, String> {
             let mut state = self
                 .state

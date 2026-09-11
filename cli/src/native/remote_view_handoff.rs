@@ -1765,6 +1765,7 @@ pub fn begin_route_bound_handoff_acquisition(
         .transition_to(RouteBoundLeaseState::Reserved)
         .map_err(|error| error.to_string())?;
     let (lease_state, lease_phase) = lifecycle.state_phase();
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     repository.mutate(|state| {
         let prior_state = state.clone();
         reconcile_matching_inactive_terminal_route_quarantines(
@@ -1834,7 +1835,7 @@ pub fn begin_route_bound_handoff_acquisition(
             .entry(input.acquisition_plan.display_allocation_id.clone())
             .or_insert_with(|| DisplayAllocation {
                 id: input.acquisition_plan.display_allocation_id.clone(),
-                boot_epoch: crate::process_identity::current_boot_epoch(),
+                boot_epoch: boot_epoch.clone(),
                 display_name: input.acquisition_plan.display_name.clone(),
                 display_isolation: input
                     .acquisition_plan
@@ -1849,7 +1850,7 @@ pub fn begin_route_bound_handoff_acquisition(
                 ..DisplayAllocation::default()
             });
         display_allocation.display_name = input.acquisition_plan.display_name.clone();
-        display_allocation.boot_epoch = crate::process_identity::current_boot_epoch();
+        display_allocation.boot_epoch = boot_epoch.clone();
         display_allocation.display_isolation = input
             .acquisition_plan
             .route_binding
@@ -1916,7 +1917,7 @@ pub fn begin_route_bound_handoff_acquisition(
 
         let lease = RemoteViewAcquisitionLease {
             id: lease_id.clone(),
-            boot_epoch: crate::process_identity::current_boot_epoch(),
+            boot_epoch: boot_epoch.clone(),
             browser_id: input.browser_id.to_string(),
             session_id: input.session_id.to_string(),
             route_id: input.acquisition_plan.selected_route_id.clone(),
@@ -1934,7 +1935,7 @@ pub fn begin_route_bound_handoff_acquisition(
         };
         state
             .remote_view_acquisition_leases
-            .insert(lease_id, lease.clone());
+            .insert(lease_id.clone(), lease.clone());
         Ok(lease)
     })
 }
@@ -2159,7 +2160,7 @@ fn finalize_route_bound_handoff_atomic(
             .or_insert_with(|| lease.clone());
         let acquisition_lease =
             finalize_route_bound_acquisition(state, &lease.id, checkout, observed_at)?;
-        if let Some((handoff_id, mut handoff)) = handoff {
+        if let Some((handoff_id, mut handoff)) = handoff.clone() {
             let existing = state.remote_view_handoffs.get(&handoff_id);
             handoff.created_at = existing
                 .and_then(|existing| existing.created_at.clone())
@@ -3006,7 +3007,7 @@ pub fn update_route_bound_handoff_acquisition_cleanup(
                 lease.cleanup = Some(updated_rollback.clone());
             }
         }
-        Ok(updated_rollback)
+        Ok(updated_rollback.clone())
     })
 }
 

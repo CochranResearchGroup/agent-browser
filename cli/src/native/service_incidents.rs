@@ -614,7 +614,7 @@ pub(crate) fn resolve_service_incident_in_repository(
 pub(crate) fn mutate_persisted_service_incident_in_repository(
     repository: &impl ServiceStateRepository,
     incident_id: &str,
-    mutator: impl FnOnce(&mut ServiceState, usize),
+    mut mutator: impl FnMut(&mut ServiceState, usize),
 ) -> Result<ServiceIncident, String> {
     repository
         .mutate(|state| {

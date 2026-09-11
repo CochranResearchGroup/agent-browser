@@ -2828,7 +2828,7 @@ pub(crate) fn acquire_lease_claim_in_repository<R: ServiceStateRepository>(
 ) -> Result<ActiveLeaseClaim, String> {
     repository.mutate(|state| {
         state
-            .acquire_lease_claim(request)
+            .acquire_lease_claim(request.clone())
             .map_err(|error| format!("lease_authority_{}", error.as_str()))
     })
 }
@@ -2839,7 +2839,7 @@ pub(crate) fn acquire_lease_claim_with_receipt_in_repository<R: ServiceStateRepo
 ) -> Result<LeaseClaimAcquisitionOutcome, String> {
     repository.mutate(|state| {
         state
-            .acquire_lease_claim_with_receipt(request)
+            .acquire_lease_claim_with_receipt(request.clone())
             .map_err(|error| format!("lease_authority_{}", error.as_str()))
     })
 }
@@ -2913,7 +2913,7 @@ fn release_lease_claim_in_repository_with_verification_key<R: ServiceStateReposi
         }
         state
             .lease_authority
-            .release_with_receipt(request, verification_key)
+            .release_with_receipt(request.clone(), verification_key)
             .map_err(|error| format!("lease_authority_{}", error.as_str()))
     })
 }
@@ -2977,7 +2977,7 @@ fn recover_lease_claim_in_repository_with_verification_key<R: ServiceStateReposi
         }
         state
             .lease_authority
-            .recover_with_receipt(request, verification_key)
+            .recover_with_receipt(request.clone(), verification_key)
             .map_err(|error| format!("lease_authority_{}", error.as_str()))
     })
 }
@@ -3013,7 +3013,7 @@ fn revoke_lease_claim_in_repository_with_verification_key<R: ServiceStateReposit
         }
         state
             .lease_authority
-            .revoke_with_receipt(request, verification_key)
+            .revoke_with_receipt(request.clone(), verification_key)
             .map_err(|error| format!("lease_authority_{}", error.as_str()))
     })
 }
@@ -4520,7 +4520,7 @@ mod tests {
 
         fn mutate<T>(
             &self,
-            mutator: impl FnOnce(&mut ServiceState) -> Result<T, String>,
+            mut mutator: impl FnMut(&mut ServiceState) -> Result<T, String>,
         ) -> Result<T, String> {
             let mut state = self
                 .state

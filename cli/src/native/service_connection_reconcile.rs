@@ -232,31 +232,30 @@ fn run(cmd: &Value) -> Result<Value, String> {
         .as_millis();
     let repository = LockedServiceStateRepository::default_json()?;
     let apply = cmd["apply"].as_bool() == Some(true);
-    let verify = |state: &ServiceState| -> Result<Value, String> {
-        validate_custody(state, &plan)?;
-        producer_census(snapshot_ms)
-    };
+    let producer_evidence = producer_census(snapshot_ms)?;
     let plan_sha256 = format!("{:x}", Sha256::digest(&plan_bytes));
     let event_id =
         apply.then(|| format!("legacy-connection-reconciliation-{}", uuid::Uuid::new_v4()));
+    let event_timestamp = apply.then(|| chrono::Utc::now().to_rfc3339());
     let evidence = if apply {
         repository.mutate(|state| {
-            let evidence = verify(state)?;
+            validate_custody(state, &plan)?;
             let changed = state.mark_profile_connection_disconnected(&plan.connection_id);
             if changed != plan.expected_tabs.len() {
                 return Err("legacy_connection_changed_count_mismatch".into());
             }
             state.events.push(super::service_model::ServiceEvent {
                 id: event_id.clone().expect("apply has an event ID"),
-                timestamp: chrono::Utc::now().to_rfc3339(),
+                timestamp: event_timestamp.clone().expect("apply has a timestamp"),
                 message: "Local operator reconciled a legacy connection after verified producer replacement".into(),
-                details: Some(json!({"planSha256":plan_sha256,"connectionIdSha256":format!("{:x}",Sha256::digest(plan.connection_id.as_bytes())),"affectedTabIds":plan.expected_tabs.keys().collect::<Vec<_>>(),"producerEvidence":evidence})),
+                details: Some(json!({"planSha256":plan_sha256,"connectionIdSha256":format!("{:x}",Sha256::digest(plan.connection_id.as_bytes())),"affectedTabIds":plan.expected_tabs.keys().collect::<Vec<_>>(),"producerEvidence":producer_evidence})),
                 ..Default::default()
             });
-            Ok(evidence)
+            Ok(producer_evidence.clone())
         })?
     } else {
-        verify(&repository.load_snapshot()?)?
+        validate_custody(&repository.load_snapshot()?, &plan)?;
+        producer_evidence
     };
     Ok(
         json!({"schemaVersion":"agent-browser.legacy-connection-reconciliation-receipt.v1","applied":apply,"eventId":event_id,"planSha256":format!("{:x}",Sha256::digest(&plan_bytes)),"affectedTabIds":plan.expected_tabs.keys().collect::<Vec<_>>(),"producerEvidence":evidence}),

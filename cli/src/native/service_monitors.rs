@@ -152,7 +152,7 @@ where
 
     let summary = summarize_results(&results);
     repository.mutate(|state| {
-        for result in results {
+        for result in results.clone() {
             apply_monitor_result(state, result);
         }
         Ok(())

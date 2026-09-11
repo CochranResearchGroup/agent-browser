@@ -869,6 +869,7 @@ pub fn persist_service_browser_record_in_repository(
     metadata: Option<ServiceLaunchMetadata>,
     process_identity: Option<ServiceBrowserProcessIdentity>,
 ) -> Result<(), String> {
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     repository.mutate(|service_state| {
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
@@ -878,7 +879,7 @@ pub fn persist_service_browser_record_in_repository(
         let retained_attachment = host == BrowserHost::AttachedExisting
             && previous.as_ref().is_some_and(|browser| {
                 browser.boot_epoch.is_some()
-                    && browser.boot_epoch == crate::process_identity::current_boot_epoch()
+                    && browser.boot_epoch == boot_epoch
                     && browser.pid == pid
                     && browser.cdp_endpoint.is_some()
                     && browser.cdp_endpoint == cdp_endpoint
@@ -900,7 +901,7 @@ pub fn persist_service_browser_record_in_repository(
         if retained_attachment {
             let mut browser = previous.clone().expect("retained attachment has a browser");
             browser.health = health;
-            browser.last_error = last_error;
+            browser.last_error = last_error.clone();
             let details = browser_health_observation_details(&browser, None);
             apply_browser_health_observation(&mut browser, Some(&details));
             record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
@@ -937,7 +938,7 @@ pub fn persist_service_browser_record_in_repository(
         };
         let mut browser = BrowserProcess {
             id: id.clone(),
-            boot_epoch: crate::process_identity::current_boot_epoch(),
+            boot_epoch: boot_epoch.clone(),
             profile_id: profile_id.clone(),
             host,
             health,
@@ -947,14 +948,14 @@ pub fn persist_service_browser_record_in_repository(
                 .as_ref()
                 .and_then(|browser| browser.display_allocation_id.clone()),
             pid,
-            cdp_endpoint,
+            cdp_endpoint: cdp_endpoint.clone(),
             view_streams,
             active_session_ids: vec![session_id.to_string()],
             tab_handles: previous
                 .as_ref()
                 .map(|browser| browser.tab_handles.clone())
                 .unwrap_or_default(),
-            last_error,
+            last_error: last_error.clone(),
             last_health_observation: None,
             attachability: None,
             record_provenance: previous
@@ -1013,7 +1014,7 @@ pub fn persist_service_browser_record_in_repository(
             false
         };
         record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
-        if let Some(process_identity) = process_identity {
+        if let Some(process_identity) = process_identity.clone() {
             service_state
                 .browser_process_identities
                 .insert(id.clone(), process_identity);
@@ -1248,6 +1249,7 @@ pub(crate) fn persist_current_browser_stale_health_in_repository(
     last_error: String,
     event_details: Option<Value>,
 ) -> BrowserRecoveryPersistence {
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     repository
         .mutate(|service_state| {
             let id = service_browser_id_for_session(session_id);
@@ -1260,6 +1262,7 @@ pub(crate) fn persist_current_browser_stale_health_in_repository(
                 cdp_endpoint.clone(),
                 health,
                 last_error.clone(),
+                boot_epoch.clone(),
             );
             let observation_details =
                 browser_health_observation_details(&browser, event_details.clone());
@@ -1295,7 +1298,7 @@ pub(crate) fn persist_current_browser_stale_health_in_repository(
                 reason_kind,
                 &last_error,
                 Some(policy),
-                event_details,
+                event_details.clone(),
             );
             service_state.browsers.insert(id, browser);
             Ok(BrowserRecoveryPersistence::Recorded)
@@ -1421,6 +1424,7 @@ pub(crate) fn persist_browser_recovery_started_in_repository(
         .unwrap_or(BrowserRecoveryPersistence::NotRecorded)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn stale_browser_process_record(
     id: &str,
     session_id: &str,
@@ -1429,10 +1433,11 @@ pub(crate) fn stale_browser_process_record(
     cdp_endpoint: Option<String>,
     health: BrowserHealth,
     last_error: String,
+    boot_epoch: Option<String>,
 ) -> BrowserProcess {
     let mut browser = BrowserProcess {
         id: id.to_string(),
-        boot_epoch: crate::process_identity::current_boot_epoch(),
+        boot_epoch,
         profile_id: previous.and_then(|browser| browser.profile_id.clone()),
         host: previous
             .map(|browser| browser.host)
@@ -1653,15 +1658,16 @@ fn persist_closed_browser_health_with_context(
         })
         .map(|route| begin_service_controller_mutation(&snapshot, &route.id))
         .collect::<Result<Vec<_>, _>>()?;
+    let observed_at = current_timestamp();
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     repository.mutate(|service_state| {
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
-        let now = current_timestamp();
         let preserve_registered_crash_continuity = preserve_registered_work
             && crate::native::service_principal::authenticated_session_work_authority(
                 service_state,
                 session_id,
-                &now,
+                &observed_at,
             )
             .is_some();
         if preserve_registered_crash_continuity {
@@ -1741,8 +1747,8 @@ fn persist_closed_browser_health_with_context(
         );
         if let Some(session) = service_state.sessions.get_mut(session_id) {
             session.lease = LeaseState::Released;
-            session.last_lease_observed_at = Some(current_timestamp());
-            session.boot_epoch = crate::process_identity::current_boot_epoch();
+            session.last_lease_observed_at = Some(observed_at.clone());
+            session.boot_epoch = boot_epoch.clone();
             session.profile_lease_conflict_session_ids.clear();
         }
         // A duplicate close callback can arrive after terminal cleanup removed

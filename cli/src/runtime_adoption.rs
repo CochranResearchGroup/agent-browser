@@ -4943,7 +4943,7 @@ mod tests {
                 "begin_post_commit_validation(prepared)",
                 "reconcile_workstation_locked_for_upgrade(",
                 "validate_post_commit_transaction(&root, &paths, prepared)",
-                "accept_prepared_payload_transaction(prepared, validation)",
+                "if let Err(error) = accept_prepared_payload_transaction(\n            prepared,\n            validation,",
             ],
         );
 

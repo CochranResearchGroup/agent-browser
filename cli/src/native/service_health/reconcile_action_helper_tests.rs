@@ -279,6 +279,7 @@ fn test_stale_browser_process_record_preserves_identity_and_marks_error() {
         Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
         ServiceBrowserHealth::ProcessExited,
         "Active browser PID 1234 exited before command dispatch".to_string(),
+        crate::process_identity::current_boot_epoch(),
     );
     assert_eq!(stale.id, "browser-mcp-live");
     assert_eq!(stale.profile_id.as_deref(), Some("profile-work"));

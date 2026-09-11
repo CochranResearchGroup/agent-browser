@@ -478,7 +478,7 @@ fn persist_phase_receipt<R: ServiceStateRepository>(
         {
             return Err("crash_regeneration_compare_and_swap_mismatch".to_string());
         }
-        apply_receipt(&mut current.evidence, receipt);
+        apply_receipt(&mut current.evidence, receipt.clone());
         current.completed_phases.push(phase);
         current.current_phase = next_phase(current);
         current.state = if current.current_phase.is_some() {
@@ -596,7 +596,7 @@ mod tests {
 
         fn mutate<T>(
             &self,
-            mutator: impl FnOnce(&mut ServiceState) -> Result<T, String>,
+            mut mutator: impl FnMut(&mut ServiceState) -> Result<T, String>,
         ) -> Result<T, String> {
             mutator(&mut self.0.lock().unwrap())
         }
@@ -625,7 +625,7 @@ mod tests {
 
         fn mutate<T>(
             &self,
-            mutator: impl FnOnce(&mut ServiceState) -> Result<T, String>,
+            mut mutator: impl FnMut(&mut ServiceState) -> Result<T, String>,
         ) -> Result<T, String> {
             let mutation = self.mutation_count.fetch_add(1, Ordering::SeqCst) + 1;
             if mutation == self.fail_at {
