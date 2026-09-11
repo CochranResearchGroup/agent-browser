@@ -7372,6 +7372,9 @@ enum PreparedCooperativeRuntimeTransfer {
     },
     CandidateFallback {
         failed_session: String,
+        source_socket_dir: PathBuf,
+        source_is_runtime_host: bool,
+        source_process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
         error: RuntimeTransactionCommandFailure,
     },
 }
@@ -7383,7 +7386,12 @@ struct RuntimeHandoffSource {
     process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
 }
 
-const CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION: &str = "dashboard-service-backend";
+fn candidate_runtime_host_bootstrap_session(transaction_id: &str) -> String {
+    format!(
+        "install-bootstrap-{}",
+        &workstation_bytes_sha256(transaction_id.as_bytes())[..16]
+    )
+}
 
 /// Starts the candidate single runtime host without launching a browser.
 ///
@@ -7396,9 +7404,10 @@ fn start_candidate_runtime_host_after_source_prepares(
     transaction_revision: u64,
     socket_dir: &Path,
 ) -> Result<(), String> {
+    let bootstrap_session = candidate_runtime_host_bootstrap_session(transaction_id);
     run_candidate_agent_json_in_socket_dir(
         candidate_binary,
-        CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION,
+        &bootstrap_session,
         transaction_id,
         transaction_revision,
         socket_dir,
@@ -7504,6 +7513,9 @@ fn transfer_discovered_runtimes(
                 cooperative_preparations[index] =
                     Some(PreparedCooperativeRuntimeTransfer::CandidateFallback {
                         failed_session,
+                        source_socket_dir: source.socket_dir,
+                        source_is_runtime_host: source.is_runtime_host,
+                        source_process_identity: source.process_identity,
                         error,
                     });
             }
@@ -7587,6 +7599,9 @@ fn transfer_discovered_runtimes(
                     ),
                     PreparedCooperativeRuntimeTransfer::CandidateFallback {
                         failed_session,
+                        source_socket_dir,
+                        source_is_runtime_host,
+                        source_process_identity,
                         error,
                     } => {
                         let legacy_transferred_owner_rejected = error.kind
@@ -7602,6 +7617,9 @@ fn transfer_discovered_runtimes(
                             &failed_session,
                             legacy_transferred_owner_rejected,
                             false,
+                            Some(&source_socket_dir),
+                            source_is_runtime_host,
+                            source_process_identity,
                         )?;
                         transfer_evidence.push(evidence);
                         continue;
@@ -7627,6 +7645,9 @@ fn transfer_discovered_runtimes(
                         &source_session,
                         false,
                         true,
+                        Some(&source_socket_dir),
+                        source_is_runtime_host,
+                        source_process_identity,
                     )?;
                     transfer_evidence.push(evidence);
                     continue;
@@ -7719,6 +7740,9 @@ fn transfer_discovered_runtimes(
                         &source_session,
                         false,
                         false,
+                        None,
+                        false,
+                        crate::connection::load_daemon_process_identity(&source_session).ok(),
                     )?;
                     transfer_evidence.push(evidence);
                     continue;
@@ -8523,6 +8547,9 @@ fn adopt_runtime_via_verified_orphan_fallback(
     source_session: &str,
     legacy_transferred_owner_rejected: bool,
     legacy_prepare_v1: bool,
+    source_socket_dir: Option<&Path>,
+    source_is_runtime_host: bool,
+    source_process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
 ) -> Result<RuntimeTransferEvidence, String> {
     use crate::runtime_adoption::{BrowserAdoptionMode, RuntimeDisposition};
 
@@ -8531,6 +8558,7 @@ fn adopt_runtime_via_verified_orphan_fallback(
             service_state,
             migration,
             source_session,
+            source_is_runtime_host,
         ) {
             return Err("runtime_owner_current_evidence_mismatch: transferred owner fallback evidence is incomplete".to_string());
         }
@@ -8564,22 +8592,28 @@ fn adopt_runtime_via_verified_orphan_fallback(
     handoffs.push(PreparedRuntimeHandoff {
         source_session: source_session.to_string(),
         candidate_session: candidate_session.clone(),
-        source_socket_dir: None,
-        source_runtime_host: false,
-        source_process_identity: crate::connection::load_daemon_process_identity(source_session)
-            .ok(),
+        source_socket_dir: source_socket_dir.map(|path| path.display().to_string()),
+        source_runtime_host: source_is_runtime_host,
+        source_process_identity,
         mode: BrowserAdoptionMode::OrphanAdoption,
         committed: false,
         source_finalized: false,
         irreversible_source_revocation: false,
     });
     let handoff_index = handoffs.len() - 1;
-    let revocation = revoke_legacy_daemon_effect_authority(
-        paths,
-        source_session,
-        expected_owner.as_ref(),
-        &mut handoffs[handoff_index].irreversible_source_revocation,
-    );
+    let revocation = if source_is_runtime_host {
+        revoke_runtime_host_lane_effect_authority(
+            expected_owner.as_ref(),
+            &mut handoffs[handoff_index].irreversible_source_revocation,
+        )
+    } else {
+        revoke_legacy_daemon_effect_authority(
+            paths,
+            source_session,
+            expected_owner.as_ref(),
+            &mut handoffs[handoff_index].irreversible_source_revocation,
+        )
+    };
     if let Err(error) = revocation {
         if handoffs[handoff_index].irreversible_source_revocation {
             migration.disposition = RuntimeDisposition::OrphanAdoption;
@@ -8971,6 +9005,7 @@ fn legacy_transferred_owner_prepare_rejection_can_fallback(
     service_state: &crate::native::service_model::ServiceState,
     migration: &crate::runtime_adoption::RuntimeMigrationRecord,
     source_session: &str,
+    source_is_runtime_host: bool,
 ) -> bool {
     service_state
         .runtime_owner_registry
@@ -8978,10 +9013,41 @@ fn legacy_transferred_owner_prepare_rejection_can_fallback(
         .is_some_and(|owner| {
             owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
                 && owner.pending_transfer.is_none()
-                && owner.owner_generation > 1
                 && owner.browser_id == migration.logical_browser_id
                 && owner.daemon_session_route == source_session
+                && (owner.owner_generation > 1
+                    || (source_is_runtime_host
+                        && !service_state
+                            .runtime_owner_registry
+                            .lifecycle_records
+                            .contains_key(&owner.browser_id)))
         })
+}
+
+/// Fence one legacy lane on a shared runtime host without stopping that host.
+///
+/// Older installed hosts can have an exact ready owner without the lifecycle
+/// record required by current handoff admission. All source prepares finish
+/// before this fallback runs. Advancing only that exact owner generation makes
+/// the stale in-memory lane observation-only, while the host remains available
+/// to surrender its other browsers before supervisor takeover retires it.
+fn revoke_runtime_host_lane_effect_authority(
+    expected_owner: Option<&crate::runtime_owner_transfer::ProfileOwner>,
+    source_authority_unavailable: &mut bool,
+) -> Result<(), String> {
+    let expected_owner =
+        expected_owner.ok_or_else(|| "runtime_host_lane_owner_missing".to_string())?;
+    let repository = crate::native::service_store::LockedServiceStateRepository::default_json()?;
+    crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+        .revoke_legacy_owner(
+            &expected_owner.profile_identity_digest,
+            &expected_owner.browser_id,
+            &expected_owner.daemon_session_route,
+            &expected_owner.owner_id,
+            expected_owner.owner_generation,
+        )?;
+    *source_authority_unavailable = true;
+    Ok(())
 }
 
 fn run_agent_json_detailed_in_socket_dir(
@@ -13582,10 +13648,11 @@ mod tests {
         assert!(candidate_runtime_host_stage_required(false, 0));
         assert!(candidate_runtime_host_stage_required(false, 3));
         assert!(!candidate_runtime_host_stage_required(true, 0));
-        assert_eq!(
-            CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION,
-            "dashboard-service-backend"
-        );
+        let first = candidate_runtime_host_bootstrap_session("upgrade-one");
+        let second = candidate_runtime_host_bootstrap_session("upgrade-two");
+        assert!(first.starts_with("install-bootstrap-"));
+        assert_ne!(first, second);
+        assert!(crate::validation::is_valid_session_name(&first));
     }
 
     #[cfg(unix)]
@@ -13618,7 +13685,10 @@ mod tests {
 
         assert_eq!(
             fs::read_to_string(&args_path).unwrap(),
-            "--json\n--session\ndashboard-service-backend\nstream\nstatus\n--service-state-lock-timeout-ms\n30000\n"
+            format!(
+                "--json\n--session\n{}\nstream\nstatus\n--service-state-lock-timeout-ms\n30000\n",
+                candidate_runtime_host_bootstrap_session("upgrade-test")
+            )
         );
         assert_eq!(
             fs::read_to_string(&claim_path).unwrap(),
@@ -16723,11 +16793,13 @@ mod tests {
             &service_state,
             &migration,
             "handoff-candidate",
+            false,
         ));
         assert!(!legacy_transferred_owner_prepare_rejection_can_fallback(
             &service_state,
             &migration,
             "different-route",
+            false,
         ));
 
         let mut generation_one_state = service_state;
@@ -16741,6 +16813,26 @@ mod tests {
             &generation_one_state,
             &migration,
             "handoff-candidate",
+            false,
+        ));
+        assert!(legacy_transferred_owner_prepare_rejection_can_fallback(
+            &generation_one_state,
+            &migration,
+            "handoff-candidate",
+            true,
+        ));
+        generation_one_state
+            .runtime_owner_registry
+            .lifecycle_records
+            .insert(
+                migration.logical_browser_id.clone(),
+                crate::runtime_owner_transfer::RuntimeLifecycleRecord::default(),
+            );
+        assert!(!legacy_transferred_owner_prepare_rejection_can_fallback(
+            &generation_one_state,
+            &migration,
+            "handoff-candidate",
+            true,
         ));
 
         let mut same_route_state = ServiceState::default();
@@ -16756,6 +16848,7 @@ mod tests {
             &same_route_state,
             &migration,
             "logical-browser",
+            false,
         ));
 
         let reversed_migration = RuntimeMigrationRecord {
@@ -16822,6 +16915,7 @@ mod tests {
             &reversed_state,
             &reversed_migration,
             "logical-browser",
+            false,
         ));
     }
 
