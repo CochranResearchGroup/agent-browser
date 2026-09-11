@@ -1070,6 +1070,8 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 
 For one ordinary CLI command, pass <code>--job-timeout-ms &lt;ms&gt;</code> to carry a cancellation-safe worker deadline as <code>jobTimeoutMs</code>. Keep this inner deadline shorter than any caller-side subprocess or client deadline so the daemon cancels the operation and releases its serialized queue before the caller exits.
 
+If the caller exits first, the daemon promptly releases only that transport connection's profile custody. An accepted job continues to its retained terminal state without being replayed. Inspect the retained job before deciding whether another action is safe.
+
 Prepared Service State mutations are serialized across runtime-host processes
 from authoritative load through durable commit. This permits selected and
 fallback hosts to coexist during an upgrade without invalidating each other's

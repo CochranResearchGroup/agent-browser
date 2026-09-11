@@ -7674,6 +7674,9 @@ Configuration:
   Pass `--job-timeout-ms` on one CLI command when its worker deadline must be
   shorter than an outer subprocess or client deadline. The worker cancels the
   dispatched operation and releases the serialized command queue first.
+  If a caller exits before the worker reaches a terminal result, the daemon
+  releases only that transport connection's profile custody. The accepted job
+  continues to its recorded terminal state without being replayed.
   Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and
   `service.recoveryMaxBackoffMs` or pass the matching service recovery flags
   to control when repeated browser relaunch attempts become faulted. Recovery

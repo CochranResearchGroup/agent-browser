@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::signal;
-use tokio::sync::{mpsc, Mutex, Notify, RwLock};
+use tokio::sync::{mpsc, watch, Mutex, Notify, RwLock};
 
 use super::action_runtime::DaemonState;
 use super::control_plane::{ControlPlaneHandle, ControlPlaneWorker};
@@ -22,6 +22,7 @@ use agent_browser_cdp::client::CdpClient;
 
 const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
+const CONNECTION_READ_AHEAD_CAPACITY: usize = 8;
 
 /// Build the runtime host on the same bounded stack used for Service State
 /// serialization. Commands may own large parsed snapshots until dispatch
@@ -840,19 +841,33 @@ async fn handle_connection<S>(
     close_notify: Arc<Notify>,
     daemon_auth_token: Arc<String>,
 ) where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     let (reader, mut writer) = tokio::io::split(stream);
-    let mut buf_reader = BufReader::new(reader);
-    let mut line = String::new();
+    let (line_tx, mut line_rx) = mpsc::channel(CONNECTION_READ_AHEAD_CAPACITY);
+    let (disconnect_tx, mut disconnect_rx) = watch::channel(false);
+    // Read independently from command execution so EOF can revoke this exact
+    // transport's profile ownership while its queued work reaches a terminal
+    // state in the control-plane worker.
+    let reader_task = tokio::spawn(async move {
+        let mut buf_reader = BufReader::new(reader);
+        loop {
+            let mut line = String::new();
+            match buf_reader.read_line(&mut line).await {
+                Ok(0) | Err(_) => break,
+                Ok(_) if line_tx.send(line).await.is_err() => return,
+                Ok(_) => {}
+            }
+        }
+        let _ = disconnect_tx.send(true);
+    });
     let connection_instance_id = super::service_connection_lifetime::new_connection_id();
     let _disconnect_guard = ProfileConnectionDisconnectGuard(&connection_instance_id);
 
-    loop {
-        line.clear();
-        match buf_reader.read_line(&mut line).await {
-            Ok(0) => break,
-            Ok(_) => {
+    'connection: loop {
+        match line_rx.recv().await {
+            None => break,
+            Some(line) => {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
                     continue;
@@ -952,51 +967,70 @@ async fn handle_connection<S>(
                     let _ = tx.try_send(());
                 }
 
-                let action = cmd.get("action").and_then(|v| v.as_str());
+                let action = cmd
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned);
                 let exits_daemon = matches!(
-                    action,
+                    action.as_deref(),
                     Some("close" | "runtime_handoff_finalize" | "runtime_handoff_rollback")
                 );
 
-                let response = if action == Some("worker_status") {
-                    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                    control_plane.status_response(id)
-                } else if action == Some("service_job_cancel") {
-                    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                    let job_id = cmd.get("jobId").and_then(|v| v.as_str()).unwrap_or("");
-                    let reason = cmd.get("reason").and_then(|v| v.as_str());
-                    control_plane.cancel_job_response(id, job_id, reason)
-                } else if action == Some("service_status") {
-                    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                    let service_state = cmd
-                        .get("serviceState")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null);
-                    let launch_config =
-                        super::service_status_projection::launch_configuration_from_status_command(
-                            &cmd,
-                        );
-                    let full_tab_history = cmd
-                        .get("fullTabHistory")
-                        .and_then(|value| value.as_bool())
-                        .unwrap_or(false);
-                    let service_state_projection =
-                        super::service_status_projection::service_state_projection_from_status_command(
-                            &cmd,
-                        );
-                    control_plane
-                        .service_status_response(
-                            id,
-                            service_state,
-                            launch_config,
-                            full_tab_history,
-                            service_state_projection,
-                        )
-                        .await
+                let response_future = async {
+                    if action.as_deref() == Some("worker_status") {
+                        let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                        control_plane.status_response(id)
+                    } else if action.as_deref() == Some("service_job_cancel") {
+                        let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                        let job_id = cmd.get("jobId").and_then(|v| v.as_str()).unwrap_or("");
+                        let reason = cmd.get("reason").and_then(|v| v.as_str());
+                        control_plane.cancel_job_response(id, job_id, reason)
+                    } else if action.as_deref() == Some("service_status") {
+                        let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                        let service_state = cmd
+                            .get("serviceState")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Null);
+                        let launch_config =
+                            super::service_status_projection::launch_configuration_from_status_command(
+                                &cmd,
+                            );
+                        let full_tab_history = cmd
+                            .get("fullTabHistory")
+                            .and_then(|value| value.as_bool())
+                            .unwrap_or(false);
+                        let service_state_projection =
+                            super::service_status_projection::service_state_projection_from_status_command(
+                                &cmd,
+                            );
+                        control_plane
+                            .service_status_response(
+                                id,
+                                service_state,
+                                launch_config,
+                                full_tab_history,
+                                service_state_projection,
+                            )
+                            .await
+                    } else {
+                        control_plane
+                            .submit_from_connection(cmd, &connection_instance_id)
+                            .await
+                    }
+                };
+                tokio::pin!(response_future);
+                let response = if exits_daemon {
+                    response_future.await
                 } else {
-                    control_plane
-                        .submit_from_connection(cmd, &connection_instance_id)
-                        .await
+                    tokio::select! {
+                        biased;
+                        response = &mut response_future => response,
+                        _ = async {
+                            if !*disconnect_rx.borrow() {
+                                let _ = disconnect_rx.changed().await;
+                            }
+                        } => break 'connection,
+                    }
                 };
 
                 let mut resp = serialize_daemon_response(response).await;
@@ -1017,12 +1051,12 @@ async fn handle_connection<S>(
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                         close_notify.notify_one();
                     }
-                    return;
+                    break;
                 }
             }
-            Err(_) => break,
         }
     }
+    reader_task.abort();
 }
 
 async fn serialize_daemon_response(response: Value) -> String {
@@ -1132,6 +1166,7 @@ fn get_port_for_session(session: &str) -> u16 {
 
 #[cfg(test)]
 mod tests {
+    use super::super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     #[allow(unused_imports)]
     use super::*;
 
@@ -1199,6 +1234,94 @@ mod tests {
             "closing the last lane must not stop the shared host"
         );
         router.shutdown().await;
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn disconnected_client_releases_connection_while_command_is_running() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_RUNTIME_HOST",
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+        ]);
+        let home =
+            std::env::temp_dir().join(format!("ab-disconnected-command-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            home.join("agent-home").to_str().unwrap(),
+        );
+        guard.set("AGENT_BROWSER_RUNTIME_HOST", "1");
+        guard.set(
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+            home.join("supervisor").to_str().unwrap(),
+        );
+        let router = RuntimeHostRouter::new(
+            home.clone(),
+            "disconnect-test",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: Some(1_000),
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let notify = Arc::new(Notify::new());
+        let (mut client, server) = tokio::io::duplex(8192);
+        let task = tokio::spawn(handle_connection(
+            server,
+            router.clone(),
+            "disconnect-test",
+            None,
+            None,
+            notify,
+            Arc::new("fixture-auth".into()),
+        ));
+
+        let command = serde_json::json!({
+            "id": "pending-command",
+            "action": "dependent_batch",
+            "bail": true,
+            "commands": [
+                {"id": "step-1", "action": "__test_sleep", "ms": 250},
+                {"id": "step-2", "action": "__test_sleep", "ms": 250}
+            ],
+            "_agentBrowserAuthToken": "fixture-auth"
+        });
+        let mut encoded = serde_json::to_vec(&command).unwrap();
+        encoded.push(b'\n');
+        client.write_all(&encoded).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        drop(client);
+
+        tokio::time::timeout(Duration::from_millis(150), task)
+            .await
+            .expect("client EOF must release its connection before the command finishes")
+            .unwrap();
+
+        router.shutdown().await;
+        let snapshot = LockedServiceStateRepository::default_json()
+            .unwrap()
+            .load_snapshot()
+            .unwrap();
+        let job = snapshot
+            .jobs
+            .get("pending-command")
+            .expect("disconnected command must still reach a terminal job state");
+        assert_eq!(job.state, super::super::service_model::JobState::Succeeded);
+        assert_eq!(
+            job.result.as_ref().unwrap()["success"],
+            serde_json::Value::Bool(true)
+        );
+        assert_eq!(
+            job.terminal_outcome.as_ref().unwrap().state,
+            super::super::service_terminal_outcome::ServiceTerminalState::Succeeded
+        );
         fs::remove_dir_all(home).unwrap();
     }
 
