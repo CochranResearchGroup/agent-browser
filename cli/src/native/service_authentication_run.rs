@@ -4,9 +4,7 @@
 //! It intentionally does not accept selectors, usernames, passwords, one-time
 //! codes, message bodies, verification URLs, or generic UI recipes.
 
-use super::action_runtime::runtime::{
-    validate_service_tab_handle_for_current_session, DaemonState,
-};
+use super::action_runtime::runtime::{validate_service_tab_handle_route_for_daemon, DaemonState};
 use super::authentication_run::{
     AuthenticationActionFailure, AuthenticationActionKind, AuthenticationActionReceipt,
     AuthenticationChallengeChannel, AuthenticationRun, AuthenticationRunBinding,
@@ -411,7 +409,7 @@ async fn select_exact_run_target(
     let handle_map = handle_value
         .as_object()
         .ok_or_else(|| "authentication_run_handle_invalid".to_string())?;
-    validate_service_tab_handle_for_current_session(handle_map, &daemon.session_id)?;
+    validate_service_tab_handle_route_for_daemon(handle_map, daemon)?;
     let target_id = handle
         .target_id
         .as_deref()

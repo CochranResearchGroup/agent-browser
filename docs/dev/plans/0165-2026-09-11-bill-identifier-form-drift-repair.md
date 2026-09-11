@@ -78,6 +78,13 @@ lock, browser, and conflicting-lease graph; unrelated control-plane envelope
 history no longer invalidates the plan. Relevant graph drift remains a hard
 pre-effect failure.
 
+The next consumer replay exposed a third exact alias defect: Authentication Run
+target selection used the current-session-only handle validator, rejecting the
+durable browser ID after a runtime handoff even though the generic daemon-aware
+validator already authorizes that ID from the current runtime-owner binding.
+Authentication Run now uses the same daemon-aware route validator; unrelated
+browser IDs and mismatched session routes remain rejected before effects.
+
 ## Delivery sequence and budget
 
 1. Produce focused red and green classifier evidence.
