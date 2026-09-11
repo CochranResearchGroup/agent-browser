@@ -135,8 +135,8 @@ from current `origin/main`. Commit `2a5545db` disambiguates the geometry-epoch
 test literal. Commit `7f2b7083` adds an exact `semantic_click` step, requires an
 explicit exact role/name locator, rejects zero or multiple accessibility-tree
 matches, validates recipes before queueing, and documents every required
-user-facing surface. Pull request 30 is the protected-main integration receipt
-and is configured to merge after required checks pass.
+user-facing surface. Pull request 30 merged as `de614fbe`, the protected-main
+integration receipt.
 
 Selected validation passed: Rust formatting; workspace clippy with warnings
 denied; 2 semantic-click, 26 desktop-capture, and 62 service-request focused
@@ -148,6 +148,17 @@ threads at 949 of 1,024 shared slice tasks. The exact gates passed with one
 build job and compiler caching disabled. The installed shared skill remains
 unchanged until normal source integration and publication; no runtime effect
 was used as acceptance evidence.
+
+After that merge, a fresh cleanliness, tip, ancestry, and process-cwd preflight
+found one task-owned debug daemon left by the passing no-launch fixture. PID
+94587 was bound to isolated home `/tmp/ab-service-collections-no-launch-95VDIZ`
+and exact session `service-collections-no-launch-94578`; it terminated cleanly
+on `SIGTERM`. The preflight then found both P0240 worktrees clean and idle. The
+campaign removed both worktrees, their local branches, and their matching
+remote branches. Their named commits and PR 30 remain the recovery locators.
+
+W5 now requires only protected-main integration of the P168 custody record,
+followed by a final main, remote, worktree, branch, catalog, and audit readback.
 
 ## Frozen decisions
 

@@ -8,7 +8,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 9a61432a4ea4aebc0a5028e49231c91f5e3d00ec
+    checkpoint: 2b85d0a6a9ea212dcd0d8f3de29a8e1abd2b9082
     remote_ref: refs/remotes/origin/maintenance/plan-0168-repository-closeout
     integration_receipt: null
     integration: merge

@@ -84,8 +84,8 @@ The semantic action now requires `exact: true`, refuses unsupported locator
 fields, requires exactly one live accessibility-tree match, validates before
 job creation, and returns locator and activation evidence. README, CLI help,
 the repository agent skill, the service schema, MCP description, inline docs,
-and the docs site describe the behavior. Pull request 30 is the integration
-receipt and is set to merge after required checks pass.
+and the docs site describe the behavior. Pull request 30 merged as
+`de614fbe303fac9dccb996b1c5aea4decfb53d9d`, the integration receipt.
 
 Provider-free validation passed for Rust formatting, clippy, focused semantic
 click, desktop capture and service request tests, service contract and client
@@ -96,6 +96,27 @@ at 949 of 1,024 tasks. The same gates passed with one Cargo build job and cache
 disabled. The repository and installed user-scoped skills differ only because
 the accepted source change has not yet been published into that installed
 surface; Plan 0168 did not overwrite it.
+
+After the merge receipt was durable, the exact cleanup preflight found one
+task-owned debug daemon left by the passing no-launch collection smoke. PID
+94587 used the integration worktree binary, isolated home
+`/tmp/ab-service-collections-no-launch-95VDIZ`, and session
+`service-collections-no-launch-94578`. It exited after `SIGTERM`; a fresh cwd
+scan then found neither P0240 worktree in use.
+
+The campaign removed these worktrees:
+
+- `/home/ecochran76/workspace.local/agent-browser-p0240-runtime-compatible`;
+- `/home/ecochran76/workspace.local/agent-browser-p0168-p0240`.
+
+It removed the matching local and remote branches at their reviewed tips:
+
+- `feature/p0240-sealed-auth-runtime-compatible` at `0bb7fc56`;
+- `integration/p0168-p0240-residual` at `7f2b7083`.
+
+After prune, only canonical `main` and the P168 closeout worktree remained.
+The original P0240 historical note commits are recoverable by their commit IDs;
+the accepted source is recoverable through PR 30 and `de614fbe`.
 
 ## Negative effects
 
