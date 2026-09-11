@@ -3,6 +3,21 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 292 | 2026-09-10
+
+Plan0164 is COMPLETE. Forward-only installer repair through `8070505d` prevents
+rollback after committed ownership, generation, or service-state effects;
+older-candidate doctor projections and runtime-monitor backoff now converge
+across upgrades. Missing operator presentation remains visible but nonblocking.
+
+Final transaction `upgrade-4026dffd-af10-4f33-a519-2a430929fb6e` accepted
+generation `0.28.0-6d4e6085c1de-e6cab967af18`, SHA256 `6d4e6085c1dee1a6e135e473f221277b0cf1ca4fd48fc79d16c767437e234381`.
+Doctor succeeds with no blocking issues; monitor and supervisor are ready.
+Fresh census: one dashboard, one runtime host, one executable generation, zero
+legacy daemons. Exact temporary-fixture PID39694 was terminated and verified
+absent. Shared production skill matches the repo. No rollback was used for the
+accepted final transaction. Plan0160 remains OPEN for wider A1–A4/AX work.
+
 ## Turn 291 | 2026-09-10
 
 The Last30Days degraded tick adds A1/AX cases. LinkedIn's lock timeout stopped
@@ -17,38 +32,6 @@ exposed `presentation_bound_slot_missing`. Plan0162 adopts Plan0124's arbitrary-
 model: three warm desktops, logical-browser allocation and just-in-time
 multi-viewer streaming. Plan0161 repair remains the critical path; Plan0162
 then supplies Plan0160 A2/A3.
-
-## Turn 289 | 2026-09-10
-
-Graceful production upgrade is accepted. Transaction
-`upgrade-0b9c31b6-5aaf-407e-a75d-931ec27502e4` installed source `84866611` as
-generation `0.28.0-f01c48c32d6a-850a0203f68d`, automatically replaced the
-supervisor and retired both prior runtime hosts. Doctor reports
-`steady_current`: one runtime host, one dashboard, one executable generation,
-zero legacy daemons and no multiplicity issue. Candidate SHA256 is
-`f01c48c32d6addd5442719ef456c08f62aa832007f6b8dafce737b25c31b6e68`.
-
-The Odollo browser PID 26188 survived unchanged and post-install diagnostics
-returned complete control-plane attestation. Durable synthetic handoff r35043
-resolved ready through the installed generation. Its browser PID 87885 also
-survived the transfer and was terminated only after acceptance; exit was
-verified and final doctor remained green. Service cleanup exposed a remaining
-profile-transfer defect: the new owner first rejected the old browser alias,
-then reported its current browser profile missing. Plan0161 owns that repair.
-
-Source commits 2ba75244, 2215a78a, 27b339bd and 84866611 repair effect-free
-transfer resume, complete planned-host validation, recovery self-exclusion and
-transient source-exit observation. The full workstation installer suite passes
-139 tests; format and workspace Clippy pass. Receipts are under
-`~/.agent-browser/campaigns/p160/graceful-upgrade-r4/`. This accepts the exact
-browser-preserving transaction. Upgrade resilience remains open: another
-install must converge automatically after stale records or an interrupted
-shutdown, and production doctor must distinguish isolated development hosts
-from conflicting production authorities. Source now routes a matching prior
-admission owner through exact resume or recovery before creating a new install
-transaction; focused isolated tests pass, but this is not installed acceptance.
-Plan0160 remains OPEN for that A3
-requirement, profile ownership, BILL/QBO recovery and the deferred A1/A4/AX work.
 
 ## Turn 286 | 2026-09-09
 

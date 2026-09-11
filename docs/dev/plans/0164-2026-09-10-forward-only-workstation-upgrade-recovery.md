@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-State: OPEN
+State: COMPLETE
 
 Consolidation: required
 
@@ -12,7 +12,7 @@ Branch: main
 
 Target: main
 
-Integration: merge
+Integration: direct `main`
 
 Parent: [Plan 0160](0160-2026-09-06-production-profile-identity-and-operational-readiness.md), A3
 
@@ -110,7 +110,38 @@ must remain with the primary.
 | Source qualification | Validation selector, format, strict workspace Clippy, focused installer tests | All touched Rust surfaces pass once on the frozen source |
 | Installed production state | Transaction receipts, binary digest, supervisor and process census, install doctor | Repaired generation is selected, exactly one production runtime host and one dashboard generation remain, and no duplicate fixture process exists |
 
-RUNBOOK.md remains the sole current execution status. Close this plan only when
-the source is merged, the repaired binary is installed, the exact production
-transaction history proves no rollback was accepted, and fresh process plus
-doctor readback proves the singular supervised topology.
+RUNBOOK.md remains the sole current execution status.
+
+## Completion evidence
+
+The source repair is committed on `main` through `8070505d`. In addition to the
+planned forward-only, durable resume, candidate-manifest, and presentation
+decoupling work, live qualification exposed and repaired three successor
+compatibility defects: post-commit generation selection now makes rollback
+unavailable, runtime-monitor backoff is scoped to the executable SHA that
+failed, and missing operator-journey proof remains a visible doctor warning
+without making the installed workstation nonzero.
+
+Final transaction `upgrade-4026dffd-af10-4f33-a519-2a430929fb6e` accepted
+generation `0.28.0-6d4e6085c1de-e6cab967af18` at revision 13 with terminal
+result `accepted`, no stop reason, and zero outstanding owner obligations. The
+installed binary SHA-256 is
+`6d4e6085c1dee1a6e135e473f221277b0cf1ca4fd48fc79d16c767437e234381`.
+No rollback command was used for the final transaction.
+
+Fresh installed doctor returned success with no blocking issues. The deferred
+operator journey is the sole warning. Runtime multiplicity is
+`steady_current`: one dashboard process, one runtime host, one executable
+generation, and zero legacy daemons. The session supervisor is ready on the
+selected executable with zero restarts. The runtime monitor is healthy, has
+zero consecutive failures, and is bound to the installed SHA. The leaked test
+daemon PID 39694 was proven to own only
+`/tmp/ab-service-collections-no-launch-IKTKS5/s/runtime-host.sock`, terminated
+by exact PID, and verified absent. The production Agent Browser skill is
+synchronized with the repository copy.
+
+Focused live-derived regressions, Rust formatting, and strict workspace Clippy
+passed. Earlier batch qualification also passed the workstation installer
+fixture, source-free fixture, dashboard/docs checks, and the partitioned
+installer tests recorded in the structured commit history. This plan is
+complete; Plan 0160 remains authoritative for wider A1 to A4 and AX work.
