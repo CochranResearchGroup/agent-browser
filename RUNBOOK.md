@@ -3,6 +3,15 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 293 | 2026-09-11
+
+[Plan0165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
+is OPEN for one consumer-blocking BILL form drift. The observed identifier
+surface uses `input#login-email-input[name='loginEmail']` with `Continue`; the installed
+closed recipe stopped two sealed runs before credential or challenge-provider effects. The bounded repair retains legacy `Save`, permits one source-frozen production
+build and workstation install, preserves `bill-soylei`, and stops downstream
+work at read-only consumer inspection.
+
 ## Turn 292 | 2026-09-10
 
 Plan0164 is COMPLETE. Forward-only installer repair through `8070505d` prevents

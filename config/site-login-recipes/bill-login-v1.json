@@ -9,12 +9,13 @@
   "authenticatedCompanyPathPrefix": "/companies/",
   "identifier": {
     "fieldSelectors": [
+      "input#login-email-input[name='loginEmail']",
       "input[autocomplete='username']",
       "input[type='email']",
       "input[name='username']",
       "input[name='email']"
     ],
-    "submitLabels": ["Save"]
+    "submitLabels": ["Save", "Continue"]
   },
   "password": {
     "fieldSelectors": [

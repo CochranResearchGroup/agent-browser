@@ -86,7 +86,7 @@ fn validate_recipe(recipe: &SiteLoginRecipe) -> Result<(), String> {
         || recipe.identifier.field_selectors.is_empty()
         || recipe.password.field_selectors.is_empty()
         || recipe.sms_otp.field_selectors.is_empty()
-        || recipe.identifier.submit_labels != ["Save"]
+        || recipe.identifier.submit_labels != ["Save", "Continue"]
         || recipe.password.submit_labels != ["Sign in"]
         || recipe.sms_otp.submit_labels != ["Continue"]
         || recipe.password_persistence.policy != PasswordPersistencePolicy::Save
@@ -210,6 +210,31 @@ mod tests {
     #[test]
     fn forms_are_classified_only_from_closed_selectors_and_labels() {
         let recipe = load_site_login_recipe("bill-login-v1").unwrap();
+        let mut current_identifier = evidence("https://login.us.bill.com/neo/login");
+        current_identifier.identifier_selector =
+            Some("input#login-email-input[name='loginEmail']".to_string());
+        current_identifier
+            .visible_button_labels
+            .push("Continue".to_string());
+        assert_eq!(
+            classify_site_page(&recipe, "company-123", &current_identifier)
+                .unwrap()
+                .state,
+            SiteLoginState::IdentifierForm
+        );
+
+        let mut legacy_identifier = evidence("https://login.us.bill.com/neo/login");
+        legacy_identifier.identifier_selector = Some("input[type='email']".to_string());
+        legacy_identifier
+            .visible_button_labels
+            .push("Save".to_string());
+        assert_eq!(
+            classify_site_page(&recipe, "company-123", &legacy_identifier)
+                .unwrap()
+                .state,
+            SiteLoginState::IdentifierForm
+        );
+
         let mut otp = evidence("https://login.us.bill.com/auth");
         otp.sms_otp_selector = Some("input[autocomplete='one-time-code']".to_string());
         otp.visible_button_labels.push("Continue".to_string());
