@@ -5,10 +5,10 @@ Keep at or below 200 lines under policy0043.
 
 ## Turn 294 | 2026-09-11
 
-Plan0166 is PLANNED before Plan0162. It preserves active Plan0165, P157 and
-unique P0240 work, reconciles Git custody, then reproduces the deadline defect.
-No Odollo retry, new browser/profile, tenant effect or production install is
-authorized; the completed RuFresh no-result remains valid.
+Plan0166 is OPEN. M0 restored canonical `main`, removed five clean integrated
+worktrees and four merged local branches, and trashed one exact orphaned test
+profile after exact process termination. Four worktrees remain; Plan0165 and
+P0240 stay active, P157 is paused, and no Odollo effect occurred.
 
 ## Turn 293 | 2026-09-11
 

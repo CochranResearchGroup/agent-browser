@@ -2,7 +2,7 @@
 
 Date: 2026-09-11
 
-State: PLANNED
+State: OPEN
 
 Consolidation: required
 
@@ -37,7 +37,7 @@ mutation, tenant effects, broad process cleanup, release publication, or
 deletion of an unmerged branch. The completed RuFresh no-result remains valid
 and must not be reopened or repeated as part of this work.
 
-## Current evidence and working hypothesis
+## Current State and working hypothesis
 
 The 2026-09-11 Git audit found nine clean worktrees. During planning, Plan 0165
 landed on `main` and `origin/main` at `ad612596`; its BILL repair remains a
@@ -47,6 +47,16 @@ branches or detached worktrees are already represented in `main`, while
 branch remains the source ref for the open Plan 0158 lane. Those two refs require
 preservation unless a fresh bounded ancestry and lane audit proves a different
 disposition.
+
+M0 completed on 2026-09-11. The canonical worktree now owns clean `main` at
+`ad612596`. Five clean worktrees whose commits were reachable from `main` were
+removed, together with the four corresponding integrated local branches. One
+orphaned Plan 0161 Chrome fixture tree was positively bound by executable,
+temporary profile, parentage, process group, and cwd before exact termination;
+its 53 MB temporary profile was moved to trash. Current remote readback found no
+stale origin tracking ref to prune. Four worktrees remain: canonical `main`, the
+active Plan 0165 operation, the unique P0240 runtime-compatible lane, and this
+Plan 0166 branch. P157 remains preserved as a paused published ref.
 
 The report does not yet distinguish a client transport deadline from the
 control plane's coordinated worker deadline. Current source inspection suggests,

@@ -6,7 +6,7 @@ lanes:
     plan_ref: refs/heads/maintenance/plan-0166-connection-release
     branch: maintenance/plan-0166-connection-release
     target: main
-    plan_state: PLANNED
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     checkpoint: ad6125963d24bb3846495b5bf7af24e92b8121e7
     remote_ref: null
@@ -39,7 +39,7 @@ lanes:
     branch: plan/profile-permissions-and-request-provenance
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: PAUSED_REF
     checkpoint: 7238f8396ad17c30ae0fcefd326f0ef68df53a1e
     remote_ref: refs/remotes/origin/plan/profile-permissions-and-request-provenance
     integration_receipt: null
