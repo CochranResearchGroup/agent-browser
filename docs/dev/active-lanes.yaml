@@ -1,5 +1,37 @@
 schema_version: 1
 lanes:
+  - id: P166
+    objective: Reconcile repository custody and repair timed-out task-owned connection release without weakening live-owner protection
+    plan: docs/dev/plans/0166-2026-09-11-repository-custody-and-timed-out-connection-release.md
+    plan_ref: refs/heads/maintenance/plan-0166-connection-release
+    branch: maintenance/plan-0166-connection-release
+    target: main
+    plan_state: PLANNED
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: ad6125963d24bb3846495b5bf7af24e92b8121e7
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P165]
+    overlaps: [P157]
+    reconciled_overlaps: [P157_preserve_open_source_ref]
+    updated_at: 2026-09-11
+  - id: P165
+    objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
+    plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md
+    plan_ref: refs/heads/fix/bill-login-email-continue
+    branch: fix/bill-login-email-continue
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: ad6125963d24bb3846495b5bf7af24e92b8121e7
+    remote_ref: refs/remotes/origin/fix/bill-login-email-continue
+    integration_receipt: ad6125963d24bb3846495b5bf7af24e92b8121e7
+    integration: merge
+    dependencies: []
+    overlaps: [P166]
+    reconciled_overlaps: [P166_preserve_active_operation]
+    updated_at: 2026-09-11
   - id: P157
     objective: Complete frozen-candidate adversarial acceptance for profile permissions, runtime convergence, remote handoffs, dashboard truth, and causal logging
     plan: docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md

@@ -147,6 +147,13 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
+[Plan 0166](docs/dev/plans/0166-2026-09-11-repository-custody-and-timed-out-connection-release.md)
+is the maintenance gate before new Plan 0162 implementation. It first restores
+truthful worktree and branch custody, then reproduces and repairs the reported
+deadline case where an exited CLI leaves its exact task-owned connection active.
+It permits no Odollo retry, new browser or profile, tenant action, or production
+installation; the completed RuFresh no-result remains valid.
+
 [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
 governs the four remaining production readiness items. Current execution,
 acceptance evidence, cumulative effort, and the next bounded action are owned by
@@ -160,8 +167,8 @@ The authenticated operator journey now adopts Plan 0124's arbitrary-N capacity t
 browsers bind to validated desktop slots, while Guacamole viewers join those
 desktops just in time without client route selection. Its initial production
 target is three warm slots and shared viewing of one browser from three
-locations. Maintenance reconciliation and unattended operation follow those
-owner/lease and presentation milestones. Plan 0159's bounded completion and installed profile repair do
+locations. Unattended operation follows those owner/lease and presentation
+milestones. Plan 0159's bounded completion and installed profile repair do
 not establish whole production readiness. P158's historical calibration sequence
 remains paused and its incomplete criteria remain visible.
 

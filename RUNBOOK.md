@@ -3,12 +3,18 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 294 | 2026-09-11
+
+Plan0166 is PLANNED before Plan0162. It preserves active Plan0165, P157 and
+unique P0240 work, reconciles Git custody, then reproduces the deadline defect.
+No Odollo retry, new browser/profile, tenant effect or production install is
+authorized; the completed RuFresh no-result remains valid.
+
 ## Turn 293 | 2026-09-11
 
 [Plan0165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
-is OPEN for one consumer-blocking BILL form drift. The observed identifier
-surface uses `input#login-email-input[name='loginEmail']` with `Continue`; the installed
-closed recipe stopped two sealed runs before credential or challenge-provider effects. The joined repair also aligns Authentication Run with the broker's exact-tab shared task lease while rejecting inactive and human-takeover leases. It retains legacy `Save`, preserves `bill-soylei`, and stops downstream work at read-only consumer inspection.
+is OPEN for one consumer-blocking BILL form drift. Its identifier is
+`input#login-email-input[name='loginEmail']` with `Continue`; two installed sealed runs stopped before credential or challenge-provider effects. The joined repair aligns Authentication Run with the broker's exact-tab shared task lease while rejecting inactive and human-takeover leases. It retains legacy `Save`, preserves `bill-soylei`, and stops downstream work at read-only consumer inspection.
 
 ## Turn 292 | 2026-09-10
 
@@ -17,13 +23,9 @@ rollback after committed ownership, generation, or service-state effects;
 older-candidate doctor projections and runtime-monitor backoff now converge
 across upgrades. Missing operator presentation remains visible but nonblocking.
 
-Final transaction `upgrade-4026dffd-af10-4f33-a519-2a430929fb6e` accepted
-generation `0.28.0-6d4e6085c1de-e6cab967af18`, SHA256 `6d4e6085c1dee1a6e135e473f221277b0cf1ca4fd48fc79d16c767437e234381`.
-Doctor succeeds with no blocking issues; monitor and supervisor are ready.
-Fresh census: one dashboard, one runtime host, one executable generation, zero
-legacy daemons. Exact temporary-fixture PID39694 was terminated and verified
-absent. Shared production skill matches the repo. No rollback was used for the
-accepted final transaction. Plan0160 remains OPEN for wider A1–A4/AX work.
+Final transaction `upgrade-4026dffd-af10-4f33-a519-2a430929fb6e` accepted its
+generation; doctor and the singular runtime census passed. Exact fixture
+PID39694 was removed, no rollback was used, and Plan0160 remains OPEN.
 
 ## Turn 291 | 2026-09-10
 
