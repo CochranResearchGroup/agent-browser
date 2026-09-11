@@ -504,24 +504,35 @@ fn verify_install_transaction_census(
 fn install_transaction_requires_forward_completion(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<bool, String> {
-    use crate::runtime_adoption::RuntimeLaneTransferState;
+    use crate::runtime_adoption::{RuntimeLaneTransferState, UpgradeTransactionState};
 
     if crate::runtime_replacement::requires_forward_recovery(transaction)? {
         return Ok(true);
     }
-    Ok(transaction.runtime_handoffs.iter().any(|handoff| {
-        handoff.committed || handoff.source_finalized || handoff.irreversible_source_revocation
-    }) || transaction
-        .runtime_host_convergence
+    Ok(matches!(
+        transaction.state,
+        UpgradeTransactionState::GenerationCommitted
+            | UpgradeTransactionState::PostCommitValidating
+            | UpgradeTransactionState::Accepted
+            | UpgradeTransactionState::OldGenerationRetirable
+    ) || transaction
+        .service_state_migration
         .as_ref()
-        .is_some_and(|convergence| {
-            convergence.lanes.iter().any(|lane| {
-                matches!(
-                    lane.state,
-                    RuntimeLaneTransferState::Committed | RuntimeLaneTransferState::Finalized
-                )
-            })
-        }))
+        .is_some_and(|migration| migration.committed)
+        || transaction.runtime_handoffs.iter().any(|handoff| {
+            handoff.committed || handoff.source_finalized || handoff.irreversible_source_revocation
+        })
+        || transaction
+            .runtime_host_convergence
+            .as_ref()
+            .is_some_and(|convergence| {
+                convergence.lanes.iter().any(|lane| {
+                    matches!(
+                        lane.state,
+                        RuntimeLaneTransferState::Committed | RuntimeLaneTransferState::Finalized
+                    )
+                })
+            }))
 }
 
 fn install_transaction_effect_free(
@@ -5857,6 +5868,11 @@ fn install_doctor_reports_expected_upgrade_ready(
                 return false;
             }
             if code == Some("runtime_monitor_not_ready") {
+                return false;
+            }
+            if code == Some("dashboard_operator_journey_not_ready")
+                || code == Some("workstation_upgrade_readiness_not_ready")
+            {
                 return false;
             }
             if code == Some("runtime_pressure_ownership_unknown")
@@ -16838,6 +16854,20 @@ mod tests {
             ["operatorJourneyReady"] = Value::Bool(false);
         journey_missing["data"]["liveDashboardRuntime"]["workstationUpgrade"]["dashboardIngress"]
             ["presentationReceipt"] = Value::Null;
+        journey_missing["data"]["issues"] = serde_json::json!([
+            {"code": "workstation_upgrade_transaction_not_terminal"},
+            {"code": "dashboard_operator_journey_not_ready"},
+            {"code": "workstation_upgrade_readiness_not_ready"},
+            {"code": "runtime_monitor_not_ready"},
+        ]);
+        journey_missing["data"]["runtimeMultiplicity"] = serde_json::json!({
+            "selectedGenerationId": "generation-new",
+            "convergenceWindow": {
+                "active": true,
+                "transactionId": transaction.transaction_id.clone(),
+            },
+            "runtimeHosts": [],
+        });
         assert!(install_doctor_reports_expected_upgrade_ready(
             &journey_missing,
             &transaction,
@@ -18084,6 +18114,26 @@ mod tests {
         );
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn committed_generation_is_forward_only_without_runtime_handoffs() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-forward-only-generation-commit-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating;
+
+        assert!(install_transaction_requires_forward_completion(&transaction).unwrap());
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
