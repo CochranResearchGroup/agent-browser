@@ -199,3 +199,217 @@ processes were terminated through PID descriptors with start/executable checks.
 No matching fixture HOME processes remained across all three attempts. The
 first two normal host shutdowns had left no owned residue. No production browser
 or incident tab was touched. Product repair and green verification remain open.
+
+
+## SoyLei r2 consumer gate, 2026-09-07
+
+A fresh Plan0137 r2 readiness check is blocked at service ownership evidence.
+This is a separate observation from the historical wrong-tab incident above;
+it neither diagnoses that incident nor establishes that its repair is installed.
+
+The service successfully opened the consumer's own target
+`296BABDFC11C3C9F147FAD7A1124BD55`. Diagnostics identify owner generation24 and
+browser PID66046, but control-plane attestation lists missing proofs
+`profile_lease` and `handoff_receipt`. Owner readiness alone therefore does not
+establish permission for the consumer's browser work.
+
+The consumer registered its own capability successfully, but registration returned
+`boundToCurrentOwner:false`. The terminal-replacement recovery-plan response remained
+`blocked`, with dominant blocker `terminal_owner_evidence_incomplete`,
+`recoverable:false`, and next action `inspect_lifecycle_owner`. Its stated reason
+is missing exact terminal cleanup and process-absence proof for the retained
+lifecycle owner. Registration is not evidence that owner binding was repaired.
+
+Repository source review clarified that this planner requires a terminal owner
+and process-absence evidence. The observed owner is live and Ready at generation24
+with PID66046. Its refusal is therefore an expected unsatisfied terminal-replacement
+contract, not contradictory health or a diagnosed service defect. The ordinary
+live-lease reconciliation path was evaluated separately, as recorded below;
+terminal-replacement refusal alone does not establish that no safe consumer
+recovery path exists.
+
+No CDP attachment, fixture authentication, payment or page mutation was performed
+in this fresh resumed check. Browser effects were limited to opening the owned
+tab and registering the consumer capability. No cleanup retry or foreign-tab
+repair is claimed. The consumer has not proceeded with browser work or applied a reconciliation
+transition; these correlation identifiers are not reusable authority.
+
+Private evidence remains in
+`~/.soylei-website/operation-receipts/p0137-browser-readiness-r2/`:
+`access-plan.json`, `tab-response.json`, `diagnostics.json`,
+`capability-register.json`, and `recovery-plan.json`. The writer directly read
+the tab, diagnostic, registration and recovery outcome fields. Capability file
+contents, access credentials and unrelated page URLs are intentionally absent
+from this note. No browser actions occurred while appending this section.
+
+
+The subsequent own-lease plan, retained as `own-lease-reconcile-plan.json`,
+reports `no_safe_reconciliation_transition`, `effectCapable:false`, and
+`proposedTransitions:[]`. The separate legacy live-lease plan in
+`live-lease-reconcile-plan.json` rejects `profile_lease_authority_mismatch`;
+that denial is expected for its null principal and is not permission to adopt it.
+These exact evaluated plans admit no consumer transition. No apply or payment
+followed them.
+
+A repository-agent source review identifies a prospective identity-resolution
+lead: the newly registered own lease has profile digest prefix `ac1e2fb`, while
+the actual Ready owner's profile digest prefix is `71def0b`. Registration appears
+to canonicalize raw `userDataDir: Default` relative to the caller's working
+directory, whereas terminal recovery resolves the named profile. This is a
+reported investigation lead, not a confirmed cause or repair. The agent-browser
+repository agent should check that registration and live-lease reconciliation
+resolve the named profile to the same physical identity as the current owner,
+and reproduce the mismatch before changing behavior. Do not work around the
+mismatch by applying a foreign lease or bypassing owner proof.
+
+## Consumer source-repair coordination, 2026-09-07
+
+The SoyLei operator asked to force progress after the blocked consumer check.
+The consumer is preparing a narrow named-profile identity correction on branch
+`fix/p0137-named-profile-identity-20260906`, isolated from the ongoing Plan0160
+attestation and tab-cleanup work. Scope: consistent named-profile resolution for
+capability registration, rotation and lease projection, with regression tests.
+This is a source contribution for the Plan0160 owner to reconcile; it does not
+authorize bypassing ownership checks or publish a competing installed runtime.
+The consumer will record the frozen commit and validation here when available.
+No browser mutation or payment resulted from this coordination note.
+
+Coordination update: the consumer observed Plan0160's new
+`named_profile_registration_and_lease_projection_use_launch_identity` regression
+in the primary worktree and stopped its overlapping implementation lane. Its
+isolated branch already carries a candidate `resolved_profile_identity_digest`
+helper shared by registration, rotation, unbound lease projection and recovery,
+plus a test that also rejects a foreign principal binding. The consumer will
+preserve that patch for review rather than merging over the primary owner's
+active repair. The primary Plan0160 owner retains integration and publication.
+
+Consumer contribution is now frozen at local commit
+`3cb446bd2f3906c7cf58bcbec15caf23d3bd3813` on the isolated branch above, based on
+`406f47ba`. The focused frozen test passed (one test, exit0), including reuse of
+an already-issued capability through guarded rejoin and rejection of a conflicting
+foreign principal. No red-before-fix claim is made. Root reviewed the three-file
+diff and the retained test log. Formatting, Clippy and broader lease coverage
+remain for the integrating owner; the contribution is not installed or published.
+No builds remain. Prefer one reconciled Plan0160 candidate over duplicate fixes.
+For the existing consumer capability, the prospective post-fix route is a fresh
+lease projection followed by its permitted rejoin using the current lease ID and
+revision; no capability rotation, new principal or synthetic owner state is needed.
+Actual runtime readback remains required and could still reveal a separate gate.
+
+## SoyLei original-client recovery retry, 2026-09-08
+
+The original Plan0137 client retried diagnostics against its retained target
+`296BABDFC11C3C9F147FAD7A1124BD55` using the existing `codex-p0137`
+registered capability and the original saved `serviceTabHandle`. The installed
+production MCP route accepted and correlated the request, then refused it at
+child admission before browser effects.
+
+Exact response classification:
+
+```json
+{
+  "success": false,
+  "id": "mcp-service-request-diagnostics-064ce074-f55d-4182-9a49-60161fb5db47",
+  "failure": {
+    "axis": "profile_access",
+    "code": "profile_child_subject_mismatch",
+    "phase": "child_admission",
+    "effectState": "no_effect",
+    "retryDisposition": "do_not_retry",
+    "recommendedAction": "use_own_service_tab_handle",
+    "reuseAllowed": false,
+    "hardStops": [
+      "blind_retry",
+      "impersonate_child_owner"
+    ]
+  },
+  "terminalOutcome": {
+    "state": "failed",
+    "phase": "execution",
+    "effectState": "no_effect",
+    "retryDisposition": "do_not_retry"
+  }
+}
+```
+
+The response and retained job use the same request and job ID shown above.
+The denial evidence reports `ownerAssurance:self-declared`,
+`callerAssurance:registered-capability`, `connectionState:disconnected`,
+`permission:tab_observe`, and `reconnectRequested:true`. Both the child and
+current policy contain the required permission at revision1, so this is an
+identity continuity refusal rather than a missing read permission.
+
+The client obeyed the typed hard stop. It did not retry, change attribution,
+refresh or replace the handle, register or rotate a capability, adopt a lease,
+create a profile or tab, close a tab, or perform a payment or other page
+action. Consequently no harmless page read was attempted. Read-only status
+after refusal still showed the exact target `ready`, its retained handle
+`valid:true`, and its child connection `disconnected`; the refusal reports
+`effectState:no_effect`.
+
+Private evidence is retained outside the product repo under
+`~/.soylei-website/operation-receipts/p0137-browser-readiness-r3/`, including
+the exact MCP response, correlated job, trace, post-refusal Service status and
+checksums. An earlier direct attempt used the stream port advertised by a
+status projection, but the listener was already absent and returned only local
+`ECONNREFUSED`; it created no Agent Browser request or job ID and did not touch
+the browser. Credential contents, private URLs, connection tokens and unrelated
+tab details remain outside this note.
+
+## SoyLei corrected self-declared recovery retry, 2026-09-08
+
+After maintainer correction at Git `692f3fc9`, the original Plan0137 client
+read a fresh access plan using its original `SoyLeiWebsite`, `codex-p0137` and
+`final-qualification-r2` labels without the optional profile capability. Access
+plan response `r129188` selected `Default`, retained `shared-local` policy
+revision1, identified the exact original self-declared subject, and returned
+`allowed:true`, no missing permission, `nextAction:proceed`, and the existing
+browser/session reuse route.
+
+The client then submitted one capability-free diagnostics request with the
+original saved `serviceTabHandle`. Exact response classification:
+
+```json
+{
+  "success": true,
+  "id": "mcp-service-request-diagnostics-04088dda-6dfe-4f53-b932-30c763f63879",
+  "error": null,
+  "data": {
+    "ok": true,
+    "action": "diagnostics",
+    "controlPlaneAttestation": {
+      "complete": true,
+      "missingProofs": []
+    }
+  },
+  "terminalOutcome": {
+    "state": "succeeded",
+    "phase": "execution",
+    "effectState": "verified_effect",
+    "failure": null,
+    "retryDisposition": "do_not_retry"
+  }
+}
+```
+
+The response and retained job use the same request and job ID shown above.
+Terminal provenance records the full original service/agent/task subject with
+`identityAssurance:self-declared`. Diagnostics recovered the exact retained
+target, verified browser owner generation24, matching process identity, active
+profile lease with matching handle and requested profile, and managed-launch
+owner custody. The attestation is complete with zero missing proofs. Its bounded
+URL and title read matched the intended fixed-development contractor-login page.
+
+This closes the original-client reconnect/readiness check as successful for the
+retained handle. It does not authorize payment or another consequential action.
+The client did not use or rotate the registered credential, adopt or mutate a
+lease, replace or refresh the handle, create or close a tab, or mutate the page.
+Read-only status after success still showed the exact target ready and handle
+valid; the durable child record remains disconnected because the recovered MCP
+connection is request-scoped.
+
+Private evidence and checksums are retained outside the product repo under
+`~/.soylei-website/operation-receipts/p0137-browser-readiness-r4/`. The directory
+contains the full access plan, exact MCP response, correlated job and trace, and
+post-success Service status. Credential contents, private connection tokens and
+unrelated tab details remain outside this note.
