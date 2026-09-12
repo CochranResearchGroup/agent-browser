@@ -22,6 +22,16 @@ pub(crate) mod action_commands {
     use serde_json::{json, Map, Value};
     use std::time::{Duration, Instant};
     use tokio::sync::{broadcast, oneshot, RwLock};
+
+    fn service_tab_browser_id_from_result(data: &Value, session_id: &str) -> String {
+        data.get("browserId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|browser_id| !browser_id.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| service_browser_id(session_id))
+    }
+
     pub(crate) fn persist_service_owned_navigate_tab(
         cmd: &Value,
         session_id: &str,
@@ -47,14 +57,15 @@ pub(crate) mod action_commands {
             .runtime_profile_name()
             .map(|profile| Value::String(profile.to_string()))
             .unwrap_or(Value::Null);
+        let browser_id = service_tab_browser_id_from_result(data, session_id);
         let service_tab_handle = json!(
-            { "browserId" : service_browser_id(session_id), "sessionName" : session_id,
+            { "browserId" : browser_id, "sessionName" : session_id,
             "tabId" : tab_id, "targetId" : target_id, "url" : url, "title" : title,
             "profileId" : profile_id.clone(), "profileOrigin" : "agent_browser_owned",
             "leaseId" : session_id, "leaseState" : "shared", "cleanupPolicy" : "close_tabs",
             "leaseHeartbeatExpected" : true, "ownerSessionId" : session_id,
             "profileAccess" : profile_child_access_from_command(cmd), "jobId" :
-            Value::Null, "traceFilter" : { "browserId" : service_browser_id(session_id),
+            Value::Null, "traceFilter" : { "browserId" : browser_id,
             "profileId" : profile_id, "sessionId" : session_id, "serviceName" :
             optional_command_string(cmd, "serviceName"), "agentName" :
             optional_command_string(cmd, "agentName"), "taskName" :
@@ -69,6 +80,30 @@ pub(crate) mod action_commands {
             title,
             &service_tab_handle,
         )
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn tab_persistence_preserves_runtime_owner_browser_id_from_result() {
+            assert_eq!(
+                service_tab_browser_id_from_result(
+                    &json!({"browserId": "session:durable-browser"}),
+                    "daemon-route",
+                ),
+                "session:durable-browser"
+            );
+        }
+
+        #[test]
+        fn tab_persistence_falls_back_to_daemon_route_without_result_browser_id() {
+            assert_eq!(
+                service_tab_browser_id_from_result(&json!({}), "daemon-route"),
+                "session:daemon-route"
+            );
+        }
     }
     pub(crate) fn add_manual_login_hint_warning(cmd: &Value, data: &mut Value) {
         let Some(service) = cmd
