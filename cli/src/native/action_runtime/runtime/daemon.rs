@@ -1096,8 +1096,8 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
             return Err("explicit_profile_conflicts_with_authenticated_cold_route".to_string());
         }
     }
-    options.runtime_profile = Some(profile_id);
-    options.profile = profile.user_data_dir.clone();
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(&profile_id, profile);
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {

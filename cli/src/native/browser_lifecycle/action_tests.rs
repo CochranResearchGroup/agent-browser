@@ -187,6 +187,141 @@ fn navigation_observation_preserves_existing_child_custody() {
 }
 
 #[test]
+fn navigation_observation_resolves_exact_current_owner_browser_alias() {
+    use crate::native::service_model::{
+        BrowserProfile, BrowserSession, BrowserTab, ServiceBrowserProcessIdentity,
+    };
+    use crate::process_identity::RecordedProcessIdentity;
+    use crate::runtime_owner_transfer::{ProfileOwner, RuntimeOwnerRegistry};
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("navigation-owner-browser-alias");
+    let profile_path = home.join("runtime-profiles/default/user-data");
+    fs::create_dir_all(&profile_path).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let session_id = "handoff-current";
+    let retained_browser_id = "session:handoff-retained";
+    let owner_browser_id = "session:handoff-current";
+    let process_identity = RecordedProcessIdentity {
+        pid: 4242,
+        start_token: "linux:boot:42".to_string(),
+        executable_path: Some("/opt/chrome/chrome".to_string()),
+        browser_family: Some("chrome".to_string()),
+    };
+    let profile_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
+    let process_digest = crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
+    let owner = ProfileOwner {
+        owner_id: "owner-current".to_string(),
+        profile_identity_digest: profile_digest,
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 9,
+        browser_id: owner_browser_id.to_string(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: process_digest,
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let snapshot = ServiceState {
+        profiles: BTreeMap::from([(
+            "default".to_string(),
+            BrowserProfile {
+                id: "default".to_string(),
+                user_data_dir: Some(profile_path.display().to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            retained_browser_id.to_string(),
+            BrowserProcess {
+                id: retained_browser_id.to_string(),
+                profile_id: Some("default".to_string()),
+                pid: Some(4242),
+                health: ServiceBrowserHealth::Ready,
+                active_session_ids: vec![session_id.to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        browser_process_identities: BTreeMap::from([(
+            retained_browser_id.to_string(),
+            ServiceBrowserProcessIdentity {
+                process_identity,
+                user_data_dir: Some(profile_path.display().to_string()),
+                runtime_profile: Some("default".to_string()),
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                profile_id: Some("default".to_string()),
+                browser_ids: vec![retained_browser_id.to_string()],
+                tab_ids: vec!["target:owned".to_string()],
+                ..BrowserSession::default()
+            },
+        )]),
+        tabs: BTreeMap::from([(
+            "target:owned".to_string(),
+            BrowserTab {
+                id: "target:owned".to_string(),
+                browser_id: retained_browser_id.to_string(),
+                target_id: Some("owned".to_string()),
+                session_id: Some(session_id.to_string()),
+                owner_session_id: Some(session_id.to_string()),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        )]),
+        runtime_owner_registry: RuntimeOwnerRegistry::from_owner(owner),
+        ..ServiceState::default()
+    };
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store.save(&snapshot).unwrap();
+
+    persist_service_owned_tab_new(
+        &json!({"action":"navigate", "serviceName":"Odollo"}),
+        session_id,
+        Some("owned"),
+        Some("about:blank#canonical"),
+        Some("Canonical"),
+        &serde_json::to_value(ServiceTabHandle {
+            browser_id: owner_browser_id.to_string(),
+            session_name: Some(session_id.to_string()),
+            tab_id: "target:owned".to_string(),
+            target_id: Some("owned".to_string()),
+            ..ServiceTabHandle::default()
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let current = store.load().unwrap();
+    let tab = &current.tabs["target:owned"];
+    assert_eq!(tab.browser_id, retained_browser_id);
+    assert_eq!(tab.url.as_deref(), Some("about:blank#canonical"));
+    assert_eq!(tab.title.as_deref(), Some("Canonical"));
+    let conflict = persist_service_owned_tab_new(
+        &json!({"action":"navigate", "serviceName":"Odollo"}),
+        session_id,
+        Some("owned"),
+        Some("about:blank#foreign"),
+        None,
+        &serde_json::to_value(ServiceTabHandle {
+            browser_id: "session:foreign".to_string(),
+            session_name: Some(session_id.to_string()),
+            tab_id: "target:owned".to_string(),
+            target_id: Some("owned".to_string()),
+            ..ServiceTabHandle::default()
+        })
+        .unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(conflict, "service_navigation_tab_identity_conflict");
+}
+
+#[test]
 fn tab_persistence_uses_service_handle_browser_identity() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("tab-handle-browser-identity");
