@@ -1,16 +1,32 @@
 # Runbook
 
-Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
-Keep at or below 200 lines under policy0043.
+Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
+
+## Turn 302 | 2026-09-12
+
+Plan0171 (`docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md`) is OPEN and integration-ready under the operator's explicit “Ok go” authority. Fork repairs merged cleanly; three focused tests, formatting, clippy, and optimized build pass at source `fbeca748`, producing SHA-256 `d49bfb95425af4498acb75b7516ad224112e923237c78045ecc7cdb0e9507146`. The 12-minute build remained inside the governed one-job Cargo cgroup. The dirty main and Turnstile worktrees remain untouched. No push, install, browser, profile, provider, cleanup, or Service State effect has occurred at this checkpoint.
+
+## Turn 301 | 2026-09-12
+
+Plan0170 is CLOSED and source-qualified on isolated branch `maintenance/plan-0170-job-timestamp-ordering`. Service Job `startedAt` now cannot precede `submittedAt`, and `completedAt` cannot precede the recorded start or submission boundary, even if the host wall clock moves backward. Monotonic deadline behavior is unchanged. Three focused Rust tests, formatting, and workspace clippy pass. The first compile attempt retained an infrastructure failure at 947 of 1,024 Cargo-slice tasks; one job with cache disabled completed without cleanup or hidden retry. Graphiti job `084f242a-977a-4017-a113-6f9a5e62b1a3` failed once with a retryable `TimeoutError` before episode creation; preserve it as `graphiti_write_pending` for the next closeout rather than enqueueing a duplicate. No production install, restart, browser, profile, provider, tenant, Service State, or timeout effect occurred. Integrate this source with the next consolidated candidate rather than replacing production solely for timestamp display ordering.
+
+## Turn 302 | 2026-09-12
+
+Plan0172 is CLOSED through PR46 at `8d3f552f`. The integrated repair preserves
+path-backed custom profile identity, rejects invalid named runtime profiles
+before launch, reconciles exact retained-browser owner aliases during
+navigation persistence, and reports runtime admission drain as confirmed
+pre-effect. All selected source gates pass. Read-only evidence shows upgrade
+transaction `upgrade-55a6f48d-5988-4be8-a626-1d234c6e0a1b` accepted at revision
+14 and the retained PID92141 browser, owner generation102, session, and South
+Carolina target coherently projected. No production install, browser effect,
+profile mutation, or Fresh Roof continuation occurred. Plan0165 remains OPEN
+for its separately authorized consumer acceptance.
 
 ## Turn 297 | 2026-09-11
 
 [Plan0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md) remains OPEN: qualify one bounded Turnstile interaction with no retry or unrelated effect.
-California exposed Imperva-wrapped hCaptcha; a requested X11 run solved it,
-then Imperva returned block error `15`. The restored Ohio stealth browser
-cleared Cloudflare during pre-click observation and loaded business search.
-No Ohio X11 input occurred, so live interaction acceptance remains unproven;
-both retained browser routes remain open.
+California exposed Imperva-wrapped hCaptcha; a requested X11 run solved it, then Imperva returned block error `15`. The restored Ohio stealth browser cleared Cloudflare during pre-click observation and loaded business search. No Ohio X11 input occurred, so live interaction acceptance remains unproven; both retained browser routes remain open.
 
 ## Turn 297 | 2026-09-11
 
@@ -18,27 +34,11 @@ both retained browser routes remain open.
 
 ## Turn 296 | 2026-09-11
 
-Plan0167 is CLOSED through PR29 at `14fb3db0`. Its 9,642,672-byte two-writer and two-reader regression completed in 709 to 739 ms across six samples with zero commit wait and 358 to 380 ms exclusive holds; the ordinary one-second deadline is unchanged. The complete Rust suite and selected public, documentation, client, and workstation gates pass. No Plan0167 command retried X or RuFresh, installed production, mutated production Service State, changed a provider or tenant, or terminated a process. Production installation, shared skill publication, installed doctor, and X evaluation remain separate gates.
-
-## Turn 295 | 2026-09-11
-
-Plan0165 installed generation `0.28.0-c0cc081c1c6b-8e9cb639ccc3`; current-form
-and shared-task-lease repairs are on `origin/main`. The retained BILL run remains
-`awaiting_identifier`; resume found no `bill-soylei` Auth Vault profile and
-returned `effect_uncertain` plus `blind_retry`. No retry or provider/accounting
-effect followed. Restore the sealed vault entry before resuming or replacing.
+Plan0167 is CLOSED through PR29 at `14fb3db0`. Its 9,642,672-byte two-writer/two-reader regression completed in 709 to 739 ms across six samples with zero commit wait and 358 to 380 ms exclusive holds; the one-second deadline is unchanged. Required gates pass. Production installation, shared skill publication, installed doctor, and X evaluation remain separate.
 
 ## Turn 294 | 2026-09-11
 
-Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF now releases exact connection custody while accepted work finishes independently.
-Provider-free gates pass; P0240 and P157 remain preserved, Plan0162 is unblocked,
-and no Odollo or RuFresh action was repeated.
-
-## Turn 293 | 2026-09-11
-
-[Plan0165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
-is OPEN for one consumer-blocking BILL form drift. Its identifier is
-`input#login-email-input[name='loginEmail']` with `Continue`; two installed sealed runs stopped before credential or challenge-provider effects. The joined repair aligns Authentication Run with the broker's exact-tab shared task lease while rejecting inactive and human-takeover leases. It retains legacy `Save`, preserves `bill-soylei`, and stops downstream work at read-only consumer inspection.
+Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF releases exact connection custody while accepted work finishes independently. Provider-free gates pass; P0240/P157 remain preserved and Plan0162 is unblocked.
 
 ## Turn 291 | 2026-09-10
 
@@ -196,5 +196,4 @@ and untracked notes0159/0160. Those files remain untouched and outside PR14.
 Repository consolidation is complete. Full A1–A4/AX runtime acceptance and the
 deferred standalone CLI download compatibility check remain Plan0160 work; they
 are product acceptance gaps rather than Git integration gaps.
-
 [Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).

@@ -538,18 +538,34 @@ fn bind_acquired_profile_principal<R: ServiceStateRepository>(
             })
             .map(|owner| owner.owner_generation)
             .ok_or_else(|| "profile_acquisition_retry_owner_missing".to_string())?;
-        state
+        let principal_binding = crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+            principal_id: authority.principal_id.clone(),
+            profile_id: authority.profile_id.clone(),
+            profile_identity_digest: profile_identity_digest.clone(),
+            capability_id: authority.capability_id.clone(),
+            provenance: authority.provenance,
+            owner_generation,
+        };
+        let existing_binding = state
             .runtime_owner_registry
-            .bind_principal_authority(
-                crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
-                    principal_id: authority.principal_id.clone(),
-                    profile_id: authority.profile_id.clone(),
-                    profile_identity_digest,
-                    capability_id: authority.capability_id.clone(),
-                    provenance: authority.provenance,
-                    owner_generation,
-                },
-            )
+            .principal_bindings
+            .get(&profile_identity_digest);
+        let same_capability_authority = existing_binding.is_some_and(|binding| {
+            binding.principal_id == principal_binding.principal_id
+                && binding.profile_id == principal_binding.profile_id
+                && binding.capability_id == principal_binding.capability_id
+                && binding.provenance == principal_binding.provenance
+        });
+        let binding_result = if same_capability_authority {
+            state
+                .runtime_owner_registry
+                .refresh_principal_authority(principal_binding)
+        } else {
+            state
+                .runtime_owner_registry
+                .bind_principal_authority(principal_binding)
+        };
+        binding_result
             .map_err(|error| format!("profile_acquisition_owner_binding_failed:{error:?}"))?;
         let session = state
             .sessions
@@ -1789,6 +1805,26 @@ fn status_profile_recovery_command(command: &Value) -> Result<Value, String> {
     }))
 }
 
+fn retire_exact_recovery_owner_binding(
+    binding: &mut Option<crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+    identities: &RecoveryIdentityJoins,
+) -> Result<(), String> {
+    let Some(current) = binding.as_ref() else {
+        return Ok(());
+    };
+    let claim = &current.claim;
+    if claim.owner_id != identities.lifecycle_owner_id
+        || claim.profile_identity_digest != identities.profile_identity_digest
+        || claim.owner_generation != identities.lifecycle_owner_generation
+        || claim.logical_browser_id != identities.durable_browser_id
+        || claim.daemon_session_route != identities.daemon_session_route
+    {
+        return Err("profile_recovery_daemon_owner_binding_mismatch".to_string());
+    }
+    *binding = None;
+    Ok(())
+}
+
 async fn apply_profile_recovery_command(
     command: &Value,
     daemon_state: &mut DaemonState,
@@ -1825,18 +1861,30 @@ async fn apply_profile_recovery_command(
         .and_then(|profile| profile.user_data_dir.clone())
         .ok_or_else(|| "profile_recovery_profile_identity_unavailable".to_string())?;
     let now = service_now_timestamp();
+    let recovery_identities = plan.identities.clone();
+    let recovery_repository = repository.clone();
+    let recovery_authority = authority.clone();
     let outcome = apply_terminal_owner_recovery(
         &repository,
         &plan,
         &now,
         raw_capability.as_bytes(),
         |intent| async move {
+            retire_exact_recovery_owner_binding(
+                &mut daemon_state.runtime_owner_binding,
+                &recovery_identities,
+            )?;
             let retry_command = profile_acquisition_recovery_launch_command(
                 &intent,
                 &daemon_state.session_id,
                 &profile_path,
             );
             auto_launch(daemon_state, &retry_command).await?;
+            bind_acquired_profile_principal(
+                &recovery_repository,
+                &recovery_authority,
+                &daemon_state.session_id,
+            )?;
             if daemon_state.browser.is_none() {
                 return Err("profile_recovery_acquisition_retry_missing_browser".to_string());
             }
@@ -3515,6 +3563,60 @@ mod tests {
         }
     }
 
+    #[test]
+    fn acquired_profile_refreshes_same_capability_binding_to_new_owner_generation() {
+        let mut initial = state();
+        let profile_identity_digest = initial
+            .runtime_owner_registry
+            .owners
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
+        initial.runtime_owner_registry.principal_bindings.insert(
+            profile_identity_digest.clone(),
+            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                principal_id: "principal:last30days".to_string(),
+                profile_id: "last30days-facebook".to_string(),
+                profile_identity_digest: profile_identity_digest.clone(),
+                capability_id: "capability:test".to_string(),
+                provenance: ServicePrincipalProvenance::RegisteredCapability,
+                owner_generation: 55,
+            },
+        );
+        let owner = initial
+            .runtime_owner_registry
+            .owners
+            .get_mut(&profile_identity_digest)
+            .unwrap();
+        owner.owner_generation = 56;
+        owner.daemon_session_route = "replacement-route".to_string();
+        initial.sessions.insert(
+            "replacement-route".to_string(),
+            BrowserSession {
+                id: "replacement-route".to_string(),
+                profile_id: Some("last30days-facebook".to_string()),
+                ..BrowserSession::default()
+            },
+        );
+        let repository = MemoryRepository::new(initial);
+
+        bind_acquired_profile_principal(&repository, &authority(), "replacement-route").unwrap();
+
+        let current = repository.load_snapshot().unwrap();
+        assert_eq!(
+            current.runtime_owner_registry.principal_bindings[&profile_identity_digest]
+                .owner_generation,
+            56
+        );
+        assert_eq!(
+            current.sessions["replacement-route"]
+                .principal_id
+                .as_deref(),
+            Some("principal:last30days")
+        );
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn protected_acquisition_launch_command_binds_exact_profile_without_a_bearer() {
@@ -3617,6 +3719,65 @@ mod tests {
         );
         assert_eq!(command["profileId"], "last30days-facebook");
         assert_eq!(command["sessionName"], "recovery-route");
+    }
+
+    #[test]
+    fn recovery_apply_retires_only_the_exact_sealed_terminal_owner_binding() {
+        let initial = state();
+        let plan = plan_terminal_owner_recovery(
+            &initial,
+            intent(),
+            "2026-09-11T12:00:00Z",
+            "2026-09-11T12:05:00Z",
+            "request-terminal-binding",
+            seal_key(),
+        )
+        .unwrap()
+        .recovery
+        .unwrap();
+        let owner = initial
+            .runtime_owner_registry
+            .owner(&plan.identities.profile_identity_digest)
+            .unwrap();
+        let mut binding = Some(
+            crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+                crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(owner),
+            ),
+        );
+
+        retire_exact_recovery_owner_binding(&mut binding, &plan.identities).unwrap();
+
+        assert!(binding.is_none());
+    }
+
+    #[test]
+    fn recovery_apply_preserves_and_rejects_a_different_owner_binding() {
+        let initial = state();
+        let plan = plan_terminal_owner_recovery(
+            &initial,
+            intent(),
+            "2026-09-11T12:00:00Z",
+            "2026-09-11T12:05:00Z",
+            "request-mismatched-binding",
+            seal_key(),
+        )
+        .unwrap()
+        .recovery
+        .unwrap();
+        let owner = initial
+            .runtime_owner_registry
+            .owner(&plan.identities.profile_identity_digest)
+            .unwrap();
+        let mut claim = crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(owner);
+        claim.owner_generation += 1;
+        let expected = crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(claim);
+        let mut binding = Some(expected.clone());
+
+        assert_eq!(
+            retire_exact_recovery_owner_binding(&mut binding, &plan.identities).unwrap_err(),
+            "profile_recovery_daemon_owner_binding_mismatch"
+        );
+        assert_eq!(binding, Some(expected));
     }
 
     #[derive(Clone)]

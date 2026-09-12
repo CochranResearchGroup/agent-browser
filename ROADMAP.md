@@ -19,6 +19,18 @@ Cloudflare `Verify you are human` checkbox on the current Ohio SOS browser.
 The live budget is one click with no retry; profile creation, browser closure,
 fingerprint manipulation, and general CAPTCHA solving are excluded.
 
+## P171 | Service Job Timestamp Integration And Install
+
+State: OPEN
+
+Current state: Plan 0170 is source-qualified. Current `origin/main`, including
+the retained-owner route reconciliation now in production, merged cleanly into
+the isolated repair branch. Plan 0171 owns the bounded validation, fork
+integration, consolidated candidate build, transactional install, and fresh
+runtime verification without browser, profile, provider, or cleanup effects.
+[Plan 0171](docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md)
+is the active execution contract.
+
 ## P168 | Worktree, Branch, Merge, And Closure Campaign
 
 State: CLOSED

@@ -8,7 +8,7 @@ Consolidation: required
 
 Lane: P165
 
-Branch: fix/bill-login-email-continue
+Branch: fix/profile-repair-owner-generation
 
 Target: main
 
@@ -85,6 +85,27 @@ validator already authorizes that ID from the current runtime-owner binding.
 Authentication Run now uses the same daemon-aware route validator; unrelated
 browser IDs and mismatched session routes remain rejected before effects.
 
+After installation of the lock repair identified by SHA-256 prefix
+`842bb1be` and suffix `a48974356`, the next preserving repair launched Chrome
+but failed lifecycle registration with
+`runtime_lifecycle_bound_browser_identity_inconsistent`. Request and job
+`mcp-service_profile_repair_apply-3b1c4a7d-9742-4118-858c-e654eba3e4a0`
+cleanly terminated launched PID 93502. The retained profile data and BILL
+accounting state were unchanged. Source diagnosis proved the apply callback
+entered the replacement launch with the exact terminal-owner binding still in
+daemon memory. Registration therefore compared the new process with the old
+binding before it could commit the replacement generation.
+
+The source repair is integrated through PR 34 at merge commit `9e544710`. It
+retires only a daemon binding that matches all five sealed owner joins
+immediately before the single authorized recovery launch. A different owner
+ID, profile digest, generation, durable browser ID, or daemon route remains
+present and fails closed. The lower-level process-identity validator is
+unchanged. The focused regression failed before the repair, then the exact and
+mismatch cases plus all 35 profile-recovery module tests passed. Formatting
+and strict Clippy also pass. Production installation and another BILL repair
+attempt remain pending separate governed gates.
+
 Commit `9f14cb05` is integrated on `origin/main`, and its release candidate is
 built at SHA-256 `61a50901a56c3403aeb0ac49cef5c0416cddd64cf4fa5482e31b670c3cd4eb40`.
 Installation is blocked before transaction creation by repeated
@@ -94,6 +115,68 @@ remains current at PID 37560. Installed SHA-256 is still
 `cfd2e4dc749adcbbee026becd7f9f3b23944f95ee7605273fc4f6c4fad4ca188`.
 The next action is lock-owner diagnosis, not another install or authentication
 retry.
+
+Production installation and preserving runtime repair are now complete. The
+first accepted upgrade exposed that profile-repair launch had advanced the
+runtime owner without refreshing its existing same-capability principal
+binding. A sealed lease reconciliation restored exact custody without launching
+or replacing Chrome. A second accepted upgrade then proved the workstation
+supersession path had the same atomicity gap. PR 36 fixes both boundaries:
+profile repair binds the acquired daemon session before its postcondition, and
+terminal replacement plus observed-owner supersession advance an existing
+principal binding atomically with the owner generation.
+
+The final installed candidate has SHA-256
+`9598cb89565fdcd1af3bcf0d496ebae3d919a7d4c9b1cd725a3393d430d83e20`,
+generation `0.28.0-9598cb89565f-492f49580f7e`, and accepted transaction
+`upgrade-50b884da-b2dc-4f0d-96e7-54b45e1770c0`. Post-install doctor proves one
+dashboard, one executable generation, zero legacy daemons, one runtime host,
+and one ready session supervisor. The retained BILL browser remains PID 49619
+with its current singleton lock and eight tabs. Owner and registered-capability
+binding both remain generation 62 after installation; the lease is active with
+no blocking identity axes, profile diagnosis is ready, and the no-launch access
+plan selects exact browser reuse. Cookies, credentials, extensions, and
+authenticated site state were preserved. No BILL credential, tenant,
+transaction, or accounting effect occurred. The plan remains OPEN only for the
+separate governed authentication and read-only consumer acceptance gates.
+
+### Retained session and tab identity repair checkpoint
+
+The first post-repair consumer `tab_new` exposed a one-way retained ownership
+graph. Session `handoff-0ad9a97d1c2766af` referenced ready browser
+`session:handoff-34c90cf1d3a26934`, but that browser omitted the session from
+`activeSessionIds`. PRs 38 and 39 preserve a ready owner route and reconstruct
+only an exact, strongly evidenced missing reverse link. PRs 40 through 42 then
+carried the admitted runtime-owner browser identity through tab creation.
+
+The remaining defect was at the persistence boundary: the service correctly
+deserialized the durable browser identity from the tab handle, then discarded
+it and regenerated an identity from the daemon session. PR 44 fixes that
+boundary at merge commit `31ebf3cb09553f4a4ecf41dd892f8204a925eb80` and
+adds a persistence-level regression. Focused regressions, formatting, and
+strict workspace Clippy pass.
+
+The installed candidate has SHA-256
+`77bd57f6f2a4370cc7c1261b00f803fdc5633a58eebf5206103d51feef8a6551`
+and generation `0.28.0-77bd57f6f2a4-a8ba978176a1`. Transaction
+`upgrade-c57f1d76-713c-49de-b5b9-60a9439f71c6` initially stopped at
+post-commit validation with a forward-only cleanup obligation. Its exact
+sealed resume from revision 13 reached accepted revision 17 with stable runtime
+census and zero outstanding owner obligations.
+
+Consumer request
+`http-service-request-tab_new-3c0a5791-79df-4417-9eaa-5733c79e810c`
+created disposable blank target `7B7CEDDA72E63DCCB64E2AD85DAA6CDA` on the
+retained browser. Release request
+`http-service-request-tab_handle_release-62f40a1e-4bf5-40b4-965d-b0d671c8a4b3`
+closed that target, verified its removal, preserved unrelated targets, and
+preserved the browser and session. Two later reconciliations retained the
+bidirectional link. No BILL navigation, authentication, credential, tenant,
+transaction, or accounting effect occurred.
+
+This closes the retained session-linkage and owned-tab cleanup blocker. It does
+not close Plan 0165. Sealed BILL authentication and downstream read-only
+consumer inspection remain separate gates.
 
 ## Git custody review
 

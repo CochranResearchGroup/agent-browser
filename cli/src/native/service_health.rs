@@ -2089,10 +2089,55 @@ pub fn merge_reconciled_service_state(
         .filter(|(_, session)| matches!(session.lease, LeaseState::Released | LeaseState::Expired))
         .map(|(id, _)| id.clone())
         .collect::<BTreeSet<_>>();
+    let ready_owner_routes = target
+        .runtime_owner_registry
+        .owners
+        .values()
+        .filter(|owner| {
+            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+                && owner.pending_transfer.is_none()
+        })
+        .map(|owner| (owner.browser_id.clone(), owner.daemon_session_route.clone()))
+        .collect::<BTreeSet<_>>();
     for browser in target.browsers.values_mut() {
-        browser
-            .active_session_ids
-            .retain(|session_id| !inactive_session_ids.contains(session_id));
+        // A work lease may expire while its daemon route still owns the live
+        // browser generation. Keep that exact bidirectional routing edge until
+        // lifecycle authority moves or ceases to be ready; otherwise a later
+        // retained-browser request selects the owner route but fails identity
+        // admission because only the session-to-browser edge survives.
+        browser.active_session_ids.retain(|session_id| {
+            !inactive_session_ids.contains(session_id)
+                || ready_owner_routes
+                    .iter()
+                    .any(|(owner_browser_id, owner_session_id)| {
+                        owner_browser_id == &browser.id && owner_session_id == session_id
+                    })
+        });
+    }
+    for (browser_id, session_id) in &ready_owner_routes {
+        let exact_live_owner_projection = target
+            .browsers
+            .get(browser_id)
+            .zip(target.sessions.get(session_id))
+            .is_some_and(|(browser, session)| {
+                browser.health == BrowserHealth::Ready
+                    && (browser.pid.is_some() || browser.cdp_endpoint.is_some())
+                    && browser.profile_id.is_some()
+                    && browser.profile_id == session.profile_id
+                    && session.browser_ids.len() == 1
+                    && session.browser_ids.first() == Some(browser_id)
+            });
+        if !exact_live_owner_projection {
+            continue;
+        }
+        let browser = target
+            .browsers
+            .get_mut(browser_id)
+            .expect("exact owner browser was just observed");
+        if !browser.active_session_ids.contains(session_id) {
+            browser.active_session_ids.push(session_id.clone());
+            browser.active_session_ids.sort();
+        }
     }
     for id in before.sessions.keys() {
         if reconciled.sessions.contains_key(id) {
@@ -4346,6 +4391,97 @@ mod tests {
             renewed_target.browsers["browser-1"].active_session_ids,
             vec!["session-1".to_string()]
         );
+    }
+
+    #[test]
+    fn merge_reconciled_service_state_preserves_live_owner_daemon_route_after_lease_expiry() {
+        let profile_root = temp_home("live-owner-expired-lease-profile");
+        fs::create_dir_all(&profile_root).unwrap();
+        let profile_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_root).unwrap();
+        let profile_id = "bill-soylei";
+        let owner_route = "handoff-owner-route";
+        let browser_id = "browser-1";
+        let before = ServiceState {
+            profiles: BTreeMap::from([(
+                profile_id.to_string(),
+                crate::native::service_model::BrowserProfile {
+                    id: profile_id.to_string(),
+                    user_data_dir: Some(profile_root.display().to_string()),
+                    ..Default::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                browser_id.to_string(),
+                BrowserProcess {
+                    id: browser_id.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    health: BrowserHealth::Ready,
+                    pid: Some(49_619),
+                    cdp_endpoint: Some("ws://127.0.0.1:37075/devtools/browser/fixture".to_string()),
+                    active_session_ids: Vec::new(),
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                owner_route.to_string(),
+                BrowserSession {
+                    id: owner_route.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    lease: LeaseState::Shared,
+                    browser_ids: vec![browser_id.to_string()],
+                    expires_at: Some("2026-01-01T00:00:00Z".to_string()),
+                    ..BrowserSession::default()
+                },
+            )]),
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-1".to_string(),
+                    profile_identity_digest: profile_digest,
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                    owner_generation: 62,
+                    browser_id: browser_id.to_string(),
+                    daemon_session_route: owner_route.to_string(),
+                    process_instance_digest: "process-digest".to_string(),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                    target_set_digest: "target-digest".to_string(),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            ),
+            ..ServiceState::default()
+        };
+        let mut reconciled = before.clone();
+        reconciled.sessions.get_mut(owner_route).unwrap().lease = LeaseState::Expired;
+
+        let mut target = before.clone();
+        merge_reconciled_service_state(&mut target, &before, &reconciled);
+
+        assert_eq!(target.sessions[owner_route].lease, LeaseState::Expired);
+        assert_eq!(
+            target.browsers[browser_id].active_session_ids,
+            vec![owner_route.to_string()]
+        );
+        let mut options = crate::LaunchOptions::default();
+        let selection =
+            crate::native::action_runtime::runtime::apply_existing_session_profile_selection(
+                &mut options,
+                &serde_json::json!({
+                    "action": "tab_new",
+                    "browserId": browser_id,
+                    "sessionName": owner_route,
+                }),
+                Some(owner_route),
+                &target,
+            )
+            .unwrap();
+        assert_eq!(
+            selection,
+            Some(crate::native::service_model::ProfileSelectionReason::ExistingOwner)
+        );
+        assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+        fs::remove_dir_all(profile_root).unwrap();
     }
 
     #[test]

@@ -5284,6 +5284,83 @@ fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profi
 }
 
 #[test]
+fn authenticated_cold_custom_profile_keeps_path_identity() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("authenticated-cold-custom-profile-home");
+    let user_data_dir = home.join("runtime-profiles/default/user-data");
+    fs::create_dir_all(&user_data_dir).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = service_profile_id(user_data_dir.to_str(), None).unwrap();
+    let principal_id = "freshroof-registry";
+    let raw_capability = "synthetic-freshroof-capability-more-than-thirty-two-characters";
+    let profile = BrowserProfile {
+        id: profile_id.clone(),
+        user_data_dir: Some(user_data_dir.display().to_string()),
+        ..BrowserProfile::default()
+    };
+    let mut state = ServiceState {
+        profiles: BTreeMap::from([(profile_id.clone(), profile.clone())]),
+        ..ServiceState::default()
+    };
+    crate::native::service_principal::register_profile_capability(
+        &mut state.service_principals,
+        crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            principal_id: principal_id.to_string(),
+            display_name: Some("Fresh Roof registry".to_string()),
+            profile_id: profile_id.clone(),
+            registered_at: Some("2026-09-12T00:00:00Z".to_string()),
+            registered_by: Some("operator".to_string()),
+        },
+        raw_capability,
+    )
+    .unwrap();
+    let authority = crate::native::service_principal::authenticate_profile_capability(
+        &state.service_principals,
+        raw_capability,
+        Some(&profile_id),
+    )
+    .unwrap();
+    let session_id = authenticated_cold_session_name(&authority, &profile).unwrap();
+    let command = json!({
+        "action": "launch",
+        "profileId": profile_id,
+        "profile": user_data_dir.display().to_string(),
+        "sessionName": session_id,
+        "servicePrincipalId": authority.principal_id,
+        "servicePrincipalProvenance": authority.provenance.as_str(),
+        "serviceProfileCapabilityId": authority.capability_id,
+        "serviceProfileCapabilityRevision": authority.capability_revision,
+        "serviceProfileRouteAuthorization": {
+            "schemaVersion": "agent-browser.profile-launch-route-authorization.v1",
+            "kind": "authenticated_cold",
+            "sessionName": session_id,
+            "profileId": profile_id,
+            "principalId": authority.principal_id,
+            "capabilityId": authority.capability_id,
+            "capabilityRevision": authority.capability_revision,
+            "runtimeOwnerRegistryRevision": 0,
+            "ownerId": null,
+            "ownerGeneration": null
+        }
+    });
+    let mut options = LaunchOptions {
+        profile: Some(user_data_dir.display().to_string()),
+        ..LaunchOptions::default()
+    };
+
+    assert!(apply_authenticated_access_plan_profile_selection(
+        &mut options,
+        &command,
+        &session_id,
+        &state,
+    )
+    .unwrap());
+    assert!(options.runtime_profile.is_none());
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn test_runtime_handoff_descriptor_accepts_legacy_schema_v1_without_active_target() {
     let descriptor: RuntimeHandoffDescriptor = serde_json::from_value(json!(
         { "schemaVersion" : 1, "sessionName" : "legacy-session", "cdpUrl" :

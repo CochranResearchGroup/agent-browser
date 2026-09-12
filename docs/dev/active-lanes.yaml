@@ -8,25 +8,41 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 0f6b949e579ba56170240198624afec942d6192e
-    remote_ref: null
+    checkpoint: 7ec8ee02c5b1d3b9ad47e626624911c12735be66
+    remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     integration_receipt: null
     integration: merge
     dependencies: [P110]
     overlaps: [P157, P165]
     reconciled_overlaps: [P157_preserve_profile_authority, P165_preserve_active_authentication_run]
-    updated_at: 2026-09-11
+    updated_at: 2026-09-12
+  - id: P171
+    objective: Integrate and install the Service Job lifecycle timestamp ordering repair
+    plan: docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md
+    plan_ref: refs/heads/maintenance/plan-0170-job-timestamp-ordering
+    branch: maintenance/plan-0170-job-timestamp-ordering
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: c075a63233f305817cd271fa5e298e30fcaa782e
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P170]
+    overlaps: [cli/src/native/service_health.rs]
+    reconciled_overlaps: [cli/src/native/service_health.rs]
+    updated_at: 2026-09-12
   - id: P165
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
     plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md
     plan_ref: refs/remotes/origin/main
-    branch: fix/bill-login-email-continue
+    branch: fix/profile-repair-owner-generation
     target: main
     plan_state: OPEN
     custody_state: INTEGRATED
-    checkpoint: 5ee95d670e52c1157f0f94b90d176e4066d1cd2f
+    checkpoint: 0edde975cceb3f1c45b65b83209b22f77183275a
     remote_ref: null
-    integration_receipt: 5ee95d670e52c1157f0f94b90d176e4066d1cd2f
+    integration_receipt: 9e544710cfca66eea0a77e1627fc4c48f48e9c28
     integration: merge
     dependencies: []
     overlaps: []

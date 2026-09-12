@@ -90,6 +90,8 @@ pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Res
         }
     }
     let pending_shared_profile_acquisition = state.pending_shared_profile_acquisition.take();
+    let runtime_owner_browser_id =
+        crate::native::action_runtime::runtime::service_tab_handle_browser_id(state);
     let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
     let wait_until = cmd
         .get("waitUntil")
@@ -166,7 +168,13 @@ pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Res
         object.insert("sharedAcquisition".to_string(), shared_acquisition.clone());
     }
     add_manual_login_hint_warning(cmd, &mut data);
-    persist_service_owned_navigate_tab(cmd, &state.session_id, mgr, &data)?;
+    persist_service_owned_navigate_tab(
+        cmd,
+        &state.session_id,
+        mgr,
+        &data,
+        Some(&runtime_owner_browser_id),
+    )?;
     Ok(data)
 }
 pub(crate) fn read_runtime_handoff(session_name: &str) -> Result<RuntimeHandoffDescriptor, String> {

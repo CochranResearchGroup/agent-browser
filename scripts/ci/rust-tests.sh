@@ -145,15 +145,20 @@ run_and_record() {
 
 run_comprehensive() {
   local log_root native_pid support_pid native_status support_status started_at
+  local base_target_dir native_target_dir support_target_dir
   log_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-browser-rust-tests.XXXXXX")"
   trap 'rm -rf "$log_root"' RETURN
   started_at=$SECONDS
+  base_target_dir="${CARGO_TARGET_DIR:-$repo_root/cli/target}"
+  native_target_dir="$base_target_dir/comprehensive-native"
+  support_target_dir="$base_target_dir/comprehensive-support"
 
-  echo "Running comprehensive Rust tests in two isolated serial compartments"
+  echo "Running comprehensive Rust tests in two isolated serial lanes"
   echo "Rust test thread stack: $RUST_MIN_STACK bytes"
 
   set +e
   (
+    export CARGO_TARGET_DIR="$native_target_dir"
     lane_status=0
     run_and_record cli-native-actions run_cli_native_actions "$log_root" || lane_status=1
     run_and_record cli-native-service run_cli_native_service "$log_root" || lane_status=1
@@ -162,6 +167,7 @@ run_comprehensive() {
   ) &
   native_pid=$!
   (
+    export CARGO_TARGET_DIR="$support_target_dir"
     lane_status=0
     run_and_record cli-workstation run_cli_workstation "$log_root" || lane_status=1
     run_and_record cli-native-browser run_cli_native_browser "$log_root" || lane_status=1

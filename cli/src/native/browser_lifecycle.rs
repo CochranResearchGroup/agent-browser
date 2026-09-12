@@ -52,6 +52,56 @@ pub(crate) mod action_commands {
     use crate::native::state;
     use serde_json::{json, Map, Value};
     use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+    fn navigation_browser_id_for_persistence(
+        state: &ServiceState,
+        tab_id: &str,
+        target_id: &str,
+        session_id: &str,
+        requested_browser_id: &str,
+    ) -> Result<String, String> {
+        let Some(tab) = state.tabs.get(tab_id) else {
+            return Ok(requested_browser_id.to_string());
+        };
+        if tab.target_id.as_deref() != Some(target_id) {
+            return Err("service_navigation_tab_identity_conflict".to_string());
+        }
+        if tab.browser_id == requested_browser_id {
+            return Ok(tab.browser_id.clone());
+        }
+        if tab.session_id.as_deref() != Some(session_id)
+            && tab.owner_session_id.as_deref() != Some(session_id)
+        {
+            return Err("service_navigation_tab_identity_conflict".to_string());
+        }
+        let binding = state
+            .runtime_owner_registry
+            .binding_for_session(session_id)
+            .ok()
+            .flatten()
+            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
+        let owner = state
+            .runtime_owner_registry
+            .owner(&binding.claim.profile_identity_digest)
+            .filter(|owner| {
+                crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(owner)
+                    == binding.claim
+            })
+            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
+        let canonical_browser_id =
+            crate::runtime_adoption::canonical_exact_owner_browser_id_for_routes(
+                state,
+                owner,
+                &[session_id],
+            )
+            .filter(|browser_id| browser_id == &tab.browser_id)
+            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
+        if requested_browser_id != owner.browser_id && requested_browser_id != canonical_browser_id
+        {
+            return Err("service_navigation_tab_identity_conflict".to_string());
+        }
+        Ok(canonical_browser_id)
+    }
+
     pub(crate) fn persist_service_owned_tab_new(
         cmd: &Value,
         session_id: &str,
@@ -66,7 +116,7 @@ pub(crate) mod action_commands {
         let handle: ServiceTabHandle = serde_json::from_value(service_tab_handle.clone())
             .map_err(|err| format!("Invalid service tab handle: {}", err))?;
         let repository = LockedServiceStateRepository::default_json()?;
-        let browser_id = service_browser_id(session_id);
+        let browser_id = handle.browser_id.clone();
         let tab_id = format!("target:{target_id}");
         let observed_at = OffsetDateTime::now_utc()
             .format(&Rfc3339)
@@ -75,15 +125,23 @@ pub(crate) mod action_commands {
         let agent_name = optional_command_string(cmd, "agentName");
         let task_name = optional_command_string(cmd, "taskName");
         repository.mutate(|state| {
+            let browser_id = if cmd.get("action").and_then(Value::as_str) == Some("navigate") {
+                navigation_browser_id_for_persistence(
+                    state,
+                    &tab_id,
+                    target_id,
+                    session_id,
+                    &browser_id,
+                )?
+            } else {
+                browser_id.clone()
+            };
             if cmd.get("action").and_then(Value::as_str) == Some("navigate")
                 && state.tabs.contains_key(&tab_id)
             {
                 // Navigation observes an existing child; it does not issue a
                 // new grant. Preserve the current custody and lease metadata.
                 let tab = state.tabs.get_mut(&tab_id).expect("existing tab");
-                if tab.browser_id != browser_id || tab.target_id.as_deref() != Some(target_id) {
-                    return Err("service_navigation_tab_identity_conflict".to_string());
-                }
                 tab.url = url.map(str::to_string);
                 tab.title = title.filter(|value| !value.is_empty()).map(str::to_string);
             } else {

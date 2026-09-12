@@ -62,7 +62,9 @@ const MCP_TOOL_ALLOWLIST = [
   'service_profile_lease_reconcile_apply', 'service_profile_lease_recover_plan',
   'service_profile_lease_recover_apply', 'service_profile_acquire',
   'service_profile_recovery_plan', 'service_profile_recovery_apply',
-  'service_profile_recovery_status', 'service_trace',
+  'service_profile_recovery_status', 'service_profile_repair_plan',
+  'service_profile_repair_apply', 'service_profile_reset_plan',
+  'service_profile_reset_apply', 'service_trace',
 ];
 
 const MCP_RESOURCE_ALLOWLIST = [
@@ -82,6 +84,7 @@ const MCP_TEMPLATE_ALLOWLIST = [
   'agent-browser://incidents/{incident_id}/activity',
   'agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}',
   'agent-browser://profiles/{profile_id}/readiness',
+  'agent-browser://profiles/{profile_id}/diagnosis',
   'agent-browser://profiles/{profile_id}/allocation',
   'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
   'agent-browser://profile-leases/{lease_id}',
