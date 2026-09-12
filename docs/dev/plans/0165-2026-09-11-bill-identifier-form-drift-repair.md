@@ -116,6 +116,30 @@ remains current at PID 37560. Installed SHA-256 is still
 The next action is lock-owner diagnosis, not another install or authentication
 retry.
 
+Production installation and preserving runtime repair are now complete. The
+first accepted upgrade exposed that profile-repair launch had advanced the
+runtime owner without refreshing its existing same-capability principal
+binding. A sealed lease reconciliation restored exact custody without launching
+or replacing Chrome. A second accepted upgrade then proved the workstation
+supersession path had the same atomicity gap. PR 36 fixes both boundaries:
+profile repair binds the acquired daemon session before its postcondition, and
+terminal replacement plus observed-owner supersession advance an existing
+principal binding atomically with the owner generation.
+
+The final installed candidate has SHA-256
+`9598cb89565fdcd1af3bcf0d496ebae3d919a7d4c9b1cd725a3393d430d83e20`,
+generation `0.28.0-9598cb89565f-492f49580f7e`, and accepted transaction
+`upgrade-50b884da-b2dc-4f0d-96e7-54b45e1770c0`. Post-install doctor proves one
+dashboard, one executable generation, zero legacy daemons, one runtime host,
+and one ready session supervisor. The retained BILL browser remains PID 49619
+with its current singleton lock and eight tabs. Owner and registered-capability
+binding both remain generation 62 after installation; the lease is active with
+no blocking identity axes, profile diagnosis is ready, and the no-launch access
+plan selects exact browser reuse. Cookies, credentials, extensions, and
+authenticated site state were preserved. No BILL credential, tenant,
+transaction, or accounting effect occurred. The plan remains OPEN only for the
+separate governed authentication and read-only consumer acceptance gates.
+
 ## Git custody review
 
 Plan 0168 verified that branch tip `5ee95d670e52c1157f0f94b90d176e4066d1cd2f`
