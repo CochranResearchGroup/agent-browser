@@ -137,6 +137,37 @@ pub(crate) fn operator_focus_failure_code(error: &str) -> Option<&str> {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    if error.starts_with("runtime_admission_draining:") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "runtime_admission_draining".to_string(),
+            axis: ServiceFailureAxis::LifecycleOwner,
+            phase: ServiceFailurePhase::LaunchAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_install_transaction".to_string(),
+            safe_next_actions: vec![
+                "inspect_install_transaction".to_string(),
+                "wait_for_transaction_terminal".to_string(),
+            ],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
+    if error.starts_with("Invalid runtime profile '") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "invalid_runtime_profile".to_string(),
+            axis: ServiceFailureAxis::Request,
+            phase: ServiceFailurePhase::LaunchAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::DoNotRetry,
+            recommended_action: "correct_runtime_profile_selector".to_string(),
+            safe_next_actions: vec!["use_named_profile_or_exact_profile_path".to_string()],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     let download_code = match error {
         "Download was canceled" => Some("download_canceled"),
         "Downloaded file not found at captured path" => Some("download_completion_path_missing"),
@@ -1199,6 +1230,47 @@ mod tests {
                 .contains(&"acquire_profile".to_string()));
             assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));
         }
+    }
+
+    #[test]
+    fn invalid_runtime_profile_is_confirmed_pre_effect() {
+        let recourse = classify_service_failure(
+            "Invalid runtime profile 'custom:fixture'. Must match /^[a-zA-Z0-9_-]+$/",
+        );
+
+        assert_eq!(recourse.code, "invalid_runtime_profile");
+        assert_eq!(recourse.phase, ServiceFailurePhase::LaunchAdmission);
+        assert_eq!(recourse.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(
+            recourse.retry_disposition,
+            ServiceRetryDisposition::DoNotRetry
+        );
+        assert_eq!(
+            recourse.recommended_action,
+            "correct_runtime_profile_selector"
+        );
+        assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));
+    }
+
+    #[test]
+    fn runtime_admission_drain_is_confirmed_pre_effect() {
+        let recourse = classify_service_failure(
+            "runtime_admission_draining: transaction 'upgrade-fixture' is transferring runtime ownership at revision 12",
+        );
+
+        assert_eq!(recourse.code, "runtime_admission_draining");
+        assert_eq!(recourse.axis, ServiceFailureAxis::LifecycleOwner);
+        assert_eq!(recourse.phase, ServiceFailurePhase::LaunchAdmission);
+        assert_eq!(recourse.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(
+            recourse.retry_disposition,
+            ServiceRetryDisposition::InspectBeforeRetry
+        );
+        assert_eq!(recourse.recommended_action, "inspect_install_transaction");
+        assert!(recourse
+            .safe_next_actions
+            .contains(&"wait_for_transaction_terminal".to_string()));
+        assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));
     }
 
     #[test]

@@ -1070,6 +1070,9 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
         })?,
     };
     validate_profile_browser_family(options, &chrome_path)?;
+    if let Some(runtime_profile) = options.runtime_profile.as_deref() {
+        crate::runtime_profile::validate_runtime_profile_name(runtime_profile)?;
+    }
 
     let max_attempts = 3;
     let mut attempt_errors = Vec::new();
@@ -3433,6 +3436,31 @@ mod tests {
         let path = PathBuf::from("/tmp/agent-browser/chrome.stderr.log");
         let msg = chrome_launch_error("Chrome exited", &[], Some(&path));
         assert!(msg.contains("Chrome stderr log: /tmp/agent-browser/chrome.stderr.log"));
+    }
+
+    #[test]
+    fn invalid_named_runtime_profile_fails_before_launch_attempts() {
+        let profile = std::env::temp_dir().join(format!(
+            "agent-browser-invalid-runtime-profile-{}",
+            std::process::id()
+        ));
+        let options = LaunchOptions {
+            executable_path: Some("/bin/false".to_string()),
+            profile: Some(profile.display().to_string()),
+            runtime_profile: Some("custom:invalid".to_string()),
+            ..LaunchOptions::default()
+        };
+
+        let error = match launch_chrome(&options) {
+            Ok(_) => panic!("invalid runtime profile must fail before launch"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error,
+            "Invalid runtime profile 'custom:invalid'. Must match /^[a-zA-Z0-9_-]+$/"
+        );
+        assert!(!error.contains("attempt 1:"));
     }
 
     #[test]
