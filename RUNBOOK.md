@@ -5,14 +5,14 @@ Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance,
 ## Turn 304 | 2026-09-12
 
 [Plan0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
-is OPEN under the operator-authorized plan, implementation, test, merge, and
-production-install objective. Production evidence localized the defect: a ready
-retained BILL browser was routed through an expired session; `tab_new` then
-fabricated a valid shared handle before canonical projection rejected it as
-`lease_expired`. The failure reproduced twice without effects. P173 owns one
-consolidated acquisition, pre-effect authority, and handle-truth repair. Current
-state is test-first implementation; no source qualification, merge, build,
-install, or installed acceptance is yet claimed.
+is CLOSED. PR52 merged as `2156aaad`; exact binary `cae894cf25f2` installed as
+generation `0.28.0-cae894cf25f2-a4332e7facd9` through accepted transaction
+`upgrade-e371f1fa-80a6-485a-a3dd-2e2c6e785454` revision 13. Installed
+acceptance proved stale same-principal rejoin, exact retained-browser reuse,
+canonical valid handle, page probe, verified exact-tab release, 16 surviving
+peer tabs, and Chrome PID 49619 continuity. BILL itself now redirects to login;
+no provider or accounting mutation occurred. The closeout retains a separate
+shared-tab cleanup-policy projection-label mismatch for bounded follow-up.
 
 ## Turn 303 | 2026-09-12
 
