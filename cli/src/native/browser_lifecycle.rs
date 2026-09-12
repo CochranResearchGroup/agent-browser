@@ -66,7 +66,7 @@ pub(crate) mod action_commands {
         let handle: ServiceTabHandle = serde_json::from_value(service_tab_handle.clone())
             .map_err(|err| format!("Invalid service tab handle: {}", err))?;
         let repository = LockedServiceStateRepository::default_json()?;
-        let browser_id = service_browser_id(session_id);
+        let browser_id = handle.browser_id.clone();
         let tab_id = format!("target:{target_id}");
         let observed_at = OffsetDateTime::now_utc()
             .format(&Rfc3339)
