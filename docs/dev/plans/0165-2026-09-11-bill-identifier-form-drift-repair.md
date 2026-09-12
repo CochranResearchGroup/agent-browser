@@ -140,6 +140,44 @@ authenticated site state were preserved. No BILL credential, tenant,
 transaction, or accounting effect occurred. The plan remains OPEN only for the
 separate governed authentication and read-only consumer acceptance gates.
 
+### Retained session and tab identity repair checkpoint
+
+The first post-repair consumer `tab_new` exposed a one-way retained ownership
+graph. Session `handoff-0ad9a97d1c2766af` referenced ready browser
+`session:handoff-34c90cf1d3a26934`, but that browser omitted the session from
+`activeSessionIds`. PRs 38 and 39 preserve a ready owner route and reconstruct
+only an exact, strongly evidenced missing reverse link. PRs 40 through 42 then
+carried the admitted runtime-owner browser identity through tab creation.
+
+The remaining defect was at the persistence boundary: the service correctly
+deserialized the durable browser identity from the tab handle, then discarded
+it and regenerated an identity from the daemon session. PR 44 fixes that
+boundary at merge commit `31ebf3cb09553f4a4ecf41dd892f8204a925eb80` and
+adds a persistence-level regression. Focused regressions, formatting, and
+strict workspace Clippy pass.
+
+The installed candidate has SHA-256
+`77bd57f6f2a4370cc7c1261b00f803fdc5633a58eebf5206103d51feef8a6551`
+and generation `0.28.0-77bd57f6f2a4-a8ba978176a1`. Transaction
+`upgrade-c57f1d76-713c-49de-b5b9-60a9439f71c6` initially stopped at
+post-commit validation with a forward-only cleanup obligation. Its exact
+sealed resume from revision 13 reached accepted revision 17 with stable runtime
+census and zero outstanding owner obligations.
+
+Consumer request
+`http-service-request-tab_new-3c0a5791-79df-4417-9eaa-5733c79e810c`
+created disposable blank target `7B7CEDDA72E63DCCB64E2AD85DAA6CDA` on the
+retained browser. Release request
+`http-service-request-tab_handle_release-62f40a1e-4bf5-40b4-965d-b0d671c8a4b3`
+closed that target, verified its removal, preserved unrelated targets, and
+preserved the browser and session. Two later reconciliations retained the
+bidirectional link. No BILL navigation, authentication, credential, tenant,
+transaction, or accounting effect occurred.
+
+This closes the retained session-linkage and owned-tab cleanup blocker. It does
+not close Plan 0165. Sealed BILL authentication and downstream read-only
+consumer inspection remain separate gates.
+
 ## Git custody review
 
 Plan 0168 verified that branch tip `5ee95d670e52c1157f0f94b90d176e4066d1cd2f`
