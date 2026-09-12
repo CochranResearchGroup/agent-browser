@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P171
+    objective: Integrate and install the Service Job lifecycle timestamp ordering repair
+    plan: docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md
+    plan_ref: refs/heads/maintenance/plan-0170-job-timestamp-ordering
+    branch: maintenance/plan-0170-job-timestamp-ordering
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: c075a63233f305817cd271fa5e298e30fcaa782e
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P170]
+    overlaps: [P165]
+    reconciled_overlaps: [P165 source is current origin/main and is merged before validation]
+    updated_at: 2026-09-12
   - id: P170
     objective: Preserve Service Job lifecycle timestamp ordering across backward wall clock adjustments
     plan: docs/dev/plans/0170-2026-09-12-service-job-lifecycle-timestamp-ordering.md
