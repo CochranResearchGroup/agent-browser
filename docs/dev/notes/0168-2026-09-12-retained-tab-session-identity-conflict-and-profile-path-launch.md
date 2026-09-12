@@ -266,5 +266,7 @@ target are coherently projected. This demonstrates eventual convergence for
 the observed transaction and does not justify a second projection repair.
 
 Focused regressions, strict workspace Clippy, route-confusion gates, formatting,
-and diff checks qualify the source candidate. Production installation and
+and diff checks qualified source commit `02f40c370e73eea5e869c70dd7d8ebe220345060`,
+which merged through PR 46 at
+`8d3f552f6bef3abec0e398900ba638ac7962a62f`. Production installation and
 fieldwork acceptance remain separately authorized gates.

@@ -3,18 +3,18 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 301 | 2026-09-12
+## Turn 302 | 2026-09-12
 
-Plan0165 retained-session and owned-tab blockers are repaired through PR 44 at
-`31ebf3cb`. Installed generation `0.28.0-77bd57f6f2a4-a8ba978176a1` has exact
-SHA-256 `77bd57f6f2a4370cc7c1261b00f803fdc5633a58eebf5206103d51feef8a6551`;
-transaction `upgrade-c57f1d76-713c-49de-b5b9-60a9439f71c6` reached accepted
-revision 17 after its exact forward-only resume. One disposable blank tab was
-created on the retained BILL browser and released with target-removal and
-unrelated-target preservation proof. Runtime multiplicity is steady and the
-session/browser link survived two reconciliations. Plan0165 remains OPEN for
-sealed BILL authentication and read-only consumer acceptance. No BILL or
-accounting effect occurred. The newly queued Plan0168 field note is next.
+Plan0172 is CLOSED through PR46 at `8d3f552f`. The integrated repair preserves
+path-backed custom profile identity, rejects invalid named runtime profiles
+before launch, reconciles exact retained-browser owner aliases during
+navigation persistence, and reports runtime admission drain as confirmed
+pre-effect. All selected source gates pass. Read-only evidence shows upgrade
+transaction `upgrade-55a6f48d-5988-4be8-a626-1d234c6e0a1b` accepted at revision
+14 and the retained PID92141 browser, owner generation102, session, and South
+Carolina target coherently projected. No production install, browser effect,
+profile mutation, or Fresh Roof continuation occurred. Plan0165 remains OPEN
+for its separately authorized consumer acceptance.
 
 ## Turn 297 | 2026-09-11
 
