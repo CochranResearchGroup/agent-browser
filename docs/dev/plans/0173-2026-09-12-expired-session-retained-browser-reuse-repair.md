@@ -133,3 +133,16 @@ rejoin candidate to the current owner's exact daemon route or browser and let
 rejoin reactivate that stale subordinate session. Preserve the unrelated
 production-scale timing assertion at 963 ms as a load-sensitive failure for
 fresh-run classification rather than changing its contract without evidence.
+
+## Checkpoint P0173-C02 | 2026-09-12
+
+State transition: `repair_active -> repair_active`.
+
+Progress classification: `blocker_reduction`; PR 52 run `34715407978` proved
+the stale-session reactivation and owner-generation regressions green. Two
+existing ambiguity tests showed the narrowed selector must still count every
+active profile session as contention. The second correction includes all
+active profile sessions while adding only the inactive same-principal session
+that exactly matches the current runtime owner's route or browser. The
+unrelated production-scale timing assertion repeated at 961 ms and remains
+unchanged for the source-required rerun.

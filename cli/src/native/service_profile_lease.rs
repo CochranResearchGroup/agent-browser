@@ -2202,12 +2202,12 @@ fn exact_rejoin_target_for_owner(
         .filter(|session| {
             session.profile_id.as_deref() == Some(authority.profile_id.as_str())
                 && (!inactive_or_expired(session.lease, session.expires_at.as_deref(), now)
-                    || session.principal_id.as_deref() == Some(authority.principal_id.as_str()))
-                && (session.id == owner.daemon_session_route
-                    || session
-                        .browser_ids
-                        .iter()
-                        .any(|browser_id| browser_id == &owner.browser_id))
+                    || (session.principal_id.as_deref() == Some(authority.principal_id.as_str())
+                        && (session.id == owner.daemon_session_route
+                            || session
+                                .browser_ids
+                                .iter()
+                                .any(|browser_id| browser_id == &owner.browser_id))))
         })
         .collect::<Vec<_>>();
     let [session] = candidate_sessions.as_slice() else {
