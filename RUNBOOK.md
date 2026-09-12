@@ -1,7 +1,14 @@
 # Runbook
 
-Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
-Keep at or below 200 lines under policy0043.
+Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
+
+## Turn 302 | 2026-09-12
+
+Plan0171 (`docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md`) is OPEN and integration-ready under the operator's explicit “Ok go” authority. Fork repairs merged cleanly; three focused tests, formatting, clippy, and optimized build pass at source `fbeca748`, producing SHA-256 `d49bfb95425af4498acb75b7516ad224112e923237c78045ecc7cdb0e9507146`. The 12-minute build remained inside the governed one-job Cargo cgroup. The dirty main and Turnstile worktrees remain untouched. No push, install, browser, profile, provider, cleanup, or Service State effect has occurred at this checkpoint.
+
+## Turn 301 | 2026-09-12
+
+Plan0170 is CLOSED and source-qualified on isolated branch `maintenance/plan-0170-job-timestamp-ordering`. Service Job `startedAt` now cannot precede `submittedAt`, and `completedAt` cannot precede the recorded start or submission boundary, even if the host wall clock moves backward. Monotonic deadline behavior is unchanged. Three focused Rust tests, formatting, and workspace clippy pass. The first compile attempt retained an infrastructure failure at 947 of 1,024 Cargo-slice tasks; one job with cache disabled completed without cleanup or hidden retry. Graphiti job `084f242a-977a-4017-a113-6f9a5e62b1a3` failed once with a retryable `TimeoutError` before episode creation; preserve it as `graphiti_write_pending` for the next closeout rather than enqueueing a duplicate. No production install, restart, browser, profile, provider, tenant, Service State, or timeout effect occurred. Integrate this source with the next consolidated candidate rather than replacing production solely for timestamp display ordering.
 
 ## Turn 302 | 2026-09-12
 
@@ -18,17 +25,15 @@ for its separately authorized consumer acceptance.
 
 ## Turn 297 | 2026-09-11
 
-[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is CLOSED. W1 and W2 closed the integrated P165 worktree, four local and remote branch pairs, and four integrated remote-only refs without closing residual operational plans. W3 integrated the two accepted P0240 residuals through PR 30 at `de614fbe`; all selected gates passed, and both P0240 worktrees plus their refs are closed. W4 found no P157 residual beyond `ad673377`. PR 31 merged the campaign record as `9f711ebc`; PR 32 closes P168 catalog custody before exact maintenance-ref deletion. The two canonical Rust edits remain attributable Odollo custody. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect occurred.
+[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is CLOSED. It closed integrated and remote-only custody, integrated two P0240 residuals through PR30 at `de614fbe`, found no P157 residual beyond `ad673377`, and merged its record through PR31/32. The canonical Rust edits remain attributable Odollo custody. No runtime or provider effect occurred.
 
 ## Turn 296 | 2026-09-11
 
-Plan0167 is CLOSED through PR29 at `14fb3db0`. Its 9,642,672-byte two-writer and two-reader regression completed in 709 to 739 ms across six samples with zero commit wait and 358 to 380 ms exclusive holds; the ordinary one-second deadline is unchanged. The complete Rust suite and selected public, documentation, client, and workstation gates pass. No Plan0167 command retried X or RuFresh, installed production, mutated production Service State, changed a provider or tenant, or terminated a process. Production installation, shared skill publication, installed doctor, and X evaluation remain separate gates.
+Plan0167 is CLOSED through PR29 at `14fb3db0`. Its 9,642,672-byte two-writer/two-reader regression completed in 709 to 739 ms across six samples with zero commit wait and 358 to 380 ms exclusive holds; the one-second deadline is unchanged. Required gates pass. Production installation, shared skill publication, installed doctor, and X evaluation remain separate.
 
 ## Turn 294 | 2026-09-11
 
-Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF now releases exact connection custody while accepted work finishes independently.
-Provider-free gates pass; P0240 and P157 remain preserved, Plan0162 is unblocked,
-and no Odollo or RuFresh action was repeated.
+Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF releases exact connection custody while accepted work finishes independently. Provider-free gates pass; P0240/P157 remain preserved and Plan0162 is unblocked.
 
 ## Turn 291 | 2026-09-10
 
@@ -186,5 +191,4 @@ and untracked notes0159/0160. Those files remain untouched and outside PR14.
 Repository consolidation is complete. Full A1–A4/AX runtime acceptance and the
 deferred standalone CLI download compatibility check remain Plan0160 work; they
 are product acceptance gaps rather than Git integration gaps.
-
 [Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).

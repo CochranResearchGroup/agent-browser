@@ -1257,7 +1257,10 @@ fn persist_service_job_running(request: &ControlRequest) {
         state: JobState::Running,
         priority: service_job_priority(request.priority),
         submitted_at: Some(request.submitted_at_wall.clone()),
-        started_at: Some(current_timestamp()),
+        started_at: Some(lifecycle_timestamp_at_or_after(
+            &current_timestamp(),
+            &request.submitted_at_wall,
+        )),
         timeout_ms: request.timeout_ms,
         ..ServiceJob::default()
     });
@@ -1285,8 +1288,10 @@ fn finalize_service_request(
         state
     };
     attach_service_failure_recourse(&mut response);
-    if let Some(existing) = load_service_job(&service_job_id(request))
-        .and_then(|job| job.terminal_outcome)
+    let existing_job = load_service_job(&service_job_id(request));
+    if let Some(existing) = existing_job
+        .as_ref()
+        .and_then(|job| job.terminal_outcome.clone())
         .filter(|outcome| outcome.state == state)
     {
         if let Some(failure) = existing.failure.as_ref() {
@@ -1295,7 +1300,12 @@ fn finalize_service_request(
         response["terminalOutcome"] = serde_json::to_value(existing).unwrap_or(Value::Null);
         return response;
     }
-    let completed_at = current_timestamp();
+    let completed_candidate = current_timestamp();
+    let lifecycle_floor = existing_job
+        .as_ref()
+        .and_then(|job| job.started_at.as_deref().or(job.submitted_at.as_deref()))
+        .unwrap_or(&request.submitted_at_wall);
+    let completed_at = lifecycle_timestamp_at_or_after(&completed_candidate, lifecycle_floor);
     let outcome = ServiceTerminalOutcome::from_response(
         &request.provenance,
         &response,
@@ -1837,6 +1847,16 @@ fn current_timestamp() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+fn lifecycle_timestamp_at_or_after(candidate: &str, floor: &str) -> String {
+    match (
+        chrono::DateTime::parse_from_rfc3339(candidate),
+        chrono::DateTime::parse_from_rfc3339(floor),
+    ) {
+        (Ok(candidate_time), Ok(floor_time)) if candidate_time < floor_time => floor.to_string(),
+        _ => candidate.to_string(),
+    }
 }
 
 impl ControlPlaneStatus {
@@ -2691,6 +2711,20 @@ mod tests {
             },
             "warnings": []
         })
+    }
+
+    #[test]
+    fn lifecycle_timestamp_never_precedes_its_prior_boundary() {
+        let submitted = "2026-09-12T12:00:01.881Z";
+
+        assert_eq!(
+            lifecycle_timestamp_at_or_after("2026-09-12T12:00:00Z", submitted),
+            submitted
+        );
+        assert_eq!(
+            lifecycle_timestamp_at_or_after("2026-09-12T12:00:02Z", submitted),
+            "2026-09-12T12:00:02Z"
+        );
     }
 
     #[tokio::test]

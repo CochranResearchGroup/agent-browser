@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P171
+    objective: Integrate and install the Service Job lifecycle timestamp ordering repair
+    plan: docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md
+    plan_ref: refs/heads/maintenance/plan-0170-job-timestamp-ordering
+    branch: maintenance/plan-0170-job-timestamp-ordering
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: c075a63233f305817cd271fa5e298e30fcaa782e
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P170]
+    overlaps: [cli/src/native/service_health.rs]
+    reconciled_overlaps: [cli/src/native/service_health.rs]
+    updated_at: 2026-09-12
   - id: P165
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
     plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md
