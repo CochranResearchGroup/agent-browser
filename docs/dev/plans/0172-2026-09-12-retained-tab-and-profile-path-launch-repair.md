@@ -2,7 +2,7 @@
 
 Date: 2026-09-12
 
-State: READY_FOR_INTEGRATION
+State: CLOSED
 
 Consolidation: required
 
@@ -12,7 +12,7 @@ Branch: fix/plan0172-retained-profile-path
 
 Target: main
 
-Integration: merge
+Integration: PR 46 merged at `8d3f552f6bef3abec0e398900ba638ac7962a62f`
 
 ## Objective and authority
 
@@ -120,3 +120,12 @@ report's projection observation as a transient transfer state; it does not prove
 an additional persistence defect or authorize installed acceptance.
 
 `RUNBOOK.md` remains the sole current execution status.
+
+## Closeout
+
+Source commit `02f40c370e73eea5e869c70dd7d8ebe220345060`
+merged through PR 46 at
+`8d3f552f6bef3abec0e398900ba638ac7962a62f`. Plan0172 is closed on the
+authorized source objective. Production installation, installed-runtime
+acceptance, and Fresh Roof continuation remain outside this packet and are not
+implied by source integration.
