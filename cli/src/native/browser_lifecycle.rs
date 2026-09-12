@@ -109,9 +109,9 @@ pub(crate) mod action_commands {
         url: Option<&str>,
         title: Option<&str>,
         service_tab_handle: &Value,
-    ) -> Result<(), String> {
+    ) -> Result<Option<ServiceTabHandle>, String> {
         let Some(target_id) = target_id else {
-            return Ok(());
+            return Ok(None);
         };
         let handle: ServiceTabHandle = serde_json::from_value(service_tab_handle.clone())
             .map_err(|err| format!("Invalid service tab handle: {}", err))?;
@@ -197,7 +197,11 @@ pub(crate) mod action_commands {
                 let excess = state.events.len() - 100;
                 state.events.drain(0..excess);
             }
-            Ok(())
+            state.refresh_service_tab_handles();
+            state
+                .service_tab_handle(&tab_id)
+                .map(Some)
+                .ok_or_else(|| "persisted service tab handle is unavailable".to_string())
         })
     }
 
@@ -525,6 +529,23 @@ pub(crate) mod action_commands {
             );
         }
         let handle = &authorized_handle;
+        if let Some(stale_reason) = inactive_handle_lease_stale_reason(handle) {
+            persist_tab_handle_refresh_event(
+                cmd,
+                &browser_id,
+                handle.get("profileId").and_then(Value::as_str),
+                "rejected_inactive_lease",
+                &observed_at,
+                &candidates,
+            )?;
+            return Ok(json!(
+                { "ok" : false, "action" : "tab_handle_refresh", "refreshed" : false,
+                "decision" : "rejected_inactive_lease", "repairPolicy" : repair_policy,
+                "observedAt" : observed_at, "browserId" : browser_id, "staleReason" :
+                stale_reason, "serviceTabHandle" : cmd.get("serviceTabHandle").cloned()
+                .unwrap_or(Value::Null), "candidates" : candidates, }
+            ));
+        }
         let mgr = state.browser.as_mut().ok_or_else(|| {
             "Cannot refresh service tab handle: routed browser session is not running".to_string()
         })?;
@@ -972,14 +993,26 @@ pub(crate) mod action_commands {
     ) -> Value {
         let tab_id = format!("target:{target_id}");
         let profile_id = previous.get("profileId").cloned().unwrap_or(Value::Null);
+        let browser_id = previous
+            .get("browserId")
+            .cloned()
+            .unwrap_or_else(|| json!(service_browser_id(session_id)));
+        let lease_state = previous
+            .get("leaseState")
+            .cloned()
+            .unwrap_or_else(|| json!("shared"));
+        let lease_stale_reason = match lease_state.as_str() {
+            Some("expired") => Some("lease_expired"),
+            Some("released") => Some("lease_released"),
+            _ => None,
+        };
         json!(
-            { "browserId" : service_browser_id(session_id), "sessionName" : session_id,
+            { "browserId" : browser_id.clone(), "sessionName" : session_id,
             "tabId" : tab_id, "targetId" : target_id, "url" : url, "title" : title,
             "profileId" : profile_id.clone(), "profileOrigin" : previous
             .get("profileOrigin").cloned().unwrap_or_else(||
             json!("agent_browser_owned")), "leaseId" : previous.get("leaseId").cloned()
-            .unwrap_or_else(|| json!(session_id)), "leaseState" : previous
-            .get("leaseState").cloned().unwrap_or_else(|| json!("shared")),
+            .unwrap_or_else(|| json!(session_id)), "leaseState" : lease_state,
             "cleanupPolicy" : previous.get("cleanupPolicy").cloned().unwrap_or_else(||
             json!("detach")), "leaseHeartbeatExpected" : previous
             .get("leaseHeartbeatExpected").and_then(Value::as_bool).unwrap_or(true),
@@ -987,9 +1020,19 @@ pub(crate) mod action_commands {
             json!(session_id)), "profileAccess" : previous.get("profileAccess").cloned()
             .unwrap_or(Value::Null), "jobId" : previous.get("jobId").cloned()
             .unwrap_or(Value::Null), "traceFilter" : { "browserId" :
-            service_browser_id(session_id), "profileId" : profile_id, "sessionId" :
-            session_id, }, "valid" : true, "staleReason" : Value::Null, }
+            browser_id, "profileId" : profile_id, "sessionId" :
+            session_id, }, "valid" : lease_stale_reason.is_none(), "staleReason" :
+            lease_stale_reason, }
         )
+    }
+    pub(crate) fn inactive_handle_lease_stale_reason(
+        handle: &Map<String, Value>,
+    ) -> Option<&'static str> {
+        match handle.get("leaseState").and_then(Value::as_str) {
+            Some("expired") => Some("lease_expired"),
+            Some("released") => Some("lease_released"),
+            _ => None,
+        }
     }
     pub(crate) fn refreshed_service_tab_handle(
         previous: &Map<String, Value>,

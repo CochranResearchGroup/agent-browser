@@ -1182,7 +1182,7 @@ pub(crate) fn rejoin_profile_lease(
 ) -> Result<ProfileLeaseRecord, ProfileLeaseError> {
     let lease = authorized_lease(state, lease_id, expected_revision, authority, now)?;
     require_action(&lease, "rejoin")?;
-    if !lease.observation_only {
+    if !lease.observation_only && lease.state == "active" {
         return Ok(lease);
     }
     let expires_at = expires_at
@@ -1219,6 +1219,10 @@ pub(crate) fn rejoin_profile_lease(
     .map_err(|_| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
     bind_session_work_lease(state, &session_id, authority, expires_at.to_string())
         .map_err(|_| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
+    if let Some(session) = state.sessions.get_mut(&session_id) {
+        session.lease = LeaseState::Exclusive;
+        session.last_lease_observed_at = Some(now.to_string());
+    }
     for tab_id in tab_ids {
         bind_tab_work_lease(state, &tab_id, authority, expires_at.to_string())
             .map_err(|_| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
@@ -2192,15 +2196,21 @@ fn exact_rejoin_target_for_owner(
     if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready {
         return None;
     }
-    let active_sessions = state
+    let candidate_sessions = state
         .sessions
         .values()
         .filter(|session| {
             session.profile_id.as_deref() == Some(authority.profile_id.as_str())
-                && !inactive_or_expired(session.lease, session.expires_at.as_deref(), now)
+                && (!inactive_or_expired(session.lease, session.expires_at.as_deref(), now)
+                    || (session.principal_id.as_deref() == Some(authority.principal_id.as_str())
+                        && (session.id == owner.daemon_session_route
+                            || session
+                                .browser_ids
+                                .iter()
+                                .any(|browser_id| browser_id == &owner.browser_id))))
         })
         .collect::<Vec<_>>();
-    let [session] = active_sessions.as_slice() else {
+    let [session] = candidate_sessions.as_slice() else {
         return None;
     };
     let exact_owner_session = session.id == owner.daemon_session_route
@@ -3748,6 +3758,47 @@ mod tests {
         assert_eq!(
             state.tabs["tab-odollo"].work_lease_expires_at.as_deref(),
             Some("2026-08-27T13:00:00Z")
+        );
+    }
+
+    #[test]
+    fn rejoin_reactivates_exact_expired_same_principal_owner_session() {
+        let (mut state, authority, lease_id) = state_with_lease();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.lease = LeaseState::Expired;
+        session.expires_at = Some("2026-08-27T11:00:00Z".to_string());
+        session.browser_ids = vec!["browser-odollo".to_string()];
+
+        let stale = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        assert!(!stale.observation_only);
+        assert_eq!(stale.state, "stale");
+        assert!(stale.authorized_actions.contains(&"rejoin".to_string()));
+
+        let rejoined = rejoin_profile_lease(
+            &mut state,
+            &lease_id,
+            &stale.lease_revision,
+            &authority,
+            NOW,
+            Some("2026-08-27T13:00:00Z"),
+        )
+        .unwrap();
+
+        assert!(!rejoined.observation_only);
+        assert_eq!(rejoined.state, "active");
+        assert_eq!(
+            state.sessions["session-odollo"].lease,
+            LeaseState::Exclusive
+        );
+        assert_eq!(
+            state.sessions["session-odollo"].expires_at.as_deref(),
+            Some("2026-08-27T13:00:00Z")
+        );
+        assert_eq!(
+            state.sessions["session-odollo"]
+                .last_lease_observed_at
+                .as_deref(),
+            Some(NOW)
         );
     }
 
