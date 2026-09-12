@@ -2,13 +2,13 @@
 
 Date: 2026-09-12
 
-Plan version: 2
+Plan version: 3
 
-State: OPEN
+State: CLOSED
 
-Execution state: `test_first_implementation`
+Execution state: `installed_acceptance_complete`
 
-Consolidation: required
+Consolidation: complete
 
 Lane: P173
 
@@ -91,11 +91,11 @@ not duplicate the retained browser or silently renew foreign or ambiguous work.
    access plan, one disposable tab, canonical handle validity, URL/title read,
    and cleanup.
 
-Overall effort ceiling: 120 active minutes. Work-unit attempts: three. Review
-and rework cycles: one. Expensive builds and production replacements: one each
-unless a demonstrated source defect invalidates the frozen candidate. The
-critical path is serialized because all source changes share the acquisition
-and lease-authority seam.
+Overall effort ceiling: 120 active minutes. Work-unit attempts: three. Two
+evidence-driven correction cycles were used: first to preserve exact owner
+generation and then to retain active ambiguity detection. Expensive builds and
+production replacements used one each. The critical path stayed serialized
+because all source changes shared the acquisition and lease-authority seam.
 
 ## Worker assignments
 
@@ -146,3 +146,47 @@ active profile sessions while adding only the inactive same-principal session
 that exactly matches the current runtime owner's route or browser. The
 unrelated production-scale timing assertion repeated at 961 ms and remains
 unchanged for the source-required rerun.
+
+## Checkpoint P0173-C03 | 2026-09-12
+
+State transition: `repair_active -> installed_acceptance_complete`.
+
+Progress classification: `objective_complete`. PR 52 head
+`e43ad07c7181ebc774bde3830b0a85f7c3ac8957` passed CI run `34716757544`
+attempt 2, including the comprehensive Rust suite, strict Clippy, dashboard,
+service-client, workstation-fixture, version, and no-launch smoke gates. It
+merged to `main` as `2156aaad472ecebb1f79e7d5ce79419949b4705c`.
+
+The exact merged optimized binary has SHA-256
+`cae894cf25f289ed1c7bef71d851a0075ade8f0a503a176a592b48845896b812`
+and size 35,590,144 bytes. Transaction
+`upgrade-e371f1fa-80a6-485a-a3dd-2e2c6e785454`, revision 13, accepted
+generation `0.28.0-cae894cf25f2-a4332e7facd9`. Doctor reported one runtime
+host, one dashboard process, zero legacy daemons, `steady_current`, ready
+workstation payload and ready session supervisor. The pre-existing dashboard
+operator-journey and default-profile authority warnings remain non-blocking.
+
+Installed BILL acceptance first returned `rejoin_profile_lease` with
+`expired_session_recovery_required`. Authenticated same-principal rejoin changed
+lease `profile-lease-v1:7f2201d54dc3f4dca2a7f2a4` from stale revision
+`profile-lease-revision-v1:bd811d3e887264b37782c9f3` to active revision
+`profile-lease-revision-v1:6b374a5c2a2c6f9874b7dd11`. The next plan returned
+`reuse_existing_browser` for browser `session:handoff-34c90cf1d3a26934` and
+session `handoff-0ad9a97d1c2766af`. Request
+`http-service-request-tab_new-06bcd9c2-907f-4730-93a4-ff853bca0d3f`
+created canonical valid handle target `455473BEECC4996631621F476ED7723B`.
+Probe `http-service-request-probe-bff028fa-9fcc-484e-b4f4-3ced3b7793ba`
+successfully read the page and showed that the separate BILL website session
+currently redirects to its login URL. Release
+`http-service-request-tab_handle_release-09a962b8-39a3-4dc0-91eb-a862b0daabc1`
+verified exact physical tab closure, browser-process and session-route
+preservation, 16 surviving peer tabs, and retained Chrome PID 49619. No BILL,
+credential, profile-data, tenant, or accounting mutation occurred.
+
+Residual follow-up: the canonical shared-tab handle exposed
+`cleanupPolicy: close_browser` from the browser-owning daemon session while the
+access plan correctly declared `close_tabs`. The release implementation is
+separately exact-target fenced and proved `browserProcessPreserved: true`, so it
+did not block or invalidate this repair. Correct that projection-label mismatch
+as a distinct contract repair before treating the label itself as cleanup
+authority.

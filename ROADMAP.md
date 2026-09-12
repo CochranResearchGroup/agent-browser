@@ -9,18 +9,17 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P173 | Expired Session Retained Browser Reuse Repair
 
-State: OPEN
+State: CLOSED
 
-Current state: production acceptance of Plan 0165 exposed a ready retained BILL
-browser routed through an expired daemon-session lease. The access plan called
-the route reusable, `tab_new` returned a provisionally valid handle, and the
-next canonical projection rejected it as `lease_expired`. The failure reproduced
-twice without authentication or tenant effects. Plan 0173 owns one test-first
-repair spanning lease-aware planning, exact same-principal rejoin, canonical
-tab-handle projection, inactive refresh rejection, source integration, one
-transactional installation, and preserving installed acceptance.
+Closed: PR 52 merged as `2156aaad472ecebb1f79e7d5ce79419949b4705c`
+after complete CI. Generation `0.28.0-cae894cf25f2-a4332e7facd9` was installed
+transactionally and passed exact same-principal lease rejoin, retained-browser
+reuse, canonical valid-handle, page probe, exact-tab release, and Chrome PID
+49619 continuity. BILL's website session is independently at login. A separate
+shared-tab cleanup-policy label mismatch is retained in the plan closeout for a
+future bounded contract repair.
 [Plan 0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
-is the active execution contract.
+is the closed execution record.
 
 ## P171 | Service Job Timestamp Integration And Install
 

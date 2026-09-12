@@ -6,11 +6,11 @@ lanes:
     plan_ref: refs/heads/fix/plan-0173-expired-session-reuse
     branch: fix/plan-0173-expired-session-reuse
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: d87828e328390a8e86b1b93bf571b7155fa0e6e5
-    remote_ref: refs/remotes/origin/fix/plan-0173-expired-session-reuse
-    integration_receipt: null
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 2156aaad472ecebb1f79e7d5ce79419949b4705c
+    remote_ref: refs/remotes/origin/main
+    integration_receipt: merge:2156aaad472ecebb1f79e7d5ce79419949b4705c
     integration: merge
     dependencies: [P144, P165]
     overlaps: [cli/src/native/service_profile_acquisition.rs, cli/src/native/browser_lifecycle.rs, cli/src/native/browser_tabs.rs]
