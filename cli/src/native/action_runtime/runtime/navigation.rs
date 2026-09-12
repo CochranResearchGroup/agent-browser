@@ -2145,12 +2145,17 @@ async fn handle_close_with_context(
             .ok_or("retained_browser_close_identity_unproven: attached PID is missing")?;
         let identity = crate::process_identity::capture_process_identity(pid, None, None)
             .ok_or("retained_browser_close_identity_unproven: process identity is missing")?;
-        let profile = state
+        let browser_profile = state
             .browser
             .as_ref()
-            .and_then(|browser| browser.browser_user_data_dir())
-            .ok_or("retained_browser_close_identity_unproven: physical profile is missing")?
-            .to_path_buf();
+            .and_then(|browser| browser.browser_user_data_dir());
+        let attached_profile = state
+            .attached_runtime_profile
+            .as_deref()
+            .map(crate::runtime_profile::runtime_profile_user_data_dir)
+            .transpose()?;
+        let profile = retained_close_profile_path(browser_profile, attached_profile)
+            .ok_or("retained_browser_close_identity_unproven: physical profile is missing")?;
         if crate::native::runtime_lifecycle::digest_json(&identity)?
             != binding.claim.process_instance_digest
             || crate::runtime_profile::canonical_profile_identity_digest(&profile)?
@@ -2380,6 +2385,13 @@ async fn handle_close_with_context(
     Ok(json!({ "closed" : true }))
 }
 
+fn retained_close_profile_path(
+    browser_profile: Option<&Path>,
+    attached_profile: Option<PathBuf>,
+) -> Option<PathBuf> {
+    browser_profile.map(Path::to_path_buf).or(attached_profile)
+}
+
 fn browser_shutdown_confirmed(outcome: &BrowserShutdownOutcome) -> bool {
     outcome.errors.is_empty() && !outcome.polite_close_failed && !outcome.force_kill_failed
 }
@@ -2505,6 +2517,16 @@ pub(crate) fn write_runtime_handoff(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retained_close_uses_attached_runtime_profile_when_manager_has_no_profile_path() {
+        let attached_profile = PathBuf::from("/tmp/agent-browser-attached-profile");
+
+        assert_eq!(
+            retained_close_profile_path(None, Some(attached_profile.clone())),
+            Some(attached_profile)
+        );
+    }
 
     #[test]
     fn orphan_logical_browser_hint_requires_exact_session_and_browser_binding() {
