@@ -2114,6 +2114,31 @@ pub fn merge_reconciled_service_state(
                     })
         });
     }
+    for (browser_id, session_id) in &ready_owner_routes {
+        let exact_live_owner_projection = target
+            .browsers
+            .get(browser_id)
+            .zip(target.sessions.get(session_id))
+            .is_some_and(|(browser, session)| {
+                browser.health == BrowserHealth::Ready
+                    && (browser.pid.is_some() || browser.cdp_endpoint.is_some())
+                    && browser.profile_id.is_some()
+                    && browser.profile_id == session.profile_id
+                    && session.browser_ids.len() == 1
+                    && session.browser_ids.first() == Some(browser_id)
+            });
+        if !exact_live_owner_projection {
+            continue;
+        }
+        let browser = target
+            .browsers
+            .get_mut(browser_id)
+            .expect("exact owner browser was just observed");
+        if !browser.active_session_ids.contains(session_id) {
+            browser.active_session_ids.push(session_id.clone());
+            browser.active_session_ids.sort();
+        }
+    }
     for id in before.sessions.keys() {
         if reconciled.sessions.contains_key(id) {
             continue;
@@ -4392,7 +4417,9 @@ mod tests {
                     id: browser_id.to_string(),
                     profile_id: Some(profile_id.to_string()),
                     health: BrowserHealth::Ready,
-                    active_session_ids: vec![owner_route.to_string()],
+                    pid: Some(49_619),
+                    cdp_endpoint: Some("ws://127.0.0.1:37075/devtools/browser/fixture".to_string()),
+                    active_session_ids: Vec::new(),
                     ..BrowserProcess::default()
                 },
             )]),
