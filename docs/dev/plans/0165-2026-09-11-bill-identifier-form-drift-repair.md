@@ -8,7 +8,7 @@ Consolidation: required
 
 Lane: P165
 
-Branch: fix/bill-login-email-continue
+Branch: fix/profile-repair-owner-generation
 
 Target: main
 
@@ -84,6 +84,27 @@ durable browser ID after a runtime handoff even though the generic daemon-aware
 validator already authorizes that ID from the current runtime-owner binding.
 Authentication Run now uses the same daemon-aware route validator; unrelated
 browser IDs and mismatched session routes remain rejected before effects.
+
+After installation of the lock repair identified by SHA-256 prefix
+`842bb1be` and suffix `a48974356`, the next preserving repair launched Chrome
+but failed lifecycle registration with
+`runtime_lifecycle_bound_browser_identity_inconsistent`. Request and job
+`mcp-service_profile_repair_apply-3b1c4a7d-9742-4118-858c-e654eba3e4a0`
+cleanly terminated launched PID 93502. The retained profile data and BILL
+accounting state were unchanged. Source diagnosis proved the apply callback
+entered the replacement launch with the exact terminal-owner binding still in
+daemon memory. Registration therefore compared the new process with the old
+binding before it could commit the replacement generation.
+
+The source candidate on `fix/profile-repair-owner-generation` retires only a
+daemon binding that matches all five sealed owner joins immediately before the
+single authorized recovery launch. A different owner ID, profile digest,
+generation, durable browser ID, or daemon route remains present and fails
+closed. The lower-level process-identity validator is unchanged. The focused
+regression failed before the repair, then the exact and mismatch cases plus all
+35 profile-recovery module tests passed. Formatting and strict Clippy also
+pass. Production installation and another BILL repair attempt remain pending
+separate governed gates.
 
 Commit `9f14cb05` is integrated on `origin/main`, and its release candidate is
 built at SHA-256 `61a50901a56c3403aeb0ac49cef5c0416cddd64cf4fa5482e31b670c3cd4eb40`.
