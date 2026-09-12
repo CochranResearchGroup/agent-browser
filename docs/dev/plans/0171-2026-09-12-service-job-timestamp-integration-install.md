@@ -53,6 +53,10 @@ failures consistently reported `(deleted)` or `No such file or directory`.
 This is a deterministic CI isolation defect also present on current main, not a
 timestamp assertion failure. Version 2 spends the plan's one source repair pass
 on separate per-lane Cargo target directories and adds a static contract test.
+The next run proved the Rust repair, then exposed a separate frozen-fixture
+omission: four already-registered profile repair/reset MCP tools were absent
+from the no-launch allowlist. Synchronizing that allowlist is fixture
+maintenance, not an additional runtime behavior change.
 
 ## Acceptance Criteria
 
@@ -114,3 +118,15 @@ after the peer lane replaced it. The timestamp-specific tests remained green.
 
 Repair: isolate the native and support lanes under `comprehensive-native` and
 `comprehensive-support`, then rerun the static runner contract and PR gates.
+
+## Checkpoint P0171-C03 | 2026-09-12
+
+State transition: `repair_active -> validation_active`.
+
+Progress classification: `blocker_reduction`; the repaired comprehensive Rust
+test step passed in PR run `34706467255`, proving the shared-target race closed.
+Its subsequent no-launch smoke found the frozen MCP allowlist omitted the
+already-registered `service_profile_repair_*` and `service_profile_reset_*`
+contracts and the already-registered profile diagnosis resource template. Add
+those frozen inventory entries in their actual order and rerun the smoke plus
+PR gates.
