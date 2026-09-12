@@ -1321,10 +1321,20 @@ fn parse_service_browser_capability_guide(
         i += 1;
     }
 
+    if flags.cli_browser_build && cmd.get("browserBuild").is_none() {
+        if let Some(browser_build) = flags.browser_build.as_deref() {
+            cmd["browserBuild"] = json!(browser_build);
+        }
+    }
+
     Ok(cmd)
 }
 
-fn parse_service_browser_capability_prefer(id: String, rest: &[&str]) -> Result<Value, ParseError> {
+fn parse_service_browser_capability_prefer(
+    id: String,
+    rest: &[&str],
+    flags: &Flags,
+) -> Result<Value, ParseError> {
     if rest.get(1).copied() != Some("prefer") {
         return Err(ParseError::InvalidValue {
             message: "Expected service browser-capability prefer".to_string(),
@@ -1473,6 +1483,12 @@ fn parse_service_browser_capability_prefer(id: String, rest: &[&str]) -> Result<
         i += 1;
     }
 
+    let browser_build = browser_build.or_else(|| {
+        flags
+            .cli_browser_build
+            .then(|| flags.browser_build.clone())
+            .flatten()
+    });
     let Some(browser_build) = browser_build else {
         return Err(ParseError::MissingArguments {
             context: "service browser-capability prefer".to_string(),
@@ -2074,6 +2090,7 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
         "browserHost": "remote_headed",
         "viewStreamProvider": "rdp_gateway",
         "controlInput": "manual_attached_desktop",
+        "serviceState": flags.service_state.clone(),
     });
     if let Some(runtime_profile) = flags.runtime_profile.as_ref() {
         cmd["runtimeProfile"] = json!(runtime_profile);
@@ -3955,7 +3972,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             Some("browser-capability") => match rest.get(1).copied() {
                 Some("preflight") => parse_service_browser_capability_preflight(id, &rest, flags),
                 Some("guide") => parse_service_browser_capability_guide(id, &rest, flags),
-                Some("prefer") => parse_service_browser_capability_prefer(id, &rest),
+                Some("prefer") => parse_service_browser_capability_prefer(id, &rest, flags),
                 Some(subcommand) => Err(ParseError::UnknownSubcommand {
                     subcommand: subcommand.to_string(),
                     valid_options: &["preflight", "guide", "prefer"],
@@ -9351,6 +9368,22 @@ mod tests {
     }
 
     #[test]
+    fn test_service_browser_capability_prefer_preserves_cleaned_browser_build() {
+        let all_args = args(
+            "service browser-capability prefer --browser-build stock_chrome --target-service-id ohio-sos --preferred-executable-id stock-chrome-wsl-stable",
+        );
+        let mut flags = default_flags();
+        flags.browser_build = Some("stock_chrome".to_string());
+        flags.cli_browser_build = true;
+
+        let cleaned = crate::flags::clean_args(&all_args);
+        let cmd = parse_command(&cleaned, &flags).unwrap();
+
+        assert_eq!(cmd["record"]["browserBuild"], "stock_chrome");
+        assert_eq!(cmd["record"]["targetServiceIds"], json!(["ohio-sos"]));
+    }
+
+    #[test]
     fn test_service_browser_capability_guide_builds_read_command() {
         let cmd = parse_command(
             &args("service browser-capability guide --browser-build stock_chrome --target-service-id only-works-on-chrome --account-id myuser --reason site_requires_stock_chrome"),
@@ -9364,6 +9397,22 @@ mod tests {
         assert_eq!(cmd["accountId"], "myuser");
         assert_eq!(cmd["reason"], "site_requires_stock_chrome");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_browser_capability_guide_preserves_cleaned_browser_build() {
+        let all_args = args(
+            "service browser-capability guide --browser-build stock_chrome --target-service-id ohio-sos",
+        );
+        let mut flags = default_flags();
+        flags.browser_build = Some("stock_chrome".to_string());
+        flags.cli_browser_build = true;
+
+        let cleaned = crate::flags::clean_args(&all_args);
+        let cmd = parse_command(&cleaned, &flags).unwrap();
+
+        assert_eq!(cmd["browserBuild"], "stock_chrome");
+        assert_eq!(cmd["targetServiceId"], "ohio-sos");
     }
 
     #[test]
@@ -9452,6 +9501,7 @@ mod tests {
         assert_eq!(cmd["taskName"], "authenticateLinkedIn");
         assert_eq!(cmd["manualLoginLaunch"], true);
         assert_eq!(cmd["dryRun"], true);
+        assert!(cmd["serviceState"].is_object());
     }
 
     #[test]
