@@ -88,6 +88,12 @@ Acceptance reconciliation: criteria 1-5 are satisfied for source
 qualification. Production build, installation, restart, and live browser
 execution were not performed.
 
+Graphiti write status: `graphiti_write_pending`. Job
+`084f242a-977a-4017-a113-6f9a5e62b1a3` failed once with a retryable
+`TimeoutError` before creating an episode. Preserve the failed job and retry
+the intended Plan 0170 source-qualification summary at the next closeout;
+do not enqueue a duplicate episode.
+
 Next action: review and integrate this isolated branch. Qualify the timestamp
 ordering in an installed candidate only as part of the next consolidated
 Agent Browser build rather than spending a standalone production replacement.
