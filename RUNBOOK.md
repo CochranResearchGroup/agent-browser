@@ -3,29 +3,20 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 299 | 2026-09-11
+## Turn 300 | 2026-09-11
 
-Plan0165 owner-generation source repair is integrated through PR 34 at
-`9e544710`. PR 33 first published exact branch custody at `1fb5e3a3`. The
-profile-recovery regression failed before implementation; exact retirement,
-mismatch denial, all 35 profile-recovery module tests, formatting, and strict
-Clippy pass. Git custody is ready for exact ref and worktree closure while the
-plan remains OPEN for production installation and one governed BILL acceptance
-attempt. No production installation, browser retry, profile mutation,
-credential change, tenant effect, or BILL accounting effect occurred.
-
-## Turn 298 | 2026-09-11
-
-Plan0165 source repair is active on `fix/profile-repair-owner-generation` after
-the installed preserving repair launched Chrome but failed with
-`runtime_lifecycle_bound_browser_identity_inconsistent`. The failed PID 93502
-was cleanly terminated and the retained BILL profile and accounting state were
-unchanged. A deterministic regression proved the apply callback retained the
-sealed terminal-owner binding into replacement launch. The candidate now
-retires only an exact five-field binding before that launch and rejects any
-mismatch without weakening lifecycle validation. Exact and negative
-regressions, all 35 profile-recovery module tests, formatting, and strict Clippy
-pass. No production installation or BILL retry occurred; both remain pending.
+Plan0165 production install and preserving profile repair are complete. PR 36
+merged the missing principal-binding refreshes at `73bdffce`. Installed
+generation `0.28.0-9598cb89565f-492f49580f7e` has exact SHA-256
+`9598cb89565fdcd1af3bcf0d496ebae3d919a7d4c9b1cd725a3393d430d83e20`;
+transaction `upgrade-50b884da-b2dc-4f0d-96e7-54b45e1770c0` is accepted.
+Runtime multiplicity is steady at one dashboard, one executable generation,
+zero legacy daemons, and one runtime host. BILL Chrome PID 49619, owner and
+principal binding generation 62, active lease, current lock, eight tabs, and
+preserved profile data are coherent with no identity blockers. Plan0165 remains
+OPEN only for its separately governed BILL authentication and read-only
+consumer acceptance. No credential, tenant, transaction, or accounting effect
+occurred.
 
 ## Turn 297 | 2026-09-11
 
@@ -48,12 +39,6 @@ effect followed. Restore the sealed vault entry before resuming or replacing.
 Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF now releases exact connection custody while accepted work finishes independently.
 Provider-free gates pass; P0240 and P157 remain preserved, Plan0162 is unblocked,
 and no Odollo or RuFresh action was repeated.
-
-## Turn 293 | 2026-09-11
-
-[Plan0165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
-is OPEN for one consumer-blocking BILL form drift. Its identifier is
-`input#login-email-input[name='loginEmail']` with `Continue`; two installed sealed runs stopped before credential or challenge-provider effects. The joined repair aligns Authentication Run with the broker's exact-tab shared task lease while rejecting inactive and human-takeover leases. It retains legacy `Save`, preserves `bill-soylei`, and stops downstream work at read-only consumer inspection.
 
 ## Turn 291 | 2026-09-10
 
