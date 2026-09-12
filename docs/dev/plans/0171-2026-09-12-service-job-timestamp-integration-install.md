@@ -71,3 +71,19 @@ delegation.
 All five acceptance criteria have current Git, build, transaction, and runtime
 receipts, or the plan records the exact terminal blocker without widening
 effects.
+
+## Checkpoint P0171-C01 | 2026-09-12
+
+State transition: `active -> integration_ready`.
+
+Progress classification: `blocker_reduction`; current fork repairs merged
+cleanly, three focused tests plus formatting and clippy pass, and the optimized
+candidate built successfully.
+
+Evidence: candidate source commit `fbeca748`; executable SHA-256
+`d49bfb95425af4498acb75b7516ad224112e923237c78045ecc7cdb0e9507146`;
+44,141,200 bytes. The 12-minute build remained inside the governed one-job
+Cargo cgroup.
+
+Acceptance state: criteria 1-2 pass. Fork integration and transactional
+installed verification remain.

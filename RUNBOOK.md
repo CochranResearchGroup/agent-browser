@@ -4,7 +4,7 @@ Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance,
 
 ## Turn 302 | 2026-09-12
 
-Plan0171 (`docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md`) is OPEN under the operator's explicit “Ok go” integration/install authority. Current `origin/main`, including the retained-owner route reconciliation, merged cleanly into the isolated timestamp branch; the dirty main and Turnstile worktrees remain untouched. Agent Browser Cargo validation passed its three focused tests, formatting, and workspace clippy after waiting at the governed resource gate behind another candidate build. No push, install, browser, profile, provider, cleanup, or Service State effect has occurred at this checkpoint.
+Plan0171 (`docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md`) is OPEN and integration-ready under the operator's explicit “Ok go” authority. Fork repairs merged cleanly; three focused tests, formatting, clippy, and optimized build pass at source `fbeca748`, producing SHA-256 `d49bfb95425af4498acb75b7516ad224112e923237c78045ecc7cdb0e9507146`. The 12-minute build remained inside the governed one-job Cargo cgroup. The dirty main and Turnstile worktrees remain untouched. No push, install, browser, profile, provider, cleanup, or Service State effect has occurred at this checkpoint.
 
 ## Turn 301 | 2026-09-12
 
