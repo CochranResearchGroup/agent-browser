@@ -96,15 +96,15 @@ entered the replacement launch with the exact terminal-owner binding still in
 daemon memory. Registration therefore compared the new process with the old
 binding before it could commit the replacement generation.
 
-The source candidate on `fix/profile-repair-owner-generation` retires only a
-daemon binding that matches all five sealed owner joins immediately before the
-single authorized recovery launch. A different owner ID, profile digest,
-generation, durable browser ID, or daemon route remains present and fails
-closed. The lower-level process-identity validator is unchanged. The focused
-regression failed before the repair, then the exact and mismatch cases plus all
-35 profile-recovery module tests passed. Formatting and strict Clippy also
-pass. Production installation and another BILL repair attempt remain pending
-separate governed gates.
+The source repair is integrated through PR 34 at merge commit `9e544710`. It
+retires only a daemon binding that matches all five sealed owner joins
+immediately before the single authorized recovery launch. A different owner
+ID, profile digest, generation, durable browser ID, or daemon route remains
+present and fails closed. The lower-level process-identity validator is
+unchanged. The focused regression failed before the repair, then the exact and
+mismatch cases plus all 35 profile-recovery module tests passed. Formatting
+and strict Clippy also pass. Production installation and another BILL repair
+attempt remain pending separate governed gates.
 
 Commit `9f14cb05` is integrated on `origin/main`, and its release candidate is
 built at SHA-256 `61a50901a56c3403aeb0ac49cef5c0416cddd64cf4fa5482e31b670c3cd4eb40`.
