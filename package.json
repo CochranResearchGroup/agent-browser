@@ -12,6 +12,8 @@
     "agent-browser": "./bin/agent-browser.js"
   },
   "scripts": {
+    "captcha-lab:start": "pnpm --filter agent-browser-captcha-lab start",
+    "test:captcha-lab": "pnpm --filter agent-browser-captcha-lab test",
     "version:sync": "node scripts/sync-version.js",
     "version": "npm run version:sync && git add cli/Cargo.toml Cargo.lock",
     "validation:select": "node scripts/dev/select-validation.js",
