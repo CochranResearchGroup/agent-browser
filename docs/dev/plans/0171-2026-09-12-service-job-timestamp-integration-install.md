@@ -161,3 +161,5 @@ report zero candidates and zero unknown or transferring cleanup obligations.
 Acceptance state: criteria 1-5 pass. Dashboard operator-journey convergence and
 one default-profile lease warning remain nonblocking; no browser launch,
 navigation, profile mutation, provider call, route switch, or cleanup occurred.
+The retained Graphiti job's one bounded retry also ended in a transport timeout
+before episode creation; it remains failed without a duplicate enqueue.

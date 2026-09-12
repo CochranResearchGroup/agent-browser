@@ -36,3 +36,8 @@ environment allowlist in a separately reviewed security repair.
 
 No browser launch, navigation, profile mutation, provider call, route switch,
 cleanup, or upstream pull request occurred.
+
+The retained Graphiti closeout job
+`084f242a-977a-4017-a113-6f9a5e62b1a3` exhausted its one bounded retry with a
+second transport `TimeoutError` before episode creation. No duplicate memory
+job was queued.
