@@ -1547,6 +1547,8 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
             .and_then(|mgr| mgr.runtime_profile_name()),
         leave_open,
     );
+    let runtime_owner_browser_id =
+        crate::native::action_runtime::runtime::service_tab_handle_browser_id(state);
     let persistence = persist_current_browser_health(
         state,
         service_host,
@@ -1565,6 +1567,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
                     .as_ref()
                     .ok_or("native_launch_browser_missing")?,
                 &json!({}),
+                Some(&runtime_owner_browser_id),
             )?;
         }
         Ok(())
