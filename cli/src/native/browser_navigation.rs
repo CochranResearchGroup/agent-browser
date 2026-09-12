@@ -24,12 +24,13 @@ pub(crate) mod action_commands {
     use tokio::sync::{broadcast, oneshot, RwLock};
 
     fn service_tab_browser_id_from_command_result(
+        runtime_owner_browser_id: Option<&str>,
         cmd: &Value,
         data: &Value,
         session_id: &str,
     ) -> String {
-        data.get("browserId")
-            .and_then(Value::as_str)
+        runtime_owner_browser_id
+            .or_else(|| data.get("browserId").and_then(Value::as_str))
             .or_else(|| cmd.get("browserId").and_then(Value::as_str))
             .map(str::trim)
             .filter(|browser_id| !browser_id.is_empty())
@@ -42,6 +43,7 @@ pub(crate) mod action_commands {
         session_id: &str,
         mgr: &BrowserManager,
         data: &Value,
+        runtime_owner_browser_id: Option<&str>,
     ) -> Result<(), String> {
         if optional_command_string(cmd, "serviceName").is_none()
             && optional_command_string(cmd, "agentName").is_none()
@@ -62,7 +64,12 @@ pub(crate) mod action_commands {
             .runtime_profile_name()
             .map(|profile| Value::String(profile.to_string()))
             .unwrap_or(Value::Null);
-        let browser_id = service_tab_browser_id_from_command_result(cmd, data, session_id);
+        let browser_id = service_tab_browser_id_from_command_result(
+            runtime_owner_browser_id,
+            cmd,
+            data,
+            session_id,
+        );
         let service_tab_handle = json!(
             { "browserId" : browser_id, "sessionName" : session_id,
             "tabId" : tab_id, "targetId" : target_id, "url" : url, "title" : title,
@@ -95,6 +102,7 @@ pub(crate) mod action_commands {
         fn tab_persistence_preserves_runtime_owner_browser_id_from_result() {
             assert_eq!(
                 service_tab_browser_id_from_command_result(
+                    None,
                     &json!({}),
                     &json!({"browserId": "session:durable-browser"}),
                     "daemon-route",
@@ -107,6 +115,7 @@ pub(crate) mod action_commands {
         fn tab_persistence_uses_admitted_command_browser_id_when_result_omits_it() {
             assert_eq!(
                 service_tab_browser_id_from_command_result(
+                    None,
                     &json!({"browserId": "session:durable-browser"}),
                     &json!({}),
                     "daemon-route",
@@ -116,9 +125,27 @@ pub(crate) mod action_commands {
         }
 
         #[test]
+        fn tab_persistence_prefers_runtime_owner_browser_id() {
+            assert_eq!(
+                service_tab_browser_id_from_command_result(
+                    Some("session:runtime-owner"),
+                    &json!({"browserId": "session:command"}),
+                    &json!({"browserId": "session:result"}),
+                    "daemon-route",
+                ),
+                "session:runtime-owner"
+            );
+        }
+
+        #[test]
         fn tab_persistence_falls_back_to_daemon_route_without_result_browser_id() {
             assert_eq!(
-                service_tab_browser_id_from_command_result(&json!({}), &json!({}), "daemon-route",),
+                service_tab_browser_id_from_command_result(
+                    None,
+                    &json!({}),
+                    &json!({}),
+                    "daemon-route",
+                ),
                 "session:daemon-route"
             );
         }
