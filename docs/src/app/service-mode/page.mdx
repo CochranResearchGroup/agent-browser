@@ -430,6 +430,7 @@ Use the CLI:
 ```bash
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id cloudflare-turnstile-v1 --json
 ```
 
 Use the canonical service request from HTTP:
@@ -642,7 +643,7 @@ const interaction = await runServiceDesktopInteraction({
     <tr>
       <td><code>recipe.recipeId</code></td>
       <td>Required</td>
-      <td>Use <code>p110-pointer-keyboard-v1</code>, <code>p110-foundation-stress-v1</code>, or <code>p131-controlled-x11-v1</code>.</td>
+      <td>Use <code>p110-pointer-keyboard-v1</code>, <code>p110-foundation-stress-v1</code>, <code>p131-controlled-x11-v1</code>, or <code>cloudflare-turnstile-v1</code>.</td>
     </tr>
     <tr>
       <td><code>serviceName</code>, <code>agentName</code>, <code>taskName</code></td>
@@ -674,6 +675,13 @@ and non-retryable.
 The foundation-stress recipe runs the same source engine across deterministic
 success, replay, conflict, cleanup, verification, prompt-intervention, and
 handoff scenarios without adding a production provider.
+
+The <code>cloudflare-turnstile-v1</code> recipe is limited to one uniquely
+recognized visible checkbox challenge on an exactly bound service-owned X11
+browser. It derives a checkbox region from the exact phrase, moves through the
+fixed xdotool adapter, recaptures after hover, and refuses button-down unless
+the checkbox appears at the same region. It emits at most one click, performs
+fresh after-state verification, and never retries automatically.
 
 The persisted foundation-stress receipt projects operation presence, replay,
 cleanup, verification, prompt intervention, and the typed live-entry gate.

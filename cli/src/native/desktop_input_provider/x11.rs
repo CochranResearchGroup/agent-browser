@@ -11,6 +11,12 @@ pub(crate) struct XTestSink {
     display_name: String,
 }
 
+#[derive(Debug)]
+pub(crate) struct XDoToolSink {
+    display_name: String,
+    expected_browser_pid: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct XTestSceneProbe {
     pub(crate) pointer_x: i32,
@@ -39,6 +45,119 @@ impl ClosedX11Sink for XTestSink {
         platform::emit(&self.display_name, event)?;
         Ok(format!("x11-acknowledgement:{}", uuid::Uuid::new_v4()))
     }
+}
+
+impl XDoToolSink {
+    pub(crate) fn new(
+        display_name: impl Into<String>,
+        expected_browser_pid: u32,
+    ) -> Result<Self, DesktopInputProviderError> {
+        let display_name = display_name.into();
+        if display_name.trim().is_empty()
+            || display_name.as_bytes().contains(&0)
+            || expected_browser_pid == 0
+        {
+            return Err(DesktopInputProviderError::new(
+                "desktop_input_display_authority_invalid",
+            ));
+        }
+        Ok(Self {
+            display_name,
+            expected_browser_pid,
+        })
+    }
+
+    pub(crate) fn probe(&self) -> Result<XTestSceneProbe, DesktopInputProviderError> {
+        #[cfg(unix)]
+        {
+            let active_pid = run_xdotool(&self.display_name, &["getactivewindow", "getwindowpid"])?
+                .trim()
+                .parse::<u32>()
+                .map_err(|_| {
+                    DesktopInputProviderError::new("desktop_input_focus_probe_unavailable")
+                })?;
+            let pointer = run_xdotool(&self.display_name, &["getmouselocation", "--shell"])?;
+            let mut pointer_x = None;
+            let mut pointer_y = None;
+            for line in pointer.lines() {
+                if let Some(value) = line.strip_prefix("X=") {
+                    pointer_x = value.parse::<i32>().ok();
+                } else if let Some(value) = line.strip_prefix("Y=") {
+                    pointer_y = value.parse::<i32>().ok();
+                }
+            }
+            return Ok(XTestSceneProbe {
+                pointer_x: pointer_x.ok_or_else(|| {
+                    DesktopInputProviderError::new("desktop_input_focus_probe_unavailable")
+                })?,
+                pointer_y: pointer_y.ok_or_else(|| {
+                    DesktopInputProviderError::new("desktop_input_focus_probe_unavailable")
+                })?,
+                controlled_fixture_focused: active_pid == self.expected_browser_pid,
+            });
+        }
+        #[cfg(not(unix))]
+        Err(DesktopInputProviderError::new(
+            "desktop_input_provider_unsupported",
+        ))
+    }
+}
+
+impl ClosedX11Sink for XDoToolSink {
+    fn emit(&mut self, event: &ControlledX11Event) -> Result<String, DesktopInputProviderError> {
+        #[cfg(unix)]
+        {
+            let args = xdotool_event_args(event)?;
+            let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+            run_xdotool(&self.display_name, &refs)?;
+            return Ok(format!("xdotool-acknowledgement:{}", uuid::Uuid::new_v4()));
+        }
+        #[cfg(not(unix))]
+        Err(DesktopInputProviderError::new(
+            "desktop_input_provider_unsupported",
+        ))
+    }
+}
+
+fn xdotool_event_args(
+    event: &ControlledX11Event,
+) -> Result<Vec<String>, DesktopInputProviderError> {
+    match event {
+        ControlledX11Event::PointerMove { x, y } => Ok(vec![
+            "mousemove".to_string(),
+            "--sync".to_string(),
+            x.to_string(),
+            y.to_string(),
+        ]),
+        ControlledX11Event::LeftDown => Ok(vec!["mousedown".to_string(), "1".to_string()]),
+        ControlledX11Event::LeftUp => Ok(vec!["mouseup".to_string(), "1".to_string()]),
+        ControlledX11Event::KeyDown { .. } | ControlledX11Event::KeyUp { .. } => Err(
+            DesktopInputProviderError::new("desktop_input_key_not_registered"),
+        ),
+    }
+}
+
+#[cfg(unix)]
+fn run_xdotool(display_name: &str, args: &[&str]) -> Result<String, DesktopInputProviderError> {
+    use std::process::{Command, Stdio};
+
+    let output = Command::new("/usr/bin/timeout")
+        .args(["5s", "/usr/bin/xdotool"])
+        .args(args)
+        .env("DISPLAY", display_name)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .map_err(|_| {
+            DesktopInputProviderError::new("desktop_input_xdotool_provider_unavailable")
+        })?;
+    if !output.status.success() || output.stdout.len() > 4096 {
+        return Err(DesktopInputProviderError::new(
+            "desktop_input_xdotool_effect_uncertain",
+        ));
+    }
+    String::from_utf8(output.stdout)
+        .map_err(|_| DesktopInputProviderError::new("desktop_input_focus_probe_unavailable"))
 }
 
 fn registered_keysym_name(key: char) -> Result<String, DesktopInputProviderError> {
@@ -406,6 +525,40 @@ mod tests {
                 "desktop_input_display_authority_invalid"
             );
         }
+    }
+
+    #[test]
+    fn xdotool_constructor_requires_exact_display_and_browser_identity() {
+        for (display_name, browser_pid) in [("", 1), ("  ", 1), ("\0", 1), (":10", 0)] {
+            assert_eq!(
+                XDoToolSink::new(display_name, browser_pid)
+                    .unwrap_err()
+                    .code(),
+                "desktop_input_display_authority_invalid"
+            );
+        }
+    }
+
+    #[test]
+    fn xdotool_adapter_registers_only_pointer_motion_and_left_button_events() {
+        assert_eq!(
+            xdotool_event_args(&ControlledX11Event::PointerMove { x: 495, y: 446 }).unwrap(),
+            ["mousemove", "--sync", "495", "446"]
+        );
+        assert_eq!(
+            xdotool_event_args(&ControlledX11Event::LeftDown).unwrap(),
+            ["mousedown", "1"]
+        );
+        assert_eq!(
+            xdotool_event_args(&ControlledX11Event::LeftUp).unwrap(),
+            ["mouseup", "1"]
+        );
+        assert_eq!(
+            xdotool_event_args(&ControlledX11Event::KeyDown { key: 'a' })
+                .unwrap_err()
+                .code(),
+            "desktop_input_key_not_registered"
+        );
     }
 
     #[test]

@@ -5,6 +5,15 @@ Keep at or below 200 lines under policy0043.
 
 ## Turn 297 | 2026-09-11
 
+[Plan0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md) remains OPEN: qualify one bounded Turnstile interaction with no retry or unrelated effect.
+California exposed Imperva-wrapped hCaptcha; a requested X11 run solved it,
+then Imperva returned block error `15`. The restored Ohio stealth browser
+cleared Cloudflare during pre-click observation and loaded business search.
+No Ohio X11 input occurred, so live interaction acceptance remains unproven;
+both retained browser routes remain open.
+
+## Turn 297 | 2026-09-11
+
 [Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is CLOSED. W1 and W2 closed the integrated P165 worktree, four local and remote branch pairs, and four integrated remote-only refs without closing residual operational plans. W3 integrated the two accepted P0240 residuals through PR 30 at `de614fbe`; all selected gates passed, and both P0240 worktrees plus their refs are closed. W4 found no P157 residual beyond `ad673377`. PR 31 merged the campaign record as `9f711ebc`; PR 32 closes P168 catalog custody before exact maintenance-ref deletion. The two canonical Rust edits remain attributable Odollo custody. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect occurred.
 
 ## Turn 296 | 2026-09-11

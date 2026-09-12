@@ -10225,6 +10225,9 @@ fn promote_dashboard_candidate_to_managed_backend(
     let repository =
         crate::dashboard_ingress::DashboardIngressRepository::new(&candidate.ingress_path);
     let registry = repository.load()?;
+    if dashboard_managed_backend_already_selected(&registry, &managed_backend) {
+        return stop_prepared_dashboard_candidate(prepared);
+    }
     let receipt = registry
         .last_presentation_receipt()
         .filter(|receipt| {
@@ -10244,6 +10247,13 @@ fn promote_dashboard_candidate_to_managed_backend(
         repository.commit_candidate_deployment(staged.revision)?;
     }
     stop_prepared_dashboard_candidate(prepared)
+}
+
+fn dashboard_managed_backend_already_selected(
+    registry: &crate::dashboard_ingress::DashboardIngressRegistry,
+    managed_backend: &crate::dashboard_ingress::DashboardBackend,
+) -> bool {
+    registry.selected_backend() == managed_backend && registry.candidate_backend().is_none()
 }
 
 fn isolated_post_commit_validation(
@@ -10582,6 +10592,12 @@ fn retire_finalized_source_runtime_host(
         return Err("runtime_source_host_backend_identity_changed_before_stop".to_string());
     }
     let identity_path = source_backend.socket_dir.join("runtime-host.identity.json");
+    if !identity_path.is_file() {
+        if recorded_runtime_host_is_absent(evidence)? {
+            return Ok(());
+        }
+        return Err("runtime_source_host_identity_missing_while_process_is_live".to_string());
+    }
     let identity: crate::process_identity::RecordedProcessIdentity =
         serde_json::from_slice(&fs::read(&identity_path).map_err(display_io(
             "read source runtime host identity",
@@ -10614,6 +10630,18 @@ fn retire_finalized_source_runtime_host(
         return Err("runtime_source_host_exit_timeout".to_string());
     }
     Ok(())
+}
+
+fn recorded_runtime_host_is_absent(
+    evidence: &crate::runtime_adoption::RuntimeHostIdentityEvidence,
+) -> Result<bool, String> {
+    let expected = crate::process_identity::RecordedProcessIdentity {
+        pid: evidence.pid,
+        start_token: evidence.process_start_token.clone(),
+        executable_path: None,
+        browser_family: None,
+    };
+    crate::process_identity::recorded_process_is_running(&expected).map(|running| !running)
 }
 
 fn wait_for_recorded_process_exit(
@@ -11463,6 +11491,7 @@ fn stage_payload_generation(
                 "providerId": "controlled-x11-xtest",
                 "capability": "guarded_pointer_keyboard_v1",
                 "recipeId": "p131-controlled-x11-v1",
+                "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"],
             },
         }))
         .expect("runtime generation manifest must serialize");
@@ -11598,6 +11627,7 @@ fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, 
                 "providerId": "controlled-x11-xtest",
                 "capability": "guarded_pointer_keyboard_v1",
                 "recipeId": "p131-controlled-x11-v1",
+                "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"],
             },
         }))
         .expect("legacy runtime generation manifest must serialize");
@@ -13659,6 +13689,21 @@ mod tests {
     }
 
     #[test]
+    fn missing_finalized_runtime_host_identity_accepts_only_absent_recorded_process() {
+        let evidence = crate::runtime_adoption::RuntimeHostIdentityEvidence {
+            endpoint_key: "runtime-host".to_string(),
+            generation_id: "generation-old".to_string(),
+            binary_sha256: "a".repeat(64),
+            pid: u32::MAX,
+            process_start_token: "missing-process".to_string(),
+            socket_identity: "unix:missing-runtime-host".to_string(),
+            observation_only: false,
+        };
+
+        assert!(recorded_runtime_host_is_absent(&evidence).unwrap());
+    }
+
+    #[test]
     fn candidate_identity_uses_the_synchronous_manifest_while_sha_sidecar_is_pending() {
         let fixture = env::temp_dir().join(format!(
             "agent-browser-candidate-identity-{}-{}",
@@ -15605,6 +15650,28 @@ mod tests {
         fs::set_permissions(&old_root, fs::Permissions::from_mode(0o755)).unwrap();
         fs::set_permissions(&candidate_root, fs::Permissions::from_mode(0o755)).unwrap();
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn managed_dashboard_promotion_accepts_exact_already_selected_backend() {
+        let managed = crate::dashboard_ingress::DashboardBackend::new(
+            "generation-candidate",
+            4849,
+            "candidate-manifest",
+        );
+        let registry = crate::dashboard_ingress::DashboardIngressRegistry::new(managed.clone());
+
+        assert!(dashboard_managed_backend_already_selected(
+            &registry, &managed
+        ));
+        assert!(!dashboard_managed_backend_already_selected(
+            &registry,
+            &crate::dashboard_ingress::DashboardBackend::new(
+                "generation-candidate",
+                4850,
+                "candidate-manifest",
+            ),
+        ));
     }
 
     #[test]

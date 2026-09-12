@@ -497,13 +497,16 @@ service-bound frame:
 ```bash
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id cloudflare-turnstile-v1 --json
 ```
 
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance and does not prove that an installed runtime contains the feature.
 
-PoC 2 registers only `p110-control-v1` for the repository's synthetic
-verification control. It is not a Turnstile, passkey, or general UI profile.
+`p110-control-v1` locates the repository's synthetic verification control.
+`cloudflare-turnstile-v1` uses bounded Tesseract phrase evidence and fixed
+left-adjacent checkbox geometry. Phrase-only rendering reports hover-required
+evidence and does not itself authorize a click.
 
 <table>
   <thead>
@@ -660,7 +663,7 @@ agent-browser desktop interact \
     </tr>
     <tr>
       <td><code>--recipe-id &lt;id&gt;</code></td>
-      <td>Select <code>p110-pointer-keyboard-v1</code> or <code>p110-foundation-stress-v1</code>.</td>
+      <td>Select <code>p110-pointer-keyboard-v1</code>, <code>p110-foundation-stress-v1</code>, <code>p131-controlled-x11-v1</code>, or <code>cloudflare-turnstile-v1</code>.</td>
     </tr>
     <tr>
       <td><code>--service-name</code>, <code>--agent-name</code>, <code>--task-name</code></td>
@@ -678,6 +681,12 @@ provider routing, focus actions, or controller takeover.
 The foundation-stress recipe runs the same source engine across deterministic
 success, replay, conflict, cleanup, verification, prompt-intervention, and
 handoff scenarios without adding a production provider.
+
+The <code>cloudflare-turnstile-v1</code> recipe derives one checkbox region
+from an exact visible phrase, moves the pointer through the fixed xdotool
+adapter, and recaptures after hover. It refuses button-down unless checkbox
+geometry is visible at the same bound region, emits one click, verifies fresh
+after-state, and never retries automatically.
 
 The action requires a pre-existing controller lease and never requests,
 renews, releases, or takes over control. It is not a Turnstile, CAPTCHA,

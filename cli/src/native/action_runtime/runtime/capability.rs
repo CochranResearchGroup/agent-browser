@@ -33,9 +33,7 @@ pub(crate) fn browser_capability_service_state(cmd: &Value) -> Result<ServiceSta
     if let Some(service_state) = cmd.get("serviceState") {
         return crate::native::service_store::decode_service_state_value(service_state);
     }
-    LockedServiceStateRepository::default_json()
-        .and_then(|repository| repository.load_snapshot())
-        .map_err(|err| err.to_string())
+    crate::flags::load_effective_service_state_snapshot()
 }
 pub(crate) fn executable_path_is_operator_supplied(
     executable_path: Option<&str>,

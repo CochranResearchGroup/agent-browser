@@ -7,6 +7,18 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P169 | Cloudflare Turnstile Desktop Challenge
+
+State: OPEN
+
+Current state: [Plan 0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md)
+owns one operator-authorized integration of the existing desktop capture,
+location, controller fencing, curved pointer motion, X11 input, and after-state
+verification contracts. The bounded target is a uniquely detected visible
+Cloudflare `Verify you are human` checkbox on the current Ohio SOS browser.
+The live budget is one click with no retry; profile creation, browser closure,
+fingerprint manipulation, and general CAPTCHA solving are excluded.
+
 ## P168 | Worktree, Branch, Merge, And Closure Campaign
 
 State: CLOSED

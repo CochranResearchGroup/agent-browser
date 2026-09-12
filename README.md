@@ -958,6 +958,7 @@ frame without producing any pointer or keyboard input:
 ```bash
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id cloudflare-turnstile-v1 --json
 ```
 
 | Option | Meaning |
@@ -970,9 +971,11 @@ agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance and does not prove that an installed runtime contains the feature.
 
-PoC 2 registers only `p110-control-v1`, which locates the repository's
-synthetic verification control. It is not a Turnstile, passkey, or general UI
-profile. The command accepts that registered `locatorId`, not raw image bytes, a template
+`p110-control-v1` locates the repository's synthetic verification control.
+`cloudflare-turnstile-v1` recognizes exactly one normalized `Verify you are
+human` phrase, derives the fixed checkbox region immediately to its left, and
+reports whether checkbox pixels are already visible or hover is required. The
+command accepts a registered `locatorId`, not raw image bytes, a template
 path, a display name, or provider routing. It captures a fresh frame through
 the same service-bound authority as `desktop capture`, then returns the
 matching `context`, `frameReceipt`, and an `observation`. `matched` means one
@@ -1118,7 +1121,7 @@ agent-browser desktop interact \
 | `--browser-id <id>` | Required retained service-owned browser identity |
 | `--controller-lease-id <id>` | Required current controller lease for the exact route and stream |
 | `--operation-id <id>` | Required caller-generated opaque idempotency identity; it is distinct from transport request identity |
-| `--recipe-id <id>` | Required registered recipe: `p110-pointer-keyboard-v1`, `p110-foundation-stress-v1`, or `p131-controlled-x11-v1` |
+| `--recipe-id <id>` | Required registered recipe: `p110-pointer-keyboard-v1`, `p110-foundation-stress-v1`, `p131-controlled-x11-v1`, or `cloudflare-turnstile-v1` |
 | `--service-name <name>` | Required accountable service label |
 | `--agent-name <name>` | Required accountable agent label |
 | `--task-name <name>` | Required accountable task label |
@@ -1146,11 +1149,19 @@ target, fixed benign text, and provider generation internally. Caller supplied
 coordinates, display names, paths, executables, provider URLs, and arbitrary
 input remain forbidden.
 
+The `cloudflare-turnstile-v1` recipe uses a fresh bound frame and bounded
+Tesseract TSV evidence to locate one exact phrase. It derives the checkbox
+region, follows a deterministic curved pointer path through the fixed xdotool
+adapter, then recaptures the desktop. Button-down is refused unless hover has
+revealed checkbox geometry at the same bound region. One click is followed by
+fresh after-state verification and is never retried automatically.
+
 The request requires an existing controller lease; `desktop interact` never
 requests, renews, releases, or takes over control. The complete transaction is
 proven only with an injected in-memory synthetic fixture provider. It is not a
 Turnstile, CAPTCHA, passkey, LastPass, credential, or general desktop-control
-workflow, and source presence is not installed or live proof.
+workflow except for the narrowly registered Turnstile recipe, and source
+presence is not installed or live proof.
 
 HTTP and software clients use `action: "desktop_interact"`, top-level
 `browserId`, `controllerLeaseId`, `operationId`, and either registered

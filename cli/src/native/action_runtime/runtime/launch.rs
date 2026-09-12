@@ -15,8 +15,8 @@ use super::daemon::{
     apply_service_browser_capability_selection, apply_service_profile_selection,
     keychain_password_from_env, launch_args_from_sources,
     launch_command_with_effective_service_defaults, launch_hash, launch_profile_from_sources,
-    runtime_profile_from_env, runtime_profile_from_sources, use_real_keychain_from_env,
-    CloseBehavior,
+    require_stock_chrome_capability_selection, runtime_profile_from_env,
+    runtime_profile_from_sources, use_real_keychain_from_env, CloseBehavior,
 };
 use super::profile_lease::apply_auto_launch_command_hints;
 #[cfg(target_os = "linux")]
@@ -1300,6 +1300,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
     )?;
     let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, &effective_cmd);
+    require_stock_chrome_capability_selection(&browser_capability_launch)?;
     let mut metadata = ServiceLaunchMetadata::from_launch_options(
         &launch_options,
         Some(&effective_cmd),

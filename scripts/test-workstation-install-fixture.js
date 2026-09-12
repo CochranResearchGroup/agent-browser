@@ -162,6 +162,7 @@ try {
     providerId: 'controlled-x11-xtest',
     capability: 'guarded_pointer_keyboard_v1',
     recipeId: 'p131-controlled-x11-v1',
+    recipeIds: ['p131-controlled-x11-v1', 'cloudflare-turnstile-v1'],
   });
   for (const entry of treeManifest(selectedGenerationRoot)) {
     assert.equal(

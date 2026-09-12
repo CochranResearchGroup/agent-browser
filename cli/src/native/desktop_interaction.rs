@@ -19,6 +19,7 @@ use super::service_model::ServiceState;
 pub(crate) const RECIPE_ID: &str = "p110-pointer-keyboard-v1";
 pub(crate) const FOUNDATION_STRESS_RECIPE_ID: &str = "p110-foundation-stress-v1";
 pub(crate) const CONTROLLED_X11_RECIPE_ID: &str = "p131-controlled-x11-v1";
+pub(crate) const TURNSTILE_RECIPE_ID: &str = "cloudflare-turnstile-v1";
 const RECIPE_VERSION: &str = "v1";
 const FIXED_TEXT: &str = "fixture-ready";
 const COORDINATE_SPACE: &str = "desktop_physical_pixels";
@@ -1007,7 +1008,7 @@ fn parse_configured_interaction_request(
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
         .ok_or_else(|| "desktop_interact requires recipe.recipeId".to_string())?;
-    if recipe_id != CONTROLLED_X11_RECIPE_ID {
+    if ![CONTROLLED_X11_RECIPE_ID, TURNSTILE_RECIPE_ID].contains(&recipe_id.as_str()) {
         return Err("desktop_interaction_unsupported: recipe is not registered".to_string());
     }
     Ok(DesktopInteractionRequest {
@@ -1514,7 +1515,8 @@ fn run_claimed_interaction(
         }
 
         let mut event_time = motion.duration_ms + hold_ms;
-        for (index, key) in FIXED_TEXT.chars().enumerate() {
+        let recipe_text = (request.recipe_id != TURNSTILE_RECIPE_ID).then_some(FIXED_TEXT);
+        for (index, key) in recipe_text.unwrap_or_default().chars().enumerate() {
             event_time += key_delay_ms(index, &motion.seed_digest);
             let down = InputEvent::KeyDown {
                 key,
@@ -1706,8 +1708,9 @@ fn run_claimed_interaction(
                 "effect_uncertain",
             ));
         }
+        let expected_text_sha256 = recipe_text.map(digest_text);
         if after.verification_state != "passed"
-            || after.text_sha256.as_deref() != Some(digest_text(FIXED_TEXT).as_str())
+            || after.text_sha256.as_deref() != expected_text_sha256.as_deref()
         {
             let mut receipt = base_receipt(
                 request,
@@ -1759,6 +1762,7 @@ fn validate_request(request: &DesktopInteractionRequest) -> Result<(), DesktopIn
         RECIPE_ID,
         FOUNDATION_STRESS_RECIPE_ID,
         CONTROLLED_X11_RECIPE_ID,
+        TURNSTILE_RECIPE_ID,
     ]
     .contains(&request.recipe_id.as_str())
         || request.browser_id.trim().is_empty()
@@ -1772,7 +1776,8 @@ fn validate_request(request: &DesktopInteractionRequest) -> Result<(), DesktopIn
         || request.task_name.trim().is_empty()
         || request.caller_id.trim().is_empty()
         || request.request_id.trim().is_empty()
-        || request.agent_name != "fixture-agent"
+        || (request.recipe_id != TURNSTILE_RECIPE_ID && request.agent_name != "fixture-agent")
+        || (request.recipe_id == TURNSTILE_RECIPE_ID && request.agent_name.trim().is_empty())
         || FIXED_TEXT.len() > 32
         || !FIXED_TEXT.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b' ' || byte == b'-'
@@ -1804,7 +1809,12 @@ fn validate_before(
     }
     if before.observation_status != "matched"
         || before.selected_candidate_id.is_none()
-        || before.selected_target_class.as_deref() != Some("synthetic_verification_control")
+        || before.selected_target_class.as_deref()
+            != Some(if request.recipe_id == TURNSTILE_RECIPE_ID {
+                super::desktop_locator::TURNSTILE_TARGET_CLASS
+            } else {
+                "synthetic_verification_control"
+            })
         || before.selected_bounds.is_none()
         || before.selected_center.is_none()
     {
@@ -2540,8 +2550,16 @@ fn base_receipt(
         duration_ms: motion.duration_ms,
         acknowledgement_ids,
         cleanup_state: "not_needed".to_string(),
-        text_length: FIXED_TEXT.len(),
-        text_sha256: digest_text(FIXED_TEXT),
+        text_length: if request.recipe_id == TURNSTILE_RECIPE_ID {
+            0
+        } else {
+            FIXED_TEXT.len()
+        },
+        text_sha256: if request.recipe_id == TURNSTILE_RECIPE_ID {
+            digest_text("")
+        } else {
+            digest_text(FIXED_TEXT)
+        },
         after_context_id: None,
         after_frame_id: None,
         after_frame_sha256: None,
@@ -2600,7 +2618,17 @@ fn authority_digest(
 
 fn recipe_sha256(recipe_id: &str) -> String {
     digest_text(&format!(
-        "{recipe_id}\0{RECIPE_VERSION}\0p110-control-v1\0{FIXED_TEXT}\0fixed_cubic_bezier_v1"
+        "{recipe_id}\0{RECIPE_VERSION}\0{}\0{}\0fixed_cubic_bezier_v1",
+        if recipe_id == TURNSTILE_RECIPE_ID {
+            super::desktop_locator::TURNSTILE_LOCATOR_ID
+        } else {
+            "p110-control-v1"
+        },
+        if recipe_id == TURNSTILE_RECIPE_ID {
+            ""
+        } else {
+            FIXED_TEXT
+        }
     ))
 }
 
@@ -2757,6 +2785,47 @@ mod tests {
         assert!(!serde_json::to_string(&receipt)
             .unwrap()
             .contains(FIXED_TEXT));
+    }
+
+    #[test]
+    fn turnstile_recipe_moves_hovers_and_clicks_without_keyboard_input() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let mut turnstile_request = request();
+        turnstile_request.recipe_id = TURNSTILE_RECIPE_ID.to_string();
+
+        let receipt = run_desktop_interaction(
+            turnstile_request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut RejectHandoffLookup,
+                clock: &mut clock,
+            },
+        )
+        .expect("Turnstile fixture should verify after one click");
+
+        assert_eq!(receipt.effect_state, "verified_success");
+        assert_eq!(receipt.text_length, 0);
+        assert!(fixture.activated);
+        assert!(fixture.typed.is_empty());
+        assert_eq!(
+            fixture
+                .events
+                .iter()
+                .filter(|event| matches!(event, InputEvent::LeftDown { .. }))
+                .count(),
+            1
+        );
+        assert!(!fixture
+            .events
+            .iter()
+            .any(|event| matches!(event, InputEvent::KeyDown { .. } | InputEvent::KeyUp { .. })));
     }
 
     #[test]
@@ -4196,6 +4265,7 @@ mod tests {
         activated: bool,
         typed: String,
         stress_context: FoundationStressContext,
+        turnstile: bool,
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -4259,6 +4329,7 @@ mod tests {
                 activated: false,
                 typed: String::new(),
                 stress_context: FoundationStressContext::actionable(),
+                turnstile: false,
             }
         }
 
@@ -4319,8 +4390,9 @@ mod tests {
 
         fn observe_before(
             &mut self,
-            _request: &DesktopInteractionRequest,
+            request: &DesktopInteractionRequest,
         ) -> Result<BeforeObservation, DesktopInteractionError> {
+            self.turnstile = request.recipe_id == TURNSTILE_RECIPE_ID;
             Ok(BeforeObservation {
                 binding: self.binding(),
                 context_id: "context-before".to_string(),
@@ -4331,7 +4403,14 @@ mod tests {
                 observation_sha256: "observation-before-sha".to_string(),
                 observation_status: "matched".to_string(),
                 selected_candidate_id: Some("candidate-1".to_string()),
-                selected_target_class: Some("synthetic_verification_control".to_string()),
+                selected_target_class: Some(
+                    if self.turnstile {
+                        super::super::desktop_locator::TURNSTILE_TARGET_CLASS
+                    } else {
+                        "synthetic_verification_control"
+                    }
+                    .to_string(),
+                ),
                 selected_bounds: Some(PixelBounds {
                     x: 148,
                     y: 88,
@@ -4424,13 +4503,15 @@ mod tests {
                 frame_sha256: "frame-after-sha".to_string(),
                 observation_id: "observation-after".to_string(),
                 observation_sha256: "observation-after-sha".to_string(),
-                verification_state: if self.activated && self.typed == FIXED_TEXT {
+                verification_state: if self.activated
+                    && (self.turnstile || self.typed == FIXED_TEXT)
+                {
                     "passed"
                 } else {
                     "unchanged"
                 }
                 .to_string(),
-                text_sha256: Some(digest_text(&self.typed)),
+                text_sha256: (!self.turnstile).then(|| digest_text(&self.typed)),
             })
         }
 

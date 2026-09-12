@@ -1683,7 +1683,12 @@ fn reject_desktop_interact_request(
     }
     if !matches!(
         recipe.get("recipeId").and_then(Value::as_str),
-        Some("p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1")
+        Some(
+            "p110-pointer-keyboard-v1"
+                | "p110-foundation-stress-v1"
+                | "p131-controlled-x11-v1"
+                | "cloudflare-turnstile-v1"
+        )
     ) {
         return Err(issue(
             ServiceRequestIssueKind::InvalidBoundedRecipe,

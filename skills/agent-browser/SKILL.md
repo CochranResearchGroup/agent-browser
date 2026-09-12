@@ -977,9 +977,8 @@ attribution. MCP clients use `service_request` or the dedicated
 
 ## Guarded Synthetic Desktop Interaction
 
-Use `desktop interact` only for a registered P110 synthetic recipe and only
-with a pre-existing current controller lease and a caller-generated operation
-ID:
+Use `desktop interact` only for a registered recipe and only with a
+pre-existing current controller lease and a caller-generated operation ID:
 
 ```bash
 agent-browser desktop interact \
@@ -1013,18 +1012,26 @@ handoff scenarios without adding a production provider.
 
 HTTP and generated-client requests use `action: "desktop_interact"`, top-level
 `browserId`, `controllerLeaseId`, `operationId`, and either
-`p110-pointer-keyboard-v1`, `p110-foundation-stress-v1`, or
-`p131-controlled-x11-v1` as
+`p110-pointer-keyboard-v1`, `p110-foundation-stress-v1`,
+`p131-controlled-x11-v1`, or `cloudflare-turnstile-v1` as
 `recipe.recipeId`. Supply all three
 attribution labels. MCP clients can use the canonical `service_request` or the
 dedicated `desktop_interact` tool. Client helpers are
 `createServiceDesktopInteractRequest()`, `requestServiceDesktopInteract()`,
 and `runServiceDesktopInteraction()`.
 
+Use `cloudflare-turnstile-v1` only for a visible Cloudflare checkbox challenge
+on an exactly bound service-owned X11 browser. First run `desktop locate` with
+the same locator ID. The interaction recipe derives coordinates from the exact
+`Verify you are human` phrase, uses the fixed xdotool adapter for curved motion,
+recaptures after hover, and refuses button-down unless checkbox geometry appears
+at the same region. It clicks at most once and never retries automatically.
+Callers cannot provide OCR text, pixels, coordinates, commands, timing, or a
+provider executable.
+
 Treat partial-effect receipts as non-retryable. Receipt metadata omits frame
-pixels, plaintext typed content, and the full motion path. This recipe is not a
-Turnstile, CAPTCHA, passkey, LastPass, credential, or general desktop-control
-workflow.
+pixels, plaintext typed content, and the full motion path. No recipe is a
+general CAPTCHA, passkey, LastPass, credential, or desktop-control workflow.
 
 Treat the foundation-stress entry gates literally. Every individual interaction
 receipt must retain `closed_live_evidence_required` and cannot open planning.

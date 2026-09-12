@@ -1353,7 +1353,7 @@ fn service_mcp_tools() -> Vec<Value> {
                         "additionalProperties": false,
                         "required": ["recipeId"],
                         "properties": {
-                            "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1"] }
+                            "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1", "cloudflare-turnstile-v1"] }
                         },
                         "description": "Repository-owned synthetic interaction recipe. Raw input fields are not accepted."
                     },
@@ -5273,8 +5273,8 @@ fn desktop_locate_tool_schema() -> Value {
 fn desktop_interact_tool_schema() -> Value {
     json!({
         "name": DESKTOP_INTERACT_MCP_TOOL_NAME,
-        "title": "Run guarded synthetic desktop interaction",
-        "description": "Queue one registered observe, locate, act, and verify recipe against an exact service-owned desktop. PoC 5 has no configured production input provider, so public dispatch fails closed before capture, lease mutation, or input.",
+        "title": "Run guarded desktop interaction",
+        "description": "Queue one registered observe, locate, act, and verify recipe against an exact service-owned desktop. Turnstile interaction requires a unique phrase anchor, hover-revealed checkbox proof, a current controller lease, and one non-retryable click.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -5283,7 +5283,7 @@ fn desktop_interact_tool_schema() -> Value {
                 "sessionName": { "type": "string", "description": "Optional daemon session used only to narrow routing." },
                 "controllerLeaseId": { "type": "string", "description": "Existing primary controller lease id." },
                 "operationId": { "type": "string", "description": "Required caller-generated opaque idempotency identity; never a daemon selector." },
-                "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1"], "description": "Registered repository-owned interaction recipe." },
+                "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1", "cloudflare-turnstile-v1"], "description": "Registered repository-owned interaction recipe." },
                 "jobTimeoutMs": { "type": "integer", "minimum": 1 },
                 "serviceName": { "type": "string", "description": "Required calling service name." },
                 "agentName": { "type": "string", "description": "Required calling agent name." },
@@ -6952,7 +6952,10 @@ fn desktop_interact_service_request(arguments: &Value) -> Result<Value, JsonRpcE
     let recipe_id = required_string_argument(arguments, "recipeId")?;
     if !matches!(
         recipe_id,
-        "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1"
+        "p110-pointer-keyboard-v1"
+            | "p110-foundation-stress-v1"
+            | "p131-controlled-x11-v1"
+            | "cloudflare-turnstile-v1"
     ) {
         return Err(JsonRpcError::invalid_params(
             "desktop_interact recipeId must be registered",

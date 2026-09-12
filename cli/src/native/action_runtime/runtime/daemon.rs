@@ -1814,3 +1814,18 @@ pub(crate) fn apply_service_browser_capability_selection(
     options.executable_path = Some(selection.executable_path.clone());
     BrowserCapabilityLaunchResolution::applied(browser_build, profile_id, selection)
 }
+
+pub(crate) fn require_stock_chrome_capability_selection(
+    resolution: &BrowserCapabilityLaunchResolution,
+) -> Result<(), String> {
+    if resolution.browser_build == Some(BrowserBuild::StockChrome)
+        && !resolution.applied
+        && resolution.reason != "explicit_executable_path"
+    {
+        return Err(format!(
+            "stock_chrome_capability_selection_failed: {}",
+            resolution.reason
+        ));
+    }
+    Ok(())
+}

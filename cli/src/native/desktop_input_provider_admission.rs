@@ -10,6 +10,7 @@ const PRODUCTION_RUNTIME_SCHEMA: &str = "agent-browser.runtime-generation.v1";
 const PROVIDER_ID: &str = "controlled-x11-xtest";
 const PROVIDER_CAPABILITY: &str = "guarded_pointer_keyboard_v1";
 const RECIPE_ID: &str = "p131-controlled-x11-v1";
+const RECIPE_IDS: [&str; 2] = [RECIPE_ID, "cloudflare-turnstile-v1"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProviderAdmission {
@@ -19,6 +20,7 @@ pub(crate) struct ProviderAdmission {
     pub(crate) provider_id: String,
     pub(crate) capability: String,
     pub(crate) recipe_id: String,
+    pub(crate) recipe_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,6 +43,8 @@ struct ProviderManifest {
     provider_id: String,
     capability: String,
     recipe_id: String,
+    #[serde(default)]
+    recipe_ids: Vec<String>,
 }
 
 pub(crate) fn current_provider_admission() -> Result<ProviderAdmission, String> {
@@ -103,6 +107,7 @@ fn verify_provider_admission(
         || provider.provider_id != PROVIDER_ID
         || provider.capability != PROVIDER_CAPABILITY
         || provider.recipe_id != RECIPE_ID
+        || provider.recipe_ids != RECIPE_IDS
     {
         return Err("desktop_input_provider_generation_invalid".to_string());
     }
@@ -124,6 +129,7 @@ fn verify_provider_admission(
         provider_id: provider.provider_id,
         capability: provider.capability,
         recipe_id: provider.recipe_id,
+        recipe_ids: provider.recipe_ids,
     })
 }
 
@@ -156,7 +162,8 @@ mod tests {
                     "enabled": enabled,
                     "providerId": "controlled-x11-xtest",
                     "capability": "guarded_pointer_keyboard_v1",
-                    "recipeId": "p131-controlled-x11-v1"
+                    "recipeId": "p131-controlled-x11-v1",
+                    "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"]
                 }
             }))
             .unwrap(),
@@ -172,6 +179,10 @@ mod tests {
         assert_eq!(admission.provider_id, "controlled-x11-xtest");
         assert_eq!(admission.runtime_environment, "development");
         assert_eq!(admission.recipe_id, "p131-controlled-x11-v1");
+        assert_eq!(
+            admission.recipe_ids,
+            ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"]
+        );
         assert_eq!(admission.generation_id, "0.28.0-fixture");
     }
 
@@ -201,7 +212,8 @@ mod tests {
                     "enabled": true,
                     "providerId": "controlled-x11-xtest",
                     "capability": "guarded_pointer_keyboard_v1",
-                    "recipeId": "p131-controlled-x11-v1"
+                    "recipeId": "p131-controlled-x11-v1",
+                    "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"]
                 }
             }))
             .unwrap(),
@@ -213,6 +225,10 @@ mod tests {
             assert_eq!(admission.provider_id, "controlled-x11-xtest");
             assert_eq!(admission.runtime_environment, "production");
             assert_eq!(admission.recipe_id, "p131-controlled-x11-v1");
+            assert_eq!(
+                admission.recipe_ids,
+                ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"]
+            );
             assert_eq!(admission.generation_id, "0.28.0-production");
         }
     }

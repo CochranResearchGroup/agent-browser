@@ -396,6 +396,11 @@ fn service_state_from_store(configured: ServiceState) -> ServiceState {
     state
 }
 
+pub(crate) fn load_effective_service_state_snapshot() -> Result<ServiceState, String> {
+    let config = load_config(&[])?;
+    Ok(service_state_from_store(config.service_state_snapshot()))
+}
+
 /// Return true for the explicit-path Service State validator. That command
 /// must not consult or lock the default durable store while preparing flags.
 pub(crate) fn is_explicit_service_state_validation(args: &[String]) -> bool {

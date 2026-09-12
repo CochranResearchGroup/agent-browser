@@ -11,7 +11,8 @@ use super::desktop_capture::{
     DesktopCaptureRequest, DesktopCaptureResult, HARD_MAX_BYTES,
 };
 use super::desktop_input_provider::{
-    ControlledX11Event, DesktopInputProviderError, ProviderEffectExecutor, XTestSink,
+    ClosedX11Sink, ControlledX11Event, DesktopInputProviderError, ProviderEffectExecutor,
+    XDoToolSink, XTestSceneProbe, XTestSink,
 };
 use super::desktop_input_provider_admission::{
     revalidate_current_provider_admission, ProviderAdmission,
@@ -20,7 +21,7 @@ use super::desktop_interaction::{
     AfterObservation, BeforeObservation, ControllerAuthority, ControllerAuthorityRepository,
     DesktopBinding, DesktopInteractionError, DesktopInteractionProvider,
     DesktopInteractionProviderEvidence, DesktopInteractionRequest, EventAcknowledgement,
-    InputEvent, InteractionClock, PixelBounds, PixelPoint, SurfaceSnapshot,
+    InputEvent, InteractionClock, PixelBounds, PixelPoint, SurfaceSnapshot, TURNSTILE_RECIPE_ID,
 };
 use super::service_model::{controller_authority_fence_matches, ServiceState};
 use super::service_store::{
@@ -36,10 +37,35 @@ pub(crate) struct ControlledX11Provider {
     admission: ProviderAdmission,
     request: DesktopInteractionRequest,
     display_name: String,
-    executor: ProviderEffectExecutor<XTestSink>,
+    executor: ProviderEffectExecutor<ConfiguredX11Sink>,
     initial_capture: Option<DesktopCaptureResult>,
     controller_epoch: u64,
     process_identity_digest: String,
+    turnstile_target: Option<PixelBounds>,
+    provider_id: String,
+}
+
+enum ConfiguredX11Sink {
+    Fixture(XTestSink),
+    Turnstile(XDoToolSink),
+}
+
+impl ConfiguredX11Sink {
+    fn probe(&self) -> Result<XTestSceneProbe, DesktopInputProviderError> {
+        match self {
+            Self::Fixture(sink) => sink.probe(),
+            Self::Turnstile(sink) => sink.probe(),
+        }
+    }
+}
+
+impl ClosedX11Sink for ConfiguredX11Sink {
+    fn emit(&mut self, event: &ControlledX11Event) -> Result<String, DesktopInputProviderError> {
+        match self {
+            Self::Fixture(sink) => sink.emit(event),
+            Self::Turnstile(sink) => sink.emit(event),
+        }
+    }
 }
 
 pub(crate) struct ConfiguredControllerAuthorityRepository {
@@ -114,8 +140,27 @@ impl ControlledX11Provider {
             max_bytes: HARD_MAX_BYTES,
         })
         .map_err(|error| provider_error(error.code()))?;
-        let sink = XTestSink::new(&capture_binding.display_name)
-            .map_err(|error| provider_error(error.code()))?;
+        let provider_id = if request.recipe_id == TURNSTILE_RECIPE_ID {
+            "controlled-x11-xdotool".to_string()
+        } else {
+            admission.provider_id.clone()
+        };
+        let sink = if request.recipe_id == TURNSTILE_RECIPE_ID {
+            ConfiguredX11Sink::Turnstile(
+                XDoToolSink::new(
+                    &capture_binding.display_name,
+                    browser.pid.ok_or_else(|| {
+                        provider_error("desktop_input_provider_identity_unavailable")
+                    })?,
+                )
+                .map_err(|error| provider_error(error.code()))?,
+            )
+        } else {
+            ConfiguredX11Sink::Fixture(
+                XTestSink::new(&capture_binding.display_name)
+                    .map_err(|error| provider_error(error.code()))?,
+            )
+        };
         let executor = ProviderEffectExecutor::new(
             &runtime_state_root,
             &admission.runtime_environment,
@@ -130,7 +175,7 @@ impl ControlledX11Provider {
             route_id: capture_binding.route_id.clone(),
             stream_id: stream.id.clone(),
             display_allocation_id: capture_binding.display_allocation_id.clone(),
-            machine_input: admission.provider_id.clone(),
+            machine_input: provider_id.clone(),
         };
         Ok((
             Self {
@@ -141,6 +186,8 @@ impl ControlledX11Provider {
                 initial_capture: Some(initial_capture),
                 controller_epoch: route.controller_epoch,
                 process_identity_digest,
+                turnstile_target: None,
+                provider_id,
             },
             authority,
         ))
@@ -175,7 +222,7 @@ impl ControlledX11Provider {
 impl DesktopInteractionProvider for ControlledX11Provider {
     fn evidence(&self) -> DesktopInteractionProviderEvidence {
         DesktopInteractionProviderEvidence {
-            provider_id: self.admission.provider_id.clone(),
+            provider_id: self.provider_id.clone(),
             provider_version: self.admission.generation_id.clone(),
             capability: self.admission.capability.clone(),
         }
@@ -189,26 +236,57 @@ impl DesktopInteractionProvider for ControlledX11Provider {
             .initial_capture
             .take()
             .ok_or_else(|| provider_error("desktop_input_provider_observation_reused"))?;
-        let bounds = locate_unique_color(&capture.image_bytes, TARGET_RGB)?;
+        let (bounds, candidate_id, target_class, observation_id, observation_sha256) =
+            if self.request.recipe_id == TURNSTILE_RECIPE_ID {
+                let target = super::desktop_locator::locate_cloudflare_turnstile(&capture)
+                    .map_err(|_| provider_error("desktop_interaction_target_unavailable"))?;
+                let bounds = PixelBounds {
+                    x: i64::from(target.bounds.0),
+                    y: i64::from(target.bounds.1),
+                    width: target.bounds.2,
+                    height: target.bounds.3,
+                };
+                self.turnstile_target = Some(bounds);
+                (
+                    bounds,
+                    target.candidate_id,
+                    target.target_class.to_string(),
+                    target.observation_id,
+                    target.observation_sha256,
+                )
+            } else {
+                let bounds = locate_unique_color(&capture.image_bytes, TARGET_RGB)?;
+                let observation_sha256 = digest_text(&format!(
+                    "{}\0{}\0{}\0{}\0{}",
+                    capture.frame_receipt.content_sha256,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height
+                ));
+                (
+                    bounds,
+                    "controlled-target".to_string(),
+                    "synthetic_verification_control".to_string(),
+                    format!("desktop-observation-{}", &observation_sha256[..24]),
+                    observation_sha256,
+                )
+            };
         let center = PixelPoint {
             x: bounds.x + i64::from(bounds.width / 2),
             y: bounds.y + i64::from(bounds.height / 2),
         };
-        let observation_sha256 = digest_text(&format!(
-            "{}\0{}\0{}\0{}\0{}",
-            capture.frame_receipt.content_sha256, bounds.x, bounds.y, bounds.width, bounds.height
-        ));
         Ok(BeforeObservation {
             binding: Self::binding(&capture),
             context_id: capture.context.context_id,
             frame_id: capture.frame_receipt.frame_id,
             frame_sha256: capture.frame_receipt.content_sha256,
             captured_at_ms: now_ms(),
-            observation_id: format!("desktop-observation-{}", &observation_sha256[..24]),
+            observation_id,
             observation_sha256,
             observation_status: "matched".to_string(),
-            selected_candidate_id: Some("controlled-target".to_string()),
-            selected_target_class: Some("synthetic_verification_control".to_string()),
+            selected_candidate_id: Some(candidate_id),
+            selected_target_class: Some(target_class),
             selected_bounds: Some(bounds),
             selected_center: Some(center),
         })
@@ -233,11 +311,13 @@ impl DesktopInteractionProvider for ControlledX11Provider {
         {
             return Err(provider_error("desktop_interaction_focus_changed"));
         }
-        let scene = XTestSink::new(&self.display_name)
-            .and_then(|sink| sink.probe())
+        let scene = self
+            .executor
+            .sink()
+            .probe()
             .map_err(|error| provider_error(error.code()))?;
         Ok(SurfaceSnapshot {
-            provider_id: self.admission.provider_id.clone(),
+            provider_id: self.provider_id.clone(),
             provider_version: self.admission.generation_id.clone(),
             provider_capability: self.admission.capability.clone(),
             surface_identity_digest: digest_text(&format!(
@@ -274,6 +354,27 @@ impl DesktopInteractionProvider for ControlledX11Provider {
         effect_key: &str,
         event: &InputEvent,
     ) -> Result<EventAcknowledgement, DesktopInteractionError> {
+        if self.request.recipe_id == TURNSTILE_RECIPE_ID
+            && matches!(event, InputEvent::LeftDown { .. })
+        {
+            let capture = self.capture()?;
+            let target = super::desktop_locator::locate_cloudflare_turnstile(&capture)
+                .map_err(|_| provider_error("desktop_interaction_target_unavailable"))?;
+            let expected = self
+                .turnstile_target
+                .ok_or_else(|| provider_error("desktop_interaction_target_unavailable"))?;
+            if !target.visible_control
+                || target.bounds
+                    != (
+                        u32::try_from(expected.x).unwrap_or(u32::MAX),
+                        u32::try_from(expected.y).unwrap_or(u32::MAX),
+                        expected.width,
+                        expected.height,
+                    )
+            {
+                return Err(provider_error("desktop_interaction_target_unavailable"));
+            }
+        }
         let controlled = match event {
             InputEvent::PointerMove { point, .. } => ControlledX11Event::PointerMove {
                 x: u32::try_from(point.x)
@@ -325,8 +426,32 @@ impl DesktopInteractionProvider for ControlledX11Provider {
         &mut self,
         _binding: &DesktopBinding,
     ) -> Result<AfterObservation, DesktopInteractionError> {
-        let capture = self.capture()?;
-        let passed = locate_unique_color(&capture.image_bytes, SUCCESS_RGB).is_ok();
+        let (capture, passed, text_sha256) = if self.request.recipe_id == TURNSTILE_RECIPE_ID {
+            let mut result = None;
+            for _ in 0..10 {
+                let capture = self.capture()?;
+                match super::desktop_locator::observe_cloudflare_turnstile(&capture) {
+                    Ok(None) => {
+                        result = Some((capture, true));
+                        break;
+                    }
+                    Ok(Some(_)) => result = Some((capture, false)),
+                    Err(_) => {
+                        return Err(provider_error(
+                            "desktop_interaction_verification_unavailable",
+                        ))
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(300));
+            }
+            let (capture, passed) = result
+                .ok_or_else(|| provider_error("desktop_interaction_verification_unavailable"))?;
+            (capture, passed, None)
+        } else {
+            let capture = self.capture()?;
+            let passed = locate_unique_color(&capture.image_bytes, SUCCESS_RGB).is_ok();
+            (capture, passed, passed.then(|| digest_text(FIXED_TEXT)))
+        };
         let observation_sha256 = digest_text(&format!(
             "{}\0{}",
             capture.frame_receipt.content_sha256, passed
@@ -339,7 +464,7 @@ impl DesktopInteractionProvider for ControlledX11Provider {
             observation_id: format!("desktop-observation-{}", &observation_sha256[..24]),
             observation_sha256,
             verification_state: if passed { "passed" } else { "failed" }.to_string(),
-            text_sha256: passed.then(|| digest_text(FIXED_TEXT)),
+            text_sha256,
         })
     }
 }

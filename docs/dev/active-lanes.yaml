@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P169
+    objective: Detect and click one visible Cloudflare Turnstile checkbox through the governed desktop workflow
+    plan: docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md
+    plan_ref: refs/heads/feature/turnstile-desktop-challenge
+    branch: feature/turnstile-desktop-challenge
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 0f6b949e579ba56170240198624afec942d6192e
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P110]
+    overlaps: [P157, P165]
+    reconciled_overlaps: [P157_preserve_profile_authority, P165_preserve_active_authentication_run]
+    updated_at: 2026-09-11
   - id: P165
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
     plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md

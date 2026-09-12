@@ -14,7 +14,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::io::Cursor;
+use std::io::{Cursor, Write};
+use std::process::{Command, Stdio};
 
 use super::desktop_capture::{
     capture_configured_desktop_frame, DesktopCaptureRequest, DesktopCaptureResult, DesktopContext,
@@ -25,6 +26,11 @@ const OBSERVATION_SCHEMA_VERSION: &str = "v1";
 const PROFILE_VERSION: &str = "p110-v1";
 const LOCATOR_ID: &str = "p110-control-v1";
 const TARGET_CLASS: &str = "synthetic_verification_control";
+pub(crate) const TURNSTILE_LOCATOR_ID: &str = "cloudflare-turnstile-v1";
+pub(crate) const TURNSTILE_TARGET_CLASS: &str = "cloudflare_turnstile_checkbox";
+const TURNSTILE_PROFILE_VERSION: &str = "p169-v1";
+const TURNSTILE_TOKEN_ID: &str = "verify-you-are-human";
+const TURNSTILE_TEMPLATE_THRESHOLD: u32 = 8_200;
 const COORDINATE_SPACE: &str = "desktop_physical_pixels";
 const NORMALIZATION_VERSION: &str = "rgba8-srgb-integer-v1";
 const TEMPLATE_DETECTOR_ID: &str = "rgba-template";
@@ -186,6 +192,17 @@ struct DesktopLocateResult {
     visualization_bytes: Option<Vec<u8>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LocatedDesktopTarget {
+    pub candidate_id: String,
+    pub target_class: &'static str,
+    pub bounds: (u32, u32, u32, u32),
+    pub center: (u32, u32),
+    pub visible_control: bool,
+    pub observation_id: String,
+    pub observation_sha256: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Theme {
     Light,
@@ -218,24 +235,46 @@ impl Theme {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocatorProfile {
     locator_id: &'static str,
+    profile_version: &'static str,
     profile_sha256: String,
     required_token_id: &'static str,
+    target_class: &'static str,
+    kind: LocatorKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocatorKind {
+    Synthetic,
+    CloudflareTurnstile,
 }
 
 fn locator_profile(locator_id: &str) -> Result<LocatorProfile, DesktopLocatorError> {
-    if locator_id != LOCATOR_ID {
-        return Err(DesktopLocatorError::new(
+    match locator_id {
+        LOCATOR_ID => Ok(LocatorProfile {
+            locator_id: LOCATOR_ID,
+            profile_version: PROFILE_VERSION,
+            profile_sha256: digest_text(
+                "p110-control-v1\x00p110-v1\x00light,dark\x001000,1250,1500\x009900\x00250\x00verify-control",
+            ),
+            required_token_id: "verify-control",
+            target_class: TARGET_CLASS,
+            kind: LocatorKind::Synthetic,
+        }),
+        TURNSTILE_LOCATOR_ID => Ok(LocatorProfile {
+            locator_id: TURNSTILE_LOCATOR_ID,
+            profile_version: TURNSTILE_PROFILE_VERSION,
+            profile_sha256: digest_text(
+                "cloudflare-turnstile-v1\x00p169-v1\x001000,1250,1500\x008200\x00250\x00verify-you-are-human\x00checkbox-left-v1\x00tesseract-tsv-v1",
+            ),
+            required_token_id: TURNSTILE_TOKEN_ID,
+            target_class: TURNSTILE_TARGET_CLASS,
+            kind: LocatorKind::CloudflareTurnstile,
+        }),
+        _ => Err(DesktopLocatorError::new(
             "desktop_locator_not_found",
             format!("locator profile {locator_id} is not repository-owned"),
-        ));
+        )),
     }
-    Ok(LocatorProfile {
-        locator_id: LOCATOR_ID,
-        profile_sha256: digest_text(
-            "p110-control-v1\x00p110-v1\x00light,dark\x001000,1250,1500\x009900\x00250\x00verify-control",
-        ),
-        required_token_id: "verify-control",
-    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -268,20 +307,41 @@ fn locate_bound_frame(
     let ocr = ocr_provider.evidence(&image, &profile)?;
     validate_ocr_evidence(&ocr, image.width(), image.height())?;
 
-    let template_size = scaled(12, scale_millis)?;
-    let raw_matches = scan_template(&image, theme, template_size)?;
+    let template_size = match profile.kind {
+        LocatorKind::Synthetic => scaled(12, scale_millis)?,
+        LocatorKind::CloudflareTurnstile => scaled(24, scale_millis)?,
+    };
+    let raw_matches = match profile.kind {
+        LocatorKind::Synthetic => scan_template(&image, theme, template_size)?,
+        LocatorKind::CloudflareTurnstile => {
+            turnstile_candidates(&image, &ocr.tokens, template_size, scale_millis)?
+        }
+    };
     let mut candidates = Vec::new();
     for template_match in raw_matches {
-        let Some(token) = corroborating_token(
-            template_match.bounds,
-            &ocr.tokens,
-            profile.required_token_id,
-            scale_millis,
-        ) else {
-            continue;
+        let token = match profile.kind {
+            LocatorKind::Synthetic => corroborating_token(
+                template_match.bounds,
+                &ocr.tokens,
+                profile.required_token_id,
+                scale_millis,
+            ),
+            LocatorKind::CloudflareTurnstile => ocr.tokens.iter().find(|token| {
+                token.token_id == profile.required_token_id
+                    && turnstile_bounds_for_phrase(token.bounds, template_size, scale_millis)
+                        == Some(template_match.bounds)
+            }),
         };
-        let score = (template_match.score * 7 + 10_000 * 3) / 10;
-        if score < TEMPLATE_THRESHOLD {
+        let Some(token) = token else { continue };
+        let score = match profile.kind {
+            LocatorKind::Synthetic => (template_match.score * 7 + 10_000 * 3) / 10,
+            LocatorKind::CloudflareTurnstile => (template_match.score * 4 + 10_000 * 6) / 10,
+        };
+        let threshold = match profile.kind {
+            LocatorKind::Synthetic => TEMPLATE_THRESHOLD,
+            LocatorKind::CloudflareTurnstile => TURNSTILE_TEMPLATE_THRESHOLD,
+        };
+        if score < threshold {
             continue;
         }
         let candidate_id = format!(
@@ -298,7 +358,7 @@ fn locate_bound_frame(
         );
         candidates.push(LocatorCandidate {
             candidate_id,
-            target_class: TARGET_CLASS,
+            target_class: profile.target_class,
             rank: 0,
             bounds: template_match.bounds,
             center: template_match.bounds.center(),
@@ -327,7 +387,17 @@ fn locate_bound_frame(
                     score: 10_000,
                 },
             ],
-            decoy_evidence: vec!["template_threshold_met", "required_token_corroborated"],
+            decoy_evidence: match profile.kind {
+                LocatorKind::Synthetic => {
+                    vec!["template_threshold_met", "required_token_corroborated"]
+                }
+                LocatorKind::CloudflareTurnstile if !template_match.visible => {
+                    vec!["hover_required", "required_phrase_corroborated"]
+                }
+                LocatorKind::CloudflareTurnstile => {
+                    vec!["checkbox_visible", "required_phrase_corroborated"]
+                }
+            },
             ambiguity_evidence: Vec::new(),
         });
     }
@@ -407,9 +477,9 @@ fn locate_bound_frame(
             geometry_epoch: frame.context.geometry_epoch,
             coordinate_space: COORDINATE_SPACE,
             locator_id: profile.locator_id,
-            profile_version: PROFILE_VERSION,
+            profile_version: profile.profile_version,
             profile_sha256: profile.profile_sha256,
-            target_class: TARGET_CLASS,
+            target_class: profile.target_class,
             detector_receipts,
             status,
             selected_candidate_id,
@@ -431,12 +501,17 @@ pub(crate) async fn handle_desktop_locate(cmd: &Value) -> Result<Value, String> 
             max_bytes: DEFAULT_MAX_BYTES,
         })
         .map_err(|error| error.to_string())?;
+        let provider: &dyn OcrEvidenceProvider = if request.locator_id == TURNSTILE_LOCATOR_ID {
+            &TesseractTsvOcrProvider
+        } else {
+            &PinnedGlyphOcrProvider
+        };
         locate_bound_frame(
             capture,
             &request.locator_id,
             request.max_candidates,
             request.include_visualization,
-            &PinnedGlyphOcrProvider,
+            provider,
         )
         .map_err(|error| error.to_string())
     })
@@ -454,6 +529,58 @@ pub(crate) async fn handle_desktop_locate(cmd: &Value) -> Result<Value, String> 
         response["visualizationBase64"] = Value::String(BASE64_STANDARD.encode(bytes));
     }
     Ok(response)
+}
+
+/// Locate one Turnstile target for the configured interaction provider without
+/// exposing OCR text, source pixels, or caller-controlled coordinates.
+pub(crate) fn locate_cloudflare_turnstile(
+    frame: &DesktopCaptureResult,
+) -> Result<LocatedDesktopTarget, String> {
+    observe_cloudflare_turnstile(frame)?.ok_or_else(|| {
+        "desktop_interaction_target_unavailable: Turnstile observation is not_found".to_string()
+    })
+}
+
+pub(crate) fn observe_cloudflare_turnstile(
+    frame: &DesktopCaptureResult,
+) -> Result<Option<LocatedDesktopTarget>, String> {
+    let result = locate_bound_frame(
+        frame.clone(),
+        TURNSTILE_LOCATOR_ID,
+        2,
+        false,
+        &TesseractTsvOcrProvider,
+    )
+    .map_err(|error| error.to_string())?;
+    if result.observation.status == "not_found" {
+        return Ok(None);
+    }
+    if result.observation.status != "matched" {
+        return Err(format!(
+            "desktop_interaction_target_unavailable: Turnstile observation is {}",
+            result.observation.status
+        ));
+    }
+    let candidate = result.observation.candidates.first().ok_or_else(|| {
+        "desktop_interaction_target_unavailable: no Turnstile candidate".to_string()
+    })?;
+    Ok(Some(LocatedDesktopTarget {
+        candidate_id: candidate.candidate_id.clone(),
+        target_class: candidate.target_class,
+        bounds: (
+            candidate.bounds.x,
+            candidate.bounds.y,
+            candidate.bounds.width,
+            candidate.bounds.height,
+        ),
+        center: (candidate.center.x, candidate.center.y),
+        visible_control: candidate.decoy_evidence.contains(&"checkbox_visible"),
+        observation_id: result.observation.observation_id.clone(),
+        observation_sha256: digest_bytes(
+            &serde_json::to_vec(&result.observation)
+                .map_err(|_| "desktop_locator_detector_failed: observation encoding failed")?,
+        ),
+    }))
 }
 
 /// Remove response-only visualization pixels before long-lived projection.
@@ -482,6 +609,17 @@ fn parse_request(cmd: &Value) -> Result<LocateRequest, DesktopLocatorError> {
         "serviceName",
         "agentName",
         "taskName",
+        "requestId",
+        "serviceJobId",
+        "callerId",
+        "requestPrincipalSource",
+        "connectionInstanceId",
+        "clientSubjectId",
+        "identityAssurance",
+        "servicePrincipalId",
+        "servicePrincipalProvenance",
+        "serviceProfileCapabilityId",
+        "serviceProfileCapabilityRevision",
     ];
     if let Some(field) = cmd.as_object().and_then(|record| {
         record
@@ -695,6 +833,7 @@ struct TemplateMatch {
     bounds: PixelBounds,
     score: u32,
     evidence_id: String,
+    visible: bool,
 }
 
 fn scan_template(
@@ -752,11 +891,92 @@ fn scan_template(
                         size,
                         score
                     )),
+                    visible: true,
                 });
             }
         }
     }
     Ok(matches)
+}
+
+fn turnstile_candidates(
+    image: &RgbaImage,
+    tokens: &[OcrTokenEvidence],
+    size: u32,
+    scale_millis: u32,
+) -> Result<Vec<TemplateMatch>, DesktopLocatorError> {
+    let mut matches = Vec::new();
+    for token in tokens
+        .iter()
+        .filter(|token| token.token_id == TURNSTILE_TOKEN_ID)
+    {
+        let Some(bounds) = turnstile_bounds_for_phrase(token.bounds, size, scale_millis) else {
+            continue;
+        };
+        if bounds.x + bounds.width > image.width() || bounds.y + bounds.height > image.height() {
+            continue;
+        }
+        let visual_score = turnstile_checkbox_score(image, bounds);
+        let visible = visual_score >= 7_000;
+        let score = if visible { visual_score } else { 5_500 };
+        matches.push(TemplateMatch {
+            bounds,
+            score,
+            evidence_id: digest_text(&format!(
+                "turnstile-checkbox-left-v1\0{}\0{}\0{}\0{}\0{}\0{}",
+                bounds.x, bounds.y, bounds.width, bounds.height, visible, score
+            )),
+            visible,
+        });
+    }
+    Ok(matches)
+}
+
+fn turnstile_bounds_for_phrase(
+    phrase: PixelBounds,
+    size: u32,
+    scale_millis: u32,
+) -> Option<PixelBounds> {
+    let gap = scaled(8, scale_millis).ok()?;
+    let x = phrase.x.checked_sub(size.checked_add(gap)?)?;
+    let phrase_center = phrase.y.checked_add(phrase.height / 2)?;
+    let y = phrase_center.saturating_sub(size / 2);
+    Some(PixelBounds {
+        x,
+        y,
+        width: size,
+        height: size,
+    })
+}
+
+fn turnstile_checkbox_score(image: &RgbaImage, bounds: PixelBounds) -> u32 {
+    let mut border_dark = 0_u32;
+    let mut border_count = 0_u32;
+    let mut interior_light = 0_u32;
+    let mut interior_count = 0_u32;
+    for offset_y in 0..bounds.height {
+        for offset_x in 0..bounds.width {
+            let pixel = image.get_pixel(bounds.x + offset_x, bounds.y + offset_y);
+            let luminance = (u32::from(pixel[0]) + u32::from(pixel[1]) + u32::from(pixel[2])) / 3;
+            let border = offset_x <= 1
+                || offset_y <= 1
+                || offset_x + 2 >= bounds.width
+                || offset_y + 2 >= bounds.height;
+            if border {
+                border_count += 1;
+                border_dark += u32::from(luminance <= 150);
+            } else {
+                interior_count += 1;
+                interior_light += u32::from(luminance >= 210);
+            }
+        }
+    }
+    if border_count == 0 || interior_count == 0 {
+        return 0;
+    }
+    let border_score = border_dark * 10_000 / border_count;
+    let interior_score = interior_light * 10_000 / interior_count;
+    (border_score * 7 + interior_score * 3) / 10
 }
 
 fn template_score(image: &RgbaImage, theme: Theme, bounds: PixelBounds) -> u32 {
@@ -827,7 +1047,8 @@ fn validate_ocr_evidence(
     width: u32,
     height: u32,
 ) -> Result<(), DesktopLocatorError> {
-    if !["fixture-ocr-v1", "pinned-glyph-v1"].contains(&evidence.provider_version.as_str())
+    if !["fixture-ocr-v1", "pinned-glyph-v1", "tesseract-tsv-5-v1"]
+        .contains(&evidence.provider_version.as_str())
         || evidence.evidence_hash.len() != 64
         || !evidence
             .evidence_hash
@@ -872,7 +1093,13 @@ fn detector_receipts(
     geometry_parameters.insert("scaleMillis".to_string(), scale_millis);
     let mut template_parameters = BTreeMap::new();
     template_parameters.insert("templateSize".to_string(), template_size);
-    template_parameters.insert("threshold".to_string(), TEMPLATE_THRESHOLD);
+    template_parameters.insert(
+        "threshold".to_string(),
+        match profile.kind {
+            LocatorKind::Synthetic => TEMPLATE_THRESHOLD,
+            LocatorKind::CloudflareTurnstile => TURNSTILE_TEMPLATE_THRESHOLD,
+        },
+    );
     template_parameters.insert("maximumEvaluations".to_string(), MAX_TEMPLATE_EVALUATIONS);
     let mut ocr_parameters = BTreeMap::new();
     ocr_parameters.insert("maximumTokens".to_string(), 256);
@@ -1032,6 +1259,209 @@ impl OcrEvidenceProvider for PinnedGlyphOcrProvider {
     }
 }
 
+struct TesseractTsvOcrProvider;
+
+impl OcrEvidenceProvider for TesseractTsvOcrProvider {
+    fn evidence(
+        &self,
+        image: &RgbaImage,
+        profile: &LocatorProfile,
+    ) -> Result<OcrEvidence, DesktopLocatorError> {
+        if profile.kind != LocatorKind::CloudflareTurnstile {
+            return Err(DesktopLocatorError::new(
+                "desktop_locator_detector_failed",
+                "ambient OCR profile mismatch",
+            ));
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = image;
+            return Err(DesktopLocatorError::new(
+                "desktop_locator_detector_unavailable",
+                "registered Turnstile OCR provider is unavailable",
+            ));
+        }
+        #[cfg(unix)]
+        {
+            let png = encode_ocr_png(image)?;
+            let mut child = Command::new("/usr/bin/timeout")
+                .args([
+                    "5s",
+                    "/usr/bin/tesseract",
+                    "stdin",
+                    "stdout",
+                    "--psm",
+                    "11",
+                    "tsv",
+                ])
+                .env("OMP_THREAD_LIMIT", "1")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|_| {
+                    DesktopLocatorError::new(
+                        "desktop_locator_detector_unavailable",
+                        "registered Turnstile OCR provider is unavailable",
+                    )
+                })?;
+            child
+                .stdin
+                .take()
+                .ok_or_else(|| {
+                    DesktopLocatorError::new(
+                        "desktop_locator_detector_failed",
+                        "registered Turnstile OCR input is unavailable",
+                    )
+                })?
+                .write_all(&png)
+                .map_err(|_| {
+                    DesktopLocatorError::new(
+                        "desktop_locator_detector_failed",
+                        "registered Turnstile OCR input failed",
+                    )
+                })?;
+            let output = child.wait_with_output().map_err(|_| {
+                DesktopLocatorError::new(
+                    "desktop_locator_detector_failed",
+                    "registered Turnstile OCR execution failed",
+                )
+            })?;
+            if output.status.code() == Some(124) {
+                return Err(DesktopLocatorError::new(
+                    "desktop_locator_detector_failed",
+                    "registered Turnstile OCR timed out",
+                ));
+            }
+            if !output.status.success() || output.stdout.len() > 1024 * 1024 {
+                return Err(DesktopLocatorError::new(
+                    "desktop_locator_detector_failed",
+                    "registered Turnstile OCR returned invalid bounded evidence",
+                ));
+            }
+            let tsv = std::str::from_utf8(&output.stdout).map_err(|_| {
+                DesktopLocatorError::new(
+                    "desktop_locator_detector_failed",
+                    "registered Turnstile OCR returned invalid bounded evidence",
+                )
+            })?;
+            let tokens = normalized_turnstile_tokens(tsv)?;
+            Ok(OcrEvidence {
+                provider_version: "tesseract-tsv-5-v1".to_string(),
+                evidence_hash: hash_tokens("tesseract-tsv-5-v1", &tokens),
+                tokens,
+            })
+        }
+    }
+}
+
+fn encode_ocr_png(image: &RgbaImage) -> Result<Vec<u8>, DesktopLocatorError> {
+    let mut bytes = Vec::new();
+    PngEncoder::new_with_quality(&mut bytes, CompressionType::Best, FilterType::Adaptive)
+        .write_image(
+            image.as_raw(),
+            image.width(),
+            image.height(),
+            ColorType::Rgba8.into(),
+        )
+        .map_err(|_| {
+            DesktopLocatorError::new(
+                "desktop_locator_detector_failed",
+                "registered Turnstile OCR image encoding failed",
+            )
+        })?;
+    Ok(bytes)
+}
+
+fn normalized_turnstile_tokens(tsv: &str) -> Result<Vec<OcrTokenEvidence>, DesktopLocatorError> {
+    #[derive(Debug)]
+    struct Word {
+        normalized: String,
+        bounds: PixelBounds,
+    }
+    let mut lines: BTreeMap<(u32, u32, u32, u32), Vec<Word>> = BTreeMap::new();
+    for row in tsv.lines().skip(1) {
+        let fields = row.split('\t').collect::<Vec<_>>();
+        if fields.len() < 12 || fields[0] != "5" {
+            continue;
+        }
+        let confidence = fields[10]
+            .split('.')
+            .next()
+            .and_then(|value| value.parse::<i32>().ok())
+            .unwrap_or(-1);
+        if confidence < 70 {
+            continue;
+        }
+        let key = (
+            parse_tsv_u32(fields[1])?,
+            parse_tsv_u32(fields[2])?,
+            parse_tsv_u32(fields[3])?,
+            parse_tsv_u32(fields[4])?,
+        );
+        let normalized = fields[11]
+            .chars()
+            .filter(char::is_ascii_alphabetic)
+            .collect::<String>()
+            .to_ascii_lowercase();
+        if normalized.is_empty() {
+            continue;
+        }
+        lines.entry(key).or_default().push(Word {
+            normalized,
+            bounds: PixelBounds {
+                x: parse_tsv_u32(fields[6])?,
+                y: parse_tsv_u32(fields[7])?,
+                width: parse_tsv_u32(fields[8])?,
+                height: parse_tsv_u32(fields[9])?,
+            },
+        });
+    }
+    let expected = ["verify", "you", "are", "human"];
+    let mut tokens = Vec::new();
+    for words in lines.values() {
+        for window in words.windows(expected.len()) {
+            if window
+                .iter()
+                .map(|word| word.normalized.as_str())
+                .eq(expected)
+            {
+                let left = window.iter().map(|word| word.bounds.x).min().unwrap_or(0);
+                let top = window.iter().map(|word| word.bounds.y).min().unwrap_or(0);
+                let right = window
+                    .iter()
+                    .map(|word| word.bounds.x.saturating_add(word.bounds.width))
+                    .max()
+                    .unwrap_or(left);
+                let bottom = window
+                    .iter()
+                    .map(|word| word.bounds.y.saturating_add(word.bounds.height))
+                    .max()
+                    .unwrap_or(top);
+                tokens.push(OcrTokenEvidence {
+                    token_id: TURNSTILE_TOKEN_ID.to_string(),
+                    bounds: PixelBounds {
+                        x: left,
+                        y: top,
+                        width: right.saturating_sub(left),
+                        height: bottom.saturating_sub(top),
+                    },
+                });
+            }
+        }
+    }
+    Ok(tokens)
+}
+
+fn parse_tsv_u32(value: &str) -> Result<u32, DesktopLocatorError> {
+    value.parse::<u32>().map_err(|_| {
+        DesktopLocatorError::new(
+            "desktop_locator_detector_failed",
+            "registered Turnstile OCR returned malformed geometry",
+        )
+    })
+}
+
 fn hash_tokens(provider_version: &str, tokens: &[OcrTokenEvidence]) -> String {
     digest_text(&format!(
         "{}\0{}",
@@ -1139,6 +1569,75 @@ mod tests {
     fn unknown_locator_profile_is_typed() {
         let error = locator_profile("unknown").expect_err("unknown profile must fail");
         assert_eq!(error.code(), "desktop_locator_not_found");
+    }
+
+    #[test]
+    fn turnstile_tsv_normalizes_only_the_exact_phrase_on_one_line() {
+        let tsv = concat!(
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n",
+            "5\t1\t2\t1\t1\t1\t527\t440\t37\t15\t96.5\tVerify\n",
+            "5\t1\t2\t1\t1\t2\t569\t440\t24\t15\t95.0\tyou\n",
+            "5\t1\t2\t1\t1\t3\t598\t440\t19\t15\t94.0\tare\n",
+            "5\t1\t2\t1\t1\t4\t622\t440\t45\t15\t96.9\thuman\n",
+            "5\t1\t3\t1\t1\t1\t100\t100\t20\t10\t99.0\tVerify\n"
+        );
+
+        let tokens = normalized_turnstile_tokens(tsv).unwrap();
+
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_id, TURNSTILE_TOKEN_ID);
+        assert_eq!(
+            tokens[0].bounds,
+            PixelBounds {
+                x: 527,
+                y: 440,
+                width: 140,
+                height: 15,
+            }
+        );
+    }
+
+    #[test]
+    fn turnstile_phrase_derives_one_target_and_requires_hover_when_box_is_hidden() {
+        let token = OcrTokenEvidence {
+            token_id: TURNSTILE_TOKEN_ID.to_string(),
+            bounds: PixelBounds {
+                x: 527,
+                y: 440,
+                width: 140,
+                height: 15,
+            },
+        };
+        let mut visible = RgbaImage::from_pixel(900, 700, Rgba([245, 245, 245, 255]));
+        let bounds = turnstile_bounds_for_phrase(token.bounds, 24, 1000).unwrap();
+        for y in bounds.y..bounds.y + bounds.height {
+            for x in bounds.x..bounds.x + bounds.width {
+                let border = x < bounds.x + 2
+                    || y < bounds.y + 2
+                    || x + 2 >= bounds.x + bounds.width
+                    || y + 2 >= bounds.y + bounds.height;
+                visible.put_pixel(
+                    x,
+                    y,
+                    if border {
+                        Rgba([70, 70, 70, 255])
+                    } else {
+                        Rgba([250, 250, 250, 255])
+                    },
+                );
+            }
+        }
+
+        let visible_matches = turnstile_candidates(&visible, &[token.clone()], 24, 1000).unwrap();
+        let hidden = RgbaImage::from_pixel(900, 700, Rgba([245, 245, 245, 255]));
+        let hidden_matches = turnstile_candidates(&hidden, &[token], 24, 1000).unwrap();
+
+        assert_eq!(visible_matches.len(), 1);
+        assert_eq!(visible_matches[0].bounds, bounds);
+        assert!(visible_matches[0].visible);
+        assert_eq!(hidden_matches.len(), 1);
+        assert_eq!(hidden_matches[0].bounds, bounds);
+        assert!(!hidden_matches[0].visible);
     }
 
     #[test]
@@ -1413,6 +1912,30 @@ mod tests {
             "locator": {"locatorId": LOCATOR_ID}
         });
         assert_eq!(parse_request(&valid).unwrap().max_candidates, 8);
+        for field in [
+            "requestId",
+            "serviceJobId",
+            "callerId",
+            "requestPrincipalSource",
+            "connectionInstanceId",
+            "clientSubjectId",
+            "identityAssurance",
+            "servicePrincipalId",
+            "servicePrincipalProvenance",
+            "serviceProfileCapabilityId",
+            "serviceProfileCapabilityRevision",
+        ] {
+            let mut service_owned = valid.clone();
+            service_owned[field] = json!(if field == "serviceProfileCapabilityRevision" {
+                1
+            } else {
+                0
+            });
+            assert_eq!(
+                parse_request(&service_owned).unwrap().browser_id,
+                "browser-1"
+            );
+        }
         let mut injected = valid.clone();
         injected["imageBase64"] = json!("pixels");
         assert_eq!(

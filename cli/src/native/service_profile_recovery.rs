@@ -2205,9 +2205,7 @@ fn validate_profile_reset_preconditions(
     if now >= expires_at {
         return Err("profile_reset_plan_expired".to_string());
     }
-    if state.state_revision != plan.service_state_revision
-        || state.runtime_owner_registry.revision != plan.runtime_owner_revision
-    {
+    if state.runtime_owner_registry.revision != plan.runtime_owner_revision {
         return Err("profile_reset_plan_stale".to_string());
     }
     let profile = state
@@ -5082,7 +5080,7 @@ mod tests {
     }
 
     #[test]
-    fn changed_profile_revision_refuses_reset_before_effect() {
+    fn unrelated_service_state_revision_does_not_stale_scoped_reset() {
         let initial = state();
         let plan = plan_profile_reset(
             &initial,
@@ -5097,6 +5095,37 @@ mod tests {
         .unwrap();
         let mut changed = initial;
         changed.state_revision += 1;
+        let repository = MemoryRepository::new(changed);
+
+        apply_profile_reset(&repository, &plan, "2026-09-10T12:01:00Z", seal_key()).unwrap();
+
+        assert_eq!(
+            repository
+                .load_snapshot()
+                .unwrap()
+                .runtime_owner_registry
+                .owners[&plan.profile_identity_digest]
+                .state,
+            ProfileOwnerState::Orphaned
+        );
+    }
+
+    #[test]
+    fn changed_runtime_owner_revision_refuses_reset_before_effect() {
+        let initial = state();
+        let plan = plan_profile_reset(
+            &initial,
+            &authority(),
+            ProfileResetScope::Runtime,
+            None,
+            "2026-09-10T12:00:00Z",
+            "2026-09-10T12:05:00Z",
+            "reset-runtime-owner-stale",
+            seal_key(),
+        )
+        .unwrap();
+        let mut changed = initial;
+        changed.runtime_owner_registry.revision += 1;
         let repository = MemoryRepository::new(changed);
 
         let error = apply_profile_reset(&repository, &plan, "2026-09-10T12:01:00Z", seal_key())

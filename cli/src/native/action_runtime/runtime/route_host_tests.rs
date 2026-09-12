@@ -2641,6 +2641,95 @@ fn test_apply_service_browser_capability_selection_sets_validated_executable() {
     );
     let _ = fs::remove_dir_all(&home);
 }
+
+#[test]
+fn test_browser_capability_selection_overlays_configured_registry() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_EXECUTABLE_PATH"]);
+    let home = unique_socket_dir("browser-capability-config-overlay-home");
+    let config_dir = home.join(".agent-browser");
+    fs::create_dir_all(&config_dir).expect("config directory should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let executable = home.join("chrome");
+    fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
+    fs::write(
+        config_dir.join("config.json"),
+        serde_json::to_vec(&json!({
+            "service": {
+                "browserCapabilityRegistry": {
+                    "browserHosts": [{
+                        "id": "linux-local", "hostKind": "local", "reachable": true,
+                        "lifecycleOwner": "agent_browser"
+                    }],
+                    "browserExecutables": [{
+                        "id": "stock-current", "hostId": "linux-local",
+                        "buildLabel": "stock_chrome", "executablePath": executable
+                    }],
+                    "browserCapabilities": [{
+                        "id": "stock-capability", "hostId": "linux-local",
+                        "executableId": "stock-current", "cdpSupported": true,
+                        "headedSupported": true, "headlessSupported": true
+                    }],
+                    "profileCompatibility": [{
+                        "id": "default-stock-compatible", "profileId": "default",
+                        "hostId": "linux-local", "executableId": "stock-current",
+                        "compatible": true, "requiresOperatorOverride": false
+                    }],
+                    "browserPreferenceBindings": [{
+                        "id": "stock-default", "scope": "global",
+                        "preferredHostId": "linux-local",
+                        "preferredExecutableId": "stock-current",
+                        "preferredCapabilityId": "stock-capability",
+                        "browserBuild": "stock_chrome", "priority": 50
+                    }],
+                    "validationEvidence": [{
+                        "id": "stock-launch-smoke", "hostId": "linux-local",
+                        "executableId": "stock-current", "capabilityId": "stock-capability",
+                        "kind": "launch", "state": "passed"
+                    }]
+                }
+            }
+        }))
+        .expect("config should serialize"),
+    )
+    .expect("config should be written");
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&ServiceState::default())
+        .expect("empty persisted state should be written");
+
+    let mut options = LaunchOptions {
+        runtime_profile: Some("default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let resolution = apply_service_browser_capability_selection(
+        &mut options,
+        &json!({ "browserBuild": "stock_chrome" }),
+    );
+
+    assert!(resolution.applied);
+    assert_eq!(resolution.reason, "validated_binding_applied");
+    assert_eq!(
+        options.executable_path.as_deref(),
+        Some(executable.to_str().expect("path should be utf-8"))
+    );
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_stock_chrome_capability_selection_fails_closed() {
+    let resolution = BrowserCapabilityLaunchResolution::skipped(
+        "profile_compatibility_missing_or_blocked",
+        Some(BrowserBuild::StockChrome),
+        Some("default".to_string()),
+    );
+
+    assert_eq!(
+        require_stock_chrome_capability_selection(&resolution),
+        Err(
+            "stock_chrome_capability_selection_failed: profile_compatibility_missing_or_blocked"
+                .to_string()
+        )
+    );
+}
 #[tokio::test]
 async fn test_service_browser_capability_preflight_reports_validated_binding_without_launch() {
     let guard = EnvGuard::new(&[
