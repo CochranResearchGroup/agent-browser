@@ -7,8 +7,8 @@ lanes:
     branch: maintenance/plan-0170-job-timestamp-ordering
     target: main
     plan_state: CLOSED
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: a4ba32ee2137cbaebd03fcec94114cc1bbccb3ea
+    custody_state: INTEGRATION_READY
+    checkpoint: ceac80650c50665618f2b3f70a4ec1d193469a64
     remote_ref: null
     integration_receipt: null
     integration: merge
