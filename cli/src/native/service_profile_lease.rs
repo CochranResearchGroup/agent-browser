@@ -1182,7 +1182,7 @@ pub(crate) fn rejoin_profile_lease(
 ) -> Result<ProfileLeaseRecord, ProfileLeaseError> {
     let lease = authorized_lease(state, lease_id, expected_revision, authority, now)?;
     require_action(&lease, "rejoin")?;
-    if !lease.observation_only {
+    if !lease.observation_only && lease.state == "active" {
         return Ok(lease);
     }
     let expires_at = expires_at
@@ -2203,6 +2203,11 @@ fn exact_rejoin_target_for_owner(
             session.profile_id.as_deref() == Some(authority.profile_id.as_str())
                 && (!inactive_or_expired(session.lease, session.expires_at.as_deref(), now)
                     || session.principal_id.as_deref() == Some(authority.principal_id.as_str()))
+                && (session.id == owner.daemon_session_route
+                    || session
+                        .browser_ids
+                        .iter()
+                        .any(|browser_id| browser_id == &owner.browser_id))
         })
         .collect::<Vec<_>>();
     let [session] = candidate_sessions.as_slice() else {
@@ -3765,7 +3770,7 @@ mod tests {
         session.browser_ids = vec!["browser-odollo".to_string()];
 
         let stale = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
-        assert!(stale.observation_only);
+        assert!(!stale.observation_only);
         assert_eq!(stale.state, "stale");
         assert!(stale.authorized_actions.contains(&"rejoin".to_string()));
 

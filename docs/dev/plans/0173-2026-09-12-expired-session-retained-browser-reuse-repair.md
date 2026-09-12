@@ -2,6 +2,8 @@
 
 Date: 2026-09-12
 
+Plan version: 2
+
 State: OPEN
 
 Execution state: `test_first_implementation`
@@ -116,3 +118,18 @@ operator did not request delegation and the source surfaces overlap tightly.
 | BILL acceptance | Access plan, tab creation, canonical read, cleanup receipts | Retained PID/profile survive; disposable handle is valid and released; no BILL data changes |
 
 The plan closes only when every row is proven by current evidence.
+
+## Checkpoint P0173-C01 | 2026-09-12
+
+State transition: `test_first_implementation -> repair_active`.
+
+Progress classification: `blocker_reduction`; PR 52 passed formatting, strict
+Clippy, dashboard, service-client, version, and workstation fixture gates. The
+comprehensive Rust run exposed two lease regressions in the first repair: the
+candidate selector counted an older same-principal session that did not match
+the current runtime owner, and the stale-session fixture incorrectly expected
+the coherent canonical profile claim to become observation-only. Restrict the
+rejoin candidate to the current owner's exact daemon route or browser and let
+rejoin reactivate that stale subordinate session. Preserve the unrelated
+production-scale timing assertion at 963 ms as a load-sensitive failure for
+fresh-run classification rather than changing its contract without evidence.
