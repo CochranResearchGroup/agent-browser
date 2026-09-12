@@ -9,7 +9,7 @@ lanes:
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     checkpoint: d87828e328390a8e86b1b93bf571b7155fa0e6e5
-    remote_ref: null
+    remote_ref: refs/remotes/origin/fix/plan-0173-expired-session-reuse
     integration_receipt: null
     integration: merge
     dependencies: [P144, P165]
