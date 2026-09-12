@@ -187,6 +187,38 @@ fn navigation_observation_preserves_existing_child_custody() {
 }
 
 #[test]
+fn tab_persistence_uses_service_handle_browser_identity() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("tab-handle-browser-identity");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let handle = ServiceTabHandle {
+        browser_id: "session:durable-browser".into(),
+        session_name: Some("daemon-route".into()),
+        tab_id: "target:owned".into(),
+        target_id: Some("owned".into()),
+        ..ServiceTabHandle::default()
+    };
+
+    persist_service_owned_tab_new(
+        &json!({"action":"tab_new", "serviceName":"books-receipts"}),
+        "daemon-route",
+        Some("owned"),
+        Some("about:blank"),
+        None,
+        &serde_json::to_value(handle).unwrap(),
+    )
+    .unwrap();
+
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    let current = store.load().unwrap();
+    assert_eq!(
+        current.tabs["target:owned"].browser_id,
+        "session:durable-browser"
+    );
+}
+
+#[test]
 fn test_tab_handle_refresh_classifies_retained_candidates() {
     let ready_browser = BrowserProcess {
         id: "browser-ready".to_string(),
