@@ -4,11 +4,11 @@ lanes:
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
     plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md
     plan_ref: refs/remotes/origin/main
-    branch: fix/bill-login-email-continue
+    branch: fix/profile-repair-owner-generation
     target: main
     plan_state: OPEN
-    custody_state: INTEGRATED
-    checkpoint: 5ee95d670e52c1157f0f94b90d176e4066d1cd2f
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 0f6b949eea2b5c853415d15310ca6362535d0d27
     remote_ref: null
     integration_receipt: 5ee95d670e52c1157f0f94b90d176e4066d1cd2f
     integration: merge
