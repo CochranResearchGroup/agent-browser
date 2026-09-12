@@ -1,6 +1,6 @@
 # Plan 0171 | Service Job Timestamp Integration And Install
 
-State: OPEN
+State: CLOSED
 Lane: P171
 Roadmap: P171
 Branch: maintenance/plan-0170-job-timestamp-ordering
@@ -130,3 +130,34 @@ already-registered `service_profile_repair_*` and `service_profile_reset_*`
 contracts and the already-registered profile diagnosis resource template. Add
 those frozen inventory entries in their actual order and rerun the smoke plus
 PR gates.
+
+## Checkpoint P0171-C04 | 2026-09-12
+
+State transition: `validation_active -> closed`.
+
+Progress classification: `verified_outcome`; PR 43 merged to `origin/main` as
+`40da27f75f7ff1116d7e92e463182c8ab644783b`. Final CI run `34707619741`
+passed Version Sync, Rust Quality, Dashboard, Service Client, Workstation
+Fixtures, the isolated comprehensive Rust suite, and no-launch service smokes.
+
+Exact candidate: the integrated tree built under the governed Cargo cgroup
+with cache disabled in 4m25s. Its 43,910,400-byte executable has SHA-256
+`2c185ec7ccd691deaf0ee59412d3d31485ab0d8ad464cc02775785fb81be621d`.
+The initial cache-enabled attempt failed before product compilation because
+the sccache compiler-probe diagnostic included its inherited environment; its
+credential sanitizer is blacklist-based and did not suppress every sensitive
+variable shape. The output is intentionally not reproduced. Cache-off is the
+accepted build fallback; hardening the sanitizer remains a separate security
+follow-up.
+
+Installed acceptance: guarded transaction
+`upgrade-1fcb7d57-671f-4cf9-afc6-1bcb45293e1a` accepted revision 13 and selected
+generation `0.28.0-2c185ec7ccd6-f318ad66074f`. The installed executable hash
+matches the candidate exactly. Admission drain is off; runtime multiplicity is
+`steady_current` with one executable generation, one runtime host, one
+dashboard process, zero legacy daemons, and no multiplicity issues. Resources
+report zero candidates and zero unknown or transferring cleanup obligations.
+
+Acceptance state: criteria 1-5 pass. Dashboard operator-journey convergence and
+one default-profile lease warning remain nonblocking; no browser launch,
+navigation, profile mutation, provider call, route switch, or cleanup occurred.

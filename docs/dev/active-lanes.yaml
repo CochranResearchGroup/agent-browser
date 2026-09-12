@@ -6,11 +6,11 @@ lanes:
     plan_ref: refs/heads/maintenance/plan-0170-job-timestamp-ordering
     branch: maintenance/plan-0170-job-timestamp-ordering
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: c075a63233f305817cd271fa5e298e30fcaa782e
-    remote_ref: null
-    integration_receipt: null
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 40da27f75f7ff1116d7e92e463182c8ab644783b
+    remote_ref: refs/remotes/origin/main
+    integration_receipt: 40da27f75f7ff1116d7e92e463182c8ab644783b
     integration: merge
     dependencies: [P170]
     overlaps: [cli/src/native/service_health.rs]

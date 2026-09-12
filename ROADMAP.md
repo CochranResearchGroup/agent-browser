@@ -9,15 +9,16 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P171 | Service Job Timestamp Integration And Install
 
-State: OPEN
+State: CLOSED
 
-Current state: Plan 0170 is source-qualified. Current `origin/main`, including
-the retained-owner route reconciliation now in production, merged cleanly into
-the isolated repair branch. Plan 0171 owns the bounded validation, fork
-integration, consolidated candidate build, transactional install, and fresh
-runtime verification without browser, profile, provider, or cleanup effects.
+Current state: PR 43 merged as `40da27f7`; exact integrated generation
+`0.28.0-2c185ec7ccd6-f318ad66074f` is accepted under transaction
+`upgrade-1fcb7d57-671f-4cf9-afc6-1bcb45293e1a`. Final CI and installed
+multiplicity/resource acceptance pass. The same PR repaired the comprehensive
+Rust runner's shared-target race and synchronized the frozen no-launch MCP
+inventory. No browser, profile, provider, or cleanup effect occurred.
 [Plan 0171](docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md)
-is the active execution contract.
+is the closed execution contract and receipt.
 
 ## P168 | Worktree, Branch, Merge, And Closure Campaign
 
