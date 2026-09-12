@@ -10,20 +10,18 @@ Plan0171 (`docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-inst
 
 Plan0170 is CLOSED and source-qualified on isolated branch `maintenance/plan-0170-job-timestamp-ordering`. Service Job `startedAt` now cannot precede `submittedAt`, and `completedAt` cannot precede the recorded start or submission boundary, even if the host wall clock moves backward. Monotonic deadline behavior is unchanged. Three focused Rust tests, formatting, and workspace clippy pass. The first compile attempt retained an infrastructure failure at 947 of 1,024 Cargo-slice tasks; one job with cache disabled completed without cleanup or hidden retry. Graphiti job `084f242a-977a-4017-a113-6f9a5e62b1a3` failed once with a retryable `TimeoutError` before episode creation; preserve it as `graphiti_write_pending` for the next closeout rather than enqueueing a duplicate. No production install, restart, browser, profile, provider, tenant, Service State, or timeout effect occurred. Integrate this source with the next consolidated candidate rather than replacing production solely for timestamp display ordering.
 
-## Turn 300 | 2026-09-11
+## Turn 301 | 2026-09-12
 
-Plan0165 production install and preserving profile repair are complete. PR 36
-merged the missing principal-binding refreshes at `73bdffce`. Installed
-generation `0.28.0-9598cb89565f-492f49580f7e` has exact SHA-256
-`9598cb89565fdcd1af3bcf0d496ebae3d919a7d4c9b1cd725a3393d430d83e20`;
-transaction `upgrade-50b884da-b2dc-4f0d-96e7-54b45e1770c0` is accepted.
-Runtime multiplicity is steady at one dashboard, one executable generation,
-zero legacy daemons, and one runtime host. BILL Chrome PID 49619, owner and
-principal binding generation 62, active lease, current lock, eight tabs, and
-preserved profile data are coherent with no identity blockers. Plan0165 remains
-OPEN only for its separately governed BILL authentication and read-only
-consumer acceptance. No credential, tenant, transaction, or accounting effect
-occurred.
+Plan0165 retained-session and owned-tab blockers are repaired through PR 44 at
+`31ebf3cb`. Installed generation `0.28.0-77bd57f6f2a4-a8ba978176a1` has exact
+SHA-256 `77bd57f6f2a4370cc7c1261b00f803fdc5633a58eebf5206103d51feef8a6551`;
+transaction `upgrade-c57f1d76-713c-49de-b5b9-60a9439f71c6` reached accepted
+revision 17 after its exact forward-only resume. One disposable blank tab was
+created on the retained BILL browser and released with target-removal and
+unrelated-target preservation proof. Runtime multiplicity is steady and the
+session/browser link survived two reconciliations. Plan0165 remains OPEN for
+sealed BILL authentication and read-only consumer acceptance. No BILL or
+accounting effect occurred. The newly queued Plan0168 field note is next.
 
 ## Turn 297 | 2026-09-11
 
@@ -32,10 +30,6 @@ occurred.
 ## Turn 296 | 2026-09-11
 
 Plan0167 is CLOSED through PR29 at `14fb3db0`. Its 9,642,672-byte two-writer/two-reader regression completed in 709 to 739 ms across six samples with zero commit wait and 358 to 380 ms exclusive holds; the one-second deadline is unchanged. Required gates pass. Production installation, shared skill publication, installed doctor, and X evaluation remain separate.
-
-## Turn 295 | 2026-09-11
-
-Plan0165 installed generation `0.28.0-c0cc081c1c6b-8e9cb639ccc3`; current-form and shared-task-lease repairs are on `origin/main`. BILL remains `awaiting_identifier`; no `bill-soylei` Auth Vault profile was found, so resume returned `effect_uncertain` plus `blind_retry`. No retry or provider effect followed.
 
 ## Turn 294 | 2026-09-11
 
