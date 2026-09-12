@@ -678,6 +678,10 @@ fn apply_transition(
                 || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Terminal
                 || lifecycle.cleanup_obligation_state != CleanupObligationState::Satisfied
                 || registry
+                    .principal_bindings
+                    .get(&owner.profile_identity_digest)
+                    .is_some_and(|binding| binding.owner_generation > current.owner_generation)
+                || registry
                     .lifecycle_records
                     .iter()
                     .any(|(logical_id, record)| {
@@ -691,6 +695,12 @@ fn apply_transition(
             registry
                 .owners
                 .insert(owner.profile_identity_digest.clone(), owner.clone());
+            if let Some(binding) = registry
+                .principal_bindings
+                .get_mut(&owner.profile_identity_digest)
+            {
+                binding.owner_generation = owner.owner_generation;
+            }
             registry.revision = registry.revision.saturating_add(1);
             let mut lifecycle = lifecycle;
             if owner.browser_id != current.browser_id {
@@ -720,6 +730,12 @@ fn apply_transition(
                 || !registry.authorizes(&expected_owner)
                 || owner.profile_identity_digest != expected_owner.profile_identity_digest
                 || owner.owner_generation != expected_owner.owner_generation.saturating_add(1)
+                || registry
+                    .principal_bindings
+                    .get(&owner.profile_identity_digest)
+                    .is_some_and(|binding| {
+                        binding.owner_generation > expected_owner.owner_generation
+                    })
             {
                 return Err("runtime_lifecycle_observed_supersession_rejected".to_string());
             }
@@ -730,6 +746,12 @@ fn apply_transition(
             registry
                 .owners
                 .insert(owner.profile_identity_digest.clone(), owner.clone());
+            if let Some(binding) = registry
+                .principal_bindings
+                .get_mut(&owner.profile_identity_digest)
+            {
+                binding.owner_generation = owner.owner_generation;
+            }
             registry.revision = registry.revision.saturating_add(1);
             let lifecycle = RuntimeLifecycleRecord {
                 logical_browser_id: owner.browser_id.clone(),
@@ -1438,6 +1460,27 @@ mod tests {
         let legacy = authority
             .register_managed_lane(registration.clone())
             .unwrap();
+        repository
+            .mutate(|state| {
+                state
+                    .runtime_owner_registry
+                    .bind_principal_authority(
+                        crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                            principal_id: "principal:test".to_string(),
+                            profile_id: "profile:test".to_string(),
+                            profile_identity_digest: legacy
+                                .claim
+                                .profile_identity_digest
+                                .clone(),
+                            capability_id: "profile-capability-v1:test".to_string(),
+                            provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+                            owner_generation: legacy.claim.owner_generation,
+                        },
+                    )
+                    .map_err(|error| format!("{error:?}"))?;
+                Ok(())
+            })
+            .unwrap();
 
         registration.logical_browser_id = "session:stable-browser".to_string();
         let canonical = authority.register_managed_lane(registration).unwrap();
@@ -1456,6 +1499,18 @@ mod tests {
             .runtime_owner_registry
             .lifecycle_records
             .contains_key("session:stable-browser"));
+        let principal_binding = state
+            .runtime_owner_registry
+            .principal_bindings
+            .get(&canonical.claim.profile_identity_digest)
+            .unwrap();
+        assert_eq!(
+            principal_binding.owner_generation,
+            canonical.claim.owner_generation
+        );
+        assert!(state
+            .runtime_owner_registry
+            .principal_binding_is_current(Some(principal_binding)));
     }
 
     #[test]
@@ -1693,6 +1748,27 @@ mod tests {
         let binding = authority
             .register_managed_lane(registration.clone())
             .unwrap();
+        repository
+            .mutate(|state| {
+                state
+                    .runtime_owner_registry
+                    .bind_principal_authority(
+                        crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                            principal_id: "principal:test".to_string(),
+                            profile_id: "profile:test".to_string(),
+                            profile_identity_digest: binding
+                                .claim
+                                .profile_identity_digest
+                                .clone(),
+                            capability_id: "profile-capability-v1:test".to_string(),
+                            provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+                            owner_generation: binding.claim.owner_generation,
+                        },
+                    )
+                    .map_err(|error| format!("{error:?}"))?;
+                Ok(())
+            })
+            .unwrap();
         authority
             .transition(RuntimeLifecycleIntent::BeginClose {
                 claim: binding.claim.clone(),
@@ -1723,6 +1799,18 @@ mod tests {
             CleanupObligationState::Owned
         );
         assert!(lifecycle.terminal_evidence.is_empty());
+        let principal_binding = state
+            .runtime_owner_registry
+            .principal_bindings
+            .get(&replacement.claim.profile_identity_digest)
+            .unwrap();
+        assert_eq!(
+            principal_binding.owner_generation,
+            replacement.claim.owner_generation
+        );
+        assert!(state
+            .runtime_owner_registry
+            .principal_binding_is_current(Some(principal_binding)));
     }
 
     #[test]
