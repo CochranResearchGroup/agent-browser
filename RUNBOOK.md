@@ -3,6 +3,17 @@
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
+## Turn 299 | 2026-09-11
+
+Plan0165 owner-generation source repair is integrated through PR 34 at
+`9e544710`. PR 33 first published exact branch custody at `1fb5e3a3`. The
+profile-recovery regression failed before implementation; exact retirement,
+mismatch denial, all 35 profile-recovery module tests, formatting, and strict
+Clippy pass. Git custody is ready for exact ref and worktree closure while the
+plan remains OPEN for production installation and one governed BILL acceptance
+attempt. No production installation, browser retry, profile mutation,
+credential change, tenant effect, or BILL accounting effect occurred.
+
 ## Turn 298 | 2026-09-11
 
 Plan0165 source repair is active on `fix/profile-repair-owner-generation` after
