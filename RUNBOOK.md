@@ -2,9 +2,13 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
-## Turn 302 | 2026-09-12
+## Turn 303 | 2026-09-12
 
-Plan0171 (`docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md`) is OPEN and integration-ready under the operator's explicit “Ok go” authority. Fork repairs merged cleanly; three focused tests, formatting, clippy, and optimized build pass at source `fbeca748`, producing SHA-256 `d49bfb95425af4498acb75b7516ad224112e923237c78045ecc7cdb0e9507146`. The 12-minute build remained inside the governed one-job Cargo cgroup. The dirty main and Turnstile worktrees remain untouched. No push, install, browser, profile, provider, cleanup, or Service State effect has occurred at this checkpoint.
+Plan0171 is CLOSED through PR43 at `40da27f7`; final CI `34707619741` passed after Cargo-target isolation repaired a parallel runner race and the no-launch MCP inventory was synchronized.
+Exact SHA-256 `2c185ec7ccd691deaf0ee59412d3d31485ab0d8ad464cc02775785fb81be621d` is installed as `0.28.0-2c185ec7ccd6-f318ad66074f`; transaction `upgrade-1fcb7d57-671f-4cf9-afc6-1bcb45293e1a` accepted revision 13.
+Admission drain is off, multiplicity is steady, and resources have zero candidates or unknown obligations; operator-journey and default-profile lease warnings remain nonblocking.
+A compiler probe exposed gaps in sccache's blacklist sanitizer; cache-off completed in 4m25s, with hardening retained as a security follow-up. The retained Graphiti job's final bounded retry timed out before episode creation; do not queue a duplicate.
+No browser, profile, provider, route, cleanup, or unrelated-worktree effect occurred.
 
 ## Turn 301 | 2026-09-12
 
