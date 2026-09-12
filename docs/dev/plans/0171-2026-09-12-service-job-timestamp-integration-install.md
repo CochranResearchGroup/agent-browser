@@ -7,6 +7,7 @@ Branch: maintenance/plan-0170-job-timestamp-ordering
 Target: main
 Integration: merge
 Date: 2026-09-12
+Plan version: 2
 
 Current execution status: [RUNBOOK.md](../../../RUNBOOK.md)
 
@@ -32,6 +33,9 @@ consolidated candidate without disturbing retained browsers or profiles.
 - publish and integrate through the normal fork workflow;
 - run transactional workstation dry-run/apply and verify exact installed
   executable, accepted transaction, units, multiplicity, and resources.
+- repair the comprehensive CI runner's shared-target race after the first PR
+  run proved that its two parallel lanes can replace a still-running test
+  executable.
 
 ## Non-Goals
 
@@ -39,6 +43,16 @@ consolidated candidate without disturbing retained browsers or profiles.
   cleanup, historical timestamp rewrite, upstream pull request, or formal
   release;
 - no edits to the dirty main or Turnstile worktrees.
+
+## Version 2 Change Note
+
+Pull request 43's first comprehensive Rust run failed in both parallel lanes
+because they shared one Cargo target directory. While one lane executed
+`agent_browser-*`, the other rebuilt and unlinked that exact executable; the
+failures consistently reported `(deleted)` or `No such file or directory`.
+This is a deterministic CI isolation defect also present on current main, not a
+timestamp assertion failure. Version 2 spends the plan's one source repair pass
+on separate per-lane Cargo target directories and adds a static contract test.
 
 ## Acceptance Criteria
 
@@ -87,3 +101,16 @@ Cargo cgroup.
 
 Acceptance state: criteria 1-2 pass. Fork integration and transactional
 installed verification remain.
+
+## Checkpoint P0171-C02 | 2026-09-12
+
+State transition: `integration_ready -> repair_active`.
+
+Progress classification: `blocker_reduction`; PR 43's first run passed Version
+Sync, Rust Quality, Dashboard, Service Client, and all Workstation Fixtures.
+The broad Rust job failed only because concurrent comprehensive lanes shared a
+Cargo target directory: eleven tests could not reopen or spawn the executable
+after the peer lane replaced it. The timestamp-specific tests remained green.
+
+Repair: isolate the native and support lanes under `comprehensive-native` and
+`comprehensive-support`, then rerun the static runner contract and PR gates.

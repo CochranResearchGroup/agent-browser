@@ -107,6 +107,12 @@ requireCondition(
   rustTests.includes('RUST_TEST_STACK_SIZE_BYTES') && rustTests.includes('RUST_MIN_STACK'),
   'normal Rust test entrypoint must declare its state-heavy fixture stack budget',
 );
+requireCondition(
+  rustTests.includes('comprehensive-native') &&
+    rustTests.includes('comprehensive-support') &&
+    rustTests.includes('export CARGO_TARGET_DIR'),
+  'parallel comprehensive Rust lanes must use distinct Cargo target directories',
+);
 
 const workflow = read('.github/workflows/ci.yml');
 const workspaceClippyCommand = ['cargo', 'clippy --workspace --manifest-path Cargo.toml -- -D warnings'].join(' ');
