@@ -1,9 +1,14 @@
 # Plan 0171 | Service Job Timestamp Integration And Install
 
 State: OPEN
+Lane: P171
+Roadmap: P171
+Branch: maintenance/plan-0170-job-timestamp-ordering
+Target: main
+Integration: merge
 Date: 2026-09-12
-Branch: `maintenance/plan-0170-job-timestamp-ordering`
-Target: `main`
+
+Current execution status: [RUNBOOK.md](../../../RUNBOOK.md)
 
 ## Objective
 

@@ -1,7 +1,10 @@
 # Runbook
 
-Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail.
-Keep at or below 200 lines under policy0043.
+Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
+
+## Turn 302 | 2026-09-12
+
+Plan0171 (`docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md`) is OPEN under the operator's explicit “Ok go” integration/install authority. Current `origin/main`, including the retained-owner route reconciliation, merged cleanly into the isolated timestamp branch; the dirty main and Turnstile worktrees remain untouched. Agent Browser Cargo validation passed its three focused tests, formatting, and workspace clippy after waiting at the governed resource gate behind another candidate build. No push, install, browser, profile, provider, cleanup, or Service State effect has occurred at this checkpoint.
 
 ## Turn 301 | 2026-09-12
 
@@ -194,5 +197,4 @@ and untracked notes0159/0160. Those files remain untouched and outside PR14.
 Repository consolidation is complete. Full A1–A4/AX runtime acceptance and the
 deferred standalone CLI download compatibility check remain Plan0160 work; they
 are product acceptance gaps rather than Git integration gaps.
-
 [Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).

@@ -13,24 +13,8 @@ lanes:
     integration_receipt: null
     integration: merge
     dependencies: [P170]
-    overlaps: [P165]
-    reconciled_overlaps: [P165 source is current origin/main and is merged before validation]
-    updated_at: 2026-09-12
-  - id: P170
-    objective: Preserve Service Job lifecycle timestamp ordering across backward wall clock adjustments
-    plan: docs/dev/plans/0170-2026-09-12-service-job-lifecycle-timestamp-ordering.md
-    plan_ref: refs/heads/maintenance/plan-0170-job-timestamp-ordering
-    branch: maintenance/plan-0170-job-timestamp-ordering
-    target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATION_READY
-    checkpoint: ceac80650c50665618f2b3f70a4ec1d193469a64
-    remote_ref: null
-    integration_receipt: null
-    integration: merge
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
+    overlaps: [cli/src/native/service_health.rs]
+    reconciled_overlaps: [cli/src/native/service_health.rs]
     updated_at: 2026-09-12
   - id: P165
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
