@@ -107,15 +107,20 @@ pub(crate) mod action_commands {
                 optional_command_string(cmd, "taskName"), }, "valid" : true,
                 "staleReason" : Value::Null, }
             );
-            persist_service_owned_tab_new(
+            let canonical_service_tab_handle = persist_service_owned_tab_new(
                 cmd,
                 &state.session_id,
                 object.get("targetId").and_then(Value::as_str),
                 object.get("url").and_then(Value::as_str),
                 object.get("title").and_then(Value::as_str),
                 &service_tab_handle,
-            )?;
-            object.insert("serviceTabHandle".to_string(), service_tab_handle);
+            )?
+            .ok_or_else(|| "persisted service tab handle is unavailable".to_string())?;
+            object.insert(
+                "serviceTabHandle".to_string(),
+                serde_json::to_value(canonical_service_tab_handle)
+                    .map_err(|error| error.to_string())?,
+            );
         }
         Ok(result)
     }

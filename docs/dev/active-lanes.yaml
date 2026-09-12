@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P173
+    objective: Repair expired-session retained-browser reuse through canonical acquisition and handle truth
+    plan: docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md
+    plan_ref: refs/heads/fix/plan-0173-expired-session-reuse
+    branch: fix/plan-0173-expired-session-reuse
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: d87828e328390a8e86b1b93bf571b7155fa0e6e5
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P144, P165]
+    overlaps: [cli/src/native/service_profile_acquisition.rs, cli/src/native/browser_lifecycle.rs, cli/src/native/browser_tabs.rs]
+    reconciled_overlaps: []
+    updated_at: 2026-09-12
   - id: P171
     objective: Integrate and install the Service Job lifecycle timestamp ordering repair
     plan: docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md

@@ -4159,6 +4159,74 @@ mod tests {
     }
 
     #[test]
+    fn service_access_plan_requires_rejoin_for_expired_retained_session() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "bill-soylei".to_string(),
+                BrowserProfile {
+                    id: "bill-soylei".to_string(),
+                    name: "BILL SoyLei".to_string(),
+                    target_service_ids: vec!["bill".to_string()],
+                    authenticated_service_ids: vec!["bill".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "session:retained-bill".to_string(),
+                BrowserProcess {
+                    id: "session:retained-bill".to_string(),
+                    profile_id: Some("bill-soylei".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["retained-bill".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "retained-bill".to_string(),
+                BrowserSession {
+                    id: "retained-bill".to_string(),
+                    profile_id: Some("bill-soylei".to_string()),
+                    browser_ids: vec!["session:retained-bill".to_string()],
+                    lease: LeaseState::Expired,
+                    expires_at: Some("2026-09-12T04:43:45Z".to_string()),
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("BooksReceipts".to_string()),
+                agent_name: Some("receipt-agent".to_string()),
+                task_name: Some("review-bill".to_string()),
+                target_service_ids: vec!["bill".to_string()],
+                runtime_profile: Some("bill-soylei".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "rejoin_profile_lease"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableSessionName"],
+            Value::Null
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["acquisitionBlocker"],
+            "expired_session_recovery_required"
+        );
+        assert!(plan["decision"]["profileReuse"]["reasons"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("expired_session_recovery_required")));
+    }
+
+    #[test]
     fn service_access_plan_reuses_ready_transferred_owner_for_tab_acquisition() {
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,

@@ -92,6 +92,7 @@ pub(crate) mod action_commands {
             title,
             &service_tab_handle,
         )
+        .map(|_| ())
     }
 
     #[cfg(test)]

@@ -1,11 +1,26 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-11
+Updated: 2026-09-12
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P173 | Expired Session Retained Browser Reuse Repair
+
+State: OPEN
+
+Current state: production acceptance of Plan 0165 exposed a ready retained BILL
+browser routed through an expired daemon-session lease. The access plan called
+the route reusable, `tab_new` returned a provisionally valid handle, and the
+next canonical projection rejected it as `lease_expired`. The failure reproduced
+twice without authentication or tenant effects. Plan 0173 owns one test-first
+repair spanning lease-aware planning, exact same-principal rejoin, canonical
+tab-handle projection, inactive refresh rejection, source integration, one
+transactional installation, and preserving installed acceptance.
+[Plan 0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
+is the active execution contract.
 
 ## P171 | Service Job Timestamp Integration And Install
 
