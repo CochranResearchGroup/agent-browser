@@ -43,6 +43,8 @@ creation and read back from the exact repository afterward:
 | [#80](https://github.com/CochranResearchGroup/agent-browser/issues/80) | PL-PLATFORM, BLOCKED | Development presentation-provider readiness |
 | [#81](https://github.com/CochranResearchGroup/agent-browser/issues/81) | PL-PLATFORM, TRIAGE | Stock Chrome CDP-free capability and routing |
 | [#82](https://github.com/CochranResearchGroup/agent-browser/issues/82) | PL-PLATFORM, TRIAGE | Residual route-bound extraction decision |
+| [#84](https://github.com/CochranResearchGroup/agent-browser/issues/84) | PL-BUGFIX, IN_PROGRESS | Browserless runtime-lane quiescence in PR #83 |
+| [#85](https://github.com/CochranResearchGroup/agent-browser/issues/85) | PL-PLATFORM, BLOCKED | Distinct XRDP route-display allocation |
 
 ## Preserved Field Note
 

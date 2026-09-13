@@ -53,6 +53,6 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#84]
     dependencies: []
     overlaps: [cli/src/workstation_install.rs]
-    reconciled_overlaps: []
+    reconciled_overlaps: [cli/src/workstation_install.rs]
     blocker: PR 83 validation and review remain separate from Plan 0177
     updated_at: 2026-09-13
