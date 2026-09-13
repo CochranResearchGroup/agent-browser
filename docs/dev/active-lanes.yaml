@@ -15,7 +15,7 @@ lanes:
     integration_receipt: null
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#95]
-    dependencies: [P178]
+    dependencies: []
     overlaps: [P165]
     reconciled_overlaps: [P165]
     updated_at: 2026-09-13
