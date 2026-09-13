@@ -13,14 +13,15 @@ use super::authentication_run::{
     ResponseOnlyAuthenticationAction, ResponseOnlySiteLoginAction, SiteLoginActionContext,
     SiteLoginActionReceipt, SiteLoginObservationReceipt, SiteLoginState,
 };
+use super::browser::WaitUntil;
 use super::service_model::{LeaseState, ServiceState, ServiceTabHandle};
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
 use super::service_trace::service_now_timestamp;
 use super::site_login_recipe::{
-    classify_site_page, load_site_login_recipe, site_login_recipe_digest, PasswordValueSource,
-    SiteLoginRecipe, SitePageEvidence,
+    classify_site_page, load_site_login_recipe, login_entry_fallback_url, site_login_recipe_digest,
+    PasswordValueSource, SiteLoginRecipe, SitePageEvidence,
 };
 use super::{auth, interaction};
 use chrono::{DateTime, Duration, Utc};
@@ -924,7 +925,15 @@ async fn resume_authentication_run(
             {
                 return Err("authentication_run_sms_provider_unavailable".to_string());
             }
-            let evidence = observe_page(daemon, &recipe).await?;
+            let mut evidence = observe_page(daemon, &recipe).await?;
+            if let Some(login_url) = login_entry_fallback_url(&recipe, &evidence) {
+                let manager = daemon
+                    .browser
+                    .as_mut()
+                    .ok_or_else(|| "authentication_run_retained_browser_not_running".to_string())?;
+                manager.navigate(login_url, WaitUntil::Load).await?;
+                evidence = observe_page(daemon, &recipe).await?;
+            }
             let classified = classify_site_page(
                 &recipe,
                 &record.run.binding.target_organization_ref,

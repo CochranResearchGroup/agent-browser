@@ -99,6 +99,7 @@ pub(crate) fn decide_profile_acquisition(
             Some("blocked_by_explicit_session_route") => Some("explicit_session_route_invalid"),
             Some("wait_for_foreign_principal") => Some("foreign_principal_profile_lease"),
             Some("authenticate_for_profile_reuse") => Some("profile_capability_required"),
+            Some("rejoin_profile_lease") => Some("expired_session_recovery_required"),
             Some("lifecycle_profile_identity_inconsistent") => {
                 Some("lifecycle_profile_identity_inconsistent")
             }
@@ -776,6 +777,7 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
     let reusable_control_input_provider = request.control_input_provider;
     let reusable_display_isolation = request.display_isolation.as_deref();
 
+    let reuse_observed_at = Utc::now();
     let mut reusable_browser_ids = service_state
         .browsers
         .iter()
@@ -793,6 +795,12 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
         .collect::<Vec<_>>();
     reusable_browser_ids.sort();
     reusable_browser_ids.dedup();
+    let expired_session_recovery_required = reusable_browser_ids.iter().any(|browser_id| {
+        browser_requires_session_rejoin(service_state, browser_id, &reuse_observed_at)
+    });
+    reusable_browser_ids.retain(|browser_id| {
+        reusable_session_name_for_browser(service_state, browser_id, &reuse_observed_at).is_some()
+    });
 
     let mut foreign_principal_session_ids = Vec::new();
     let mut principal_bound_session_ids = service_state
@@ -957,6 +965,9 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
     if active_claim_is_foreign {
         reasons.push("foreign_principal_active_claim");
     }
+    if expired_session_recovery_required {
+        reasons.push("expired_session_recovery_required");
+    }
     if strict_identity_required
         && authenticated_principal.is_none()
         && (!principal_bound_session_ids.is_empty() || active_claim_requires_authentication)
@@ -1024,6 +1035,8 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
         "lifecycle_profile_identity_inconsistent"
     } else if !reusable_browser_ids.is_empty() {
         "reuse_existing_browser"
+    } else if expired_session_recovery_required {
+        "rejoin_profile_lease"
     } else if !active_lease_session_ids.is_empty() {
         "wait_for_profile_lease"
     } else {
@@ -1033,9 +1046,9 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
     let reusable_session_name = explicit_session_route
         .map(|(_browser_id, session_name)| session_name)
         .or_else(|| {
-            reusable_browser_id
-                .as_deref()
-                .and_then(|browser_id| reusable_session_name_for_browser(service_state, browser_id))
+            reusable_browser_id.as_deref().and_then(|browser_id| {
+                reusable_session_name_for_browser(service_state, browser_id, &reuse_observed_at)
+            })
         });
 
     let active_lease_count = if active_claim.is_some() {
@@ -1101,24 +1114,76 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
 fn reusable_session_name_for_browser(
     service_state: &ServiceState,
     browser_id: &str,
+    observed_at: &chrono::DateTime<Utc>,
 ) -> Option<String> {
     service_state
         .browsers
         .get(browser_id)
-        .and_then(|browser| browser.active_session_ids.first().cloned())
+        .and_then(|browser| {
+            browser.active_session_ids.iter().find_map(|session_id| {
+                service_state
+                    .sessions
+                    .get(session_id)
+                    .is_none_or(|session| session_lease_is_current(session, observed_at))
+                    .then(|| session_id.clone())
+            })
+        })
         .or_else(|| {
             service_state
                 .sessions
                 .iter()
                 .find_map(|(session_id, session)| {
-                    session
-                        .browser_ids
-                        .iter()
-                        .any(|id| id == browser_id)
-                        .then_some(session_id.clone())
+                    (session.browser_ids.iter().any(|id| id == browser_id)
+                        && session_lease_is_current(session, observed_at))
+                    .then_some(session_id.clone())
                 })
         })
-        .or_else(|| browser_id.strip_prefix("session:").map(str::to_string))
+        .or_else(|| {
+            browser_id.strip_prefix("session:").and_then(|session_id| {
+                service_state
+                    .sessions
+                    .get(session_id)
+                    .is_none_or(|session| session_lease_is_current(session, observed_at))
+                    .then(|| session_id.to_string())
+            })
+        })
+}
+
+fn browser_requires_session_rejoin(
+    service_state: &ServiceState,
+    browser_id: &str,
+    observed_at: &chrono::DateTime<Utc>,
+) -> bool {
+    let Some(browser) = service_state.browsers.get(browser_id) else {
+        return false;
+    };
+    let linked_sessions = browser
+        .active_session_ids
+        .iter()
+        .filter_map(|session_id| service_state.sessions.get(session_id))
+        .chain(service_state.sessions.values().filter(|session| {
+            session.browser_ids.iter().any(|id| id == browser_id)
+                && !browser
+                    .active_session_ids
+                    .iter()
+                    .any(|session_id| session_id == &session.id)
+        }))
+        .collect::<Vec<_>>();
+    !linked_sessions.is_empty()
+        && linked_sessions
+            .iter()
+            .all(|session| !session_lease_is_current(session, observed_at))
+}
+
+fn session_lease_is_current(session: &BrowserSession, observed_at: &chrono::DateTime<Utc>) -> bool {
+    if matches!(session.lease, LeaseState::Released | LeaseState::Expired) {
+        return false;
+    }
+    session.expires_at.as_deref().is_none_or(|expires_at| {
+        chrono::DateTime::parse_from_rfc3339(expires_at)
+            .map(|expires_at| expires_at > *observed_at)
+            .unwrap_or(false)
+    })
 }
 
 fn browser_is_reusable_for_posture(

@@ -16300,6 +16300,7 @@ mod tests {
 
         use crate::native::service_model::{
             BrowserProfile, ProfileReadinessState, ProfileSeedingMode, ProfileTargetReadiness,
+            SitePolicy,
         };
 
         let state = ServiceState {
@@ -16317,6 +16318,14 @@ mod tests {
                         ..ProfileTargetReadiness::default()
                     }],
                     ..BrowserProfile::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    requires_cdp_free: true,
+                    ..SitePolicy::default()
                 },
             )]),
             ..ServiceState::default()
@@ -16393,7 +16402,11 @@ mod tests {
         );
         assert_eq!(
             resource["contents"]["targetReadiness"][0]["state"],
-            "needs_manual_seeding"
+            "unknown"
+        );
+        assert_eq!(
+            resource["contents"]["targetReadiness"][0]["seedingMode"],
+            "attachable_ok"
         );
     }
 
@@ -16447,7 +16460,11 @@ mod tests {
         );
         assert_eq!(
             resource["contents"]["profileAllocation"]["targetReadiness"][0]["state"],
-            "needs_manual_seeding"
+            "unknown"
+        );
+        assert_eq!(
+            resource["contents"]["profileAllocation"]["targetReadiness"][0]["seedingMode"],
+            "attachable_ok"
         );
         assert_service_profile_allocation_contract(&resource["contents"]["profileAllocation"]);
     }

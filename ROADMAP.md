@@ -1,35 +1,104 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-12
+Updated: 2026-09-13
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## Stable Product Lanes
+
+[Agent Browser product lanes](docs/dev/product-lanes.md) define the stable
+ownership model above numbered delivery plans:
+
+- `PL-BUGFIX`: reliability and bounded defect repair;
+- `PL-AUTH`: credential management and automated authentication;
+- `PL-CHALLENGE`: CAPTCHA and anti-automation challenge handling;
+- `PL-RECIPES`: deterministic reusable automation recipes and helpers; and
+- `PL-PLATFORM`: architecture, runtime, supervisor, Service State, installation,
+  shared desktop services, and development infrastructure.
+
+Numbered `P###` entries below remain delivery plans and historical roadmap
+checkpoints. They do not define permanent product ownership. New substantive
+plans select one product lane and use the active-lane catalog for branch and
+worktree custody. [The notes index](docs/dev/notes/README.md) routes current
+field evidence and acceptance records into the same model.
+
+## P177 | Development Governance And Repository Readiness
+
+State: PLANNED
+
+Current state: issue tracking is disabled, the installed policy selector is one
+released patch behind, the merged no-op repair remains checked out with an
+untracked field note, the Turnstile branch is divergent and carries a duplicate
+P173 identity, and the active planning audit reports 37 housekeeping findings.
+[Plan 0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
+defines the policy adoption, issue migration, worktree reconciliation, planning
+cleanup, and read-only runtime-readiness campaign required before serious
+feature development resumes. Provider and runtime mutations remain separately
+gated.
+
+## P176 | Product Lane And Note Consolidation
+
+State: CLOSED
+
+Current state: five stable product lanes, note-routing rules, multi-agent WIP
+limits, shared-writer arbitration, dependency ordering, and Plan 0161 platform
+ownership are integrated through PR 60 at `1d12d1c4`.
+[Plan 0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
+is the closed execution and integration record.
+
+## P174 | CI Production-Scale And Process-Identity Reliability
+
+State: CLOSED
+
+Closed: PR 54 merged the repair as `3f680a13`; CI run `34729883713`
+passed every required check on its first attempt, including comprehensive Rust.
+PR 51 then reconciled the P171 catalog cleanup onto that exact repair and merged
+as `00796d5c`; post-reconciliation run `34731270343` also passed on its first
+attempt. The one-second deadline and production identity fence remain unchanged.
+[Plan 0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md)
+is the closed execution record.
+
+## P173 | Expired Session Retained Browser Reuse Repair
+
+State: CLOSED
+
+Closed: PR 52 merged as `2156aaad472ecebb1f79e7d5ce79419949b4705c`
+after complete CI. Generation `0.28.0-cae894cf25f2-a4332e7facd9` was installed
+transactionally and passed exact same-principal lease rejoin, retained-browser
+reuse, canonical valid-handle, page probe, exact-tab release, and Chrome PID
+49619 continuity. BILL's website session is independently at login. A separate
+shared-tab cleanup-policy label mismatch is retained in the plan closeout for a
+future bounded contract repair.
+[Plan 0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
+is the closed execution record.
+
 ## P169 | Cloudflare Turnstile Desktop Challenge
 
-State: OPEN
+State: BLOCKED
 
 Current state: [Plan 0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md)
-owns one operator-authorized integration of the existing desktop capture,
-location, controller fencing, curved pointer motion, X11 input, and after-state
-verification contracts. The bounded target is a uniquely detected visible
-Cloudflare `Verify you are human` checkbox on the current Ohio SOS browser.
-The live budget is one click with no retry; profile creation, browser closure,
-fingerprint manipulation, and general CAPTCHA solving are excluded.
+and [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66)
+own the existing bounded Turnstile implementation. The branch is reconciled to
+current `main` under Plan 0177 and remains paused because live interaction
+acceptance is unproven. No retry or new feature scope is authorized. The
+[desktop guard architecture note](docs/dev/notes/0179-2026-09-13-captcha-and-desktop-automation-guard-architecture.md)
+preserves the broader staged design without creating a second P173 identity.
 
 ## P171 | Service Job Timestamp Integration And Install
 
-State: OPEN
+State: CLOSED
 
-Current state: Plan 0170 is source-qualified. Current `origin/main`, including
-the retained-owner route reconciliation now in production, merged cleanly into
-the isolated repair branch. Plan 0171 owns the bounded validation, fork
-integration, consolidated candidate build, transactional install, and fresh
-runtime verification without browser, profile, provider, or cleanup effects.
+Current state: PR 43 merged as `40da27f7`; exact integrated generation
+`0.28.0-2c185ec7ccd6-f318ad66074f` is accepted under transaction
+`upgrade-1fcb7d57-671f-4cf9-afc6-1bcb45293e1a`. Final CI and installed
+multiplicity/resource acceptance pass. The same PR repaired the comprehensive
+Rust runner's shared-target race and synchronized the frozen no-launch MCP
+inventory. No browser, profile, provider, or cleanup effect occurred.
 [Plan 0171](docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md)
-is the active execution contract.
+is the closed execution contract and receipt.
 
 ## P168 | Worktree, Branch, Merge, And Closure Campaign
 

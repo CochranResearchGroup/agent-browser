@@ -9185,7 +9185,35 @@ fn run_agent_json_detailed_in_socket_dir(
     command_args: &[&str],
     runtime: Option<(&Path, bool)>,
 ) -> Result<Value, RuntimeTransactionCommandFailure> {
-    run_agent_json_detailed_in_socket_dir_with(binary, session, command_args, runtime, |_| {})
+    retry_no_effect_runtime_handoff_prepare(command_args, || {
+        run_agent_json_detailed_in_socket_dir_with(binary, session, command_args, runtime, |_| {})
+    })
+}
+
+fn retry_no_effect_runtime_handoff_prepare<Run>(
+    command_args: &[&str],
+    mut run: Run,
+) -> Result<Value, RuntimeTransactionCommandFailure>
+where
+    Run: FnMut() -> Result<Value, RuntimeTransactionCommandFailure>,
+{
+    const MAX_ATTEMPTS: u8 = 3;
+    let retry_stale_revision = command_args == ["handoff", "prepare"];
+    let mut attempts = 0_u8;
+    loop {
+        attempts = attempts.saturating_add(1);
+        match run() {
+            Err(error)
+                if retry_stale_revision
+                    && attempts < MAX_ATTEMPTS
+                    && error.kind == RuntimeTransactionCommandFailureKind::CommandFailed
+                    && error.message.contains("service_state_stale_revision:") =>
+            {
+                continue;
+            }
+            result => return result,
+        }
+    }
 }
 
 fn run_agent_json_detailed_in_socket_dir_with(
@@ -13037,9 +13065,24 @@ mod tests {
         ));
         let socket_dir = root.join("runtime-host");
         fs::create_dir_all(&socket_dir).unwrap();
-        let mut child = Command::new("sleep").arg("60").spawn().unwrap();
-        let identity = crate::process_identity::capture_process_identity(child.id(), None, None)
-            .expect("capture fixture process identity");
+        let fixture_executable = root.join("runtime-host-fixture");
+        fs::copy("/bin/sleep", &fixture_executable).unwrap();
+        let mut child = Command::new(&fixture_executable).arg("60").spawn().unwrap();
+        let identity_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let identity = loop {
+            if let Some(identity) = crate::process_identity::capture_process_identity(
+                child.id(),
+                Some(&fixture_executable),
+                None,
+            ) {
+                break identity;
+            }
+            assert!(
+                std::time::Instant::now() < identity_deadline,
+                "fixture process did not publish its final executable identity"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
         write_private_json_atomic(&socket_dir.join("runtime-host.identity.json"), &identity)
             .unwrap();
 
@@ -14014,9 +14057,21 @@ mod tests {
         fs::create_dir_all(executable.parent().unwrap()).unwrap();
         fs::copy("/bin/sleep", &executable).unwrap();
         let mut child = Command::new(&executable).arg("30").spawn().unwrap();
-        let identity =
-            crate::process_identity::capture_process_identity(child.id(), Some(&executable), None)
-                .unwrap();
+        let identity_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let identity = loop {
+            if let Some(identity) = crate::process_identity::capture_process_identity(
+                child.id(),
+                Some(&executable),
+                None,
+            ) {
+                break identity;
+            }
+            assert!(
+                std::time::Instant::now() < identity_deadline,
+                "candidate host fixture did not publish its final executable identity"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
         let transaction = new_upgrade_transaction(
             &paths,
             candidate_generation_id.to_string(),
@@ -14695,10 +14750,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn finalized_runtime_host_grace_observes_self_exit_before_pidfd_fallback() {
-        let mut child = Command::new("sh")
-            .args(["-c", "sleep 0.05"])
-            .spawn()
-            .unwrap();
+        let mut child = Command::new("/bin/sleep").arg("0.05").spawn().unwrap();
         let executable = PathBuf::from(format!("/proc/{}/exe", child.id()))
             .canonicalize()
             .unwrap();
@@ -17104,6 +17156,55 @@ mod tests {
             ),
             RuntimeTransactionCommandFailureKind::CommandFailed
         );
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_replans_only_after_no_effect_stale_revision() {
+        let mut attempts = 0_u8;
+        let result = retry_no_effect_runtime_handoff_prepare(&["handoff", "prepare"], || {
+            attempts = attempts.saturating_add(1);
+            if attempts < 3 {
+                Err(RuntimeTransactionCommandFailure {
+                    kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                    message: format!(
+                        "Runtime transaction command failed for session 'fixture': service_state_stale_revision: expected={}; actual={}",
+                        attempts,
+                        attempts + 1
+                    ),
+                })
+            } else {
+                Ok(serde_json::json!({"success": true}))
+            }
+        });
+
+        assert_eq!(result.unwrap()["success"], true);
+        assert_eq!(attempts, 3);
+
+        let mut non_prepare_attempts = 0_u8;
+        let result = retry_no_effect_runtime_handoff_prepare(&["handoff", "resume"], || {
+            non_prepare_attempts = non_prepare_attempts.saturating_add(1);
+            Err(RuntimeTransactionCommandFailure {
+                kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                message: "service_state_stale_revision: expected=4; actual=5".to_string(),
+            })
+        });
+        assert!(result.is_err());
+        assert_eq!(non_prepare_attempts, 1);
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_stale_revision_retry_is_bounded() {
+        let mut attempts = 0_u8;
+        let result = retry_no_effect_runtime_handoff_prepare(&["handoff", "prepare"], || {
+            attempts = attempts.saturating_add(1);
+            Err(RuntimeTransactionCommandFailure {
+                kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                message: "service_state_stale_revision: expected=8; actual=9".to_string(),
+            })
+        });
+
+        assert!(result.is_err());
+        assert_eq!(attempts, 3);
     }
 
     #[test]

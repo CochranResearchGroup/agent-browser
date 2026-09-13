@@ -2,28 +2,39 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
-## Turn 302 | 2026-09-12
+## Turn 312 | 2026-09-13
 
-Plan0171 (`docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md`) is OPEN and integration-ready under the operator's explicit “Ok go” authority. Fork repairs merged cleanly; three focused tests, formatting, clippy, and optimized build pass at source `fbeca748`, producing SHA-256 `d49bfb95425af4498acb75b7516ad224112e923237c78045ecc7cdb0e9507146`. The 12-minute build remained inside the governed one-job Cargo cgroup. The dirty main and Turnstile worktrees remain untouched. No push, install, browser, profile, provider, cleanup, or Service State effect has occurred at this checkpoint.
+[Plan0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
+is PLANNED on `platform/plan-0177-development-readiness` from current
+`origin/main` at `d32919f8`. It freezes serious development until issue-backed
+multi-session policy, current worktree custody, 37 active planning findings,
+and read-only repository/runtime readiness are reconciled.
 
-## Turn 301 | 2026-09-12
+PR63 already merged the no-op Service State repair and passed required CI, so
+that worktree is closure-only after its untracked field note is preserved. The
+Turnstile branch remains six commits ahead and 51 behind current main with one
+unpublished commit and conflicting P169/P173 identities. GitHub Issues remain
+disabled. No provider, Git cleanup, runtime, browser, profile, installation, or
+tenant mutation is authorized by this planning checkpoint.
 
-Plan0170 is CLOSED and source-qualified on isolated branch `maintenance/plan-0170-job-timestamp-ordering`. Service Job `startedAt` now cannot precede `submittedAt`, and `completedAt` cannot precede the recorded start or submission boundary, even if the host wall clock moves backward. Monotonic deadline behavior is unchanged. Three focused Rust tests, formatting, and workspace clippy pass. The first compile attempt retained an infrastructure failure at 947 of 1,024 Cargo-slice tasks; one job with cache disabled completed without cleanup or hidden retry. Graphiti job `084f242a-977a-4017-a113-6f9a5e62b1a3` failed once with a retryable `TimeoutError` before episode creation; preserve it as `graphiti_write_pending` for the next closeout rather than enqueueing a duplicate. No production install, restart, browser, profile, provider, tenant, Service State, or timeout effect occurred. Integrate this source with the next consolidated candidate rather than replacing production solely for timestamp display ordering.
+## Turn 311 | 2026-09-13
 
-## Turn 302 | 2026-09-12
+[Plan0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
+is CLOSED. PR60 passed every required check and merged as `1d12d1c4`. Five
+stable product lanes now govern numbered plans, reusable note routing,
+worktree limits, shared-writer arbitration, dependencies, and merge order.
+Plan 0161 belongs to platform ownership; authentication consumes its scoped
+reset and readiness contracts. No product behavior, runtime, browser, profile,
+credential, provider, tenant, installation, or release effect occurred.
 
-Plan0172 is CLOSED through PR46 at `8d3f552f`. The integrated repair preserves
-path-backed custom profile identity, rejects invalid named runtime profiles
-before launch, reconciles exact retained-browser owner aliases during
-navigation persistence, and reports runtime admission drain as confirmed
-pre-effect. All selected source gates pass. Read-only evidence shows upgrade
-transaction `upgrade-55a6f48d-5988-4be8-a626-1d234c6e0a1b` accepted at revision
-14 and the retained PID92141 browser, owner generation102, session, and South
-Carolina target coherently projected. No production install, browser effect,
-profile mutation, or Fresh Roof continuation occurred. Plan0165 remains OPEN
-for its separately authorized consumer acceptance.
+## Turn 310 | 2026-09-13
 
-## Turn 297 | 2026-09-11
+[Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)
+is CLOSED. PR57 passed every required fast check and merged as `0e18b351`.
+Executable SHA-256 `d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`
+is installed as generation `0.28.0-d0186990d375-3a6142188dd0` through accepted
+transaction `upgrade-c8483b3d-6fb1-41f3-b9da-5681169d5869`; the supervisor is
+singular and cleanup inventory has no candidates.
 
 [Plan0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md) remains OPEN: qualify one bounded Turnstile interaction with no retry or unrelated effect.
 California exposed Imperva-wrapped hCaptcha; a requested X11 run solved it, then Imperva returned block error `15`. The restored Ohio stealth browser cleared Cloudflare during pre-click observation and loaded business search. No Ohio X11 input occurred, so live interaction acceptance remains unproven; both retained browser routes remain open.
@@ -32,28 +43,24 @@ California exposed Imperva-wrapped hCaptcha; a requested X11 run solved it, then
 
 [Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is CLOSED. W1 and W2 closed the integrated P165 worktree, four local and remote branch pairs, and four integrated remote-only refs without closing residual operational plans. W3 integrated the two accepted P0240 residuals through PR 30 at `de614fbe`; all selected gates passed, and both P0240 worktrees plus their refs are closed. W4 found no P157 residual beyond `ad673377`. PR 31 merged the campaign record as `9f711ebc`; PR 32 closes P168 catalog custody before exact maintenance-ref deletion. The two canonical Rust edits remain attributable Odollo custody. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect occurred.
 
-## Turn 296 | 2026-09-11
+Plan 0240 authentication-route source merged through PR58 as `9619d87c` after
+every required check passed. Its primary worktree remains on the historical
+topic branch at that merge head with one attributable untracked field note; the
+topic remote remains three commits behind. Preserve the worktree for its owner
+to commit or disposition the note before branch cleanup.
 
-Plan0167 is CLOSED through PR29 at `14fb3db0`. Its 9,642,672-byte two-writer/two-reader regression completed in 709 to 739 ms across six samples with zero commit wait and 358 to 380 ms exclusive holds; the one-second deadline is unchanged. Required gates pass. Production installation, shared skill publication, installed doctor, and X evaluation remain separate.
+The clean Turnstile worktree remains on `feature/turnstile-desktop-challenge`
+at `17791566`, six commits ahead and 35 behind `origin/main`. It contains active
+Plan 0169 plus a CAPTCHA roadmap labeled P173 that conflicts with canonical
+Plan 0173. Preserve the branch; reconcile the roadmap identifier and rebase or
+merge current `main` inside that owning lane before review.
 
-## Turn 294 | 2026-09-11
-
-Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF releases exact connection custody while accepted work finishes independently. Provider-free gates pass; P0240/P157 remain preserved and Plan0162 is unblocked.
-
-## Turn 291 | 2026-09-10
-
-The Last30Days degraded tick adds A1/AX cases. LinkedIn's lock timeout stopped
-before effects and must retain `no_effect` plus holder context. Reddit created
-tabs, then redundantly enabled CDP domains. Five historical job lookups were
-lost, so AX requires durable read-only lookup. `last30days-facebook` retains its
-owner and profile but no locks or process; Plan0161 W2 owns preserving repair.
-Recovery r348638 is uncertain; diagnosis r513089 proves no launch. Only Last30Days may authorize a later tick. A3, BILL/QBO and PID45449 remain untouched.
-
-Production has three Guacamole routes but two admitted capacity slots; selection
-exposed `presentation_bound_slot_missing`. Plan0162 adopts Plan0124's arbitrary-N
-model: three warm desktops, logical-browser allocation and just-in-time
-multi-viewer streaming. Plan0161 repair remains the critical path; Plan0162
-then supplies Plan0160 A2/A3.
+The production executable and selected generation are coherent. Runtime
+monitoring is in bounded backoff after `service_state_lock_timeout` against the
+shared 6.97 MB Service State while the exact supervisor held the lock. Do not
+blindly retry, restart, or clean current browser trees. Historical Turns 291
+through 309 are preserved in
+[the September 10 to 12 archive](RUNBOOK-history-2026-09-10-through-turn309.md).
 
 ## Turn 286 | 2026-09-09
 
@@ -196,4 +203,4 @@ and untracked notes0159/0160. Those files remain untouched and outside PR14.
 Repository consolidation is complete. Full A1–A4/AX runtime acceptance and the
 deferred standalone CLI download compatibility check remain Plan0160 work; they
 are product acceptance gaps rather than Git integration gaps.
-[Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).
+[Turns 291 through 309](RUNBOOK-history-2026-09-10-through-turn309.md); [previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).

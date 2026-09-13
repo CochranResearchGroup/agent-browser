@@ -419,6 +419,15 @@ pub(crate) fn browser_build_from_command(cmd: &Value) -> Option<BrowserBuild> {
     }
     cmd.get("params").and_then(browser_build_from_command)
 }
+
+/// True when a command explicitly selects a browser build at any accepted
+/// command nesting level. This must stay aligned with `browser_build_from_command`.
+pub(crate) fn browser_build_is_explicit(cmd: &Value) -> bool {
+    ["browserBuild", "browser_build", "browser-build"]
+        .iter()
+        .any(|key| cmd.get(key).and_then(Value::as_str).is_some())
+        || cmd.get("params").is_some_and(browser_build_is_explicit)
+}
 pub(crate) fn launch_command_with_effective_service_defaults(
     command: &Value,
     options: &LaunchOptions,
@@ -441,10 +450,7 @@ pub(crate) fn launch_command_with_effective_service_defaults(
         readiness_profile_id: optional_command_string(command, "readinessProfileId"),
         runtime_profile: runtime_profile_from_sources(command, false),
         browser_build: browser_build_from_command(command),
-        browser_build_explicit: command
-            .get("browserBuild")
-            .and_then(Value::as_str)
-            .is_some(),
+        browser_build_explicit: browser_build_is_explicit(command),
         browser_host: browser_host_from_command(command),
         view_stream_provider: optional_command_string(command, "viewStreamProvider")
             .or_else(|| optional_command_string(command, "viewStream"))

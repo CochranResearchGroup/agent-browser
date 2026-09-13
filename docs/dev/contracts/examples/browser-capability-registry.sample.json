@@ -77,7 +77,7 @@
       "profileLockBehavior": "exclusive_user_data_dir",
       "keyringBehavior": "basic_password_store",
       "knownLimits": [
-        "Google first sign-in should still be seeded without a CDP attachment",
+        "Google first sign-in may use headed stealth CDP unless site policy requires CDP-free operation",
         "Some Canva-class sites may still require cdp_free_headed posture"
       ]
     },
