@@ -287,7 +287,7 @@ def audit_repo(
             header = plan_header(text)
             state_match = PLAN_STATE_RE.search(header)
             lane_match = ROADMAP_LANE_RE.search(header)
-            if active_only and not state_match and not entry["filename_ok"]:
+            if active_only and not state_match:
                 excluded = report["excluded_unclassified_plans"]
                 assert isinstance(excluded, list)
                 excluded.append(plan_path.name)

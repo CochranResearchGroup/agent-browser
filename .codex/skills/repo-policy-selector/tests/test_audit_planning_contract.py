@@ -206,7 +206,7 @@ class PlanningContractAuditTests(unittest.TestCase):
         self.assertEqual(report["plans"][0]["lane_id"], "P0118")
         self.assertEqual(report["excluded_unclassified_plans"], [])
 
-    def test_active_only_rejects_state_found_only_in_plan_body(self):
+    def test_active_only_excludes_state_found_only_in_plan_body(self):
         root = self.make_repo(("planning-discipline",))
         plans = root / "docs/dev/plans"
         plans.mkdir(parents=True)
@@ -217,10 +217,10 @@ class PlanningContractAuditTests(unittest.TestCase):
 
         report = self.audit.audit_repo(root, active_only=True)
 
-        self.assertFalse(report["ok"])
-        self.assertIn(
-            "plan missing deterministic state: 0001-2026-07-20-ambiguous.md",
-            report["problems"],
+        self.assertTrue(report["ok"], report["problems"])
+        self.assertEqual(
+            report["excluded_unclassified_plans"],
+            ["0001-2026-07-20-ambiguous.md"],
         )
 
     def test_recognized_plan_indexes_are_not_audited_as_plans(self):

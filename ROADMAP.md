@@ -25,6 +25,17 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P179 | Policy Selector v0.1.26 Integration
+
+State: OPEN
+
+Current state: [Plan 0179](docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md)
+and [issue #89](https://github.com/CochranResearchGroup/agent-browser/issues/89)
+own the scoped integration of the already-created v0.1.26 policy rollout.
+Canonical `main` is clean and synchronized; the published rollout branch has
+merged current `origin/main` and is awaiting bounded local validation and pull
+request review. This lane authorizes no installed or live runtime effect.
+
 ## P177 | Development Governance And Repository Readiness
 
 State: CLOSED
@@ -671,16 +682,10 @@ and just-in-time viewer allocation in production.
 
 ## P123 | Exact Profile Compatibility Installed Admission
 
-State: OPEN
-Current state: the Plan 0122 repair and Plan 0123 admission are published on
-`origin/main` with zero local divergence. Candidate commit `5fd4be88` produced
-optimized binary SHA-256
-`ae49edfd9d71161543c8378c06688876984f891b46cedca5272de1e77ca2f811`.
-Installed doctor is green and converged on the prior generation. Candidate
-workstation dry-run is planned, supported, and non-mutating with effective
-groups, no missing commands, and sufficient disk. Resource and both GC
-dry-runs have zero candidates or warnings. Live transactional apply remains an
-explicit authorization gate.
+State: CANCELLED
+Current state: Plan 0123 is historical and superseded by later transactional
+installation and retained-profile campaigns, including Plan 0165. Its frozen
+candidate must not receive a new live apply.
 
 ### Plan
 
@@ -879,14 +884,10 @@ work.
 
 ## P114 | Terminal Route Quarantine Recovery
 
-State: OPEN
-Current state: one Google Messages route-bound acquisition lease remains in
-`rollback_incomplete` after its matching browser, process identity, and session
-disappeared and its route, display, and pool became terminal. The existing
-repair action now has focused source coverage for exact-lease dry run and
-apply, safe promotion to `rollback_complete`, and rejection when any live
-browser evidence remains. Broader validation and one installed exact-lease
-recovery remain open.
+State: CLOSED
+Current state: Plan 0114 is closed by Plan 0150's accepted production
+convergence and acquisition evidence. No separate active issue or installed
+recovery remains for the historical route.
 
 ### Plan
 

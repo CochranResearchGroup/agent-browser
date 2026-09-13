@@ -5,7 +5,6 @@
 - Use this contract in repositories where several projects, agents, branches, or worktrees may remain active at once. Keep lighter repositories on proportional planning and Git policy without requiring a lane catalog.
 - Keep a compact machine-readable active-lane catalog on the canonical default branch, normally `docs/dev/active-lanes.yaml`. A documented equivalent path is allowed.
 - Treat the catalog as a discovery projection. A roadmap owns priority, a branch-local plan owns execution detail, a runbook owns chronological history, review tooling owns review state, and Git refs plus receipts prove custody and integration.
-- Give each lane one stable id and one branch owner. Record its objective, plan path and source ref, branch, target, plan state, custody state, published checkpoint, remote ref, integration method, dependencies, overlaps, reconciliation date, and any blocker or disposition.
 - Give each lane one stable id and one branch owner. Record its objective, work-item locators when work-item tracking is adopted, plan path and source ref, branch, target, plan state, custody state, published checkpoint, remote ref, integration method, dependencies, overlaps, reconciliation date, and any blocker or disposition.
 - Give each substantive lane one accountable execution owner. When several lanes
   depend on shared schemas, roadmaps, catalogs, or other integration surfaces,

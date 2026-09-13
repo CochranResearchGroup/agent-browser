@@ -9,7 +9,7 @@ class MeasurementRoutingPolicyContractTests(unittest.TestCase):
         cls.bundle_root = cls.repo_root / "repo-policy-selector" / "policy-library"
 
     def module_text(self, module_id: str) -> str:
-        return (self.repo_root / "modules" / f"{module_id}.md").read_text(encoding="utf-8")
+        return (self.bundle_root / "modules" / f"{module_id}.md").read_text(encoding="utf-8")
 
     def normalized_module_text(self, module_id: str) -> str:
         return " ".join(self.module_text(module_id).split())
@@ -46,6 +46,8 @@ class MeasurementRoutingPolicyContractTests(unittest.TestCase):
             "subagent-workflow-optimization",
         ):
             source = self.repo_root / "modules" / f"{module_id}.md"
+            if not source.exists():
+                self.skipTest("selector source checkout is not present in an installed bundle")
             bundled = self.bundle_root / "modules" / f"{module_id}.md"
             self.assertEqual(source.read_bytes(), bundled.read_bytes(), module_id)
 

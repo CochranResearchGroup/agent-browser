@@ -24,6 +24,7 @@ const expected = [
   '0047-multi-session-development-operating-model.md',
   '0048-forge-issue-reporting.md',
   '0049-github-issue-operations.md',
+  '0050-collaborative-development-workflow.md',
 ];
 const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
 
@@ -38,6 +39,6 @@ assert.match(agents, /before any issue provider mutation/i);
 const release = JSON.parse(
   readFileSync(join(root, '.codex/skills/repo-policy-selector/release-manifest.json'), 'utf8'),
 );
-assert.equal(release.bundle_version, '0.1.25');
+assert.equal(release.bundle_version, '0.1.26');
 
 console.log(`Policy wiring verified: ${policyFiles.length} unique identities, selector v${release.bundle_version}`);

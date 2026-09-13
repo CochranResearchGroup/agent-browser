@@ -10,7 +10,7 @@ class CollaborativeDevelopmentPolicyContractTests(unittest.TestCase):
 
     def module_text(self) -> str:
         return (
-            self.repo_root / "modules" / "collaborative-development-workflow.md"
+            self.bundle_root / "modules" / "collaborative-development-workflow.md"
         ).read_text(encoding="utf-8")
 
     def test_collaboration_contract_has_required_boundaries(self) -> None:
@@ -44,6 +44,8 @@ class CollaborativeDevelopmentPolicyContractTests(unittest.TestCase):
 
     def test_source_module_matches_selector_bundle(self) -> None:
         source = self.repo_root / "modules" / "collaborative-development-workflow.md"
+        if not source.exists():
+            self.skipTest("selector source checkout is not present in an installed bundle")
         bundled = (
             self.bundle_root
             / "modules"
