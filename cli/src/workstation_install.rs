@@ -7613,6 +7613,8 @@ fn transfer_discovered_runtimes(
                 &old_binary,
                 &source_session,
                 &source.socket_dir,
+                transaction_id,
+                transaction_revision,
             )?;
         }
         match prepare_runtime_handoff_with_alias_fallback(
@@ -8570,6 +8572,8 @@ fn quiesce_browserless_shared_runtime_lanes(
     old_binary: &Path,
     primary_session: &str,
     source_socket_dir: &Path,
+    transaction_id: &str,
+    transaction_revision: u64,
 ) -> Result<Vec<String>, String> {
     let lanes = crate::session_supervisor::runtime_host_supervised_lane_configs()?
         .into_iter()
@@ -8579,20 +8583,24 @@ fn quiesce_browserless_shared_runtime_lanes(
         primary_session,
         lanes,
         |session| {
-            run_agent_json_detailed_in_socket_dir(
+            run_admission_claimed_agent_json_in_socket_dir(
                 old_binary,
                 session,
                 &["service", "status"],
-                Some((source_socket_dir, true)),
+                source_socket_dir,
+                transaction_id,
+                transaction_revision,
             )
             .map_err(|error| error.message)
         },
         |session| {
-            run_agent_json_detailed_in_socket_dir(
+            run_admission_claimed_agent_json_in_socket_dir(
                 old_binary,
                 session,
                 &["close"],
-                Some((source_socket_dir, true)),
+                source_socket_dir,
+                transaction_id,
+                transaction_revision,
             )
             .map_err(|error| error.message)
         },
@@ -9312,6 +9320,31 @@ fn run_agent_json_detailed_in_socket_dir(
 ) -> Result<Value, RuntimeTransactionCommandFailure> {
     retry_no_effect_runtime_handoff_prepare(command_args, || {
         run_agent_json_detailed_in_socket_dir_with(binary, session, command_args, runtime, |_| {})
+    })
+}
+
+fn run_admission_claimed_agent_json_in_socket_dir(
+    binary: &Path,
+    session: &str,
+    command_args: &[&str],
+    socket_dir: &Path,
+    transaction_id: &str,
+    transaction_revision: u64,
+) -> Result<Value, RuntimeTransactionCommandFailure> {
+    retry_no_effect_runtime_handoff_prepare(command_args, || {
+        run_agent_json_detailed_in_socket_dir_with(
+            binary,
+            session,
+            command_args,
+            Some((socket_dir, true)),
+            |command| {
+                configure_candidate_runtime_admission(
+                    command,
+                    transaction_id,
+                    transaction_revision,
+                );
+            },
+        )
     })
 }
 
@@ -17317,6 +17350,59 @@ mod tests {
                 "close:dashboard-service-backend"
             ]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shared_runtime_host_quiesce_commands_carry_exact_admission_claim() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-quiesce-admission-claim-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let binary = root.join("agent-browser");
+        let log_path = root.join("commands.txt");
+        fs::write(
+            &binary,
+            format!(
+                "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID\" \"$AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_REVISION\" \"$*\" >> '{}'\nprintf '%s\\n' '{{\"success\":true}}'\n",
+                log_path.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
+        let socket_dir = root.join("socket");
+        fs::create_dir_all(&socket_dir).unwrap();
+
+        run_admission_claimed_agent_json_in_socket_dir(
+            &binary,
+            "dashboard-service-backend",
+            &["service", "status"],
+            &socket_dir,
+            "upgrade-test",
+            8,
+        )
+        .unwrap();
+        run_admission_claimed_agent_json_in_socket_dir(
+            &binary,
+            "dashboard-service-backend",
+            &["close"],
+            &socket_dir,
+            "upgrade-test",
+            8,
+        )
+        .unwrap();
+
+        let commands = fs::read_to_string(&log_path).unwrap();
+        assert!(commands.contains(
+            "upgrade-test|8|--json --session dashboard-service-backend --service-state-lock-timeout-ms 30000 service status"
+        ));
+        assert!(commands.contains(
+            "upgrade-test|8|--json --session dashboard-service-backend --service-state-lock-timeout-ms 30000 close"
+        ));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
