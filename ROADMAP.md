@@ -27,15 +27,15 @@ field evidence and acceptance records into the same model.
 
 ## P179 | Policy Selector v0.1.26 Integration
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0179](docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md)
 and [issue #89](https://github.com/CochranResearchGroup/agent-browser/issues/89)
-own the scoped integration of the already-created v0.1.26 policy rollout.
-Canonical `main` is clean and synchronized; the published rollout branch has
-merged current `origin/main`. Checkpoint `966c61e4` passes bounded policy,
-selector, planning, goal, documentation, and patch-hygiene checks and awaits
-pull request review. This lane authorizes no installed or live runtime effect.
+record the scoped integration of the v0.1.26 policy rollout. PR #90 merged as
+`3f842f59` after bounded policy, selector, planning, goal, documentation, and
+patch-hygiene checks passed. Canonical `main` is clean and synchronized, and
+the integrated topic worktree plus refs are retired. No installed or live
+runtime effect occurred.
 
 ## P177 | Development Governance And Repository Readiness
 
@@ -58,9 +58,11 @@ State: OPEN
 Current state: [Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md),
 [issue #84](https://github.com/CochranResearchGroup/agent-browser/issues/84),
 and [PR #83](https://github.com/CochranResearchGroup/agent-browser/pull/83)
-hold the concurrent installer repair. Checkpoint `24159acb` is published with
-no dedicated worktree. Plan 0177 does not broaden its scope into runtime repair
-or installed acceptance.
+hold the installer repair. PR #83 merged checkpoint `f6b263f0` through
+`ae426642`. The retained worktree now contains a new uncommitted follow-up that
+carries exact runtime-admission claims into browserless status and close
+commands. It remains active owner custody and must not be closed or absorbed by
+the policy campaign. Installed acceptance remains separately gated.
 
 ## P12 | Selected Workspace Inspector And App Intelligence
 
