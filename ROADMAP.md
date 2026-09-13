@@ -11,9 +11,10 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 State: OPEN
 
-Current state: candidate `5a4fd859` passes both focused tests repeatedly, fmt,
-and strict Clippy. Affected compartments and comprehensive Rust remain before
-integration. The one-second deadline and process-identity fence are unchanged.
+Current state: candidate `5a4fd859` passes repeated focused tests, fmt, strict
+Clippy, 674 Service State tests, and 163 workstation tests. Local comprehensive
+compilation was blocked by stale shared-slice task occupancy; protected CI is
+the next authority. The deadline and identity fence remain unchanged.
 [Plan 0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md)
 is the active execution contract.
 

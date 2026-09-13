@@ -130,3 +130,28 @@ queued behind the repository resource-admission threshold.
 
 Next action: complete fmt, Clippy, affected compartments, and one comprehensive
 Rust run on the frozen candidate.
+
+## Checkpoint P0174-C03 | 2026-09-12
+
+State transition: `candidate_validation to protected_ci_validation`.
+
+Acceptance state: local affected surfaces accepted; local comprehensive run is
+non-qualifying because host task capacity failed before the native test lane.
+
+Progress classification: `blocker_reduction`; fmt, strict Clippy, 674 Service
+State tests, and 163 workstation tests pass. The comprehensive support lane
+completed its displayed test surfaces, but the native fresh-target compile
+failed with `EAGAIN` while creating compiler and linker threads.
+
+Evidence: five pre-existing Cargo scopes from September 10 and 11 retain 905
+of the shared slice's 1,024 task slots. They use little memory but leave
+insufficient task capacity for another fresh Rust compiler. The failed run is
+preserved as a host-infrastructure receipt, not a source failure.
+
+Material blockers: local comprehensive qualification cannot proceed without
+unauthorized stale-process cleanup or changing the shared task limit. Protected
+Linux CI does not use the WSL admission layer and is the next authoritative
+qualification surface.
+
+Next action: push the frozen candidate, open the fork PR, and require all
+protected checks including comprehensive Rust to pass without rerun.
