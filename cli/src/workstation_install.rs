@@ -13007,9 +13007,24 @@ mod tests {
         ));
         let socket_dir = root.join("runtime-host");
         fs::create_dir_all(&socket_dir).unwrap();
-        let mut child = Command::new("sleep").arg("60").spawn().unwrap();
-        let identity = crate::process_identity::capture_process_identity(child.id(), None, None)
-            .expect("capture fixture process identity");
+        let fixture_executable = root.join("runtime-host-fixture");
+        fs::copy("/bin/sleep", &fixture_executable).unwrap();
+        let mut child = Command::new(&fixture_executable).arg("60").spawn().unwrap();
+        let identity_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let identity = loop {
+            if let Some(identity) = crate::process_identity::capture_process_identity(
+                child.id(),
+                Some(&fixture_executable),
+                None,
+            ) {
+                break identity;
+            }
+            assert!(
+                std::time::Instant::now() < identity_deadline,
+                "fixture process did not publish its final executable identity"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
         write_private_json_atomic(&socket_dir.join("runtime-host.identity.json"), &identity)
             .unwrap();
 

@@ -2,6 +2,10 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 305 | 2026-09-12
+
+[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md) is OPEN on PR54; focused tests, fmt, strict Clippy, and both affected compartments pass. Local comprehensive compilation was blocked by five stale Cargo scopes occupying 905 of 1,024 shared task slots; protected CI is running. No stale-process cleanup, install, or runtime effect is authorized.
+
 ## Turn 304 | 2026-09-12
 
 [Plan0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
