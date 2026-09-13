@@ -356,6 +356,21 @@ scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml
   command logs, secrets, auth state, browser artifacts, private site data, or
   every small commit.
 
+## Product Lane Routing
+
+- Before creating a substantive plan, branch, or worktree, select one primary
+  product lane from `docs/dev/product-lanes.md`.
+- Record `Product lane: <ID>` in the plan and `product_lane: <ID>` in the active
+  lane catalog. Product lanes own long-lived boundaries; numbered plans own one
+  bounded delivery outcome.
+- Use the lane's branch prefix and default worktree limit. Do not let a bugfix
+  become a shadow architecture or feature lane.
+- When two lanes need a shared source or documentation surface, record one
+  primary writer and an explicit dependency or overlap before either agent
+  edits it. Merge the provider contract before dependent consumers.
+- Route field notes through `docs/dev/notes/README.md`. Notes preserve evidence;
+  they are not branch custody, execution authority, or a second backlog.
+
 ## Windows Debugging
 
 A remote Windows Server 2022 EC2 instance is available for debugging Windows-specific issues. It uses AWS Systems Manager (SSM) with no SSH or open ports. Commands run via `aws ssm send-command` and return stdout/stderr.

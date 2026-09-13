@@ -2,6 +2,17 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 311 | 2026-09-13
+
+[Plan0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
+is active on `platform/product-lanes-note-consolidation`. It defines five stable
+product lanes above numbered plans, routes reusable notes without rewriting
+history, places Plan 0161 under platform ownership, and establishes worktree,
+shared-writer, overlap, dependency, and merge rules for multi-agent development.
+No product behavior, runtime, browser, profile, credential, provider, or tenant
+effect is in scope. The next gate is documentation validation and review-ready
+Git custody.
+
 ## Turn 310 | 2026-09-13
 
 [Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)

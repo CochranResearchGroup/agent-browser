@@ -1,11 +1,39 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-12
+Updated: 2026-09-13
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## Stable Product Lanes
+
+[Agent Browser product lanes](docs/dev/product-lanes.md) define the stable
+ownership model above numbered delivery plans:
+
+- `PL-BUGFIX`: reliability and bounded defect repair;
+- `PL-AUTH`: credential management and automated authentication;
+- `PL-CHALLENGE`: CAPTCHA and anti-automation challenge handling;
+- `PL-RECIPES`: deterministic reusable automation recipes and helpers; and
+- `PL-PLATFORM`: architecture, runtime, supervisor, Service State, installation,
+  shared desktop services, and development infrastructure.
+
+Numbered `P###` entries below remain delivery plans and historical roadmap
+checkpoints. They do not define permanent product ownership. New substantive
+plans select one product lane and use the active-lane catalog for branch and
+worktree custody. [The notes index](docs/dev/notes/README.md) routes current
+field evidence and acceptance records into the same model.
+
+## P176 | Product Lane And Note Consolidation
+
+State: OPEN
+
+Current state: five stable product lanes, note-routing rules, multi-agent WIP
+limits, shared-writer arbitration, dependency ordering, and Plan 0161 platform
+ownership are drafted on `platform/product-lanes-note-consolidation`.
+[Plan 0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
+owns the documentation-only integration and closeout.
 
 ## P174 | CI Production-Scale And Process-Identity Reliability
 
