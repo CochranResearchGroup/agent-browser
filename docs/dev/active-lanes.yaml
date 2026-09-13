@@ -1,5 +1,37 @@
 schema_version: 1
 lanes:
+  - id: P174
+    objective: Repair comprehensive Rust production-scale timing and process-identity fixture reliability
+    plan: docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md
+    plan_ref: refs/heads/fix/plan-0174-ci-reliability
+    branch: fix/plan-0174-ci-reliability
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: d7250923c5f5ae20b4e8a338a5d7ceb657f3eb74
+    remote_ref: refs/remotes/origin/fix/plan-0174-ci-reliability
+    integration_receipt: null
+    integration: merge
+    dependencies: [P167]
+    overlaps: [cli/src/native/service_store.rs, cli/src/workstation_install.rs]
+    reconciled_overlaps: []
+    updated_at: 2026-09-12
+  - id: P173
+    objective: Repair expired-session retained-browser reuse through canonical acquisition and handle truth
+    plan: docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md
+    plan_ref: refs/heads/fix/plan-0173-expired-session-reuse
+    branch: fix/plan-0173-expired-session-reuse
+    target: main
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 2156aaad472ecebb1f79e7d5ce79419949b4705c
+    remote_ref: refs/remotes/origin/main
+    integration_receipt: merge:2156aaad472ecebb1f79e7d5ce79419949b4705c
+    integration: merge
+    dependencies: [P144, P165]
+    overlaps: [cli/src/native/service_profile_acquisition.rs, cli/src/native/browser_lifecycle.rs, cli/src/native/browser_tabs.rs]
+    reconciled_overlaps: []
+    updated_at: 2026-09-12
   - id: P165
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
     plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md

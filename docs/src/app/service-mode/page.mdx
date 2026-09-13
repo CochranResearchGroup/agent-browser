@@ -888,7 +888,11 @@ an existing compatible live browser, wait for the profile lease with
 compatible acquisition lane exists. <code>compatibleLiveBrowserCount</code>
 counts browsers that can accept the planned operation, while
 <code>sameProfileLiveBrowserCount</code> reports healthy same-profile
-observations. Tab reuse does not inherit new-launch presentation defaults, but
+observations. A healthy retained browser linked only to inactive sessions
+reports <code>rejoin_profile_lease</code> with blocker
+<code>expired_session_recovery_required</code>. Inspect and rejoin the exact
+profile lease, then request a fresh access plan. Tab reuse does not inherit
+new-launch presentation defaults, but
 explicit host, stream, input, and display constraints remain strict. Duplicate live browsers or duplicate active
 leases for the selected profile are exposed as <code>duplicatePressure</code>
 so clients can queue instead of cloning equivalent runtime profiles. When the

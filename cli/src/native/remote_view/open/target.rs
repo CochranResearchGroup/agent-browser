@@ -243,7 +243,7 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
     tab["duplicateTargetCleanup"] = no_duplicate_target_cleanup();
     if !reacquire_only {
         if let Some(service_tab_handle) = tab.get("serviceTabHandle").cloned() {
-            persist_service_owned_tab_new(
+            let canonical_service_tab_handle = persist_service_owned_tab_new(
                 cmd,
                 session_id,
                 tab.get("targetId").and_then(Value::as_str),
@@ -251,7 +251,18 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
                 tab.get("title").and_then(Value::as_str),
                 &service_tab_handle,
             )
-            .map_err(|message| route_bound_runtime_issue("open_target", message, Some(cmd)))?;
+            .map_err(|message| route_bound_runtime_issue("open_target", message, Some(cmd)))?
+            .ok_or_else(|| {
+                route_bound_runtime_issue(
+                    "open_target",
+                    "persisted service tab handle is unavailable".to_string(),
+                    Some(cmd),
+                )
+            })?;
+            tab["serviceTabHandle"] =
+                serde_json::to_value(canonical_service_tab_handle).map_err(|error| {
+                    route_bound_runtime_issue("open_target", error.to_string(), Some(cmd))
+                })?;
         }
     }
     Ok(tab)
@@ -300,20 +311,27 @@ pub(crate) fn route_bound_open_reused_target_result(
     );
     // Resolving presentation carries no new client acquisition authority.
     // Persisting this synthetic handle would erase the original child's grant.
-    if cmd.get("durableResolutionMode").and_then(Value::as_str) != Some("reacquire_only") {
-        persist_service_owned_tab_new(
-            cmd,
-            session_id,
-            Some(target_id),
-            Some(&url),
-            Some(&title),
-            &service_tab_handle,
-        )?;
-    }
+    let canonical_service_tab_handle =
+        if cmd.get("durableResolutionMode").and_then(Value::as_str) != Some("reacquire_only") {
+            persist_service_owned_tab_new(
+                cmd,
+                session_id,
+                Some(target_id),
+                Some(&url),
+                Some(&title),
+                &service_tab_handle,
+            )?
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| error.to_string())?
+            .unwrap_or(service_tab_handle)
+        } else {
+            service_tab_handle
+        };
     Ok(json!(
         { "targetId" : target_id, "url" : url, "title" : title, "browserId" :
         browser_id, "sessionId" : session_id, "profileId" : profile_id,
-        "serviceTabHandle" : service_tab_handle, "reusedExistingTarget" : true,
+        "serviceTabHandle" : canonical_service_tab_handle, "reusedExistingTarget" : true,
         "tabAcquisitionDecision" : decision, "targetReadiness" :
         route_bound_handoff_target_url_readiness(cmd.get("url")
         .and_then(Value::as_str), Some(& url),), "tabSwitch" : switch, }

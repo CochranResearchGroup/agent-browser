@@ -335,7 +335,7 @@ fn tab_persistence_uses_service_handle_browser_identity() {
         ..ServiceTabHandle::default()
     };
 
-    persist_service_owned_tab_new(
+    let returned = persist_service_owned_tab_new(
         &json!({"action":"tab_new", "serviceName":"books-receipts"}),
         "daemon-route",
         Some("owned"),
@@ -343,13 +343,21 @@ fn tab_persistence_uses_service_handle_browser_identity() {
         None,
         &serde_json::to_value(handle).unwrap(),
     )
-    .unwrap();
+    .unwrap()
+    .expect("tab persistence should return the canonical handle");
 
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
-    let current = store.load().unwrap();
+    let mut current = store.load().unwrap();
+    current.refresh_service_tab_handles();
     assert_eq!(
         current.tabs["target:owned"].browser_id,
         "session:durable-browser"
+    );
+    assert_eq!(
+        returned,
+        current
+            .service_tab_handle("target:owned")
+            .expect("canonical handle should remain projected")
     );
 }
 
@@ -483,19 +491,48 @@ fn test_tab_handle_refresh_handle_builder_preserves_trace_context() {
         "https://example.com/recover",
         "Recovered",
     );
-    assert_eq!(refreshed["browserId"], "session:service-session");
+    assert_eq!(refreshed["browserId"], "session:old");
     assert_eq!(refreshed["sessionName"], "service-session");
     assert_eq!(refreshed["tabId"], "target:old-target");
     assert_eq!(refreshed["targetId"], "new-target");
     assert_eq!(refreshed["profileId"], "profile-1");
     assert_eq!(refreshed["valid"], true);
     assert_eq!(refreshed["staleReason"], Value::Null);
-    assert_eq!(
-        refreshed["traceFilter"]["browserId"],
-        "session:service-session"
-    );
+    assert_eq!(refreshed["traceFilter"]["browserId"], "session:old");
     assert_eq!(refreshed["traceFilter"]["profileId"], "profile-1");
     assert_eq!(refreshed["traceFilter"]["sessionId"], "service-session");
+}
+
+#[test]
+fn test_tab_handle_refresh_handle_builder_preserves_expired_lease_invalidity() {
+    let previous = serde_json::Map::from_iter([
+        ("browserId".to_string(), json!("session:retained-browser")),
+        ("sessionName".to_string(), json!("retained-session")),
+        ("tabId".to_string(), json!("target:old-target")),
+        ("targetId".to_string(), json!("old-target")),
+        ("profileId".to_string(), json!("bill-soylei")),
+        ("leaseId".to_string(), json!("retained-session")),
+        ("leaseState".to_string(), json!("expired")),
+        ("valid".to_string(), json!(false)),
+        ("staleReason".to_string(), json!("lease_expired")),
+    ]);
+
+    let refreshed = refreshed_service_tab_handle(
+        &previous,
+        "retained-session",
+        "same-target",
+        "https://app.bill.com/",
+        "BILL",
+    );
+
+    assert_eq!(refreshed["browserId"], "session:retained-browser");
+    assert_eq!(refreshed["leaseState"], "expired");
+    assert_eq!(refreshed["valid"], false);
+    assert_eq!(refreshed["staleReason"], "lease_expired");
+    assert_eq!(
+        inactive_handle_lease_stale_reason(refreshed.as_object().unwrap()),
+        Some("lease_expired")
+    );
 }
 #[test]
 fn test_tab_new_shared_acquisition_evidence_reports_reused_route_hints() {

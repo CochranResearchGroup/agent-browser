@@ -2,6 +2,22 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 305 | 2026-09-12
+
+[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md) is OPEN on PR54; focused tests, fmt, strict Clippy, and both affected compartments pass. Local comprehensive compilation was blocked by five stale Cargo scopes occupying 905 of 1,024 shared task slots; protected CI is running. No stale-process cleanup, install, or runtime effect is authorized.
+
+## Turn 304 | 2026-09-12
+
+[Plan0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
+is CLOSED. PR52 merged as `2156aaad`; exact binary `cae894cf25f2` installed as
+generation `0.28.0-cae894cf25f2-a4332e7facd9` through accepted transaction
+`upgrade-e371f1fa-80a6-485a-a3dd-2e2c6e785454` revision 13. Installed
+acceptance proved stale same-principal rejoin, exact retained-browser reuse,
+canonical valid handle, page probe, verified exact-tab release, 16 surviving
+peer tabs, and Chrome PID 49619 continuity. BILL itself now redirects to login;
+no provider or accounting mutation occurred. The closeout retains a separate
+shared-tab cleanup-policy projection-label mismatch for bounded follow-up.
+
 ## Turn 303 | 2026-09-12
 
 Plan0171 is CLOSED through PR43 at `40da27f7`; final CI `34707619741` passed after Cargo-target isolation repaired a parallel runner race and the no-launch MCP inventory was synchronized.
@@ -9,23 +25,6 @@ Exact SHA-256 `2c185ec7ccd691deaf0ee59412d3d31485ab0d8ad464cc02775785fb81be621d`
 Admission drain is off, multiplicity is steady, and resources have zero candidates or unknown obligations; operator-journey and default-profile lease warnings remain nonblocking.
 A compiler probe exposed gaps in sccache's blacklist sanitizer; cache-off completed in 4m25s, with hardening retained as a security follow-up. The retained Graphiti job's final bounded retry timed out before episode creation; do not queue a duplicate.
 No browser, profile, provider, route, cleanup, or unrelated-worktree effect occurred.
-
-## Turn 301 | 2026-09-12
-
-Plan0170 is CLOSED and source-qualified on isolated branch `maintenance/plan-0170-job-timestamp-ordering`. Service Job `startedAt` now cannot precede `submittedAt`, and `completedAt` cannot precede the recorded start or submission boundary, even if the host wall clock moves backward. Monotonic deadline behavior is unchanged. Three focused Rust tests, formatting, and workspace clippy pass. The first compile attempt retained an infrastructure failure at 947 of 1,024 Cargo-slice tasks; one job with cache disabled completed without cleanup or hidden retry. Graphiti job `084f242a-977a-4017-a113-6f9a5e62b1a3` failed once with a retryable `TimeoutError` before episode creation; preserve it as `graphiti_write_pending` for the next closeout rather than enqueueing a duplicate. No production install, restart, browser, profile, provider, tenant, Service State, or timeout effect occurred. Integrate this source with the next consolidated candidate rather than replacing production solely for timestamp display ordering.
-
-## Turn 302 | 2026-09-12
-
-Plan0172 is CLOSED through PR46 at `8d3f552f`. The integrated repair preserves
-path-backed custom profile identity, rejects invalid named runtime profiles
-before launch, reconciles exact retained-browser owner aliases during
-navigation persistence, and reports runtime admission drain as confirmed
-pre-effect. All selected source gates pass. Read-only evidence shows upgrade
-transaction `upgrade-55a6f48d-5988-4be8-a626-1d234c6e0a1b` accepted at revision
-14 and the retained PID92141 browser, owner generation102, session, and South
-Carolina target coherently projected. No production install, browser effect,
-profile mutation, or Fresh Roof continuation occurred. Plan0165 remains OPEN
-for its separately authorized consumer acceptance.
 
 ## Turn 297 | 2026-09-11
 

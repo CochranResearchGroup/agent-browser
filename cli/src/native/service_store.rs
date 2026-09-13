@@ -3232,9 +3232,8 @@ mod tests {
             1
         );
         assert!(
-            elapsed < Duration::from_millis(900),
-            "production-scale contender used insufficient one-second headroom: {} ms",
-            elapsed.as_millis()
+            contender_commit_wait_ms < 900,
+            "production-scale contender commit used insufficient one-second lock-wait headroom: {contender_commit_wait_ms} ms"
         );
         assert!(
             contender_commit_hold_ms < 500,

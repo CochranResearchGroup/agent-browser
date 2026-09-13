@@ -1,11 +1,37 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-11
+Updated: 2026-09-12
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P174 | CI Production-Scale And Process-Identity Reliability
+
+State: OPEN
+
+Current state: candidate `5a4fd859` passes repeated focused tests, fmt, strict
+Clippy, 674 Service State tests, and 163 workstation tests. Local comprehensive
+compilation was blocked by stale shared-slice task occupancy; protected CI is
+running on PR 54 as the next authority. The deadline and identity fence remain
+unchanged.
+[Plan 0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md)
+is the active execution contract.
+
+## P173 | Expired Session Retained Browser Reuse Repair
+
+State: CLOSED
+
+Closed: PR 52 merged as `2156aaad472ecebb1f79e7d5ce79419949b4705c`
+after complete CI. Generation `0.28.0-cae894cf25f2-a4332e7facd9` was installed
+transactionally and passed exact same-principal lease rejoin, retained-browser
+reuse, canonical valid-handle, page probe, exact-tab release, and Chrome PID
+49619 continuity. BILL's website session is independently at login. A separate
+shared-tab cleanup-policy label mismatch is retained in the plan closeout for a
+future bounded contract repair.
+[Plan 0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
+is the closed execution record.
 
 ## P171 | Service Job Timestamp Integration And Install
 
