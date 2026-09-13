@@ -143,7 +143,7 @@ handoff authority fails closed. Reconciliation also expires active session
 leases whose recorded browser ownership no longer exists, preventing stale
 session rows from holding a profile indefinitely.
 
-Do not use <code>--attachable</code> for the initial sign-in on Google, Gmail, or similar SSO flows. Google can reject sign-in when DevTools is present during the login ceremony. Sign in with detached <code>runtime login</code>, close Chrome, then relaunch the same runtime profile with <code>--attachable</code> for automation:
+The built-in Google and Gmail policies use headed stealth Chromium, so the initial sign-in may remain attachable. Use detached <code>runtime login</code> only when an effective site policy sets <code>requiresCdpFree</code>, then close Chrome and relaunch the same runtime profile with <code>--attachable</code> for automation:
 
 ```bash
 agent-browser --runtime-profile google-login runtime login https://accounts.google.com

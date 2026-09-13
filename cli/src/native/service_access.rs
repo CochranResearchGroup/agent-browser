@@ -199,7 +199,12 @@ fn service_access_plan_artifact_for_state_with_principal(
 ) -> ServiceAccessPlanArtifact {
     let original_state = service_state;
     let mut effective_state = original_state.clone();
-    effective_state.refresh_profile_readiness();
+    effective_state.refresh_profile_readiness_for_browser_build(
+        request
+            .browser_build_explicit
+            .then_some(request.browser_build)
+            .flatten(),
+    );
     let service_state = &effective_state;
     if let Some(site_policy_id) = request
         .target_url
@@ -716,8 +721,11 @@ fn browser_build_for_evidence(
     selected_profile: Option<&BrowserProfile>,
     site_policy: Option<&SitePolicy>,
 ) -> Option<BrowserBuild> {
-    site_policy
-        .and_then(|policy| policy.browser_build)
+    request
+        .browser_build_explicit
+        .then_some(request.browser_build)
+        .flatten()
+        .or_else(|| site_policy.and_then(|policy| policy.browser_build))
         .or_else(|| selected_profile.and_then(|profile| profile.browser_build))
         .or(request.browser_build)
         .or(service_state.default_browser_build)
@@ -6885,16 +6893,16 @@ mod tests {
             "https://accounts.google.com"
         );
         assert_eq!(plan["decision"]["browserHost"], "local_headed");
-        assert_eq!(plan["decision"]["interactionRisk"], "manual");
+        assert_eq!(plan["decision"]["interactionRisk"], "hardened");
         assert_eq!(plan["decision"]["pacing"]["singleSessionRecommended"], true);
         assert_eq!(plan["decision"]["launchPosture"]["requiresCdpFree"], false);
         assert_eq!(
             plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
-            true
+            false
         );
         assert_eq!(
             plan["decision"]["recommendedAction"],
-            "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+            "verify_or_seed_profile_before_authenticated_work"
         );
     }
 

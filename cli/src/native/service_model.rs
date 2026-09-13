@@ -2790,10 +2790,25 @@ impl ServiceState {
 
     /// Refresh profile target-readiness rows from retained service policy.
     pub fn refresh_profile_readiness(&mut self) {
+        self.refresh_profile_readiness_for_browser_build(None);
+    }
+
+    /// Refresh readiness for an access-plan build override without persisting
+    /// authentication evidence or changing the configured browser default.
+    pub(crate) fn refresh_profile_readiness_for_browser_build(
+        &mut self,
+        browser_build_override: Option<BrowserBuild>,
+    ) {
         self.apply_builtin_site_policies();
         let site_policies = self.site_policies.clone();
+        let default_browser_build = self.default_browser_build;
         for profile in self.profiles.values_mut() {
-            profile.target_readiness = derive_profile_target_readiness(profile, &site_policies);
+            profile.target_readiness = derive_profile_target_readiness(
+                profile,
+                &site_policies,
+                default_browser_build,
+                browser_build_override,
+            );
         }
     }
 
@@ -3378,6 +3393,8 @@ pub fn service_profile_sources(service_state: &ServiceState) -> Vec<ProfileSourc
 fn derive_profile_target_readiness(
     profile: &BrowserProfile,
     site_policies: &BTreeMap<String, SitePolicy>,
+    default_browser_build: Option<BrowserBuild>,
+    browser_build_override: Option<BrowserBuild>,
 ) -> Vec<ProfileTargetReadiness> {
     let explicit_readiness = profile
         .target_readiness
@@ -3406,8 +3423,13 @@ fn derive_profile_target_readiness(
     target_service_ids
         .into_iter()
         .map(|target_service_id| {
-            let derived =
-                derive_target_readiness_for_profile(profile, site_policies, &target_service_id);
+            let derived = derive_target_readiness_for_profile(
+                profile,
+                site_policies,
+                &target_service_id,
+                default_browser_build,
+                browser_build_override,
+            );
             if let Some(explicit) = explicit_readiness.get(&target_service_id) {
                 normalize_explicit_target_readiness(explicit, derived)
             } else {
@@ -3773,7 +3795,7 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             id: "google".to_string(),
             origin_pattern: "https://accounts.google.com".to_string(),
             browser_host: Some(BrowserHost::LocalHeaded),
-            browser_build: Some(BrowserBuild::StockChrome),
+            browser_build: Some(BrowserBuild::StealthcdpChromium),
             interaction_mode: InteractionMode::HumanLikeInput,
             rate_limit: RateLimitPolicy {
                 min_action_delay_ms: Some(500),
@@ -3782,12 +3804,12 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
                 max_parallel_sessions: Some(1),
                 retry_budget: Some(1),
             },
-            manual_login_preferred: true,
+            manual_login_preferred: false,
             profile_required: true,
             challenge_policy: ChallengePolicy::ManualOnly,
             allowed_challenge_providers: vec!["manual".to_string()],
             notes: Some(
-                "Google first sign-in should use detached headed Chrome before attachable automation."
+                "Google sign-in should use headed stealth Chromium; a failed sign-in or encountered challenge may require operator intervention."
                     .to_string(),
             ),
             ..SitePolicy::default()
@@ -3796,7 +3818,7 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             id: "gmail".to_string(),
             origin_pattern: "https://mail.google.com".to_string(),
             browser_host: Some(BrowserHost::LocalHeaded),
-            browser_build: Some(BrowserBuild::StockChrome),
+            browser_build: Some(BrowserBuild::StealthcdpChromium),
             interaction_mode: InteractionMode::HumanLikeInput,
             rate_limit: RateLimitPolicy {
                 min_action_delay_ms: Some(500),
@@ -3805,12 +3827,12 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
                 max_parallel_sessions: Some(1),
                 retry_budget: Some(1),
             },
-            manual_login_preferred: true,
+            manual_login_preferred: false,
             profile_required: true,
             challenge_policy: ChallengePolicy::ManualOnly,
             allowed_challenge_providers: vec!["manual".to_string()],
             notes: Some(
-                "Gmail inherits Google sign-in seeding and should prefer a persistent headed profile."
+                "Gmail inherits headed stealth Chromium sign-in and should prefer a persistent profile."
                     .to_string(),
             ),
             ..SitePolicy::default()
@@ -3873,13 +3895,21 @@ fn derive_target_readiness_for_profile(
     profile: &BrowserProfile,
     site_policies: &BTreeMap<String, SitePolicy>,
     target_service_id: &str,
+    default_browser_build: Option<BrowserBuild>,
+    browser_build_override: Option<BrowserBuild>,
 ) -> ProfileTargetReadiness {
     let authenticated = profile
         .authenticated_service_ids
         .iter()
         .any(|id| id == target_service_id);
     let manual_seeding_required = !authenticated
-        && target_requires_detached_manual_seeding(profile, site_policies, target_service_id);
+        && target_requires_detached_manual_seeding(
+            profile,
+            site_policies,
+            target_service_id,
+            default_browser_build,
+            browser_build_override,
+        );
     let (state, evidence, recommended_action, seeding_mode, preferred_keyring, setup_scopes) =
         if authenticated {
             (
@@ -3934,13 +3964,23 @@ fn target_requires_detached_manual_seeding(
     profile: &BrowserProfile,
     site_policies: &BTreeMap<String, SitePolicy>,
     target_service_id: &str,
+    default_browser_build: Option<BrowserBuild>,
+    browser_build_override: Option<BrowserBuild>,
 ) -> bool {
+    let site_policy = site_policies.get(target_service_id);
+    if site_policy.is_some_and(|policy| policy.requires_cdp_free) {
+        return true;
+    }
+    let effective_browser_build = browser_build_override
+        .or_else(|| site_policy.and_then(|policy| policy.browser_build))
+        .or(profile.browser_build)
+        .or(default_browser_build);
+    if effective_browser_build == Some(BrowserBuild::StealthcdpChromium) {
+        return false;
+    }
     profile.manual_login_preferred
         || target_is_google_signin(target_service_id)
-        || site_policies
-            .get(target_service_id)
-            .map(|policy| policy.manual_login_preferred)
-            .unwrap_or(false)
+        || site_policy.is_some_and(|policy| policy.manual_login_preferred)
 }
 
 fn target_is_google_signin(target_service_id: &str) -> bool {
@@ -10182,6 +10222,18 @@ mod tests {
             state.site_policies["gmail"].challenge_policy,
             ChallengePolicy::ManualOnly
         );
+        assert_eq!(state.site_policies["google"].browser_build, None);
+        let builtin_google = builtin_site_policy("google").unwrap();
+        assert_eq!(
+            builtin_google.browser_build,
+            Some(BrowserBuild::StealthcdpChromium)
+        );
+        assert!(!builtin_google.manual_login_preferred);
+        assert_eq!(
+            state.site_policies["gmail"].browser_build,
+            Some(BrowserBuild::StealthcdpChromium)
+        );
+        assert!(!state.site_policies["gmail"].manual_login_preferred);
         assert_eq!(
             state.site_policies["google_sheets"].browser_build,
             Some(BrowserBuild::StealthcdpChromium)
@@ -10274,6 +10326,82 @@ mod tests {
             seeded_google.recommended_action,
             "probe_target_auth_or_reuse_if_acceptable"
         );
+    }
+
+    #[test]
+    fn refresh_profile_readiness_allows_stealth_cdp_first_login() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-stealth".to_string(),
+                BrowserProfile {
+                    id: "google-stealth".to_string(),
+                    name: "Google Stealth".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    browser_build: Some(BrowserBuild::StealthcdpChromium),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    manual_login_preferred: true,
+                    ..SitePolicy::default()
+                },
+            )]),
+            default_browser_build: Some(BrowserBuild::StealthcdpChromium),
+            ..ServiceState::default()
+        };
+
+        state.refresh_profile_readiness();
+
+        let readiness = &state.profiles["google-stealth"].target_readiness[0];
+        assert_eq!(readiness.state, ProfileReadinessState::Unknown);
+        assert!(!readiness.manual_seeding_required);
+        assert_eq!(readiness.seeding_mode, ProfileSeedingMode::AttachableOk);
+        assert!(readiness.cdp_attachment_allowed_during_seeding);
+        assert_eq!(
+            readiness.recommended_action,
+            "verify_or_seed_profile_before_authenticated_work"
+        );
+    }
+
+    #[test]
+    fn refresh_profile_readiness_preserves_required_cdp_free_first_login() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "strict-login".to_string(),
+                BrowserProfile {
+                    id: "strict-login".to_string(),
+                    name: "Strict Login".to_string(),
+                    target_service_ids: vec!["strict-login".to_string()],
+                    browser_build: Some(BrowserBuild::StealthcdpChromium),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "strict-login".to_string(),
+                SitePolicy {
+                    id: "strict-login".to_string(),
+                    manual_login_preferred: true,
+                    requires_cdp_free: true,
+                    ..SitePolicy::default()
+                },
+            )]),
+            default_browser_build: Some(BrowserBuild::StealthcdpChromium),
+            ..ServiceState::default()
+        };
+
+        state.refresh_profile_readiness();
+
+        let readiness = &state.profiles["strict-login"].target_readiness[0];
+        assert_eq!(readiness.state, ProfileReadinessState::NeedsManualSeeding);
+        assert!(readiness.manual_seeding_required);
+        assert_eq!(
+            readiness.seeding_mode,
+            ProfileSeedingMode::DetachedHeadedNoCdp
+        );
+        assert!(!readiness.cdp_attachment_allowed_during_seeding);
     }
 
     #[test]
