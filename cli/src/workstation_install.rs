@@ -7608,6 +7608,13 @@ fn transfer_discovered_runtimes(
             preserve_runtime_without_live_source(migration);
             continue;
         }
+        if source.is_runtime_host {
+            quiesce_browserless_shared_runtime_lanes(
+                &old_binary,
+                &source_session,
+                &source.socket_dir,
+            )?;
+        }
         match prepare_runtime_handoff_with_alias_fallback(
             &old_binary,
             &service_state,
@@ -8517,6 +8524,124 @@ fn prepare_runtime_handoff_with_alias_fallback(
             )
         },
         retire_idle_daemon,
+    )
+}
+
+fn quiesce_browserless_shared_runtime_lanes_with<Observe, Close>(
+    primary_session: &str,
+    lanes: Vec<String>,
+    mut observe: Observe,
+    mut close: Close,
+) -> Result<Vec<String>, String>
+where
+    Observe: FnMut(&str) -> Result<Value, String>,
+    Close: FnMut(&str) -> Result<Value, String>,
+{
+    let mut closed = Vec::new();
+    let lanes = lanes
+        .into_iter()
+        .filter(|session| session != primary_session)
+        .collect::<std::collections::BTreeSet<_>>();
+    for session in lanes {
+        let status = observe(&session)?;
+        let health = status
+            .pointer("/data/control_plane/browser_health")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                format!("runtime_host_competing_lane_browser_health_unavailable:{session}")
+            })?;
+        if health != "NotStarted" {
+            return Err(format!(
+                "runtime_host_competing_lane_not_browserless:{session}:{health}"
+            ));
+        }
+        let response = close(&session)?;
+        if response.get("success").and_then(Value::as_bool) != Some(true) {
+            return Err(format!(
+                "runtime_host_browserless_lane_close_unconfirmed:{session}"
+            ));
+        }
+        closed.push(session);
+    }
+    Ok(closed)
+}
+
+fn quiesce_browserless_shared_runtime_lanes(
+    old_binary: &Path,
+    primary_session: &str,
+    source_socket_dir: &Path,
+) -> Result<Vec<String>, String> {
+    let lanes = crate::session_supervisor::runtime_host_supervised_lane_configs()?
+        .into_iter()
+        .map(|(session, _)| session)
+        .collect();
+    let closed = quiesce_browserless_shared_runtime_lanes_with(
+        primary_session,
+        lanes,
+        |session| {
+            run_agent_json_detailed_in_socket_dir(
+                old_binary,
+                session,
+                &["service", "status"],
+                Some((source_socket_dir, true)),
+            )
+            .map_err(|error| error.message)
+        },
+        |session| {
+            run_agent_json_detailed_in_socket_dir(
+                old_binary,
+                session,
+                &["close"],
+                Some((source_socket_dir, true)),
+            )
+            .map_err(|error| error.message)
+        },
+    )?;
+    require_stable_service_state_revision()?;
+    Ok(closed)
+}
+
+fn require_stable_service_state_revision_with<Observe, Wait>(
+    mut observe: Observe,
+    wait: Wait,
+) -> Result<u64, String>
+where
+    Observe: FnMut() -> Result<u64, String>,
+    Wait: FnOnce(),
+{
+    let before = observe()?;
+    wait();
+    let after = observe()?;
+    if before != after {
+        return Err(format!(
+            "runtime_host_service_state_writer_not_quiesced:before={before}:after={after}"
+        ));
+    }
+    Ok(after)
+}
+
+fn require_stable_service_state_revision() -> Result<u64, String> {
+    let path = crate::native::service_store::JsonServiceStateStore::default_path()?;
+    require_stable_service_state_revision_with(
+        || {
+            let bytes = fs::read(&path).map_err(|error| {
+                format!(
+                    "runtime_host_service_state_revision_read_failed:{}:{error}",
+                    path.display()
+                )
+            })?;
+            serde_json::from_slice::<Value>(&bytes)
+                .map_err(|error| {
+                    format!(
+                        "runtime_host_service_state_revision_invalid:{}:{error}",
+                        path.display()
+                    )
+                })?
+                .get("stateRevision")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| "runtime_host_service_state_revision_unavailable".to_string())
+        },
+        || std::thread::sleep(std::time::Duration::from_millis(1_250)),
     )
 }
 
@@ -14705,18 +14830,35 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn finalized_runtime_host_grace_observes_self_exit_before_pidfd_fallback() {
-        let mut child = Command::new("/bin/sleep").arg("0.05").spawn().unwrap();
-        let executable = PathBuf::from(format!("/proc/{}/exe", child.id()))
-            .canonicalize()
-            .unwrap();
-        let identity =
-            crate::process_identity::capture_process_identity(child.id(), Some(&executable), None)
-                .unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-finalized-host-grace-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let executable = root.join("runtime-host-fixture");
+        fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = Command::new(&executable).arg("0.25").spawn().unwrap();
+        let identity_deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        let identity = loop {
+            if let Some(identity) = crate::process_identity::capture_process_identity(
+                child.id(),
+                Some(&executable),
+                None,
+            ) {
+                break identity;
+            }
+            assert!(
+                std::time::Instant::now() < identity_deadline,
+                "fixture process did not publish its final executable identity"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
 
         assert!(
             wait_for_recorded_process_exit(&identity, std::time::Duration::from_secs(1)).unwrap()
         );
         child.wait().unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -17138,6 +17280,106 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(attempts, 3);
+    }
+
+    #[test]
+    fn shared_runtime_host_quiesce_closes_only_proven_browserless_competing_lanes() {
+        let actions = std::cell::RefCell::new(Vec::new());
+        let closed = quiesce_browserless_shared_runtime_lanes_with(
+            "bill-soylei",
+            vec![
+                "bill-soylei".to_string(),
+                "dashboard-service-backend".to_string(),
+                "dashboard-service-backend".to_string(),
+            ],
+            |session| {
+                actions.borrow_mut().push(format!("observe:{session}"));
+                Ok(serde_json::json!({
+                    "data": {
+                        "control_plane": {
+                            "browser_health": "NotStarted"
+                        }
+                    }
+                }))
+            },
+            |session| {
+                actions.borrow_mut().push(format!("close:{session}"));
+                Ok(serde_json::json!({"success": true}))
+            },
+        )
+        .unwrap();
+
+        assert_eq!(closed, vec!["dashboard-service-backend"]);
+        assert_eq!(
+            *actions.borrow(),
+            vec![
+                "observe:dashboard-service-backend",
+                "close:dashboard-service-backend"
+            ]
+        );
+    }
+
+    #[test]
+    fn shared_runtime_host_quiesce_fails_closed_for_another_browser_bearing_lane() {
+        let mut close_attempted = false;
+        let error = quiesce_browserless_shared_runtime_lanes_with(
+            "bill-soylei",
+            vec!["other-browser".to_string()],
+            |_| {
+                Ok(serde_json::json!({
+                    "data": {
+                        "control_plane": {
+                            "browser_health": "Ready"
+                        }
+                    }
+                }))
+            },
+            |_| {
+                close_attempted = true;
+                Ok(serde_json::json!({"success": true}))
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "runtime_host_competing_lane_not_browserless:other-browser:Ready"
+        );
+        assert!(!close_attempted);
+    }
+
+    #[test]
+    fn shared_runtime_host_quiesce_requires_exact_worker_health_evidence() {
+        let error = quiesce_browserless_shared_runtime_lanes_with(
+            "bill-soylei",
+            vec!["unproven-lane".to_string()],
+            |_| Ok(serde_json::json!({"data": {}})),
+            |_| Ok(serde_json::json!({"success": true})),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "runtime_host_competing_lane_browser_health_unavailable:unproven-lane"
+        );
+    }
+
+    #[test]
+    fn shared_runtime_host_quiesce_requires_a_stable_revision_window() {
+        let mut observations = vec![91_u64, 91_u64].into_iter();
+        let revision =
+            require_stable_service_state_revision_with(|| Ok(observations.next().unwrap()), || {})
+                .unwrap();
+        assert_eq!(revision, 91);
+
+        let mut observations = vec![91_u64, 92_u64].into_iter();
+        let error =
+            require_stable_service_state_revision_with(|| Ok(observations.next().unwrap()), || {})
+                .unwrap_err();
+        assert_eq!(
+            error,
+            "runtime_host_service_state_writer_not_quiesced:before=91:after=92"
+        );
     }
 
     #[test]
