@@ -9185,7 +9185,35 @@ fn run_agent_json_detailed_in_socket_dir(
     command_args: &[&str],
     runtime: Option<(&Path, bool)>,
 ) -> Result<Value, RuntimeTransactionCommandFailure> {
-    run_agent_json_detailed_in_socket_dir_with(binary, session, command_args, runtime, |_| {})
+    retry_no_effect_runtime_handoff_prepare(command_args, || {
+        run_agent_json_detailed_in_socket_dir_with(binary, session, command_args, runtime, |_| {})
+    })
+}
+
+fn retry_no_effect_runtime_handoff_prepare<Run>(
+    command_args: &[&str],
+    mut run: Run,
+) -> Result<Value, RuntimeTransactionCommandFailure>
+where
+    Run: FnMut() -> Result<Value, RuntimeTransactionCommandFailure>,
+{
+    const MAX_ATTEMPTS: u8 = 3;
+    let retry_stale_revision = command_args == ["handoff", "prepare"];
+    let mut attempts = 0_u8;
+    loop {
+        attempts = attempts.saturating_add(1);
+        match run() {
+            Err(error)
+                if retry_stale_revision
+                    && attempts < MAX_ATTEMPTS
+                    && error.kind == RuntimeTransactionCommandFailureKind::CommandFailed
+                    && error.message.contains("service_state_stale_revision:") =>
+            {
+                continue;
+            }
+            result => return result,
+        }
+    }
 }
 
 fn run_agent_json_detailed_in_socket_dir_with(
@@ -17061,6 +17089,55 @@ mod tests {
             ),
             RuntimeTransactionCommandFailureKind::CommandFailed
         );
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_replans_only_after_no_effect_stale_revision() {
+        let mut attempts = 0_u8;
+        let result = retry_no_effect_runtime_handoff_prepare(&["handoff", "prepare"], || {
+            attempts = attempts.saturating_add(1);
+            if attempts < 3 {
+                Err(RuntimeTransactionCommandFailure {
+                    kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                    message: format!(
+                        "Runtime transaction command failed for session 'fixture': service_state_stale_revision: expected={}; actual={}",
+                        attempts,
+                        attempts + 1
+                    ),
+                })
+            } else {
+                Ok(serde_json::json!({"success": true}))
+            }
+        });
+
+        assert_eq!(result.unwrap()["success"], true);
+        assert_eq!(attempts, 3);
+
+        let mut non_prepare_attempts = 0_u8;
+        let result = retry_no_effect_runtime_handoff_prepare(&["handoff", "resume"], || {
+            non_prepare_attempts = non_prepare_attempts.saturating_add(1);
+            Err(RuntimeTransactionCommandFailure {
+                kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                message: "service_state_stale_revision: expected=4; actual=5".to_string(),
+            })
+        });
+        assert!(result.is_err());
+        assert_eq!(non_prepare_attempts, 1);
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_stale_revision_retry_is_bounded() {
+        let mut attempts = 0_u8;
+        let result = retry_no_effect_runtime_handoff_prepare(&["handoff", "prepare"], || {
+            attempts = attempts.saturating_add(1);
+            Err(RuntimeTransactionCommandFailure {
+                kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                message: "service_state_stale_revision: expected=8; actual=9".to_string(),
+            })
+        });
+
+        assert!(result.is_err());
+        assert_eq!(attempts, 3);
     }
 
     #[test]
