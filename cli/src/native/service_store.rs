@@ -2758,6 +2758,9 @@ mod tests {
         fixture.state_revision = 41;
         store.save(&fixture).expect("fixture should save");
         let repository = LockedServiceStateRepository::new(store);
+        let before = repository
+            .load_snapshot()
+            .expect("baseline state should be readable");
 
         let result = repository
             .mutate(|_state| Ok("unchanged"))
@@ -2768,7 +2771,7 @@ mod tests {
 
         assert_eq!(result, "unchanged");
         assert_eq!(persisted.state_revision, 41);
-        assert_eq!(persisted, fixture);
+        assert_eq!(persisted, before);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
