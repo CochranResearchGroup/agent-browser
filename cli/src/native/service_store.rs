@@ -2811,6 +2811,79 @@ mod tests {
     }
 
     #[test]
+    fn prepared_noop_mutation_replays_after_concurrent_revision_change() {
+        struct StaleNoopStore {
+            path: PathBuf,
+            state: Arc<Mutex<ServiceState>>,
+            load_count: Arc<std::sync::atomic::AtomicUsize>,
+        }
+
+        impl ServiceStateStore for StaleNoopStore {
+            fn load(&self) -> Result<ServiceState, String> {
+                self.load_without_recovery()
+            }
+
+            fn load_without_recovery(&self) -> Result<ServiceState, String> {
+                let load_index = self
+                    .load_count
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut state = self.state.lock().unwrap();
+                if load_index == 1 {
+                    state.state_revision += 1;
+                }
+                Ok(state.clone())
+            }
+
+            fn save(&self, _state: &ServiceState) -> Result<(), String> {
+                Err("unexpected_noop_save".to_string())
+            }
+
+            fn state_path(&self) -> Option<&Path> {
+                Some(&self.path)
+            }
+
+            fn supports_prepared_save(&self) -> bool {
+                true
+            }
+
+            fn prepare_save(
+                &self,
+                _state: &ServiceState,
+            ) -> Result<Option<ServiceStateTransaction>, String> {
+                Err("unexpected_noop_prepare".to_string())
+            }
+
+            fn save_prepared(&self, _transaction: &ServiceStateTransaction) -> Result<(), String> {
+                Err("unexpected_noop_commit".to_string())
+            }
+        }
+
+        let path = unique_state_path("prepared-stale-noop-replay");
+        let mut initial = ServiceState::default();
+        initial.state_revision = 7;
+        let state = Arc::new(Mutex::new(initial));
+        let load_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let repository = LockedServiceStateRepository::new(StaleNoopStore {
+            path: path.clone(),
+            state: Arc::clone(&state),
+            load_count: Arc::clone(&load_count),
+        });
+        let mutator_count = std::sync::atomic::AtomicUsize::new(0);
+
+        repository
+            .mutate(|_state| {
+                mutator_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            })
+            .expect("no-op mutation should replay from the newer revision");
+
+        assert_eq!(mutator_count.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 4);
+        assert_eq!(state.lock().unwrap().state_revision, 8);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
     fn prepared_transactions_serialize_competing_writers_before_commit() {
         struct BlockingPreparedStore {
             path: PathBuf,
