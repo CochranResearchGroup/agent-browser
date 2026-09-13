@@ -19,22 +19,3 @@ lanes:
     overlaps: [P157, P165]
     reconciled_overlaps: [P157, P165]
     updated_at: 2026-09-13
-  - id: P178
-    product_lane: PL-BUGFIX
-    objective: Quiesce proven browserless shared runtime lanes before transactional handoff
-    plan: docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md
-    plan_ref: refs/remotes/origin/main
-    branch: fix/plan-0240-quiesce-browserless-runtime-lanes
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: f6b263f0b63becda20b37cb82f42981c4683fe20
-    remote_ref: refs/remotes/origin/fix/plan-0240-quiesce-browserless-runtime-lanes
-    integration_receipt: null
-    integration: merge
-    work_items: [CochranResearchGroup/agent-browser#84]
-    dependencies: []
-    overlaps: [cli/src/workstation_install.rs]
-    reconciled_overlaps: [cli/src/workstation_install.rs]
-    blocker: uncommitted runtime-admission claim follow-up requires active-owner reconciliation
-    updated_at: 2026-09-13

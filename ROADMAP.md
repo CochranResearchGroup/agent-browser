@@ -53,16 +53,17 @@ separate issue #84 and PR #83 lane.
 
 ## P178 | Browserless Runtime Lane Quiescence
 
-State: OPEN
+State: BLOCKED
 
 Current state: [Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md),
 [issue #84](https://github.com/CochranResearchGroup/agent-browser/issues/84),
-and [PR #83](https://github.com/CochranResearchGroup/agent-browser/pull/83)
-hold the installer repair. PR #83 merged checkpoint `f6b263f0` through
-`ae426642`. The retained worktree now contains a new uncommitted follow-up that
-carries exact runtime-admission claims into browserless status and close
-commands. It remains active owner custody and must not be closed or absorbed by
-the policy campaign. Installed acceptance remains separately gated.
+[PR #83](https://github.com/CochranResearchGroup/agent-browser/pull/83), and
+[PR #92](https://github.com/CochranResearchGroup/agent-browser/pull/92) record
+the integrated installer repair. PR #83 merged checkpoint `f6b263f0` as
+`ae426642`; PR #92 merged exact runtime-admission claims for browserless status
+and close as `7e59ae35`. Both clean source branches and their worktree are
+retired after ancestry verification. Installed acceptance remains blocked by
+production maintenance issue #76 and requires separate effect authority.
 
 ## P12 | Selected Workspace Inspector And App Intelligence
 
