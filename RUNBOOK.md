@@ -5,14 +5,12 @@ Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance,
 ## Turn 311 | 2026-09-13
 
 [Plan0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
-is integration-ready on `platform/product-lanes-note-consolidation` at content
-checkpoint `ce0ac47f`. It defines five stable
-product lanes above numbered plans, routes reusable notes without rewriting
-history, places Plan 0161 under platform ownership, and establishes worktree,
-shared-writer, overlap, dependency, and merge rules for multi-agent development.
-No product behavior, runtime, browser, profile, credential, provider, or tenant
-effect is in scope. Local documentation validation passes; review and merge are
-the remaining gates.
+is CLOSED. PR60 passed every required check and merged as `1d12d1c4`. Five
+stable product lanes now govern numbered plans, reusable note routing,
+worktree limits, shared-writer arbitration, dependencies, and merge order.
+Plan 0161 belongs to platform ownership; authentication consumes its scoped
+reset and readiness contracts. No product behavior, runtime, browser, profile,
+credential, provider, tenant, installation, or release effect occurred.
 
 ## Turn 310 | 2026-09-13
 

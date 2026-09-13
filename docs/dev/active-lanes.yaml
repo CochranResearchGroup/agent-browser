@@ -4,14 +4,14 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Define stable product lanes and consolidate reusable note routing for multi-agent development
     plan: docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md
-    plan_ref: refs/heads/platform/product-lanes-note-consolidation
+    plan_ref: refs/remotes/origin/main
     branch: platform/product-lanes-note-consolidation
     target: main
-    plan_state: OPEN
-    custody_state: INTEGRATION_READY
-    checkpoint: ce0ac47f31ce5ef928b32fee385e8cdbd968e002
-    remote_ref: refs/remotes/origin/platform/product-lanes-note-consolidation
-    integration_receipt: null
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 1d12d1c4b7a01758f6d309d0a84394fcd71e9e60
+    remote_ref: null
+    integration_receipt: 1d12d1c4b7a01758f6d309d0a84394fcd71e9e60
     integration: merge
     dependencies: []
     overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml]
