@@ -68,6 +68,16 @@ tags:
   a different safe ready unit only within the remaining cumulative milestone
   allowance. Escalate only when no meaningful safe action remains or an exact
   action-specific gate is reached.
+- Before the first material action in a multi-packet proof, reconcile the
+  remaining material allowance against every packet required for acceptance,
+  including baseline and candidate comparison. If the allowance cannot cover
+  the minimum complete proof, reframe before execution or record the scoped
+  block; do not spend the last attempt on a packet that cannot satisfy the
+  unchanged objective even if it passes.
+- A failed sidecar, observer, maintenance check, or secondary verdict invalidates
+  completed primary evidence only when the plan records a causal path from that
+  failure to the evidence's identity, timing, correctness, or resource validity.
+  Otherwise retain the primary evidence and report the secondary axis separately.
 - Keep one primary orchestrator responsible for authority, the critical path,
   work-unit selection, integration, progress classification, and the final
   completion claim.
@@ -108,6 +118,11 @@ tags:
   is complete, cancelled, or disproven. Repeated hardening or no-progress first
   requires a local tactic change or bounded reframe; it does not automatically
   require operator approval.
+- Set an evidence deadline for the first artifact that can answer the goal's
+  primary question. When that deadline passes, simplify or split the packet
+  before adding more instrumentation, documentation, review, or governance.
+  Supporting work that does not improve the primary evidence by the configured
+  checkpoint is overhead and must not silently become the new objective.
 - Continue automatically whenever a useful in-scope action is available and no
   exact applicable gate blocks it. A recent checkpoint may support that choice,
   but creating another checkpoint is not a prerequisite for taking an obvious

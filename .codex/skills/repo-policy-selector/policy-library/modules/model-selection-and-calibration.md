@@ -19,6 +19,15 @@ tags:
 - Escalate only when stronger reasoning is likely to resolve a specific obstacle. Delegate the smallest useful decision or diagnostic task with evidence, attempted approaches, acceptance check, write scope, remaining budget, and stop condition. Return ordinary execution to its configured default when that task concludes. Record requested and runtime-reported effective model and effort; report unknown effective configuration explicitly.
 - Model upgrades, reasoning changes, prompt edits, tool substitutions, successor plans, and worker replacement inherit cumulative milestone accounting. Reassessment intervals are not renewable budgets. Exhaustion cannot be bypassed by renaming an approach or opening another worker.
 - Delegate when expected gains in expertise, independence, context isolation, or elapsed time justify setup and reconciliation cost. Do deterministic mechanical work with existing tools before purchasing model work for it. A compact specialist brief is preferred when full-history inheritance adds no value. The primary integrates returned evidence without repeating the worker's investigation.
+- Route polling, hashing, schema checks, counter reconciliation, deterministic
+  test execution, and exact structured transformations to tools before any
+  model. When judgment-light work still needs a model, use the calibrated
+  economical tier with a narrow input packet, structured output, deterministic
+  verifier, attempt/time bound, and no authority to change scope or acceptance.
+- Retain causality decisions, safety or authority changes, material experiment
+  design, architectural tradeoffs, and the final acceptance claim with the
+  primary or a justified specialist tier. Do not pay a stronger model to repeat
+  verified mechanical work returned by a cheaper worker.
 - Calibrate complete workflows, not isolated responses. Before starting, freeze representative inputs, acceptance checks, baseline and candidate configurations, quality floor, sample size, retry allowance, resource ceiling, evaluator, and promotion/stop rules. Include failed and timed-out attempts, retain difficult regressions, and use held-out examples when tuning on earlier samples.
 - Record the sample/date, workload identity, model and effort, context and tools, topology, accepted count and denominator, defects, interventions, elapsed time, cumulative agent effort, and measured allocation or labeled proxy. Keep elapsed wall time separate from summed worker effort. Do not attribute shared-account consumption to one configuration when concurrent use prevents attribution.
 - Stop calibration at its predeclared sample or resource ceiling, or at a defined critical-quality failure. Small samples yield provisional routing only. Do not enlarge the experiment, weaken acceptance, or retry away failures to obtain a favorable result.

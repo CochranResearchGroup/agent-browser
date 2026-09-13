@@ -15,6 +15,10 @@ tags:
 - Keep the critical path visible so parallel work does not hide the real blocker.
 - Prefer plan slices that minimize cross-lane file overlap and reconciliation cost.
 - Call out integration points explicitly when multiple lanes must converge before completion.
+- Define shared schemas, interfaces, and other cross-lane contracts before
+  dependent implementations fan out. If the contract is still unsettled, keep
+  that decision on the critical path or assign it one coordination owner rather
+  than letting parallel lanes establish competing authorities.
 - Express non-trivial execution as inspectable work units and dependency edges,
   including fan-out, join, review, retry, and terminal transitions. A table or
   plan section is sufficient; a graph framework is not required.

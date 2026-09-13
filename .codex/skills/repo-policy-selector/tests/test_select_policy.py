@@ -511,6 +511,47 @@ class SelectPolicyRegressionTests(unittest.TestCase):
         self.assertTrue(signals["mentions_work_item_tracking"])
         self.assertIn("work-item-traceability", modules, reasons)
 
+    def test_collaborative_development_selects_complete_workflow(self):
+        repo_root = self.make_repo(
+            readme_text="""
+            # Shared Website Repository
+
+            Multiple contributors use feature branches and isolated worktrees.
+            Every change follows a pull request workflow with peer review before
+            deployment.
+            """
+        )
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        signals = self.select_policy.detect_signals(repo_root)
+        _purpose, _subtype, _execution_bias, _profile, modules, reasons = self.select_policy.choose_profile(
+            signals, installed_library
+        )
+
+        self.assertTrue(signals["mentions_collaborative_development"])
+        for module_id in (
+            "work-item-traceability",
+            "git-worktree-hygiene",
+            "commit-history-discipline",
+            "branch-and-integration-strategy",
+            "commit-and-push-cadence",
+            "validation-and-handoff",
+            "collaborative-development-workflow",
+        ):
+            self.assertIn(module_id, modules, reasons)
+
+    def test_incidental_collaboration_word_does_not_select_workflow(self):
+        repo_root = self.make_repo(
+            readme_text="""
+            # Library
+
+            This package collaborates with an external rendering service.
+            """
+        )
+
+        signals = self.select_policy.detect_signals(repo_root)
+
+        self.assertFalse(signals["mentions_collaborative_development"])
+
     def test_github_issue_reporting_selects_core_and_github_adapter(self):
         repo_root = self.make_repo(
             readme_text="""
@@ -775,6 +816,34 @@ class SelectPolicyRegressionTests(unittest.TestCase):
         self.assertFalse(workflow_signals["mentions_subagent_runtime"])
         self.assertTrue(runtime_signals["mentions_subagents"])
         self.assertTrue(runtime_signals["mentions_subagent_runtime"])
+
+    def test_development_runtime_isolation_requires_explicit_lane_runtime_signal(self):
+        generic_repo = self.make_repo(
+            agents_text="""
+            # Product Repo
+
+            Run the local development server before submitting changes.
+            """,
+        )
+        isolated_repo = self.make_repo(
+            agents_text="""
+            # Multi-Lane Product Repo
+
+            Each active branch that executes the service needs an isolated
+            development runtime with per-lane runtime state, ports, and data.
+            """,
+        )
+
+        generic_signals = self.select_policy.detect_signals(generic_repo)
+        isolated_signals = self.select_policy.detect_signals(isolated_repo)
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        _purpose, _subtype, _bias, _profile, modules, reasons = (
+            self.select_policy.choose_profile(isolated_signals, installed_library)
+        )
+
+        self.assertFalse(generic_signals["mentions_development_runtime_isolation"])
+        self.assertTrue(isolated_signals["mentions_development_runtime_isolation"])
+        self.assertIn("development-runtime-isolation", modules, reasons)
 
     def test_every_profile_adopts_model_selection_and_calibration(self):
         installed_library = self.select_policy.enumerate_policy_library(self.policy_root)

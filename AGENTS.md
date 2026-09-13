@@ -465,22 +465,7 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 
 ## Policy Re-read Triggers
 
-- Before substantive bug hunting or feature work, read policies
-  `0028-goal-execution-governance.md`, `0042-code-testing-discipline.md`, and
-  `0045-model-selection-and-calibration.md` for delivery bounds, batch validation,
-  and economical task routing; read `0021-subagent-workflow-optimization.md`
-  when considering delegation. These apply to ongoing continuations too.
-- Read policy `0044-planning-discipline.md` before substantive planning, a
-  second related defect, or another expensive build/deployment/acceptance cycle.
-  It routes consolidation, evidence, delivery budgeting and worker assignments.
-- Read policy `0047-multi-session-development-operating-model.md` before
-  starting or resuming a substantive development lane, assigning top-level
-  session ownership, delegating work, creating a lane runtime, or integrating
-  parallel branches.
-- Read policies `0048-forge-issue-reporting.md` and
-  `0049-github-issue-operations.md` before any issue provider mutation,
-  including settings, labels, issue creation, editing, assignment, planning,
-  closure, or transfer.
+- re-read planning-related policy before opening, revising, or closing a substantive plan
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete
 - re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
@@ -534,6 +519,7 @@ Read and follow:
 - `docs/dev/policies/0047-multi-session-development-operating-model.md`
 - `docs/dev/policies/0048-forge-issue-reporting.md`
 - `docs/dev/policies/0049-github-issue-operations.md`
+- `docs/dev/policies/0050-collaborative-development-workflow.md`
 
 ## Scope
 

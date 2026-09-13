@@ -15,6 +15,11 @@ tags:
 - Keep a compact machine-readable active-lane catalog on the canonical default branch, normally `docs/dev/active-lanes.yaml`. A documented equivalent path is allowed.
 - Treat the catalog as a discovery projection. A roadmap owns priority, a branch-local plan owns execution detail, a runbook owns chronological history, review tooling owns review state, and Git refs plus receipts prove custody and integration.
 - Give each lane one stable id and one branch owner. Record its objective, work-item locators when work-item tracking is adopted, plan path and source ref, branch, target, plan state, custody state, published checkpoint, remote ref, integration method, dependencies, overlaps, reconciliation date, and any blocker or disposition.
+- Give each substantive lane one accountable execution owner. When several lanes
+  depend on shared schemas, roadmaps, catalogs, or other integration surfaces,
+  name one coordination owner for those surfaces instead of allowing every lane
+  to edit them independently. A person or session may fill more than one role
+  when the portfolio is small and the ownership remains unambiguous.
 - Keep plan outcome state separate from Git custody state. Use a small plan vocabulary such as `PLANNED`, `OPEN`, `BLOCKED`, `CLOSED`, and `CANCELLED`, and a custody vocabulary such as `ACTIVE_WORKTREE`, `PAUSED_REF`, `INTEGRATION_READY`, `INTEGRATED`, `ARCHIVED`, and `DISCARD_APPROVED`.
 - Keep detailed plans with their topic branches. Expose deterministic metadata for lane, state, branch, target, integration method, dependencies, overlaps, and base or checkpoint evidence so an auditor can read it from an explicit ref without checkout.
 - Do not put absolute worktree paths, ephemeral agent identifiers, secrets, tenant data, or private runtime details in the shared catalog. Derive local worktree locations during reconciliation.
@@ -24,6 +29,10 @@ tags:
   catalog.
 - Reconcile the catalog against current worktrees, bounded local and remote refs, branch-local plan metadata, checkpoint SHAs, target ancestry, receipts, dependencies, and overlap before planning, handoff, integration, or cleanup decisions. Prefer catalog-only discovery when the catalog is the complete authorized population; use exact repeated branch selectors for bounded unregistered-lane discovery. Prefix discovery is an explicit broader survey and should not be the default in repositories with large historical branch namespaces.
 - For active worktree custody, classify equal, local-ahead, remote-ahead, and diverged local/remote tips explicitly. Local-ahead, remote-ahead, and diverged state fail closed until the lane owner reconciles and publishes the intended checkpoint.
+- Treat worktree presence as workstation-local evidence. When a cataloged
+  `ACTIVE_WORKTREE` lane has no local branch or checkout but its exact remote
+  ref and checkpoint agree, classify it as healthy remote-active custody;
+  require a local checkout only when evaluating local worktree claims.
 - Fetching is a caller-controlled operation. A lane auditor must remain read-only and must not fetch, merge, rebase, push, delete refs, remove worktrees, edit plans, or infer authority from a clean report.
 - Register normal work before parallel execution begins. An urgent lane may start first only when delay creates greater risk; register and publish its first recoverable checkpoint at the earliest safe boundary.
 - After existing catalogs are migrated, enable required work-item validation so
@@ -32,6 +41,10 @@ tags:
   governed tracker.
 - Do not silently resolve catalog conflicts. Duplicate lane ids, two lanes claiming one branch, missing custody, stale checkpoints, active local/remote mismatch, plan/catalog drift, and unresolved overlaps fail closed until reconciled.
 - Keep the catalog current through the repository's protected-default-branch workflow. A lane branch may propose its own registration, but it is not globally discoverable until that projection lands on the configured default ref.
+- Reconcile worktree lifecycle with lane state. An integrated, archived, paused,
+  or handed-off branch does not justify an indefinitely registered checkout;
+  close an unneeded clean worktree after custody is verified and update the lane
+  projection without erasing the branch's disposition.
 
 ## Adoption Notes
 

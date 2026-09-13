@@ -31,6 +31,10 @@ tags:
   - `CLOSED`
   - `CANCELLED`
 - Multi-track repositories may also use `BLOCKED`. Keep this outcome state separate from Git custody such as active worktree, paused ref, integration-ready, integrated, archived, or discard-approved.
+- Keep authoritative plan metadata in a bounded header before the first
+  second-level section. Auditors must not infer state or lane metadata from
+  narrative body text, and should exclude recognized plan indexes such as
+  `README.md` and `INDEX.md` from plan-file validation.
 - For any plan in an active state such as `OPEN`, require a short `Current State` section that says what already exists and what still remains.
 - Use bounded plan artifacts with explicit scope, non-goals, acceptance criteria, and definition of done.
 - A plan organizes execution; it does not grant, consume, or renew authority.
@@ -53,6 +57,14 @@ tags:
   change the outcome, scope, cost, or safety envelope.
 - Give each active execution packet one bounded outcome, owner, expected write
   surface, required inputs, validation evidence, and terminal condition.
+- For measurement or optimization work, obtain and durably record the smallest
+  usable baseline before expanding into broad matrices, soak, maintenance, or
+  secondary acceptance checks. Order the packet so an early stop can still
+  answer the primary measurement question; breadth may follow after that
+  minimum evidence exists.
+- Do not make independent acceptance axes one all-or-nothing packet by default.
+  State which checks govern measurement validity, correctness, resources,
+  maintenance, and evidence integrity, and how each result affects the others.
 - When active work lives off the default branch, keep execution detail in the branch-local plan and publish only a compact active-lane projection to the default branch. Plan closure does not by itself authorize branch deletion or worktree removal.
 - When a task is large enough to plan, explicitly separate:
   - parallelizable low-conflict tracks
