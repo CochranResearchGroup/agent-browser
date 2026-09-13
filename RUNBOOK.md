@@ -4,6 +4,28 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 316 | 2026-09-13
+
+[Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
+is source-integrated and BLOCKED on separately authorized installed acceptance.
+PR #83 merged browserless lane quiescence as `ae426642`; all fast checks and
+comprehensive Rust passed. PR #92 merged exact runtime-admission claims for the
+old-runtime status and close commands as `7e59ae35`. Its focused tests, format,
+Rust Quality, Dashboard, Service Client, and Version Sync passed; Workstation
+Fixtures and comprehensive Rust were still running at the one lazy readback and
+were not actively watched.
+
+Both source tips are ancestors of `origin/main`. Their clean worktree and local
+and remote refs are retired, so P178 leaves active Git custody. Issue #84 remains
+open and BLOCKED behind production maintenance quarantine issue #76. No
+installation, restart, handoff, browser closure, or Service State mutation
+occurred in closeout.
+
+Provider-free issue #78 is also closed. PR #93 merged the development status
+port repair as `4190fdf1`; the fixture, read-only current-runtime JSON and text
+readback, documentation checks, and docs build passed. It performed no runtime
+mutation. Installed shared-skill parity remains separately owned by issue #79.
+
 ## Turn 315 | 2026-09-13
 
 [Plan 0179](docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md)
@@ -16,10 +38,8 @@ the clean topic worktree and local and remote refs were retired. Selected CI
 was queued at the one lazy readback and was not actively watched.
 
 No installed runtime, browser, profile, provider, tenant, service, or
-supervisor state changed. Plan 0178 now has a new uncommitted source repair in
-its worktree and must be reconciled with its active owner rather than closed.
-Provider-free issue #78 remains the next independent bugfix after that custody
-is stable.
+supervisor state changed. Turn 316 supersedes the then-current Plan 0178 and
+issue #78 next actions with their integrated source outcomes.
 
 ## Turn 314 | 2026-09-13
 
