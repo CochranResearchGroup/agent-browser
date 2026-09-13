@@ -2,7 +2,7 @@
 
 Date: 2026-09-12
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -78,11 +78,11 @@ No subagents are assigned; current orchestration policy prohibits delegation.
 
 | Requirement | Evidence | State |
 |---|---|---|
-| Red-capable focused loops | Repeated exact focused commands reproduce each symptom | pending |
-| Deadline preserved | Source diff plus lock wait/hold assertions | pending |
-| Identity fence preserved | Stable exact-identity fixture plus mismatch coverage | pending |
-| Candidate qualified | fmt, clippy, focused, affected compartments, comprehensive Rust | pending |
-| Integrated and cleanup unblocked | Green repair PR, then green and merged PR 51 | pending |
+| Red-capable focused loops | Retained CI failures plus focused timing and identity evidence | accepted; CI reproduced both symptoms, while local loops isolated the seams without reproducing every host race |
+| Deadline preserved | Source diff plus lock wait/hold assertions | pass; one-second production deadline unchanged |
+| Identity fence preserved | Stable exact-identity fixture plus mismatch coverage | pass; production verifier unchanged |
+| Candidate qualified | fmt, clippy, focused, affected compartments, comprehensive Rust | pass locally where admitted and in first-attempt CI run `34729883713` |
+| Integrated and cleanup unblocked | Green repair PR, then green and merged PR 51 | pass; merges `3f680a13` and `00796d5c`, exact-head runs `34729883713` and `34731270343` green |
 
 Terminal success requires both defects repaired, the comprehensive Rust gate
 green without retry, the repair merged, PR 51 rebased or reconciled and merged,
@@ -158,3 +158,32 @@ protected checks including comprehensive Rust to pass without rerun.
 
 Remote review: PR 54 at
 `https://github.com/CochranResearchGroup/agent-browser/pull/54`.
+
+## Checkpoint P0174-C04 | 2026-09-12
+
+State transition: `protected_ci_validation to closed`.
+
+Acceptance state: terminal success. PR 54 head
+`9aa554cd6f3d575691231a6f69cc8fa68c0f3699` passed first-attempt CI run
+`34729883713`, including the comprehensive Rust suite and no-launch service
+smokes, then merged to `main` as
+`3f680a13e09f08e2ae5ca9b64d61222ff7efbdfe`.
+
+PR 51 was reconciled by merging that exact `main` into head
+`9e917698e2f74900165d7fb03703bfd08b89a142`; its net source delta remained only
+the intended P171 active-lane deletion. It merged as
+`00796d5cbc7240ef38f220e81292e943a4fe83b2`. Exact-head CI run `34731270343`
+then passed Version Sync, Rust Quality, Dashboard, Service Client, Workstation
+Fixtures, comprehensive Rust, and no-launch service smokes on its first attempt.
+
+The repository has neither `main` branch protection nor a ruleset, so GitHub
+executed the requested auto-merge immediately instead of waiting for the active
+checks. The completed green run is therefore post-merge exact-head evidence;
+adding enforced required checks is a separate repository-settings follow-up.
+
+The repaired timing test asserts the measured contender commit wait while
+retaining whole-operation and exclusive-hold diagnostics; the production
+one-second lock deadline is unchanged. The process fixture uses a unique copied
+executable and bounded exact-identity readiness; production PID, start-token,
+and executable matching are unchanged. No install, browser, profile, provider,
+production state, process cleanup, or release effect occurred.

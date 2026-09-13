@@ -9,15 +9,15 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P174 | CI Production-Scale And Process-Identity Reliability
 
-State: OPEN
+State: CLOSED
 
-Current state: candidate `5a4fd859` passes repeated focused tests, fmt, strict
-Clippy, 674 Service State tests, and 163 workstation tests. Local comprehensive
-compilation was blocked by stale shared-slice task occupancy; protected CI is
-running on PR 54 as the next authority. The deadline and identity fence remain
-unchanged.
+Closed: PR 54 merged the repair as `3f680a13`; CI run `34729883713`
+passed every required check on its first attempt, including comprehensive Rust.
+PR 51 then reconciled the P171 catalog cleanup onto that exact repair and merged
+as `00796d5c`; post-reconciliation run `34731270343` also passed on its first
+attempt. The one-second deadline and production identity fence remain unchanged.
 [Plan 0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md)
-is the active execution contract.
+is the closed execution record.
 
 ## P173 | Expired Session Retained Browser Reuse Repair
 
