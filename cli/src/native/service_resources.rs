@@ -2753,12 +2753,12 @@ mod tests {
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
     use crate::native::action_runtime::runtime::{
-        account_ids_from_command, browser_build_from_command, browser_host_from_command,
-        is_stale_page_session_error, optional_command_string, parse_control_input_provider,
-        parse_view_stream_provider, recover_browser_command_channel, relaunch_and_restore_page,
-        remote_headed_display_isolation_from_command, runtime_profile_from_sources,
-        service_browser_id, target_service_ids_from_command, target_url_from_command,
-        validate_service_tab_handle_for_current_session,
+        account_ids_from_command, browser_build_from_command, browser_build_is_explicit,
+        browser_host_from_command, is_stale_page_session_error, optional_command_string,
+        parse_control_input_provider, parse_view_stream_provider, recover_browser_command_channel,
+        relaunch_and_restore_page, remote_headed_display_isolation_from_command,
+        runtime_profile_from_sources, service_browser_id, target_service_ids_from_command,
+        target_url_from_command, validate_service_tab_handle_for_current_session,
         validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
         HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
@@ -2872,7 +2872,7 @@ pub(crate) mod service_commands {
             readiness_profile_id: optional_command_string(cmd, "readinessProfileId"),
             runtime_profile: runtime_profile_from_sources(cmd, false),
             browser_build: browser_build_from_command(cmd),
-            browser_build_explicit: cmd.get("browserBuild").and_then(Value::as_str).is_some(),
+            browser_build_explicit: browser_build_is_explicit(cmd),
             browser_host: browser_host_from_command(cmd),
             view_stream_provider: optional_command_string(cmd, "viewStreamProvider")
                 .or_else(|| optional_command_string(cmd, "viewStream"))
@@ -2900,6 +2900,81 @@ pub(crate) mod service_commands {
             object.insert("browserBuildSelectionSummary".to_string(), summary);
         }
         Ok(plan)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn access_plan_preserves_nested_explicit_browser_build() {
+            let command = json!({
+                "params": {
+                    "targetServiceId": "google",
+                    "browserBuild": "stock_chrome"
+                },
+                "serviceState": {
+                    "defaultBrowserBuild": "stealthcdp_chromium",
+                    "sitePolicies": {
+                        "google": {
+                            "id": "google",
+                            "browserBuild": "stealthcdp_chromium"
+                        }
+                    }
+                }
+            });
+
+            let plan = handle_service_access_plan(&command).await.unwrap();
+
+            assert_eq!(plan["query"]["browserBuild"], "stock_chrome");
+            assert_eq!(
+                plan["decision"]["launchPosture"]["browserBuild"],
+                "stock_chrome"
+            );
+            assert_eq!(
+                plan["decision"]["launchPosture"]["browserBuildSource"],
+                "request"
+            );
+        }
+
+        #[tokio::test]
+        async fn access_plan_explicit_stealth_overrides_manual_stock_login_posture() {
+            let command = json!({
+                "targetServiceId": "google",
+                "params": {
+                    "browserBuild": "stealthcdp_chromium"
+                },
+                "serviceState": {
+                    "profiles": {
+                        "google-login": {
+                            "id": "google-login",
+                            "name": "Google login",
+                            "targetServiceIds": ["google"]
+                        }
+                    },
+                    "sitePolicies": {
+                        "google": {
+                            "id": "google",
+                            "browserBuild": "stock_chrome",
+                            "manualLoginPreferred": true
+                        }
+                    }
+                }
+            });
+
+            let plan = handle_service_access_plan(&command).await.unwrap();
+
+            assert_eq!(plan["selectedProfile"]["id"], "google-login");
+            assert_eq!(
+                plan["decision"]["launchPosture"]["browserBuild"],
+                "stealthcdp_chromium"
+            );
+            assert_eq!(plan["readinessSummary"]["manualSeedingRequired"], false);
+            assert_eq!(
+                plan["readiness"]["targetReadiness"][0]["seedingMode"],
+                "attachable_ok"
+            );
+        }
     }
 }
 pub(crate) use service_commands::*;
