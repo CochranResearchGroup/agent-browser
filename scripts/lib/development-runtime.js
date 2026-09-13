@@ -513,10 +513,12 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
   const localIngressManifest = fetchJson('http://127.0.0.1/api/runtime/manifest', [
     `Host: ${descriptor.localHost}`,
   ]);
+  // Public status reports configured listener ports. Process ownership remains
+  // available through unit mainPid fields and is checked separately by doctor.
   const ports = {
-    dashboard: listeningProcessId(descriptor.dashboardPort),
-    backend: listeningProcessId(descriptor.backendPort),
-    lane: listeningProcessId(descriptor.laneStreamPort),
+    dashboard: descriptor.dashboardPort,
+    backend: descriptor.backendPort,
+    lane: descriptor.laneStreamPort,
   };
   const auth = {
     store: privateFileStatus(join(descriptor.authDir, 'dashboard-auth.json')),
@@ -567,6 +569,11 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
 
 export function doctorDevelopmentRuntime({ env = process.env } = {}) {
   const status = developmentRuntimeStatus({ env });
+  const listenerProcessIds = {
+    dashboard: listeningProcessId(status.ports.dashboard),
+    backend: listeningProcessId(status.ports.backend),
+    lane: listeningProcessId(status.ports.lane),
+  };
   const presentationProviderDoctor = doctorDevelopmentPresentationProvider({
     env,
     probe: probeDevelopmentPresentationProvider,
@@ -592,9 +599,9 @@ export function doctorDevelopmentRuntime({ env = process.env } = {}) {
     check('generation-external-browser-discovery',
       status.generationMetadata?.externalBrowserDiscovery === 'disabled',
       status.generationMetadata?.externalBrowserDiscovery),
-    check('port:dashboard', status.ports.dashboard === status.units[status.descriptor.unitNames.dashboard].mainPid, status.ports.dashboard),
-    check('port:backend', status.ports.backend === status.units[status.descriptor.unitNames.backend].mainPid, status.ports.backend),
-    check('port:lane', status.ports.lane === status.units[status.descriptor.unitNames.runtimeHost].mainPid, status.ports.lane),
+    check('port:dashboard', listenerProcessIds.dashboard === status.units[status.descriptor.unitNames.dashboard].mainPid, status.ports.dashboard),
+    check('port:backend', listenerProcessIds.backend === status.units[status.descriptor.unitNames.backend].mainPid, status.ports.backend),
+    check('port:lane', listenerProcessIds.lane === status.units[status.descriptor.unitNames.runtimeHost].mainPid, status.ports.lane),
     check('auth:store', status.auth.store.private, status.auth.store),
     check('auth:bootstrap', status.auth.bootstrap.private, status.auth.bootstrap),
     check(

@@ -121,6 +121,9 @@ in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
 - Use `agent-browser-dev` and the `development-runtime:*` package scripts for
   experimental installed validation. Do not publish experimental binaries into
   production.
+- Development runtime JSON status reports configured listener numbers under
+  `ports`; service process identities remain under `units.*.mainPid`. Doctor
+  prints the configured port while separately checking listener ownership.
 - Build ordinary installed candidates with
   `pnpm build:development-candidate`. It uses the optimized Cargo `ci` profile
   at `cli/target/ci/agent-browser`. Reserve `pnpm build:native` and its full
