@@ -524,7 +524,7 @@ fn runtime_admission_claim_matches(
 ) -> bool {
     matches!(
         action,
-        "service_reconcile" | "stream_status" | "service_remote_view_browser_reattach"
+        "close" | "service_reconcile" | "service_remote_view_browser_reattach" | "stream_status"
     ) && command
         .pointer("/runtimeAdmissionClaim/transactionId")
         .and_then(serde_json::Value::as_str)
@@ -3268,6 +3268,19 @@ mod tests {
             }),
         )
         .unwrap();
+        require_runtime_admission(&path, "service_status", &serde_json::json!({})).unwrap();
+        require_runtime_admission(
+            &path,
+            "close",
+            &serde_json::json!({
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .unwrap();
+        assert!(require_runtime_admission(&path, "close", &serde_json::json!({})).is_err());
         assert!(require_runtime_admission(
             &path,
             "service_remote_view_browser_reattach",
