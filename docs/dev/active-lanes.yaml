@@ -1,5 +1,22 @@
 schema_version: 1
 lanes:
+  - id: P177
+    product_lane: PL-PLATFORM
+    objective: Establish issue-backed multi-session governance and reconcile repository custody before serious development resumes
+    plan: docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md
+    plan_ref: refs/heads/platform/plan-0177-development-readiness
+    branch: platform/plan-0177-development-readiness
+    target: main
+    plan_state: PLANNED
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: d32919f8708cbca6a44aadc0cae513cc7e153474
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P176]
+    overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml, docs/dev/policies]
+    reconciled_overlaps: []
+    updated_at: 2026-09-13
   - id: P176
     product_lane: PL-PLATFORM
     objective: Define stable product lanes and consolidate reusable note routing for multi-agent development

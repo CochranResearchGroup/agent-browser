@@ -25,6 +25,20 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P177 | Development Governance And Repository Readiness
+
+State: PLANNED
+
+Current state: issue tracking is disabled, the installed policy selector is one
+released patch behind, the merged no-op repair remains checked out with an
+untracked field note, the Turnstile branch is divergent and carries a duplicate
+P173 identity, and the active planning audit reports 37 housekeeping findings.
+[Plan 0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
+defines the policy adoption, issue migration, worktree reconciliation, planning
+cleanup, and read-only runtime-readiness campaign required before serious
+feature development resumes. Provider and runtime mutations remain separately
+gated.
+
 ## P176 | Product Lane And Note Consolidation
 
 State: CLOSED
