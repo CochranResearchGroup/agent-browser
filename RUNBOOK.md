@@ -4,7 +4,7 @@ Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance,
 
 ## Turn 305 | 2026-09-12
 
-[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md) is OPEN at `976e2031` to repair two comprehensive-Rust CI flakes that block YAML-only PR51. Preserve the one-second Service State deadline and exact process-identity fence; use focused red-capable loops, then one frozen-candidate comprehensive run. No install, browser, profile, provider, production-state, process-cleanup, or release effect is authorized.
+[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md) is OPEN at candidate `5a4fd859`; repeated focused tests, fmt, and strict Clippy pass. Affected compartments and one frozen-candidate comprehensive run remain. The one-second Service State deadline and exact identity fence are unchanged; no install or runtime effect is authorized.
 
 ## Turn 304 | 2026-09-12
 
