@@ -1,6 +1,24 @@
 schema_version: 1
 lanes:
+  - id: P176
+    product_lane: PL-PLATFORM
+    objective: Define stable product lanes and consolidate reusable note routing for multi-agent development
+    plan: docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md
+    plan_ref: refs/heads/platform/product-lanes-note-consolidation
+    branch: platform/product-lanes-note-consolidation
+    target: main
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    checkpoint: ce0ac47f31ce5ef928b32fee385e8cdbd968e002
+    remote_ref: refs/remotes/origin/platform/product-lanes-note-consolidation
+    integration_receipt: null
+    integration: merge
+    dependencies: []
+    overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml]
+    reconciled_overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml]
+    updated_at: 2026-09-13
   - id: P175
+    product_lane: PL-AUTH
     objective: Prefer stealth Chromium for Google sign-in while preserving explicit browser-build requests
     plan: docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md
     plan_ref: refs/remotes/origin/main
@@ -17,6 +35,7 @@ lanes:
     reconciled_overlaps: [cli/src/native/service_access.rs, cli/src/native/service_model.rs, cli/src/native/service_resources.rs, cli/src/native/action_runtime/runtime/daemon.rs]
     updated_at: 2026-09-13
   - id: P173
+    product_lane: PL-BUGFIX
     objective: Repair expired-session retained-browser reuse through canonical acquisition and handle truth
     plan: docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md
     plan_ref: refs/remotes/origin/main
@@ -33,6 +52,7 @@ lanes:
     reconciled_overlaps: [cli/src/native/service_profile_acquisition.rs, cli/src/native/browser_lifecycle.rs, cli/src/native/browser_tabs.rs]
     updated_at: 2026-09-13
   - id: P165
+    product_lane: PL-AUTH
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
     plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md
     plan_ref: refs/remotes/origin/main
@@ -49,6 +69,7 @@ lanes:
     reconciled_overlaps: []
     updated_at: 2026-09-11
   - id: P157
+    product_lane: PL-PLATFORM
     objective: Complete frozen-candidate adversarial acceptance for profile permissions, runtime convergence, remote handoffs, dashboard truth, and causal logging
     plan: docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md
     plan_ref: refs/remotes/origin/main
@@ -65,6 +86,7 @@ lanes:
     reconciled_overlaps: [P144]
     updated_at: 2026-09-11
   - id: P144
+    product_lane: PL-PLATFORM
     objective: Replace inferred profile lease authority with one canonical fenced authority kernel
     plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md
     plan_ref: refs/remotes/origin/main
