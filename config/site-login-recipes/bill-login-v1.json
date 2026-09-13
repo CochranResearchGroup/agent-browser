@@ -7,6 +7,11 @@
     "https://login.us.bill.com"
   ],
   "authenticatedCompanyPathPrefix": "/companies/",
+  "loginEntryFallback": {
+    "fromUrl": "https://app.bill.com/spend/transactions",
+    "fromTitle": "Page Not Found",
+    "toUrl": "https://login.us.bill.com/neo/login?url=%2FHome"
+  },
   "identifier": {
     "fieldSelectors": [
       "input#login-email-input[name='loginEmail']",
