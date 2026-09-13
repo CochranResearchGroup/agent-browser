@@ -2,7 +2,7 @@
 
 Date: 2026-09-12
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -232,3 +232,27 @@ and strict workspace Clippy passes. Source checkpoint is `a7c1b637`.
 
 Next action: publish the deterministic fixture repair and require a fresh green
 PR 57 head before merge or installation.
+
+## Checkpoint P0175-C08 | 2026-09-13
+
+State transition: `ci_fixture_stabilization to closed`.
+
+Acceptance state: PR 57 passed every required fast check and merged to `main`
+as `0e18b35132ea747e3b8d9c244abc1abef137fbf7`. The accepted production
+installation publishes executable SHA-256
+`d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50` as
+generation `0.28.0-d0186990d375-3a6142188dd0` through transaction
+`upgrade-c8483b3d-6fb1-41f3-b9da-5681169d5869`.
+
+Progress classification: `integrated_and_installed`; the source, repository CI,
+production executable identity, singular supervisor, and zero-candidate
+cleanup readbacks satisfy this bounded plan. Account sign-in, CAPTCHA solving,
+and downstream consumer workflow acceptance remain separate gates.
+
+Current operational note: a later runtime-monitor cycle entered bounded
+backoff on `service_state_lock_timeout` while the exact installed supervisor
+held the shared Service State lock. That is a coordination incident, not
+evidence of installation drift, and it does not reopen this plan.
+
+Next action: none for Plan 0175. Track shared-state lock contention and current
+authentication-route work in their owning lanes without blind retry.

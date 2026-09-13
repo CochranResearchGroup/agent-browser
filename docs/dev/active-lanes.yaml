@@ -3,35 +3,35 @@ lanes:
   - id: P175
     objective: Prefer stealth Chromium for Google sign-in while preserving explicit browser-build requests
     plan: docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md
-    plan_ref: refs/heads/fix/plan-0175-mcp-readiness-expectations
+    plan_ref: refs/remotes/origin/main
     branch: fix/plan-0175-mcp-readiness-expectations
     target: main
-    plan_state: OPEN
-    custody_state: INTEGRATION_READY
-    checkpoint: a7c1b63757263f6ad84389c9c9e47c9790ac16b6
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 0e18b35132ea747e3b8d9c244abc1abef137fbf7
     remote_ref: null
-    integration_receipt: null
+    integration_receipt: 0e18b35132ea747e3b8d9c244abc1abef137fbf7
     integration: merge
     dependencies: []
     overlaps: [cli/src/native/service_access.rs, cli/src/native/service_model.rs, cli/src/native/service_resources.rs, cli/src/native/action_runtime/runtime/daemon.rs]
-    reconciled_overlaps: []
-    updated_at: 2026-09-12
+    reconciled_overlaps: [cli/src/native/service_access.rs, cli/src/native/service_model.rs, cli/src/native/service_resources.rs, cli/src/native/action_runtime/runtime/daemon.rs]
+    updated_at: 2026-09-13
   - id: P173
     objective: Repair expired-session retained-browser reuse through canonical acquisition and handle truth
     plan: docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md
-    plan_ref: refs/heads/fix/plan-0173-expired-session-reuse
+    plan_ref: refs/remotes/origin/main
     branch: fix/plan-0173-expired-session-reuse
     target: main
     plan_state: CLOSED
     custody_state: INTEGRATED
     checkpoint: 2156aaad472ecebb1f79e7d5ce79419949b4705c
     remote_ref: refs/remotes/origin/main
-    integration_receipt: merge:2156aaad472ecebb1f79e7d5ce79419949b4705c
+    integration_receipt: 2156aaad472ecebb1f79e7d5ce79419949b4705c
     integration: merge
     dependencies: [P144, P165]
     overlaps: [cli/src/native/service_profile_acquisition.rs, cli/src/native/browser_lifecycle.rs, cli/src/native/browser_tabs.rs]
-    reconciled_overlaps: []
-    updated_at: 2026-09-12
+    reconciled_overlaps: [cli/src/native/service_profile_acquisition.rs, cli/src/native/browser_lifecycle.rs, cli/src/native/browser_tabs.rs]
+    updated_at: 2026-09-13
   - id: P165
     objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
     plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md
