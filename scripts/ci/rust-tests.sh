@@ -75,6 +75,21 @@ run_cli_native_service() {
   run_cli_isolated --bin agent-browser native::service -- --test-threads=1
 }
 
+run_cli_native_service_without_performance_oracle() {
+  echo "Running Rust compartment: cli-native-service"
+  run_cli_isolated --bin agent-browser native::service -- \
+    --skip native::service_store::tests::production_scale_independent_mutations_do_not_timeout_behind_slow_preparation \
+    --test-threads=1
+}
+
+run_cli_native_service_performance_oracle() {
+  echo "Running Rust compartment: cli-native-service-performance"
+  run_cli_isolated --bin agent-browser \
+    native::service_store::tests::production_scale_independent_mutations_do_not_timeout_behind_slow_preparation -- \
+    --exact \
+    --test-threads=1
+}
+
 run_cli_native_stream() {
   echo "Running Rust compartment: cli-native-stream"
   run_cli_isolated --bin agent-browser native::stream -- --test-threads=1
@@ -144,7 +159,7 @@ run_and_record() {
 }
 
 run_comprehensive() {
-  local log_root native_pid support_pid native_status support_status started_at
+  local log_root native_pid support_pid native_status support_status performance_status started_at
   local base_target_dir native_target_dir support_target_dir
   log_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-browser-rust-tests.XXXXXX")"
   trap 'rm -rf "$log_root"' RETURN
@@ -161,7 +176,7 @@ run_comprehensive() {
     export CARGO_TARGET_DIR="$native_target_dir"
     lane_status=0
     run_and_record cli-native-actions run_cli_native_actions "$log_root" || lane_status=1
-    run_and_record cli-native-service run_cli_native_service "$log_root" || lane_status=1
+    run_and_record cli-native-service run_cli_native_service_without_performance_oracle "$log_root" || lane_status=1
     run_and_record cli-native-other run_cli_native_other "$log_root" || lane_status=1
     exit "$lane_status"
   ) &
@@ -183,10 +198,19 @@ run_comprehensive() {
   native_status=$?
   wait "$support_pid"
   support_status=$?
+
+  performance_status=0
+  CARGO_TARGET_DIR="$native_target_dir" \
+    run_and_record cli-native-service-performance \
+      run_cli_native_service_performance_oracle "$log_root" || performance_status=1
+  if [[ "$performance_status" -ne 0 ]]; then
+    native_status=1
+  fi
   set -e
 
   for compartment in cli-native-actions cli-native-service cli-native-other \
-    cli-workstation cli-native-browser cli-native-stream cli-core transport cli-integration; do
+    cli-workstation cli-native-browser cli-native-stream cli-core transport cli-integration \
+    cli-native-service-performance; do
     cat "$log_root/$compartment.log"
     cat "$log_root/$compartment.result"
   done

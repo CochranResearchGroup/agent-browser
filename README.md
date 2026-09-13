@@ -359,6 +359,11 @@ Edge family labels to the canonical `chrome` engine while continuing to reject
 Lightpanda and unrelated family evidence.
 Its temporary candidate session is scoped to the upgrade transaction, so a
 retry cannot reuse a candidate daemon left by an earlier failed transaction.
+A source-runtime `handoff prepare` that returns the exact no-effect
+`service_state_stale_revision` commit refusal is reloaded and replanned up to
+two times inside the same transaction. Every other handoff failure remains
+terminal, and repeated stale revisions still roll back to the selected old
+generation instead of widening the retry.
 If persisted browser health or tab validity lags a retained live browser after
 rollback, upgrade bootstrap performs one read-only loopback CDP observation.
 It accepts that evidence only when the recorded PID and process identity,
