@@ -29,6 +29,11 @@ tags:
   evidence returned, and the primary agent's reconciliation decision.
 - Keep urgent blocking work local when the next action depends directly on the answer, except for a bounded specialist consultation whose demonstrated capability is more likely to resolve that exact obstacle than local continuation.
 - Give delegated work explicit ownership, expected output, and write scope.
+- Prefer economical workers for bounded inventory, normalization, receipt
+  drafting, manifest/counter checks, focused test triage, and other readily
+  verified transformations. Give them minimal context, a structured return
+  contract, deterministic checks, and no authority to alter goal scope,
+  acceptance, safety controls, or material budgets.
 - Prefer subagents for independent sidecar work, verification, or implementation slices with disjoint write sets.
 - Do not spawn parallel work that duplicates context loading or repeats the same exploration without a clear benefit.
 - Reuse prior agent context when the task is a continuation of the same bounded thread.
@@ -51,6 +56,9 @@ tags:
   replacement, plan revisions, and successor packets so review discovery does
   not restart accidentally.
 - Keep final integration responsibility with the primary agent even when subagents perform part of the work.
+- Integrate a verified worker result directly. Repeating its full investigation
+  with the primary defeats the routing decision; re-open only failed checks,
+  missing evidence, or consequential judgments reserved to the primary.
 - Be explicit about whether the repo optimizes for wall-clock speed, token efficiency, or a balance of the two.
 - Treat spawned subagents as asynchronous runtime artifacts, not just informal delegation.
 - Record the subagent run id, session id, transcript path, or equivalent handle when the runtime provides one.

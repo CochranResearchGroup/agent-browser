@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   mkdirSync,
   mkdtempSync,
@@ -21,12 +21,14 @@ import {
   assertDefaultDevelopmentUnchanged,
   developmentCandidateBinary,
   developmentRuntimeDescriptor,
+  developmentRuntimeStatus,
   defaultDevelopmentSnapshot,
   developmentExternalDiscoveryChecks,
   observeDevelopmentExternalDiscovery,
   evaluateProtectedLeaseAuthorityStatus,
   garbageCollectDevelopmentRuntime,
   installDevelopmentRuntime,
+  doctorDevelopmentRuntime,
   publishDevelopmentRuntimeIngress,
   renderDevelopmentUnits,
 } from './lib/development-runtime.js';
@@ -261,6 +263,39 @@ try {
   assert.doesNotMatch(JSON.stringify(units), /4848|4849|agent-browser-dashboard\.service/);
 
   const installed = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
+  const installedStatus = developmentRuntimeStatus({ env });
+  assert.deepEqual(installedStatus.ports, {
+    dashboard: 4948,
+    backend: 4949,
+    lane: 4951,
+  }, 'status ports must contain configured listener ports rather than listener process IDs');
+  const installedDoctor = doctorDevelopmentRuntime({ env });
+  assert.deepEqual(
+    installedDoctor.checks
+      .filter((item) => item.name.startsWith('port:'))
+      .map((item) => [item.name, item.observed]),
+    [
+      ['port:dashboard', 4948],
+      ['port:backend', 4949],
+      ['port:lane', 4951],
+    ],
+    'doctor text observations must report configured ports rather than listener process IDs',
+  );
+  const cliStatusResult = spawnSync(
+    process.execPath,
+    ['scripts/development-runtime.js', 'status', '--json'],
+    { cwd: process.cwd(), env, encoding: 'utf8' },
+  );
+  const cliStatus = JSON.parse(cliStatusResult.stdout);
+  assert.deepEqual(cliStatus.ports, installedStatus.ports);
+  const cliDoctor = spawnSync(
+    process.execPath,
+    ['scripts/development-runtime.js', 'doctor'],
+    { cwd: process.cwd(), env, encoding: 'utf8' },
+  );
+  assert.match(cliDoctor.stdout, /(?:PASS|FAIL) port:dashboard: 4948/);
+  assert.match(cliDoctor.stdout, /(?:PASS|FAIL) port:backend: 4949/);
+  assert.match(cliDoctor.stdout, /(?:PASS|FAIL) port:lane: 4951/);
   assert.deepEqual(JSON.parse(readFileSync(descriptor.presentationProvider.inventoryPath, 'utf8')), {
     schemaVersion: 'agent-browser.development-presentation-inventory.v1',
     environment: 'development',

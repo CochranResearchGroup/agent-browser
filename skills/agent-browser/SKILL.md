@@ -1157,7 +1157,10 @@ the Development badge and its runtime manifest must report
 provider uses six development-only route identities and local port 8093. Do not
 attach it to production Guacamole. Its seeded `development-default` runtime lane
 uses fixed stream port 4951. Use `pnpm development-runtime:gc` for safe
-unselected-generation cleanup.
+unselected-generation cleanup. Development JSON status reports configured
+listener numbers under `ports`; service process identities remain under
+`units.*.mainPid`. Doctor prints configured ports while checking listener
+ownership separately.
 The development doctor also verifies the shared root-owned protected lease
 authority socket, including its system unit state, root ownership,
 `agent-browser` group, and mode `0660`. Do not create a development authority

@@ -117,15 +117,23 @@ def read_ref_file(repo: Path, ref: str, path: str) -> str | None:
     return result.stdout if result.returncode == 0 else None
 
 
+def resolve_read_ref(repo: Path, value: str, *, remote: str) -> str | None:
+    candidates = [value]
+    if value.startswith("refs/heads/"):
+        candidates.append(f"refs/remotes/{remote}/{value.removeprefix('refs/heads/')}")
+    elif not value.startswith("refs/"):
+        candidates.extend((f"refs/heads/{value}", f"refs/remotes/{remote}/{value}"))
+    return next((candidate for candidate in candidates if ref_tip(repo, candidate)), None)
+
+
 def plan_metadata(text: str) -> dict[str, str]:
     metadata: dict[str, str] = {}
+    header = re.split(r"(?m)^##\s+", text, maxsplit=1)[0]
     for key in ("state", "lane", "branch", "target", "integration"):
-        match = re.search(rf"(?im)^{key}\s*:\s*(.+?)\s*$", text)
+        match = re.search(rf"(?im)^{key}\s*:\s*(.+?)\s*$", header)
         if match:
-            value = match.group(1).strip()
-            if len(value) >= 2 and value[0] == value[-1] == "`":
-                value = value[1:-1].strip()
-            metadata[key] = value
+            value = match.group(1).strip().strip("`")
+            metadata[key] = value.upper() if key in {"state", "lane"} else value
     return metadata
 
 
@@ -401,7 +409,8 @@ def audit_repo(
         if plan_state in {"PLANNED", "OPEN", "BLOCKED"}:
             plan_ref = str(catalog_lane.get("plan_ref", ""))
             plan_path = str(catalog_lane.get("plan", ""))
-            plan_body = read_ref_file(repo, plan_ref, plan_path) if plan_ref and plan_path else None
+            resolved_plan_ref = resolve_read_ref(repo, plan_ref, remote=remote) if plan_ref else None
+            plan_body = read_ref_file(repo, resolved_plan_ref, plan_path) if resolved_plan_ref and plan_path else None
             if plan_body is None:
                 findings.append("plan_catalog_drift")
                 problems.append(f"{lane_id}: registered plan is not readable at plan_ref")
@@ -451,7 +460,14 @@ def audit_repo(
         if custody_state == "ACTIVE_WORKTREE" and ref_relation == "diverged":
             findings.append("local_remote_diverged")
             problems.append(f"{lane_id}: active local and remote custody have diverged")
-        if custody_state == "ACTIVE_WORKTREE" and not lane_worktrees:
+        if (
+            custody_state == "ACTIVE_WORKTREE"
+            and not lane_worktrees
+            and ref_relation == "remote_only"
+            and checkpoint == remote_tip
+        ):
+            findings.append("remote_active")
+        elif custody_state == "ACTIVE_WORKTREE" and not lane_worktrees:
             if "registered_but_missing" not in findings:
                 findings.append("registered_but_missing")
             problems.append(f"{lane_id}: ACTIVE_WORKTREE lane has no assigned worktree")
@@ -486,9 +502,14 @@ def audit_repo(
             for overlap in unreconciled_overlaps:
                 problems.append(f"{lane_id}: declared overlap lacks disposition: {overlap}")
         target = str(catalog_lane.get("target", ""))
-        target_ref = target if target.startswith("refs/") else f"refs/heads/{target}"
-        target_tip = ref_tip(repo, target_ref) if target else None
-        integrated_into_target = is_ancestor(repo, local_tip, target_tip)
+        target_ref = (
+            default_ref
+            if target and default_ref.rsplit("/", 1)[-1] == target.rsplit("/", 1)[-1]
+            else resolve_read_ref(repo, target, remote=remote)
+        )
+        target_tip = ref_tip(repo, target_ref) if target_ref else None
+        branch_tip = local_tip or remote_tip
+        integrated_into_target = is_ancestor(repo, branch_tip, target_tip)
         integration_receipt = str(catalog_lane.get("integration_receipt", ""))
         receipt_verified = bool(
             integration_receipt
@@ -497,8 +518,8 @@ def audit_repo(
         )
         readiness_evidenced = (
             custody_state == "INTEGRATION_READY"
-            and local_tip
-            and local_tip == remote_tip == checkpoint
+            and branch_tip
+            and branch_tip == remote_tip == checkpoint
             and catalog_lane.get("validation_status") == "passed"
             and catalog_lane.get("validation_ref") == checkpoint
             and not any(item.get("status") for item in lane_worktrees)

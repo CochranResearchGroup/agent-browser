@@ -8,6 +8,13 @@ Lane: P116
 
 Source baseline: `190338dde2e5efb997e1d92e5a7a3647189c9646`
 
+## Current State
+
+The 2026-09-09 correction is the newest authority and keeps three gates open:
+cooperative surrender, supervisor convergence, and singular runtime/listener
+projection. [Issue #70](https://github.com/CochranResearchGroup/agent-browser/issues/70)
+owns that bounded completion outcome.
+
 Depends on:
 
 - `docs/dev/plans/0035-2026-06-15-external-byop-browser-adoption-plan.md`

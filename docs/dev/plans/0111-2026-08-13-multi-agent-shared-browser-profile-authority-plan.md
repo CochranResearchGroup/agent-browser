@@ -8,6 +8,13 @@ Lane: P111
 
 Source baseline: `8042d5b7cb11`
 
+## Current State
+
+Shared-profile routing is complete under Plan 0069. Atomic owner reservation,
+scoped coordinators, duplicate-pressure reconciliation, and controlled live
+proof remain open under
+[issue #69](https://github.com/CochranResearchGroup/agent-browser/issues/69).
+
 Depends on:
 
 - `docs/dev/plans/0037-2026-06-19-runtime-profile-sharing-plan.md`

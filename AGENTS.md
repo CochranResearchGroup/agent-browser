@@ -121,6 +121,9 @@ in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
 - Use `agent-browser-dev` and the `development-runtime:*` package scripts for
   experimental installed validation. Do not publish experimental binaries into
   production.
+- Development runtime JSON status reports configured listener numbers under
+  `ports`; service process identities remain under `units.*.mainPid`. Doctor
+  prints the configured port while separately checking listener ownership.
 - Build ordinary installed candidates with
   `pnpm build:development-candidate`. It uses the optimized Cargo `ci` profile
   at `cli/target/ci/agent-browser`. Reserve `pnpm build:native` and its full
@@ -471,8 +474,18 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
   and economical task routing; read `0021-subagent-workflow-optimization.md`
   when considering delegation. These apply to ongoing continuations too.
 - Read policy `0044-planning-discipline.md` before substantive planning, a
-  second related defect, or another expensive build/deployment/acceptance cycle.
-  It routes consolidation, evidence, delivery budgeting and worker assignments.
+  second related defect, or another expensive build, deployment, or acceptance
+  cycle. It routes consolidation, evidence, delivery budgeting, and worker
+  assignments.
+- Read policies `0047-multi-session-development-operating-model.md` and
+  `0050-collaborative-development-workflow.md` before
+  starting or resuming a substantive development lane, assigning top-level session ownership,
+  delegating work, creating a lane runtime, or integrating parallel branches.
+- Read policies `0048-forge-issue-reporting.md` and
+  `0049-github-issue-operations.md` before any issue provider mutation,
+  including settings, labels, issue creation, editing, assignment, planning,
+  closure, or transfer.
+- re-read planning-related policy before opening, revising, or closing a substantive plan
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete
 - re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
@@ -523,6 +536,10 @@ Read and follow:
 - `docs/dev/policies/0044-planning-discipline.md`
 - `docs/dev/policies/0045-model-selection-and-calibration.md`
 - `docs/dev/policies/0046-work-item-traceability.md`
+- `docs/dev/policies/0047-multi-session-development-operating-model.md`
+- `docs/dev/policies/0048-forge-issue-reporting.md`
+- `docs/dev/policies/0049-github-issue-operations.md`
+- `docs/dev/policies/0050-collaborative-development-workflow.md`
 
 ## Scope
 

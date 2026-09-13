@@ -1,0 +1,40 @@
+name: Product work
+description: Propose one bounded product outcome owned by a product lane.
+title: "[Product] "
+labels:
+  - enhancement
+  - state/triage
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Bounded outcome
+      description: Describe the user-visible or agent-visible result, not an implementation inventory.
+    validations:
+      required: true
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Proposed product lane
+      options:
+        - PL-BUGFIX
+        - PL-AUTH
+        - PL-CHALLENGE
+        - PL-RECIPES
+        - PL-PLATFORM
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance evidence
+      description: State the observable evidence needed to finish this item.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and non-goals
+      description: Name blocking work items, shared surfaces, and excluded scope.
+    validations:
+      required: false

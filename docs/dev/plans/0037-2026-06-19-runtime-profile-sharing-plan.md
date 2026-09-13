@@ -1,8 +1,14 @@
 # Runtime Profile Sharing Plan
 
 Date: 2026-06-19
-State: OPEN
+State: CLOSED
 Lane: P14/P16
+
+## Current State
+
+Closed by the later accepted evidence in Plan 0069, which records complete live
+shared-profile routing proof and no remaining work. New atomic owner-reservation
+and multi-agent authority work belongs to Plan 0111 and issue #69.
 Depends On:
 - `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`
 - `docs/dev/plans/0036-2026-06-18-rdp-ready-to-go-plan.md`

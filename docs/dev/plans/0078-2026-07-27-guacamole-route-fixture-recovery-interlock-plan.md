@@ -1,9 +1,16 @@
 # Plan 0078: Guacamole Route Fixture Recovery Interlock
 
 Date: 2026-07-27
-Status: Blocked after replacement live attempt; XRDP collapsed both routes onto one display
+State: BLOCKED
 Lane: P78
 Source incident: last30days Plan 0012 post-reboot route preflight
+
+## Current State
+
+The deterministic controller repair is retained, but the replacement live
+attempt collapsed both same-user XRDP routes onto display `:10`. Issue #85 owns
+selection and proof of a distinct route-isolation mechanism. No route sync,
+display restoration, or provider retry is authorized by this reconciliation.
 
 ## Goal
 

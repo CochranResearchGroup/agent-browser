@@ -224,7 +224,13 @@ Plan 0161 preserving-repair source milestone
   provider-free or isolated reproducer. It cannot begin another maintenance,
   build or installation loop by itself.
 
-## Worker assignments and model routing
+## Worker assignments
+
+The coordinator owns shared service contracts, plan reconciliation, and final
+integration. Bounded workers may implement disjoint provider-free fixtures or
+review one isolated surface under the assignments below.
+
+### Model routing
 
 Optimize for balanced wall-clock and token efficiency. Use deterministic
 CodeGraph, generators and focused repository checks before model work. Worker

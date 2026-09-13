@@ -84,6 +84,11 @@ pnpm smoke:development-browser-launch
 pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-dev.ecochran.dyndns.org
 ```
 
+Development runtime JSON status reports configured listener numbers under
+`ports`. Service process identities remain under `units.*.mainPid`. Doctor
+prints each configured port while separately verifying that its listener is
+owned by the expected unit PID.
+
 The development candidate uses the optimized Cargo `ci` profile and publishes
 `cli/target/ci/agent-browser`. Reserve `pnpm build:native`, with full LTO and
 one codegen unit, for the final production or release gate. The Cargo wrapper

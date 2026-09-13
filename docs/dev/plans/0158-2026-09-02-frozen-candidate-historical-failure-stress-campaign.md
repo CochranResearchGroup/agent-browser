@@ -2,11 +2,18 @@
 
 Date: 2026-09-02
 
-State: OPEN
+State: BLOCKED
 
 Execution state: `paused_for_postmortem_and_plan_0159_discussion`
 
-Lane: P157
+Lane: P158
+
+## Current State
+
+Completed subcycles remain accepted, but the historical campaign cannot resume
+automatically. [Issue #72](https://github.com/CochranResearchGroup/agent-browser/issues/72)
+preserves the explicit reopen confirmation and protected external-vantage gate.
+Partial artifacts remain diagnostic evidence only.
 
 Role: installed-acceptance successor to Plan 0157
 
