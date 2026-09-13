@@ -211,3 +211,24 @@ Evidence: failed CI job `103659215375` in run `34732944495`; local
 
 Next action: publish the corrected smoke expectation, require a fresh green PR
 57 head, then merge and run the preserving transactional installation.
+
+## Checkpoint P0175-C07 | 2026-09-12
+
+State transition: `smoke_expectation_repair to ci_fixture_stabilization`.
+
+Acceptance state: the fresh PR 57 head passed its workstation fixture and fast
+gates, then the comprehensive Rust lane exposed two unrelated nondeterministic
+workstation installer fixtures. Merge and installation remain withheld.
+
+Progress classification: `qualification_repair`; one fixture no longer spawns
+through a shell whose executable can change after identity capture, and the
+other now waits boundedly for the copied executable to publish its final
+process identity.
+
+Evidence: failed CI job `103662798122` in run `34734236616`; the same Rust
+source passed both tests in the preceding run. Both focused tests pass after
+the repair, 20 repeated direct test-binary executions pass, formatting passes,
+and strict workspace Clippy passes. Source checkpoint is `a7c1b637`.
+
+Next action: publish the deterministic fixture repair and require a fresh green
+PR 57 head before merge or installation.

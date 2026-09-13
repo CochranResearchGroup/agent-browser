@@ -8,7 +8,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: INTEGRATION_READY
-    checkpoint: 961776635f31167eff7bf9218e85a3e28025404f
+    checkpoint: a7c1b63757263f6ad84389c9c9e47c9790ac16b6
     remote_ref: null
     integration_receipt: null
     integration: merge

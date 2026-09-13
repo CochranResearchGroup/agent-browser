@@ -2,6 +2,17 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 309 | 2026-09-12
+
+Plan0175 PR57 reran after the MCP smoke correction. Its fast gates and
+Workstation Fixtures passed, while the comprehensive Rust lane exposed two
+unrelated nondeterministic process-identity fixtures: shell exec changed the
+captured executable in one case, and immediate post-spawn capture returned no
+identity in another. The fixtures now use stable executable identity and a
+bounded publication wait. Both focused tests, 20 repeated executions, format,
+and strict Clippy pass at source checkpoint `a7c1b637`. Merge and install remain
+withheld pending a fresh green PR57 head.
+
 ## Turn 308 | 2026-09-12
 
 Plan0175 correction PR57 passed every fast gate except the final Rust no-launch
