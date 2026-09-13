@@ -3,12 +3,12 @@ lanes:
   - id: P175
     objective: Prefer stealth Chromium for Google sign-in while preserving explicit browser-build requests
     plan: docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md
-    plan_ref: refs/heads/fix/plan-0175-stealth-routing-auth
-    branch: fix/plan-0175-stealth-routing-auth
+    plan_ref: refs/heads/fix/plan-0175-mcp-readiness-expectations
+    branch: fix/plan-0175-mcp-readiness-expectations
     target: main
     plan_state: OPEN
-    custody_state: INTEGRATION_READY
-    checkpoint: 27ec5aae0f9100e67306cc1c0e53694326af8cdd
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 97aa399af666113d5e293033c158f5988433379c
     remote_ref: null
     integration_receipt: null
     integration: merge

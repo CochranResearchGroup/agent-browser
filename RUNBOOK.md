@@ -2,6 +2,18 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 307 | 2026-09-12
+
+Plan0175 merged through PR55 as `97aa399a`, but its post-merge comprehensive
+Rust gate exposed three stale MCP readiness fixtures. Installation is withheld.
+The bounded correction makes ordinary built-in Google resource expectations
+`unknown` plus `attachable_ok` and preserves detached handoff coverage through
+an explicit `requiresCdpFree` fixture. Four focused MCP tests, formatting and
+strict Clippy pass. Production remains on binary SHA-256 `cae894cf25f2` with a
+ready singular supervisor; doctor separately reports one live retained browser
+identity missing a lifecycle cleanup record, which transactional preflight must
+reconcile without blind closure or relaunch.
+
 ## Turn 306 | 2026-09-12
 
 [Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)

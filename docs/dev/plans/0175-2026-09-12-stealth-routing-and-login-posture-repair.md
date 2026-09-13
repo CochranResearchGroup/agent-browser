@@ -86,8 +86,8 @@ No subagents are assigned; current orchestration policy prohibits delegation.
 | Stealth first login attachable | Focused profile-readiness test | passed |
 | Hard CDP-free exception preserved | Focused profile-readiness test | passed |
 | Public guidance aligned | Help, README, skill, docs-site diff | passed |
-| Candidate qualified | fmt, clippy, focused and selected checks | passed |
-| Reviewable custody | Clean committed branch and exact head readback | passed |
+| Candidate qualified | fmt, clippy, focused and selected checks | correction focused; full CI pending |
+| Reviewable custody | Clean committed branch and exact head readback | pending correction commit |
 
 Terminal success for this slice is a committed, provider-free qualified
 candidate. Production installation, real Google sign-in, captcha solving, and
@@ -153,3 +153,28 @@ ahead of its `main` baseline, and ready for the protected review workflow.
 
 Next action: review and merge the two-commit source plus custody packet.
 Installation and live acceptance require separate operator authority.
+
+## Checkpoint P0175-C04 | 2026-09-12
+
+State transition: `integration_ready to post_merge_correction`.
+
+Acceptance state: PR 55 merged as `97aa399a`, but its comprehensive Rust gate
+then failed three stale MCP resource assertions. Installation is withheld.
+
+Progress classification: `qualification_repair`; ordinary built-in Google
+readiness now correctly returns `unknown` and `attachable_ok`. The MCP readiness
+and allocation fixtures still expected detached manual seeding. The retained
+handoff fixture now declares `requiresCdpFree: true` so it continues to protect
+the explicit detached exception.
+
+Evidence: the four focused `read_profile_` MCP tests pass, formatting passes,
+and strict workspace Clippy passes. The already built merged candidate is not
+installable evidence while full CI is red.
+
+Authority update: the operator authorized merge, worktree consolidation, and
+production installation. Runtime mutation remains gated on a green corrected
+source head, preserving installer preflight, and coherent supervisor and
+Service State readback.
+
+Next action: commit and publish the correction through protected CI, merge only
+when green, then rebuild and run transactional installation.
