@@ -2,92 +2,33 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
-## Turn 309 | 2026-09-12
+## Turn 310 | 2026-09-13
 
-Plan0175 PR57 reran after the MCP smoke correction. Its fast gates and
-Workstation Fixtures passed, while the comprehensive Rust lane exposed two
-unrelated nondeterministic process-identity fixtures: shell exec changed the
-captured executable in one case, and immediate post-spawn capture returned no
-identity in another. The fixtures now use stable executable identity and a
-bounded publication wait. Both focused tests, 20 repeated executions, format,
-and strict Clippy pass at source checkpoint `a7c1b637`. Merge and install remain
-withheld pending a fresh green PR57 head.
+[Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)
+is CLOSED. PR57 passed every required fast check and merged as `0e18b351`.
+Executable SHA-256 `d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`
+is installed as generation `0.28.0-d0186990d375-3a6142188dd0` through accepted
+transaction `upgrade-c8483b3d-6fb1-41f3-b9da-5681169d5869`; the supervisor is
+singular and cleanup inventory has no candidates.
 
-## Turn 308 | 2026-09-12
+The Plan 0240 authentication-route lane is active at `f26f3269` in the primary
+worktree with one attributable untracked field note. At reconciliation, PR58
+had passed Version Sync, Rust Quality, Dashboard, Service Client, and Workstation
+Fixtures; Rust remained in progress. Preserve that worktree and do not absorb
+its note.
 
-Plan0175 correction PR57 passed every fast gate except the final Rust no-launch
-smoke phase. That phase returned the intended ordinary Google posture
-`unknown`, `attachable_ok`, and `not_required`, while the JavaScript smoke still
-asserted the former detached-login values. The aligned no-launch smoke passes
-locally against the qualified candidate. Merge and production installation
-remain withheld until a fresh PR57 head passes every required check.
+The clean Turnstile worktree remains on `feature/turnstile-desktop-challenge`
+at `17791566`, six commits ahead and 31 behind `origin/main`. It contains active
+Plan 0169 plus a CAPTCHA roadmap labeled P173 that conflicts with canonical
+Plan 0173. Preserve the branch; reconcile the roadmap identifier and rebase or
+merge current `main` inside that owning lane before review.
 
-## Turn 307 | 2026-09-12
-
-Plan0175 merged through PR55 as `97aa399a`, but its post-merge comprehensive
-Rust gate exposed three stale MCP readiness fixtures. Installation is withheld.
-The bounded correction makes ordinary built-in Google resource expectations
-`unknown` plus `attachable_ok` and preserves detached handoff coverage through
-an explicit `requiresCdpFree` fixture. Four focused MCP tests, formatting and
-strict Clippy pass. Production remains on binary SHA-256 `cae894cf25f2` with a
-ready singular supervisor; doctor separately reports one live retained browser
-identity missing a lifecycle cleanup record, which transactional preflight must
-reconcile without blind closure or relaunch. The correction is committed at
-`0572b065` and ready for protected CI.
-
-## Turn 306 | 2026-09-12
-
-[Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md) is source-qualified at `27ec5aae` on `fix/plan-0175-stealth-routing-auth`, with integration-ready custody. The bounded batch preserves explicit nested browser-build selections, routes built-in Google/Gmail sign-in to headed stealth Chromium, and retains detached CDP-free login only for `requiresCdpFree`; it authorizes no rename, install, launch, sign-in, profile, or provider effect. Focused access-plan/service-model groups, formatting, strict Clippy, selected contracts/fixtures, docs build, and exact branch-binary workstation fixture pass. Production installation and live account acceptance remain separate gates.
-
-## Turn 305 | 2026-09-12
-
-[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md) is CLOSED. PR54 merged the CI repair as `3f680a13`; first-attempt run `34729883713` passed every required check, including comprehensive Rust. Reconciled P171 cleanup PR51 merged as `00796d5c`; exact-head run `34731270343` also passed on its first attempt. GitHub reports no `main` branch protection or repository ruleset, so its auto-merge request merged PR51 before checks completed; the completed green run is post-merge evidence, and missing enforcement remains a separate repository-settings follow-up. Local comprehensive compilation remains non-qualifying because five stale Cargo scopes occupied 905 of 1,024 shared task slots. No stale-process cleanup, install, or runtime effect occurred.
-
-## Turn 304 | 2026-09-12
-
-[Plan0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md) is CLOSED. PR52 merged as `2156aaad`; exact binary `cae894cf25f2` installed as
-generation `0.28.0-cae894cf25f2-a4332e7facd9` through accepted transaction
-`upgrade-e371f1fa-80a6-485a-a3dd-2e2c6e785454` revision 13. Installed
-acceptance proved stale same-principal rejoin, exact retained-browser reuse,
-canonical valid handle, page probe, verified exact-tab release, 16 surviving
-peer tabs, and Chrome PID 49619 continuity. BILL itself now redirects to login;
-no provider or accounting mutation occurred. The closeout retains a separate
-shared-tab cleanup-policy projection-label mismatch for bounded follow-up.
-
-## Turn 303 | 2026-09-12
-
-Plan0171 is CLOSED through PR43 at `40da27f7`; final CI `34707619741` passed after Cargo-target isolation repaired a parallel runner race and the no-launch MCP inventory was synchronized.
-Exact SHA-256 `2c185ec7ccd691deaf0ee59412d3d31485ab0d8ad464cc02775785fb81be621d` is installed as `0.28.0-2c185ec7ccd6-f318ad66074f`; transaction `upgrade-1fcb7d57-671f-4cf9-afc6-1bcb45293e1a` accepted revision 13.
-Admission drain is off, multiplicity is steady, and resources have zero candidates or unknown obligations; operator-journey and default-profile lease warnings remain nonblocking.
-A compiler probe exposed gaps in sccache's blacklist sanitizer; cache-off completed in 4m25s, with hardening retained as a security follow-up. The retained Graphiti job's final bounded retry timed out before episode creation; do not queue a duplicate.
-No browser, profile, provider, route, cleanup, or unrelated-worktree effect occurred.
-
-## Turn 297 | 2026-09-11
-
-[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is CLOSED. It closed integrated and remote-only custody, integrated two P0240 residuals through PR30 at `de614fbe`, found no P157 residual beyond `ad673377`, and merged its record through PR31/32. The canonical Rust edits remain attributable Odollo custody. No runtime or provider effect occurred.
-
-## Turn 296 | 2026-09-11
-
-Plan0167 is CLOSED through PR29 at `14fb3db0`. Its 9,642,672-byte two-writer/two-reader regression completed in 709 to 739 ms across six samples with zero commit wait and 358 to 380 ms exclusive holds; the one-second deadline is unchanged. Required gates pass. Production installation, shared skill publication, installed doctor, and X evaluation remain separate.
-
-## Turn 294 | 2026-09-11
-
-Plan0166 is CLOSED via PR27 at `6030c71b`. Git custody is reconciled; client EOF releases exact connection custody while accepted work finishes independently. Provider-free gates pass; P0240/P157 remain preserved and Plan0162 is unblocked.
-
-## Turn 291 | 2026-09-10
-
-The Last30Days degraded tick adds A1/AX cases. LinkedIn's lock timeout stopped
-before effects and must retain `no_effect` plus holder context. Reddit created
-tabs, then redundantly enabled CDP domains. Five historical job lookups were
-lost, so AX requires durable read-only lookup. `last30days-facebook` retains its
-owner and profile but no locks or process; Plan0161 W2 owns preserving repair.
-Recovery r348638 is uncertain; diagnosis r513089 proves no launch. Only Last30Days may authorize a later tick. A3, BILL/QBO and PID45449 remain untouched.
-
-Production has three Guacamole routes but two admitted capacity slots; selection
-exposed `presentation_bound_slot_missing`. Plan0162 adopts Plan0124's arbitrary-N
-model: three warm desktops, logical-browser allocation and just-in-time
-multi-viewer streaming. Plan0161 repair remains the critical path; Plan0162
-then supplies Plan0160 A2/A3.
+The production executable and selected generation are coherent. Runtime
+monitoring is in bounded backoff after `service_state_lock_timeout` against the
+shared 6.97 MB Service State while the exact supervisor held the lock. Do not
+blindly retry, restart, or clean current browser trees. Historical Turns 291
+through 309 are preserved in
+[the September 10 to 12 archive](RUNBOOK-history-2026-09-10-through-turn309.md).
 
 ## Turn 286 | 2026-09-09
 
@@ -230,4 +171,4 @@ and untracked notes0159/0160. Those files remain untouched and outside PR14.
 Repository consolidation is complete. Full A1–A4/AX runtime acceptance and the
 deferred standalone CLI download compatibility check remain Plan0160 work; they
 are product acceptance gaps rather than Git integration gaps.
-[Previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).
+[Turns 291 through 309](RUNBOOK-history-2026-09-10-through-turn309.md); [previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).
