@@ -14830,18 +14830,35 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn finalized_runtime_host_grace_observes_self_exit_before_pidfd_fallback() {
-        let mut child = Command::new("/bin/sleep").arg("0.05").spawn().unwrap();
-        let executable = PathBuf::from(format!("/proc/{}/exe", child.id()))
-            .canonicalize()
-            .unwrap();
-        let identity =
-            crate::process_identity::capture_process_identity(child.id(), Some(&executable), None)
-                .unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-finalized-host-grace-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let executable = root.join("runtime-host-fixture");
+        fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = Command::new(&executable).arg("0.25").spawn().unwrap();
+        let identity_deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        let identity = loop {
+            if let Some(identity) = crate::process_identity::capture_process_identity(
+                child.id(),
+                Some(&executable),
+                None,
+            ) {
+                break identity;
+            }
+            assert!(
+                std::time::Instant::now() < identity_deadline,
+                "fixture process did not publish its final executable identity"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
 
         assert!(
             wait_for_recorded_process_exit(&identity, std::time::Duration::from_secs(1)).unwrap()
         );
         child.wait().unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
