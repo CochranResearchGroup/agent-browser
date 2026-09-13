@@ -1514,7 +1514,10 @@ returns an unknown-effect error instead of replaying a credential or OTP
 submission.
 
 The `bill-login-v1` recipe supports BILL identifier, password, and SMS OTP
-forms. Set `IM_RECEIPTS_LOCAL_API_BASE_URL` to an HTTP loopback IM Receipts API
+forms. When its exact signed-out Spend deep link renders BILL's `Page Not
+Found`, the owning Authentication Run enters the recipe's fixed login URL
+before classifying the page. Other unsupported pages remain operator
+intervention and are never redirected. Set `IM_RECEIPTS_LOCAL_API_BASE_URL` to an HTTP loopback IM Receipts API
 and `IM_RECEIPTS_SEALED_AUTH_CAPABILITY` to its matching capability of at least
 32 characters. The watch is armed before password submission can trigger SMS.
 The OTP crosses only the protected loopback response and is absent from MCP,
