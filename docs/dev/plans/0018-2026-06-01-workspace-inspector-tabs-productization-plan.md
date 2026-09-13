@@ -1,8 +1,15 @@
 # Workspace Inspector Tabs Productization Plan
 
 Date: 2026-06-01
-State: OPEN
+State: CANCELLED
 Lane: P12-F
+
+## Current State
+
+Superseded by Plan 0012 and
+[issue #68](https://github.com/CochranResearchGroup/agent-browser/issues/68).
+Its retained implementation and evidence remain valid; the unfinished hosted
+inspector outcome is consolidated into the parent rather than discarded.
 Parent Roadmap: `docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md`
 Depends On:
 - `docs/dev/plans/0013-2026-05-31-selected-workspace-context-plan.md`

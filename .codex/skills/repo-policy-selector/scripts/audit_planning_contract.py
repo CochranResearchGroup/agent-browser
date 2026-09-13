@@ -15,7 +15,7 @@ ROADMAP_LANE_HEADING_PREFIX_RE = re.compile(r"^##\s+P\d+")
 RUNBOOK_TURN_RE = re.compile(r"^##\s+Turn\s+\d+\s+\|\s+\d{4}-\d{2}-\d{2}$")
 RUNBOOK_TURN_HEADING_PREFIX_RE = re.compile(r"^##\s+Turn\b", re.IGNORECASE)
 PLAN_FILE_RE = re.compile(r"^\d{4}-\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")
-PLAN_STATE_RE = re.compile(r"(?im)^(?:state|status)\s*:\s*(PLANNED|OPEN|CLOSED|CANCELLED)\s*$")
+PLAN_STATE_RE = re.compile(r"(?im)^(?:state|status)\s*:\s*(PLANNED|OPEN|BLOCKED|CLOSED|CANCELLED)\s*$")
 ROADMAP_LANE_RE = re.compile(r"(?im)^(?:roadmap|lane|phase)\s*:\s*(P\d+)\b")
 CURRENT_STATE_RE = re.compile(r"(?im)^##\s+Current State\s*$|^(?:current state)\s*:", re.MULTILINE)
 GOAL_BOUND_PATTERNS = {
@@ -248,7 +248,7 @@ def audit_repo(
     open_roadmap_lanes = [
         lane_id
         for lane_id, section in roadmap_sections.items()
-        if re.search(r"(?im)^(?:state|status)\s*:\s*OPEN\s*$", section)
+        if re.search(r"(?im)^(?:state|status)\s*:\s*(?:OPEN|BLOCKED)\s*$", section)
     ]
     report["open_roadmap_lanes"] = open_roadmap_lanes
     for lane_id in open_roadmap_lanes if roadmap_applicable else []:
@@ -286,7 +286,7 @@ def audit_repo(
                 assert isinstance(excluded, list)
                 excluded.append(plan_path.name)
                 continue
-            if active_only and state_match and state_match.group(1) not in {"PLANNED", "OPEN"}:
+            if active_only and state_match and state_match.group(1) in {"CLOSED", "CANCELLED"}:
                 excluded = report["excluded_closed_plans"]
                 assert isinstance(excluded, list)
                 excluded.append(plan_path.name)
@@ -309,8 +309,8 @@ def audit_repo(
                 problems.append(f"plan missing deterministic state: {plan_path.name}")
             if roadmap_applicable and not entry["lane_ok"]:
                 problems.append(f"plan missing roadmap lane id: {plan_path.name}")
-            if entry["state"] == "OPEN" and not entry["current_state_ok"]:
-                problems.append(f"OPEN plan missing Current State section: {plan_path.name}")
+            if entry["state"] in {"OPEN", "BLOCKED"} and not entry["current_state_ok"]:
+                problems.append(f"{entry['state']} plan missing Current State section: {plan_path.name}")
             if roadmap_applicable and not entry["wired_in_roadmap"]:
                 problems.append(f"plan not wired in ROADMAP.md: {plan_path.name}")
             if roadmap_applicable and not entry["wired_in_runbook"]:
@@ -320,7 +320,7 @@ def audit_repo(
             cast_list.append(entry)
         plans = report["plans"]
         assert isinstance(plans, list)
-        actionable_states = {"PLANNED", "OPEN"}
+        actionable_states = {"PLANNED", "OPEN", "BLOCKED"}
         for lane_id in open_roadmap_lanes if roadmap_applicable else []:
             if not any(
                 plan.get("lane_id") == lane_id and plan.get("state") in actionable_states

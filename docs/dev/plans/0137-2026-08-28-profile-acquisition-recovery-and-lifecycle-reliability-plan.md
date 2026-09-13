@@ -2,13 +2,20 @@
 
 Date: 2026-08-28
 
-State: OPEN
+State: CANCELLED
 
 Execution state: `slice_k_profile_lease_usability_repair_installation_blocked_by_transfer_rollback`
 
 Lane: P137
 
 Source baseline: `e636a2501165ad33c8b4223b84005abfba0387d7`
+
+## Current State
+
+Superseded without discarding accepted source. Residual lease authority moved
+to Plan 0144 and issue #71; transactional recovery and reset moved to Plans
+0152 and 0161; retained consumer/session acceptance moved to Plan 0165 and
+issue #75.
 
 Branch: `main`
 

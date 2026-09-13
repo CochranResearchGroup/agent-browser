@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-State: PLANNED
+State: OPEN
 
 Consolidation: required
 
@@ -15,6 +15,13 @@ Target: main
 Integration: merge
 
 Parent: [Plan 0161](0161-2026-09-09-first-class-profile-repair-and-reset-plan.md), W6
+
+## Current State
+
+Provider-free source implementation is ready under
+[issue #74](https://github.com/CochranResearchGroup/agent-browser/issues/74).
+Production use, destructive profile mutation, credential handling, and live
+restore proof remain separate effect gates.
 
 ## Objective and authority
 

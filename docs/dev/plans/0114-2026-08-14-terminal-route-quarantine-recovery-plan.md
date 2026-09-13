@@ -2,11 +2,17 @@
 
 Date: 2026-08-14
 
-State: OPEN
+State: CLOSED
 
 Lane: P114
 
 Source baseline: `15743c05`
+
+## Current State
+
+Closed by Plan 0150's accepted production convergence and acquisition evidence,
+which explicitly depends on this quarantine-recovery work. No separate active
+issue is required for the historical route.
 
 ## Goal
 

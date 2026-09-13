@@ -18,6 +18,13 @@ Integration: merge
 
 Source integration receipt: `74883c6c3655744f04a2ffeb7894d23ba2c75aa2`
 
+## Current State
+
+Git custody is integrated. Public API, effect-admission, and installed proof
+remain open across the eight structural gates retained by
+[issue #71](https://github.com/CochranResearchGroup/agent-browser/issues/71).
+Source integration alone does not close this plan.
+
 Git custody: the recorded checkpoint `ae5ad34c` is integrated. Plan 0168 may
 close the historical branch without closing the remaining public mutation and
 daemon effect-admission work in this plan.

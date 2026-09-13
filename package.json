@@ -13,6 +13,7 @@
   },
   "scripts": {
     "version:sync": "node scripts/sync-version.js",
+    "test:policy-wiring": "node scripts/test-policy-wiring.js",
     "version": "npm run version:sync && git add cli/Cargo.toml Cargo.lock",
     "validation:select": "node scripts/dev/select-validation.js",
     "test:cdp-crate-architecture": "node scripts/test-cdp-crate-architecture.js",

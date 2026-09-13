@@ -321,6 +321,36 @@ class SelectPolicyRegressionTests(unittest.TestCase):
         self.assertNotIn("policy-adoption-feedback-loop", semantic_matches)
         self.assertNotIn("preview-artifact-review", semantic_matches)
 
+    def test_model_selection_reference_does_not_replace_its_local_policy(self):
+        repo_root = self.make_repo()
+        policy_dir = repo_root / "docs" / "dev" / "policies"
+        policy_dir.mkdir(parents=True, exist_ok=True)
+        (policy_dir / "0002-subagent-runtime-governance.md").write_text(
+            "# Policy | Subagent Runtime Governance\n\n"
+            "## Policy\n\n"
+            "- Apply `model-selection-and-calibration` for task-tier selection.\n",
+            encoding="utf-8",
+        )
+
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        surfaces = self.select_policy.extract_existing_policy_surfaces(repo_root)
+        semantic_matches = self.select_policy.semantic_module_matches(surfaces, installed_library)
+        coverage = self.select_policy.policy_adoption_coverage(
+            surfaces,
+            ["model-selection-and-calibration"],
+            installed_library,
+        )
+        plan = self.select_policy.build_install_plan(
+            repo_root,
+            coverage["missing_recommended_modules"],
+            coverage,
+            installed_library,
+        )
+
+        self.assertNotIn("model-selection-and-calibration", semantic_matches)
+        self.assertEqual(coverage["missing_recommended_modules"], ["model-selection-and-calibration"])
+        self.assertEqual(plan[0]["action"], "install-new")
+
     def test_memory_consumer_language_does_not_imply_runtime_operations(self):
         repo_root = self.make_repo(
             agents_text="""

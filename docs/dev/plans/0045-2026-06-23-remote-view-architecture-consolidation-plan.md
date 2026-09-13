@@ -1,8 +1,14 @@
 # Remote View Architecture Consolidation Plan
 
 Date: 2026-06-23
-State: PLANNED
+State: CANCELLED
 Lane: P45
+
+## Current State
+
+Superseded by Plans 0099, 0100, and 0101, which split projection, status, and
+route-bound extraction into bounded authorities. The optional residual deletion
+test is tracked for a current priority decision in issue #82.
 Depends On:
 - `docs/dev/plans/0041-2026-06-22-foreign-cdp-browser-discovery-and-control-plan.md`
 - `docs/dev/plans/0043-2026-06-22-route-handoff-confusion-audit-plan.md`

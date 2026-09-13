@@ -1,0 +1,30 @@
+name: Governance work
+description: Track repository policy, custody, planning, or maintenance outcomes.
+title: "[Governance] "
+labels:
+  - type/governance
+  - lane/platform
+  - state/triage
+  - effect/no-live
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Governance outcome
+      description: Name the repository state or operating contract that should become true.
+    validations:
+      required: true
+  - type: textarea
+    id: authorities
+    attributes:
+      label: Governing authorities
+      description: Link the roadmap, plan, policy, lane, or prior issue without copying their full bodies.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Completion evidence
+      description: Define the Git, audit, review, or readback evidence required for closure.
+    validations:
+      required: true

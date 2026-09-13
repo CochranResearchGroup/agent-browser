@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: PLANNED
+State: OPEN
 
 Consolidation: required
 
@@ -10,11 +10,11 @@ Lane: P177
 
 Product lane: PL-PLATFORM
 
-Branch: `platform/plan-0177-development-readiness`
+Branch: `platform/plan-0177-execution`
 
 Target: `main`
 
-Integration: merge through the repository review workflow
+Integration: merge
 
 ## Objective
 
@@ -24,6 +24,16 @@ its installed and development runtime boundaries in a truthful maintenance
 state before serious feature development resumes.
 
 ## Current State
+
+Execution is active under
+[issue #65](https://github.com/CochranResearchGroup/agent-browser/issues/65).
+The selector upgrade, policies 0047 through 0049, issue foundation, field-note
+custody, canonical no-op branch closure, Turnstile paused checkpoint, planning
+ledger reconciliation, and read-only runtime census are complete. Production
+maintenance is quarantined by issue #76; final catalog validation, review, and
+integration remain.
+
+The baseline below is retained as the campaign's opening evidence.
 
 The repository has stable product lanes and mature planning, Git, validation,
 runtime, and multi-agent policies, but it lacks one operating model that assigns

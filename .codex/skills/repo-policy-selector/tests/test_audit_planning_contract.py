@@ -249,6 +249,29 @@ class PlanningContractAuditTests(unittest.TestCase):
         self.assertEqual(report["excluded_closed_plans"], ["0001-2026-07-20-closed.md"])
         self.assertEqual(report["excluded_unclassified_plans"], ["legacy.md"])
 
+    def test_active_only_keeps_blocked_plans_actionable(self):
+        root = self.make_repo(("planning-discipline", "roadmap-runbook-governance"))
+        plans = root / "docs/dev/plans"
+        plans.mkdir(parents=True)
+        plan_name = "0158-2026-09-02-blocked-work.md"
+        (plans / plan_name).write_text(
+            "State: BLOCKED\nLane: P158\n## Current State\nWaiting on an explicit gate.\n",
+            encoding="utf-8",
+        )
+        (root / "ROADMAP.md").write_text(
+            f"# Roadmap\n\n## P158 | Blocked Work\nState: BLOCKED\nCurrent State: Waiting.\n{plan_name}\n",
+            encoding="utf-8",
+        )
+        (root / "RUNBOOK.md").write_text(
+            f"# Runbook\n\n## Turn 1 | 2026-09-02\n{plan_name}\n",
+            encoding="utf-8",
+        )
+
+        report = self.audit.audit_repo(root, active_only=True)
+
+        self.assertTrue(report["ok"], report["problems"])
+        self.assertEqual([item["state"] for item in report["plans"]], ["BLOCKED"])
+
     def test_active_only_allows_planning_repo_without_a_plans_directory(self):
         root = self.make_repo(("planning-discipline",))
 

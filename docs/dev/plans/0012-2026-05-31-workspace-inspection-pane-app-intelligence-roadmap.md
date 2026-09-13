@@ -5,6 +5,14 @@ State: OPEN
 Lane: P12
 Owner: dashboard/service-control-plane
 
+## Current State
+
+Core selected-workspace inspector surfaces and provider-free fixtures exist,
+but the remaining evidence tabs, App Intelligence actions, and hosted outcome
+are not fully accepted. [Issue #68](https://github.com/CochranResearchGroup/agent-browser/issues/68)
+owns the consolidated completion outcome. Plans 0018 and 0021 are superseded
+into this umbrella rather than retained as parallel active plans.
+
 ## Purpose
 
 Turn the right inspection pane tabs into a selected-workspace command surface

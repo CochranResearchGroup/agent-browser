@@ -1,0 +1,40 @@
+name: Defect
+description: Report incorrect behavior with bounded reproduction evidence.
+title: "[Defect] "
+labels:
+  - bug
+  - state/triage
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, cookies, customer data, or private page content.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: State the promised behavior or invariant.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Include exact typed errors and effect state when available.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Bounded reproduction
+      description: Provide the smallest safe reproducer and relevant version or environment.
+    validations:
+      required: true
+  - type: dropdown
+    id: effect
+    attributes:
+      label: External-effect posture
+      options:
+        - No live effect required
+        - Live acceptance is separately gated
+    validations:
+      required: true
