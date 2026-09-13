@@ -607,6 +607,7 @@ def semantic_module_matches(
                 "codegraph-usage",
                 "graph-backed-memory-usage",
                 "memory-service-runtime-governance",
+                "model-selection-and-calibration",
                 "policy-adoption-feedback-loop",
                 "policy-harvest-loop",
                 "preview-artifact-review",

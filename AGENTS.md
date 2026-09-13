@@ -473,6 +473,14 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 - Read policy `0044-planning-discipline.md` before substantive planning, a
   second related defect, or another expensive build/deployment/acceptance cycle.
   It routes consolidation, evidence, delivery budgeting and worker assignments.
+- Read policy `0047-multi-session-development-operating-model.md` before
+  starting or resuming a substantive development lane, assigning top-level
+  session ownership, delegating work, creating a lane runtime, or integrating
+  parallel branches.
+- Read policies `0048-forge-issue-reporting.md` and
+  `0049-github-issue-operations.md` before any issue provider mutation,
+  including settings, labels, issue creation, editing, assignment, planning,
+  closure, or transfer.
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete
 - re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
@@ -523,6 +531,9 @@ Read and follow:
 - `docs/dev/policies/0044-planning-discipline.md`
 - `docs/dev/policies/0045-model-selection-and-calibration.md`
 - `docs/dev/policies/0046-work-item-traceability.md`
+- `docs/dev/policies/0047-multi-session-development-operating-model.md`
+- `docs/dev/policies/0048-forge-issue-reporting.md`
+- `docs/dev/policies/0049-github-issue-operations.md`
 
 ## Scope
 

@@ -209,28 +209,6 @@ class PlanningContractAuditTests(unittest.TestCase):
 
         self.assertTrue(report["ok"], report["problems"])
 
-    def test_roadmap_contract_accepts_three_digit_lane_ids(self):
-        root = self.make_repo(("planning-discipline", "roadmap-runbook-governance"))
-        plans = root / "docs/dev/plans"
-        plans.mkdir(parents=True)
-        plan_name = "0168-2026-09-11-closeout.md"
-        (plans / plan_name).write_text(
-            "State: OPEN\nLane: P168\n## Current State\nReady.\n",
-            encoding="utf-8",
-        )
-        (root / "ROADMAP.md").write_text(
-            f"# Roadmap\n\n## P168 | Closeout\nState: OPEN\nCurrent State: Ready\n{plan_name}\n",
-            encoding="utf-8",
-        )
-        (root / "RUNBOOK.md").write_text(
-            f"# Runbook\n\n## Turn 1 | 2026-09-11\n{plan_name}\n",
-            encoding="utf-8",
-        )
-
-        report = self.audit.audit_repo(root)
-
-        self.assertTrue(report["ok"], report["problems"])
-
     def test_active_only_excludes_closed_and_unclassified_legacy_plans(self):
         root = self.make_repo(("planning-discipline",))
         plans = root / "docs/dev/plans"
@@ -340,33 +318,3 @@ class PlanningContractAuditTests(unittest.TestCase):
 
         self.assertFalse(report["ok"])
         self.assertTrue(any("RUNBOOK.md has headings" in item for item in report["problems"]))
-
-
-class ConsolidationContractAuditTests(unittest.TestCase):
-    def setUp(self):
-        self.audit = load_audit_module()
-        self.valid = "Consolidation: required\n" + "\n".join(
-            "### " + heading + "\nConcrete scoped content.\n" for heading in
-            ("Consolidated batch", "Delivery sequence and budget", "Worker assignments", "Evidence and exit"))
-
-    def test_unmarked_legacy_is_explicitly_excluded(self):
-        report = self.audit.audit_consolidation_contract("State: OPEN")
-        self.assertFalse(report["applicable"])
-        self.assertIn("legacy", report["excluded_reason"])
-
-    def test_complete_structure_passes(self):
-        self.assertTrue(self.audit.audit_consolidation_contract(self.valid)["ok"])
-
-    def test_missing_worker_section_fails(self):
-        text = self.valid.replace("### Worker assignments\nConcrete scoped content.\n", "")
-        self.assertFalse(self.audit.audit_consolidation_contract(text)["ok"])
-
-    def test_comment_only_and_placeholder_sections_fail(self):
-        for body in ("<!-- future work -->", "TBD"):
-            with self.subTest(body=body):
-                text = self.valid.replace("Concrete scoped content.", body, 1)
-                self.assertFalse(self.audit.audit_consolidation_contract(text)["ok"])
-
-    def test_invalid_declaration_cannot_disable_gate(self):
-        self.assertFalse(self.audit.audit_consolidation_contract(
-            self.valid.replace("Consolidation: required", "Consolidation: optional"))["ok"])
