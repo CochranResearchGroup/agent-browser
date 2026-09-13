@@ -20,11 +20,20 @@ pub(crate) struct SiteLoginRecipe {
     pub(crate) target_service_id: String,
     pub(crate) allowed_origins: Vec<String>,
     pub(crate) authenticated_company_path_prefix: String,
+    pub(crate) login_entry_fallback: LoginEntryFallbackRecipe,
     pub(crate) identifier: SiteFormRecipe,
     pub(crate) password: SiteFormRecipe,
     pub(crate) password_value_source: PasswordValueSource,
     pub(crate) sms_otp: SiteFormRecipe,
     pub(crate) password_persistence: PasswordPersistenceRecipe,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct LoginEntryFallbackRecipe {
+    pub(crate) from_url: String,
+    pub(crate) from_title: String,
+    pub(crate) to_url: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,6 +99,9 @@ fn validate_recipe(recipe: &SiteLoginRecipe) -> Result<(), String> {
         || recipe.target_service_id != "bill"
         || recipe.allowed_origins != ["https://app.bill.com", "https://login.us.bill.com"]
         || recipe.authenticated_company_path_prefix != "/companies/"
+        || recipe.login_entry_fallback.from_url != "https://app.bill.com/spend/transactions"
+        || recipe.login_entry_fallback.from_title != "Page Not Found"
+        || recipe.login_entry_fallback.to_url != "https://login.us.bill.com/neo/login?url=%2FHome"
         || recipe.identifier.field_selectors.is_empty()
         || recipe.password.field_selectors.is_empty()
         || recipe.sms_otp.field_selectors.is_empty()
@@ -102,6 +114,15 @@ fn validate_recipe(recipe: &SiteLoginRecipe) -> Result<(), String> {
         return Err("site_login_recipe_contract_mismatch".to_string());
     }
     Ok(())
+}
+
+pub(crate) fn login_entry_fallback_url<'a>(
+    recipe: &'a SiteLoginRecipe,
+    evidence: &SitePageEvidence,
+) -> Option<&'a str> {
+    let fallback = &recipe.login_entry_fallback;
+    (evidence.url == fallback.from_url && evidence.title == fallback.from_title)
+        .then_some(fallback.to_url.as_str())
 }
 
 pub(crate) fn classify_site_page(
@@ -273,6 +294,31 @@ mod tests {
             )
             .unwrap_err(),
             "site_login_origin_not_allowed"
+        );
+    }
+
+    #[test]
+    fn bill_dead_spend_entry_uses_only_the_closed_login_fallback() {
+        let recipe = load_site_login_recipe("bill-login-v1").unwrap();
+        let dead_entry = SitePageEvidence {
+            url: "https://app.bill.com/spend/transactions".to_string(),
+            title: "Page Not Found".to_string(),
+            identifier_selector: None,
+            password_selector: None,
+            sms_otp_selector: None,
+            visible_button_labels: Vec::new(),
+        };
+        assert_eq!(
+            login_entry_fallback_url(&recipe, &dead_entry),
+            Some("https://login.us.bill.com/neo/login?url=%2FHome")
+        );
+
+        let mut unsupported_challenge = dead_entry.clone();
+        unsupported_challenge.url = "https://login.us.bill.com/challenge".to_string();
+        unsupported_challenge.title = "Verify your identity".to_string();
+        assert_eq!(
+            login_entry_fallback_url(&recipe, &unsupported_challenge),
+            None
         );
     }
 }
