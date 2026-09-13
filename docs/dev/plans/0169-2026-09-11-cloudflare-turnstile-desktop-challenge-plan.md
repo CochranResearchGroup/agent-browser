@@ -39,9 +39,11 @@ or additional challenge implementation is authorized by that reconciliation.
 
 The operator resumed provider-free anti-bot feature work on 2026-09-13. The
 [Plan 0180 Phase 0 packet](0180-2026-09-13-captcha-guard-contract-and-threat-model.md)
-freezes the guard contract and threat model without changing this plan's live
-effect gate. It does not authorize a browser launch, installation, profile
-mutation, desktop input, live challenge attempt, or retry.
+closed at `c6f0b447a03a586991561824ad0e744974267e81` with the guard contract,
+threat model, dependency policy, and deterministic fixtures frozen. It did not
+change this plan's live effect gate or authorize a browser launch,
+installation, profile mutation, desktop input, live challenge attempt, or
+retry.
 
 A second California Secretary of State fieldwork route exposed a distinct
 challenge family. Imperva supplies the blocking interstitial, while a nested

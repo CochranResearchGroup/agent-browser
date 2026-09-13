@@ -7,10 +7,10 @@ Keep this file at or below 200 lines under policy 0043.
 ## Turn 317 | 2026-09-13
 
 [Plan 0180](docs/dev/plans/0180-2026-09-13-captcha-guard-contract-and-threat-model.md)
-is OPEN under P169 and issue #66. The operator resumed provider-free anti-bot
-feature work. The feature branch merged current `origin/main` and published
-reconciled checkpoint `fc16ac08`. The contract test accepts six positive
-fixtures and rejects seven adversarial fixtures.
+is CLOSED under P169 and issue #66 at published checkpoint
+`c6f0b447a03a586991561824ad0e744974267e81`. The guard request, capability,
+receipt, threat model, dependency policy, and deterministic fixtures are frozen.
+All selected provider-free validation passed.
 
 This packet freezes guard requests, capabilities, receipts, threat boundaries,
 redaction, replay, and future crate dependency direction. It does not authorize

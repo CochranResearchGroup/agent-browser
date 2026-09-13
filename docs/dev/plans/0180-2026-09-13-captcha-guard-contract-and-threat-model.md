@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -35,9 +35,9 @@ effect journaling, replay suppression, input acknowledgement, and after-state
 verification. Those types remain coupled to `cli/src/native/` and do not yet
 define the smaller interface needed by the staged guard architecture.
 
-The branch was reconciled with `origin/main` and published at `fc16ac08`. Issue
-`#66` remains open, blocked, and live-gated. This packet is a provider-free
-contract slice only.
+The branch was reconciled with `origin/main`. The provider-free contract packet
+is published at `c6f0b447a03a586991561824ad0e744974267e81`. Issue `#66`
+remains open, blocked, and live-gated.
 
 ## Authority And Effect Boundary
 
@@ -128,16 +128,26 @@ write from this packet.
 | Requirement | Evidence | State |
 | --- | --- | --- |
 | Current transaction mapped | CodeGraph exploration of desktop interaction, capture, authority, and journal seams | complete |
-| Request contract | Schema plus positive and adversarial fixtures | pending |
-| Capability contract | Schema plus cross-platform guarantee fixtures | pending |
-| Receipt contract | Schema plus replay, uncertainty, and verification fixtures | pending |
-| Threat model and dependency direction | Contract document and machine-readable dependency policy | pending |
-| Provider-free qualification | Focused test and selected documentation checks | pending |
+| Request contract | Schema plus positive and adversarial fixtures | complete |
+| Capability contract | Schema plus cross-platform guarantee fixtures | complete |
+| Receipt contract | Schema plus replay, uncertainty, and verification fixtures | complete |
+| Threat model and dependency direction | Contract document and machine-readable dependency policy | complete |
+| Provider-free qualification | Six valid fixtures accepted, seven adversarial fixtures rejected, and all selected checks passed | complete |
 | Installed or live acceptance | Separate Plan 0169 gate | not applicable |
 
 Close this packet only when every provider-free row is complete and the exact
 source checkpoint is published. A clean contract packet does not unblock or
 complete Plan 0169's live acceptance.
+
+## Closeout
+
+The packet closed at published source checkpoint
+`c6f0b447a03a586991561824ad0e744974267e81`. The focused contract test, release
+asset fixture, service API and MCP parity check, generated service-client
+contract and type checks, validation-selector self-check, active planning and
+goal audit, JSON parsing, runbook bound, and patch hygiene passed. No installed
+runtime, browser, profile, credential, desktop-input, provider, or live-site
+effect occurred.
 
 ## Non-Goals
 

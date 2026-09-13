@@ -3,39 +3,14 @@ work_item_tracking: required
 lanes:
   - id: P169
     product_lane: PL-CHALLENGE
-<<<<<<< HEAD
-    objective: Detect and click one visible Cloudflare Turnstile checkbox through the governed desktop workflow
-    plan: docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md
-    plan_ref: refs/heads/feature/turnstile-desktop-challenge
-    branch: feature/turnstile-desktop-challenge
-    target: main
-    plan_state: BLOCKED
-    custody_state: PAUSED_REF
-    checkpoint: 5c5d46ddc1b6f9f4772e297a6692685ec93449e3
-    remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
-    integration_receipt: null
-    integration: merge
-    work_items: [CochranResearchGroup/agent-browser#66]
-    dependencies: [P110]
-    overlaps: [P157, P165]
-    reconciled_overlaps: [P157_preserve_profile_authority, P165_preserve_active_authentication_run]
-    updated_at: 2026-09-13
-  - id: P177
-    product_lane: PL-PLATFORM
-    objective: Establish issue-backed multi-session governance and reconcile repository custody before serious development resumes
-    plan: docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md
-    plan_ref: refs/heads/platform/plan-0177-development-readiness
-    branch: platform/plan-0177-development-readiness
-=======
     objective: Qualify one bounded Turnstile interaction through the governed desktop workflow
     plan: docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md
     plan_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     branch: feature/turnstile-desktop-challenge
->>>>>>> origin/main
     target: main
     plan_state: BLOCKED
     custody_state: PAUSED_REF
-    checkpoint: 32e7ec8385ba6a86a840f4b5acb366aa235e2f4f
+    checkpoint: c6f0b447a03a586991561824ad0e744974267e81
     remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     integration_receipt: null
     integration: merge

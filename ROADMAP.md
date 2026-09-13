@@ -133,11 +133,12 @@ preserves the broader staged design without creating a second P173 identity.
 
 The operator resumed provider-free anti-bot feature work on 2026-09-13.
 [Plan 0180](docs/dev/plans/0180-2026-09-13-captcha-guard-contract-and-threat-model.md)
-owns the first architecture packet: freeze the guard request, capability,
-receipt, threat model, and dependency direction with deterministic fixtures.
-It does not authorize installation, browser or profile mutation, desktop input,
-a live challenge attempt, or retry. Plan 0169 remains blocked on its separate
-live-interaction acceptance gate.
+closed the first architecture packet at
+`c6f0b447a03a586991561824ad0e744974267e81`: guard request, capability,
+receipt, threat model, dependency direction, and deterministic fixtures are
+frozen. This did not authorize installation, browser or profile mutation,
+desktop input, a live challenge attempt, or retry. Plan 0169 remains blocked on
+its separate live-interaction acceptance gate.
 
 ## P171 | Service Job Timestamp Integration And Install
 
