@@ -7,15 +7,15 @@ lanes:
     plan_ref: refs/heads/platform/product-lanes-note-consolidation
     branch: platform/product-lanes-note-consolidation
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 9fec81e592b0991d0090334ced9d6c2aae318e5b
-    remote_ref: null
+    plan_state: INTEGRATION_READY
+    custody_state: INTEGRATION_READY
+    checkpoint: ce0ac47f31ce5ef928b32fee385e8cdbd968e002
+    remote_ref: refs/remotes/origin/platform/product-lanes-note-consolidation
     integration_receipt: null
     integration: merge
     dependencies: []
     overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml]
-    reconciled_overlaps: []
+    reconciled_overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml]
     updated_at: 2026-09-13
   - id: P175
     product_lane: PL-AUTH

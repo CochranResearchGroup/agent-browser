@@ -105,4 +105,3 @@ Do not bulk-edit old notes merely to add lane metadata. Add metadata when a
 note becomes an active input or when a new plan cites it. This preserves hashes,
 links, and historical meaning while preventing the directory from becoming the
 active backlog.
-

@@ -171,4 +171,3 @@ notes declare a primary product lane, disposition, owning plan or work item,
 and any related lanes. Notes do not become a second backlog: an actionable open
 finding must be adopted by a plan or recorded as deferred with a named product
 lane.
-

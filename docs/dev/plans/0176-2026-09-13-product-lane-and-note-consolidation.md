@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: OPEN
+State: INTEGRATION_READY
 
 Consolidation: required
 
@@ -98,3 +98,21 @@ The plan becomes integration-ready when the complete documentation batch is
 committed and published with passing local checks. It closes only after merge
 to `main` and a clean canonical readback. Implementing any product feature is a
 separate bounded plan in its assigned product lane.
+
+## Checkpoint P0176-C01 | 2026-09-13
+
+State transition: `open to integration_ready`.
+
+The complete taxonomy and note-routing batch is committed at `ce0ac47f` and
+published on `platform/product-lanes-note-consolidation`. Plan 0176 passes its
+planning contract, the runbook remains below 200 lines, remote-view guidance
+checks pass, and patch hygiene is clean. The repository-wide active planning
+audit still reports 37 pre-existing legacy findings; none belongs to Plan 0176.
+
+The Turnstile branch overlaps ROADMAP, RUNBOOK, and active-lane documentation.
+This platform contract lands first; that owning lane must merge current `main`,
+renumber its conflicting CAPTCHA roadmap, and reconcile its lane projection
+before review. The active Plan 0240 worktree and note remain untouched.
+
+Next action: review and merge this two-commit documentation packet, then require
+a clean canonical active-lane readback before closing Plan 0176.

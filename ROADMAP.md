@@ -27,13 +27,14 @@ field evidence and acceptance records into the same model.
 
 ## P176 | Product Lane And Note Consolidation
 
-State: OPEN
+State: INTEGRATION READY
 
 Current state: five stable product lanes, note-routing rules, multi-agent WIP
 limits, shared-writer arbitration, dependency ordering, and Plan 0161 platform
 ownership are drafted on `platform/product-lanes-note-consolidation`.
 [Plan 0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
-owns the documentation-only integration and closeout.
+owns the documentation-only integration and closeout. The complete content
+checkpoint is `ce0ac47f`; repository review and merge remain.
 
 ## P174 | CI Production-Scale And Process-Identity Reliability
 
