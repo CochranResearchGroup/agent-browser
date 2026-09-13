@@ -646,6 +646,41 @@ where
                 let candidate_revision = candidate.state_revision;
                 candidate.state_revision = baseline_revision;
                 if candidate == baseline {
+                    let commit_deadline = Instant::now() + timeout.max(Duration::from_millis(1));
+                    let mut file_guard = acquire_service_state_file_lock_until(
+                        path,
+                        ServiceStateFileLockMode::Exclusive,
+                        commit_deadline,
+                        "prepared_noop_check",
+                    )?;
+                    let _process_guard = acquire_service_state_process_lock(
+                        lock,
+                        commit_deadline,
+                        "prepared_noop_check",
+                    )?;
+                    file_guard.set_state_summary(&baseline, None);
+                    file_guard.set_phase("load_current");
+                    let current = if self.store.recovery_required() {
+                        self.store.load()?
+                    } else {
+                        self.store.load_without_recovery()?
+                    };
+                    if current.state_revision != baseline_revision {
+                        if attempt == 0 {
+                            record_service_state_lock_terminal(
+                                "file",
+                                "prepared_noop_check",
+                                "exclusive",
+                                "stale_candidate_replay",
+                                Duration::ZERO,
+                            );
+                            continue;
+                        }
+                        return Err(format!(
+                            "service_state_stale_revision: expected={baseline_revision}; actual={}",
+                            current.state_revision
+                        ));
+                    }
                     return Ok(Some(result));
                 }
                 candidate.state_revision = candidate_revision;
