@@ -12,6 +12,8 @@ Branch: `feature/turnstile-desktop-challenge`
 
 Target: `main`
 
+Integration: merge
+
 ## Objective
 
 Add one service-owned desktop workflow that detects the visible Cloudflare
