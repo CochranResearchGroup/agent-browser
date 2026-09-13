@@ -7,19 +7,19 @@ Keep this file at or below 200 lines under policy 0043.
 ## Turn 315 | 2026-09-13
 
 [Plan 0179](docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md)
-is OPEN through [issue #89](https://github.com/CochranResearchGroup/agent-browser/issues/89).
-The local-only v0.1.26 rollout commit `133bed0d` is preserved on published
-branch `platform/policy-selector-v0-1-26-rollout`. Canonical `main` is clean and
-equal to `origin/main` at `ae426642`; the scoped branch has merged that current
-tip without conflict. Checkpoint `966c61e4` passes policy wiring, 122 selector
-tests with three source-checkout-only skips, active planning and goal audits,
-remote-view documentation checks, and patch hygiene. Pull request review and
-integration remain.
+is CLOSED through [issue #89](https://github.com/CochranResearchGroup/agent-browser/issues/89).
+PR #90 merged the v0.1.26 selector rollout as `3f842f59` after policy wiring,
+122 selector tests with three source-checkout-only skips, active planning and
+goal audits, remote-view documentation checks, and patch hygiene passed.
+Canonical `main` is clean and synchronized. Exact ancestry was verified before
+the clean topic worktree and local and remote refs were retired. Selected CI
+was queued at the one lazy readback and was not actively watched.
 
 No installed runtime, browser, profile, provider, tenant, service, or
-supervisor state is in scope. After reviewed integration and exact-ref cleanup,
-the next actions are Plan 0178 Git closeout with its installed gate preserved,
-then provider-free issue #78 in separate custody.
+supervisor state changed. Plan 0178 now has a new uncommitted source repair in
+its worktree and must be reconciled with its active owner rather than closed.
+Provider-free issue #78 remains the next independent bugfix after that custody
+is stable.
 
 ## Turn 314 | 2026-09-13
 

@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: OPEN
+State: CLOSED
 
 Lane: P179
 
@@ -31,12 +31,16 @@ branch. Canonical `main` is clean and equal to `origin/main` at
 `ae4266429b94dedef087e91c38087c7742f3caee`. The scoped branch has merged that
 remote tip without conflict and is undergoing bounded policy validation.
 
-Checkpoint `966c61e4a721d1cd2355a5ec252ef442fc1a6828` repairs repository-specific
+Checkpoint `966c61e4a721d1cd2355a5ec252ef442fc1a6828` repaired repository-specific
 policy routing, installed-bundle test paths, v0.1.26 wiring, active-only audit
 classification, and the three residual active-planning ledger findings.
 Policy wiring, 122 selector tests with three source-checkout-only skips, the
 goal audit, the active planning audit, remote-view documentation checks, and
-patch hygiene pass. Pull request review and integration remain.
+patch hygiene passed. PR #90 merged the branch as
+`3f842f59214496441b0c82f85740c401ea652608`. Exact ancestry was verified;
+canonical `main` was fast-forwarded to that commit; and the clean topic
+worktree plus local and remote topic refs were retired. Selected CI was queued
+at the one lazy readback and was not actively watched.
 
 ## Scope
 

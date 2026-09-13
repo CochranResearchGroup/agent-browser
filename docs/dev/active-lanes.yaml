@@ -1,25 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P179
-    product_lane: PL-PLATFORM
-    objective: Integrate repository policy selector rollout v0.1.26 through scoped custody
-    plan: docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md
-    plan_ref: refs/remotes/origin/platform/policy-selector-v0-1-26-rollout
-    branch: platform/policy-selector-v0-1-26-rollout
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 966c61e4a721d1cd2355a5ec252ef442fc1a6828
-    remote_ref: refs/remotes/origin/platform/policy-selector-v0-1-26-rollout
-    integration_receipt: null
-    integration: merge
-    work_items: [CochranResearchGroup/agent-browser#89]
-    dependencies: []
-    overlaps: [AGENTS.md, docs/dev/policies, .codex/skills/repo-policy-selector]
-    reconciled_overlaps: []
-    blocker: pull request review and integration remain
-    updated_at: 2026-09-13
   - id: P169
     product_lane: PL-CHALLENGE
     objective: Qualify one bounded Turnstile interaction through the governed desktop workflow
@@ -46,7 +27,7 @@ lanes:
     branch: fix/plan-0240-quiesce-browserless-runtime-lanes
     target: main
     plan_state: OPEN
-    custody_state: PAUSED_REF
+    custody_state: ACTIVE_WORKTREE
     checkpoint: f6b263f0b63becda20b37cb82f42981c4683fe20
     remote_ref: refs/remotes/origin/fix/plan-0240-quiesce-browserless-runtime-lanes
     integration_receipt: null
@@ -55,5 +36,5 @@ lanes:
     dependencies: []
     overlaps: [cli/src/workstation_install.rs]
     reconciled_overlaps: [cli/src/workstation_install.rs]
-    blocker: PR 83 validation and review remain separate from Plan 0177
+    blocker: uncommitted runtime-admission claim follow-up requires active-owner reconciliation
     updated_at: 2026-09-13
