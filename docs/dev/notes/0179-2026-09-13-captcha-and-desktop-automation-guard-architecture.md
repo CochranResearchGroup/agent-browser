@@ -1,16 +1,14 @@
-# Plan 0173 | CAPTCHA And Desktop Automation Guard Roadmap
+# CAPTCHA And Desktop Automation Guard Architecture
 
 Date: 2026-09-12
 
-State: PLANNED
+Product lane: PL-CHALLENGE
 
-Consolidation: required
+Disposition: design evidence retained under Plan 0169 and issue #66
 
-Lane: P173
+Governing plan: Plan 0169
 
-Branch: `feature/turnstile-desktop-challenge`
-
-Target: `main`
+Source branch: `feature/turnstile-desktop-challenge`
 
 ## Objective
 

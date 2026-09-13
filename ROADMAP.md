@@ -7,29 +7,6 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
-## P173 | CAPTCHA And Desktop Automation Guard Architecture
-
-State: PLANNED
-
-Current state: [Plan 0173](docs/dev/plans/0173-2026-09-12-captcha-and-desktop-automation-guard-roadmap.md)
-selects a staged hybrid. First extract a provider-free desktop guard crate
-inside the Rust workspace for fast focused development, after extracting the
-provider-neutral desktop transaction kernel into a shared desktop-services
-crate. Native execution reuses the evolving capture, evidence, coordinate,
-controller, effect, journal, verification, capability, and handoff
-infrastructure while Agent Browser retains browser and service authority. The
-full CLI is an integration artifact: structured replay, guard, shared-service,
-and platform-adapter tiers run independently, with an optimized candidate built
-once per frozen batch. The same narrow interface is then proven through an
-experimental versioned stdio adapter over those services. A sister
-desktop-control project is gated on two real clients, a stable protocol,
-separate lifecycle and security ownership, and a credible backend beyond X11.
-The roadmap permits no live CAPTCHA effect, profile rotation, runtime
-installation, or arbitrary desktop command surface in the planning packet. The
-intended product path performs one bounded automated solve attempt without
-preemptive handoff, then requires human intervention for failed, unsupported,
-ambiguous, or exhausted attempts rather than retrying blindly.
-
 ## P169 | Cloudflare Turnstile Desktop Challenge
 
 State: OPEN
