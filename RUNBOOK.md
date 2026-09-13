@@ -4,26 +4,15 @@ Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance,
 
 ## Turn 306 | 2026-09-12
 
-[Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)
-is source-qualified on `fix/plan-0175-stealth-routing-auth`. The bounded
-batch preserves explicit browser-build selections nested in service request
-parameters, moves built-in Google and Gmail sign-in to headed stealth Chromium,
-and retains detached CDP-free login only for `requiresCdpFree` policy. No build
-ID rename, production install, browser launch, account sign-in, profile change,
-or provider effect is authorized. The complete access-plan and service-model
-focused groups, formatting, strict Clippy, selected contract and fixture gates,
-documentation build, and exact branch-binary workstation fixture passed. The
-candidate source is committed at `27ec5aae` with integration-ready custody;
-production installation and live account acceptance remain separate gates.
+[Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md) is source-qualified at `27ec5aae` on `fix/plan-0175-stealth-routing-auth`, with integration-ready custody. The bounded batch preserves explicit nested browser-build selections, routes built-in Google/Gmail sign-in to headed stealth Chromium, and retains detached CDP-free login only for `requiresCdpFree`; it authorizes no rename, install, launch, sign-in, profile, or provider effect. Focused access-plan/service-model groups, formatting, strict Clippy, selected contracts/fixtures, docs build, and exact branch-binary workstation fixture pass. Production installation and live account acceptance remain separate gates.
 
 ## Turn 305 | 2026-09-12
 
-[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md) is OPEN on PR54; focused tests, fmt, strict Clippy, and both affected compartments pass. Local comprehensive compilation was blocked by five stale Cargo scopes occupying 905 of 1,024 shared task slots; protected CI is running. No stale-process cleanup, install, or runtime effect is authorized.
+[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md) is CLOSED. PR54 merged the CI repair as `3f680a13`; first-attempt run `34729883713` passed every required check, including comprehensive Rust. Reconciled P171 cleanup PR51 merged as `00796d5c`; exact-head run `34731270343` also passed on its first attempt. GitHub reports no `main` branch protection or repository ruleset, so its auto-merge request merged PR51 before checks completed; the completed green run is post-merge evidence, and missing enforcement remains a separate repository-settings follow-up. Local comprehensive compilation remains non-qualifying because five stale Cargo scopes occupied 905 of 1,024 shared task slots. No stale-process cleanup, install, or runtime effect occurred.
 
 ## Turn 304 | 2026-09-12
 
-[Plan0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
-is CLOSED. PR52 merged as `2156aaad`; exact binary `cae894cf25f2` installed as
+[Plan0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md) is CLOSED. PR52 merged as `2156aaad`; exact binary `cae894cf25f2` installed as
 generation `0.28.0-cae894cf25f2-a4332e7facd9` through accepted transaction
 `upgrade-e371f1fa-80a6-485a-a3dd-2e2c6e785454` revision 13. Installed
 acceptance proved stale same-principal rejoin, exact retained-browser reuse,
