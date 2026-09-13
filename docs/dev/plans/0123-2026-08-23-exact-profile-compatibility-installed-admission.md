@@ -2,13 +2,19 @@
 
 Date: 2026-08-23
 
-State: OPEN
+State: CANCELLED
 
 Execution state: `source_published_read_only_admission_accepted_live_apply_requires_explicit_authorization`
 
 Lane: P123
 
 Candidate source commit: `5fd4be88b2e35b4a6fe3e9e16f20ece8e20301f4`
+
+## Current State
+
+Superseded by later transactional installation and retained-profile campaigns,
+including Plan 0165's installed no-launch reuse evidence. The frozen candidate
+is historical evidence and must not receive a new live apply.
 
 Depends on:
 

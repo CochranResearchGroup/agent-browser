@@ -27,17 +27,46 @@ field evidence and acceptance records into the same model.
 
 ## P177 | Development Governance And Repository Readiness
 
-State: PLANNED
+State: OPEN
 
-Current state: issue tracking is disabled, the installed policy selector is one
-released patch behind, the merged no-op repair remains checked out with an
-untracked field note, the Turnstile branch is divergent and carries a duplicate
-P173 identity, and the active planning audit reports 37 housekeeping findings.
+Current state: issue tracking is enabled with issues #65 through #85, selector
+v0.1.25 and policies 0047 through 0049 are enacted, the no-op branch is retired
+after field-note custody, Turnstile is published as a P169-only paused ref, and
+the 37-finding planning ledger is reconciled.
 [Plan 0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
 defines the policy adoption, issue migration, worktree reconciliation, planning
-cleanup, and read-only runtime-readiness campaign required before serious
-feature development resumes. Provider and runtime mutations remain separately
-gated.
+cleanup, and read-only runtime-readiness campaign. Production maintenance and
+provider-backed acceptance remain quarantined under issue #76; final review and
+integration are open.
+
+## P178 | Browserless Runtime Lane Quiescence
+
+State: OPEN
+
+Current state: [Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md),
+[issue #84](https://github.com/CochranResearchGroup/agent-browser/issues/84),
+and [PR #83](https://github.com/CochranResearchGroup/agent-browser/pull/83)
+hold the concurrent installer repair. Checkpoint `24159acb` is published with
+no dedicated worktree. Plan 0177 does not broaden its scope into runtime repair
+or installed acceptance.
+
+## P12 | Selected Workspace Inspector And App Intelligence
+
+State: OPEN
+
+Current state: [Plan 0012](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md)
+and [issue #68](https://github.com/CochranResearchGroup/agent-browser/issues/68)
+own the remaining evidence-tab, App Intelligence, and hosted outcome. Plans
+0018 and 0021 are superseded into this single delivery authority.
+
+## P165 | BILL Authentication And Consumer Acceptance
+
+State: BLOCKED
+
+Current state: [Plan 0165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
+and [issue #75](https://github.com/CochranResearchGroup/agent-browser/issues/75)
+retain sealed BILL authentication and the first read-only consumer acceptance.
+Source, installation, and session-link repair are already complete.
 
 ## P176 | Product Lane And Note Consolidation
 
@@ -1408,7 +1437,7 @@ installed payload.
 
 ## P91 | Systemd Interlock Self-Quiesce Repair
 
-State: BLOCKED
+State: CLOSED
 Current state: the self-quiesce defect is repaired and validated, and the
 corrected binary and source-free payload are installed with matching
 provenance. The dashboard public route and PostgreSQL backup timer are healthy.
@@ -1421,9 +1450,8 @@ closed safely.
 
 ### Next Recommendation
 
-Schedule one coordinated maintenance window to install the current candidate,
-hand off the remaining stale daemon sessions, and require one successful
-installed interlock pass before re-enabling the recurring timer contract.
+Keep this repair closed. Issue #76 owns the distinct current production
+Service State monitor lock-timeout regression.
 
 ## P90 | Route-Bound Display Proof Diagnostics
 
@@ -1747,7 +1775,8 @@ Current state: the deterministic controller repair and documentation are
 implemented. The authorized replacement live attempt created the two expected
 Guacamole route records and permissions, then failed because XRDP reattached
 both same-user connections to display `:10` instead of allocating route B's
-display `:11`.
+display `:11`. [Issue #85](https://github.com/CochranResearchGroup/agent-browser/issues/85)
+owns the remaining route-isolation outcome.
 
 ### Current State
 
@@ -2315,9 +2344,10 @@ streaming code.
 
 ## P13 | Resource Monitor And Garbage Collector
 
-State: OPEN
-Current state: P13 has cleanup visibility in place and is moving to
-profile/browser sprawl prevention.
+State: CLOSED
+Current state: Plans 0026, 0027, and 0029 are closed. Preserve their resource
+inventory, guarded GC, and minimal-profile behavior; route new process pressure
+through a current defect such as issue #77.
 
 ### Current State
 
@@ -2327,7 +2357,7 @@ profile/browser sprawl prevention.
   visibility, timer summary output, and install doctor resource warnings.
 - Plan
   `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`
-  is open to make access-plan and launch behavior promote the minimal necessary
+  is closed after making access-plan and launch behavior promote the minimal necessary
   number of runtime profiles for simultaneous account, website, browser-build,
   and remote-view isolation sets.
 - The 2026-06-04 cleanup found stale multi-day `chromium-stealthcdp` process
@@ -2350,23 +2380,21 @@ profile/browser sprawl prevention.
 
 ### Next Recommendation
 
-Start Plan 0027 Slice A with a read-only access-plan `profileReuse` advisory.
-The broker should explain whether the minimal-profile path is to reuse an
-existing browser, wait for the selected profile lease, or launch a new browser
-because isolation actually requires it.
+Keep P13 closed and preserve its monitoring contracts. Use issue #77 for the
+fresh ownership and cleanup-eligibility investigation.
 
 ## P14 | AuraCall Service CDP Upgrade
 
-State: OPEN
-Current state: P14 is a high-level migration-support lane for service-owned
-profile origin, tab handles, controlled CDP attach, bounded evaluate,
-diagnostics, readiness evidence, and client ergonomics.
+State: CLOSED
+Current state: Plan 0033 records all six implementation slices closed. New
+consumer-specific migration pressure should open a fresh bounded issue rather
+than retaining this historical umbrella.
 
 ### Current State
 
 - Plan
   `docs/dev/plans/0033-2026-06-13-auracall-service-cdp-upgrade-plan.md`
-  is open.
+  is closed.
 - The motivating downstream user is AuraCall, but the lane is intentionally
   framed as generic agent-browser service primitives rather than
   provider-specific AuraCall scraping logic.
@@ -2390,10 +2418,8 @@ diagnostics, readiness evidence, and client ergonomics.
 
 ### Next Recommendation
 
-Continue P14 Slice E with readiness/freshness lifecycle gating. Keep focused
-live smokes for attach-read-detach, bounded evaluate, and diagnostics evidence
-capture as validation follow-up before treating the AuraCall migration bridge
-as live-proven.
+Preserve the completed generic primitives. Route any new AuraCall migration
+gap through a current issue with its own acceptance boundary.
 
 ## P16 | Remote Control Ready Command
 
@@ -2441,19 +2467,16 @@ in their own environment before changing browser-owner defaults.
 
 ## P69 | Shared Profile Routing And Handoff Deepening
 
-State: OPEN
-Current state: P69 is the active follow-up for the architecture review,
-`last30days` profile-routing failure, and shared-profile operator confusion.
-It makes explicit runtime profile identity authoritative for plain `open`, then
-routes concurrent operators through retained-browser tab acquisition instead of
-refusing merely because the profile directory is already owned by a browser
-process.
+State: CLOSED
+Current state: Plan 0069 records complete live shared-profile routing proof and
+no remaining work. Plan 0111 and issue #69 exclusively own later atomic owner
+reservation and multi-agent authority.
 
 ### Current State
 
 - Plan
   `docs/dev/plans/0069-2026-07-06-shared-profile-routing-and-handoff-deepening-plan.md`
-  is open.
+  is closed.
 - The source routing note is
   `docs/dev/notes/2026-07-06-last30days-profile-routing-failure.md`.
 - The plan applies the architecture-review recommendation to deepen the
@@ -2647,11 +2670,10 @@ coverage.
 
 ## P44 | RDP Browser Deterministic Refactor
 
-State: OPEN
-Current state: P44 is the follow-on deterministic route-bound acquisition
-lane. It turns the audited Facebook/RDP friction into one normalized
-operator-visible browser transaction instead of separate parser, route,
-display, browser, tab, proof, and dashboard recovery surfaces.
+State: CLOSED
+Current state: Plan 0044 is complete. Later remote-view architecture and route
+recovery work has separate plan authority; do not retain this plan as an open
+umbrella.
 
 ### Current State
 

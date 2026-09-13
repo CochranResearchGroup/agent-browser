@@ -122,7 +122,10 @@ def plan_metadata(text: str) -> dict[str, str]:
     for key in ("state", "lane", "branch", "target", "integration"):
         match = re.search(rf"(?im)^{key}\s*:\s*(.+?)\s*$", text)
         if match:
-            metadata[key] = match.group(1).strip()
+            value = match.group(1).strip()
+            if len(value) >= 2 and value[0] == value[-1] == "`":
+                value = value[1:-1].strip()
+            metadata[key] = value
     return metadata
 
 

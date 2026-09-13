@@ -1,10 +1,16 @@
 # Plan 0091: Systemd Interlock Self-Quiesce Repair
 
 Date: 2026-08-03
-Status: Blocked at Installed Runtime Gate
+State: CLOSED
 Lane: P91
 Predecessor: P90
 Source incident: external dashboard HTTP 502 after a timer-triggered workstation reconcile
+
+## Current State
+
+The self-quiesce repair and compatible-helper installation were completed by
+later runtime work. The current production monitor lock-timeout regression is
+a distinct defect under issue #76 and does not keep this historical repair open.
 
 ## Goal
 

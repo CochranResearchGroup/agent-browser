@@ -1,8 +1,15 @@
 # Activity Tab Selected Workspace Timeline Plan
 
 Date: 2026-06-01
-State: OPEN
+State: CANCELLED
 Lane: P12-I
+
+## Current State
+
+Superseded by Plan 0012 and
+[issue #68](https://github.com/CochranResearchGroup/agent-browser/issues/68).
+Activity-specific implementation remains retained while its unproven hosted
+acceptance is consolidated into the parent outcome.
 Parent Roadmap: `docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md`
 Depends On:
 - `docs/dev/plans/0013-2026-05-31-selected-workspace-context-plan.md`

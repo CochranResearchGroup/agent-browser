@@ -781,6 +781,41 @@ Implementation exists only at detached HEAD.
         self.assertIn("plan_catalog_drift", lane["findings"])
         self.assertIn("P42: plan state OPEN does not match catalog state BLOCKED", report["problems"])
 
+    def test_registered_plan_metadata_accepts_inline_code_scalars(self) -> None:
+        repo, temporary = self.make_registered_active_repo()
+        self.addCleanup(temporary.cleanup)
+        worktree = Path(
+            self.git(repo, "worktree", "list", "--porcelain")
+            .split("worktree ")[2]
+            .splitlines()[0]
+        )
+        plan = worktree / "docs/dev/plans/0042-2026-08-20-carrier-reconciliation.md"
+        plan.write_text(
+            plan.read_text(encoding="utf-8")
+            .replace("Branch: feature/p42-carrier-reconciliation", "Branch: `feature/p42-carrier-reconciliation`")
+            .replace("Target: main", "Target: `main`"),
+            encoding="utf-8",
+        )
+        self.git(worktree, "add", str(plan.relative_to(worktree)))
+        self.git(worktree, "commit", "-q", "-m", "Use inline code metadata")
+        checkpoint = self.git(worktree, "rev-parse", "HEAD")
+        self.git(worktree, "push", "-q", "origin", "feature/p42-carrier-reconciliation")
+        catalog = repo / "docs/dev/active-lanes.yaml"
+        catalog.write_text(
+            re.sub(
+                r"(?m)^    checkpoint: .+$",
+                f"    checkpoint: {checkpoint}",
+                catalog.read_text(encoding="utf-8"),
+            ),
+            encoding="utf-8",
+        )
+        self.git(repo, "add", "docs/dev/active-lanes.yaml")
+        self.git(repo, "commit", "-q", "-m", "Record inline metadata checkpoint")
+
+        result = self.run_audit(repo)
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+
     def test_unknown_dependency_fails_closed(self) -> None:
         repo, temporary = self.make_registered_active_repo()
         self.addCleanup(temporary.cleanup)

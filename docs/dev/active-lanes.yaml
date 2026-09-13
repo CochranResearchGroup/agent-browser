@@ -1,121 +1,58 @@
 schema_version: 1
+work_item_tracking: required
 lanes:
   - id: P177
     product_lane: PL-PLATFORM
-    objective: Establish issue-backed multi-session governance and reconcile repository custody before serious development resumes
+    objective: Establish issue-backed governance and reconcile repository custody before serious development resumes
     plan: docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md
-    plan_ref: refs/heads/platform/plan-0177-development-readiness
-    branch: platform/plan-0177-development-readiness
+    plan_ref: refs/heads/platform/plan-0177-execution
+    branch: platform/plan-0177-execution
     target: main
-    plan_state: PLANNED
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: d32919f8708cbca6a44aadc0cae513cc7e153474
-    remote_ref: null
+    checkpoint: f98a3161e6066bc2f46397ada8c3dd05e2b0f518
+    remote_ref: refs/remotes/origin/platform/plan-0177-execution
     integration_receipt: null
     integration: merge
-    dependencies: [P176]
+    work_items: [CochranResearchGroup/agent-browser#65]
+    dependencies: []
     overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml, docs/dev/policies]
-    reconciled_overlaps: []
+    reconciled_overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml, docs/dev/policies]
     updated_at: 2026-09-13
-  - id: P176
-    product_lane: PL-PLATFORM
-    objective: Define stable product lanes and consolidate reusable note routing for multi-agent development
-    plan: docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md
-    plan_ref: refs/remotes/origin/main
-    branch: platform/product-lanes-note-consolidation
+  - id: P169
+    product_lane: PL-CHALLENGE
+    objective: Qualify one bounded Turnstile interaction through the governed desktop workflow
+    plan: docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md
+    plan_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
+    branch: feature/turnstile-desktop-challenge
     target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATED
-    checkpoint: 1d12d1c4b7a01758f6d309d0a84394fcd71e9e60
-    remote_ref: null
-    integration_receipt: 1d12d1c4b7a01758f6d309d0a84394fcd71e9e60
+    plan_state: BLOCKED
+    custody_state: PAUSED_REF
+    checkpoint: 32e7ec8385ba6a86a840f4b5acb366aa235e2f4f
+    remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
+    integration_receipt: null
     integration: merge
+    work_items: [CochranResearchGroup/agent-browser#66]
     dependencies: []
-    overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml]
-    reconciled_overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml]
+    overlaps: [P157, P165]
+    reconciled_overlaps: [P157, P165]
     updated_at: 2026-09-13
-  - id: P175
-    product_lane: PL-AUTH
-    objective: Prefer stealth Chromium for Google sign-in while preserving explicit browser-build requests
-    plan: docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md
-    plan_ref: refs/remotes/origin/main
-    branch: fix/plan-0175-mcp-readiness-expectations
-    target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATED
-    checkpoint: 0e18b35132ea747e3b8d9c244abc1abef137fbf7
-    remote_ref: null
-    integration_receipt: 0e18b35132ea747e3b8d9c244abc1abef137fbf7
-    integration: merge
-    dependencies: []
-    overlaps: [cli/src/native/service_access.rs, cli/src/native/service_model.rs, cli/src/native/service_resources.rs, cli/src/native/action_runtime/runtime/daemon.rs]
-    reconciled_overlaps: [cli/src/native/service_access.rs, cli/src/native/service_model.rs, cli/src/native/service_resources.rs, cli/src/native/action_runtime/runtime/daemon.rs]
-    updated_at: 2026-09-13
-  - id: P173
+  - id: P178
     product_lane: PL-BUGFIX
-    objective: Repair expired-session retained-browser reuse through canonical acquisition and handle truth
-    plan: docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md
-    plan_ref: refs/remotes/origin/main
-    branch: fix/plan-0173-expired-session-reuse
+    objective: Quiesce proven browserless shared runtime lanes before transactional handoff
+    plan: docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md
+    plan_ref: refs/heads/platform/plan-0177-execution
+    branch: fix/plan-0240-quiesce-browserless-runtime-lanes
     target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATED
-    checkpoint: 2156aaad472ecebb1f79e7d5ce79419949b4705c
-    remote_ref: refs/remotes/origin/main
-    integration_receipt: 2156aaad472ecebb1f79e7d5ce79419949b4705c
+    plan_state: OPEN
+    custody_state: PAUSED_REF
+    checkpoint: 24159acbaf5c540c903f466dc229de767c300ddb
+    remote_ref: refs/remotes/origin/fix/plan-0240-quiesce-browserless-runtime-lanes
+    integration_receipt: null
     integration: merge
-    dependencies: [P144, P165]
-    overlaps: [cli/src/native/service_profile_acquisition.rs, cli/src/native/browser_lifecycle.rs, cli/src/native/browser_tabs.rs]
-    reconciled_overlaps: [cli/src/native/service_profile_acquisition.rs, cli/src/native/browser_lifecycle.rs, cli/src/native/browser_tabs.rs]
+    work_items: [CochranResearchGroup/agent-browser#84]
+    dependencies: []
+    overlaps: [cli/src/workstation_install.rs]
+    reconciled_overlaps: []
+    blocker: PR 83 validation and review remain separate from Plan 0177
     updated_at: 2026-09-13
-  - id: P165
-    product_lane: PL-AUTH
-    objective: Repair the current BILL identifier form drift and qualify the retained profile without downstream consumer effects
-    plan: docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md
-    plan_ref: refs/remotes/origin/main
-    branch: fix/profile-repair-owner-generation
-    target: main
-    plan_state: OPEN
-    custody_state: INTEGRATED
-    checkpoint: 0edde975cceb3f1c45b65b83209b22f77183275a
-    remote_ref: null
-    integration_receipt: 9e544710cfca66eea0a77e1627fc4c48f48e9c28
-    integration: merge
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
-    updated_at: 2026-09-11
-  - id: P157
-    product_lane: PL-PLATFORM
-    objective: Complete frozen-candidate adversarial acceptance for profile permissions, runtime convergence, remote handoffs, dashboard truth, and causal logging
-    plan: docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md
-    plan_ref: refs/remotes/origin/main
-    branch: plan/profile-permissions-and-request-provenance
-    target: main
-    plan_state: OPEN
-    custody_state: INTEGRATED
-    checkpoint: cccf3636d5fb097b24e25bf1cc448470fc664c93
-    remote_ref: null
-    integration_receipt: ad673377e5505676ceebe74a24f56c3f96e6e65d
-    integration: merge
-    dependencies: [P144]
-    overlaps: [P144]
-    reconciled_overlaps: [P144]
-    updated_at: 2026-09-11
-  - id: P144
-    product_lane: PL-PLATFORM
-    objective: Replace inferred profile lease authority with one canonical fenced authority kernel
-    plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md
-    plan_ref: refs/remotes/origin/main
-    branch: plan/lease-authority-coordination
-    target: main
-    plan_state: OPEN
-    custody_state: INTEGRATED
-    checkpoint: ae5ad34cccd545b41ed60b803fbd8f03aaa66dd7
-    remote_ref: null
-    integration_receipt: 74883c6c3655744f04a2ffeb7894d23ba2c75aa2
-    integration: merge
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
-    updated_at: 2026-09-11

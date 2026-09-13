@@ -1,10 +1,16 @@
 # Plan 0069: Shared Profile Routing And Handoff Deepening
 
-State: OPEN
+State: CLOSED
 
 Created: 2026-07-06
 
 Lane: P44 follow-up
+
+## Current State
+
+Closed. The completion checkpoint records live shared-profile routing proof and
+`Remaining: None`. Plan 0111 and issue #69 own the later atomic reservation and
+multi-agent authority problem; they do not reopen this completed routing plan.
 
 Source artifacts:
 

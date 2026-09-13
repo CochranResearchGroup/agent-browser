@@ -2,7 +2,7 @@
 
 Date: 2026-09-11
 
-State: OPEN
+State: BLOCKED
 
 Consolidation: required
 
@@ -15,6 +15,13 @@ Target: main
 Integration: merge
 
 Parent: Books Receipts Plan 0240 consumer acceptance
+
+## Current State
+
+Source, installation, and retained session-link repair are complete. Sealed BILL
+authentication and the first read-only consumer acceptance remain blocked under
+[issue #75](https://github.com/CochranResearchGroup/agent-browser/issues/75).
+The unauthenticated profile-selection defect is separate issue #67.
 
 ## Objective and authority
 

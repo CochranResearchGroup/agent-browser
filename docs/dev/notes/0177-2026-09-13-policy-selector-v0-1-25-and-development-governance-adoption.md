@@ -26,6 +26,13 @@ Policies 0048 and 0049 are adopted from the pinned selector library. Agent
 Browser adds an exact owned-target registry, normalized lane and state labels,
 and repository-specific issue forms during Plan 0177 execution.
 
+The release installation initially replaced Agent Browser's newer local audit
+extensions. Plan 0177 retained the v0.1.25 referenced-policy selection fix while
+restoring three-digit lane, required work-item, consolidation, and active-audit
+support from current `main`. The planning audit was additionally extended to
+treat `BLOCKED` as an actionable state rather than hiding blocked plans as
+unclassified history.
+
 ## Deferred Module
 
 The unreleased `collaborative-development-workflow` module at
