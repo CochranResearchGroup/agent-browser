@@ -678,6 +678,13 @@ def infer_repo_local_policy_findings(
         "goal-execution-governance": ["/goal", "goal execution", "long-running goal", "goal checkpoint", "goal-compatible"],
         "roadmap-runbook-governance": ["roadmap", "runbook", "progress", "current working set"],
         "work-item-traceability": ["issue tracking", "work item", "work-item", "backlog", "wip limit"],
+        "collaborative-development-workflow": [
+            "multi-user development",
+            "collaborative development",
+            "multiple contributors",
+            "pull request workflow",
+            "peer review",
+        ],
         "forge-issue-reporting": [
             "forge issue reporting",
             "owned repository issue",
@@ -697,6 +704,12 @@ def infer_repo_local_policy_findings(
         "runtime-vs-product-boundary": ["runtime home", "outside the repo", "user-scoped runtime", "product repo"],
         "runtime-state-governance": ["version controlled", "runtime state", "redaction", "pruning"],
         "tenant-isolation-and-operator-state": ["tenant", "tenant-scoped", "one profile per tenant", "state isolation"],
+        "development-runtime-isolation": [
+            "isolated development runtime",
+            "per-lane runtime",
+            "lane runtime",
+            "development runtime isolation",
+        ],
         "fieldwork-productization": ["fieldwork", "keep as product", "refactor before keep", "archive as note only"],
         "monolith-extraction-discipline": ["monolith", "monolithic", "strong trunk", "oversized cli"],
         "policy-management": ["docs/dev/policies", "policy library", "agents.md"],
@@ -1270,6 +1283,17 @@ def detect_signals(repo_root: Path) -> dict:
                 "parallel worktree",
             ]
         ),
+        "mentions_development_runtime_isolation": any(
+            phrase in combined or phrase in semantic_text
+            for phrase in [
+                "isolated development runtime",
+                "isolated dev runtime",
+                "per-lane runtime",
+                "per lane runtime",
+                "lane runtime",
+                "development runtime isolation",
+            ]
+        ),
         "mentions_work_item_tracking": any(
             phrase in combined or phrase in semantic_text
             for phrase in [
@@ -1281,6 +1305,28 @@ def detect_signals(repo_root: Path) -> dict:
                 "wip limit",
                 "work in process limit",
                 "issue dependency",
+            ]
+        ),
+        "mentions_collaborative_development": any(
+            phrase in combined or phrase in semantic_text
+            for phrase in [
+                "multi-user development",
+                "multi user development",
+                "collaborative development",
+                "multiple contributors",
+                "more than one contributor",
+                "human collaborators",
+                "team development",
+            ]
+        ) and any(
+            phrase in combined or phrase in semantic_text
+            for phrase in [
+                "pull request",
+                "feature branch",
+                "worktree",
+                "shared repository",
+                "shared repo",
+                "peer review",
             ]
         ),
         "mentions_forge_issue_reporting": any(
@@ -2264,9 +2310,26 @@ def choose_profile(signals: dict, installed_library: dict[str, Any]) -> tuple[st
     if signals["mentions_active_lane_coordination"] and "active-lane-coordination" not in modules:
         modules.append("active-lane-coordination")
         reasons.append("repo language indicates concurrent off-main lanes need default-branch discovery")
+    if signals["mentions_development_runtime_isolation"] and "development-runtime-isolation" not in modules:
+        modules.append("development-runtime-isolation")
+        reasons.append("repo language indicates concurrent development services need lane and production isolation")
     if signals["mentions_work_item_tracking"] and "work-item-traceability" not in modules:
         modules.append("work-item-traceability")
         reasons.append("repo language indicates issue or backlog state needs traceability to plans and delivery evidence")
+    if signals["mentions_collaborative_development"]:
+        collaboration_modules = (
+            "work-item-traceability",
+            "git-worktree-hygiene",
+            "commit-history-discipline",
+            "branch-and-integration-strategy",
+            "commit-and-push-cadence",
+            "validation-and-handoff",
+            "collaborative-development-workflow",
+        )
+        for module_id in collaboration_modules:
+            if module_id not in modules:
+                modules.append(module_id)
+        reasons.append("repo language indicates multiple human contributors need proportional shared-custody and deployment coordination")
     forge_reporting = (
         signals["mentions_forge_issue_reporting"]
         or signals["mentions_github_issue_operations"]

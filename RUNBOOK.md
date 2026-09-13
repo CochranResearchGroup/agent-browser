@@ -4,6 +4,23 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 315 | 2026-09-13
+
+[Plan 0179](docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md)
+is OPEN through [issue #89](https://github.com/CochranResearchGroup/agent-browser/issues/89).
+The local-only v0.1.26 rollout commit `133bed0d` is preserved on published
+branch `platform/policy-selector-v0-1-26-rollout`. Canonical `main` is clean and
+equal to `origin/main` at `ae426642`; the scoped branch has merged that current
+tip without conflict. Checkpoint `966c61e4` passes policy wiring, 122 selector
+tests with three source-checkout-only skips, active planning and goal audits,
+remote-view documentation checks, and patch hygiene. Pull request review and
+integration remain.
+
+No installed runtime, browser, profile, provider, tenant, service, or
+supervisor state is in scope. After reviewed integration and exact-ref cleanup,
+the next actions are Plan 0178 Git closeout with its installed gate preserved,
+then provider-free issue #78 in separate custody.
+
 ## Turn 314 | 2026-09-13
 
 Plan 0177 is CLOSED after [PR #86](https://github.com/CochranResearchGroup/agent-browser/pull/86)

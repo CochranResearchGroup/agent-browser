@@ -85,6 +85,22 @@ Treat `AGENTS.md` as a policy-loading contract, not just a static pointer:
 - whether the repo produces local artifacts, reports, review packets, rendered documents, or local builds that should be surfaced through a preview or approval service for human review
 - whether the repo reports issues across GitHub, GitLab, enterprise or
   self-managed hosts, owned forks, or permissioned upstreams
+- whether multiple human contributors or agents acting for different people
+  share branches, worktrees, pull requests, reviews, or deployment authority
+
+For collaborative development, require both contributor signals and workflow
+signals so incidental uses of words such as "collaborate" do not add team
+ceremony to a single-maintainer repository. When selected, compose
+`collaborative-development-workflow` with `work-item-traceability`, the complete
+Git worktree/commit/branch/push set, and `validation-and-handoff`. Add
+`active-lane-coordination` separately when the repository actually has several
+concurrent off-main lanes.
+
+Add `development-runtime-isolation` when repository policy or operating docs
+explicitly describe isolated development services, per-lane runtimes, or
+concurrent lane execution that could share mutable runtime resources. Do not add
+it merely because a repository has a local development command or mentions a
+generic development environment.
 
 For forge issue reporting, prioritize signals such as:
 

@@ -17,6 +17,7 @@ modules:
   - runtime-vs-product-boundary
   - runtime-state-governance
   - tenant-isolation-and-operator-state
+  - development-runtime-isolation
   - fieldwork-productization
   - monolith-extraction-discipline
   - architecture-guardrails

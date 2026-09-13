@@ -44,6 +44,9 @@ modules:
   - id: work-item-traceability
     path: modules/work-item-traceability.md
     tags: [issues, planning, traceability, flow, governance]
+  - id: collaborative-development-workflow
+    path: modules/collaborative-development-workflow.md
+    tags: [collaboration, contributors, pull-requests, git, deployment]
   - id: forge-issue-reporting
     path: modules/forge-issue-reporting.md
     tags: [issues, github, gitlab, reporting, governance]
@@ -140,6 +143,9 @@ modules:
   - id: tenant-isolation-and-operator-state
     path: modules/tenant-isolation-and-operator-state.md
     tags: [tenant, runtime, isolation, operations]
+  - id: development-runtime-isolation
+    path: modules/development-runtime-isolation.md
+    tags: [runtime, development, isolation, environments, safety]
   - id: fieldwork-productization
     path: modules/fieldwork-productization.md
     tags: [fieldwork, productization, operations, migration]

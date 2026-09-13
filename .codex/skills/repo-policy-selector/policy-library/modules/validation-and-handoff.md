@@ -45,6 +45,14 @@ tags:
   specification or acceptance contract. Do not let a pass on one axis mask a
   failure on the other, and do not let the separation bypass primary-agent
   evidence review and disposition.
+- For experiments and multi-axis acceptance, record verdicts independently for
+  the primary measurement, correctness, resources, maintenance, and evidence
+  integrity when those axes apply. Preserve every completed sample with its
+  identity and conditions even when the overall packet later stops.
+- Define an invalidation map before execution: each stop predicate names the
+  samples and verdicts it can invalidate and the causal reason. A later failure
+  may mark the packet incomplete without erasing unaffected valid samples.
+  Never promote partial evidence into a complete acceptance claim.
 - Separate review modes. Use at most one broad fresh-context `drift_discovery`
   pass when observed drift, consequence, or uncertainty justifies it. After
   adjudication, use `closed_world` remediation

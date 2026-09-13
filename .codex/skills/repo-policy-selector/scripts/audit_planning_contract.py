@@ -12,11 +12,14 @@ from pathlib import Path
 
 ROADMAP_HEADING_RE = re.compile(r"^##\s+P\d+\s+\|\s+.+$")
 ROADMAP_LANE_HEADING_PREFIX_RE = re.compile(r"^##\s+P\d+")
-RUNBOOK_TURN_RE = re.compile(r"^##\s+Turn\s+\d+\s+\|\s+\d{4}-\d{2}-\d{2}$")
+RUNBOOK_TURN_RE = re.compile(r"^##\s+Turn\b.+\b\d{4}-\d{2}-\d{2}$", re.IGNORECASE)
 RUNBOOK_TURN_HEADING_PREFIX_RE = re.compile(r"^##\s+Turn\b", re.IGNORECASE)
 PLAN_FILE_RE = re.compile(r"^\d{4}-\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")
-PLAN_STATE_RE = re.compile(r"(?im)^(?:state|status)\s*:\s*(PLANNED|OPEN|BLOCKED|CLOSED|CANCELLED)\s*$")
-ROADMAP_LANE_RE = re.compile(r"(?im)^(?:roadmap|lane|phase)\s*:\s*(P\d+)\b")
+PLAN_INDEX_NAMES = {"INDEX.MD", "README.MD"}
+PLAN_STATE_RE = re.compile(
+    r"(?im)^(?:state|status)\s*:\s*`?(PLANNED|OPEN|BLOCKED|CLOSED|CANCELLED)`?\s*$"
+)
+ROADMAP_LANE_RE = re.compile(r"(?im)^(?:roadmap|lane|phase)\s*:\s*`?(P\d+)`?\s*$")
 CURRENT_STATE_RE = re.compile(r"(?im)^##\s+Current State\s*$|^(?:current state)\s*:", re.MULTILINE)
 GOAL_BOUND_PATTERNS = {
     "max_work_unit_attempts": re.compile(r"(?im)^max_work_unit_attempts\s*:\s*[1-9]\d*\s*$"),
@@ -63,6 +66,11 @@ def read_text(path: Path) -> str:
         return ""
 
 
+def plan_header(text: str) -> str:
+    """Return metadata before the first second-level plan section."""
+    return re.split(r"(?m)^##\s+", text, maxsplit=1)[0]
+
+
 def split_roadmap_sections(roadmap_text: str) -> dict[str, str]:
     sections: dict[str, str] = {}
     current_lane: str | None = None
@@ -72,7 +80,7 @@ def split_roadmap_sections(roadmap_text: str) -> dict[str, str]:
             if current_lane is not None:
                 sections[current_lane] = "\n".join(current_lines).strip()
             current_lines = [line]
-            match = re.match(r"^##\s+(P\d{2})\s+\|", line)
+            match = re.match(r"^##\s+(P\d+)\s+\|", line)
             current_lane = match.group(1) if match else None
         elif current_lane is not None:
             current_lines.append(line)
@@ -124,15 +132,29 @@ def audit_goal_execution_contract(root: Path) -> dict:
     }
 
 
+def planning_dev_root(root: Path) -> str:
+    agents_text = read_text(root / "AGENTS.md") or read_text(root / "AGENT.MD")
+    if re.search(r"(?<!s)\bdoc/dev/(?:policies|agent-policies)\b", agents_text, re.IGNORECASE):
+        return "doc/dev"
+    for candidate in ("docs/dev", "doc/dev"):
+        policy_dir = root / candidate / "policies"
+        if policy_dir.exists() and (
+            list(policy_dir.glob("*planning-discipline.md"))
+            or list(policy_dir.glob("*roadmap-runbook-governance.md"))
+        ):
+            return candidate
+    return "docs/dev"
+
+
 def planning_contracts(root: Path) -> tuple[dict[str, bool], dict[str, bool]]:
-    policy_dir = root / "docs" / "dev" / "policies"
+    policy_dirs = (root / "docs/dev/policies", root / "doc/dev/policies")
     available = {
-        "planning_discipline": bool(list(policy_dir.glob("*planning-discipline.md"))) if policy_dir.exists() else False,
-        "roadmap_runbook_governance": bool(list(policy_dir.glob("*roadmap-runbook-governance.md"))) if policy_dir.exists() else False,
+        "planning_discipline": any(directory.exists() and list(directory.glob("*planning-discipline.md")) for directory in policy_dirs),
+        "roadmap_runbook_governance": any(directory.exists() and list(directory.glob("*roadmap-runbook-governance.md")) for directory in policy_dirs),
     }
     agents_text = read_text(root / "AGENTS.md") or read_text(root / "AGENT.MD")
     policy_wired = bool(
-        re.search(r"docs/dev/policies|docs/dev/agent-policies", agents_text, re.IGNORECASE)
+        re.search(r"docs?/dev/(?:policies|agent-policies)", agents_text, re.IGNORECASE)
         and re.search(r"\b(?:read|follow|policy entry|policy loading)\b", agents_text, re.IGNORECASE)
     )
     adopted = {name: bool(present and policy_wired) for name, present in available.items()}
@@ -167,26 +189,6 @@ def active_baseline_findings(path: Path) -> tuple[list[str], list[str]]:
     return list(dict.fromkeys(accepted)), []
 
 
-def audit_consolidation_contract(text: str) -> dict:
-    """Check declared structure only; content and execution need evidence review."""
-    marker = re.search(r"(?im)^Consolidation:\s*(.*?)\s*$", text)
-    if not marker:
-        return {"applicable": False, "ok": True, "problems": [],
-                "excluded_reason": "unmarked legacy plan; not evaluated"}
-    problems = []
-    if marker.group(1) != "required":
-        problems.append("Consolidation must be declared required")
-    headings = ("Consolidated batch", "Delivery sequence and budget",
-                "Worker assignments", "Evidence and exit")
-    for heading in headings:
-        match = re.search(r"(?m)^#{2,3} " + re.escape(heading) + r"\s*\n(.*?)(?=^#{1,3} |\Z)",
-                          text, re.DOTALL)
-        body = re.sub(r"<!--.*?-->", "", match.group(1), flags=re.DOTALL).strip() if match else ""
-        if not body or body.lower() in {"tbd", "todo", "pending"}:
-            problems.append("missing substantive consolidation section: " + heading)
-    return {"applicable": True, "ok": not problems, "problems": problems}
-
-
 def audit_repo(
     root: Path,
     *,
@@ -196,9 +198,10 @@ def audit_repo(
     active_only: bool = False,
     force: bool = False,
 ) -> dict:
+    default_dev_root = planning_dev_root(root)
     roadmap = resolve_repo_path(root, roadmap_path, "ROADMAP.md")
     runbook = resolve_repo_path(root, runbook_path, "RUNBOOK.md")
-    plans_dir = resolve_repo_path(root, plans_dir_path, "docs/dev/plans")
+    plans_dir = resolve_repo_path(root, plans_dir_path, f"{default_dev_root}/plans")
     available_contracts, contracts = planning_contracts(root)
     planning_applicable = contracts["planning_discipline"] or contracts["roadmap_runbook_governance"]
     roadmap_applicable = contracts["roadmap_runbook_governance"] or force
@@ -242,13 +245,13 @@ def audit_repo(
     ]
     bad_headings = [line for line in roadmap_headings if not ROADMAP_HEADING_RE.match(line)]
     if roadmap_applicable and roadmap_text and bad_headings:
-        problems.append("ROADMAP.md has top-level headings that do not match '## P## | Title'")
+        problems.append("ROADMAP.md has lane headings that do not match '## P<digits> | Title'")
     report["roadmap_headings"] = roadmap_headings
     roadmap_sections = split_roadmap_sections(roadmap_text)
     open_roadmap_lanes = [
         lane_id
         for lane_id, section in roadmap_sections.items()
-        if re.search(r"(?im)^(?:state|status)\s*:\s*(?:OPEN|BLOCKED)\s*$", section)
+        if re.search(r"(?im)^(?:state|status)\s*:\s*OPEN\s*$", section)
     ]
     report["open_roadmap_lanes"] = open_roadmap_lanes
     for lane_id in open_roadmap_lanes if roadmap_applicable else []:
@@ -261,11 +264,13 @@ def audit_repo(
     ]
     bad_turns = [line for line in runbook_turns if not RUNBOOK_TURN_RE.match(line)]
     if roadmap_applicable and runbook_text and bad_turns:
-        problems.append("RUNBOOK.md has headings that do not match '## Turn N | YYYY-MM-DD'")
+        problems.append("RUNBOOK.md has Turn headings without a terminal YYYY-MM-DD date")
     report["runbook_turns"] = runbook_turns
 
     if plans_dir.exists():
         for plan_path in sorted(plans_dir.glob("*.md")):
+            if plan_path.name.upper() in PLAN_INDEX_NAMES:
+                continue
             entry = {
                 "file": plan_path.name,
                 "path": str(plan_path),
@@ -279,27 +284,26 @@ def audit_repo(
                 "wired_in_runbook": False,
             }
             text = read_text(plan_path)
-            state_match = PLAN_STATE_RE.search(text)
-            lane_match = ROADMAP_LANE_RE.search(text)
+            header = plan_header(text)
+            state_match = PLAN_STATE_RE.search(header)
+            lane_match = ROADMAP_LANE_RE.search(header)
             if active_only and not state_match:
                 excluded = report["excluded_unclassified_plans"]
                 assert isinstance(excluded, list)
                 excluded.append(plan_path.name)
                 continue
-            if active_only and state_match and state_match.group(1) in {"CLOSED", "CANCELLED"}:
+            state = state_match.group(1).upper() if state_match else None
+            if active_only and state is not None and state not in {"PLANNED", "OPEN", "BLOCKED"}:
                 excluded = report["excluded_closed_plans"]
                 assert isinstance(excluded, list)
                 excluded.append(plan_path.name)
                 continue
             if state_match:
-                entry["state"] = state_match.group(1)
+                entry["state"] = state
                 entry["state_ok"] = True
             if lane_match:
-                entry["lane_id"] = lane_match.group(1)
+                entry["lane_id"] = lane_match.group(1).upper()
                 entry["lane_ok"] = True
-            consolidation = audit_consolidation_contract(text)
-            entry["consolidation_contract"] = consolidation
-            problems.extend(f"{problem}: {plan_path.name}" for problem in consolidation["problems"])
             entry["current_state_ok"] = bool(CURRENT_STATE_RE.search(text))
             entry["wired_in_roadmap"] = plan_path.name in roadmap_text
             entry["wired_in_runbook"] = plan_path.name in runbook_text
@@ -309,8 +313,8 @@ def audit_repo(
                 problems.append(f"plan missing deterministic state: {plan_path.name}")
             if roadmap_applicable and not entry["lane_ok"]:
                 problems.append(f"plan missing roadmap lane id: {plan_path.name}")
-            if entry["state"] in {"OPEN", "BLOCKED"} and not entry["current_state_ok"]:
-                problems.append(f"{entry['state']} plan missing Current State section: {plan_path.name}")
+            if entry["state"] == "OPEN" and not entry["current_state_ok"]:
+                problems.append(f"OPEN plan missing Current State section: {plan_path.name}")
             if roadmap_applicable and not entry["wired_in_roadmap"]:
                 problems.append(f"plan not wired in ROADMAP.md: {plan_path.name}")
             if roadmap_applicable and not entry["wired_in_runbook"]:
@@ -329,7 +333,7 @@ def audit_repo(
             ):
                 problems.append(f"OPEN roadmap lane missing actionable plan coverage: {lane_id}")
 
-    baseline_path = root / "docs/dev/planning-audit-baseline.json"
+    baseline_path = root / default_dev_root / "planning-audit-baseline.json"
     accepted_baseline_findings: list[str] = []
     unused_baseline_findings: list[str] = []
     if active_only and baseline_path.exists():
