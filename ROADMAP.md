@@ -27,17 +27,17 @@ field evidence and acceptance records into the same model.
 
 ## P177 | Development Governance And Repository Readiness
 
-State: OPEN
+State: CLOSED
 
-Current state: issue tracking is enabled with issues #65 through #85, selector
-v0.1.25 and policies 0047 through 0049 are enacted, the no-op branch is retired
-after field-note custody, Turnstile is published as a P169-only paused ref, and
-the 37-finding planning ledger is reconciled.
+Current state: PR #86 integrated the issue foundation, selector v0.1.25,
+policies 0047 through 0049, field-note custody, no-op branch retirement,
+P169-only Turnstile paused checkpoint, and the reconciled 37-finding planning
+ledger as `2d71134a55fc2f919daaf8cb7595efd3c7ebef79`.
 [Plan 0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
 defines the policy adoption, issue migration, worktree reconciliation, planning
 cleanup, and read-only runtime-readiness campaign. Production maintenance and
-provider-backed acceptance remain quarantined under issue #76; final review and
-integration are open.
+provider-backed acceptance remain quarantined under issue #76; P178 remains a
+separate issue #84 and PR #83 lane.
 
 ## P178 | Browserless Runtime Lane Quiescence
 

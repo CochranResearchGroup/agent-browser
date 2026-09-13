@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -25,13 +25,16 @@ state before serious feature development resumes.
 
 ## Current State
 
-Execution is active under
-[issue #65](https://github.com/CochranResearchGroup/agent-browser/issues/65).
-The selector upgrade, policies 0047 through 0049, issue foundation, field-note
-custody, canonical no-op branch closure, Turnstile paused checkpoint, planning
-ledger reconciliation, and read-only runtime census are complete. Production
-maintenance is quarantined by issue #76; final catalog validation, review, and
-integration remain.
+Execution integrated through
+[PR #86](https://github.com/CochranResearchGroup/agent-browser/pull/86) as
+`2d71134a55fc2f919daaf8cb7595efd3c7ebef79`. The selector upgrade, policies
+0047 through 0049, issue foundation, field-note custody, canonical no-op branch
+closure, Turnstile paused checkpoint, planning ledger reconciliation, and
+read-only runtime census are complete. P177 is removed from active Git custody;
+its [issue #65](https://github.com/CochranResearchGroup/agent-browser/issues/65)
+closes after this post-integration receipt lands. Production maintenance remains
+quarantined by issue #76, and the unrelated P178 repair remains separately owned
+by issue #84 and PR #83.
 
 The baseline below is retained as the campaign's opening evidence.
 
@@ -399,3 +402,20 @@ occurred.
 Next action: review and merge this planning packet. Execution begins with W0
 and must stop before W2 provider mutations until the operator grants the exact
 GitHub issue-setting and issue-operation authority.
+
+## Closeout checkpoint P0177-C02 | 2026-09-13
+
+State is `CLOSED`. PR #86 integrated the campaign as
+`2d71134a55fc2f919daaf8cb7595efd3c7ebef79` after every selected policy,
+planning, catalog, documentation, and patch-hygiene check passed. Dashboard,
+Service Client, Version Sync, Rust Quality, and Workstation Fixtures also
+passed. The unselected full Rust lane failed only in a pre-existing
+workstation process-exit fixture; issue #84 and PR #83 own its separately
+published repair, so no blind retry or cross-lane source change occurred.
+
+The canonical checkout is preserved for a final fast-forward after this
+receipt merges. P169 remains a clean published `PAUSED_REF`; P178 remains a
+separate active worktree and pull request. Production maintenance and
+provider-backed acceptance remain quarantined by issue #76. Serious isolated,
+provider-free development may resume under policies 0047 through 0049 and the
+issue-backed lane model, without borrowing production runtime authority.
