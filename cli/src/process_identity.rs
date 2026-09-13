@@ -189,11 +189,24 @@ pub fn capture_process_identity(
     let mut observed = None;
     for attempt in 0..10 {
         match observe_process(pid) {
-            ProcessObservation::Observed(candidate) if candidate.start_token.is_some() => {
+            ProcessObservation::Observed(candidate) => {
+                let identity_is_ready = candidate.start_token.is_some()
+                    && candidate
+                        .executable_path
+                        .as_deref()
+                        .is_some_and(|executable| {
+                            expected_executable.is_none_or(|expected| {
+                                executable_paths_match(expected, Path::new(executable))
+                            })
+                        })
+                    && expected_browser_family.is_none_or(|expected| {
+                        candidate.browser_family.as_deref() == Some(expected)
+                    });
                 observed = Some(candidate);
-                break;
+                if identity_is_ready {
+                    break;
+                }
             }
-            ProcessObservation::Observed(candidate) => observed = Some(candidate),
             ProcessObservation::Missing | ProcessObservation::Failed { .. } => observed = None,
         }
         if attempt < 9 {
