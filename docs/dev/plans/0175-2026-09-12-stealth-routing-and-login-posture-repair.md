@@ -191,3 +191,23 @@ commit ahead of merged main before this documentation receipt.
 
 Next action: open the correction PR and require every fast gate to pass before
 merge or installation.
+
+## Checkpoint P0175-C06 | 2026-09-12
+
+State transition: `correction_integration_ready to smoke_expectation_repair`.
+
+Acceptance state: PR 57 passed Version Sync, Rust Quality, Dashboard, Service
+Client, and Workstation Fixtures, but its Rust job found the same stale Google
+readiness posture in the no-launch MCP smoke. Merge and installation remain
+withheld.
+
+Progress classification: `qualification_repair`; the smoke now expects
+ordinary built-in Google readiness to be `unknown`, its seeding mode to be
+`attachable_ok`, and its handoff lifecycle to be `not_required`. The smoke
+passes against the qualified optimized candidate without launching a browser.
+
+Evidence: failed CI job `103659215375` in run `34732944495`; local
+`smoke-mcp-read-no-launch.js` pass with the exact candidate binary.
+
+Next action: publish the corrected smoke expectation, require a fresh green PR
+57 head, then merge and run the preserving transactional installation.

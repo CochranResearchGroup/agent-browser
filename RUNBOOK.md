@@ -2,6 +2,15 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 308 | 2026-09-12
+
+Plan0175 correction PR57 passed every fast gate except the final Rust no-launch
+smoke phase. That phase returned the intended ordinary Google posture
+`unknown`, `attachable_ok`, and `not_required`, while the JavaScript smoke still
+asserted the former detached-login values. The aligned no-launch smoke passes
+locally against the qualified candidate. Merge and production installation
+remain withheld until a fresh PR57 head passes every required check.
+
 ## Turn 307 | 2026-09-12
 
 Plan0175 merged through PR55 as `97aa399a`, but its post-merge comprehensive
