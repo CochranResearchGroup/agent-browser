@@ -23,14 +23,14 @@ is installed as generation `0.28.0-d0186990d375-3a6142188dd0` through accepted
 transaction `upgrade-c8483b3d-6fb1-41f3-b9da-5681169d5869`; the supervisor is
 singular and cleanup inventory has no candidates.
 
-The Plan 0240 authentication-route lane is active at `f26f3269` in the primary
-worktree with one attributable untracked field note. At reconciliation, PR58
-had passed Version Sync, Rust Quality, Dashboard, Service Client, and Workstation
-Fixtures; Rust remained in progress. Preserve that worktree and do not absorb
-its note.
+Plan 0240 authentication-route source merged through PR58 as `9619d87c` after
+every required check passed. Its primary worktree remains on the historical
+topic branch at that merge head with one attributable untracked field note; the
+topic remote remains three commits behind. Preserve the worktree for its owner
+to commit or disposition the note before branch cleanup.
 
 The clean Turnstile worktree remains on `feature/turnstile-desktop-challenge`
-at `17791566`, six commits ahead and 31 behind `origin/main`. It contains active
+at `17791566`, six commits ahead and 35 behind `origin/main`. It contains active
 Plan 0169 plus a CAPTCHA roadmap labeled P173 that conflicts with canonical
 Plan 0173. Preserve the branch; reconcile the roadmap identifier and rebase or
 merge current `main` inside that owning lane before review.

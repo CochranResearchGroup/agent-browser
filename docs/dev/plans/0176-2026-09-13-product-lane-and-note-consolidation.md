@@ -112,7 +112,10 @@ audit still reports 37 pre-existing legacy findings; none belongs to Plan 0176.
 The Turnstile branch overlaps ROADMAP, RUNBOOK, and active-lane documentation.
 This platform contract lands first; that owning lane must merge current `main`,
 renumber its conflicting CAPTCHA roadmap, and reconcile its lane projection
-before review. The active Plan 0240 worktree and note remain untouched.
+before review. PR58 merged the Plan 0240 authentication-route repair as
+`9619d87c`; its retained worktree and untracked note remain untouched pending
+owner closeout.
 
-Next action: review and merge this two-commit documentation packet, then require
-a clean canonical active-lane readback before closing Plan 0176.
+Next action: review and merge the documentation packet after its current-main
+reconciliation, then require a clean canonical active-lane readback before
+closing Plan 0176.
