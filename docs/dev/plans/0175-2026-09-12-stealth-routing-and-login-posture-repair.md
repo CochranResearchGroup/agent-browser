@@ -87,7 +87,7 @@ No subagents are assigned; current orchestration policy prohibits delegation.
 | Hard CDP-free exception preserved | Focused profile-readiness test | passed |
 | Public guidance aligned | Help, README, skill, docs-site diff | passed |
 | Candidate qualified | fmt, clippy, focused and selected checks | correction focused; full CI pending |
-| Reviewable custody | Clean committed branch and exact head readback | pending correction commit |
+| Reviewable custody | Clean committed branch and exact head readback | passed |
 
 Terminal success for this slice is a committed, provider-free qualified
 candidate. Production installation, real Google sign-in, captcha solving, and
@@ -178,3 +178,16 @@ Service State readback.
 
 Next action: commit and publish the correction through protected CI, merge only
 when green, then rebuild and run transactional installation.
+
+## Checkpoint P0175-C05 | 2026-09-12
+
+State transition: `post_merge_correction to correction_integration_ready`.
+
+Acceptance state: correction committed at source checkpoint
+`0572b065522e190f29a57e8e6d105836c2ef67d3`; protected CI pending.
+
+Progress classification: `custody`; the corrective branch is clean and one
+commit ahead of merged main before this documentation receipt.
+
+Next action: open the correction PR and require every fast gate to pass before
+merge or installation.

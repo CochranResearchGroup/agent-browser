@@ -12,7 +12,8 @@ an explicit `requiresCdpFree` fixture. Four focused MCP tests, formatting and
 strict Clippy pass. Production remains on binary SHA-256 `cae894cf25f2` with a
 ready singular supervisor; doctor separately reports one live retained browser
 identity missing a lifecycle cleanup record, which transactional preflight must
-reconcile without blind closure or relaunch.
+reconcile without blind closure or relaunch. The correction is committed at
+`0572b065` and ready for protected CI.
 
 ## Turn 306 | 2026-09-12
 
