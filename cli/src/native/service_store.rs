@@ -638,11 +638,52 @@ where
                     return Ok(None);
                 }
                 let baseline_revision = baseline.state_revision;
-                let mut candidate = baseline;
+                let mut candidate = baseline.clone();
                 candidate.state_revision = baseline_revision
                     .checked_add(1)
                     .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
                 let result = mutator(&mut candidate)?;
+                let candidate_revision = candidate.state_revision;
+                candidate.state_revision = baseline_revision;
+                if candidate == baseline {
+                    let commit_deadline = Instant::now() + timeout.max(Duration::from_millis(1));
+                    let mut file_guard = acquire_service_state_file_lock_until(
+                        path,
+                        ServiceStateFileLockMode::Exclusive,
+                        commit_deadline,
+                        "prepared_noop_check",
+                    )?;
+                    let _process_guard = acquire_service_state_process_lock(
+                        lock,
+                        commit_deadline,
+                        "prepared_noop_check",
+                    )?;
+                    file_guard.set_state_summary(&baseline, None);
+                    file_guard.set_phase("load_current");
+                    let current = if self.store.recovery_required() {
+                        self.store.load()?
+                    } else {
+                        self.store.load_without_recovery()?
+                    };
+                    if current.state_revision != baseline_revision {
+                        if attempt == 0 {
+                            record_service_state_lock_terminal(
+                                "file",
+                                "prepared_noop_check",
+                                "exclusive",
+                                "stale_candidate_replay",
+                                Duration::ZERO,
+                            );
+                            continue;
+                        }
+                        return Err(format!(
+                            "service_state_stale_revision: expected={baseline_revision}; actual={}",
+                            current.state_revision
+                        ));
+                    }
+                    return Ok(Some(result));
+                }
+                candidate.state_revision = candidate_revision;
                 let transaction = self
                     .store
                     .prepare_save(&candidate)?
@@ -2741,6 +2782,104 @@ mod tests {
             process_lock_available,
             "durable serialization and commit must not retain the process mutex"
         );
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn prepared_noop_mutation_does_not_advance_service_state_revision() {
+        let path = unique_state_path("prepared-noop-revision");
+        let store = JsonServiceStateStore::new(&path);
+        let mut fixture = ServiceState::default();
+        fixture.state_revision = 41;
+        store.save(&fixture).expect("fixture should save");
+        let repository = LockedServiceStateRepository::new(store);
+        let before = repository
+            .load_snapshot()
+            .expect("baseline state should be readable");
+
+        let result = repository
+            .mutate(|_state| Ok("unchanged"))
+            .expect("no-op mutation should succeed");
+        let persisted = repository
+            .load_snapshot()
+            .expect("persisted state should remain readable");
+
+        assert_eq!(result, "unchanged");
+        assert_eq!(persisted.state_revision, 41);
+        assert_eq!(persisted, before);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn prepared_noop_mutation_replays_after_concurrent_revision_change() {
+        struct StaleNoopStore {
+            path: PathBuf,
+            state: Arc<Mutex<ServiceState>>,
+            load_count: Arc<std::sync::atomic::AtomicUsize>,
+        }
+
+        impl ServiceStateStore for StaleNoopStore {
+            fn load(&self) -> Result<ServiceState, String> {
+                self.load_without_recovery()
+            }
+
+            fn load_without_recovery(&self) -> Result<ServiceState, String> {
+                let load_index = self
+                    .load_count
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut state = self.state.lock().unwrap();
+                if load_index == 1 {
+                    state.state_revision += 1;
+                }
+                Ok(state.clone())
+            }
+
+            fn save(&self, _state: &ServiceState) -> Result<(), String> {
+                Err("unexpected_noop_save".to_string())
+            }
+
+            fn state_path(&self) -> Option<&Path> {
+                Some(&self.path)
+            }
+
+            fn supports_prepared_save(&self) -> bool {
+                true
+            }
+
+            fn prepare_save(
+                &self,
+                _state: &ServiceState,
+            ) -> Result<Option<ServiceStateTransaction>, String> {
+                Err("unexpected_noop_prepare".to_string())
+            }
+
+            fn save_prepared(&self, _transaction: &ServiceStateTransaction) -> Result<(), String> {
+                Err("unexpected_noop_commit".to_string())
+            }
+        }
+
+        let path = unique_state_path("prepared-stale-noop-replay");
+        let mut initial = ServiceState::default();
+        initial.state_revision = 7;
+        let state = Arc::new(Mutex::new(initial));
+        let load_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let repository = LockedServiceStateRepository::new(StaleNoopStore {
+            path: path.clone(),
+            state: Arc::clone(&state),
+            load_count: Arc::clone(&load_count),
+        });
+        let mutator_count = std::sync::atomic::AtomicUsize::new(0);
+
+        repository
+            .mutate(|_state| {
+                mutator_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            })
+            .expect("no-op mutation should replay from the newer revision");
+
+        assert_eq!(mutator_count.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 4);
+        assert_eq!(state.lock().unwrap().state_revision, 8);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
