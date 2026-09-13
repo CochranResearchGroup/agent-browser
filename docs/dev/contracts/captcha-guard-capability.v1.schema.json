@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/captcha-guard-capability.v1.schema.json",
+  "title": "Agent Browser CAPTCHA guard capability",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "adapterId",
+    "adapterVersion",
+    "platform",
+    "modes",
+    "challengeProfiles",
+    "effectCeiling",
+    "guarantees",
+    "rawCoordinatesAccepted",
+    "arbitraryCommandsAccepted",
+    "humanHandoff"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "v1" },
+    "adapterId": { "$ref": "#/$defs/opaqueId" },
+    "adapterVersion": { "$ref": "#/$defs/opaqueId" },
+    "platform": {
+      "enum": ["synthetic", "x11", "wayland", "windows", "macos", "remote"]
+    },
+    "modes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "observe_only",
+          "fixture_solve",
+          "operator_authorized_automated_solve"
+        ]
+      }
+    },
+    "challengeProfiles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/opaqueId" }
+    },
+    "effectCeiling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxAttempts",
+        "maxSteps",
+        "maxPointerEvents",
+        "maxKeyEvents",
+        "maxDeadlineMs"
+      ],
+      "properties": {
+        "maxAttempts": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "maxSteps": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "maxPointerEvents": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "maxKeyEvents": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "maxDeadlineMs": { "type": "integer", "minimum": 1, "maximum": 120000 }
+      }
+    },
+    "guarantees": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freshFrame",
+        "geometryEpoch",
+        "windowIdentity",
+        "processIdentity",
+        "controllerAuthority",
+        "focusCheck",
+        "effectJournal",
+        "replaySuppression",
+        "afterStateVerification"
+      ],
+      "properties": {
+        "freshFrame": { "type": "boolean" },
+        "geometryEpoch": { "type": "boolean" },
+        "windowIdentity": { "type": "boolean" },
+        "processIdentity": { "type": "boolean" },
+        "controllerAuthority": { "type": "boolean" },
+        "focusCheck": { "type": "boolean" },
+        "effectJournal": { "type": "boolean" },
+        "replaySuppression": { "type": "boolean" },
+        "afterStateVerification": { "type": "boolean" }
+      }
+    },
+    "rawCoordinatesAccepted": { "const": false },
+    "arbitraryCommandsAccepted": { "const": false },
+    "humanHandoff": { "enum": ["none", "opaque_remote_view"] }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    }
+  }
+}

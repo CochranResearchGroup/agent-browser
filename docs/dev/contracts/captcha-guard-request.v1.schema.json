@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/captcha-guard-request.v1.schema.json",
+  "title": "Agent Browser CAPTCHA guard request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "operationId",
+    "idempotencyKey",
+    "policyDigest",
+    "challengeProfileId",
+    "mode",
+    "caller",
+    "authorityEnvelope",
+    "effectBudget"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "v1" },
+    "operationId": { "$ref": "#/$defs/opaqueId" },
+    "idempotencyKey": { "$ref": "#/$defs/opaqueId" },
+    "policyDigest": { "$ref": "#/$defs/sha256" },
+    "challengeProfileId": { "$ref": "#/$defs/opaqueId" },
+    "mode": {
+      "enum": [
+        "observe_only",
+        "fixture_solve",
+        "operator_authorized_automated_solve"
+      ]
+    },
+    "caller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serviceName",
+        "taskName",
+        "callerId",
+        "requestId",
+        "principalId"
+      ],
+      "properties": {
+        "serviceName": { "$ref": "#/$defs/opaqueId" },
+        "agentName": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 128 },
+            { "type": "null" }
+          ]
+        },
+        "taskName": { "$ref": "#/$defs/opaqueId" },
+        "callerId": { "$ref": "#/$defs/opaqueId" },
+        "requestId": { "$ref": "#/$defs/opaqueId" },
+        "principalId": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "authorityEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "browserRef",
+        "routeRef",
+        "displayRef",
+        "windowRef",
+        "processRef",
+        "frameRef",
+        "frameSha256",
+        "geometryEpoch",
+        "candidateRef",
+        "controllerAuthorityRef",
+        "expiresAt"
+      ],
+      "properties": {
+        "browserRef": { "$ref": "#/$defs/opaqueId" },
+        "sessionRef": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 256 },
+            { "type": "null" }
+          ]
+        },
+        "routeRef": { "$ref": "#/$defs/opaqueId" },
+        "displayRef": { "$ref": "#/$defs/opaqueId" },
+        "windowRef": { "$ref": "#/$defs/opaqueId" },
+        "processRef": { "$ref": "#/$defs/opaqueId" },
+        "frameRef": { "$ref": "#/$defs/opaqueId" },
+        "frameSha256": { "$ref": "#/$defs/sha256" },
+        "geometryEpoch": { "$ref": "#/$defs/opaqueId" },
+        "candidateRef": { "$ref": "#/$defs/opaqueId" },
+        "controllerAuthorityRef": { "$ref": "#/$defs/opaqueId" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "effectBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxAttempts",
+        "maxSteps",
+        "maxPointerEvents",
+        "maxKeyEvents",
+        "deadlineMs"
+      ],
+      "properties": {
+        "maxAttempts": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "maxSteps": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "maxPointerEvents": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "maxKeyEvents": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "deadlineMs": { "type": "integer", "minimum": 1, "maximum": 120000 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "mode": { "const": "observe_only" } },
+        "required": ["mode"]
+      },
+      "then": {
+        "properties": {
+          "effectBudget": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": { "const": 0 },
+              "maxPointerEvents": { "const": 0 },
+              "maxKeyEvents": { "const": 0 }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "effectBudget": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": { "const": 1 }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

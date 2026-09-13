@@ -37,6 +37,12 @@ Plan 0177 reconciled this source branch to current `main` and assigned
 the stable work-item locator. The branch is preserved as `PAUSED_REF`; no retry
 or additional challenge implementation is authorized by that reconciliation.
 
+The operator resumed provider-free anti-bot feature work on 2026-09-13. The
+[Plan 0180 Phase 0 packet](0180-2026-09-13-captcha-guard-contract-and-threat-model.md)
+freezes the guard contract and threat model without changing this plan's live
+effect gate. It does not authorize a browser launch, installation, profile
+mutation, desktop input, live challenge attempt, or retry.
+
 A second California Secretary of State fieldwork route exposed a distinct
 challenge family. Imperva supplies the blocking interstitial, while a nested
 hCaptcha checkbox frame supplies the visible `I am human` control and a

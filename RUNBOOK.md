@@ -4,6 +4,20 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 317 | 2026-09-13
+
+[Plan 0180](docs/dev/plans/0180-2026-09-13-captcha-guard-contract-and-threat-model.md)
+is OPEN under P169 and issue #66. The operator resumed provider-free anti-bot
+feature work. The feature branch merged current `origin/main` and published
+reconciled checkpoint `fc16ac08`. The contract test accepts six positive
+fixtures and rejects seven adversarial fixtures.
+
+This packet freezes guard requests, capabilities, receipts, threat boundaries,
+redaction, replay, and future crate dependency direction. It does not authorize
+installation, browser or profile mutation, desktop input, a live challenge
+attempt, or retry. [Plan 0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md)
+remains blocked on its distinct live acceptance gate.
+
 ## Turn 316 | 2026-09-13
 
 [Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
@@ -108,210 +122,7 @@ are closed. Retained implementation and evidence remain in Git and their plans.
 
 ## Turn 312 | 2026-09-13
 
-<<<<<<< HEAD
-[Plan0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
-is PLANNED on `platform/plan-0177-development-readiness` from current
-`origin/main` at `d32919f8`. It freezes serious development until issue-backed
-multi-session policy, current worktree custody, 37 active planning findings,
-and read-only repository/runtime readiness are reconciled.
-
-PR63 already merged the no-op Service State repair and passed required CI, so
-that worktree is closure-only after its untracked field note is preserved. The
-Turnstile branch remains six commits ahead and 51 behind current main with one
-unpublished commit and conflicting P169/P173 identities. GitHub Issues remain
-disabled. No provider, Git cleanup, runtime, browser, profile, installation, or
-tenant mutation is authorized by this planning checkpoint.
-
-## Turn 311 | 2026-09-13
-
-[Plan0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
-is CLOSED. PR60 passed every required check and merged as `1d12d1c4`. Five
-stable product lanes now govern numbered plans, reusable note routing,
-worktree limits, shared-writer arbitration, dependencies, and merge order.
-Plan 0161 belongs to platform ownership; authentication consumes its scoped
-reset and readiness contracts. No product behavior, runtime, browser, profile,
-credential, provider, tenant, installation, or release effect occurred.
-
-## Turn 310 | 2026-09-13
-
-[Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)
-is CLOSED. PR57 passed every required fast check and merged as `0e18b351`.
-Executable SHA-256 `d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`
-is installed as generation `0.28.0-d0186990d375-3a6142188dd0` through accepted
-transaction `upgrade-c8483b3d-6fb1-41f3-b9da-5681169d5869`; the supervisor is
-singular and cleanup inventory has no candidates.
-
-[Plan0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md) remains OPEN: qualify one bounded Turnstile interaction with no retry or unrelated effect.
-California exposed Imperva-wrapped hCaptcha; a requested X11 run solved it, then Imperva returned block error `15`. The restored Ohio stealth browser cleared Cloudflare during pre-click observation and loaded business search. No Ohio X11 input occurred, so live interaction acceptance remains unproven; both retained browser routes remain open.
-
-## Turn 297 | 2026-09-11
-
-[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md) is CLOSED. W1 and W2 closed the integrated P165 worktree, four local and remote branch pairs, and four integrated remote-only refs without closing residual operational plans. W3 integrated the two accepted P0240 residuals through PR 30 at `de614fbe`; all selected gates passed, and both P0240 worktrees plus their refs are closed. W4 found no P157 residual beyond `ad673377`. PR 31 merged the campaign record as `9f711ebc`; PR 32 closes P168 catalog custody before exact maintenance-ref deletion. The two canonical Rust edits remain attributable Odollo custody. No production, browser, profile, credential, provider, tenant, X, RuFresh, or release effect occurred.
-
-Plan 0240 authentication-route source merged through PR58 as `9619d87c` after
-every required check passed. Its primary worktree remains on the historical
-topic branch at that merge head with one attributable untracked field note; the
-topic remote remains three commits behind. Preserve the worktree for its owner
-to commit or disposition the note before branch cleanup.
-
-The clean Turnstile worktree remains on `feature/turnstile-desktop-challenge`
-at `17791566`, six commits ahead and 35 behind `origin/main`. It contains active
-Plan 0169 plus a CAPTCHA roadmap labeled P173 that conflicts with canonical
-Plan 0173. Preserve the branch; reconcile the roadmap identifier and rebase or
-merge current `main` inside that owning lane before review.
-
-The production executable and selected generation are coherent. Runtime
-monitoring is in bounded backoff after `service_state_lock_timeout` against the
-shared 6.97 MB Service State while the exact supervisor held the lock. Do not
-blindly retry, restart, or clean current browser trees. Historical Turns 291
-through 309 are preserved in
-[the September 10 to 12 archive](RUNBOOK-history-2026-09-10-through-turn309.md).
-
-## Turn 286 | 2026-09-09
-
-Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Operator authorized candidate installation and deferred standalone CLI compatibility
-to the next round. Installation began19:51:02 UTC with a local15-minute bound.
-Source052848aa is now installed; no new build or broad diagnosis was needed.
-Full A1–A4/AX remains OPEN. Next round retains ownership/identity as highest
-priority, with standalone CLI compatibility explicitly deferred to that round.
-Do not restart A4 observation before its prerequisites and complete sequence
-budget are ready. No consumer payment/CSV action or unrelated cleanup.
-
-Operator direction now makes profile remediation a first-class product surface.
-Plan0160 defines the objective and
-[Plan0161](docs/dev/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
-owns the bounded implementation of read-only profile diagnosis, preserving plan/apply repair, and
-explicitly scoped reset across CLI, HTTP, MCP, generated client and dashboard.
-The next implementation milestone is diagnose plus preserving repair for the
-current owner/lease blocker. Runtime and authentication reset follow. Destructive
-profile-data reset remains separately gated and is not required for that first
-milestone. No profile or runtime was changed by this planning amendment.
-
-Private receipt prefixes:
-- R = ~/.local/state/agent-browser/campaigns/p160/consolidated-20260908/
-- P = ~/.local/state/agent-browser/campaigns/p160/publication-028597ea/
-- N = ~/.local/state/agent-browser/campaigns/p160/ownership-round-20260908T175133Z/
-
-### Requirement-to-evidence table
-
-I = implemented, Q = qualified, D = installed/integrated, U = user-workflow proof.
-These stages are independent; partial or unknown is not completion.
-R receipts below qualify the prior b2207d5c binary; they are retained evidence,
-not fresh executions on052848aa. N receipts identify the current installation.
-
-| Requirement | I / Q / D / U | Decisive evidence | Missing proof and next action |
-| --- | --- | --- | --- |
-| A1 original identity recovery | yes / pass on f816 / retained source / r4 pass | P/consumer-r4-acceptance.json; incident0156 r4 | Preserve original self-declared recovery; no invented consumer credentialed-rejoin gate. Fresh consumer proof after this replacement remains distinct. |
-| A1 named/custom lifecycle | yes / prior binary pass / yes / synthetic | R/post-r4-matrix-results.json | Four headless/headed close-reopen rows include two clients, original handles through isolated host interruption, foreign denial and exact cleanup. Other operation/negative-case joins remain due. |
-| A1 session-only lifecycle | yes / prior headless and headed pass / yes / synthetic | R/final-session-matrix-results.json; R/final-session-headed-results.json | Five production identities preserved and no fixture residue. Session-only, named and custom lifecycle cases all have prior-binary proof; broader cross-operation/negative joins remain separate. |
-| A1 pending confirm | yes / prior binary pass / yes / original synthetic tab pass | R/installed-modal-acceptance.json; R/final-dialog-bmPf4N | Installed original handle passed labeled confirm status/dismiss and preserved actual page title/marker. Isolated snapshot and wrong-target denial pass. Original consumer retry and cross-target pending-modal routing remain unproven. |
-| A1 lease findings | dispositions / scoped / yes / partial | P/post-r4-ownership-dispositions.json; R/primary-evidence-disposition.json | Keep seven advisory axes separate from ordinary control failures. Complete UI/network/file-transfer after peer-target selection and remaining negative joins with isolated fixtures. |
-| A1 first-class profile remediation | yes / pass / isolated dev installed / synthetic headed | Plan0161 completion checkpoint; b4a160c1; dev generation 0.28.0-0ddc830f9a2e | Diagnose, preserving repair, runtime reset and authentication reset are delivered with BILL combined fixture and exact headed peer-survival proof. Consumer BILL workflow remains separate; destructive profile-data reset is gated by Plan0163. |
-| A2 local remote-view journey | yes / installed052848aa pass with same-link recovery / yes / synthetic | local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt | Two authenticated viewers, anonymous denial, same-link reconnect and trusted input pass. Preserve initial local-viewers-2wL0BG failure; external vantage remains separate. |
-| A3 current readiness | yes / installed doctor pass / yes / n/a | N/installation-postjourney-doctor.json; N/configuration-freeze.json | Preserve warning dispositions and current evidence; doctor alone does not prove complete operation. |
-| A3 preserving shutdown delivery | source follow-up / one exact installed pass / provisional / synthetic plus retained Odollo | graceful-upgrade-r4; transaction 0b9c31b6; Plan0160 automatic convergence checkpoint | Exact transaction transferred both live browser lanes and converged three production hosts to one. Source now auto-resumes or recovers the exact prior admission owner before a new apply. Install and prove the controlled-interruption case, with isolated development namespaces excluded from production multiplicity. |
-| A4 scheduled/restart continuity | partial / three current steady cycles pass / timer active / incomplete | R/steady-cadence/scheduled-control.json | Normal gaps300.875s,300.398s,300.526s; current configuration and five roots preserved. Startup gap298.8s excluded. Full A1 prerequisites and ordered controlled-restart/next-cycle sequence remain incomplete; no second production restart performed. |
-| AX selected seven cases | surfaces implemented / partial / yes / partial | R/primary-evidence-disposition.json; P/post-r4-ax-acceptance.json | Seven exact returned-ID failure reconstructions remain unjoined. Profile selection, missing binding, changed generation, stale target/transport, Xvfb, journal interruption and failed transition are distinct predicates. |
-| Historical wrong-tab attribution | current repair / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |
-| Consumer CSV and transfer scope | native repair052848aa / final binary shared-case pass / installed052848aa / synthetic only | N/red-policy-reproduction.json; N/qualification-status.json; retained-unit-sim-4lmrgW | Peer policy/bytes and original handle preserved; owned cancel joins response, job and trace. Standalone compatibility deferred by operator; misattribution and consumer cancellation cause unproven. waitfordownload unchanged. |
-| Final integration and completion | partial / incomplete / plan branch / incomplete | Plan0160 W5 | Full A1–A4/AX and required final integration remain open. |
-
-### Installation disposition and next action
-
-N/staged-generation.json identifies the exact qualified artifact used by
-N/activation-receipt.json. The missing staging directory was reconstructed from
-the retained release binary. A second disappearance occurred before activation
-mutation; cause remains unproven. Pausing the interlock timer and performing
-restage/activation sequentially succeeded. The timer was restored afterward.
-N/installation-closeout.json records the final installed state and check results.
-No additional reproduction, build, standalone CLI experiment or consumer operation
-was performed for installation. Prior45/75-minute allowances remain consumed.
-
-Sol implemented the bounded source repair; primary reviewed owner proof/deadline
-and ran candidate/final qualification. A Luna docs spawn hit the thread limit,
-so primary handled the small docs edits. Effective model cost remains unknown.
-CI build2m16s; release build9m45s; format, strict clippy and docs checks passed.
-Rework: original fixture transport identity mismatch, then a newline assertion
-and unsupported trace filter. These exceeded the planned single fixture
-correction; all failures are retained and no allowance was renewed. Extra
-standalone data-URL checks failed on both baseline and candidate; a candidate
-about:blank check also failed. Compatibility remains incomplete, not repaired.
-Final shared-case proof includes Service/native peer preservation, canceled own
-GUID with successful peer completion, returned-ID job/trace join and zero fixture
-process residue. The integration fixture is private; a maintained regression
-for native policy preservation remains a gap. Do not claim whole-plan completion.
-
-### Validation, rework and bounded delegation
-
-Format, strict workspace clippy, remote-view docs and Plan0160 consolidation
-checks passed. The planning audit retains38 legacy findings. The final release
-build took10m13s; two useful worker candidate builds took about2m33s each, and a
-superseded shallow compile was stopped. Preserved real red/green evidence remains
-the dialog regression protection. Production guidance received only relevant text.
-
-Workers reproduced the confirm timeout, prepared bounded fixture drivers and
-consolidated evidence. Primary retained the minimal repair and pinned proof while
-rejecting an inactive-target refusal, a shallow helper test and incorrect predicate
-mappings. Effective worker model cost was unavailable, so no savings are claimed.
-
-The first viewer stalled at Checking stream; a bounded second attempt passed on
-the same durable link with new clients, reconnect and controller refresh. No
-browser/provider restart or source change established a single cause. Removing an
-unneeded headless Xvfb dependency produced a residue-free cold-session pass. The
-headed fixture also passed after restoring its proven PrivateTmp condition; only
-applicable browser/profile/interaction facts are accepted. Timer evidence excludes
-an overdue startup and one corrected shell sequencing mistake; steady observation
-still requires the next completed invocation without settings changes.
-
-### Presentation capacity and supervisor completion | 2026-09-09
-
-Available Guacamole pool entries were blocked by historical browser IDs retained
-on reconciled orphan route/display rows. Qualification now treats that exact
-orphaned plus available plus unallocated combination as warm idle; checked-out
-missing-browser ownership still blocks. Seven inventory tests and reconciliation
-coverage pass.
-
-Accepted workstation upgrades previously stopped, rewrote and enabled the runtime
-host unit but returned unitStarted=false, leaving the candidate unsupervised and
-forcing operator recovery. Apply and guarded resume now complete the existing
-identity-bound takeover and require fresh proof of the supervisor PID, selected
-ingress, executable, ports and conflict-free runtime census. Same-process installer
-lock ownership is admitted for this internal step; foreign or unreadable locks
-remain blocking. Acceptance now occurs only after takeover while the parent drain
-remains active, and final census requires exactly one selected runtime-host
-listener. Stale durable aliases may bootstrap staging from one exact reattachable
-RDP browser, but the candidate must issue a fresh durable handoff before commit. Old-runtime
-BILL reattach job bd44aa98-cf7e-4e57-9937-89aed1822873 failed at
-InventoryAdmission without a route change. Transactions b1624cb5, 5c7bc5c0 and b5eb7ee8 exposed drain, cache and dotenv defects. Attempt 82fd55c4 proved BILL on
-private :92 cannot appear on route A :10. Route display and acquisition-custody
-repairs passed live. Turn289 records accepted install and convergence proof.
-
-### Git consolidation | 2026-09-08
-
-PR13 merged the three historical Reddit/X incident reports into main at b21c4459.
-PR14 merged the runtime backlog at ba3916ca from exact reviewed head ad120da2.
-[CI run 34309070521](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34309070521)
-passed the required fast gates: version sync, Rust quality, Service Client,
-Dashboard, workstation fixtures, the complete Rust suite and the pinned no-launch
-service smokes. Local validation also covered the live CDP tab-streaming path,
-dashboard and docs builds, generated-client contracts, Guacamole/workstation
-fixtures, and the installed candidate's retained identity and durable handoff.
-
-The clean P0137 and Reddit worktrees were retired after ancestry/content checks.
-Four additional local branches whose tips are ancestors of ba3916ca were deleted
-after the merge. Their work remains reachable from main; remote incident branches
-were retained where squash/merge topology does not establish tip ancestry. The
-active Plan0160 worktree remains because it holds pre-existing incident0156 edits
-and untracked notes0159/0160. Those files remain untouched and outside PR14.
-
-Repository consolidation is complete. Full A1–A4/AX runtime acceptance and the
-deferred standalone CLI download compatibility check remain Plan0160 work; they
-are product acceptance gaps rather than Git integration gaps.
-[Turns 291 through 309](RUNBOOK-history-2026-09-10-through-turn309.md); [previous runbook through Turn280](RUNBOOK-history-through-2026-09-08-turn280.md); [earlier history through Turn213](RUNBOOK-history-through-2026-09-02.md).
-=======
 Plan 0177 was authored and merged through PR64 as `17ae56b0`. That merge is
 source custody only because GitHub allowed it while Rust and Workstation
 Fixtures were still running. The execution campaign revalidated its own changed
 surfaces and preserves final CI as a separate closeout gate.
->>>>>>> origin/main

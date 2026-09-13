@@ -14,6 +14,7 @@
   "scripts": {
     "captcha-lab:start": "pnpm --filter agent-browser-captcha-lab start",
     "test:captcha-lab": "pnpm --filter agent-browser-captcha-lab test",
+    "test:captcha-guard-contract": "node scripts/test-captcha-guard-contract.js",
     "version:sync": "node scripts/sync-version.js",
     "test:policy-wiring": "node scripts/test-policy-wiring.js",
     "version": "npm run version:sync && git add cli/Cargo.toml Cargo.lock",
