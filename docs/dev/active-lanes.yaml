@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P174
+    objective: Repair comprehensive Rust production-scale timing and process-identity fixture reliability
+    plan: docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md
+    plan_ref: refs/heads/fix/plan-0174-ci-reliability
+    branch: fix/plan-0174-ci-reliability
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 976e20316f83e6952c4bf1aa7bf3928267c250ca
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P167]
+    overlaps: [cli/src/native/service_store.rs, cli/src/workstation_install.rs]
+    reconciled_overlaps: []
+    updated_at: 2026-09-12
   - id: P173
     objective: Repair expired-session retained-browser reuse through canonical acquisition and handle truth
     plan: docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md

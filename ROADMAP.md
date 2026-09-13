@@ -7,6 +7,16 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P174 | CI Production-Scale And Process-Identity Reliability
+
+State: OPEN
+
+Current state: PR 51 is blocked by two provider-free Rust flakes unrelated to
+its YAML-only diff. Plan0174 owns deterministic repair without changing the
+one-second Service State deadline or weakening process-identity fencing.
+[Plan 0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md)
+is the active execution contract.
+
 ## P173 | Expired Session Retained Browser Reuse Repair
 
 State: CLOSED

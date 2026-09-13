@@ -2,6 +2,10 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 305 | 2026-09-12
+
+[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md) is OPEN at `976e2031` to repair two comprehensive-Rust CI flakes that block YAML-only PR51. Preserve the one-second Service State deadline and exact process-identity fence; use focused red-capable loops, then one frozen-candidate comprehensive run. No install, browser, profile, provider, production-state, process-cleanup, or release effect is authorized.
+
 ## Turn 304 | 2026-09-12
 
 [Plan0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
