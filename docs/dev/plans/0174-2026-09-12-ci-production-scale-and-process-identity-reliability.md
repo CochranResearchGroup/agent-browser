@@ -103,3 +103,30 @@ Evidence: run `34711447417`, attempts 1 and 2; source baseline `976e2031`.
 Material blockers: none.
 
 Next action: reproduce and minimize both failures through focused commands.
+
+## Checkpoint P0174-C02 | 2026-09-12
+
+State transition: `diagnosis_active to candidate_validation`.
+
+Acceptance state: both focused repairs pass; broader validation pending.
+
+Progress classification: `implementation`; the Service State assertion now
+uses measured exclusive commit wait rather than whole-operation wall time, and
+the retirement fixture records a unique executable only after exact identity
+readiness. The one-second deadline and production identity verifier are
+unchanged.
+
+Evidence: the baseline timing test passed 12 times at 660 to 711 ms wall time,
+0 ms commit wait, and 335 to 372 ms exclusive hold, while CI failed only the
+wall proxy at 962 and 1,061 ms. The patched timing test passed 12 times with
+0 ms commit wait and at most 447 ms hold. The patched identity test passed one
+guarded compile run and ten repeated executions.
+
+Material blockers: the first guarded compile attempt admitted but sccache hit
+host thread-creation pressure and emitted inherited environment values in its
+fatal diagnostic. No values entered repository files. The supported cache-off,
+four-job mode compiled and tested successfully; remaining Cargo validation is
+queued behind the repository resource-admission threshold.
+
+Next action: complete fmt, Clippy, affected compartments, and one comprehensive
+Rust run on the frozen candidate.
