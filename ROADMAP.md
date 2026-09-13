@@ -33,8 +33,9 @@ Current state: [Plan 0179](docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-2
 and [issue #89](https://github.com/CochranResearchGroup/agent-browser/issues/89)
 own the scoped integration of the already-created v0.1.26 policy rollout.
 Canonical `main` is clean and synchronized; the published rollout branch has
-merged current `origin/main` and is awaiting bounded local validation and pull
-request review. This lane authorizes no installed or live runtime effect.
+merged current `origin/main`. Checkpoint `966c61e4` passes bounded policy,
+selector, planning, goal, documentation, and patch-hygiene checks and awaits
+pull request review. This lane authorizes no installed or live runtime effect.
 
 ## P177 | Development Governance And Repository Readiness
 

@@ -11,7 +11,10 @@ is OPEN through [issue #89](https://github.com/CochranResearchGroup/agent-browse
 The local-only v0.1.26 rollout commit `133bed0d` is preserved on published
 branch `platform/policy-selector-v0-1-26-rollout`. Canonical `main` is clean and
 equal to `origin/main` at `ae426642`; the scoped branch has merged that current
-tip without conflict and is undergoing bounded policy validation.
+tip without conflict. Checkpoint `966c61e4` passes policy wiring, 122 selector
+tests with three source-checkout-only skips, active planning and goal audits,
+remote-view documentation checks, and patch hygiene. Pull request review and
+integration remain.
 
 No installed runtime, browser, profile, provider, tenant, service, or
 supervisor state is in scope. After reviewed integration and exact-ref cleanup,

@@ -31,6 +31,13 @@ branch. Canonical `main` is clean and equal to `origin/main` at
 `ae4266429b94dedef087e91c38087c7742f3caee`. The scoped branch has merged that
 remote tip without conflict and is undergoing bounded policy validation.
 
+Checkpoint `966c61e4a721d1cd2355a5ec252ef442fc1a6828` repairs repository-specific
+policy routing, installed-bundle test paths, v0.1.26 wiring, active-only audit
+classification, and the three residual active-planning ledger findings.
+Policy wiring, 122 selector tests with three source-checkout-only skips, the
+goal audit, the active planning audit, remote-view documentation checks, and
+patch hygiene pass. Pull request review and integration remain.
+
 ## Scope
 
 - Preserve the v0.1.26 selector bundle, adopted policy modules, tests, and
@@ -66,4 +73,3 @@ remote tip without conflict and is undergoing bounded policy validation.
 After this plan closes, reconcile Plan 0178 source custody while preserving its
 separate installed-acceptance gate. Then begin provider-free issue #78 in a new
 bugfix branch and worktree.
-

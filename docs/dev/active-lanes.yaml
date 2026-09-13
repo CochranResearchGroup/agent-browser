@@ -10,7 +10,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 133bed0de3628feb438c544fb1bef0ae3719aaf1
+    checkpoint: 966c61e4a721d1cd2355a5ec252ef442fc1a6828
     remote_ref: refs/remotes/origin/platform/policy-selector-v0-1-26-rollout
     integration_receipt: null
     integration: merge
@@ -18,7 +18,7 @@ lanes:
     dependencies: []
     overlaps: [AGENTS.md, docs/dev/policies, .codex/skills/repo-policy-selector]
     reconciled_overlaps: []
-    blocker: current-main reconciliation and bounded validation are in progress
+    blocker: pull request review and integration remain
     updated_at: 2026-09-13
   - id: P169
     product_lane: PL-CHALLENGE
