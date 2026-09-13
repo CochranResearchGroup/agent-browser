@@ -2,6 +2,21 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 312 | 2026-09-13
+
+[Plan0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
+is PLANNED on `platform/plan-0177-development-readiness` from current
+`origin/main` at `d32919f8`. It freezes serious development until issue-backed
+multi-session policy, current worktree custody, 37 active planning findings,
+and read-only repository/runtime readiness are reconciled.
+
+PR63 already merged the no-op Service State repair and passed required CI, so
+that worktree is closure-only after its untracked field note is preserved. The
+Turnstile branch remains six commits ahead and 51 behind current main with one
+unpublished commit and conflicting P169/P173 identities. GitHub Issues remain
+disabled. No provider, Git cleanup, runtime, browser, profile, installation, or
+tenant mutation is authorized by this planning checkpoint.
+
 ## Turn 311 | 2026-09-13
 
 [Plan0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
