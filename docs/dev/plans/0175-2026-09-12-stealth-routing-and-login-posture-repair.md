@@ -87,7 +87,7 @@ No subagents are assigned; current orchestration policy prohibits delegation.
 | Hard CDP-free exception preserved | Focused profile-readiness test | passed |
 | Public guidance aligned | Help, README, skill, docs-site diff | passed |
 | Candidate qualified | fmt, clippy, focused and selected checks | passed |
-| Reviewable custody | Clean committed branch and exact head readback | pending |
+| Reviewable custody | Clean committed branch and exact head readback | passed |
 
 Terminal success for this slice is a committed, provider-free qualified
 candidate. Production installation, real Google sign-in, captcha solving, and
@@ -140,3 +140,16 @@ event changed production state.
 Next action: commit the qualified candidate, record exact branch custody, and
 submit it for review. Production installation and live account acceptance stay
 outside this plan's current authority.
+
+## Checkpoint P0175-C03 | 2026-09-12
+
+State transition: `source_qualified to integration_ready`.
+
+Acceptance state: the provider-free candidate is committed at source checkpoint
+`27ec5aae0f9100e67306cc1c0e53694326af8cdd`; review and integration remain.
+
+Progress classification: `custody`; the branch is clean, one source commit
+ahead of its `main` baseline, and ready for the protected review workflow.
+
+Next action: review and merge the two-commit source plus custody packet.
+Installation and live acceptance require separate operator authority.

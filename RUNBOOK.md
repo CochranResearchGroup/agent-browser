@@ -13,8 +13,8 @@ ID rename, production install, browser launch, account sign-in, profile change,
 or provider effect is authorized. The complete access-plan and service-model
 focused groups, formatting, strict Clippy, selected contract and fixture gates,
 documentation build, and exact branch-binary workstation fixture passed. The
-candidate is ready for committed review custody; production installation and
-live account acceptance remain separate gates.
+candidate source is committed at `27ec5aae` with integration-ready custody;
+production installation and live account acceptance remain separate gates.
 
 ## Turn 305 | 2026-09-12
 
