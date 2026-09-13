@@ -155,3 +155,6 @@ qualification surface.
 
 Next action: push the frozen candidate, open the fork PR, and require all
 protected checks including comprehensive Rust to pass without rerun.
+
+Remote review: PR 54 at
+`https://github.com/CochranResearchGroup/agent-browser/pull/54`.
