@@ -1,24 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P177
-    product_lane: PL-PLATFORM
-    objective: Establish issue-backed governance and reconcile repository custody before serious development resumes
-    plan: docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md
-    plan_ref: refs/heads/platform/plan-0177-execution
-    branch: platform/plan-0177-execution
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: f98a3161e6066bc2f46397ada8c3dd05e2b0f518
-    remote_ref: refs/remotes/origin/platform/plan-0177-execution
-    integration_receipt: null
-    integration: merge
-    work_items: [CochranResearchGroup/agent-browser#65]
-    dependencies: []
-    overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml, docs/dev/policies]
-    reconciled_overlaps: [ROADMAP.md, RUNBOOK.md, AGENTS.md, docs/dev/active-lanes.yaml, docs/dev/policies]
-    updated_at: 2026-09-13
   - id: P169
     product_lane: PL-CHALLENGE
     objective: Qualify one bounded Turnstile interaction through the governed desktop workflow
@@ -41,12 +23,12 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Quiesce proven browserless shared runtime lanes before transactional handoff
     plan: docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md
-    plan_ref: refs/heads/platform/plan-0177-execution
+    plan_ref: refs/remotes/origin/main
     branch: fix/plan-0240-quiesce-browserless-runtime-lanes
     target: main
     plan_state: OPEN
     custody_state: PAUSED_REF
-    checkpoint: 24159acbaf5c540c903f466dc229de767c300ddb
+    checkpoint: f6b263f0b63becda20b37cb82f42981c4683fe20
     remote_ref: refs/remotes/origin/fix/plan-0240-quiesce-browserless-runtime-lanes
     integration_receipt: null
     integration: merge

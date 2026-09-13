@@ -4,6 +4,22 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 314 | 2026-09-13
+
+Plan 0177 is CLOSED after [PR #86](https://github.com/CochranResearchGroup/agent-browser/pull/86)
+integrated the governance and repository-readiness campaign as
+`2d71134a55fc2f919daaf8cb7595efd3c7ebef79`. All selected local checks passed.
+The PR's Dashboard, Service Client, Version Sync, Rust Quality, and Workstation
+Fixtures jobs passed. Its unselected full Rust lane failed only in a pre-existing
+workstation process-exit fixture now separately owned by issue #84 and PR #83;
+Plan 0177 did not retry or absorb that source lane.
+
+P177 leaves the active-lane catalog. P169 remains a published clean
+`PAUSED_REF` at `32e7ec83`; P178 remains a separate active worktree and PR at
+`f6b263f0`. Production maintenance and provider-backed acceptance remain
+quarantined under issue #76. The canonical checkout is fast-forwarded only
+after this closeout receipt integrates; no runtime mutation is part of closeout.
+
 ## Turn 313 | 2026-09-13
 
 [Plan 0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
