@@ -27,7 +27,7 @@ field evidence and acceptance records into the same model.
 
 ## P176 | Product Lane And Note Consolidation
 
-State: INTEGRATION READY
+State: OPEN
 
 Current state: five stable product lanes, note-routing rules, multi-agent WIP
 limits, shared-writer arbitration, dependency ordering, and Plan 0161 platform

@@ -7,7 +7,7 @@ lanes:
     plan_ref: refs/heads/platform/product-lanes-note-consolidation
     branch: platform/product-lanes-note-consolidation
     target: main
-    plan_state: INTEGRATION_READY
+    plan_state: OPEN
     custody_state: INTEGRATION_READY
     checkpoint: ce0ac47f31ce5ef928b32fee385e8cdbd968e002
     remote_ref: refs/remotes/origin/platform/product-lanes-note-consolidation

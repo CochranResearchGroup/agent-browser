@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: INTEGRATION_READY
+State: OPEN
 
 Consolidation: required
 
@@ -101,7 +101,7 @@ separate bounded plan in its assigned product lane.
 
 ## Checkpoint P0176-C01 | 2026-09-13
 
-State transition: `open to integration_ready`.
+Custody transition: `active_worktree to integration_ready`.
 
 The complete taxonomy and note-routing batch is committed at `ce0ac47f` and
 published on `platform/product-lanes-note-consolidation`. Plan 0176 passes its
