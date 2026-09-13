@@ -13984,9 +13984,21 @@ mod tests {
         fs::create_dir_all(executable.parent().unwrap()).unwrap();
         fs::copy("/bin/sleep", &executable).unwrap();
         let mut child = Command::new(&executable).arg("30").spawn().unwrap();
-        let identity =
-            crate::process_identity::capture_process_identity(child.id(), Some(&executable), None)
-                .unwrap();
+        let identity_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let identity = loop {
+            if let Some(identity) = crate::process_identity::capture_process_identity(
+                child.id(),
+                Some(&executable),
+                None,
+            ) {
+                break identity;
+            }
+            assert!(
+                std::time::Instant::now() < identity_deadline,
+                "candidate host fixture did not publish its final executable identity"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
         let transaction = new_upgrade_transaction(
             &paths,
             candidate_generation_id.to_string(),
@@ -14665,10 +14677,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn finalized_runtime_host_grace_observes_self_exit_before_pidfd_fallback() {
-        let mut child = Command::new("sh")
-            .args(["-c", "sleep 0.05"])
-            .spawn()
-            .unwrap();
+        let mut child = Command::new("/bin/sleep").arg("0.05").spawn().unwrap();
         let executable = PathBuf::from(format!("/proc/{}/exe", child.id()))
             .canonicalize()
             .unwrap();

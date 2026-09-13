@@ -327,8 +327,12 @@ try {
       `readiness target mismatch: ${JSON.stringify(readiness)}`,
     );
     assert(
-      readiness.targetReadiness?.[0]?.state === 'needs_manual_seeding',
+      readiness.targetReadiness?.[0]?.state === 'unknown',
       `readiness state mismatch: ${JSON.stringify(readiness)}`,
+    );
+    assert(
+      readiness.targetReadiness?.[0]?.seedingMode === 'attachable_ok',
+      `readiness seeding mode mismatch: ${JSON.stringify(readiness)}`,
     );
 
     const allocationUri = `agent-browser://profiles/${profileId}/allocation`;
@@ -344,8 +348,12 @@ try {
       `allocation row profile mismatch: ${JSON.stringify(allocation)}`,
     );
     assert(
-      allocation.profileAllocation?.targetReadiness?.[0]?.state === 'needs_manual_seeding',
+      allocation.profileAllocation?.targetReadiness?.[0]?.state === 'unknown',
       `allocation readiness mismatch: ${JSON.stringify(allocation)}`,
+    );
+    assert(
+      allocation.profileAllocation?.targetReadiness?.[0]?.seedingMode === 'attachable_ok',
+      `allocation seeding mode mismatch: ${JSON.stringify(allocation)}`,
     );
 
     const lookupUri = `agent-browser://profiles/lookup?serviceName=McpReadSmoke&loginId=${targetServiceId}`;
@@ -385,16 +393,20 @@ try {
       `handoff command mismatch: ${JSON.stringify(handoff)}`,
     );
     assert(
-      handoff.lifecycle?.state === 'needs_manual_seeding',
+      handoff.lifecycle?.state === 'not_required',
       `handoff lifecycle mismatch: ${JSON.stringify(handoff)}`,
+    );
+    assert(
+      handoff.seedingMode === 'attachable_ok',
+      `handoff seeding mode mismatch: ${JSON.stringify(handoff)}`,
     );
     assert(
       handoff.operatorIntervention?.defaultChannels?.includes('mcp'),
       `handoff intervention missing MCP channel: ${JSON.stringify(handoff)}`,
     );
     assert(
-      handoff.operatorIntervention?.blocksProfileLease === true,
-      `handoff intervention should block profile lease: ${JSON.stringify(handoff)}`,
+      handoff.operatorIntervention?.blocksProfileLease === false,
+      `handoff intervention should not block profile lease: ${JSON.stringify(handoff)}`,
     );
   } finally {
     mcp.close();

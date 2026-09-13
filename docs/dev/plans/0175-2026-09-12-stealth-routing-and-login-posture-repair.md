@@ -86,7 +86,7 @@ No subagents are assigned; current orchestration policy prohibits delegation.
 | Stealth first login attachable | Focused profile-readiness test | passed |
 | Hard CDP-free exception preserved | Focused profile-readiness test | passed |
 | Public guidance aligned | Help, README, skill, docs-site diff | passed |
-| Candidate qualified | fmt, clippy, focused and selected checks | passed |
+| Candidate qualified | fmt, clippy, focused and selected checks | correction focused; full CI pending |
 | Reviewable custody | Clean committed branch and exact head readback | passed |
 
 Terminal success for this slice is a committed, provider-free qualified
@@ -153,3 +153,82 @@ ahead of its `main` baseline, and ready for the protected review workflow.
 
 Next action: review and merge the two-commit source plus custody packet.
 Installation and live acceptance require separate operator authority.
+
+## Checkpoint P0175-C04 | 2026-09-12
+
+State transition: `integration_ready to post_merge_correction`.
+
+Acceptance state: PR 55 merged as `97aa399a`, but its comprehensive Rust gate
+then failed three stale MCP resource assertions. Installation is withheld.
+
+Progress classification: `qualification_repair`; ordinary built-in Google
+readiness now correctly returns `unknown` and `attachable_ok`. The MCP readiness
+and allocation fixtures still expected detached manual seeding. The retained
+handoff fixture now declares `requiresCdpFree: true` so it continues to protect
+the explicit detached exception.
+
+Evidence: the four focused `read_profile_` MCP tests pass, formatting passes,
+and strict workspace Clippy passes. The already built merged candidate is not
+installable evidence while full CI is red.
+
+Authority update: the operator authorized merge, worktree consolidation, and
+production installation. Runtime mutation remains gated on a green corrected
+source head, preserving installer preflight, and coherent supervisor and
+Service State readback.
+
+Next action: commit and publish the correction through protected CI, merge only
+when green, then rebuild and run transactional installation.
+
+## Checkpoint P0175-C05 | 2026-09-12
+
+State transition: `post_merge_correction to correction_integration_ready`.
+
+Acceptance state: correction committed at source checkpoint
+`0572b065522e190f29a57e8e6d105836c2ef67d3`; protected CI pending.
+
+Progress classification: `custody`; the corrective branch is clean and one
+commit ahead of merged main before this documentation receipt.
+
+Next action: open the correction PR and require every fast gate to pass before
+merge or installation.
+
+## Checkpoint P0175-C06 | 2026-09-12
+
+State transition: `correction_integration_ready to smoke_expectation_repair`.
+
+Acceptance state: PR 57 passed Version Sync, Rust Quality, Dashboard, Service
+Client, and Workstation Fixtures, but its Rust job found the same stale Google
+readiness posture in the no-launch MCP smoke. Merge and installation remain
+withheld.
+
+Progress classification: `qualification_repair`; the smoke now expects
+ordinary built-in Google readiness to be `unknown`, its seeding mode to be
+`attachable_ok`, and its handoff lifecycle to be `not_required`. The smoke
+passes against the qualified optimized candidate without launching a browser.
+
+Evidence: failed CI job `103659215375` in run `34732944495`; local
+`smoke-mcp-read-no-launch.js` pass with the exact candidate binary.
+
+Next action: publish the corrected smoke expectation, require a fresh green PR
+57 head, then merge and run the preserving transactional installation.
+
+## Checkpoint P0175-C07 | 2026-09-12
+
+State transition: `smoke_expectation_repair to ci_fixture_stabilization`.
+
+Acceptance state: the fresh PR 57 head passed its workstation fixture and fast
+gates, then the comprehensive Rust lane exposed two unrelated nondeterministic
+workstation installer fixtures. Merge and installation remain withheld.
+
+Progress classification: `qualification_repair`; one fixture no longer spawns
+through a shell whose executable can change after identity capture, and the
+other now waits boundedly for the copied executable to publish its final
+process identity.
+
+Evidence: failed CI job `103662798122` in run `34734236616`; the same Rust
+source passed both tests in the preceding run. Both focused tests pass after
+the repair, 20 repeated direct test-binary executions pass, formatting passes,
+and strict workspace Clippy passes. Source checkpoint is `a7c1b637`.
+
+Next action: publish the deterministic fixture repair and require a fresh green
+PR 57 head before merge or installation.

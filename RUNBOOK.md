@@ -2,6 +2,39 @@
 
 Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance, and current requirement status; receipts and archives preserve detail. Keep at or below 200 lines under policy0043.
 
+## Turn 309 | 2026-09-12
+
+Plan0175 PR57 reran after the MCP smoke correction. Its fast gates and
+Workstation Fixtures passed, while the comprehensive Rust lane exposed two
+unrelated nondeterministic process-identity fixtures: shell exec changed the
+captured executable in one case, and immediate post-spawn capture returned no
+identity in another. The fixtures now use stable executable identity and a
+bounded publication wait. Both focused tests, 20 repeated executions, format,
+and strict Clippy pass at source checkpoint `a7c1b637`. Merge and install remain
+withheld pending a fresh green PR57 head.
+
+## Turn 308 | 2026-09-12
+
+Plan0175 correction PR57 passed every fast gate except the final Rust no-launch
+smoke phase. That phase returned the intended ordinary Google posture
+`unknown`, `attachable_ok`, and `not_required`, while the JavaScript smoke still
+asserted the former detached-login values. The aligned no-launch smoke passes
+locally against the qualified candidate. Merge and production installation
+remain withheld until a fresh PR57 head passes every required check.
+
+## Turn 307 | 2026-09-12
+
+Plan0175 merged through PR55 as `97aa399a`, but its post-merge comprehensive
+Rust gate exposed three stale MCP readiness fixtures. Installation is withheld.
+The bounded correction makes ordinary built-in Google resource expectations
+`unknown` plus `attachable_ok` and preserves detached handoff coverage through
+an explicit `requiresCdpFree` fixture. Four focused MCP tests, formatting and
+strict Clippy pass. Production remains on binary SHA-256 `cae894cf25f2` with a
+ready singular supervisor; doctor separately reports one live retained browser
+identity missing a lifecycle cleanup record, which transactional preflight must
+reconcile without blind closure or relaunch. The correction is committed at
+`0572b065` and ready for protected CI.
+
 ## Turn 306 | 2026-09-12
 
 [Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md) is source-qualified at `27ec5aae` on `fix/plan-0175-stealth-routing-auth`, with integration-ready custody. The bounded batch preserves explicit nested browser-build selections, routes built-in Google/Gmail sign-in to headed stealth Chromium, and retains detached CDP-free login only for `requiresCdpFree`; it authorizes no rename, install, launch, sign-in, profile, or provider effect. Focused access-plan/service-model groups, formatting, strict Clippy, selected contracts/fixtures, docs build, and exact branch-binary workstation fixture pass. Production installation and live account acceptance remain separate gates.
