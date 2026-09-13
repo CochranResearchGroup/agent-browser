@@ -1,0 +1,38 @@
+name: Operational gate
+description: Track a runtime, installation, provider, or acceptance gate separately from source custody.
+title: "[Operational gate] "
+labels:
+  - type/operational-gate
+  - state/triage
+  - effect/live-gated
+body:
+  - type: textarea
+    id: gate
+    attributes:
+      label: Exact open gate
+      description: State what is not yet proven and what remains prohibited.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Current evidence
+      description: Include source identity, runtime identity, receipts, and typed failures without secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance and stop conditions
+      description: Define the readback that closes the gate and the conditions that stop retries.
+    validations:
+      required: true
+  - type: dropdown
+    id: authority
+    attributes:
+      label: Effect authority
+      options:
+        - Read-only investigation only
+        - Explicit live-effect authority required
+    validations:
+      required: true

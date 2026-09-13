@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "targets": [
+    {
+      "id": "agent-browser-owned-github-fork",
+      "forge": "github",
+      "host": "github.com",
+      "repository": "CochranResearchGroup/agent-browser",
+      "relationship": "owned",
+      "allowed_actions": [
+        "read",
+        "create",
+        "comment",
+        "edit",
+        "apply_labels",
+        "create_labels",
+        "close",
+        "reopen"
+      ],
+      "security_route": "none",
+      "label_map": {
+        "intent/defect": { "provider_label": "bug" },
+        "intent/documentation": { "provider_label": "documentation" },
+        "intent/feature": { "provider_label": "enhancement" },
+        "lane/bugfix": { "provider_label": "lane/bugfix" },
+        "lane/auth": { "provider_label": "lane/auth" },
+        "lane/challenge": { "provider_label": "lane/challenge" },
+        "lane/recipes": { "provider_label": "lane/recipes" },
+        "lane/platform": { "provider_label": "lane/platform" },
+        "state/triage": { "provider_label": "state/triage" },
+        "state/ready": { "provider_label": "state/ready" },
+        "state/in-progress": { "provider_label": "state/in-progress" },
+        "state/blocked": { "provider_label": "state/blocked" },
+        "type/governance": { "provider_label": "type/governance" },
+        "type/operational-gate": { "provider_label": "type/operational-gate" },
+        "effect/no-live": { "provider_label": "effect/no-live" },
+        "effect/live-gated": { "provider_label": "effect/live-gated" }
+      }
+    }
+  ]
+}
