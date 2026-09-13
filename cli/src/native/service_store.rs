@@ -638,11 +638,17 @@ where
                     return Ok(None);
                 }
                 let baseline_revision = baseline.state_revision;
-                let mut candidate = baseline;
+                let mut candidate = baseline.clone();
                 candidate.state_revision = baseline_revision
                     .checked_add(1)
                     .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
                 let result = mutator(&mut candidate)?;
+                let candidate_revision = candidate.state_revision;
+                candidate.state_revision = baseline_revision;
+                if candidate == baseline {
+                    return Ok(Some(result));
+                }
+                candidate.state_revision = candidate_revision;
                 let transaction = self
                     .store
                     .prepare_save(&candidate)?
@@ -2741,6 +2747,28 @@ mod tests {
             process_lock_available,
             "durable serialization and commit must not retain the process mutex"
         );
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn prepared_noop_mutation_does_not_advance_service_state_revision() {
+        let path = unique_state_path("prepared-noop-revision");
+        let store = JsonServiceStateStore::new(&path);
+        let mut fixture = ServiceState::default();
+        fixture.state_revision = 41;
+        store.save(&fixture).expect("fixture should save");
+        let repository = LockedServiceStateRepository::new(store);
+
+        let result = repository
+            .mutate(|_state| Ok("unchanged"))
+            .expect("no-op mutation should succeed");
+        let persisted = repository
+            .load_snapshot()
+            .expect("persisted state should remain readable");
+
+        assert_eq!(result, "unchanged");
+        assert_eq!(persisted.state_revision, 41);
+        assert_eq!(persisted, fixture);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
