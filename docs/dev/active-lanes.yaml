@@ -62,9 +62,9 @@ lanes:
     plan_ref: refs/remotes/origin/platform/lease-authority-crate
     branch: platform/lease-authority-crate
     target: main
-    plan_state: OPEN
+    plan_state: BLOCKED
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 744fa0444037d548e99be0e843f1a912e255315e
+    checkpoint: b52024b811d5c0d0fd15607091101475300070fc
     remote_ref: refs/remotes/origin/platform/lease-authority-crate
     integration_receipt: null
     integration: merge

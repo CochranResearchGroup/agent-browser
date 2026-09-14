@@ -2,9 +2,9 @@
 
 Date: 2026-09-13
 
-Plan version: 6
+Plan version: 7
 
-State: OPEN
+State: BLOCKED
 
 Lane: P181
 
@@ -63,10 +63,11 @@ secondary acceptance axis, not a premise of the extraction:
 
 ## Current State
 
-P181 is active on `platform/lease-authority-crate` through work item #99. The
+P181 is blocked on `platform/lease-authority-crate` through work item #99. The
 immutable implementation baseline is
 `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; joined candidate
-`744fa0444037d548e99be0e843f1a912e255315e` is published for draft PR #106.
+`b52024b811d5c0d0fd15607091101475300070fc` includes current `main` and is
+locally qualified for draft PR #106.
 P0 through P6 are complete. The candidate includes current `main`, the P182
 adjacent-revision convergence fixture, and the tracked workspace lockfile
 registration. The architecture contract and mutation self-tests are green,
@@ -103,10 +104,25 @@ Native E2E lane had one isolated profile-continuity failure and a navigation
 cancellation fixture that retained the shared profile browser, cascading into
 12 later fail-closed tests. Browser E2E repair is outside P181's no-browser
 authority and does not erase the source, measurement, or native-Linux results.
-Required target-platform CI for the repaired candidate remains open. Issue #71 is closed
-in the forge, but P181 has no authority to treat that tracker state as Plan 0144
-acceptance or to reopen it. Its public, effect-admission, and installed gates
-remain separate.
+Repair full CI run 34846719359 completed failed after every native-Linux job
+passed. macOS ARM compiled `agent-browser-lease-authority` and then failed on
+three inherited CLI-only compile defects. Windows also reached the extracted
+crate before fail-fast cancellation. Native E2E passed 42 tests and failed 14:
+the same profile-continuity defect appeared first, then the navigation
+cancellation fixture retained its shared-profile browser and caused the later
+fail-closed cascade. The failing CLI bodies and browser fixture are unchanged
+by P181. These failures do not invalidate the accepted source, Linux, security,
+or measurement evidence, but the plan's broad-validation repair allowance is
+exhausted and its explicit hard stop prohibits a third broad run or merge.
+
+The joined tree passes the architecture contract, all 108 crate tests,
+formatting, workspace strict Clippy, and patch hygiene. The final closed-world
+P7 readback found no extraction regression after joining P183 and P184. P181
+therefore preserves a qualified, published source candidate while remaining
+BLOCKED on target-platform completion outside its authorized write scope.
+Issue #71 is closed in the forge, but P181 has no authority to treat that
+tracker state as Plan 0144 acceptance or to reopen it. Its public,
+effect-admission, and installed gates remain separate.
 
 The bounded 23-invocation P6 packet measured a focused candidate median of
 12.11 seconds against 150.53 seconds at baseline, a 91.95 percent reduction.
@@ -521,6 +537,12 @@ Owner: primary agent.
 Exit: remote `main` contains the accepted extraction through a merged pull
 request, the lane and work item close truthfully, and no runtime claim is made.
 
+The fresh-context review, finding adjudication, and closed-world guard
+verification are complete. The joined `b52024b8` tree passes the architecture
+contract, 108 crate tests, format, and strict workspace Clippy. Documentation
+is reconciled with current `main`. Integration and work-item closure remain
+blocked because the one permitted broad repair run completed non-green.
+
 ### Complete Delivery Budget
 
 - Maximum packets: eight, P0 through P7.
@@ -647,13 +669,13 @@ Hard stops:
 
 | Axis | Current evidence state | Remaining proof |
 | --- | --- | --- |
-| seam | implemented: no upward imports, one owner, old owner deleted, architecture guard green | final P7 review |
-| correctness | qualified locally: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined P182 fixtures pass | joined target-platform CI |
-| security | qualified: private signing and custody guard plus fresh architecture and security review pass | final closed-world P7 readback |
-| compatibility | non-Linux fail-closed variants repaired; qualified locally and at source-equivalent native-Linux CI | repaired Windows and macOS compilation plus Linux custody CI |
+| seam | accepted: no upward imports, one owner, old owner deleted, architecture guard green after current-main join | none inside P181 |
+| correctness | qualified: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined P182 fixtures and native-Linux comprehensive CI pass | target-platform completion remains blocked outside P181 |
+| security | accepted: private signing and custody guard plus fresh architecture, security, and closed-world review pass | none inside P181 |
+| compatibility | non-Linux fail-closed variants repaired; macOS ARM and Windows compiled the extracted crate before unrelated CLI failure or cancellation | complete Windows and macOS workspace jobs remain missing |
 | acceleration | measured: focused median improved 91.95 percent; downstream and cold did not regress | formal promotion withheld because focused selections were not literally identical |
-| CI | source-equivalent comprehensive native-Linux CI, local format, strict Clippy, and focused selections pass | dispatch and evaluate joined target-platform CI |
-| custody | plan, lane, branch, draft PR #106, and remote candidate `dd7f2f1c` agree | merged-main receipt and truthful issue closure |
+| CI | native-Linux CI and joined local gates pass; repair run 34846719359 is terminal failed outside the extraction surface | a future authorized integration packet must re-establish a green target-platform gate without resetting this plan's exhausted broad-run allowance |
+| custody | plan, lane, branch, and draft PR #106 preserve candidate `b52024b8`; merge is intentionally withheld | merged-main receipt and truthful issue closure after the external gate clears |
 | runtime | not applicable and not claimed by P181 | none; runtime proof remains under Plan 0144 authority |
 
 P181 completes only when:
@@ -682,8 +704,12 @@ target passes.
 
 ## Next Action
 
-Dispatch target-platform CI for repaired checkpoint `744fa044`, evaluate Linux
-custody plus Windows and macOS compilation, then perform the final closed-world P7 readback. Keep
-draft PR #106 unmerged until those gates pass. Preserve the P6 measured result
-without promoting it to the stricter acceleration claim, and do not claim
-runtime or Plan 0144 acceptance.
+Preserve draft PR #106 and the published branch without another broad run or
+merge. The exact remaining prerequisites are green inherited CLI compilation
+on macOS and a browser E2E lane that cleans up the navigation-cancellation
+fixture. Those repairs require separate work-item authority. After they land on
+`main`, a bounded integration successor may join that source, re-establish the
+missing target-platform evidence, and complete PR integration without
+resetting P181's historical validation or measurement ledgers. Preserve the P6
+measured result without promoting it to the stricter acceleration claim, and do
+not claim runtime or Plan 0144 acceptance.

@@ -1,10 +1,10 @@
 # Plan 0181 P0 | Lease-authority invariant ledger
 
-Date: 2026-09-13  
-Product lane: PL-PLATFORM  
-Disposition: active-input  
-Owning plan: Plan 0181  
-Issue: #99  
+Date: 2026-09-13
+Product lane: PL-PLATFORM
+Disposition: active-input
+Owning plan: Plan 0181
+Issue: #99
 Related lane: P144
 
 ## Freeze

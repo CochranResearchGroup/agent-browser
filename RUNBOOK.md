@@ -8,7 +8,7 @@ Keep this file at or below 200 lines under policy 0043.
 ## Turn 322 | 2026-09-14
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Candidate
+is BLOCKED in `PL-PLATFORM` through issue #99 and draft PR #106. Candidate
 `09b3afe8` extracts the canonical kernel and protected stack into
 `agent-browser-lease-authority`, deletes the old owner, and leaves one private
 CLI Service State adapter. All 108 crate tests, three retained adapter tests,
@@ -21,9 +21,10 @@ crate before fail-fast cancellation. Native E2E passed 42 tests, then retained
 one navigation fixture browser and cascaded to 14 failures. Browser repair is
 outside P181 authority and does not invalidate its provider-free source proof.
 P6 remains a measured 91.95 percent focused-loop improvement without the
-stricter acceleration-promotion claim. P181 is joined with current `main` for
-closed-world P7 review; PR integration remains gated on truthful disposition of
-the incomplete target-platform lane. No runtime, browser, profile, provider,
+stricter acceleration-promotion claim. Joined-tree P7 architecture, crate,
+format, strict-Clippy, and patch-hygiene checks pass. The plan's one broad
+repair allowance is exhausted, so PR integration remains blocked on separately
+owned macOS CLI and browser E2E repairs. No runtime, browser, profile, provider,
 installation, production, release, or Plan 0144 acceptance claim is made.
 
 ## Turn 321 | 2026-09-14
