@@ -1282,7 +1282,7 @@ fn exact_terminal_custom_profile_can_reopen_after_proven_close() {
     runtime_owner_registry.lifecycle_records.insert(
         browser_id.clone(),
         crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-            logical_browser_id: browser_id,
+            logical_browser_id: browser_id.clone(),
             profile_identity_digest,
             owner_generation: 5,
             lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
@@ -1724,8 +1724,8 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
     runtime_owner_registry.lifecycle_records.insert(
         browser_id.clone(),
         crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-            logical_browser_id: browser_id,
-            profile_identity_digest: legacy_profile_digest,
+            logical_browser_id: browser_id.clone(),
+            profile_identity_digest: legacy_profile_digest.clone(),
             owner_generation: 1,
             lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
             cleanup_obligation_state:
@@ -1776,6 +1776,44 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
         assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
         assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
     }
+
+    let mut partially_migrated = state.clone();
+    let current_profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&current_user_data_dir)
+            .unwrap();
+    let mut current_owner = partially_migrated
+        .runtime_owner_registry
+        .owners
+        .remove(&legacy_profile_digest)
+        .unwrap();
+    current_owner.profile_identity_digest = current_profile_digest.clone();
+    current_owner.owner_generation += 1;
+    partially_migrated
+        .runtime_owner_registry
+        .owners
+        .insert(current_profile_digest.clone(), current_owner);
+    let lifecycle = partially_migrated
+        .runtime_owner_registry
+        .lifecycle_records
+        .get_mut(&browser_id)
+        .unwrap();
+    lifecycle.profile_identity_digest = current_profile_digest;
+    lifecycle.owner_generation += 1;
+    let mut options = LaunchOptions {
+        runtime_profile: Some(profile_id.to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_existing_session_profile_selection(
+            &mut options,
+            &json!({ "action": "launch" }),
+            Some(session_id),
+            &partially_migrated,
+        )
+        .unwrap(),
+        None
+    );
+    assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
     let _ = fs::remove_dir_all(&home);
 }
 
