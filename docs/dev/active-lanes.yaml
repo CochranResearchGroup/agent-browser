@@ -5,14 +5,14 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Recreate missing canonical route viewers under the exact install admission claim
     plan: docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md
-    plan_ref: refs/heads/fix/plan-0186-route-profile-record-sync
-    branch: fix/plan-0186-route-profile-record-sync
+    plan_ref: refs/heads/fix/plan-0186-runtime-host-lane-profile-isolation
+    branch: fix/plan-0186-runtime-host-lane-profile-isolation
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: fefc0dcab9115de3e6f2a25ba76c1de032974665
-    remote_ref: refs/remotes/origin/fix/plan-0186-route-profile-record-sync
-    integration_receipt: 0a2c88005195b6421ecd903df259bf1e65c06ef2
+    checkpoint: d83dd8fd2824454ee6bcb65a1036ab5b98aafedf
+    remote_ref: refs/remotes/origin/fix/plan-0186-runtime-host-lane-profile-isolation
+    integration_receipt: f65bf9077c15da2d6258cfa8ee933a7e590b4a39
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#112]
     dependencies: [P185]
