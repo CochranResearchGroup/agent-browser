@@ -25,11 +25,11 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
-## P181 | Authentication Resume State Reconciliation
+## P182 | Authentication Resume State Reconciliation
 
 State: OPEN
 
-Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-authentication-resume-state-reconciliation.md)
+Current state: [Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
 and [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
 own the repeated adjacent-revision collision that prevents the preserved
 Authentication Run from recording its initial observation. Source diagnosis
@@ -51,7 +51,7 @@ does not recognize the newer claimed-close exception, so the preserving
 upgrade fails with `runtime_admission_draining`. The repair must quiesce exact
 browserless lanes before drain, prove interruption safety, and retain all
 browser-bearing and unknown lanes. No installed or consumer acceptance is yet
-claimed. P181 may proceed with disjoint provider-free source work, but its
+claimed. P182 may proceed with disjoint provider-free source work, but its
 installed acceptance and same-run recourse remain queued after P180 installed
 acceptance. The preserved Authentication Run must not be retried or replaced
 during this installer batch.

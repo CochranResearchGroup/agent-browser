@@ -1,10 +1,10 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P181
+  - id: P182
     product_lane: PL-BUGFIX
     objective: Make durable Authentication Run resume converge under an active Service State writer
-    plan: docs/dev/plans/0181-2026-09-13-authentication-resume-state-reconciliation.md
+    plan: docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md
     plan_ref: refs/heads/fix/issue-96-auth-resume-state-reconciliation
     branch: fix/issue-96-auth-resume-state-reconciliation
     target: main

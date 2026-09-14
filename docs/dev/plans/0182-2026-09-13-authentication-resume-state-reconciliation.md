@@ -1,10 +1,10 @@
-# Plan 0181 | Authentication Resume State Reconciliation
+# Plan 0182 | Authentication Resume State Reconciliation
 
 Date: 2026-09-13
 
 State: OPEN
 
-Lane: P181
+Lane: P182
 
 Product lane: PL-BUGFIX
 
@@ -45,7 +45,7 @@ The repeated issue therefore points first to bounded starvation in shared
 Service State persistence, not to an Authentication Run state-machine defect.
 
 P180 and issue #95 still own the shared installed runtime until they record an
-accepted integrated candidate and explicit handback. P181 may perform source
+accepted integrated candidate and explicit handback. P182 may perform source
 analysis, provider-free fixtures, and isolated source validation in parallel,
 but it must not read, mutate, retry, cancel, or replace the preserved live run
 before that handback.
@@ -114,14 +114,14 @@ effect stops the lane without an automatic retry.
 
 ## Worker Assignments
 
-- **Primary and coordination owner:** this P181 session owns diagnosis, source,
+- **Primary and coordination owner:** this P182 session owns diagnosis, source,
   tests, plan detail, and proposed shared-authority projections.
 - **P180 owner:** retains exclusive installed-runtime custody and is the only
   lane that may release the runtime dependency.
 - **Review owner:** one later bounded reviewer may inspect the frozen source
   diff and red-green proof without editing this branch or operating the runtime.
 - **Books Receipts:** remains a downstream observer and must not continue the
-  preserved run until P181 supplies exact same-run recourse.
+  preserved run until P182 supplies exact same-run recourse.
 
 No parallel implementation worker is assigned. The Service State repository
 and Authentication Run call site form one tightly coupled correctness boundary.
@@ -166,7 +166,7 @@ runtime or prove the preserved run can continue.
 
 Live acceptance begins only after issue #95 records the installed identity,
 transaction terminality, multiplicity, Service State health, retained browser
-continuity, and explicit runtime handback. P181 must then re-read the exact run,
+continuity, and explicit runtime handback. P182 must then re-read the exact run,
 tab, handle, pending-effect state, failed jobs, installed identity, and current
 writer evidence before choosing recourse. Success preserves the same run and
 advances it once without duplicate effect. Any changed handle, pending effect,

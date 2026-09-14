@@ -6,10 +6,10 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 318 | 2026-09-13
 
-[Plan 0181](docs/dev/plans/0181-2026-09-13-authentication-resume-state-reconciliation.md)
+[Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
 is OPEN through [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
 on branch `fix/issue-96-auth-resume-state-reconciliation` from integrated
-`main` at `44e5dc16`. P181 is a second `PL-BUGFIX` lane whose source writes are
+`main` at `44e5dc16`. P182 is a second `PL-BUGFIX` lane whose source writes are
 disjoint from P180's installer repair and whose installed acceptance explicitly
 depends on P180's runtime handback.
 
@@ -63,7 +63,7 @@ build job. Publication, integration, and installed acceptance remain open. No
 installation, runtime handoff, browser closure, service mutation, or Books
 Receipts action occurred.
 
-Issue #96 has moved to P181 for disjoint provider-free source work. Its live
+Issue #96 has moved to P182 for disjoint provider-free source work. Its live
 acceptance remains queued behind P180. Do not retry, cancel, replace, or create
 a duplicate profile lane from P180. Re-anchor the same run, tab, handle,
 installed identity, and writer evidence only after issue #95 hands the shared
