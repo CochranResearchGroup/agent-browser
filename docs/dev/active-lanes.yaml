@@ -8,7 +8,7 @@ lanes:
     plan_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     branch: feature/turnstile-desktop-challenge
     target: main
-    plan_state: ACTIVE
+    plan_state: BLOCKED
     custody_state: ACTIVE_WORKTREE
     checkpoint: 1d71ed39aa19fa6273e2b80f184d9c2d68a474ea
     remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge

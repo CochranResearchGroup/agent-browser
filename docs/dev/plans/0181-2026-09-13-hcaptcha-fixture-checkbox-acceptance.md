@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: ACTIVE
+State: BLOCKED
 
 Consolidation: required
 
@@ -36,9 +36,9 @@ locator or solver.
 
 The repository CAPTCHA lab supplies a local hCaptcha application and keeps its
 secret server-side. The operator supplied a custom non-production sitekey and
-secret in `/tmp`; those files are untracked, mode `0600`, and may be read only
-to start this bounded lab run. They must not enter source, logs, receipts, or
-durable runtime state.
+secret in `~/credentials/API-keys.env`. The lab launcher reads only the named
+hCaptcha values from that operator-managed file without copying or printing
+them. They must not enter source, logs, receipts, or durable runtime state.
 
 Development presentation-provider apply reached a no-effect quarantine before
 the fixture run. Its exact Service trace showed that route bootstrap opened an
@@ -192,6 +192,61 @@ Provider-required doctor passes. Development Service Status reports three
 maximum of six. The operator-supplied credential path did not exist at the
 literal location provided; no alternative credential copy was used and the
 fixture remains unstarted with zero input emitted.
+
+## 2026-09-14 Live Fixture Hard Stop
+
+The operator corrected the credential locator to
+`~/credentials/API-keys.env`. The repository lab read the two hCaptcha values
+directly from that file and served the fixture at the local approved origin.
+No credential value entered a command argument, source file, receipt, or plan.
+
+The first installed observation returned `not_found` even though a fresh
+desktop capture visibly contained one unchecked widget. Read-only Tesseract
+evidence showed two bounded mismatches with the source-only profile: the real
+widget rendered a 30-pixel checkbox with a one-pixel border, and OCR returned
+`Tam human` plus `hhCaptcha`. Two test-first implementation tracers reproduced
+those mismatches. Commit `8d5b3bb6` updates profile `p181-v2` to accept only
+those observed OCR variants and exact geometry while retaining prompt, brand,
+visibility, score, and duplicate-widget guards. All seven focused hCaptcha
+tests, Rust formatting, and strict workspace Clippy pass.
+
+The final optimized development generation is
+`0.28.0-b80054511bdc`, SHA-256
+`b80054511bdcd71c35202714b8e80bdad679c729200416ceb1041f0137aef922`.
+Installation reported the development runtime and presentation provider ready
+and production unchanged. A stale pre-install browser identity caused one
+fully compensated `presentation_bound_slot_missing` launch failure in job
+`r103018`. A fresh one-time identity then opened successfully in job `r525024`
+on `development-route-2`, `development-display-2`, with browser
+`session:p181-hcaptcha-final`, profile
+`managed-ephemeral-p181-hcaptcha-final`, target
+`65A6718816889DFD44EEF5A48825475C`, and operator-visible state `ready`.
+The preserved durable operator handoff is
+`https://agent-browser-dev.ecochran.dyndns.org/remote-view/r525024`.
+
+Installed observation job `r641899` matched exactly one candidate,
+`desktop-candidate-aab43ebdbae9c925e34dfedd`, at `(294,331)` with size
+`30x30`, score `9498`, and prompt, hCaptcha brand, visible-checkbox, route,
+display, profile, and fresh-frame agreement. Controller request
+`http-service-request-service_controller_lease_takeover-2501f60b-edf4-4673-99da-59645390c339`
+then established controller epoch `1` and exact lease
+`viewer:development-route-2:codex-p181-hcaptcha:2026-09-14T13-44-42-88320314Z`.
+
+The sole interaction call, job `r858591`, stopped at
+`desktop_interaction_authority_required` because the lease viewer identity
+`codex-p181-hcaptcha` did not equal the action agent identity `codex`. Source
+ordering and the existing authority regression prove this rejection occurs
+before input events. The fresh terminal desktop capture also shows the checkbox
+still unchecked and no visual, audio, or accessibility challenge. Therefore
+the measured fixture result is zero pointer events and zero clicks, despite the
+generic Service wrapper conservatively reporting `effect_uncertain`.
+
+The plan is blocked at its no-retry hard stop. The final browser, fixture, route,
+controller record, and durable handoff remain open. Resumption requires a new
+explicit interaction attempt budget and a fresh controller lease whose
+`viewerId` exactly matches the interaction `agentName`. No solver, reset,
+second click, image selection, audio action, accessibility action, production
+mutation, or release is authorized.
 
 ## Non-Goals
 
