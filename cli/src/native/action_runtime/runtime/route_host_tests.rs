@@ -1688,6 +1688,110 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
 }
 
 #[test]
+fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("terminal-legacy-route-profile-relaunch-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = "rdp-guac-route-b-viewer";
+    let session_id = profile_id;
+    let browser_id = format!("session:{session_id}");
+    let legacy_user_data_dir = home.join("legacy-generation-relative-route-profile");
+    fs::create_dir_all(&legacy_user_data_dir).unwrap();
+    let current_user_data_dir = crate::runtime_profile::resolve_profile(None, Some(profile_id))
+        .unwrap()
+        .user_data_dir;
+    fs::create_dir_all(&current_user_data_dir).unwrap();
+    let legacy_profile_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&legacy_user_data_dir).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "terminal-legacy-route-owner".to_string(),
+        profile_identity_digest: legacy_profile_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 1,
+        browser_id: browser_id.clone(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+    runtime_owner_registry.lifecycle_records.insert(
+        browser_id.clone(),
+        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+            logical_browser_id: browser_id,
+            profile_identity_digest: legacy_profile_digest,
+            owner_generation: 1,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state:
+                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".to_string(),
+                "profile_lock_released".to_string(),
+            ],
+            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+        },
+    );
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(legacy_user_data_dir.to_string_lossy().into_owned()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        runtime_owner_registry,
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+
+    let command = json!({
+        "action": "launch",
+        "runtimeProfile": profile_id,
+    });
+    let mut options = LaunchOptions {
+        runtime_profile: Some(profile_id.to_string()),
+        profile: Some(current_user_data_dir.to_string_lossy().into_owned()),
+        ..LaunchOptions::default()
+    };
+    let selection =
+        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+
+    assert_eq!(selection, None);
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn legacy_terminal_profile_migration_is_limited_to_canonical_route_viewers() {
+    assert!(super::daemon::canonical_route_viewer_runtime_profile(
+        "rdp-guac-route-a-viewer"
+    ));
+    assert!(super::daemon::canonical_route_viewer_runtime_profile(
+        "rdp-guac-route-z-viewer"
+    ));
+    for lookalike in [
+        "rdp-guac-route-aa-viewer",
+        "rdp-guac-route-1-viewer",
+        "rdp-guac-route-A-viewer",
+        "rdp-guac-route-a-viewer-extra",
+        "ordinary-profile",
+    ] {
+        assert!(!super::daemon::canonical_route_viewer_runtime_profile(
+            lookalike
+        ));
+    }
+}
+
+#[test]
 fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_binding() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("terminal-owner-shared-local-relaunch-home");

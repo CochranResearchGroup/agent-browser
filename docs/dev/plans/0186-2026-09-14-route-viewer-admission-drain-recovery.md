@@ -8,7 +8,7 @@ Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-route-viewer-command-scope`
+Branch: `fix/plan-0186-stale-route-owner-reconcile`
 
 Target: `main`
 
@@ -22,7 +22,8 @@ Consolidation: required
 
 Let exact transaction-owned post-commit reconciliation recreate missing
 canonical Guacamole route viewers while the admission drain remains active,
-without admitting ordinary browser effects or tenant profiles.
+including viewers whose terminal owner history names a generation-relative
+profile path, without admitting ordinary browser effects or tenant profiles.
 
 ## Current State
 
@@ -39,6 +40,27 @@ effect as `runtime_admission_draining`. Unlike navigation, `set headers` did
 not carry the global managed profile when the CLI attached its claim, so its
 generated prestart launch also lacked that claim. The task-owned temporary
 host was terminated after its scoped cleanup left no route display.
+
+PR #114 merged the exact secondary-command shaping repair as `bba8b7a3`.
+Candidate SHA-256
+`5610a704203b70f3410b5cb1d1240c14eac75891447f856b5da15a4fc8dde3a1`
+passes the strengthened source-free fixture, the 28-test admission sweep,
+format, clippy, and the selected workstation checks. Runtime acceptance then
+proved the admission repair: route A launched, applied its header, and
+navigated. Route B stopped before effect as
+`existing_session_profile_identity_unproven`. Service State has no route-B or
+route-C browser, session, tab, or process-identity row, but retains a ready
+generation-1 owner for each former generation-relative profile identity. The
+current managed route profiles resolve to stable user-data paths, so the stale
+owners now block their own replacement.
+
+Fresh status projection after the reboot correction shows a stronger terminal
+join than the earlier readback: B and C each retain a matching runtime lifecycle
+record in `terminal` state with `satisfied` cleanup and exact
+`exact_process_exited` plus `profile_lock_released` evidence. The stale ready
+owner is history under the existing lifecycle contract, but the raw registry
+session matcher still returns it as live. The launch profile-selection path uses
+that raw matcher instead of the lifecycle-aware resolution contract.
 
 After reboot, no canonical route viewer survived. The repaired opener used the
 stable managed profile, but its first route-A launch failed before effect as
@@ -58,6 +80,17 @@ therefore impossible despite coherent transaction and candidate identities.
 - Propagate that already-scoped claim to the generated prestart launch.
 - Materialize the managed route scope for secondary commands only when the CLI
   session and runtime profile are exactly equal.
+- Exclude an owner from session binding only when its exact same-generation
+  lifecycle is terminal with cleanup satisfied and another current match
+  exists. Apply that filter before multi-owner ambiguity is evaluated so an
+  old profile identity cannot shadow the new stable-profile owner, while a
+  sole terminal owner remains available to the guarded relaunch path.
+- Let that guarded relaunch move from a historical profile digest to the stable
+  managed runtime-profile path only when the session, explicit runtime profile,
+  and exact canonical single-letter route-viewer ID agree.
+- Preserve active, retained, closing, transferring, unknown, mismatched, and
+  cleanup-unsatisfied owners, along with registered-principal authority and
+  every ambiguous nonterminal state.
 - Keep missing claims, stale revisions, ordinary profiles, and lookalike route
   profile names denied.
 - Integrate one candidate, resume the existing transaction, then install the
@@ -67,6 +100,9 @@ therefore impossible despite coherent transaction and candidate identities.
 
 - `cli/src/runtime_adoption.rs` admission scope and focused tests.
 - `cli/src/main.rs` claim attachment, launch propagation, and focused tests.
+- Runtime-owner session binding, guarded route-profile migration, and focused
+  fail-closed tests; no Service State mutation or new public contract is
+  required.
 - Source-free workstation fixture proof for the embedded support workflow.
 - Canonical plan, roadmap, runbook, and active-lane projections.
 
@@ -84,7 +120,13 @@ therefore impossible despite coherent transaction and candidate identities.
 First prove the unmodified admission contract fails the canonical route-viewer
 claim. Green tests must cover every required action and prove that an ordinary
 profile, missing claim, stale revision, and lookalike route name remain denied.
-The generated launch must inherit only the already-scoped claim. Run the
+The generated launch must inherit only the already-scoped claim. The added
+owner tests must prove terminal-and-satisfied history cannot make a current
+replacement for the same session ambiguous, while a sole terminal owner still
+reaches the guarded relaunch path. Migration coverage must prove that only an
+exact canonical route viewer can replace its generation-relative profile path.
+Existing negative coverage must continue to preserve missing, mismatched,
+nonterminal, and cleanup-unsatisfied lifecycle states. Run the
 focused admission tests, relevant workstation fixture, Rust format, workspace
 clippy with warnings denied, patch hygiene, and validation selection from
 `ffc6e510`.
@@ -105,6 +147,17 @@ clippy with warnings denied, patch hygiene, and validation selection from
 - Rust format, workspace clippy with warnings denied, validation selection,
   workstation host provision, fresh VM harness, Guacamole assets, PostgreSQL
   durability, route-user synchronization, and patch hygiene all pass.
+- The stale-owner regression failed red on the pre-repair matcher with
+  `runtime_owner_session_ambiguous`. The repaired matcher passes all 24
+  `runtime_owner_transfer::tests`, including the replacement-session case.
+- The production-shaped terminal legacy route-owner regression, the canonical
+  route-name boundary test, both existing exact-terminal-owner tests, and the
+  existing custom-profile relaunch test pass.
+- Optimized candidate SHA-256
+  `3f398a578987998d2605edd30a5e7fb371fc0515576e4148d7049b6abaa238a9`
+  passes the source-free workstation fixture with a terminal legacy route-B
+  owner under the active transaction drain. Rust format, workspace clippy with
+  warnings denied, and patch hygiene pass on this source head.
 
 ## Delivery Sequence And Budget
 

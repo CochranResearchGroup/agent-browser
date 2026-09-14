@@ -254,15 +254,73 @@ try {
     AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID: 'upgrade-fixture',
     AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_REVISION: '7',
   };
+  const legacyRouteProfile = 'rdp-guac-route-b-viewer';
+  const legacyRouteBrowser = `session:${legacyRouteProfile}`;
+  const legacyRouteUserData = join(home, 'legacy-generation-route-profile');
+  const currentRouteUserData = join(
+    home,
+    '.agent-browser',
+    'runtime-profiles',
+    legacyRouteProfile,
+    'user-data',
+  );
+  mkdirSync(legacyRouteUserData, { recursive: true });
+  mkdirSync(currentRouteUserData, { recursive: true });
+  const profileIdentityDigest = (path) => createHash('sha256')
+    .update(`agent-browser.profile-identity.v1\n${resolve(path)}`)
+    .digest('hex');
+  const legacyRouteProfileDigest = profileIdentityDigest(legacyRouteUserData);
+  const serviceStateDir = join(home, '.agent-browser', 'service');
+  mkdirSync(serviceStateDir, { recursive: true });
+  writeFileSync(
+    join(serviceStateDir, 'state.json'),
+    JSON.stringify({
+      profiles: {
+        [legacyRouteProfile]: {
+          id: legacyRouteProfile,
+          name: legacyRouteProfile,
+          userDataDir: legacyRouteUserData,
+          persistent: true,
+        },
+      },
+      runtimeOwnerRegistry: {
+        revision: 1,
+        owners: {
+          [legacyRouteProfileDigest]: {
+            ownerId: 'legacy-route-owner',
+            profileIdentityDigest: legacyRouteProfileDigest,
+            state: 'ready',
+            ownerGeneration: 1,
+            browserId: legacyRouteBrowser,
+            daemonSessionRoute: legacyRouteProfile,
+            processInstanceDigest: '1'.repeat(64),
+            browserFamily: 'chrome',
+            cdpEndpointIdentityDigest: '2'.repeat(64),
+            targetSetDigest: '3'.repeat(64),
+          },
+        },
+        lifecycleRecords: {
+          [legacyRouteBrowser]: {
+            logicalBrowserId: legacyRouteBrowser,
+            profileIdentityDigest: legacyRouteProfileDigest,
+            ownerGeneration: 1,
+            lifecycleState: 'terminal',
+            cleanupObligationState: 'satisfied',
+            terminalEvidence: ['exact_process_exited', 'profile_lock_released'],
+          },
+        },
+      },
+    }),
+  );
   const routeAdmissionSocket = join(xdgRoot, 'route-admission-socket');
   const routeViewerAdmission = spawnSync(
     installedBinary,
     [
       '--json',
       '--session',
-      'rdp-guac-route-a-viewer',
+      legacyRouteProfile,
       '--runtime-profile',
-      'rdp-guac-route-a-viewer',
+      legacyRouteProfile,
       '--executable-path',
       '/bin/false',
       'open',
@@ -281,6 +339,11 @@ try {
     JSON.parse(routeViewerAdmission.stdout).error,
     /runtime_admission_draining/,
     'the exact transaction claim must pass canonical route-viewer launch admission',
+  );
+  assert.doesNotMatch(
+    JSON.parse(routeViewerAdmission.stdout).error,
+    /existing_session_profile_identity_(?:unproven|inconsistent|ambiguous)/,
+    'terminal legacy route-owner history must not block the stable runtime-profile launch',
   );
   const routeHeaderAdmission = spawnSync(
     installedBinary,

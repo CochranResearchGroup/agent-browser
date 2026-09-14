@@ -568,12 +568,36 @@ impl RuntimeOwnerRegistry {
                         || previous_daemon_session_route == Some(session_id))
             })
             .collect::<Vec<_>>();
-        if matches.len() > 1 {
+        let current_matches = matches
+            .iter()
+            .copied()
+            .filter(|owner| {
+                !self
+                    .lifecycle_records
+                    .get(&owner.browser_id)
+                    .is_some_and(|lifecycle| {
+                        lifecycle.profile_identity_digest == owner.profile_identity_digest
+                            && lifecycle.owner_generation == owner.owner_generation
+                            && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+                            && lifecycle.cleanup_obligation_state
+                                == CleanupObligationState::Satisfied
+                    })
+            })
+            .collect::<Vec<_>>();
+        // A sole terminal owner remains available to the guarded relaunch path.
+        // Once a replacement exists, completed history must not make that
+        // current session binding ambiguous.
+        let selected_matches = if current_matches.is_empty() {
+            &matches
+        } else {
+            &current_matches
+        };
+        if selected_matches.len() > 1 {
             return Err(format!(
                 "runtime_owner_session_ambiguous: session '{session_id}' matches multiple profile owners"
             ));
         }
-        Ok(matches.first().map(|owner| {
+        Ok(selected_matches.first().map(|owner| {
             let claim = OwnerAuthorityClaim::from_owner(owner);
             if owner.daemon_session_route == session_id {
                 RuntimeOwnerBinding::effect_capable(claim)
@@ -2046,6 +2070,59 @@ mod tests {
         assert!(owner_binding_for_session(&repository, "session-old")
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn terminal_history_does_not_make_a_replacement_session_binding_ambiguous() {
+        let historical = owner();
+        let mut replacement = historical.clone();
+        replacement.owner_id = "owner-current".to_string();
+        replacement.profile_identity_digest = digest("profile-current");
+        replacement.browser_id = "browser-current".to_string();
+        replacement.process_instance_digest = digest("process-current");
+        replacement.cdp_endpoint_identity_digest = digest("cdp-current");
+        replacement.target_set_digest = digest("targets-current");
+
+        let mut registry = RuntimeOwnerRegistry::from_owner(historical.clone());
+        registry.owners.insert(
+            replacement.profile_identity_digest.clone(),
+            replacement.clone(),
+        );
+        registry.lifecycle_records.insert(
+            historical.browser_id.clone(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: historical.browser_id,
+                profile_identity_digest: historical.profile_identity_digest,
+                owner_generation: historical.owner_generation,
+                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state: CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+
+        let binding = registry
+            .binding_for_session("session-old")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            binding.claim.profile_identity_digest,
+            replacement.profile_identity_digest
+        );
+        assert!(binding.effect_capable);
+
+        registry
+            .lifecycle_records
+            .get_mut("browser-a")
+            .unwrap()
+            .cleanup_obligation_state = CleanupObligationState::Owned;
+        assert!(registry
+            .binding_for_session("session-old")
+            .unwrap_err()
+            .contains("runtime_owner_session_ambiguous"));
     }
 
     #[test]
