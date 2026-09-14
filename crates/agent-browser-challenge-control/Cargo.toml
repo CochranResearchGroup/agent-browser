@@ -1,0 +1,12 @@
+[package]
+name = "agent-browser-challenge-control"
+version = "0.1.0"
+edition = "2021"
+description = "Pure challenge lifecycle decisions for Agent Browser"
+license = "Apache-2.0"
+repository = "https://github.com/vercel-labs/agent-browser"
+publish = false
+
+[dependencies]
+agent-browser-desktop-services = { path = "../agent-browser-desktop-services" }
+serde = { version = "1.0", features = ["derive"] }
