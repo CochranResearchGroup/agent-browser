@@ -35,7 +35,7 @@ pub fn issue_lease_effect_authorization(
     raw_capability: &[u8],
 ) -> Result<LeaseEffectAuthorization, String> {
     let authority = crate::authenticate_profile_capability(
-        &state.service_principals,
+        state.service_principals,
         std::str::from_utf8(raw_capability)
             .map_err(|_| "lease_authority_capability_mismatch".to_string())?,
         claim.profile_id(),
@@ -89,7 +89,7 @@ pub fn issue_lease_recovery_authorization(
     raw_capability: &[u8],
 ) -> Result<LeaseRecoveryAuthorization, String> {
     let authority = crate::authenticate_profile_capability(
-        &state.service_principals,
+        state.service_principals,
         std::str::from_utf8(raw_capability)
             .map_err(|_| "lease_authority_recovery_controller_mismatch".to_string())?,
         claim.profile_id(),
