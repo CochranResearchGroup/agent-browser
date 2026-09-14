@@ -1405,7 +1405,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
     Ok(true)
 }
 
-pub(super) fn canonical_route_viewer_runtime_profile(profile_id: &str) -> bool {
+pub(crate) fn canonical_route_viewer_runtime_profile(profile_id: &str) -> bool {
     profile_id
         .strip_prefix("rdp-guac-route-")
         .and_then(|suffix| suffix.strip_suffix("-viewer"))
