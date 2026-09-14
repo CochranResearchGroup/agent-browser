@@ -25,6 +25,18 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P186 | Route Viewer Admission Drain Recovery
+
+State: OPEN
+
+Current state: [Plan 0186](docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
+and [issue #112](https://github.com/CochranResearchGroup/agent-browser/issues/112)
+own the post-reboot recovery defect exposed after P185 integration. A missing
+canonical route viewer must be launched during forward reconciliation, but the
+active admission drain rejects launch even with the exact transaction claim.
+P186 admits only the canonical managed route-viewer action sequence for the
+matching transaction and keeps ordinary profiles and browser effects blocked.
+
 ## P185 | Route Viewer Runtime Profile Identity
 
 State: OPEN
@@ -33,9 +45,10 @@ Current state: [Plan 0185](docs/dev/plans/0185-2026-09-14-route-viewer-runtime-p
 and [issue #110](https://github.com/CochranResearchGroup/agent-browser/issues/110)
 own the post-commit reconciliation blocker exposed by the P184 candidate. The
 canonical Guacamole route opener treated managed profile names as relative
-custom paths, so immutable support generations changed their identity. P185
-switches the shared route-viewer workflow to stable managed runtime profiles,
-then resumes the existing forward-only transaction without a new install.
+custom paths, so immutable support generations changed their identity. PR #111
+merged the stable managed-profile repair as `ffc6e510`. Installed acceptance
+now depends on P186 because reboot removed every reusable route viewer while
+the transaction's admission drain remains active.
 
 ## P184 | Resumable Candidate Generation Retention
 
