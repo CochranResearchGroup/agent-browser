@@ -75,6 +75,7 @@ not required unless Rust source changes.
 
 ## Source Validation Evidence
 
+- PR #111 merged the source repair as `ffc6e510`; issue #110 is closed.
 - Both route-profile assertions failed red while the opener used `--profile`.
 - The rebuilt candidate's source-free workstation fixture passed and proved the
   embedded support payload uses `--runtime-profile`.
@@ -83,6 +84,11 @@ not required unless Rust source changes.
 - Both changed scripts pass Node syntax and focused static identity checks.
 - Workstation host provision, fresh VM harness, Guacamole assets, PostgreSQL
   durability, and route-specific user synchronization fixtures all pass.
+
+Installed acceptance remains open through P186. After reboot removed all route
+viewers, the exact transaction-owned opener failed before effect because the
+active drain did not admit canonical viewer launch. P186 owns that separate
+admission defect.
 
 ## Delivery Sequence And Budget
 
