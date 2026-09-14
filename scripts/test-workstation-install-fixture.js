@@ -372,6 +372,16 @@ try {
     /'set',\s*'headers'/,
     'Guacamole route sessions must apply header authentication before navigation',
   );
+  assert.match(
+    routeOpenerSource,
+    /'--runtime-profile',\s*profile/,
+    'canonical route viewers must use stable managed runtime-profile identity',
+  );
+  assert.equal(
+    /'--profile',\s*profile/.test(routeOpenerSource),
+    false,
+    'canonical route viewer names must not be interpreted as generation-relative custom paths',
+  );
   assert.equal(
     /'eval'|--base64|--stdin/.test(routeOpenerSource),
     false,
