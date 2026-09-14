@@ -2157,10 +2157,9 @@ pub(crate) fn workstation_upgrade_status_json() -> Result<Value, String> {
 fn workstation_upgrade_status_for_root(root: &Path) -> Result<Value, String> {
     let paths = install_paths(root);
     let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
-    let latest = latest_upgrade_transaction(&transaction_dir)?;
-    let active_drain = root
-        .join(".agent-browser/runtime-adoption/admission-drain.json")
-        .is_file();
+    let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+    let active_drain = drain_path.is_file();
+    let latest = governing_upgrade_transaction(root, &transaction_dir)?;
     let selected_generation = selected_generation_id(&paths);
     let dashboard_ingress_path = env::var_os("AGENT_BROWSER_DASHBOARD_INGRESS_STATE")
         .map(PathBuf::from)
@@ -2438,6 +2437,44 @@ fn latest_upgrade_transaction(
 ) -> Result<Option<crate::runtime_adoption::UpgradeTransaction>, String> {
     latest_upgrade_transaction_entry(transaction_dir)
         .map(|entry| entry.map(|(_, transaction)| transaction))
+}
+
+/// An active admission drain is the authority for the transaction currently
+/// governing workstation readiness. A newer zero-effect history record must
+/// not shadow that owner while post-commit validation is still in progress.
+fn governing_upgrade_transaction(
+    root: &Path,
+    transaction_dir: &Path,
+) -> Result<Option<crate::runtime_adoption::UpgradeTransaction>, String> {
+    let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+    let encoded = match fs::read(&drain_path) {
+        Ok(encoded) => encoded,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return latest_upgrade_transaction(transaction_dir)
+        }
+        Err(error) => {
+            return Err(display_io("read runtime admission drain", &drain_path)(
+                error,
+            ))
+        }
+    };
+    let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(&encoded)
+        .map_err(|error| format!("Runtime admission drain is invalid: {error}"))?;
+    if !valid_upgrade_transaction_id(&drain.transaction_id) {
+        return Err("runtime_admission_drain_transaction_invalid".to_string());
+    }
+    let path = transaction_dir.join(format!("{}.json", drain.transaction_id));
+    let transaction: crate::runtime_adoption::UpgradeTransaction = serde_json::from_slice(
+        &fs::read(&path).map_err(display_io("read governing install transaction", &path))?,
+    )
+    .map_err(|error| format!("Governing runtime transaction is invalid: {error}"))?;
+    if transaction.transaction_id != drain.transaction_id
+        || transaction.candidate_generation_id != drain.candidate_generation_id
+        || drain.transaction_revision > transaction.revision
+    {
+        return Err("runtime_admission_drain_transaction_evidence_mismatch".to_string());
+    }
+    Ok(Some(transaction))
 }
 
 fn latest_upgrade_transaction_entry(
@@ -13663,6 +13700,66 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(latest.transaction_id, "upgrade-new");
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn active_admission_drain_owner_governs_status_over_newer_zero_effect_history() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-transaction-drain-owner-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+        fs::create_dir_all(&transaction_dir).unwrap();
+
+        let mut owner = new_upgrade_transaction(
+            &paths,
+            "candidate-owner".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        owner.transaction_id = "upgrade-owner".to_string();
+        owner.checkpoints[0].recorded_at = "2026-08-21T16:00:00Z".to_string();
+        fs::write(
+            transaction_dir.join("upgrade-owner.json"),
+            serde_json::to_vec_pretty(&owner).unwrap(),
+        )
+        .unwrap();
+
+        let mut newer = new_upgrade_transaction(
+            &paths,
+            "candidate-newer".to_string(),
+            "c".repeat(64),
+            "d".repeat(64),
+        );
+        newer.transaction_id = "upgrade-newer".to_string();
+        newer.checkpoints[0].recorded_at = "2026-08-22T16:00:00Z".to_string();
+        fs::write(
+            transaction_dir.join("upgrade-newer.json"),
+            serde_json::to_vec_pretty(&newer).unwrap(),
+        )
+        .unwrap();
+
+        let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        fs::write(
+            &drain_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-adoption.v1",
+                "transactionId": owner.transaction_id,
+                "candidateGenerationId": owner.candidate_generation_id,
+                "transactionRevision": owner.revision,
+                "recordedAt": "2026-08-21T16:00:01Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let governing = governing_upgrade_transaction(&root, &transaction_dir)
+            .unwrap()
+            .unwrap();
+        assert_eq!(governing.transaction_id, "upgrade-owner");
 
         fs::remove_dir_all(root).unwrap();
     }
