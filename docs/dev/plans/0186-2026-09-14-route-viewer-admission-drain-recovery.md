@@ -8,7 +8,7 @@ Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-runtime-profile-config-provenance`
+Branch: `fix/plan-0186-terminal-profile-lifecycle-migration`
 
 Target: `main`
 
@@ -85,6 +85,18 @@ field before CLI provenance is recorded. Main preflight then misclassifies
 that inherited startup default as an explicit caller path and rejects the
 guarded stable-path migration.
 
+PR #118 merged the CLI provenance repair as `851fcebf`. Exact merged candidate
+SHA-256
+`9becdc951f7ae2a58fedda4965a1d3abb4e023d5a4c658298dd29a54da782e24`
+passes the source-free fixture and advances live route A through browser
+launch. Post-launch owner registration then stops as
+`runtime_lifecycle_profile_identity_mismatch`. Exact cleanup proves the
+launched process exited and the stable profile lock released. Registration
+looks up the new profile digest, finds no owner, then collides with the same
+logical browser's terminal lifecycle record under the historical digest. The
+lifecycle transition therefore needs the same exact canonical profile
+migration already admitted by prelaunch selection.
+
 ## Consolidated Batch
 
 - Recognize only canonical managed `rdp-guac-route-*-viewer` profiles as the
@@ -109,6 +121,11 @@ guarded stable-path migration.
   binding, distinguish its configuration-derived `userDataDir` from a
   caller-authored `--profile`. Let continuity replace only the inherited path;
   preserve an explicit profile as a hard conflict.
+- Atomically move the exact terminal route owner and lifecycle record from the
+  historical profile digest to the stable digest as one next-generation owner.
+  Require canonical route and browser identity, complete terminal cleanup
+  evidence, no destination owner, no colliding lifecycle, and no principal
+  binding on either digest.
 - Preserve active, retained, closing, transferring, unknown, mismatched, and
   cleanup-unsatisfied owners, along with registered-principal authority and
   every ambiguous nonterminal state.
@@ -121,9 +138,8 @@ guarded stable-path migration.
 
 - `cli/src/runtime_adoption.rs` admission scope and focused tests.
 - `cli/src/main.rs` claim attachment, launch propagation, and focused tests.
-- Runtime-owner session binding, guarded route-profile migration, and focused
-  fail-closed tests; no Service State mutation or new public contract is
-  required.
+- Runtime-owner session binding, guarded route-profile selection and lifecycle
+  migration, and focused fail-closed tests; no new public contract is required.
 - Source-free workstation fixture proof for the embedded support workflow.
 - Canonical plan, roadmap, runbook, and active-lane projections.
 
@@ -198,6 +214,18 @@ clippy with warnings denied, patch hygiene, and validation selection from
   source checkpoint `e073f710`; it also proves that an explicit conflicting
   `--profile` remains denied. The adjacent terminal legacy-route test and
   workspace clippy with warnings denied pass.
+- PR #118 merged the preflight provenance correction as `851fcebf`; exact
+  candidate SHA-256
+  `9becdc951f7ae2a58fedda4965a1d3abb4e023d5a4c658298dd29a54da782e24`
+  passes the pinned source-free fixture. Its first forced live route-A launch
+  reaches owner registration and fails with
+  `runtime_lifecycle_profile_identity_mismatch`; launched-process and
+  profile-lock cleanup both pass, and the exact task-owned candidate host is
+  terminated afterward. The lifecycle migration regression fails red on
+  `851fcebf` with that exact error and passes at source checkpoint `bbbf5abc`.
+  All 19 runtime-lifecycle tests pass, including new denial coverage for
+  noncanonical routes, incomplete cleanup evidence, and registered-principal
+  bindings. Rust format and workspace clippy with warnings denied pass.
 
 ## Delivery Sequence And Budget
 

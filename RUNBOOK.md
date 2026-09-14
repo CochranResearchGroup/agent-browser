@@ -7,18 +7,21 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 327 | 2026-09-14
 
-PR #117 merged the normalized profile-evidence repair as `acf5d4c6`; exact
-candidate `95d9509f` passes the source-free fixture but live route-A open again
-stopped before effect as `existing_session_profile_identity_unproven`. No
-candidate daemon or browser started. Production configuration proved the
-remaining pre-daemon cause: explicit canonical `--runtime-profile` selection
-copies its obsolete configured `userDataDir` into `profile` before CLI
-provenance is recorded, so main preflight treats an inherited default as an
-explicit conflict. The exact main-preflight regression fails red on main and
-passes at `e073f710`; an actual CLI `--profile` remains fail-closed. Next:
-integrate this final provenance repair, build the exact merge once, validate
-the source-free fixture, and only then retry route reconciliation. Do not retry
-the unchanged candidate or tenant workflows.
+PR #118 merged the preflight provenance repair as `851fcebf`; exact candidate
+`9becdc95` passes the pinned source-free fixture. A forced, transaction-bound
+route-A attempt advanced through browser launch, then failed during owner
+registration as `runtime_lifecycle_profile_identity_mismatch`. Cleanup proved
+the launched process exited and the stable profile lock released; the exact
+task-owned candidate runtime host was then terminated. Root cause is the
+post-launch registry finding the same logical browser's terminal lifecycle
+under the historical digest after finding no owner under the stable digest.
+The focused regression fails red on the merge and passes at `bbbf5abc` with an
+atomic canonical-route-only terminal owner and lifecycle migration. All 19
+runtime-lifecycle tests, format, and clippy pass; ordinary routes, incomplete
+cleanup evidence, and registered-principal bindings remain denied. Next:
+integrate once, build the exact merge once, rerun the pinned fixture, then make
+one fresh transaction-bound route attempt. Do not retry unchanged candidates
+or tenant workflows.
 
 ## Turn 325 | 2026-09-14
 
