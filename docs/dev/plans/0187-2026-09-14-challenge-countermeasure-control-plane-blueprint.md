@@ -31,6 +31,16 @@ repository reconciliation, provider-free source implementation, documentation,
 and validation. They do not authorize a browser launch, desktop input, provider
 mutation, a challenge attempt, a retry, production mutation, or release.
 
+## Current State
+
+W0 is active on `challenge/p169-control-plane` through parent issue #127.
+Current-main merge checkpoint `99c85c683e40331d4d3f592c76f7ca3725d73ea7`
+is published and includes the extracted lease-authority crate. The original
+feature branch remains preserved at
+`2ae7a68332b7a505c74bbd1e987d8a82fb52409d`. Challenge packets are normalized
+as Plan 0188 and Plan 0189. Reconciliation validation and exact active-lane
+readback remain before W0 exit and W1 implementation.
+
 ## Consolidation
 
 The current branch contains three related layers that have become conflated:
@@ -249,6 +259,14 @@ evidence ref. No force push is part of this reconciliation.
 
 Exit: current main, plan IDs, work item, branch, active lane, and baseline
 commit agree. No source implementation starts before this checkpoint.
+
+W0 integration checkpoint: merge commit
+`99c85c683e40331d4d3f592c76f7ca3725d73ea7` joins current-main checkpoint
+`994ed7b5f5c1deda5a968fa94a6ae3a82f04e2fc` without rewriting preserved feature
+checkpoint `2ae7a68332b7a505c74bbd1e987d8a82fb52409d`. Parent issue #127 is open and
+in progress. Plan 0188 and Plan 0189 are the normalized challenge packet
+identities. The integration branch is published; validation remains the final
+W0 exit gate.
 
 ### W1 | Desktop transaction correctness
 

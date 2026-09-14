@@ -111,18 +111,18 @@ lanes:
     updated_at: 2026-09-13
   - id: P169
     product_lane: PL-CHALLENGE
-    objective: Qualify one bounded hCaptcha fixture checkbox interaction through the governed desktop workflow
-    plan: docs/dev/plans/0181-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md
-    plan_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
-    branch: feature/turnstile-desktop-challenge
+    objective: Deliver a provider-neutral challenge control plane and shared desktop transaction boundary
+    plan: docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md
+    plan_ref: refs/remotes/origin/challenge/p169-control-plane
+    branch: challenge/p169-control-plane
     target: main
-    plan_state: BLOCKED
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 0def316d207efb8c5c5b6c82c44ec50eac4b6ed9
-    remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
+    checkpoint: 99c85c683e40331d4d3f592c76f7ca3725d73ea7
+    remote_ref: refs/remotes/origin/challenge/p169-control-plane
     integration_receipt: null
     integration: merge
-    work_items: [CochranResearchGroup/agent-browser#66]
+    work_items: [CochranResearchGroup/agent-browser#127, CochranResearchGroup/agent-browser#66]
     dependencies: []
     overlaps: [P157, P165]
     reconciled_overlaps: [P157, P165]

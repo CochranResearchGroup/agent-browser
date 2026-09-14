@@ -7,16 +7,28 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [The P169 challenge history through its Turn 319 is archived separately](RUNBOOK-history-2026-09-14-p169-through-turn319.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Active Plan Locator Index
+
+Current open, planned, or blocked plan locators retained outside the recent
+turn summaries:
+
+- [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), and [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md)
+- [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md), [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), and [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md)
+- [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
+- [P180](docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md), [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P183](docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md), and [P184](docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
+- [P185](docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), and [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)
+
 ## Turn 329 | 2026-09-14
 
 [Plan 0187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
-entered W0 custody normalization. Published feature checkpoint
+is OPEN and entered W0 custody normalization. Published feature checkpoint
 `2ae7a68332b7a505c74bbd1e987d8a82fb52409d` remains preserved while
-`challenge/p169-control-plane` reconciles current `origin/main` through a
-merge without rewriting the old branch. Current main supplies the extracted
-lease-authority crate that W2 must consume.
+`challenge/p169-control-plane` joined current-main checkpoint
+`994ed7b5f5c1deda5a968fa94a6ae3a82f04e2fc` through merge checkpoint
+`99c85c683e40331d4d3f592c76f7ca3725d73ea7` without rewriting the old branch.
+Current main supplies the extracted lease-authority crate that W2 must consume.
 
-The merge must preserve the first-request Guacamole header fix, current-main
+The merge preserves the first-request Guacamole header fix, current-main
 runtime-profile and shared-host isolation, and both sides' runbook evidence.
 The challenge packets are renumbered to Plan 0188 and Plan 0189. Parent
 [issue #127](https://github.com/CochranResearchGroup/agent-browser/issues/127)
