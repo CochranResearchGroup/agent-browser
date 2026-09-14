@@ -10580,7 +10580,13 @@ fn promote_dashboard_candidate_to_managed_backend(
     let repository =
         crate::dashboard_ingress::DashboardIngressRepository::new(&candidate.ingress_path);
     let registry = repository.load()?;
-    if dashboard_managed_backend_already_selected(&registry, &managed_backend) {
+    if registry.selected_backend() == &managed_backend {
+        if let Some(staged) = registry.candidate_backend() {
+            return Err(format!(
+                "dashboard managed backend is already selected while conflicting candidate generation {} remains staged",
+                staged.generation_id
+            ));
+        }
         return stop_prepared_dashboard_candidate(prepared);
     }
     let receipt = registry
@@ -10602,13 +10608,6 @@ fn promote_dashboard_candidate_to_managed_backend(
         repository.commit_candidate_deployment(staged.revision)?;
     }
     stop_prepared_dashboard_candidate(prepared)
-}
-
-fn dashboard_managed_backend_already_selected(
-    registry: &crate::dashboard_ingress::DashboardIngressRegistry,
-    managed_backend: &crate::dashboard_ingress::DashboardBackend,
-) -> bool {
-    registry.selected_backend() == managed_backend && registry.candidate_backend().is_none()
 }
 
 fn isolated_post_commit_validation(
@@ -16100,28 +16099,6 @@ mod tests {
     }
 
     #[test]
-    fn managed_dashboard_promotion_accepts_exact_already_selected_backend() {
-        let managed = crate::dashboard_ingress::DashboardBackend::new(
-            "generation-candidate",
-            4849,
-            "candidate-manifest",
-        );
-        let registry = crate::dashboard_ingress::DashboardIngressRegistry::new(managed.clone());
-
-        assert!(dashboard_managed_backend_already_selected(
-            &registry, &managed
-        ));
-        assert!(!dashboard_managed_backend_already_selected(
-            &registry,
-            &crate::dashboard_ingress::DashboardBackend::new(
-                "generation-candidate",
-                4850,
-                "candidate-manifest",
-            ),
-        ));
-    }
-
-    #[test]
     fn candidate_dashboard_wait_observes_one_concurrent_authenticated_commit() {
         use std::net::TcpListener;
 
@@ -16226,6 +16203,94 @@ mod tests {
         server.join().unwrap();
         let selected = repository.load().unwrap();
         assert_eq!(selected.selected_backend().generation_id, generation_id);
+        fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn managed_dashboard_promotion_accepts_exact_already_selected_backend() {
+        use std::net::TcpListener;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-managed-dashboard-resume-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let generation_id = "generation-candidate";
+        let manifest = serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-manifest.v1",
+        });
+        let manifest_body = manifest.to_string();
+        let manifest_sha256 = workstation_bytes_sha256(manifest_body.as_bytes());
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let managed_port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).unwrap();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                manifest_body.len(),
+                manifest_body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        let ingress_path = root.join(".agent-browser/dashboard-ingress.json");
+        let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
+        let managed_backend = crate::dashboard_ingress::DashboardBackend::new(
+            generation_id,
+            managed_port,
+            manifest_sha256.clone(),
+        );
+        repository.initialize(managed_backend.clone()).unwrap();
+
+        let transaction = new_upgrade_transaction(
+            &paths,
+            generation_id.to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: generation_id.to_string(),
+                generation_path: paths.generations_dir.join(generation_id),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path(&root, &transaction.transaction_id),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: root.join("admission-drain.json"),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: Some(PreparedDashboardCandidate {
+                child: None,
+                backend: crate::dashboard_ingress::DashboardBackend::new(
+                    generation_id,
+                    managed_port.saturating_add(1),
+                    manifest_sha256,
+                ),
+                ingress_path: ingress_path.clone(),
+                staged_revision: 0,
+            }),
+        };
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: managed_port - 1,
+            guacamole_port: 8092,
+        };
+
+        promote_dashboard_candidate_to_managed_backend(&args, &mut prepared).unwrap();
+        server.join().unwrap();
+        let registry = repository.load().unwrap();
+        assert_eq!(registry.selected_backend(), &managed_backend);
+        assert!(registry.candidate_backend().is_none());
+        assert_eq!(registry.revision, 1);
+
         fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
