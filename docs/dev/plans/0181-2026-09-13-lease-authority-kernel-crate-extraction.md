@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan version: 1
+Plan version: 10
 
 State: OPEN
 
@@ -64,15 +64,99 @@ secondary acceptance axis, not a premise of the extraction:
 ## Current State
 
 P181 is active on `platform/lease-authority-crate` through work item #99. The
-published implementation baseline is
-`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`. P144/#71 is ready with no assignee,
-active branch, or worktree on the authority source, so P181 owns the structural
-write surface while this lane remains active. P0 is the current packet; no Rust
-source movement or benchmark sample has started.
+immutable implementation baseline is
+`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; joined candidate
+`5ceb709c` includes current `main` at
+`bba8b7a3eee1658211c02c44944f61c468c45745` and is being qualified for
+draft PR #106.
+P0 through P6 are complete. The candidate includes current `main`, the P182
+adjacent-revision convergence fixture, and the tracked workspace lockfile
+registration. The architecture contract and mutation self-tests are green,
+Cargo metadata reports the third workspace member, the old native owner is
+deleted, and one private CLI adapter retains repository, Service State, and
+runtime-owner joins. Exact label comparison preserves all 106 baseline
+authority and protocol tests as 108 crate tests plus three CLI adapter tests,
+including five additional principal and profile-identity tests.
 
-The workspace contains the `agent-browser` binary crate and the
-`agent-browser-cdp` library crate. The Lease-authority kernel is already a
-cohesive native module but remains inside the binary compilation unit.
+A fresh-context architecture and security review found no semantic or security
+defect in the extraction. Its one validation finding was accepted: the
+architecture guard now rejects forbidden browser, async-runtime, HTTP, and
+image dependencies; public signing-key and secret-loader APIs; and public
+claim-map, terminal-record, signed-proof, or private-key fields. Closed-world
+mutation checks cover each accepted guard family.
+
+Local admission recovered without changing wrapper controls. All 108 crate
+tests, all three retained adapter tests, the five joined P182 `prepared_`
+tests, formatting, and workspace strict Clippy pass. Native-Linux CI run
+34801395695 passed the comprehensive Rust and workstation lanes at
+source-equivalent checkpoint `38012fd2`. Run 34802213548 passed every Lease
+Authority compartment at hardened checkpoint `3c7e2bcc` and failed only an
+unrelated production-scale Service Store timing fixture at 502 ms against its
+500 ms threshold; the immediately preceding run passed that fixture. Required
+Manual full CI run 34838219043 exposed nine non-Linux compile errors because
+four Linux-derived observation helpers had no fail-closed non-Linux variants.
+Checkpoint `744fa044` adds those variants with the existing
+`lease_authority_protocol_browser_process_platform_unsupported` contract. The
+architecture guard, all 108 crate tests, formatting, and workspace strict
+Clippy pass after the repair. Local Windows cross checks stop in `ring` before
+the crate because the WSL host lacks the required MinGW or MSVC native tools,
+so exact cross-platform verification remains CI-owned. The same full run's
+Native E2E lane had one isolated profile-continuity failure and a navigation
+cancellation fixture that retained the shared profile browser, cascading into
+12 later fail-closed tests. Browser E2E repair is outside P181's no-browser
+authority and does not erase the source, measurement, or native-Linux results.
+Repair full CI run 34846719359 completed failed after every native-Linux job
+passed. macOS ARM compiled `agent-browser-lease-authority` and then failed on
+three inherited CLI-only compile defects. Windows also reached the extracted
+crate before fail-fast cancellation. Native E2E passed 42 tests and failed 14:
+the same profile-continuity defect appeared first, then the navigation
+cancellation fixture retained its shared-profile browser and caused the later
+fail-closed cascade. The failing CLI bodies and browser fixture are unchanged
+by P181. These failures do not invalidate the accepted source, Linux, security,
+or measurement evidence. The plan's broad-validation repair allowance remains
+exhausted, so no third workspace-wide run is permitted.
+
+The joined tree passes the architecture contract, all 108 crate tests,
+formatting, workspace strict Clippy, and patch hygiene. The final closed-world
+P7 readback found no extraction regression after joining P183 and P184. P181
+therefore preserves a qualified, published source candidate. The operator
+directed continued planning and execution after the root problem was identified
+as validation-boundary coupling. P7 now adds one path-filtered, non-fail-fast
+Linux, macOS, and Windows crate workflow. This is a discriminating
+target-platform gate, not another broad run, and it does not reset either broad
+CI receipt or the P6 measurement ledger.
+Focused run 34857388895 then exposed one crate-owned Windows fixture defect:
+persisted test owner bindings used Unix-only absolute profile paths. Checkpoint
+`b6aa71dd` makes those fixtures platform-native without relaxing protected-state
+validation. Exact-head focused run 34857911397 passes the crate on Linux,
+macOS ARM, macOS x86, and Windows. Ordinary PR CI run 34857911400 also passes
+all fast jobs, including Rust Quality, the comprehensive Rust suite, no-launch
+service smokes, Workstation Fixtures, Dashboard, and Service Client. After
+joining P186, final head `8a57dce5` passed focused run 34861501476 on all four
+targets and ordinary CI run 34861501499, including the comprehensive Rust suite
+and no-launch smokes. `main` then advanced through the second P186 repair in PR
+#114. Merge checkpoint `5ceb709c` preserves the extracted-crate calls while
+adding exact route-command admission shaping. The focused joined admission
+test, format, strict workspace Clippy, architecture guard, and guard mutation
+self-test pass. Exact joined-head CI and merge custody remain.
+Issue #71 is closed in the forge, but P181 has no authority to treat that
+tracker state as Plan 0144 acceptance or to reopen it. Its public,
+effect-admission, and installed gates remain separate.
+
+The bounded 23-invocation P6 packet measured a focused candidate median of
+12.11 seconds against 150.53 seconds at baseline, a 91.95 percent reduction.
+The downstream workspace-check median improved 6.29 percent, and the
+directional cold pair improved 5.47 percent. The strict acceleration-promotion
+claim is withheld because the baseline ran 106 legacy filtered tests while the
+candidate ran 108 crate tests and the three retained adapter tests were
+validated separately. The complete receipt is in
+[the P6 measurement note](../notes/0181-3-2026-09-14-lease-authority-build-measurement.md).
+
+The candidate workspace contains the `agent-browser` binary crate plus the
+`agent-browser-cdp` and `agent-browser-lease-authority` library crates. The
+baseline Lease-authority kernel was a cohesive native module inside the binary
+compilation unit; checkpoint `3c7e2bcc` moves that owner into the new crate and
+hardens the executable architecture boundary.
 
 Current baseline evidence:
 
@@ -241,11 +325,17 @@ Required evidence:
 - P144 work-item, branch, and writer reconciliation;
 - current test and target-platform inventory;
 - red architecture contract; and
-- one smallest usable comparable focused-loop baseline before source movement.
+- one smallest usable comparable focused-loop baseline before candidate
+  measurement. The immutable baseline SHA and command must be frozen before
+  source movement; actual execution may occur later from that exact SHA when
+  the Cargo wrapper admits it.
 
-Exit: the interface constraints, file population, exclusions, benchmark
+Exit: the interface constraints, file population, exclusions, benchmark SHA and
 commands, and P144 ordering are frozen. Stop if P144 has an overlapping active
-writer or if comparable measurement requires product behavior changes.
+writer or if comparable measurement requires product behavior changes. A
+resource-gated, unadmitted waiter does not block source work when the immutable
+baseline remains independently runnable, but the baseline preparation must pass
+before any candidate measurement.
 
 Evidence deadline: 90 active minutes after implementation begins.
 
@@ -417,7 +507,7 @@ Run one cache-off, linker-off, `CARGO_INCREMENTAL=0` workspace check per SHA in
 fresh disposable targets. This is directional safety evidence, not a clean-build
 performance conclusion.
 
-The frozen invocation ledger is 23 compiling invocations at most:
+The frozen invocation ledger is 23 admitted compiling invocations at most:
 
 - 4 unmeasured preparation invocations: one baseline and one candidate prime
   for each of the focused and downstream warm families;
@@ -430,10 +520,23 @@ There is no other priming, exploratory compile, or added sample inside this
 packet. Report focused, retained-CLI, downstream, cold, complete-suite,
 wall-time, and RSS axes separately.
 
+An invocation that the Cargo wrapper never admits is an infrastructure receipt,
+not a compile or benchmark sample. Preserve it, but do not count it as one of
+the 23 compiling invocations. This distinction cannot be used after Cargo
+admission or rustc startup.
+
 Exit: the report states which loop improved, stayed neutral, regressed, or was
 not comparably measured. A correctness regression blocks integration. A
 focused-loop regression triggers one bounded diagnosis and then repair or a
 recommendation not to land the split.
+
+P6 completed on 2026-09-14 at the exact 23-invocation ceiling. The candidate
+showed a 91.95 percent lower focused median, a 6.29 percent lower downstream
+median, and a 5.47 percent lower directional cold result. All valid samples
+passed. One admitted wrong-target downstream invocation was interrupted,
+preserved, excluded, and replaced under the single replacement allowance. The
+measured improvement is retained, but the formal acceleration-promotion claim
+is withheld because the focused selections were not literally identical.
 
 ### P7 | Review, Documentation, Integration, And Closeout
 
@@ -445,6 +548,8 @@ Owner: primary agent.
 - Update Cargo guidance, `AGENTS.md` architecture and testing sections, inline
   module documentation, and the plan. Executable test-compartment and
   validation-selector changes belong to P5 and must already be validated.
+- Keep one path-filtered cross-platform workflow that tests the crate package
+  directly and does not cancel sibling targets after one failure.
 - Update ROADMAP, RUNBOOK, work item, and active-lane projection with separate
   source, measurement, integration, and runtime claims.
 - Publish a pull request from the exact validated branch and merge only after
@@ -452,6 +557,13 @@ Owner: primary agent.
 
 Exit: remote `main` contains the accepted extraction through a merged pull
 request, the lane and work item close truthfully, and no runtime claim is made.
+
+The fresh-context review, finding adjudication, and closed-world guard
+verification are complete. The joined tree passes the architecture contract,
+108 crate tests, format, and strict workspace Clippy. Documentation is
+reconciled with current `main`. The remaining integration gate is the focused
+cross-platform crate workflow plus ordinary PR CI, not another workspace-wide
+or browser E2E replay.
 
 ### Complete Delivery Budget
 
@@ -530,6 +642,20 @@ so those fields are unknown. Workers had no write, runtime, live-effect,
 child-spawn, or acceptance authority. The primary reconciled all three reports
 and retains every plan decision.
 
+## Execution Delegation Receipt
+
+| Packet | Worker | Requested route | Result | Primary disposition |
+| --- | --- | --- | --- | --- |
+| P0 architecture and validation wiring | `/root/lease_validation_wiring` | `gpt-5.6-luna`, medium | complete after one bounded repair | accepted the red contract, self-tests, test compartment, selector route, and 106-test ledger |
+| P0 seam classification | `/root/lease_core_extract` | `gpt-5.6-terra`, medium | semantic inventory complete; later persistence turn hit account usage limit | accepted the 99-move/7-retain partition and four seam decisions; no source edits were attempted |
+| P1 initial source route | `/root/lease_core_extract_sol` | `gpt-5.6-sol`, medium | partial profile/principal edits followed by model-capacity failure | preserved the partial files for specialist recovery; capacity failure was not treated as a reasoning result |
+| P1 through P3 source recovery and extraction | `/root/lease_slice_recovery` | `gpt-6-astra`, high | complete under cheap structural checks | accepted exact principal/profile movement, private CLI adapter isolation, typed authenticated kernel API, protected-stack transfer, direct caller migration, and deletion of the old owner; Cargo validation remains with the primary |
+
+The runtime did not report effective model, token, elapsed, or cost metadata.
+The unavailable Terra route is an environment/account constraint, not a
+reasoning failure. P1 may route once to the planned Sol alternative without
+resetting its attempt or effort bounds.
+
 ## Risks And Stop Rules
 
 | Risk | Prevention or stop rule |
@@ -556,23 +682,24 @@ Hard stops:
 - canonical profile identity would have two implementations;
 - an existing schema, error, hash, replay, or custody invariant changes without
   a separately reviewed decision;
-- the broad validation plus one repair still fails;
+- the broad validation plus one repair leaves a P181-attributable failure and
+  no narrower target-specific gate can discriminate the extraction;
 - the complete delivery or effort bound is exhausted; or
 - work requires an installed, provider, production, credential, browser,
   profile, or destructive effect.
 
 ## Evidence And Exit
 
-| Axis | Required evidence | Invalid substitutes |
+| Axis | Current evidence state | Remaining proof |
 | --- | --- | --- |
-| seam | frozen dependency graph, no upward imports, one owner, deletion test | smaller files or more modules |
-| correctness | one-for-one mapping of all 106 baseline tests into crate-side or retained CLI selections, zero lost invariants, complete provider-free suite | moving every fixture or focused green tests alone |
-| security | private signing and custody, redaction, zeroization, corruption and endpoint tests | visibility alone |
-| compatibility | identical schema, errors, hashes, identities, replay, and target behavior | successful compilation |
-| acceleration | comparable focused, downstream, cold, and complete measurements | Plan 0151 timing or one warm run |
-| CI | formatting, strict Clippy, architecture guards, selected checks, target CI | local state alone |
-| custody | work item, plan, lane, branch, PR, remote SHA, and merged-main readback agree | chat or local branch |
-| runtime | explicitly not claimed by P181 | source merge or tests |
+| seam | accepted: no upward imports, one owner, old owner deleted, architecture guard green after current-main join | none inside P181 |
+| correctness | accepted: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined fixtures, native-Linux comprehensive CI, and exact-head focused run 34857911397 pass | none inside P181 |
+| security | accepted: private signing and custody guard plus fresh architecture, security, and closed-world review pass | none inside P181 |
+| compatibility | accepted: non-Linux fail-closed variants and platform-native fixtures pass focused Linux, macOS ARM, macOS x86, and Windows crate jobs | none inside P181 |
+| acceleration | measured: focused median improved 91.95 percent; downstream and cold did not regress | formal promotion withheld because focused selections were not literally identical |
+| CI | accepted through `8a57dce5`: focused run 34861501476 and ordinary PR CI run 34861501499 pass; current-main join `5ceb709c` passes focused admission, format, strict Clippy, architecture, and mutation checks | exact joined-head focused and ordinary CI |
+| custody | plan, lane, branch, and draft PR #106 preserve the joined candidate | merged-main receipt and truthful issue closure after the focused gate clears |
+| runtime | not applicable and not claimed by P181 | none; runtime proof remains under Plan 0144 authority |
 
 P181 completes only when:
 
@@ -600,6 +727,10 @@ target passes.
 
 ## Next Action
 
-Execute P0: freeze the one-for-one invariant ledger, add the red architecture
-contract, and capture the smallest comparable focused-loop baseline. Recheck
-P144 source custody immediately before the first authority-source edit.
+Qualify and publish joined checkpoint `5ceb709c`, verify focused and ordinary PR
+CI on the resulting exact head, perform the final published-diff self-review,
+and merge PR #106.
+Keep the inherited workspace cross-platform and browser E2E defects separate;
+do not rerun broad CI under P181. Preserve the P6 measured result without
+promoting it to the stricter acceleration claim, and do not claim runtime or
+Plan 0144 acceptance.

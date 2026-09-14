@@ -91,10 +91,11 @@ fn state_for_case(case: &AccessPlanCase) -> ServiceState {
     }
 
     if case.retained_owner_evidence {
-        let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
-            std::path::Path::new(&profile_path),
-        )
-        .expect("fixture profile path must canonicalize");
+        let profile_identity_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(std::path::Path::new(
+                &profile_path,
+            ))
+            .expect("fixture profile path must canonicalize");
         state.runtime_owner_registry = RuntimeOwnerRegistry {
             revision: 1,
             owners: BTreeMap::from([(

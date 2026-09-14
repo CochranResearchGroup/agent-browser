@@ -460,7 +460,8 @@ pub(crate) fn reconcile_absent_runtime_lifecycles(state: &mut ServiceState) -> u
         })
         .filter_map(|profile_root| {
             let digest =
-                crate::runtime_profile::canonical_profile_identity_digest(&profile_root).ok()?;
+                agent_browser_lease_authority::canonical_profile_identity_digest(&profile_root)
+                    .ok()?;
             Some((digest, profile_root))
         })
         .collect::<BTreeMap<_, _>>();
@@ -3763,7 +3764,7 @@ mod tests {
         };
 
         let profile_identity_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(profile_root).unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(profile_root).unwrap();
         let logical_browser_id = "browser-closing".to_string();
         let owner_generation = 7;
         let owner = ProfileOwner {
@@ -4398,7 +4399,8 @@ mod tests {
         let profile_root = temp_home("live-owner-expired-lease-profile");
         fs::create_dir_all(&profile_root).unwrap();
         let profile_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&profile_root).unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_root)
+                .unwrap();
         let profile_id = "bill-soylei";
         let owner_route = "handoff-owner-route";
         let browser_id = "browser-1";
@@ -6387,7 +6389,8 @@ mod tests {
         let profile_id = "odollo-fedex";
         let principal_id = "principal:odollo-fulfillment";
         let profile_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path)
+                .unwrap();
         let mut state = ServiceState {
             profiles: BTreeMap::from([(
                 profile_id.to_string(),

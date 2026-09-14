@@ -100,15 +100,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 06e761eeebf156c4071fcec000b7a87cef293e3e
+    checkpoint: 5ceb709c6fd9b8004d019ddfa2e1ceadbe49b51d
     remote_ref: refs/remotes/origin/platform/lease-authority-crate
     integration_receipt: null
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#99]
     dependencies: []
-    overlaps: [P182, P183]
-    reconciled_overlaps: [P182, P183]
-    updated_at: 2026-09-13
+    overlaps: [P182, P183, P184, P185, P186]
+    reconciled_overlaps: [P182, P183, P184, P185, P186]
+    updated_at: 2026-09-14
   - id: P180
     product_lane: PL-BUGFIX
     objective: Repair preserving upgrades by quiescing proven browserless lanes before admission drain

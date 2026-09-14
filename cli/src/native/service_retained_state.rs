@@ -1376,7 +1376,10 @@ pub(crate) mod service_commands {
                 .and_then(|profile_id| state.profiles.get(profile_id))
                 .and_then(|profile| profile.user_data_dir.as_deref())
                 .and_then(|path| {
-                    crate::runtime_profile::canonical_profile_identity_digest(Path::new(path)).ok()
+                    agent_browser_lease_authority::canonical_profile_identity_digest(Path::new(
+                        path,
+                    ))
+                    .ok()
                 });
             let mut lifecycle_aliases = state
                 .runtime_owner_registry

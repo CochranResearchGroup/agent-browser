@@ -3969,7 +3969,8 @@ mod tests {
         let principal_id = "principal:registered-session";
         let browser_id = service_browser_id(session_id);
         let profile_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path)
+                .unwrap();
         let mut service_state = ServiceState {
             browsers: std::collections::BTreeMap::from([(
                 browser_id.clone(),

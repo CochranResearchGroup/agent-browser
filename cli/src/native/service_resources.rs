@@ -1924,8 +1924,10 @@ mod tests {
             browser_family: Some("chromium".to_string()),
         };
         let profile_identity_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_root))
-                .unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(Path::new(
+                profile_root,
+            ))
+            .unwrap();
         let owner = crate::runtime_owner_transfer::ProfileOwner {
             owner_id: format!("owner-{pid}"),
             profile_identity_digest: profile_identity_digest.clone(),
