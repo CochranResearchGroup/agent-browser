@@ -5944,6 +5944,24 @@ fn expected_upgrade_runtime_host_transition_ready(
     data: &Value,
     expected: &crate::runtime_adoption::UpgradeTransaction,
 ) -> bool {
+    let recorded_candidate_absent = expected
+        .runtime_host_convergence
+        .as_ref()
+        .and_then(|convergence| convergence.candidate_host.as_ref())
+        .is_some_and(|candidate| {
+            matches!(
+                crate::process_identity::observe_process(candidate.pid),
+                crate::process_identity::ProcessObservation::Missing
+            )
+        });
+    expected_upgrade_runtime_host_transition_ready_with(data, expected, recorded_candidate_absent)
+}
+
+fn expected_upgrade_runtime_host_transition_ready_with(
+    data: &Value,
+    expected: &crate::runtime_adoption::UpgradeTransaction,
+    recorded_candidate_absent: bool,
+) -> bool {
     let Some(convergence) = expected.runtime_host_convergence.as_ref() else {
         return false;
     };
@@ -5989,6 +6007,72 @@ fn expected_upgrade_runtime_host_transition_ready(
                 && host.get("socketIdentity").and_then(Value::as_str)
                     == Some(expected_host.socket_identity.as_str())
         };
+    let exact_candidate = hosts.iter().find(|host| exact_host(host, candidate));
+    let replacement_candidate = if exact_candidate.is_none()
+        && candidate.generation_id == expected.candidate_generation_id
+        && candidate.binary_sha256 == expected.candidate_binary_sha256
+        && recorded_candidate_absent
+    {
+        let expected_socket = candidate_runtime_host_socket_dir(&expected.transaction_id)
+            .ok()
+            .map(|directory| directory.join("runtime-host.sock"));
+        let listeners = data
+            .pointer("/daemonListenerInventory/listeners")
+            .and_then(Value::as_array);
+        let replacements = hosts
+            .iter()
+            .filter(|host| {
+                let pid = host
+                    .get("pid")
+                    .and_then(Value::as_u64)
+                    .and_then(|value| u32::try_from(value).ok());
+                pid.is_some_and(|pid| pid != candidate.pid && pid != old.pid)
+                    && host.get("generationId").and_then(Value::as_str)
+                        == Some(expected.candidate_generation_id.as_str())
+                    && host.get("binarySha256").and_then(Value::as_str)
+                        == Some(expected.candidate_binary_sha256.as_str())
+                    && host
+                        .get("processStartToken")
+                        .and_then(Value::as_str)
+                        .is_some_and(|value| !value.trim().is_empty())
+                    && host
+                        .get("socketIdentity")
+                        .and_then(Value::as_str)
+                        .is_some_and(|value| !value.trim().is_empty())
+                    && listeners.is_some_and(|listeners| {
+                        listeners.iter().any(|listener| {
+                            listener.get("pid").and_then(Value::as_u64)
+                                == host.get("pid").and_then(Value::as_u64)
+                                && listener.get("binarySha256").and_then(Value::as_str)
+                                    == host.get("binarySha256").and_then(Value::as_str)
+                                && listener.get("processStartToken").and_then(Value::as_str)
+                                    == host.get("processStartToken").and_then(Value::as_str)
+                                && listener.get("socketIdentity").and_then(Value::as_str)
+                                    == host.get("socketIdentity").and_then(Value::as_str)
+                                && expected_socket.as_deref().is_some_and(|expected_socket| {
+                                    listener
+                                        .get("socketPath")
+                                        .and_then(Value::as_str)
+                                        .is_some_and(|path| Path::new(path) == expected_socket)
+                                })
+                        })
+                    })
+            })
+            .collect::<Vec<_>>();
+        (replacements.len() == 1).then(|| replacements[0])
+    } else {
+        None
+    };
+    let Some(effective_candidate) = exact_candidate.or(replacement_candidate) else {
+        return false;
+    };
+    let Some(effective_candidate_pid) = effective_candidate
+        .get("pid")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+    else {
+        return false;
+    };
     let mut additional_source_hosts = Vec::new();
     for identity in expected
         .runtime_handoffs
@@ -5997,7 +6081,7 @@ fn expected_upgrade_runtime_host_transition_ready(
             handoff.committed && !handoff.source_finalized && handoff.source_runtime_host
         })
         .filter_map(|handoff| handoff.source_process_identity.as_ref())
-        .filter(|identity| identity.pid != old.pid && identity.pid != candidate.pid)
+        .filter(|identity| identity.pid != old.pid && identity.pid != effective_candidate_pid)
     {
         if !additional_source_hosts.iter().any(
             |existing: &&crate::process_identity::RecordedProcessIdentity| {
@@ -6016,7 +6100,6 @@ fn expected_upgrade_runtime_host_transition_ready(
         };
     if hosts.len() != expected_host_count
         || !hosts.iter().any(|host| exact_host(host, old))
-        || !hosts.iter().any(|host| exact_host(host, candidate))
         || additional_source_hosts.iter().any(|identity| {
             !hosts
                 .iter()
@@ -6040,7 +6123,7 @@ fn expected_upgrade_runtime_host_transition_ready(
             .any(|listener| listener_pid(listener, old.pid))
         && listeners
             .iter()
-            .any(|listener| listener_pid(listener, candidate.pid))
+            .any(|listener| listener_pid(listener, effective_candidate_pid))
         && additional_source_hosts.iter().all(|identity| {
             listeners
                 .iter()
@@ -16900,6 +16983,46 @@ mod tests {
         assert!(install_doctor_reports_expected_upgrade_ready(
             &report,
             &transaction,
+            &[]
+        ));
+        let replacement_socket = candidate_runtime_host_socket_dir(&transaction.transaction_id)
+            .unwrap()
+            .join("runtime-host.sock");
+        let mut restarted_transaction = transaction.clone();
+        restarted_transaction
+            .runtime_host_convergence
+            .as_mut()
+            .unwrap()
+            .candidate_host
+            .as_mut()
+            .unwrap()
+            .pid = u32::MAX;
+        let mut restarted_candidate = report.clone();
+        restarted_candidate["data"]["runtimeMultiplicity"]["runtimeHosts"][1] = serde_json::json!({
+            "generationId": "generation-new",
+            "pid": 44,
+            "processStartToken": "linux:boot:44",
+            "binarySha256": "a".repeat(64),
+            "socketIdentity": "unix:1:44",
+        });
+        restarted_candidate["data"]["daemonListenerInventory"]["listeners"][1] = serde_json::json!({
+            "pid": 44,
+            "processStartToken": "linux:boot:44",
+            "binarySha256": "a".repeat(64),
+            "socketIdentity": "unix:1:44",
+            "socketPath": replacement_socket,
+        });
+        assert!(install_doctor_reports_expected_upgrade_ready(
+            &restarted_candidate,
+            &restarted_transaction,
+            &[]
+        ));
+        let mut wrong_replacement_socket = restarted_candidate.clone();
+        wrong_replacement_socket["data"]["daemonListenerInventory"]["listeners"][1]["socketPath"] =
+            Value::String("/tmp/foreign/runtime-host.sock".to_string());
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &wrong_replacement_socket,
+            &restarted_transaction,
             &[]
         ));
         let mut reused_process = transaction.clone();
