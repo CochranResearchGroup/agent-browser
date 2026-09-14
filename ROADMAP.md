@@ -30,11 +30,13 @@ field evidence and acceptance records into the same model.
 State: OPEN
 
 Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-defines a bounded `PL-PLATFORM` successor that first removes the Lease-authority
-kernel's Service State, principal, and runtime-profile dependency leaks, then
-extracts one independently testable Rust crate and measures the focused build
-loop under comparable conditions. It depends on source-writer reconciliation
-with Plan 0144 and issue #71. Work item
+has a source-complete, not-yet-compile-validated checkpoint at `b7cd01bd` in
+draft PR #106. The old native owner is deleted, the kernel and protected stack
+live in `agent-browser-lease-authority`, and the CLI retains only a private
+Service State and repository adapter. The architecture contract is green and
+all 106 baseline invariant labels remain mapped. Local Cargo validation is
+waiting for the repository wrapper to admit a build without weakening its host
+reserve; build measurement and acceptance remain open. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
 is in progress on `platform/lease-authority-crate` from baseline `16d4fb22`.
 P181 authorizes the bounded source extraction and provider-free validation but

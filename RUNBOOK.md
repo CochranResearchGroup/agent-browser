@@ -20,14 +20,26 @@ is in progress on `platform/lease-authority-crate` from published baseline
 validation but no runtime, browser, profile, provider, installation, or
 production effect.
 
-P0 is complete locally: the architecture self-test passes, the current tree is
-red on nine expected extraction conditions, and the invariant ledger maps all
-106 tests into 99 moved and 7 retained tests. The baseline preparation was not
-admitted under host memory pressure and remains due from immutable SHA
-`16d4fb22` before candidate measurement.
+P0 through the P4 source migration are implemented at published checkpoint
+`b7cd01bd` in draft PR #106. The architecture contract is green, Cargo metadata
+reports the third workspace member, the old owner is deleted, and all 106
+baseline authority/protocol test labels remain mapped as 108 crate tests plus
+three CLI adapter tests, including five new principal/profile tests. The CLI
+keeps one private Service State and repository adapter; signing keys, authority
+maps, proof fields, and raw plan issuance remain private to the crate.
 
-Next action: execute P1 after rechecking P144 source custody. No source edit has
-started yet.
+The immutable baseline preparation and candidate Cargo attempts remain
+unadmitted under host memory pressure. No Cargo scope, rustc process, test, or
+benchmark sample has started. Draft-PR native-Linux CI is the first pending
+compile signal; local provider-free validation remains required once the wrapper
+can preserve its configured reserve. Issue #71's forge closure is tracker state,
+not acceptance of Plan 0144's separately open public, effect, and installed
+gates.
+
+Next action: resolve the first compile signal, run P5 validation in increasing
+cost order, then freeze the validated candidate before P6 measurement. No
+runtime, browser, profile, provider, installation, or production effect is
+authorized.
 
 ## Turn 317 | 2026-09-13
 

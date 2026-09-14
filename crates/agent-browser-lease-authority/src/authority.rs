@@ -1691,10 +1691,6 @@ impl ActiveLeaseClaim {
         &self.expires_at
     }
 
-    pub fn owner_generation(&self) -> Option<u64> {
-        self.owner_generation
-    }
-
     fn effect_authorization(
         &self,
         capability: &crate::ServiceProfileCapability,

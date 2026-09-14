@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -65,20 +65,31 @@ secondary acceptance axis, not a premise of the extraction:
 
 P181 is active on `platform/lease-authority-crate` through work item #99. The
 published implementation baseline is
-`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`. P144/#71 is ready with no assignee,
-active branch, or worktree on the authority source, so P181 owns the structural
-write surface while this lane remains active. P0 is complete locally: the red
-architecture contract self-test passes, the current tree fails its nine
-pre-extraction conditions, validation wiring exists, and the invariant ledger
-maps all 106 tests into 99 moved and 7 retained tests. P1 is the current packet.
-The first baseline
-preparation attempt was not admitted after 2 minutes 22 seconds because the
-Cargo wrapper reported host memory pressure; no Cargo scope or benchmark sample
-started. No Rust source movement has started.
+`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; source checkpoint `b7cd01bd` is
+published for draft PR #106. P0 through the P4 source migration are implemented
+but not yet compile-validated. The architecture contract is green, Cargo
+metadata reports the third workspace member, the old native owner is deleted,
+and one private CLI adapter retains repository, Service State, and runtime-owner
+joins. Exact label comparison preserves all 106 baseline authority and protocol
+tests as 108 crate tests plus three CLI adapter tests, including five additional
+principal and profile-identity tests.
 
-The workspace contains the `agent-browser` binary crate and the
-`agent-browser-cdp` library crate. The Lease-authority kernel is already a
-cohesive native module but remains inside the binary compilation unit.
+The immutable baseline preparation and four candidate Cargo validation
+attempts were not admitted because the Cargo wrapper reported host memory pressure; no Cargo
+scope, rustc process, test, or benchmark sample started. The latest readback had
+approximately 24 GiB available while the wrapper required approximately 30 GiB
+to preserve its configured reserve and one build claim. Unrelated browser and
+service processes are outside P181 cleanup authority. Native-Linux draft-PR CI
+is therefore the first pending compile signal; local Cargo validation remains
+required when admission becomes available. Issue #71 is currently closed in the
+forge, but P181 has no authority to treat that tracker state as Plan 0144
+acceptance or to reopen it. Its public, effect-admission, and installed gates
+remain separate.
+
+The candidate workspace contains the `agent-browser` binary crate plus the
+`agent-browser-cdp` and `agent-browser-lease-authority` library crates. The
+baseline Lease-authority kernel was a cohesive native module inside the binary
+compilation unit; checkpoint `b7cd01bd` moves that owner into the new crate.
 
 Current baseline evidence:
 
@@ -553,6 +564,8 @@ and retains every plan decision.
 | --- | --- | --- | --- | --- |
 | P0 architecture and validation wiring | `/root/lease_validation_wiring` | `gpt-5.6-luna`, medium | complete after one bounded repair | accepted the red contract, self-tests, test compartment, selector route, and 106-test ledger |
 | P0 seam classification | `/root/lease_core_extract` | `gpt-5.6-terra`, medium | semantic inventory complete; later persistence turn hit account usage limit | accepted the 99-move/7-retain partition and four seam decisions; no source edits were attempted |
+| P1 initial source route | `/root/lease_core_extract_sol` | `gpt-5.6-sol`, medium | partial profile/principal edits followed by model-capacity failure | preserved the partial files for specialist recovery; capacity failure was not treated as a reasoning result |
+| P1 through P3 source recovery and extraction | `/root/lease_slice_recovery` | `gpt-6-astra`, high | complete under cheap structural checks | accepted exact principal/profile movement, private CLI adapter isolation, typed authenticated kernel API, protected-stack transfer, direct caller migration, and deletion of the old owner; Cargo validation remains with the primary |
 
 The runtime did not report effective model, token, elapsed, or cost metadata.
 The unavailable Terra route is an environment/account constraint, not a
