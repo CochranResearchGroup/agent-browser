@@ -10,8 +10,8 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 12848e34a318ad7a8af3c99b2454e7b0e1db8ba9
-    remote_ref: null
+    checkpoint: d6c6b5a60f79af15e51716eadfa20fd5b165e2a8
+    remote_ref: refs/remotes/origin/fix/plan-0184-resumable-candidate-retention
     integration_receipt: null
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#108]
