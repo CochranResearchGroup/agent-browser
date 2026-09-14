@@ -70,6 +70,9 @@ Its exact candidate brought route A to display readiness, then route B failed
 only when sharing the host that A started; route B succeeds alone. Checkpoint
 `d83dd8fd` removes first-lane process-profile fallback from shared-host lane
 resolution while retaining explicit lane fields and current Service State.
+PR #121 merged that repair as `5d07b94f`, but exact-merge acceptance exposed a
+second direct environment read in auto-launch option construction. Checkpoint
+`fb754890` applies the same shared-host isolation to that final entry point.
 P186 remains open for integration and simultaneous three-route acceptance.
 
 ## P185 | Route Viewer Runtime Profile Identity
