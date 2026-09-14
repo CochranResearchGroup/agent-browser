@@ -16,7 +16,7 @@ Integration: merge
 
 Work item: [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
 
-Dependency: P180 installed acceptance and explicit shared-runtime handback
+Dependency: P180 source integration and explicit shared-runtime handback
 
 Related lane: P181 Lease Authority extraction retains the Service State
 repository implementation but may later edit adjacent product adapters
@@ -47,11 +47,24 @@ the initial page-observation transition before any credential or page effect.
 The repeated issue therefore points first to bounded starvation in shared
 Service State persistence, not to an Authentication Run state-machine defect.
 
-P180 and issue #95 still own the shared installed runtime until they record an
-accepted integrated candidate and explicit handback. P182 may perform source
-analysis, provider-free fixtures, and isolated source validation in parallel,
-but it must not read, mutate, retry, cancel, or replace the preserved live run
-before that handback.
+P180's source repair is integrated on `main` at `44e5dc16`. On 2026-09-13 the
+operator explicitly released Agent #95's shared-runtime custody to P182. P180
+did not install an accepted candidate before handback: the selected production
+generation remains `0.28.0-d0186990d375-3a6142188dd0`, the installed binary
+digest remains `d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`,
+and the latest candidate transaction is terminally rolled back. P182 therefore
+owns the one later integrated-candidate window, which must contain both the
+merged P180 repair and this P182 repair. The handback permits read-only
+reinspection now; it does not authorize a resume on the old generation.
+
+Fresh reinspection preserved the exact run identity and returned `ready` at
+transition 0 with zero observations, zero action receipts, and no pending
+effect. It remains bound to browser
+`session:terminal-profile-67534c4dbefc554fd23fff53`, session
+`terminal-profile-67534c4dbefc554fd23fff53`, and tab
+`target:D34843BCDD95B71F5339ABCCE040048E`. Both earlier resume jobs remain
+terminal `no_effect` failures. No resume, cancellation, replacement run, tab
+request, or provider effect occurred during reinspection.
 
 A concurrent `PL-PLATFORM` session has opened P181 for Lease Authority crate
 extraction. Its plan explicitly retains `ServiceStateRepository`
@@ -112,9 +125,11 @@ The batch contains one persistence invariant and its Authentication Run proof:
 4. **Batch qualification, 60 to 90 minutes.** Freeze the candidate and run the
    affected focused tests, formatting, workspace Clippy with warnings denied,
    validation selection, and the comprehensive provider-free Rust lane once.
-5. **Integration and gated acceptance.** Publish an issue-linked pull request.
-   Installed acceptance remains serialized behind P180 and permits no live
-   Authentication Run action until exact runtime handback and reinspection.
+5. **Integration and gated acceptance.** Publish and merge the issue-linked
+   pull request. After source qualification, build and transactionally apply
+   one candidate from integrated `main` containing both P180 and P182. Permit
+   no Authentication Run resume until that exact candidate, runtime continuity,
+   and fresh same-run state pass the installed gate.
 
 The source batch has a three-hour active-work ceiling. End the current tactic
 after two consecutive checkpoints or 30 active minutes without outcome
@@ -176,10 +191,10 @@ assertions, all changed-surface gates, a clean published checkpoint, and an
 issue-linked pull request. Passing source tests does not release the shared
 runtime or prove the preserved run can continue.
 
-Live acceptance begins only after issue #95 records the installed identity,
-transaction terminality, multiplicity, Service State health, retained browser
-continuity, and explicit runtime handback. P182 must then re-read the exact run,
-tab, handle, pending-effect state, failed jobs, installed identity, and current
-writer evidence before choosing recourse. Success preserves the same run and
-advances it once without duplicate effect. Any changed handle, pending effect,
-unknown outcome, new writer ambiguity, or failed install stops the live packet.
+Live acceptance begins only after P182's integrated candidate records installed
+identity, transaction terminality, multiplicity, Service State health, and
+retained-browser continuity. P182 must then re-read the exact run, tab, handle,
+pending-effect state, failed jobs, installed identity, and current writer
+evidence before choosing recourse. Success preserves the same run and advances
+it once without duplicate effect. Any changed handle, pending effect, unknown
+outcome, new writer ambiguity, or failed install stops the live packet.

@@ -10,8 +10,9 @@ Keep this file at or below 200 lines under policy 0043.
 is OPEN through [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
 on branch `fix/issue-96-auth-resume-state-reconciliation` from integrated
 `main` at `44e5dc16`. P182 is a second `PL-BUGFIX` lane whose source writes are
-disjoint from P180's installer repair and whose installed acceptance explicitly
-depends on P180's runtime handback.
+disjoint from P180's installer repair. P180 merged at `44e5dc16`, and the
+operator explicitly released Agent #95's shared-runtime custody to P182 on
+2026-09-13 without installing a candidate.
 
 A concurrent platform session opened P181 for Lease Authority crate extraction
 after this lane began. Its plan retains the Service State repository
@@ -19,19 +20,23 @@ implementation while later touching adjacent adapters. P182 remains the writer
 for the narrow repository contention repair; P181 must consume the published
 checkpoint or reconcile any adjacent adapter edit before implementation.
 
-Current source retries one stale prepared Service State candidate once, then
-returns `service_state_stale_revision` if an active writer advances the
-revision again. Authentication resume records its initial page observation
-through that repository before reserving or performing any credential or page
-effect. The first source packet will reproduce two adjacent stale candidates
-and test a bounded serialized fallback while preserving the ordinary optimistic
-path, revision fencing, and pure-mutator contract.
+The published P182 source packet at `4f9e1741` reproduces two adjacent stale
+candidates and adds one serialized pure-mutator fallback after the first stale
+candidate. PR #98 has passed Version Sync, Rust Quality, Dashboard, Service
+Client, and Workstation Fixtures; its Rust gate remains pending. Local red and
+green focused runs were admitted to neither build because current host memory
+pressure blocked Cargo capacity, and both waits were stopped without compiling.
 
-No installed-runtime read, Authentication Run action, browser action, provider
-effect, or Service State mutation is authorized before P180 records its exact
-installed acceptance and explicit handback. Preserve
-`authrun-8b8d1c46947be0910b540a4e`, its browser, tab, handle, zero-transition
-state, and both failed no-effect jobs.
+The installed production identity remains generation
+`0.28.0-d0186990d375-3a6142188dd0` with binary digest
+`d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`;
+the latest candidate transaction is terminally rolled back. Read-only
+reinspection confirms `authrun-8b8d1c46947be0910b540a4e` remains `ready` at
+transition 0 with zero observations, zero action receipts, and no pending
+effect on the same browser, session, and tab. Do not resume on the old
+generation. Next: qualify and merge PR #98, install one integrated P180 plus
+P182 candidate, re-anchor exact runtime and run evidence, then issue at most
+one same-run recourse.
 
 ## Turn 317 | 2026-09-13
 

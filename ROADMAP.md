@@ -32,11 +32,12 @@ State: OPEN
 Current state: [Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
 and [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
 own the repeated adjacent-revision collision that prevents the preserved
-Authentication Run from recording its initial observation. Source diagnosis
-is active in a second disjoint bugfix worktree. Installed acceptance and any
-same-run continuation remain serialized behind P180's explicit shared-runtime
-handback. The existing run, browser, tab, handle, and zero-effect state must be
-preserved.
+Authentication Run from recording its initial observation. The source repair
+is published in PR #98. P180's repair is integrated at `44e5dc16`, and the
+operator released Agent #95's runtime custody without an accepted install.
+P182 now owns one integrated P180 plus P182 candidate window. The existing run,
+browser, tab, handle, and zero-effect state must be preserved, and no resume is
+allowed on the old installed generation.
 
 ## P180 | Pre-Drain Browserless Lane Quiescence Repair
 
