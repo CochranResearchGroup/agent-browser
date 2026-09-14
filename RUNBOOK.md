@@ -4,6 +4,51 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 317 | 2026-09-13
+
+[Plan 0180](docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md)
+is OPEN through [issue #95](https://github.com/CochranResearchGroup/agent-browser/issues/95).
+Independent source diagnosis confirms an upgrade-compatibility inversion:
+activation persists admission drain before browserless-lane quiescence, while
+the selected old runtime from source `0e18b351` does not admit claimed `close`.
+Current `main` learned that exception only in `e33d34df`, so the candidate
+cannot rely on it to upgrade the executor that enforces the drain.
+
+A scripted legacy-runtime regression first failed on the old ordering with the
+exact `runtime_admission_draining` close symptom, then passed after the narrow
+activation seam moved quiescence before drain. Failed pre-drain quiescence now
+leaves the transaction at `StateMigrationValidated` with no drain and supports
+a successful retry. Full shutdown still bypasses preserving quiescence, and an
+exact claimed `close` is denied after drain.
+
+All five shared-runtime quiescence tests and all 161 workstation installer
+tests pass on the strengthened candidate. The regression now executes exact
+status, multi-primary exclusion, browserless close before drain, post-drain
+claimed-close denial, and handoff admission; separate tests cover
+after-close retry, cooperative-only scope, isolated and full-shutdown bypass,
+and selected-socket drift. Rust formatting, workspace clippy with warnings
+denied, patch
+hygiene, and validation selection also pass. The comprehensive provider-free
+Rust runner passed both lanes in 1,215 seconds on the initial repair
+checkpoint, including CLI core, CDP transport, CLI integration, and
+production-scale Service State performance. PR CI must provide final-head
+comprehensive proof before merge.
+The first admitted build attempt failed before project compilation when
+optional sccache could not spawn under host process pressure; successful runs
+retained Cargo admission and cgroups, disabled only that cache, and used one
+build job. Publication, integration, and installed acceptance remain open. No
+installation, runtime handoff, browser closure, service mutation, or Books
+Receipts action occurred.
+
+Issue #96 is queued behind P180 installed acceptance as a distinct follow-up.
+Its current preserved Authentication Run is
+`authrun-8b8d1c46947be0910b540a4e`; two resume jobs failed with adjacent
+`service_state_stale_revision` and `no_effect`, while the run remains at
+transition 0 with zero actions and observations. Do not retry, cancel, replace,
+or create a duplicate profile lane from P180. Re-anchor the same run, tab,
+handle, installed identity, and writer evidence only after issue #95 hands the
+shared runtime back.
+
 ## Turn 316 | 2026-09-13
 
 [Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)

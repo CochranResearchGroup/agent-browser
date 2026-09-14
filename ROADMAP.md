@@ -25,6 +25,23 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P180 | Pre-Drain Browserless Lane Quiescence Repair
+
+State: OPEN
+
+Current state: [Plan 0180](docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md)
+and [issue #95](https://github.com/CochranResearchGroup/agent-browser/issues/95)
+own the installer compatibility repair exposed by Books Receipts Plan 0240.
+The committed activation path writes admission drain before asking the selected
+old runtime to close a proven browserless competing lane. That old generation
+does not recognize the newer claimed-close exception, so the preserving
+upgrade fails with `runtime_admission_draining`. The repair must quiesce exact
+browserless lanes before drain, prove interruption safety, and retain all
+browser-bearing and unknown lanes. No installed or consumer acceptance is yet
+claimed. Issue #96 is queued as the next serialized bugfix investigation after
+P180 installed acceptance; its preserved Authentication Run and same-handle
+recourse must not be retried or replaced during this installer batch.
+
 ## P179 | Policy Selector v0.1.26 Integration
 
 State: CLOSED

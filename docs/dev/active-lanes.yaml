@@ -1,6 +1,24 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P180
+    product_lane: PL-BUGFIX
+    objective: Repair preserving upgrades by quiescing proven browserless lanes before admission drain
+    plan: docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md
+    plan_ref: refs/remotes/origin/fix/plan-0240-predrain-quiesce
+    branch: fix/plan-0240-predrain-quiesce
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 8fd65192c5f0ef597b0ed9a554e8e0eb6ffb5c2c
+    remote_ref: refs/remotes/origin/fix/plan-0240-predrain-quiesce
+    integration_receipt: null
+    integration: merge
+    work_items: [CochranResearchGroup/agent-browser#95]
+    dependencies: []
+    overlaps: [P165]
+    reconciled_overlaps: [P165]
+    updated_at: 2026-09-13
   - id: P169
     product_lane: PL-CHALLENGE
     objective: Qualify one bounded Turnstile interaction through the governed desktop workflow
