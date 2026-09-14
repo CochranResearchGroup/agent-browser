@@ -1215,8 +1215,8 @@ fn exact_terminal_owner_allows_profile_relaunch(
     }
     let requested_runtime_path = (session_id == profile_id
         && canonical_route_viewer_runtime_profile(profile_id)
-        && command_profile_id.as_deref() == Some(profile_id)
-        && options.runtime_profile.as_deref() == Some(profile_id))
+        && (command_profile_id.as_deref() == Some(profile_id)
+            || options.runtime_profile.as_deref() == Some(profile_id)))
     .then(|| crate::runtime_profile::resolve_profile(None, Some(profile_id)))
     .transpose()?
     .map(|profile| profile.user_data_dir);
