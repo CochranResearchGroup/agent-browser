@@ -5,6 +5,7 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 [Turns 314 through 320 are archived](RUNBOOK-history-2026-09-14-turn314-through-turn320.md).
 [The P169 challenge history through its Turn 319 is archived separately](RUNBOOK-history-2026-09-14-p169-through-turn319.md).
+[Superseded Plan 0186 checkpoints through Turn 328 are preserved separately](RUNBOOK-history-2026-09-14-p186-through-turn328.md).
 Keep this file at or below 200 lines under policy 0043.
 
 ## Active Plan Locator Index
@@ -61,43 +62,28 @@ desktop-interaction tests, 7 hCaptcha tests, 108 lease-authority tests, 3 CDP
 tests, and remote-view documentation checks pass. No public behavior or live
 runtime state changed.
 
+Plan 0186 is CLOSED through PR #129 and main checkpoint `f84ae098`. Exact
+candidate SHA-256 `66ac712c6a91a26395d3369fb40ec111e5e46a101a736e35c7c0acce999e7e76`
+passed its source-free fixture and preserving install. Transaction
+`upgrade-bacc8671-6067-4820-bb0f-7d264a446615` finalized routes A, B, and C;
+their validation processes reached terminal cleanup with locks released. Final
+doctor reports one runtime host, one dashboard, zero legacy daemons, no drain,
+a healthy monitor, and 43 healthy profile leases. No tenant workflow retried.
+
 ## Turn 328 | 2026-09-14
 
-PR #120 merged atomic route profile-record synchronization as `f65bf907`;
-exact candidate `e7e98600` passes the pinned source-free fixture. Route A then
-reached display readiness, but route B failed before effect only when A had
-started the shared host first. B succeeded alone and was closed cleanly. A
-focused regression reproduces the failure: a shared host inherited A's
-process-wide profile defaults and applied them while resolving B. PR #121
-merged the first command-source guard as `5d07b94f`; exact candidate `852d9f58`
-passes the pinned fixture but reproduced the B denial through a second direct
-environment read in auto-launch option construction. Its focused regression
-fails red on the merge and passes at `fb754890`; both cross-lane tests, format,
-and clippy pass under the 8 GB reserve. The task-owned candidate browser and
-hosts are closed. Next: integrate this final entry-point guard, build the exact
-merge once, run the pinned fixture, then require simultaneous three-route
-readiness before resuming transaction revision 21. Do not retry tenant
-workflows.
-
-## Turn 325 | 2026-09-14
-
-PR #114 merged the exact route-viewer secondary-command claim shaping as
-`bba8b7a3`; merged candidate digest `5610a704` passes the strengthened fixture,
-the 28-test admission sweep, format, clippy, and selected workstation checks.
-Runtime acceptance proved the admission repair through route A launch, header,
-and navigation, then route B failed before effect as
-`existing_session_profile_identity_unproven`. B and C retain ready generation-1
-owners for obsolete generation-relative profile identities without matching
-browser, session, tab, process, principal, or lease rows. Their exact lifecycle
-rows are terminal with cleanup satisfied and process-exit plus
-profile-lock-release evidence. Issue #112 is reopened. Root cause is the raw
-registry session matcher returning terminal history as live before ambiguity
-and profile selection, followed by the guarded relaunch rejecting the stable
-runtime-profile path because it differs from the historical profile digest.
-Next: preserve sole terminal relaunch, exclude exact terminal history when a
-current replacement exists, allow only exact canonical route-path migration,
-merge one repair, then resume transaction revision 17 exactly once.
-Last30Days owner generation 90 remains unchanged; do not retry tenant workflows.
+[Plan 0186](docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
+is CLOSED. The repair batch merged through PR #129 as `f84ae098`; exact
+candidate SHA-256 `66ac712c6a91a26395d3369fb40ec111e5e46a101a736e35c7c0acce999e7e76`
+passed the source-free fixture and a default preserving workstation install.
+Transaction `upgrade-bacc8671-6067-4820-bb0f-7d264a446615` accepted the exact
+candidate and finalized A, B, and C as separate route-viewer handoff lanes.
+Their validation processes later reached terminal cleanup with profile locks
+released. Final doctor passes: one selected runtime host, one dashboard
+process, zero legacy daemons, no admission drain, healthy runtime monitor, and
+43 healthy profile leases. Last30Days owner generation 90 is unchanged.
+Dashboard operator-journey evidence remains a nonblocking separate follow-up.
+No tenant workflow was retried.
 
 ## Turn 324 | 2026-09-14
 
