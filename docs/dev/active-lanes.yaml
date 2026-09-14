@@ -10,7 +10,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 16d4fb22dfd8cf96cd7e65edfd0b66fe54953945
+    checkpoint: 06e761eeebf156c4071fcec000b7a87cef293e3e
     remote_ref: refs/remotes/origin/platform/lease-authority-crate
     integration_receipt: null
     integration: merge
