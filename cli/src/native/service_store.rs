@@ -2956,6 +2956,10 @@ mod tests {
                     .load_count
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 let mut state = self.state.lock().unwrap();
+                // The baseline performs optimistic baseline and commit loads at
+                // indices 0 and 1, then 2 and 3. Both commit loads lose an
+                // adjacent revision race. The repaired replay replaces the
+                // second optimistic pair with one exclusive load at index 2.
                 if matches!(load_index, 1 | 3) {
                     state.state_revision += 1;
                 }
