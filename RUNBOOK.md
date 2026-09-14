@@ -13,6 +13,12 @@ on branch `fix/issue-96-auth-resume-state-reconciliation` from integrated
 disjoint from P180's installer repair and whose installed acceptance explicitly
 depends on P180's runtime handback.
 
+A concurrent platform session opened P181 for Lease Authority crate extraction
+after this lane began. Its plan retains the Service State repository
+implementation while later touching adjacent adapters. P182 remains the writer
+for the narrow repository contention repair; P181 must consume the published
+checkpoint or reconcile any adjacent adapter edit before implementation.
+
 Current source retries one stale prepared Service State candidate once, then
 returns `service_state_stale_revision` if an active writer advances the
 revision again. Authentication resume records its initial page observation

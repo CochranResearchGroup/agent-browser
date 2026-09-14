@@ -18,6 +18,9 @@ Work item: [issue #96](https://github.com/CochranResearchGroup/agent-browser/iss
 
 Dependency: P180 installed acceptance and explicit shared-runtime handback
 
+Related lane: P181 Lease Authority extraction retains the Service State
+repository implementation but may later edit adjacent product adapters
+
 Consolidation: required
 
 ## Objective
@@ -49,6 +52,13 @@ accepted integrated candidate and explicit handback. P182 may perform source
 analysis, provider-free fixtures, and isolated source validation in parallel,
 but it must not read, mutate, retry, cancel, or replace the preserved live run
 before that handback.
+
+A concurrent `PL-PLATFORM` session has opened P181 for Lease Authority crate
+extraction. Its plan explicitly retains `ServiceStateRepository`
+implementations in the CLI while moving Lease Authority code and later product
+adapters. P182 owns the narrow `service_store.rs` contention repair. P181 must
+consume P182's published checkpoint or reconcile any adjacent adapter edit;
+neither lane may rewrite the other's implementation silently.
 
 ## Consolidated Batch
 
@@ -118,6 +128,8 @@ effect stops the lane without an automatic retry.
   tests, plan detail, and proposed shared-authority projections.
 - **P180 owner:** retains exclusive installed-runtime custody and is the only
   lane that may release the runtime dependency.
+- **P181 owner:** retains Lease Authority extraction and must reconcile its
+  later Service State adapter packet against P182's published repository fix.
 - **Review owner:** one later bounded reviewer may inspect the frozen source
   diff and red-green proof without editing this branch or operating the runtime.
 - **Books Receipts:** remains a downstream observer and must not continue the

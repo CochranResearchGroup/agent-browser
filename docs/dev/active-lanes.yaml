@@ -16,8 +16,8 @@ lanes:
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#96]
     dependencies: [P180]
-    overlaps: [P180]
-    reconciled_overlaps: [P180]
+    overlaps: [P180, P181]
+    reconciled_overlaps: [P180, P181]
     updated_at: 2026-09-13
   - id: P180
     product_lane: PL-BUGFIX
