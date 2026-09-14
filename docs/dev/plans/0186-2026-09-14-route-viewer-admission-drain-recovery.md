@@ -8,7 +8,7 @@ Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-route-profile-record-sync`
+Branch: `fix/plan-0186-runtime-host-lane-profile-isolation`
 
 Target: `main`
 
@@ -110,6 +110,19 @@ repair must update the canonical profile record in the same repository
 transaction as terminal replacement and accept this already-migrated owner
 with stale profile metadata on the next guarded preflight.
 
+PR #120 merged that profile-record synchronization as `f65bf907`. Exact
+candidate SHA-256
+`e7e98600792285665fca0f75477e6b3d3cf2bece74d71702613e3a1e5e59d043`
+passes the pinned source-free fixture. Route A then completed launch, header,
+navigation, and display readiness, but route B failed before effect as
+`existing_session_profile_identity_unproven`. Route B succeeded by itself on
+a fresh candidate host, then failed again when route A started the shared host
+first. The shared host was still using process-wide
+`AGENT_BROWSER_PROFILE` and `AGENT_BROWSER_RUNTIME_PROFILE` fallbacks captured
+from its first lane. Source checkpoint `d83dd8fd` prevents those first-lane
+defaults from participating inside a shared runtime-host process; attributed
+lane fields and current Service State remain authoritative.
+
 ## Consolidated Batch
 
 - Recognize only canonical managed `rdp-guac-route-*-viewer` profiles as the
@@ -140,6 +153,9 @@ with stale profile metadata on the next guarded preflight.
   Require canonical route and browser identity, complete terminal cleanup
   evidence, no destination owner, no colliding lifecycle, and no principal
   binding on either digest.
+- Prevent a shared runtime host from resolving a later lane through the
+  process-wide profile name or path inherited from the lane that started the
+  host. Preserve environment fallback for non-shared legacy execution.
 - Preserve active, retained, closing, transferring, unknown, mismatched, and
   cleanup-unsatisfied owners, along with registered-principal authority and
   every ambiguous nonterminal state.
@@ -252,6 +268,15 @@ clippy with warnings denied, patch hygiene, and validation selection from
   synchronizes the profile record atomically. All 19 runtime-lifecycle tests,
   the adjacent route-host regression, Rust format, and workspace clippy with
   warnings denied pass.
+- PR #120 merged the atomic profile-record synchronization as `f65bf907`;
+  exact candidate SHA-256
+  `e7e98600792285665fca0f75477e6b3d3cf2bece74d71702613e3a1e5e59d043`
+  passes the pinned fixture. Live route A reached display readiness, while B
+  failed before effect only when A had started the shared host first. A
+  route-B-only candidate run succeeded and was closed cleanly. The focused
+  cross-lane environment regression fails red on `f65bf907` with
+  `existing_session_profile_identity_unproven` and passes at `d83dd8fd`.
+  Rust format and workspace clippy with warnings denied pass.
 
 ## Delivery Sequence And Budget
 

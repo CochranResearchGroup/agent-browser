@@ -65,7 +65,12 @@ PR #119 merged that transition as `0a2c8800`; exact-merge live validation then
 proved the owner and lifecycle advanced, but the retained profile record kept
 the legacy path and blocked navigation. Source checkpoint `fefc0dca` brings
 that profile record into the same atomic terminal-replacement transaction and
-accepts the already-migrated recovery shape.
+accepts the already-migrated recovery shape. PR #120 merged it as `f65bf907`.
+Its exact candidate brought route A to display readiness, then route B failed
+only when sharing the host that A started; route B succeeds alone. Checkpoint
+`d83dd8fd` removes first-lane process-profile fallback from shared-host lane
+resolution while retaining explicit lane fields and current Service State.
+P186 remains open for integration and simultaneous three-route acceptance.
 
 ## P185 | Route Viewer Runtime Profile Identity
 

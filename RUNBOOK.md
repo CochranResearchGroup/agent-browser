@@ -5,22 +5,21 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 327 | 2026-09-14
+## Turn 328 | 2026-09-14
 
-PR #119 merged the terminal lifecycle migration as `0a2c8800`; exact candidate
-`2b0fd4f2` passes the pinned source-free fixture. A transaction-bound route-A
-attempt then created the stable-path browser and advanced owner/lifecycle to
-generation 4, but navigation was denied because the retained profile record
-still named the legacy path. Exact cleanup closed that browser, removed its
-session projection, returned lifecycle cleanup to terminal and satisfied, and
-terminated the task-owned candidate host. Two focused regressions fail red on
-the merge and pass at `fefc0dca`: preflight accepts the resulting stable-owner
-plus stale-profile recovery shape, and canonical terminal replacement updates
-`BrowserProfile.userDataDir` in the same repository transaction as owner and
-lifecycle. All 19 lifecycle tests, the route-host regression, format, and
-clippy pass. Next: integrate once, build the exact merge once, rerun the pinned
-fixture, then make one fresh transaction-bound route attempt. Do not retry
-unchanged candidates or tenant workflows.
+PR #120 merged atomic route profile-record synchronization as `f65bf907`;
+exact candidate `e7e98600` passes the pinned source-free fixture. Route A then
+reached display readiness, but route B failed before effect only when A had
+started the shared host first. B succeeded alone and was closed cleanly. A
+focused regression reproduces the failure: a shared host inherited A's
+process-wide profile defaults and applied them while resolving B. It fails red
+on the merge and passes at `d83dd8fd` when shared-host execution ignores those
+process defaults and relies on attributed lane fields plus Service State.
+Format and workspace clippy pass under the 8 GB reserve. The task-owned
+candidate browser and hosts are closed. Next: integrate once, build the exact
+merge once, run the pinned fixture, then require simultaneous three-route
+readiness before resuming transaction revision 21. Do not retry tenant
+workflows.
 
 ## Turn 325 | 2026-09-14
 
