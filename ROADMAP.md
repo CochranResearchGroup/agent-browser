@@ -38,7 +38,9 @@ does not recognize the newer claimed-close exception, so the preserving
 upgrade fails with `runtime_admission_draining`. The repair must quiesce exact
 browserless lanes before drain, prove interruption safety, and retain all
 browser-bearing and unknown lanes. No installed or consumer acceptance is yet
-claimed.
+claimed. Issue #96 is queued as the next serialized bugfix investigation after
+P180 installed acceptance; its preserved Authentication Run and same-handle
+recourse must not be retried or replaced during this installer batch.
 
 ## P179 | Policy Selector v0.1.26 Integration
 

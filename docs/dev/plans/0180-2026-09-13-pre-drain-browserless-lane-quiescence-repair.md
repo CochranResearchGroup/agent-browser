@@ -135,6 +135,20 @@ cleanup, or treat absence alone as ownership proof.
   repair.
 - No formal release and no repeated full build during implementation.
 
+## Queued Successor
+
+[Issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
+is queued immediately after issue #95 installed acceptance and runtime handback.
+It is a distinct Service State and Authentication Run reconciliation defect,
+not part of this installer-ordering batch. The preserved run is
+`authrun-8b8d1c46947be0910b540a4e`; its two resume jobs failed before effect with
+adjacent stale revisions, and the run remains at transition 0 with zero actions
+and zero observations. The successor investigation must preserve that run,
+browser, tab, and handle, and must not create a replacement run or duplicate
+profile lane. Re-anchor those identifiers and the installed runtime after P180
+acceptance before deciding whether the repeated writer collision belongs in
+the Service State persistence lane or the authentication orchestration lane.
+
 ## Repair Design
 
 1. Add a stable orchestration seam that exposes the ordering of pre-drain
@@ -279,12 +293,19 @@ The frozen source candidate has the following local evidence:
 - the admission-drain test passed with an exact claimed `close` explicitly
   denied;
 - all five `shared_runtime_host_quiesce` tests passed;
-- all 159 `workstation_install` tests passed serially;
+- all 161 `workstation_install` tests passed serially on the strengthened
+  candidate, including the multi-primary, exact socket, scope, scripted
+  old-runtime, and after-close retry cases;
 - Rust formatting and workspace clippy with warnings denied passed; and
 - `git diff --check` and validation selection passed; and
 - the comprehensive provider-free Rust runner passed both native and support
-  lanes in 1,215 seconds, including CLI core, CDP transport, CLI integration,
-  and the production-scale Service State performance compartment.
+  lanes in 1,215 seconds on the initial repair checkpoint, including CLI core,
+  CDP transport, CLI integration, and the production-scale Service State
+  performance compartment; and
+- after the completion audit strengthened the regression contract and added a
+  cooperative-transfer scope predicate, the full 161-test workstation module,
+  formatting, clippy, and focused admission tests passed. PR CI must provide
+  the final-head comprehensive proof before merge.
 
 The validation selector also named workstation shell, VM, Guacamole asset,
 PostgreSQL, and route-user fixtures solely because the shared installer Rust
@@ -304,6 +325,9 @@ The source repair is integration-ready only when:
 - missing, browser-bearing, and changed-source evidence all fail before drain;
 - every required changed-surface gate passes with no hidden retry; and
 - the branch has a clean published checkpoint linked to issue #95.
+
+Issue #96 remains queued, unchanged, and outside this exit decision. P180 does
+not become larger merely because the successor shares Service State symptoms.
 
 Installed acceptance additionally requires one integrated candidate whose
 transaction reaches an accepted terminal state, selects the new generation,

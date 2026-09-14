@@ -21,17 +21,33 @@ leaves the transaction at `StateMigrationValidated` with no drain and supports
 a successful retry. Full shutdown still bypasses preserving quiescence, and an
 exact claimed `close` is denied after drain.
 
-All five shared-runtime quiescence tests and all 159 workstation installer
-tests pass. Rust formatting, workspace clippy with warnings denied, patch
+All five shared-runtime quiescence tests and all 161 workstation installer
+tests pass on the strengthened candidate. The regression now executes exact
+status, multi-primary exclusion, browserless close before drain, post-drain
+claimed-close denial, and handoff admission; separate tests cover
+after-close retry, cooperative-only scope, isolated and full-shutdown bypass,
+and selected-socket drift. Rust formatting, workspace clippy with warnings
+denied, patch
 hygiene, and validation selection also pass. The comprehensive provider-free
-Rust runner passed both lanes in 1,215 seconds, including CLI core, CDP
-transport, CLI integration, and production-scale Service State performance.
+Rust runner passed both lanes in 1,215 seconds on the initial repair
+checkpoint, including CLI core, CDP transport, CLI integration, and
+production-scale Service State performance. PR CI must provide final-head
+comprehensive proof before merge.
 The first admitted build attempt failed before project compilation when
 optional sccache could not spawn under host process pressure; successful runs
 retained Cargo admission and cgroups, disabled only that cache, and used one
 build job. Publication, integration, and installed acceptance remain open. No
 installation, runtime handoff, browser closure, service mutation, or Books
 Receipts action occurred.
+
+Issue #96 is queued behind P180 installed acceptance as a distinct follow-up.
+Its current preserved Authentication Run is
+`authrun-8b8d1c46947be0910b540a4e`; two resume jobs failed with adjacent
+`service_state_stale_revision` and `no_effect`, while the run remains at
+transition 0 with zero actions and observations. Do not retry, cancel, replace,
+or create a duplicate profile lane from P180. Re-anchor the same run, tab,
+handle, installed identity, and writer evidence only after issue #95 hands the
+shared runtime back.
 
 ## Turn 316 | 2026-09-13
 
