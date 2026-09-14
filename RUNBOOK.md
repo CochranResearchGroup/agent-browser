@@ -4,46 +4,50 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 319 | 2026-09-13
+## Turn 320 | 2026-09-14
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is OPEN in `PL-PLATFORM`. It defines in-process dependency deepening before
-extracting `agent-browser-lease-authority`, direct consumer migration with no
-permanent facade, a one-for-one partition of 106 baseline test invariants
-between the crate and retained CLI integration coverage, and comparable focused
-loop and downstream build measurements. P181 is a structural successor
-to Plan 0144, not a replacement for issue #71's public, effect, or installed
-gates. Work item
-[CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
-is in progress on `platform/lease-authority-crate` from published baseline
-`16d4fb22`. P181 authorizes the bounded source extraction and provider-free
-validation but no runtime, browser, profile, provider, installation, or
-production effect.
+is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Hardened source
+checkpoint `3c7e2bcc` extracts the canonical kernel and protected stack into
+`agent-browser-lease-authority`, deletes the old owner, and leaves one private
+CLI Service State adapter. The architecture and mutation guards preserve all
+106 baseline invariant labels as 108 crate tests plus three CLI adapter tests.
 
-P0 through P4 and the P5 validation wiring are implemented at hardened,
-published checkpoint `3c7e2bcc` in draft PR #106. The architecture contract,
-its dependency and private-surface mutation self-tests, Cargo metadata, and
-one-for-one baseline invariant mapping are green. The old owner is deleted;
-108 crate tests and three CLI adapter tests cover all 106 baseline labels plus
-five new principal/profile tests. A fresh-context architecture and security
-review found no source defect and its one validation-coverage finding is fixed.
-The CLI keeps one private Service State and repository adapter; signing keys,
-authority maps, proof fields, and raw plan issuance remain private to the crate.
+Native-Linux CI at source-equivalent `38012fd2` passed the comprehensive Rust
+and no-launch lanes. The `3c7e2bcc` run passed every Lease Authority and other
+Rust compartment but failed the unrelated production-scale Service Store
+timing assertion at 502 ms against its 500 ms threshold; the immediately prior
+run passed that same fixture. Local Cargo admission has recovered: all 108 crate
+tests and the three retained adapter tests pass through `cargo-safe.sh`.
 
-The immutable baseline preparation and candidate Cargo attempts remain
-unadmitted under host memory pressure. No local Cargo scope, rustc process,
-test, or benchmark sample has started. Exact-head native-Linux CI passes format,
-strict Clippy, dashboard, service-client, version-sync, and the complete
-workstation fixture job. Its comprehensive Rust job remains in progress. Local
-provider-free validation remains required once the wrapper can preserve its
-configured reserve. Issue #71's forge closure is tracker state, not acceptance
-of Plan 0144's separately open public, effect, and installed gates.
+Next: reconcile current `main`, freeze the joined candidate, run the bounded P6
+comparison, and obtain target-platform validation. The PR remains draft. No
+runtime, browser, profile, provider, installation, production, release, build
+acceleration, or Plan 0144 acceptance claim is authorized or made.
 
-Next action: resolve the comprehensive CI result, then run local P5 validation
-and the frozen P6 comparison when Cargo admission becomes available. Do not
-mark the PR ready or merge before complete provider-free, measurement, and
-target-platform gates. No runtime, browser, profile, provider, installation,
-or production effect is authorized.
+## Turn 319 | 2026-09-13
+
+[Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
+is OPEN through [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
+on `fix/issue-96-auth-resume-state-reconciliation`. Its source writes are
+disjoint from P180, integrated at `44e5dc16`. The operator released Agent #95's
+runtime custody to P182 on 2026-09-13 without installing a candidate.
+
+The published P182 source packet at `4f9e1741` reproduces two adjacent stale
+candidates and adds one serialized pure-mutator fallback after the first stale
+candidate. P181 must reconcile any later adjacent adapter edit. PR #98's
+completed fast gates passed; Rust was still running. Host pressure blocked both
+local focused builds before compilation.
+
+The installed production identity remains generation
+`0.28.0-d0186990d375-3a6142188dd0` with binary digest
+`d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`;
+the latest candidate transaction is terminally rolled back. The exact run is
+still `ready` at transition 0 with zero observations, action receipts, or
+pending effect on the same browser, session, and tab. Do not resume on the old
+generation. Next: qualify and merge PR #98, install one integrated P180 plus
+P182 candidate, re-anchor runtime and run evidence, then issue at most one
+same-run recourse.
 
 ## Turn 317 | 2026-09-13
 
@@ -81,14 +85,11 @@ build job. Publication, integration, and installed acceptance remain open. No
 installation, runtime handoff, browser closure, service mutation, or Books
 Receipts action occurred.
 
-Issue #96 is queued behind P180 installed acceptance as a distinct follow-up.
-Its current preserved Authentication Run is
-`authrun-8b8d1c46947be0910b540a4e`; two resume jobs failed with adjacent
-`service_state_stale_revision` and `no_effect`, while the run remains at
-transition 0 with zero actions and observations. Do not retry, cancel, replace,
-or create a duplicate profile lane from P180. Re-anchor the same run, tab,
-handle, installed identity, and writer evidence only after issue #95 hands the
-shared runtime back.
+Issue #96 has moved to P182 for disjoint provider-free source work. Its live
+acceptance remains queued behind P180. Do not retry, cancel, replace, or create
+a duplicate profile lane from P180. Re-anchor the same run, tab, handle,
+installed identity, and writer evidence only after issue #95 hands the shared
+runtime back.
 
 ## Turn 316 | 2026-09-13
 
@@ -191,10 +192,3 @@ provider readiness remain issues #79, #78, and #80. No runtime mutation occurred
 Closed or superseded during reconciliation: Plans 0018, 0021, 0037, 0045,
 0069, 0091, 0114, 0123, and 0137. ROADMAP lanes P13, P14, P44, P69, and P91
 are closed. Retained implementation and evidence remain in Git and their plans.
-
-## Turn 312 | 2026-09-13
-
-Plan 0177 was authored and merged through PR64 as `17ae56b0`. That merge is
-source custody only because GitHub allowed it while Rust and Workstation
-Fixtures were still running. The execution campaign revalidated its own changed
-surfaces and preserves final CI as a separate closeout gate.

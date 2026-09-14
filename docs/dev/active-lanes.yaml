@@ -1,6 +1,24 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P182
+    product_lane: PL-BUGFIX
+    objective: Make durable Authentication Run resume converge under an active Service State writer
+    plan: docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md
+    plan_ref: refs/remotes/origin/fix/issue-96-auth-resume-state-reconciliation
+    branch: fix/issue-96-auth-resume-state-reconciliation
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 86ce723e06d79fb5b5a018dd7bf211c5b753410b
+    remote_ref: refs/remotes/origin/fix/issue-96-auth-resume-state-reconciliation
+    integration_receipt: null
+    integration: merge
+    work_items: [CochranResearchGroup/agent-browser#96]
+    dependencies: []
+    overlaps: [P180, P181]
+    reconciled_overlaps: [P180, P181]
+    updated_at: 2026-09-13
   - id: P181
     product_lane: PL-PLATFORM
     objective: Extract the Lease-authority kernel into one deep independently testable Rust crate
@@ -16,8 +34,8 @@ lanes:
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#99]
     dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
+    overlaps: [P182]
+    reconciled_overlaps: [P182]
     updated_at: 2026-09-13
   - id: P180
     product_lane: PL-BUGFIX
