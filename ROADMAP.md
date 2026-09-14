@@ -47,6 +47,11 @@ evidence. The remaining P186 slice makes the raw session matcher honor that
 existing terminal-history contract before ambiguity evaluation and permits the
 guarded canonical route relaunch to adopt its stable runtime-profile path,
 without mutating Service State or weakening nonterminal owner authority.
+PR #116 merged this slice as `e9a9496a`, but exact-merge live acceptance found
+one final CLI-shape mismatch before effect: the explicit global runtime profile
+is not guaranteed to be repeated in both normalized launch representations.
+P186 remains open for that bounded evidence correction and exact-merge
+acceptance.
 
 ## P185 | Route Viewer Runtime Profile Identity
 

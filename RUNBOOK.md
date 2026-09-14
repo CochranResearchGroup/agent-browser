@@ -5,6 +5,17 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 326 | 2026-09-14
+
+PR #116 merged terminal route-owner reconciliation as `e9a9496a`. Exact merged
+candidate `3bb31e5c` passes the source-free fixture, but live route-A open
+stopped before effect as `existing_session_profile_identity_unproven`. The
+fixture did not distinguish the two normalized locations for the explicit
+global profile. A corrected focused test fails red on the merge and passes when
+either exact representation is accepted without requiring duplication. P186
+and issue #112 remain open; do not retry the unchanged candidate or tenant
+flows.
+
 ## Turn 325 | 2026-09-14
 
 PR #114 merged the exact route-viewer secondary-command claim shaping as

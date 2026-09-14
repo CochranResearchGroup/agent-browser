@@ -1753,21 +1753,29 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
         .save(&state)
         .unwrap();
 
-    let command = json!({
-        "action": "launch",
-        "runtimeProfile": profile_id,
-    });
-    let mut options = LaunchOptions {
-        runtime_profile: Some(profile_id.to_string()),
-        profile: Some(current_user_data_dir.to_string_lossy().into_owned()),
-        ..LaunchOptions::default()
-    };
-    let selection =
-        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+    // CLI command normalization may preserve the explicit global selection in
+    // either LaunchOptions or the generated launch payload. Neither form needs
+    // to repeat the same identity in both places.
+    for (command, mut options) in [
+        (
+            json!({ "action": "launch" }),
+            LaunchOptions {
+                runtime_profile: Some(profile_id.to_string()),
+                ..LaunchOptions::default()
+            },
+        ),
+        (
+            json!({ "action": "launch", "runtimeProfile": profile_id }),
+            LaunchOptions::default(),
+        ),
+    ] {
+        let selection =
+            apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
 
-    assert_eq!(selection, None);
-    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
-    assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
+        assert_eq!(selection, None);
+        assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+        assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
+    }
     let _ = fs::remove_dir_all(&home);
 }
 

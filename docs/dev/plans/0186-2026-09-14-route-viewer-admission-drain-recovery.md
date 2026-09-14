@@ -8,7 +8,7 @@ Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-stale-route-owner-reconcile`
+Branch: `fix/plan-0186-cli-runtime-profile-evidence`
 
 Target: `main`
 
@@ -62,6 +62,17 @@ owner is history under the existing lifecycle contract, but the raw registry
 session matcher still returns it as live. The launch profile-selection path uses
 that raw matcher instead of the lifecycle-aware resolution contract.
 
+PR #116 merged the terminal-history and canonical legacy-path repair as
+`e9a9496a`. Exact merged candidate SHA-256
+`3bb31e5ceb7bf5fa5d42c2bc2f8b0c62260e8bb46b4102297fe1babd86f78179`
+passes the production-shaped source-free workstation fixture. Its first live
+route-A open still stopped before effect as
+`existing_session_profile_identity_unproven`. The guarded migration required
+`runtimeProfile` to be present in both normalized launch representations, but
+the real CLI can retain the explicit global `--runtime-profile` selection in
+only one. The source-free fixture did not distinguish those normalization
+shapes.
+
 After reboot, no canonical route viewer survived. The repaired opener used the
 stable managed profile, but its first route-A launch failed before effect as
 `runtime_admission_draining`. The CLI attaches a transaction claim only to
@@ -88,6 +99,9 @@ therefore impossible despite coherent transaction and candidate identities.
 - Let that guarded relaunch move from a historical profile digest to the stable
   managed runtime-profile path only when the session, explicit runtime profile,
   and exact canonical single-letter route-viewer ID agree.
+- Treat the exact profile in either normalized launch representation as the
+  explicit CLI evidence; continue to reject a conflicting command-payload
+  profile.
 - Preserve active, retained, closing, transferring, unknown, mismatched, and
   cleanup-unsatisfied owners, along with registered-principal authority and
   every ambiguous nonterminal state.
@@ -158,6 +172,15 @@ clippy with warnings denied, patch hygiene, and validation selection from
   passes the source-free workstation fixture with a terminal legacy route-B
   owner under the active transaction drain. Rust format, workspace clippy with
   warnings denied, and patch hygiene pass on source checkpoint `c68e1ea6`.
+- PR #116 merged as `e9a9496a`; exact merged candidate SHA-256
+  `3bb31e5ceb7bf5fa5d42c2bc2f8b0c62260e8bb46b4102297fe1babd86f78179`
+  passes the source-free fixture but fails the first live route-A open before
+  effect. A corrected unit regression that omits command-payload
+  `runtimeProfile` fails red with `existing_session_profile_identity_unproven`
+  and passes at source checkpoint `82c319e7` when the guard accepts either
+  exact normalized representation. The canonical-name boundary, both existing
+  exact-terminal-owner tests, custom-profile compatibility, Rust format, and
+  workspace clippy with warnings denied also pass.
 
 ## Delivery Sequence And Budget
 
