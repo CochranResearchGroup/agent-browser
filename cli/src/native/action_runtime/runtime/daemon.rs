@@ -311,7 +311,7 @@ pub(crate) fn runtime_profile_from_env() -> Option<String> {
 /// A shared host inherits process environment from the lane that started it.
 /// Later lanes must resolve profile identity from their attributed command and
 /// Service State, never from those first-lane process defaults.
-fn shared_runtime_host_process() -> bool {
+pub(crate) fn shared_runtime_host_process() -> bool {
     parse_env_bool(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV)
 }
 pub(crate) fn runtime_profile_from_sources(

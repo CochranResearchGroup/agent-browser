@@ -15,8 +15,8 @@ use super::daemon::{
     apply_service_browser_capability_selection, apply_service_profile_selection,
     keychain_password_from_env, launch_args_from_sources,
     launch_command_with_effective_service_defaults, launch_hash, launch_profile_from_sources,
-    runtime_profile_from_env, runtime_profile_from_sources, use_real_keychain_from_env,
-    CloseBehavior,
+    runtime_profile_from_env, runtime_profile_from_sources, shared_runtime_host_process,
+    use_real_keychain_from_env, CloseBehavior,
 };
 use super::profile_lease::apply_auto_launch_command_hints;
 #[cfg(target_os = "linux")]
@@ -1138,8 +1138,12 @@ pub(crate) fn launch_options_from_env() -> LaunchOptions {
         proxy_bypass: env::var("AGENT_BROWSER_PROXY_BYPASS").ok(),
         proxy_username: env::var("AGENT_BROWSER_PROXY_USERNAME").ok(),
         proxy_password: env::var("AGENT_BROWSER_PROXY_PASSWORD").ok(),
-        profile: env::var("AGENT_BROWSER_PROFILE").ok(),
-        runtime_profile: runtime_profile_from_env(),
+        profile: (!shared_runtime_host_process())
+            .then(|| env::var("AGENT_BROWSER_PROFILE").ok())
+            .flatten(),
+        runtime_profile: (!shared_runtime_host_process())
+            .then(runtime_profile_from_env)
+            .flatten(),
         expected_browser_family: None,
         allow_file_access: env::var("AGENT_BROWSER_ALLOW_FILE_ACCESS")
             .map(|v| v == "1" || v == "true")

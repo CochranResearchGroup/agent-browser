@@ -233,6 +233,22 @@ fn test_launch_options_from_env_defaults() {
     assert!(opts.keychain_password.is_none());
 }
 #[test]
+fn test_shared_runtime_host_launch_options_do_not_inherit_first_lane_profile() {
+    let guard = EnvGuard::new(&[
+        crate::runtime_host::RUNTIME_HOST_PROCESS_ENV,
+        "AGENT_BROWSER_PROFILE",
+        "AGENT_BROWSER_RUNTIME_PROFILE",
+    ]);
+    guard.set(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV, "1");
+    guard.set("AGENT_BROWSER_PROFILE", "/tmp/first-lane-profile");
+    guard.set("AGENT_BROWSER_RUNTIME_PROFILE", "first-lane");
+
+    let options = launch_options_from_env();
+
+    assert_eq!(options.profile, None);
+    assert_eq!(options.runtime_profile, None);
+}
+#[test]
 fn test_launch_options_from_env_headed_flag() {
     let _guard = EnvGuard::new(&[
         "AGENT_BROWSER_HEADED",
