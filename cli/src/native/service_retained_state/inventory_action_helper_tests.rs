@@ -382,7 +382,8 @@ fn test_prune_retained_degraded_browser_preserves_terminal_lifecycle_alias_evide
 
     let profile_path = "/tmp/agent-browser-plan0233-qbo-profile";
     let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path)).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(Path::new(profile_path))
+            .unwrap();
     let mut service_state = ServiceState {
         profiles: BTreeMap::from([(
             "plan0233-qbo".to_string(),

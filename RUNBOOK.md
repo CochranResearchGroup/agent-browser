@@ -5,7 +5,7 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 324 | 2026-09-14
+## Turn 325 | 2026-09-14
 
 PR #114 merged the exact route-viewer secondary-command claim shaping as
 `bba8b7a3`; merged candidate digest `5610a704` passes the strengthened fixture,
@@ -24,6 +24,28 @@ Next: preserve sole terminal relaunch, exclude exact terminal history when a
 current replacement exists, allow only exact canonical route-path migration,
 merge one repair, then resume transaction revision 17 exactly once.
 Last30Days owner generation 90 remains unchanged; do not retry tenant workflows.
+
+## Turn 324 | 2026-09-14
+
+[Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md) is CLOSED through PR #106, which merged exact validated head `91aa3204` into
+`main` as `b5a78faf`. The new crate owns the canonical kernel and protected
+stack; the old owner is deleted and the CLI retains one private adapter.
+
+Full CI run 34846719359 is terminal. macOS ARM compiled the extracted crate and
+then failed in inherited CLI-only code; Windows also reached the extracted
+crate before fail-fast cancellation. Native E2E passed 42 tests, then retained
+one navigation fixture browser and cascaded to 14 failures. Browser repair is
+outside P181 authority and does not invalidate its provider-free source proof.
+P6 measured a 91.95 percent focused-loop improvement without the stricter
+promotion claim. Focused run 34857911397 passes Linux, both macOS targets, and
+Windows after `b6aa71dd` fixed Unix-only fixture paths; ordinary CI run
+34857911400 is green. Final pre-join head `8a57dce5` also passes focused run
+34861501476 and ordinary run 34861501499. The second P186 repair merged to
+`main` afterward and was joined cleanly. Exact focused run 34864731916 passes
+Linux, both macOS targets, and Windows. Ordinary run 34864731908 passes every
+fast gate, including comprehensive Rust and no-launch smokes. No runtime,
+browser, profile, provider, installation, production, release, or Plan 0144
+acceptance claim is made. No P181 execution remains.
 
 ## Turn 323 | 2026-09-14
 
@@ -101,26 +123,6 @@ pending effect on the same browser, session, and tab. Do not resume on the old
 generation. Next: qualify and merge PR #98, install one integrated P180 plus
 P182 candidate, re-anchor runtime and run evidence, then issue at most one
 same-run recourse.
-
-## Turn 318 | 2026-09-13
-
-[Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is OPEN in `PL-PLATFORM`. It defines in-process dependency deepening before
-extracting `agent-browser-lease-authority`, direct consumer migration with no
-permanent facade, a one-for-one partition of 106 baseline test invariants
-between the crate and retained CLI integration coverage, and comparable focused
-loop and downstream build measurements. P181 is a structural successor
-to Plan 0144, not a replacement for issue #71's public, effect, or installed
-gates. Work item
-[CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
-is in progress on `platform/lease-authority-crate` from published baseline
-`16d4fb22`. P181 authorizes the bounded source extraction and provider-free
-validation but no runtime, browser, profile, provider, installation, or
-production effect.
-
-Next action: execute P0 by freezing the invariant ledger, adding the red
-architecture contract, and capturing the comparable focused-loop baseline.
-Recheck P144 source custody immediately before the first authority-source edit.
 
 ## Turn 317 | 2026-09-13
 

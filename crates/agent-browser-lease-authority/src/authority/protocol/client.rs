@@ -1,9 +1,11 @@
+//! Typed client for the protected authority transport.
+
+use super::super::{
+    ActiveLeaseClaim, LeaseClaimMode, LeaseEffectAuthorization, LeaseResourceKey, LeaseResourceKind,
+};
 use super::{
     LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
     LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
-};
-use crate::native::service_lease_authority::{
-    ActiveLeaseClaim, LeaseClaimMode, LeaseEffectAuthorization, LeaseResourceKey,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -58,11 +60,11 @@ impl<E: ProtectedLeaseAuthorityExchange> ProtectedLeaseAuthorityClient<E> {
     }
 }
 
-pub(crate) struct ProtectedProfileEnrollmentRequest {
-    pub(crate) raw_capability: String,
-    pub(crate) profile_id: String,
-    pub(crate) profile_path: String,
-    pub(crate) idempotency_key: String,
+pub struct ProtectedProfileEnrollmentRequest {
+    pub raw_capability: String,
+    pub profile_id: String,
+    pub profile_path: String,
+    pub idempotency_key: String,
 }
 
 impl std::fmt::Debug for ProtectedProfileEnrollmentRequest {
@@ -78,17 +80,17 @@ impl std::fmt::Debug for ProtectedProfileEnrollmentRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedProfileEnrollment {
-    pub(crate) principal_id: String,
-    pub(crate) capability_id: String,
-    pub(crate) capability_revision: u64,
-    pub(crate) resource_revision: u64,
+pub struct ProtectedProfileEnrollment {
+    pub principal_id: String,
+    pub capability_id: String,
+    pub capability_revision: u64,
+    pub resource_revision: u64,
 }
 
-pub(crate) struct ProtectedEphemeralProfileClaimRequest {
-    pub(crate) raw_capability: String,
-    pub(crate) profile_id: String,
-    pub(crate) idempotency_key: String,
+pub struct ProtectedEphemeralProfileClaimRequest {
+    pub raw_capability: String,
+    pub profile_id: String,
+    pub idempotency_key: String,
 }
 
 impl std::fmt::Debug for ProtectedEphemeralProfileClaimRequest {
@@ -103,25 +105,25 @@ impl std::fmt::Debug for ProtectedEphemeralProfileClaimRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedEphemeralProfileClaim {
-    pub(crate) resource: LeaseResourceKey,
-    pub(crate) claim_id: String,
-    pub(crate) principal_id: String,
-    pub(crate) capability_id: String,
-    pub(crate) capability_revision: u64,
-    pub(crate) claim_revision: u64,
-    pub(crate) fencing_token: u64,
-    pub(crate) expires_at: String,
+pub struct ProtectedEphemeralProfileClaim {
+    pub resource: LeaseResourceKey,
+    pub claim_id: String,
+    pub principal_id: String,
+    pub capability_id: String,
+    pub capability_revision: u64,
+    pub claim_revision: u64,
+    pub fencing_token: u64,
+    pub expires_at: String,
 }
 
-pub(crate) struct ProtectedBrowserLaunchRequest {
-    pub(crate) raw_capability: String,
-    pub(crate) resource: LeaseResourceKey,
-    pub(crate) claim_id: String,
-    pub(crate) claim_revision: u64,
-    pub(crate) fencing_token: u64,
-    pub(crate) audience: String,
-    pub(crate) idempotency_key: String,
+pub struct ProtectedBrowserLaunchRequest {
+    pub raw_capability: String,
+    pub resource: LeaseResourceKey,
+    pub claim_id: String,
+    pub claim_revision: u64,
+    pub fencing_token: u64,
+    pub audience: String,
+    pub idempotency_key: String,
 }
 
 impl std::fmt::Debug for ProtectedBrowserLaunchRequest {
@@ -140,32 +142,32 @@ impl std::fmt::Debug for ProtectedBrowserLaunchRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedBrowserLaunchPermit {
-    pub(crate) receipt_id: String,
-    pub(crate) resource: LeaseResourceKey,
-    pub(crate) claim_id: String,
-    pub(crate) claim_revision: u64,
-    pub(crate) fencing_token: u64,
-    pub(crate) daemon_session_route: String,
+pub struct ProtectedBrowserLaunchPermit {
+    pub receipt_id: String,
+    pub resource: LeaseResourceKey,
+    pub claim_id: String,
+    pub claim_revision: u64,
+    pub fencing_token: u64,
+    pub daemon_session_route: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedBrowserOwner {
-    pub(crate) authority_receipt_id: String,
-    pub(crate) owner_id: String,
-    pub(crate) owner_generation: u64,
-    pub(crate) logical_browser_id: String,
-    pub(crate) daemon_session_route: String,
-    pub(crate) process_instance_digest: String,
-    pub(crate) process_pid: u32,
-    pub(crate) revision: u64,
+pub struct ProtectedBrowserOwner {
+    pub authority_receipt_id: String,
+    pub owner_id: String,
+    pub owner_generation: u64,
+    pub logical_browser_id: String,
+    pub daemon_session_route: String,
+    pub process_instance_digest: String,
+    pub process_pid: u32,
+    pub revision: u64,
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedBrowserOwnerLease {
-    pub(crate) raw_capability: String,
-    pub(crate) profile_id: String,
-    pub(crate) owner: ProtectedBrowserOwner,
+pub struct ProtectedBrowserOwnerLease {
+    pub raw_capability: String,
+    pub profile_id: String,
+    pub owner: ProtectedBrowserOwner,
 }
 
 impl std::fmt::Debug for ProtectedBrowserOwnerLease {
@@ -179,12 +181,12 @@ impl std::fmt::Debug for ProtectedBrowserOwnerLease {
     }
 }
 
-pub(crate) struct ProtectedBrowserOwnerReconciliationRequest {
-    pub(crate) raw_capability: String,
-    pub(crate) profile_id: String,
-    pub(crate) expected_owner_id: String,
-    pub(crate) expected_owner_generation: u64,
-    pub(crate) idempotency_key: String,
+pub struct ProtectedBrowserOwnerReconciliationRequest {
+    pub raw_capability: String,
+    pub profile_id: String,
+    pub expected_owner_id: String,
+    pub expected_owner_generation: u64,
+    pub idempotency_key: String,
 }
 
 impl std::fmt::Debug for ProtectedBrowserOwnerReconciliationRequest {
@@ -201,23 +203,23 @@ impl std::fmt::Debug for ProtectedBrowserOwnerReconciliationRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedBrowserOwnerReconciliation {
-    pub(crate) receipt_id: String,
-    pub(crate) owner_id: String,
-    pub(crate) owner_generation: u64,
-    pub(crate) evidence_digest: String,
-    pub(crate) authority_revision: u64,
-    pub(crate) owner_revision: u64,
-    pub(crate) replayed: bool,
+pub struct ProtectedBrowserOwnerReconciliation {
+    pub receipt_id: String,
+    pub owner_id: String,
+    pub owner_generation: u64,
+    pub evidence_digest: String,
+    pub authority_revision: u64,
+    pub owner_revision: u64,
+    pub replayed: bool,
 }
 
-pub(crate) struct ProtectedBrowserAdoptionRequest {
-    pub(crate) raw_capability: String,
-    pub(crate) profile_id: String,
-    pub(crate) expected_owner_id: String,
-    pub(crate) expected_owner_generation: u64,
-    pub(crate) candidate_daemon_session_route: String,
-    pub(crate) idempotency_key: String,
+pub struct ProtectedBrowserAdoptionRequest {
+    pub raw_capability: String,
+    pub profile_id: String,
+    pub expected_owner_id: String,
+    pub expected_owner_generation: u64,
+    pub candidate_daemon_session_route: String,
+    pub idempotency_key: String,
 }
 
 impl std::fmt::Debug for ProtectedBrowserAdoptionRequest {
@@ -239,7 +241,7 @@ impl std::fmt::Debug for ProtectedBrowserAdoptionRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum ProtectedBrowserAdoptionState {
+pub enum ProtectedBrowserAdoptionState {
     Prepared,
     Completed,
     Uncertain,
@@ -247,54 +249,54 @@ pub(crate) enum ProtectedBrowserAdoptionState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProtectedBrowserAdoptionReceipt {
-    pub(crate) schema_version: String,
-    pub(crate) receipt_id: String,
-    pub(crate) resource: LeaseResourceKey,
-    pub(crate) owner_id: String,
-    pub(crate) owner_generation: u64,
-    pub(crate) logical_browser_id: String,
-    pub(crate) candidate_daemon_session_route: String,
-    pub(crate) browser_process_instance_digest: String,
-    pub(crate) state: ProtectedBrowserAdoptionState,
-    pub(crate) prepared_at: String,
-    pub(crate) transition_deadline: String,
-    pub(crate) authority_revision: u64,
-    pub(crate) owner_revision: u64,
-    pub(crate) completed_at: Option<String>,
-    pub(crate) terminal_authority_revision: Option<u64>,
-    pub(crate) terminal_owner_revision: Option<u64>,
-    pub(crate) completed_owner_id: Option<String>,
-    pub(crate) completed_owner_generation: Option<u64>,
+pub struct ProtectedBrowserAdoptionReceipt {
+    pub schema_version: String,
+    pub receipt_id: String,
+    pub resource: LeaseResourceKey,
+    pub owner_id: String,
+    pub owner_generation: u64,
+    pub logical_browser_id: String,
+    pub candidate_daemon_session_route: String,
+    pub browser_process_instance_digest: String,
+    pub state: ProtectedBrowserAdoptionState,
+    pub prepared_at: String,
+    pub transition_deadline: String,
+    pub authority_revision: u64,
+    pub owner_revision: u64,
+    pub completed_at: Option<String>,
+    pub terminal_authority_revision: Option<u64>,
+    pub terminal_owner_revision: Option<u64>,
+    pub completed_owner_id: Option<String>,
+    pub completed_owner_generation: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedBrowserAdoptionPreparation {
-    pub(crate) receipt: ProtectedBrowserAdoptionReceipt,
-    pub(crate) replayed: bool,
+pub struct ProtectedBrowserAdoptionPreparation {
+    pub receipt: ProtectedBrowserAdoptionReceipt,
+    pub replayed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedBrowserAuthorityOwner {
-    pub(crate) authority_receipt_id: String,
-    pub(crate) owner_id: String,
-    pub(crate) owner_generation: u64,
-    pub(crate) logical_browser_id: String,
-    pub(crate) daemon_session_route: String,
-    pub(crate) process_instance_digest: String,
-    pub(crate) process_pid: u32,
-    pub(crate) revision: u64,
+pub struct ProtectedBrowserAuthorityOwner {
+    pub authority_receipt_id: String,
+    pub owner_id: String,
+    pub owner_generation: u64,
+    pub logical_browser_id: String,
+    pub daemon_session_route: String,
+    pub process_instance_digest: String,
+    pub process_pid: u32,
+    pub revision: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedBrowserAdoptionCompletion {
-    pub(crate) receipt: ProtectedBrowserAdoptionReceipt,
-    pub(crate) owner: Option<ProtectedBrowserAuthorityOwner>,
-    pub(crate) replayed: bool,
+pub struct ProtectedBrowserAdoptionCompletion {
+    pub receipt: ProtectedBrowserAdoptionReceipt,
+    pub owner: Option<ProtectedBrowserAuthorityOwner>,
+    pub replayed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProtectedAuthorityObservationState {
+pub enum ProtectedAuthorityObservationState {
     Absent,
     Current,
     Stale,
@@ -302,17 +304,17 @@ pub(crate) enum ProtectedAuthorityObservationState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProtectedProfileAuthorityInspection {
-    pub(crate) observed_at: String,
-    pub(crate) reservation: Option<ProtectedEphemeralProfileClaim>,
-    pub(crate) owner: Option<ProtectedBrowserAuthorityOwner>,
-    pub(crate) holder_observation: ProtectedAuthorityObservationState,
-    pub(crate) physical_occupancy: ProtectedAuthorityObservationState,
-    pub(crate) effect_channel_observation: ProtectedAuthorityObservationState,
-    pub(crate) requester_is_holder: bool,
+pub struct ProtectedProfileAuthorityInspection {
+    pub observed_at: String,
+    pub reservation: Option<ProtectedEphemeralProfileClaim>,
+    pub owner: Option<ProtectedBrowserAuthorityOwner>,
+    pub holder_observation: ProtectedAuthorityObservationState,
+    pub physical_occupancy: ProtectedAuthorityObservationState,
+    pub effect_channel_observation: ProtectedAuthorityObservationState,
+    pub requester_is_holder: bool,
 }
 
-pub(crate) fn enroll_protected_profile(
+pub fn enroll_protected_profile(
     request: &ProtectedProfileEnrollmentRequest,
 ) -> Result<ProtectedProfileEnrollment, String> {
     ProtectedLeaseAuthorityClient::default().request(
@@ -321,7 +323,7 @@ pub(crate) fn enroll_protected_profile(
     )
 }
 
-pub(crate) fn acquire_protected_ephemeral_profile_claim(
+pub fn acquire_protected_ephemeral_profile_claim(
     request: &ProtectedEphemeralProfileClaimRequest,
 ) -> Result<ProtectedEphemeralProfileClaim, String> {
     ProtectedLeaseAuthorityClient::default().request(
@@ -330,7 +332,7 @@ pub(crate) fn acquire_protected_ephemeral_profile_claim(
     )
 }
 
-pub(crate) fn authorize_protected_browser_launch(
+pub fn authorize_protected_browser_launch(
     request: &ProtectedBrowserLaunchRequest,
 ) -> Result<ProtectedBrowserLaunchPermit, String> {
     ProtectedLeaseAuthorityClient::default().request(
@@ -339,7 +341,7 @@ pub(crate) fn authorize_protected_browser_launch(
     )
 }
 
-pub(crate) fn mark_protected_browser_launch_uncertain(
+pub fn mark_protected_browser_launch_uncertain(
     permit: &ProtectedBrowserLaunchPermit,
     completion_evidence_digest: &str,
     completion_idempotency_key: &str,
@@ -371,7 +373,7 @@ pub(crate) fn mark_protected_browser_launch_uncertain(
     })
 }
 
-pub(crate) fn complete_protected_browser_launch_success(
+pub fn complete_protected_browser_launch_success(
     permit: &ProtectedBrowserLaunchPermit,
     browser_pid: u32,
     profile_path: &Path,
@@ -400,7 +402,7 @@ pub(crate) fn complete_protected_browser_launch_success(
     })
 }
 
-pub(crate) fn reconcile_protected_browser_owner(
+pub fn reconcile_protected_browser_owner(
     request: &ProtectedBrowserOwnerReconciliationRequest,
 ) -> Result<ProtectedBrowserOwnerReconciliation, String> {
     ProtectedLeaseAuthorityClient::default().request(
@@ -409,7 +411,7 @@ pub(crate) fn reconcile_protected_browser_owner(
     )
 }
 
-pub(crate) fn prepare_protected_browser_adoption(
+pub fn prepare_protected_browser_adoption(
     request: &ProtectedBrowserAdoptionRequest,
 ) -> Result<ProtectedBrowserAdoptionPreparation, String> {
     ProtectedLeaseAuthorityClient::default().request(
@@ -418,7 +420,7 @@ pub(crate) fn prepare_protected_browser_adoption(
     )
 }
 
-pub(crate) fn inspect_protected_profile_authority(
+pub fn inspect_protected_profile_authority(
     raw_capability: &str,
     profile_id: &str,
 ) -> Result<ProtectedProfileAuthorityInspection, String> {
@@ -428,7 +430,7 @@ pub(crate) fn inspect_protected_profile_authority(
     )
 }
 
-pub(crate) fn complete_protected_browser_adoption_success(
+pub fn complete_protected_browser_adoption_success(
     preparation: &ProtectedBrowserAdoptionPreparation,
     completion_idempotency_key: &str,
 ) -> Result<ProtectedBrowserAdoptionCompletion, String> {
@@ -440,7 +442,7 @@ pub(crate) fn complete_protected_browser_adoption_success(
     )
 }
 
-pub(crate) fn mark_protected_browser_adoption_uncertain(
+pub fn mark_protected_browser_adoption_uncertain(
     preparation: &ProtectedBrowserAdoptionPreparation,
     completion_idempotency_key: &str,
 ) -> Result<ProtectedBrowserAdoptionCompletion, String> {
@@ -456,7 +458,7 @@ fn encode_protected_browser_adoption_request(
     request: &ProtectedBrowserAdoptionRequest,
 ) -> Result<Vec<u8>, String> {
     if request.raw_capability.trim().is_empty()
-        || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+        || crate::validate_runtime_profile_name(&request.profile_id).is_err()
         || request.expected_owner_id.trim().is_empty()
         || request.expected_owner_generation == 0
         || request.candidate_daemon_session_route.trim().is_empty()
@@ -483,8 +485,7 @@ fn encode_protected_profile_authority_inspection(
     raw_capability: &str,
     profile_id: &str,
 ) -> Result<Vec<u8>, String> {
-    if raw_capability.trim().is_empty()
-        || crate::runtime_profile::validate_runtime_profile_name(profile_id).is_err()
+    if raw_capability.trim().is_empty() || crate::validate_runtime_profile_name(profile_id).is_err()
     {
         return Err("lease_authority_profile_inspection_request_invalid".to_string());
     }
@@ -754,8 +755,7 @@ fn decode_protected_browser_adoption_receipt(
         serde_json::from_value(value.cloned().ok_or_else(|| error_code.to_string())?)
             .map_err(|_| error_code.to_string())?;
     if receipt.schema_version != "agent-browser.lease-authority-browser-adoption-receipt.v1"
-        || receipt.resource.kind
-            != crate::native::service_lease_authority::LeaseResourceKind::Profile
+        || receipt.resource.kind != LeaseResourceKind::Profile
         || receipt.receipt_id.trim().is_empty()
         || receipt.owner_id.trim().is_empty()
         || receipt.owner_generation == 0
@@ -834,7 +834,7 @@ fn encode_protected_profile_enrollment_request(
     request: &ProtectedProfileEnrollmentRequest,
 ) -> Result<Vec<u8>, String> {
     if request.raw_capability.trim().is_empty()
-        || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+        || crate::validate_runtime_profile_name(&request.profile_id).is_err()
         || request.profile_path.trim().is_empty()
         || request.idempotency_key.trim().is_empty()
     {
@@ -906,7 +906,7 @@ fn encode_protected_ephemeral_profile_claim_request(
     request: &ProtectedEphemeralProfileClaimRequest,
 ) -> Result<Vec<u8>, String> {
     if request.raw_capability.trim().is_empty()
-        || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+        || crate::validate_runtime_profile_name(&request.profile_id).is_err()
         || request.idempotency_key.trim().is_empty()
     {
         return Err("lease_authority_acquire_request_invalid".to_string());
@@ -1223,7 +1223,7 @@ fn encode_protected_browser_owner_reconciliation_request(
     request: &ProtectedBrowserOwnerReconciliationRequest,
 ) -> Result<Vec<u8>, String> {
     if request.raw_capability.trim().is_empty()
-        || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+        || crate::validate_runtime_profile_name(&request.profile_id).is_err()
         || request.expected_owner_id.trim().is_empty()
         || request.expected_owner_generation == 0
         || request.idempotency_key.trim().is_empty()
@@ -1313,8 +1313,8 @@ fn decode_protected_browser_owner_reconciliation_response(
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::LeaseResourceKey;
     use super::*;
-    use crate::native::service_lease_authority::LeaseResourceKey;
     use std::cell::Cell;
 
     struct FixtureExchange {

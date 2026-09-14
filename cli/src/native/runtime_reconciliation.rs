@@ -75,7 +75,9 @@ impl<'a> RuntimeResourceReconciler<'a> {
             return protected("runtime_lifecycle_profile_identity_changed");
         }
         let Ok(profile_identity_digest) =
-            crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_root))
+            agent_browser_lease_authority::canonical_profile_identity_digest(Path::new(
+                profile_root,
+            ))
         else {
             return protected("runtime_lifecycle_profile_identity_unproven");
         };
@@ -362,7 +364,8 @@ mod tests {
     fn exact_closing_package_browser_tree_is_owned() {
         let profile_root = std::env::temp_dir().join("agent-browser-reconciler-owned-profile");
         let profile_identity_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&profile_root).unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_root)
+                .unwrap();
         let recorded = RecordedProcessIdentity {
             pid: 4100,
             start_token: "linux:fixture:100".to_string(),

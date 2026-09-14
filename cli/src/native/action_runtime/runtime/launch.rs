@@ -75,13 +75,6 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
-#[cfg(target_os = "linux")]
-use crate::native::service_lease_authority::{
-    complete_protected_browser_adoption_success, complete_protected_browser_launch_success,
-    mark_protected_browser_adoption_uncertain, mark_protected_browser_launch_uncertain,
-    ProtectedBrowserAdoptionPreparation, ProtectedBrowserLaunchPermit, ProtectedBrowserOwner,
-    ProtectedBrowserOwnerLease,
-};
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -108,6 +101,13 @@ use crate::native::webdriver::safari;
 use crate::runtime_profile::{
     clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
+};
+#[cfg(target_os = "linux")]
+use agent_browser_lease_authority::{
+    complete_protected_browser_adoption_success, complete_protected_browser_launch_success,
+    mark_protected_browser_adoption_uncertain, mark_protected_browser_launch_uncertain,
+    ProtectedBrowserAdoptionPreparation, ProtectedBrowserLaunchPermit, ProtectedBrowserOwner,
+    ProtectedBrowserOwnerLease,
 };
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};

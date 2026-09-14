@@ -22,19 +22,7 @@ use super::action_runtime::runtime::{
     adopt_protected_profile_browser, auto_launch_protected_profile, ProtectedProfileLaunchContext,
 };
 use super::action_runtime::runtime::{auto_launch, service_browser_id, DaemonState};
-#[cfg(target_os = "linux")]
-use super::service_lease_authority::{
-    acquire_protected_ephemeral_profile_claim, authorize_protected_browser_launch,
-    enroll_protected_profile, inspect_protected_profile_authority,
-    prepare_protected_browser_adoption, reconcile_protected_browser_owner,
-    ProtectedAuthorityObservationState, ProtectedBrowserAdoptionRequest,
-    ProtectedBrowserLaunchRequest, ProtectedBrowserOwnerReconciliationRequest,
-    ProtectedEphemeralProfileClaimRequest, ProtectedProfileEnrollmentRequest,
-};
-use super::service_lease_authority::{
-    issue_lease_effect_authorization_for_state, AcquireLeaseClaimRequest,
-    LeaseClaimAcquisitionOutcome, LeaseClaimMode, LeaseEffectAuthorization, LeaseResourceKey,
-};
+use super::service_lease_authority_adapter::issue_lease_effect_authorization_for_state;
 use super::service_model::{
     profile_seeding_handoff_id, service_profile_seeding_handoff, BrowserProfile,
     ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
@@ -48,6 +36,19 @@ use super::service_store::{LockedServiceStateRepository, ServiceStateRepository}
 use super::service_trace::service_commands::service_now_timestamp;
 use crate::runtime_owner_transfer::{
     CleanupObligationState, ProfileOwnerState, RuntimeLaneLifecycleState,
+};
+#[cfg(target_os = "linux")]
+use agent_browser_lease_authority::{
+    acquire_protected_ephemeral_profile_claim, authorize_protected_browser_launch,
+    enroll_protected_profile, inspect_protected_profile_authority,
+    prepare_protected_browser_adoption, reconcile_protected_browser_owner,
+    ProtectedAuthorityObservationState, ProtectedBrowserAdoptionRequest,
+    ProtectedBrowserLaunchRequest, ProtectedBrowserOwnerReconciliationRequest,
+    ProtectedEphemeralProfileClaimRequest, ProtectedProfileEnrollmentRequest,
+};
+use agent_browser_lease_authority::{
+    AcquireLeaseClaimRequest, LeaseClaimAcquisitionOutcome, LeaseClaimMode,
+    LeaseEffectAuthorization, LeaseResourceKey,
 };
 
 pub(crate) const PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1: &str =
@@ -456,7 +457,7 @@ pub(crate) fn profile_acquisition_daemon_route(command: &Value) -> Result<String
 fn enroll_profile_with_protected_authority(
     profile: &BrowserProfile,
     raw_capability: &str,
-) -> Result<super::service_lease_authority::ProtectedProfileEnrollment, String> {
+) -> Result<agent_browser_lease_authority::ProtectedProfileEnrollment, String> {
     let profile_path = profile
         .user_data_dir
         .as_deref()
@@ -1399,8 +1400,8 @@ async fn acquire_profile_command(
 
 #[cfg(target_os = "linux")]
 fn protected_profile_acquisition_response(
-    claim: &super::service_lease_authority::ProtectedEphemeralProfileClaim,
-    owner: &super::service_lease_authority::ProtectedBrowserOwner,
+    claim: &agent_browser_lease_authority::ProtectedEphemeralProfileClaim,
+    owner: &agent_browser_lease_authority::ProtectedBrowserOwner,
     replayed: bool,
 ) -> Value {
     json!({
@@ -1708,7 +1709,7 @@ fn issue_profile_effect_authorization<R: ServiceStateRepository>(
         std::cmp::min(issued + chrono::Duration::minutes(2), claim_expires_at)
             .with_timezone(&chrono::Utc)
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let intent = super::service_lease_authority::LeaseEffectIntent {
+    let intent = agent_browser_lease_authority::LeaseEffectIntent {
         action_class: "browser_launch".to_string(),
         audience: daemon_session_route.to_string(),
         operation_idempotency_key: operation_idempotency_key.to_string(),
@@ -3466,10 +3467,11 @@ mod tests {
 
     fn state() -> ServiceState {
         let profile_path = "/tmp/agent-browser-p137/recovery-contract";
-        let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
-            std::path::Path::new(profile_path),
-        )
-        .unwrap();
+        let profile_identity_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(std::path::Path::new(
+                profile_path,
+            ))
+            .unwrap();
         let browser_id = "session:durable-browser".to_string();
         ServiceState {
             profiles: BTreeMap::from([(
@@ -3642,7 +3644,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn protected_acquisition_response_exposes_receipts_without_effect_authority() {
-        use crate::native::service_lease_authority::{
+        use agent_browser_lease_authority::{
             ProtectedBrowserOwner, ProtectedEphemeralProfileClaim,
         };
 
@@ -4793,9 +4795,7 @@ mod tests {
             .unwrap()
             .lease_authority()
             .current_claim(
-                &crate::native::service_lease_authority::LeaseResourceKey::profile(
-                    "last30days-facebook"
-                ),
+                &agent_browser_lease_authority::LeaseResourceKey::profile("last30days-facebook"),
                 "2026-08-28T12:00:00Z"
             )
             .is_none());
@@ -4844,9 +4844,7 @@ mod tests {
             .unwrap()
             .lease_authority()
             .current_claim(
-                &crate::native::service_lease_authority::LeaseResourceKey::profile(
-                    "last30days-facebook"
-                ),
+                &agent_browser_lease_authority::LeaseResourceKey::profile("last30days-facebook"),
                 "2026-08-28T12:00:00Z"
             )
             .is_none());

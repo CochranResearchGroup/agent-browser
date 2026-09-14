@@ -741,7 +741,9 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
     match clean.get(1).map(|s| s.as_str()) {
         Some("create") => {
             let runtime_name = selected_runtime_name(clean, flags, 2);
-            if let Err(e) = runtime_profile::validate_runtime_profile_name(&runtime_name) {
+            if let Err(e) =
+                agent_browser_lease_authority::validate_runtime_profile_name(&runtime_name)
+            {
                 if flags.json {
                     print_json_error(e);
                 } else {
@@ -1839,13 +1841,13 @@ fn main() {
     // passwordless helper and runs before user-scoped environment loading.
     #[cfg(target_os = "linux")]
     if let Ok(value) =
-        env::var(native::service_lease_authority::LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV)
+        env::var(agent_browser_lease_authority::LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV)
     {
         if value != "1" {
             eprintln!("lease_authority_bootstrap_process_marker_invalid");
             exit(1);
         }
-        if let Err(error) = native::service_lease_authority::run_linux_lease_authority_bootstrap() {
+        if let Err(error) = agent_browser_lease_authority::run_linux_lease_authority_bootstrap() {
             eprintln!("{error}");
             exit(1);
         }
@@ -1856,14 +1858,13 @@ fn main() {
     // system unit. Dispatch happens before user-scoped environment loading so
     // a repository or home .env file cannot configure the authority process.
     #[cfg(target_os = "linux")]
-    if let Ok(value) =
-        env::var(native::service_lease_authority::LEASE_AUTHORITY_SERVICE_PROCESS_ENV)
+    if let Ok(value) = env::var(agent_browser_lease_authority::LEASE_AUTHORITY_SERVICE_PROCESS_ENV)
     {
         if value != "1" {
             eprintln!("lease_authority_service_process_marker_invalid");
             exit(1);
         }
-        if let Err(error) = native::service_lease_authority::run_linux_lease_authority_service() {
+        if let Err(error) = agent_browser_lease_authority::run_linux_lease_authority_service() {
             eprintln!("{error}");
             exit(1);
         }

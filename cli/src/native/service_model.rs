@@ -2446,9 +2446,9 @@ pub struct ServiceState {
     /// Only `active_claims` grants authority; terminal events are never blockers.
     #[serde(
         default,
-        skip_serializing_if = "super::service_lease_authority::LeaseAuthorityState::is_empty"
+        skip_serializing_if = "agent_browser_lease_authority::LeaseAuthorityState::is_empty"
     )]
-    pub(crate) lease_authority: super::service_lease_authority::LeaseAuthorityState,
+    pub(crate) lease_authority: agent_browser_lease_authority::LeaseAuthorityState,
     /// Idempotent receipts for applied profile-lease reconciliation plans.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_lease_reconcile_receipts:
@@ -2574,26 +2574,26 @@ impl ServiceState {
     /// Returns the immutable canonical lease authority projection. Mutations
     /// stay behind the authority kernel so sibling subsystems cannot edit its
     /// active index, fencing counters, or history independently.
-    pub(crate) fn lease_authority(&self) -> &super::service_lease_authority::LeaseAuthorityState {
+    pub(crate) fn lease_authority(&self) -> &agent_browser_lease_authority::LeaseAuthorityState {
         &self.lease_authority
     }
 
     pub(crate) fn acquire_lease_claim(
         &mut self,
-        request: super::service_lease_authority::AcquireLeaseClaimRequest,
+        request: agent_browser_lease_authority::AcquireLeaseClaimRequest,
     ) -> Result<
-        super::service_lease_authority::ActiveLeaseClaim,
-        super::service_lease_authority::LeaseAuthorityError,
+        agent_browser_lease_authority::ActiveLeaseClaim,
+        agent_browser_lease_authority::LeaseAuthorityError,
     > {
         self.lease_authority.acquire(request)
     }
 
     pub(crate) fn acquire_lease_claim_with_receipt(
         &mut self,
-        request: super::service_lease_authority::AcquireLeaseClaimRequest,
+        request: agent_browser_lease_authority::AcquireLeaseClaimRequest,
     ) -> Result<
-        super::service_lease_authority::LeaseClaimAcquisitionOutcome,
-        super::service_lease_authority::LeaseAuthorityError,
+        agent_browser_lease_authority::LeaseClaimAcquisitionOutcome,
+        agent_browser_lease_authority::LeaseAuthorityError,
     > {
         self.lease_authority.acquire_with_receipt(request)
     }

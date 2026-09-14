@@ -91,24 +91,6 @@ lanes:
     overlaps: [P180, P181]
     reconciled_overlaps: [P180, P181]
     updated_at: 2026-09-13
-  - id: P181
-    product_lane: PL-PLATFORM
-    objective: Extract the Lease-authority kernel into one deep independently testable Rust crate
-    plan: docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md
-    plan_ref: refs/remotes/origin/platform/lease-authority-crate
-    branch: platform/lease-authority-crate
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 06e761eeebf156c4071fcec000b7a87cef293e3e
-    remote_ref: refs/remotes/origin/platform/lease-authority-crate
-    integration_receipt: null
-    integration: merge
-    work_items: [CochranResearchGroup/agent-browser#99]
-    dependencies: []
-    overlaps: [P182, P183]
-    reconciled_overlaps: [P182, P183]
-    updated_at: 2026-09-13
   - id: P180
     product_lane: PL-BUGFIX
     objective: Repair preserving upgrades by quiescing proven browserless lanes before admission drain

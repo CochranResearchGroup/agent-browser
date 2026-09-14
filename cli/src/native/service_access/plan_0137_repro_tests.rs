@@ -49,7 +49,7 @@ fn fixture() -> TerminalOwnerFixture {
 }
 
 fn state_for_fixture(fixture: &TerminalOwnerFixture) -> ServiceState {
-    let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+    let profile_identity_digest = agent_browser_lease_authority::canonical_profile_identity_digest(
         std::path::Path::new(&fixture.profile_path),
     )
     .expect("fixture profile path must canonicalize");

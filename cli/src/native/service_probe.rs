@@ -150,8 +150,9 @@ pub(crate) async fn reattach_verified_retained_target(
         profile.user_data_dir.as_deref(),
         (!profile_id.starts_with("custom:")).then_some(profile_id),
     )?;
-    if crate::runtime_profile::canonical_profile_identity_digest(&resolved_profile.user_data_dir)?
-        != binding.claim.profile_identity_digest
+    if agent_browser_lease_authority::canonical_profile_identity_digest(
+        &resolved_profile.user_data_dir,
+    )? != binding.claim.profile_identity_digest
     {
         return Err(
             "service_tab_recovery_identity_mismatch: configured physical profile differs".into(),

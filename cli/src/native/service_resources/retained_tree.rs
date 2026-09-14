@@ -98,7 +98,8 @@ fn verified_root(
     let recorded = state.browser_process_identities.get(browser_id)?;
     let profile_path = recorded.user_data_dir.as_deref()?;
     let profile_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path)).ok()?;
+        agent_browser_lease_authority::canonical_profile_identity_digest(Path::new(profile_path))
+            .ok()?;
     let owner = state.runtime_owner_registry.owner(&profile_digest)?;
     let lifecycle = state
         .runtime_owner_registry
@@ -153,8 +154,10 @@ fn verified_root(
         return None;
     }
     let observed_profile = command_arg_value(&root.command, "--user-data-dir")?;
-    if crate::runtime_profile::canonical_profile_identity_digest(Path::new(&observed_profile))
-        .ok()?
+    if agent_browser_lease_authority::canonical_profile_identity_digest(Path::new(
+        &observed_profile,
+    ))
+    .ok()?
         != profile_digest
     {
         return None;

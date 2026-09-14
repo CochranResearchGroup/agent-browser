@@ -206,7 +206,7 @@ pub(crate) struct DaemonState {
     /// State, command JSON, logs, or responses.
     #[cfg(target_os = "linux")]
     pub(crate) protected_browser_owner:
-        Option<crate::native::service_lease_authority::ProtectedBrowserOwnerLease>,
+        Option<agent_browser_lease_authority::ProtectedBrowserOwnerLease>,
     /// Storage mutations made through agent-browser storage commands, keyed by origin.
     /// This preserves cross-origin storage for state saves even after navigation.
     pub(crate) tracked_origin_storage: HashMap<String, state::OriginStorage>,

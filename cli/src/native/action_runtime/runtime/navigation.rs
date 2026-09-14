@@ -16,10 +16,6 @@ use crate::native::browser_navigation::{
 use crate::native::network::resolve_fetch_paused;
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
 use crate::native::runtime_lifecycle::{RuntimeLifecycleAuthority, RuntimeLifecycleIntent};
-#[cfg(target_os = "linux")]
-use crate::native::service_lease_authority::{
-    reconcile_protected_browser_owner, ProtectedBrowserOwnerReconciliationRequest,
-};
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,
     service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
@@ -42,6 +38,10 @@ use crate::native::webdriver::backend::BrowserBackend;
 use crate::runtime_profile::{
     clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
+};
+#[cfg(target_os = "linux")]
+use agent_browser_lease_authority::{
+    reconcile_protected_browser_owner, ProtectedBrowserOwnerReconciliationRequest,
 };
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -1053,7 +1053,7 @@ fn runtime_handoff_verified_profile_from_runtime_state(
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
-        if crate::runtime_profile::validate_runtime_profile_name(&name).is_err() {
+        if agent_browser_lease_authority::validate_runtime_profile_name(&name).is_err() {
             continue;
         }
         if let Ok(Some(state)) = read_runtime_state(&name) {
@@ -1074,8 +1074,10 @@ pub(crate) fn runtime_handoff_verified_profile_from_states(
             state.browser_pid == recorded.process_identity.pid
                 && state.process_identity.as_ref() == Some(&recorded.process_identity)
                 && state.ws_url.as_deref() == Some(cdp_url)
-                && crate::runtime_profile::validate_runtime_profile_name(&state.runtime_profile)
-                    .is_ok()
+                && agent_browser_lease_authority::validate_runtime_profile_name(
+                    &state.runtime_profile,
+                )
+                .is_ok()
         })
         .map(|state| state.runtime_profile)
         .collect::<BTreeSet<_>>();
@@ -2034,7 +2036,7 @@ fn rebind_runtime_handoff_service_projection_in_state(
 
 fn runtime_handoff_profile_digest(runtime_profile: &str) -> Result<String, String> {
     let user_data_dir = runtime_profile_user_data_dir(runtime_profile)?;
-    crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)
+    agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)
 }
 
 fn runtime_handoff_target_set_digest(manager: &BrowserManager) -> Result<String, String> {
@@ -2158,7 +2160,7 @@ async fn handle_close_with_context(
             .ok_or("retained_browser_close_identity_unproven: physical profile is missing")?;
         if crate::native::runtime_lifecycle::digest_json(&identity)?
             != binding.claim.process_instance_digest
-            || crate::runtime_profile::canonical_profile_identity_digest(&profile)?
+            || agent_browser_lease_authority::canonical_profile_identity_digest(&profile)?
                 != binding.claim.profile_identity_digest
         {
             return Err("retained_browser_close_identity_unproven: process or physical profile differs from current owner".into());
