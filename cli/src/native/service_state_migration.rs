@@ -1090,8 +1090,10 @@ fn materialize_inert_legacy_profile_placeholders(state: &mut ServiceState) {
 ///
 /// The invalid `browser_missing` handle is the migration proof that the tab
 /// cannot authorize work. Any principal, work lease, live or indeterminate
-/// process identity, owner, or retained session reference keeps the missing
-/// browser as a hard blocker.
+/// process identity or retained session reference keeps the missing browser as
+/// a hard blocker. A single owner may be preserved only when its exact profile
+/// digest is still backed by an active registered principal capability and no
+/// transfer is pending.
 fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
     let missing_browsers = state
         .tabs
@@ -1107,11 +1109,20 @@ fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
                 .any(|session| session.browser_ids.iter().any(|id| id == *browser_id))
         })
         .filter(|browser_id| {
-            !state
+            let owners = state
                 .runtime_owner_registry
                 .owners
                 .values()
-                .any(|owner| owner.browser_id == **browser_id)
+                .filter(|owner| owner.browser_id == **browser_id)
+                .collect::<Vec<_>>();
+            owners.is_empty()
+                || (owners.len() == 1
+                    && owners[0].pending_transfer.is_none()
+                    && state
+                        .runtime_owner_registry
+                        .principal_bindings
+                        .contains_key(&owners[0].profile_identity_digest)
+                    && owner_principal_binding_is_migration_safe(state, owners[0]))
         })
         .filter(|browser_id| {
             let tabs = state
@@ -1745,6 +1756,157 @@ mod tests {
         assert_eq!(
             migrated["sessions"]["im-receipts"]["tabIds"],
             json!(["target:tab-a"])
+        );
+        assert_eq!(migrated["tabs"]["target:tab-a"]["lifecycle"], "ready");
+    }
+
+    #[test]
+    fn registered_owner_bound_stale_invalid_tab_preserves_authority_through_placeholder() {
+        let raw = json!({
+            "profiles": {
+                "last30days-facebook": {
+                    "id": "last30days-facebook",
+                    "name": "Last30Days Facebook",
+                    "persistent": true
+                }
+            },
+            "tabs": {
+                "target:tab-a": {
+                    "id": "target:tab-a",
+                    "browserId": "session:last30days",
+                    "targetId": "tab-a",
+                    "sessionId": "last30days",
+                    "ownerSessionId": "last30days",
+                    "lifecycle": "ready",
+                    "serviceTabHandle": {
+                        "browserId": "session:last30days",
+                        "sessionName": "last30days",
+                        "tabId": "target:tab-a",
+                        "targetId": "tab-a",
+                        "valid": false,
+                        "staleReason": "browser_missing"
+                    }
+                }
+            }
+        })
+        .to_string();
+        let mut state = read_service_state(&raw).unwrap();
+        let profile_identity_digest = "1".repeat(64);
+        let owner_generation = 90;
+        state.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-last30days".to_string(),
+                    profile_identity_digest: profile_identity_digest.clone(),
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                    owner_generation,
+                    browser_id: "session:last30days".to_string(),
+                    daemon_session_route: "last30days".to_string(),
+                    process_instance_digest: "2".repeat(64),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "3".repeat(64),
+                    target_set_digest: "4".repeat(64),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
+        let registered = crate::native::service_principal::register_profile_capability(
+            &mut state.service_principals,
+            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+                principal_id: "last30days".to_string(),
+                display_name: Some("Last30Days".to_string()),
+                profile_id: "last30days-facebook".to_string(),
+                registered_at: Some("2026-09-02T12:54:45Z".to_string()),
+                registered_by: Some("operator".to_string()),
+            },
+            "synthetic-last30days-capability-more-than-thirty-two-characters",
+        )
+        .unwrap();
+        state
+            .runtime_owner_registry
+            .bind_principal_authority(
+                crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                    principal_id: registered.principal.principal_id,
+                    profile_id: registered.capability.profile_id,
+                    profile_identity_digest: profile_identity_digest.clone(),
+                    capability_id: registered.capability.capability_id,
+                    provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+                    owner_generation,
+                },
+            )
+            .unwrap();
+
+        let expected_error = "service_state_tab_browser_missing:target:tab-a:session:last30days";
+
+        let mut unbound = state.clone();
+        unbound
+            .runtime_owner_registry
+            .principal_bindings
+            .remove(&profile_identity_digest);
+        assert_eq!(
+            stage_service_state_migration(&serde_json::to_string(&unbound).unwrap()).unwrap_err(),
+            expected_error
+        );
+
+        let capability_id = state.runtime_owner_registry.principal_bindings
+            [&profile_identity_digest]
+            .capability_id
+            .clone();
+        let mut revoked = state.clone();
+        revoked
+            .service_principals
+            .profile_capabilities
+            .get_mut(&capability_id)
+            .unwrap()
+            .state = crate::native::service_principal::ServiceProfileCapabilityState::Revoked;
+        assert_eq!(
+            stage_service_state_migration(&serde_json::to_string(&revoked).unwrap()).unwrap_err(),
+            expected_error
+        );
+
+        let mut generation_ahead = state.clone();
+        generation_ahead
+            .runtime_owner_registry
+            .principal_bindings
+            .get_mut(&profile_identity_digest)
+            .unwrap()
+            .owner_generation += 1;
+        assert_eq!(
+            stage_service_state_migration(&serde_json::to_string(&generation_ahead).unwrap())
+                .unwrap_err(),
+            expected_error
+        );
+
+        let mut valid_tab = state.clone();
+        valid_tab
+            .tabs
+            .get_mut("target:tab-a")
+            .unwrap()
+            .service_tab_handle
+            .as_mut()
+            .unwrap()
+            .valid = true;
+        assert_eq!(
+            stage_service_state_migration(&serde_json::to_string(&valid_tab).unwrap()).unwrap_err(),
+            expected_error
+        );
+
+        let staged =
+            stage_service_state_migration(&serde_json::to_string(&state).unwrap()).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["browsers"]["session:last30days"]["health"],
+            "not_started"
+        );
+        assert_eq!(migrated["sessions"]["last30days"]["lease"], "released");
+        assert_eq!(
+            migrated["runtimeOwnerRegistry"]["owners"][&profile_identity_digest]["ownerGeneration"],
+            owner_generation
+        );
+        assert_eq!(
+            migrated["runtimeOwnerRegistry"]["principalBindings"][&profile_identity_digest]
+                ["ownerGeneration"],
+            owner_generation
         );
         assert_eq!(migrated["tabs"]["target:tab-a"]["lifecycle"], "ready");
     }
