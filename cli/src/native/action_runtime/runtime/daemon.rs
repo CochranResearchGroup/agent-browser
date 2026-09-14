@@ -1224,9 +1224,12 @@ fn exact_terminal_owner_allows_profile_relaunch(
         .as_deref()
         .map(agent_browser_lease_authority::canonical_profile_identity_digest)
         .transpose()?;
-    let migrated_canonical_route_profile = requested_runtime_digest
-        .as_deref()
-        .is_some_and(|digest| digest != binding.claim.profile_identity_digest);
+    let migrated_canonical_route_profile =
+        requested_runtime_digest.as_deref().is_some_and(|digest| {
+            digest != configured_profile_digest
+                && (binding.claim.profile_identity_digest == configured_profile_digest
+                    || binding.claim.profile_identity_digest == digest)
+        });
     if !migrated_canonical_route_profile
         && configured_profile_digest != binding.claim.profile_identity_digest
     {

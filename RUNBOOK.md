@@ -7,21 +7,20 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 327 | 2026-09-14
 
-PR #118 merged the preflight provenance repair as `851fcebf`; exact candidate
-`9becdc95` passes the pinned source-free fixture. A forced, transaction-bound
-route-A attempt advanced through browser launch, then failed during owner
-registration as `runtime_lifecycle_profile_identity_mismatch`. Cleanup proved
-the launched process exited and the stable profile lock released; the exact
-task-owned candidate runtime host was then terminated. Root cause is the
-post-launch registry finding the same logical browser's terminal lifecycle
-under the historical digest after finding no owner under the stable digest.
-The focused regression fails red on the merge and passes at `bbbf5abc` with an
-atomic canonical-route-only terminal owner and lifecycle migration. All 19
-runtime-lifecycle tests, format, and clippy pass; ordinary routes, incomplete
-cleanup evidence, and registered-principal bindings remain denied. Next:
-integrate once, build the exact merge once, rerun the pinned fixture, then make
-one fresh transaction-bound route attempt. Do not retry unchanged candidates
-or tenant workflows.
+PR #119 merged the terminal lifecycle migration as `0a2c8800`; exact candidate
+`2b0fd4f2` passes the pinned source-free fixture. A transaction-bound route-A
+attempt then created the stable-path browser and advanced owner/lifecycle to
+generation 4, but navigation was denied because the retained profile record
+still named the legacy path. Exact cleanup closed that browser, removed its
+session projection, returned lifecycle cleanup to terminal and satisfied, and
+terminated the task-owned candidate host. Two focused regressions fail red on
+the merge and pass at `fefc0dca`: preflight accepts the resulting stable-owner
+plus stale-profile recovery shape, and canonical terminal replacement updates
+`BrowserProfile.userDataDir` in the same repository transaction as owner and
+lifecycle. All 19 lifecycle tests, the route-host regression, format, and
+clippy pass. Next: integrate once, build the exact merge once, rerun the pinned
+fixture, then make one fresh transaction-bound route attempt. Do not retry
+unchanged candidates or tenant workflows.
 
 ## Turn 325 | 2026-09-14
 
