@@ -2878,8 +2878,114 @@ mod tests {
             .expect("no-op mutation should replay from the newer revision");
 
         assert_eq!(mutator_count.load(std::sync::atomic::Ordering::SeqCst), 2);
-        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 4);
+        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 3);
         assert_eq!(state.lock().unwrap().state_revision, 8);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn prepared_mutation_converges_after_two_adjacent_revision_changes() {
+        struct TwiceStalePreparedStore {
+            path: PathBuf,
+            state: Arc<Mutex<ServiceState>>,
+            load_count: Arc<std::sync::atomic::AtomicUsize>,
+            commit_count: Arc<std::sync::atomic::AtomicUsize>,
+        }
+
+        impl ServiceStateStore for TwiceStalePreparedStore {
+            fn load(&self) -> Result<ServiceState, String> {
+                self.load_without_recovery()
+            }
+
+            fn load_without_recovery(&self) -> Result<ServiceState, String> {
+                let load_index = self
+                    .load_count
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut state = self.state.lock().unwrap();
+                if matches!(load_index, 1 | 3) {
+                    state.state_revision += 1;
+                }
+                Ok(state.clone())
+            }
+
+            fn save(&self, _state: &ServiceState) -> Result<(), String> {
+                Err("unexpected_unprepared_save".to_string())
+            }
+
+            fn state_path(&self) -> Option<&Path> {
+                Some(&self.path)
+            }
+
+            fn supports_prepared_save(&self) -> bool {
+                true
+            }
+
+            fn prepare_save(
+                &self,
+                state: &ServiceState,
+            ) -> Result<Option<ServiceStateTransaction>, String> {
+                Ok(Some(ServiceStateTransaction {
+                    state_payload: serde_json::to_string(state).unwrap(),
+                    handoff_payload: String::new(),
+                    owner_registry_payload: None,
+                    lifecycle_registry_payload: None,
+                }))
+            }
+
+            fn save_prepared(&self, transaction: &ServiceStateTransaction) -> Result<(), String> {
+                self.commit_count
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                *self.state.lock().unwrap() =
+                    serde_json::from_str(&transaction.state_payload).unwrap();
+                Ok(())
+            }
+        }
+
+        let path = unique_state_path("prepared-twice-stale-convergence");
+        let state = Arc::new(Mutex::new(ServiceState::default()));
+        let load_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let commit_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let repository = LockedServiceStateRepository::new(TwiceStalePreparedStore {
+            path: path.clone(),
+            state: Arc::clone(&state),
+            load_count: Arc::clone(&load_count),
+            commit_count: Arc::clone(&commit_count),
+        });
+        let mutator_count = std::sync::atomic::AtomicUsize::new(0);
+
+        let result = repository
+            .mutate(|candidate| {
+                mutator_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                candidate.jobs.insert(
+                    "authentication-observation".to_string(),
+                    crate::native::service_model::ServiceJob {
+                        id: "authentication-observation".to_string(),
+                        action: "service_authentication_run_resume".to_string(),
+                        ..crate::native::service_model::ServiceJob::default()
+                    },
+                );
+                Ok("recorded")
+            })
+            .expect("a pure mutation should converge after repeated adjacent writers");
+
+        let state = state.lock().unwrap();
+        assert_eq!(result, "recorded");
+        assert_eq!(mutator_count.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 3);
+        assert_eq!(commit_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(state.state_revision, 2);
+        assert_eq!(
+            state
+                .jobs
+                .keys()
+                .filter(|id| id.as_str() == "authentication-observation")
+                .count(),
+            1
+        );
+        assert!(service_state_lock_diagnostics()
+            .recent
+            .iter()
+            .any(|activity| activity.operation == "prepared_contended_commit"));
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
