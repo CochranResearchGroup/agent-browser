@@ -119,17 +119,26 @@ future bounded contract repair.
 [Plan 0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
 is the closed execution record.
 
-## P169 | Cloudflare Turnstile Desktop Challenge
+## P169 | Challenge Countermeasure Control Plane
 
 State: BLOCKED
 
 Current state: [Plan 0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md)
 and [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66)
 own the existing bounded Turnstile implementation. The branch is reconciled to
-current `main` under Plan 0177 and remains paused because live interaction
-acceptance is unproven. No retry or new feature scope is authorized. The
+the Plan 0177 checkpoint but has since drifted behind current `main`; the leaf
+remains paused because live interaction acceptance is unproven. No retry or new
+feature scope is authorized. The
 [desktop guard architecture note](docs/dev/notes/0179-2026-09-13-captcha-and-desktop-automation-guard-architecture.md)
-preserves the broader staged design without creating a second P173 identity.
+preserves the broader staged design under this single P169 lane.
+
+[Plan 0187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
+is the planning-only parent blueprint for the broader product trunk. It defines
+the provider-neutral challenge lifecycle and policy control plane, the shared
+desktop transaction capability, provider and consumer branches, and workfronts
+W0 through W8. Activation is gated on a parent work item, plan-ID and branch
+custody normalization against current main, and a bounded implementation plan.
+It authorizes no source work, runtime effect, or hCaptcha retry.
 
 The operator resumed provider-free anti-bot feature work on 2026-09-13.
 [Plan 0180](docs/dev/plans/0180-2026-09-13-captcha-guard-contract-and-threat-model.md)

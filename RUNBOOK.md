@@ -4,6 +4,22 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 319 | 2026-09-14
+
+[Plan 0187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
+is PLANNED under PL-CHALLENGE and P169. It recovers the provider-neutral
+challenge control-plane trunk from the current Turnstile and hCaptcha leaves,
+defines the shared desktop transaction module and product branches, and divides
+delivery into workfronts W0 through W8. Its first consolidated batch is W0
+through W4.
+
+The immediate gate is W0 custody normalization: reconcile current main,
+renumber branch-local plan collisions, create a parent work item, assign one
+active implementation plan, and record its branch and baseline. Plan 0187 is
+planning-only authority. It does not authorize source implementation, browser
+or provider mutation, desktop input, a live challenge attempt, hCaptcha retry,
+production mutation, or release.
+
 ## Turn 318 | 2026-09-14
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)

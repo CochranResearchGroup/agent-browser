@@ -4,11 +4,27 @@ Date: 2026-09-12
 
 Product lane: PL-CHALLENGE
 
-Disposition: design evidence retained under Plan 0169 and issue #66
+Disposition: design baseline adopted and refined by Plan 0187
 
-Governing plan: Plan 0169
+Governing plan: Plan 0187
+
+Related leaf plans: Plan 0169, branch-local Plan 0180, and branch-local Plan 0181
 
 Source branch: `feature/turnstile-desktop-challenge`
+
+## 2026-09-14 Product-Trunk Refinement
+
+[Plan 0187](../plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
+places this extraction design inside a broader provider-neutral challenge
+control plane. The control plane owns posture and avoidance, lifecycle,
+attempt budgets, strategy selection, completion verification, cooldown,
+intervention, receipt, replay, and downstream admission. The CAPTCHA guard
+defined here becomes the first resolution-profile contract rather than the
+whole product trunk.
+
+The shared desktop transaction module remains a sibling capability consumed by
+the control plane. Agent Browser remains the authority adapter for browser,
+profile, route, display, process, controller, and operation-ledger state.
 
 ## Objective
 
