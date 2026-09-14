@@ -1,6 +1,24 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P183
+    product_lane: PL-BUGFIX
+    objective: Preserve registered owner authority while repairing browser-missing tab references
+    plan: docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md
+    plan_ref: refs/heads/fix/plan-0183-inert-tab-owner-reconciliation
+    branch: fix/plan-0183-inert-tab-owner-reconciliation
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: caff5e085eda4ba31b32af183a9d5909e19d5465
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    work_items: [CochranResearchGroup/agent-browser#104]
+    dependencies: [P180, P182]
+    overlaps: [P181]
+    reconciled_overlaps: [P181]
+    updated_at: 2026-09-13
   - id: P182
     product_lane: PL-BUGFIX
     objective: Make durable Authentication Run resume converge under an active Service State writer
@@ -34,8 +52,8 @@ lanes:
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#99]
     dependencies: []
-    overlaps: [P182]
-    reconciled_overlaps: [P182]
+    overlaps: [P182, P183]
+    reconciled_overlaps: [P182, P183]
     updated_at: 2026-09-13
   - id: P180
     product_lane: PL-BUGFIX
