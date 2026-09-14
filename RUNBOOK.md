@@ -4,6 +4,28 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 318 | 2026-09-14
+
+[Plan 0181](docs/dev/plans/0181-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)
+is BLOCKED under P169 and [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66).
+The provider-free hCaptcha locator and interaction work, plus the exact
+`desktop_interaction_authority_required` no-effect recourse repair, are
+checkpointed at `0def316d207efb8c5c5b6c82c44ec50eac4b6ed9` with selected tests,
+formatting, strict Clippy, docs build, and documentation checks passing.
+
+Installed development generation `0.28.0-9587f109293e` opened the fixture in
+job `r538730`; route, display, browser, and operator presentation were ready.
+Observation `r196319` matched exactly one checkbox, and the renewed controller
+lease used the same `codex-p181-hcaptcha` identity as the action. The sole
+interaction job `r163653` acknowledged nine pointer-motion events and then
+stopped at `desktop_interaction_stale_observation` before `LeftDown`. Terminal
+observation `r7758` still matched the visible checkbox at the same geometry.
+
+This is an Agent Browser interaction-timing defect rather than a fixture
+defect. No click, retry, reset, challenge-solving action, provider apply,
+production mutation, or release occurred. Resumption requires a bounded
+freshness-semantics repair and a new explicit live interaction budget.
+
 ## Turn 317 | 2026-09-13
 
 [Plan 0180](docs/dev/plans/0180-2026-09-13-captcha-guard-contract-and-threat-model.md)

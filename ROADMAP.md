@@ -140,6 +140,16 @@ frozen. This did not authorize installation, browser or profile mutation,
 desktop input, a live challenge attempt, or retry. Plan 0169 remains blocked on
 its separate live-interaction acceptance gate.
 
+[Plan 0181](docs/dev/plans/0181-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)
+adds the separate hCaptcha fixture locator and one-click recipe. Its
+provider-free implementation and corrected no-effect classification for
+pre-input controller-authority rejection pass, but the installed acceptance
+attempt `r163653` stopped before `LeftDown` because the original observation
+expired during the guarded pointer trajectory. Plan 0181 and P169 are BLOCKED
+on a separately planned interaction-freshness repair and a new explicit live
+interaction budget. No retry, reset, challenge solving, provider apply,
+production mutation, or release is authorized.
+
 ## P171 | Service Job Timestamp Integration And Install
 
 State: CLOSED

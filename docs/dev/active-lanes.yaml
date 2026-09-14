@@ -8,9 +8,9 @@ lanes:
     plan_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     branch: feature/turnstile-desktop-challenge
     target: main
-    plan_state: ACTIVE
+    plan_state: BLOCKED
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 1d71ed39aa19fa6273e2b80f184d9c2d68a474ea
+    checkpoint: 0def316d207efb8c5c5b6c82c44ec50eac4b6ed9
     remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     integration_receipt: null
     integration: merge
@@ -18,4 +18,4 @@ lanes:
     dependencies: []
     overlaps: [P157, P165]
     reconciled_overlaps: [P157, P165]
-    updated_at: 2026-09-13
+    updated_at: 2026-09-14

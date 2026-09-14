@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: ACTIVE
+State: BLOCKED
 
 Consolidation: required
 
@@ -274,27 +274,94 @@ The critical path is serialized:
 4. Build and install at most one additional optimized development candidate,
    verify its exact generation and that production remains unchanged, then run
    development runtime and provider readiness checks.
-5. If the preserved fixture and browser remain ready, acquire one fresh
-   controller lease and submit one desktop interaction with both `viewerId`
-   and `agentName` set to `codex-p181-hcaptcha`.
-6. Capture the terminal state and stop. A passed checkbox, an image, audio, or
-   accessibility challenge, an inconclusive result, readiness loss, or any
-   authority failure is terminal for this successor.
+5. If the preserved browser remains ready, reuse it. If candidate installation
+   retires that process while the local fixture remains ready, launch at most
+   one fresh managed-ephemeral replacement browser for the same fixture. This
+   is replacement acceptance infrastructure, not another interaction attempt.
+6. Acquire one fresh controller lease and submit one desktop interaction with
+   both `viewerId` and `agentName` set to `codex-p181-hcaptcha`.
+7. Capture the terminal state and stop. A passed checkbox, an image, audio, or
+   accessibility challenge, an inconclusive result, replacement launch failure,
+   or any authority failure is terminal for this successor.
 
 Successor bounds are one classifier implementation attempt, one completed
-candidate build and development installation, one controller takeover, and one
-desktop interaction call. No additional provider apply, widget reset, second
-click, challenge-solving input, production mutation, or release is authorized.
+candidate build and development installation, at most one replacement fixture
+browser launch if installation retires the old process, one controller
+takeover, and one desktop interaction call. No additional provider apply,
+widget reset, second click, challenge-solving input, production mutation, or
+release is authorized.
 The successor active-work ceiling is 90 minutes. Reassess after two checkpoints
 or 30 minutes without outcome progress. The primary agent owns the critical
 path; no worker assignment is needed for this tightly coupled repair and live
 acceptance sequence.
+
+The first replacement launch, job `r101716`, failed with
+`service_tab_target_selector_conflict` and a fully rolled-back `no_effect`
+terminal result. The command supplied the saved `sessionName` but omitted the
+global daemon `session`, so its provenance recorded `runtimeLaneId=default`
+against `sessionId=p181-hcaptcha-resume`. Readback found no replacement browser
+or session and confirmed the selected route and slot were restored to ready and
+available. A corrected dry run with both selectors set to
+`p181-hcaptcha-resume` selected that exact native lane and one ready route.
+
+This harness failure counts against the cumulative milestone allowance. It does
+not consume the still-zero interaction budget. One corrected replacement launch
+is permitted because the discriminating dry run proves a different request
+routing path and the prior request had no effect. The replacement-launch bound
+is therefore two total submissions, including job `r101716`; any failure from
+the corrected submission is terminal.
 
 Acceptance requires both axes to remain separate: provider-free checks prove
 the corrected no-effect recourse, while the installed fixture attempt proves
 the original one-click hCaptcha behavior. The classifier repair does not itself
 authorize a retry, and a successful interaction does not replace the required
 source and Service-envelope validation.
+
+## 2026-09-14 Terminal Resumption Result
+
+The corrected replacement launch succeeded once as job `r538730` in installed
+development generation `0.28.0-9587f109293e`. It created browser
+`session:p181-hcaptcha-resume`, session `p181-hcaptcha-resume`, profile
+`managed-ephemeral-p181-hcaptcha-resume`, route `development-route-1`, display
+`development-display-1`, and target
+`C617E37D432CD1C987AB5830A92B802A`. Browser, route, display, and operator
+presentation all reported `ready`. The durable operator handoff is
+`https://agent-browser-dev.ecochran.dyndns.org/remote-view/r538730`.
+
+Fresh installed observation `r196319` matched exactly one visible hCaptcha
+checkbox at `(294,331)` with size `30x30`, center `(309,346)`, score `9498`,
+and prompt, hCaptcha brand, checkbox visibility, route, display, profile, and
+fresh-frame agreement. Viewer lease request
+`http-service-request-service_viewer_lease_request-f75613c0-a907-497b-8506-98955d983355`
+and the sole controller takeover
+`http-service-request-service_controller_lease_takeover-4342d441-e9d2-4f52-b439-c2cbea659cfb`
+established controller epoch `2`. The controller `viewerId` and interaction
+`agentName` both equal `codex-p181-hcaptcha`.
+
+The sole authorized interaction, job `r163653`, stopped with
+`desktop_interaction_stale_observation`. Its receipt records nine attempted and
+acknowledged pointer events, no after-frame or after-observation, and
+`effectState=effect_uncertain`. Source ordering proves those nine events are the
+planned pointer-motion sequence: the freshness guard rejected `LeftDown`
+before the first button event. Read-only terminal observation `r7758` then
+matched the still-visible checkbox at the same bounds and center. Its changed
+frame digest is consistent with the pointer having moved onto the target, but
+does not independently prove click state.
+
+This is an Agent Browser interaction-timing defect, not a CAPTCHA-lab fixture
+defect. The transaction reuses the original observation freshness timestamp
+for the button-down gate after executing a bounded external pointer trajectory;
+the real X11 adapter can consume the freshness budget before the click even
+though every motion event and the surface-authority checks succeed. The receipt
+correctly remains uncertain because pointer motion occurred, while the source
+ordering proves no button event occurred.
+
+The successor is terminal under its one-interaction and no-retry bounds. Plan
+0181 returns to `BLOCKED`. Resumption requires a separately planned repair that
+defines freshness across a real guarded pointer trajectory, proves no weakening
+of authority or surface-stability checks, and receives a new explicit live
+interaction budget. No reset, second click, challenge-solving action, provider
+apply, production mutation, or release is authorized by this result.
 
 ## Non-Goals
 
