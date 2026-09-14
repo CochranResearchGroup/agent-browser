@@ -216,9 +216,10 @@ pub trait ServiceStateRepository {
     fn load_snapshot(&self) -> Result<ServiceState, String>;
 
     /// Apply a pure in-memory state transformation. Durable repositories may
-    /// replay the closure once against a newer revision when a concurrent
-    /// writer commits while this candidate is being prepared. Callers must do
-    /// external I/O before or after this closure, never inside it.
+    /// replay the closure once against a newer revision while holding exclusive
+    /// persistence authority when a concurrent writer commits during initial
+    /// preparation. Callers must do external I/O before or after this closure,
+    /// never inside it.
     fn mutate<R>(
         &self,
         mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
@@ -609,8 +610,9 @@ where
 
     /// Evaluate a mutation predicate against the same baseline used to prepare
     /// the update. A false predicate performs no save and does not advance the
-    /// authority revision. One stale candidate is replayed from a fresh load;
-    /// transaction recovery retains its ordinary load semantics.
+    /// authority revision. One stale candidate is replayed from a fresh load
+    /// under exclusive persistence authority; transaction recovery retains its
+    /// ordinary load semantics.
     pub(crate) fn mutate_if<R>(
         &self,
         predicate: impl FnMut(&ServiceState) -> bool,
@@ -633,6 +635,13 @@ where
                 .state_path()
                 .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
             for attempt in 0..2 {
+                if attempt == 1 {
+                    return self.mutate_serialized_after_stale_candidate(
+                        timeout,
+                        &mut predicate,
+                        &mut mutator,
+                    );
+                }
                 let baseline = self.load_snapshot_with_lock_timeout(timeout)?;
                 if !predicate(&baseline) {
                     return Ok(None);
@@ -666,20 +675,14 @@ where
                         self.store.load_without_recovery()?
                     };
                     if current.state_revision != baseline_revision {
-                        if attempt == 0 {
-                            record_service_state_lock_terminal(
-                                "file",
-                                "prepared_noop_check",
-                                "exclusive",
-                                "stale_candidate_replay",
-                                Duration::ZERO,
-                            );
-                            continue;
-                        }
-                        return Err(format!(
-                            "service_state_stale_revision: expected={baseline_revision}; actual={}",
-                            current.state_revision
-                        ));
+                        record_service_state_lock_terminal(
+                            "file",
+                            "prepared_noop_check",
+                            "exclusive",
+                            "stale_candidate_replay",
+                            Duration::ZERO,
+                        );
+                        continue;
                     }
                     return Ok(Some(result));
                 }
@@ -706,20 +709,14 @@ where
                     self.store.load_without_recovery()?
                 };
                 if current.state_revision != baseline_revision {
-                    if attempt == 0 {
-                        record_service_state_lock_terminal(
-                            "file",
-                            "prepared_commit",
-                            "exclusive",
-                            "stale_candidate_replay",
-                            Duration::ZERO,
-                        );
-                        continue;
-                    }
-                    return Err(format!(
-                        "service_state_stale_revision: expected={baseline_revision}; actual={}",
-                        current.state_revision
-                    ));
+                    record_service_state_lock_terminal(
+                        "file",
+                        "prepared_commit",
+                        "exclusive",
+                        "stale_candidate_replay",
+                        Duration::ZERO,
+                    );
+                    continue;
                 }
                 drop(process_guard);
                 file_guard.set_phase("commit_prepared");
@@ -758,6 +755,63 @@ where
         }
         let result = mutator(&mut state)?;
         self.store.save(&state)?;
+        Ok(Some(result))
+    }
+
+    fn mutate_serialized_after_stale_candidate<R>(
+        &self,
+        timeout: Duration,
+        predicate: &mut impl FnMut(&ServiceState) -> bool,
+        mutator: &mut impl FnMut(&mut ServiceState) -> Result<R, String>,
+    ) -> Result<Option<R>, String> {
+        let path = self
+            .store
+            .state_path()
+            .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
+        let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
+        let mut file_guard = acquire_service_state_file_lock_until(
+            path,
+            ServiceStateFileLockMode::Exclusive,
+            deadline,
+            "prepared_contended_commit",
+        )?;
+        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        let process_guard =
+            acquire_service_state_process_lock(lock, deadline, "prepared_contended_commit")?;
+        file_guard.set_phase("load_current");
+        let baseline = if self.store.recovery_required() {
+            self.store.load()?
+        } else {
+            self.store.load_without_recovery()?
+        };
+        file_guard.set_state_summary(&baseline, None);
+        if !predicate(&baseline) {
+            return Ok(None);
+        }
+
+        let baseline_revision = baseline.state_revision;
+        let mut candidate = baseline.clone();
+        candidate.state_revision = baseline_revision
+            .checked_add(1)
+            .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+        file_guard.set_phase("mutate");
+        let result = mutator(&mut candidate)?;
+        let candidate_revision = candidate.state_revision;
+        candidate.state_revision = baseline_revision;
+        if candidate == baseline {
+            return Ok(Some(result));
+        }
+        candidate.state_revision = candidate_revision;
+
+        drop(process_guard);
+        file_guard.set_phase("prepare_contended");
+        let transaction = self
+            .store
+            .prepare_save(&candidate)?
+            .ok_or_else(|| "service_state_prepared_save_missing".to_string())?;
+        file_guard.set_state_summary(&candidate, Some(transaction.state_payload.len()));
+        file_guard.set_phase("commit_prepared");
+        self.store.save_prepared(&transaction)?;
         Ok(Some(result))
     }
 }
