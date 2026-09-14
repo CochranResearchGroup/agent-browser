@@ -440,7 +440,9 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
         registration.target_ids.sort();
         registration.target_ids.dedup();
         let profile_identity_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&registration.profile_root)?;
+            agent_browser_lease_authority::canonical_profile_identity_digest(
+                &registration.profile_root,
+            )?;
         let process_instance_digest = digest_json(&registration.process_identity)?;
         let cdp_endpoint_identity_digest = digest_text(&registration.cdp_endpoint);
         let target_set_digest = digest_json(&registration.target_ids)?;
@@ -578,7 +580,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
         profile_root: &std::path::Path,
     ) -> Result<(), String> {
         let profile_identity_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(profile_root)?;
+            agent_browser_lease_authority::canonical_profile_identity_digest(profile_root)?;
         let _observed_owner = self
             .repository
             .load_snapshot()?
@@ -1519,7 +1521,8 @@ mod tests {
         let authority = RuntimeLifecycleAuthority::new(&repository);
         let profile_root = std::env::temp_dir().join("agent-browser-lifecycle-prelaunch-admission");
         let profile_identity_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&profile_root).unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_root)
+                .unwrap();
         let mut current = owner();
         current.profile_identity_digest = profile_identity_digest.clone();
         current.browser_id = "session:prelaunch-owner".to_string();
@@ -1572,7 +1575,8 @@ mod tests {
         let profile_root =
             std::env::temp_dir().join("agent-browser-lifecycle-observed-supersession");
         let profile_identity_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&profile_root).unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_root)
+                .unwrap();
         let mut current = owner();
         current.profile_identity_digest = profile_identity_digest.clone();
         current.browser_id = "session:stale-transferring".to_string();

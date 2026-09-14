@@ -2299,7 +2299,7 @@ fn base_fragment() -> RuntimeEvidenceSummary {
 }
 
 fn canonical_profile_digest(value: &str) -> Result<String, String> {
-    crate::runtime_profile::canonical_profile_identity_digest(std::path::Path::new(value))
+    agent_browser_lease_authority::canonical_profile_identity_digest(std::path::Path::new(value))
 }
 
 fn source_revision(value: &(impl Serialize + ?Sized)) -> Result<String, String> {

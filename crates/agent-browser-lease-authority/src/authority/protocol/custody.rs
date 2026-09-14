@@ -1,3 +1,5 @@
+//! Filesystem and peer custody verification for the protected authority.
+
 use sha2::{Digest, Sha256};
 
 const LEASE_AUTHORITY_ROOT_UID: u32 = 0;

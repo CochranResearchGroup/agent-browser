@@ -1,3 +1,5 @@
+//! Protected authority service process and bootstrap.
+
 use serde::{Deserialize, Serialize};
 use std::os::fd::FromRawFd;
 use std::os::unix::net::UnixListener;
@@ -484,7 +486,7 @@ fn bootstrap_state_root(
             authority_epoch,
             &boot_epoch,
             authority,
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         )?;
         store.publish(&kernel, None)?;
 
@@ -596,8 +598,8 @@ fn service_error(code: &'static str) -> LeaseAuthorityProtocolError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::LeaseResourceKey;
     use super::*;
-    use crate::native::service_lease_authority::LeaseResourceKey;
 
     fn temp_parent(label: &str) -> PathBuf {
         let parent = std::env::temp_dir().join(format!(

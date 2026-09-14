@@ -291,7 +291,8 @@ function isRustWorkspaceSurface(file) {
     file === 'cli/Cargo.toml' ||
     file === 'cli/build.rs' ||
     file.startsWith('cli/src/') ||
-    file.startsWith('crates/agent-browser-cdp/')
+    file.startsWith('crates/agent-browser-cdp/') ||
+    file.startsWith('crates/agent-browser-lease-authority/')
   );
 }
 
@@ -314,6 +315,7 @@ function isLeaseAuthorityCrateSurface(file) {
     file === 'Cargo.lock' ||
     file === 'cli/Cargo.toml' ||
     file === 'cli/src/native/mod.rs' ||
+    file === 'cli/src/native/service_lease_authority_adapter.rs' ||
     file === 'cli/src/native/service_lease_authority.rs' ||
     file.startsWith('cli/src/native/service_lease_authority/') ||
     file.startsWith('crates/agent-browser-lease-authority/') ||

@@ -1,3 +1,5 @@
+//! Protected lease authority protocol and durable store.
+
 use ring::signature::{self, Ed25519KeyPair};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -19,7 +21,7 @@ use super::{
     LeaseResourceKey, LeaseResourceKind, RecoverLeaseClaimRequest, ReleaseLeaseClaimRequest,
     RevokeLeaseClaimRequest,
 };
-use crate::native::service_principal::{
+use crate::{
     authenticate_profile_capability, profile_capability_digest, register_profile_capability,
     ServicePrincipalRegistrationRequest, ServicePrincipalRegistry,
 };
@@ -1410,7 +1412,7 @@ impl LeaseAuthorityProtocolKernel {
         authority_observed_at: &str,
     ) -> Result<LeaseAuthorityProfileEnrollmentOutcome, LeaseAuthorityProtocolError> {
         if operator_uid == 0
-            || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+            || crate::validate_runtime_profile_name(&request.profile_id).is_err()
             || request.idempotency_key.trim().is_empty()
             || !valid_sha256_digest(physical_identity_digest)
         {
@@ -1691,10 +1693,7 @@ impl LeaseAuthorityProtocolKernel {
         &self,
         raw_capability: &[u8],
         profile_id: &str,
-    ) -> Result<
-        crate::native::service_principal::ServiceProfileCapability,
-        LeaseAuthorityProtocolError,
-    > {
+    ) -> Result<crate::ServiceProfileCapability, LeaseAuthorityProtocolError> {
         let raw_capability =
             std::str::from_utf8(raw_capability).map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_recovery_controller_invalid",
@@ -4304,7 +4303,7 @@ fn validate_protected_state(
                 )
             || !enrollment_ids.insert(&receipt.enrollment_id)
             || !valid_sha256_digest(&receipt.physical_identity_digest)
-            || crate::runtime_profile::validate_runtime_profile_name(&receipt.profile_id).is_err()
+            || crate::validate_runtime_profile_name(&receipt.profile_id).is_err()
             || receipt.principal_id.trim().is_empty()
             || receipt.capability_id.trim().is_empty()
             || receipt.operator_uid == 0
@@ -5337,12 +5336,11 @@ fn derive_profile_enrollment_identity(
             code: "lease_authority_protocol_profile_enrollment_path_unprotected",
         });
     }
-    let digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&canonical).map_err(|_| {
-            LeaseAuthorityProtocolError {
-                code: "lease_authority_protocol_profile_enrollment_path_invalid",
-            }
-        })?;
+    let digest = crate::canonical_profile_identity_digest(&canonical).map_err(|_| {
+        LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_profile_enrollment_path_invalid",
+        }
+    })?;
     Ok(format!("sha256:{digest}"))
 }
 
@@ -5671,7 +5669,7 @@ fn observe_linux_browser_process(
     })?;
     let profile_identity_digest = format!(
         "sha256:{}",
-        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).map_err(|_| {
+        crate::canonical_profile_identity_digest(&profile_path).map_err(|_| {
             LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_browser_process_profile_unavailable",
             }
@@ -5860,7 +5858,7 @@ fn derive_browser_adoption_physical_observation(
     )?;
     let profile_identity_digest = format!(
         "sha256:{}",
-        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).map_err(|_| {
+        crate::canonical_profile_identity_digest(&profile_path).map_err(|_| {
             LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_browser_adoption_profile_unavailable",
             }
@@ -7025,7 +7023,7 @@ mod tests {
 
     fn test_kernel(
         authority: super::super::LeaseAuthorityState,
-        principals: crate::native::service_principal::ServicePrincipalRegistry,
+        principals: crate::ServicePrincipalRegistry,
     ) -> LeaseAuthorityProtocolKernel {
         LeaseAuthorityProtocolKernel::bootstrap(
             TEST_AUTHORITY_DOMAIN_ID,
@@ -7055,7 +7053,7 @@ mod tests {
             "sha256:1111111111111111111111111111111111111111111111111111111111111111";
         let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         kernel
             .enroll_profile(
@@ -7846,7 +7844,7 @@ mod tests {
     fn typed_dispatcher_returns_only_a_nonce_bound_service_challenge() {
         let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
             .validate(991)
@@ -7898,7 +7896,7 @@ mod tests {
     fn framed_service_returns_a_typed_error_for_a_generic_signing_oracle() {
         let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
             .validate(991)
@@ -7953,7 +7951,7 @@ mod tests {
 
         let mut unprivileged_kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         let error = dispatch_lease_authority_request(
             &mut unprivileged_kernel,
@@ -7971,7 +7969,7 @@ mod tests {
 
         let mut root_kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         let error = dispatch_lease_authority_request(
             &mut root_kernel,
@@ -8020,10 +8018,7 @@ mod tests {
         let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
         store
             .publish(
-                &test_kernel(
-                    authority,
-                    crate::native::service_principal::ServicePrincipalRegistry::default(),
-                ),
+                &test_kernel(authority, crate::ServicePrincipalRegistry::default()),
                 None,
             )
             .unwrap();
@@ -8178,7 +8173,7 @@ mod tests {
     fn authority_time_floor_survives_restart_and_cannot_move_backward() {
         let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         assert_eq!(
             kernel
@@ -8244,10 +8239,7 @@ mod tests {
                 owner_generation: Some(57),
             })
             .unwrap();
-        let mut kernel = test_kernel(
-            authority,
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
-        );
+        let mut kernel = test_kernel(authority, crate::ServicePrincipalRegistry::default());
         let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
             .validate(991)
             .unwrap();
@@ -8590,7 +8582,7 @@ mod tests {
         };
         let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
 
         let enrolled = kernel
@@ -9264,7 +9256,7 @@ mod tests {
         };
         let profile_identity_digest = format!(
             "sha256:{}",
-            crate::runtime_profile::canonical_profile_identity_digest(&profile).unwrap()
+            crate::canonical_profile_identity_digest(&profile).unwrap()
         );
         let evidence =
             derive_browser_process_identity(peer, child.id(), &profile, &profile_identity_digest)
@@ -9279,7 +9271,7 @@ mod tests {
             evidence.profile_identity_digest,
             format!(
                 "sha256:{}",
-                crate::runtime_profile::canonical_profile_identity_digest(&profile).unwrap()
+                crate::canonical_profile_identity_digest(&profile).unwrap()
             )
         );
         assert!(valid_sha256_digest(&evidence.process_instance_digest));
@@ -9427,7 +9419,7 @@ while not os.path.exists(stop):
         };
         let profile_identity_digest = format!(
             "sha256:{}",
-            crate::runtime_profile::canonical_profile_identity_digest(&profile).unwrap()
+            crate::canonical_profile_identity_digest(&profile).unwrap()
         );
         let process =
             derive_browser_process_identity(peer, browser.id(), &profile, &profile_identity_digest)
@@ -9607,9 +9599,9 @@ while not os.path.exists(stop):
         let raw_controller =
             "abpc_v1_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         let mut principals = ServicePrincipalRegistry::default();
-        let registered = crate::native::service_principal::register_profile_capability(
+        let registered = crate::register_profile_capability(
             &mut principals,
-            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            crate::ServicePrincipalRegistrationRequest {
                 principal_id: "principal:last30days".to_string(),
                 display_name: None,
                 profile_id: "last30days-social".to_string(),
@@ -9716,7 +9708,7 @@ while not os.path.exists(stop):
             .profile_capabilities
             .get_mut(&registered.capability.capability_id)
             .unwrap()
-            .state = crate::native::service_principal::ServiceProfileCapabilityState::Revoked;
+            .state = crate::ServiceProfileCapabilityState::Revoked;
         let encoded_recovered = restarted.encode_protected_state().unwrap();
         let mut replay_kernel = LeaseAuthorityProtocolKernel::from_protected_state(
             &encoded_recovered,
@@ -9766,10 +9758,10 @@ while not os.path.exists(stop):
     #[test]
     fn authenticated_acquire_derives_holder_identity_inside_the_kernel() {
         let raw_capability = "last30days-profile-capability-secret-v1";
-        let mut principals = crate::native::service_principal::ServicePrincipalRegistry::default();
-        let registered = crate::native::service_principal::register_profile_capability(
+        let mut principals = crate::ServicePrincipalRegistry::default();
+        let registered = crate::register_profile_capability(
             &mut principals,
-            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            crate::ServicePrincipalRegistrationRequest {
                 principal_id: "principal:last30days".to_string(),
                 display_name: Some("Last30days".to_string()),
                 profile_id: "last30days-social".to_string(),
@@ -9845,10 +9837,10 @@ while not os.path.exists(stop):
     #[test]
     fn protected_state_round_trip_preserves_replay_without_persisting_the_bearer() {
         let raw_capability = "last30days-profile-capability-secret-v1";
-        let mut principals = crate::native::service_principal::ServicePrincipalRegistry::default();
-        crate::native::service_principal::register_profile_capability(
+        let mut principals = crate::ServicePrincipalRegistry::default();
+        crate::register_profile_capability(
             &mut principals,
-            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            crate::ServicePrincipalRegistrationRequest {
                 principal_id: "principal:last30days".to_string(),
                 display_name: Some("Last30days".to_string()),
                 profile_id: "last30days-social".to_string(),
@@ -9961,10 +9953,7 @@ while not os.path.exists(stop):
         assert!(!projection.contains("administrativeAuthorizations"));
         assert!(!projection.contains(&planned.authorization.proof));
 
-        let kernel = test_kernel(
-            authority,
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
-        );
+        let kernel = test_kernel(authority, crate::ServicePrincipalRegistry::default());
         let protected = kernel.encode_protected_state().unwrap();
         let protected_text = String::from_utf8(protected.clone()).unwrap();
         assert!(protected_text.contains("administrativeAuthorizations"));
@@ -10002,10 +9991,10 @@ while not os.path.exists(stop):
     #[test]
     fn authenticated_acquire_cannot_invent_an_unregistered_profile_resource() {
         let raw_capability = "unregistered-profile-capability-secret-v1";
-        let mut principals = crate::native::service_principal::ServicePrincipalRegistry::default();
-        crate::native::service_principal::register_profile_capability(
+        let mut principals = crate::ServicePrincipalRegistry::default();
+        crate::register_profile_capability(
             &mut principals,
-            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            crate::ServicePrincipalRegistrationRequest {
                 principal_id: "principal:unregistered".to_string(),
                 display_name: None,
                 profile_id: "unregistered-profile".to_string(),
@@ -10047,7 +10036,7 @@ while not os.path.exists(stop):
     fn protected_state_rejects_two_profile_ids_for_one_physical_identity() {
         let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         kernel
             .bootstrap_profile_resource(
@@ -10081,7 +10070,7 @@ while not os.path.exists(stop):
     fn protected_state_rejects_noncanonical_physical_identity_digest() {
         let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         kernel
             .bootstrap_profile_resource(
@@ -10114,7 +10103,7 @@ while not os.path.exists(stop):
             7,
             "boot-1",
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         )
         .unwrap();
         let protected = kernel.encode_protected_state().unwrap();
@@ -10136,7 +10125,7 @@ while not os.path.exists(stop):
     fn protected_state_rejects_owner_for_unregistered_physical_resource() {
         let kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         let mut protected: serde_json::Value =
             serde_json::from_slice(&kernel.encode_protected_state().unwrap()).unwrap();
@@ -10170,10 +10159,10 @@ while not os.path.exists(stop):
     #[test]
     fn protected_state_rejects_owner_binding_without_registered_capability() {
         let raw_capability = "last30days-profile-capability-secret-v1";
-        let mut principals = crate::native::service_principal::ServicePrincipalRegistry::default();
-        crate::native::service_principal::register_profile_capability(
+        let mut principals = crate::ServicePrincipalRegistry::default();
+        crate::register_profile_capability(
             &mut principals,
-            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            crate::ServicePrincipalRegistrationRequest {
                 principal_id: "principal:last30days".to_string(),
                 display_name: Some("Last30days".to_string()),
                 profile_id: "last30days-social".to_string(),
@@ -10220,7 +10209,7 @@ while not os.path.exists(stop):
     fn protected_owner_registry_cannot_serialize_runtime_lifecycle_history() {
         let kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         let protected: serde_json::Value =
             serde_json::from_slice(&kernel.encode_protected_state().unwrap()).unwrap();
@@ -10245,7 +10234,7 @@ while not os.path.exists(stop):
         let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
         let first = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         store.publish(&first, None).unwrap();
 
@@ -10283,7 +10272,7 @@ while not os.path.exists(stop):
         let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
         let first = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         store.publish(&first, None).unwrap();
         let stale = store.load_for_mutation(test_load_context()).unwrap();
@@ -10320,7 +10309,7 @@ while not os.path.exists(stop):
         let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
         let mut first = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         first.state.authority.events.push(LeaseAuthorityEvent {
             event_id: "event:historical".to_string(),
@@ -10396,7 +10385,7 @@ while not os.path.exists(stop):
         };
         let mut legacy = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         legacy.state.authority.events.push(historical_event.clone());
         store.publish(&legacy, None).unwrap();
@@ -10446,7 +10435,7 @@ while not os.path.exists(stop):
         let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
         let kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         store.publish(&kernel, None).unwrap();
         let selector: serde_json::Value = serde_json::from_slice(
@@ -10489,7 +10478,7 @@ while not os.path.exists(stop):
         let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
         let first = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         store.publish(&first, None).unwrap();
         let mut selected = store.load_for_mutation(test_load_context()).unwrap();
@@ -10531,7 +10520,7 @@ while not os.path.exists(stop):
         let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
         let kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         store.publish(&kernel, None).unwrap();
         let selector: serde_json::Value = serde_json::from_slice(
@@ -10555,7 +10544,7 @@ while not os.path.exists(stop):
     fn service_identity_challenge_binds_nonce_domain_epoch_and_custody() {
         let kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
-            crate::native::service_principal::ServicePrincipalRegistry::default(),
+            crate::ServicePrincipalRegistry::default(),
         );
         let signing_key = super::super::LeaseAuthoritySigningKey::from_private_bytes([7u8; 32]);
         let verification_keys =

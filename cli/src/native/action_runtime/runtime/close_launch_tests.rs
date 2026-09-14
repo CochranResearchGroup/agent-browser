@@ -55,8 +55,6 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
-#[cfg(target_os = "linux")]
-use crate::native::service_lease_authority::{ProtectedBrowserOwner, ProtectedBrowserOwnerLease};
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -106,6 +104,8 @@ use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRep
 use crate::native::service_ui_action::*;
 use crate::native::state;
 use crate::test_utils::EnvGuard;
+#[cfg(target_os = "linux")]
+use agent_browser_lease_authority::{ProtectedBrowserOwner, ProtectedBrowserOwnerLease};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
@@ -266,9 +266,7 @@ async fn rejected_protected_launch_completion_cleans_up_and_terminalizes_uncerta
 #[cfg(target_os = "linux")]
 #[test]
 fn confirmed_protected_close_reconciles_exact_owner_and_clears_custody() {
-    use crate::native::service_lease_authority::{
-        ProtectedBrowserOwner, ProtectedBrowserOwnerLease,
-    };
+    use agent_browser_lease_authority::{ProtectedBrowserOwner, ProtectedBrowserOwnerLease};
 
     let mut state = DaemonState::new();
     state.session_id = "session:protected-close".to_string();
