@@ -1208,23 +1208,50 @@ fn exact_terminal_owner_allows_profile_relaunch(
     };
     let user_data_dir =
         resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), profile_id)?;
-    let profile_digest =
+    let configured_profile_digest =
         agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
-    if profile_digest != binding.claim.profile_identity_digest
-        || binding.claim.daemon_session_route != session_id
+    if binding.claim.daemon_session_route != session_id {
+        return Ok(false);
+    }
+    let requested_runtime_path = (session_id == profile_id
+        && canonical_route_viewer_runtime_profile(profile_id)
+        && command_profile_id.as_deref() == Some(profile_id)
+        && options.runtime_profile.as_deref() == Some(profile_id))
+    .then(|| crate::runtime_profile::resolve_profile(None, Some(profile_id)))
+    .transpose()?
+    .map(|profile| profile.user_data_dir);
+    let requested_runtime_digest = requested_runtime_path
+        .as_deref()
+        .map(agent_browser_lease_authority::canonical_profile_identity_digest)
+        .transpose()?;
+    let migrated_canonical_route_profile = requested_runtime_digest
+        .as_deref()
+        .is_some_and(|digest| digest != binding.claim.profile_identity_digest);
+    if !migrated_canonical_route_profile
+        && configured_profile_digest != binding.claim.profile_identity_digest
     {
         return Ok(false);
     }
     if let Some(requested_path) = options.profile.as_deref().or(command_profile.as_deref()) {
         let requested_path =
             resolved_service_profile_identity_path(Some(requested_path), profile_id)?;
-        if agent_browser_lease_authority::canonical_profile_identity_digest(&requested_path)?
-            != profile_digest
-        {
+        let requested_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(&requested_path)?;
+        let expected_digest = if migrated_canonical_route_profile {
+            requested_runtime_digest
+                .as_deref()
+                .ok_or_else(|| "canonical_route_viewer_profile_identity_missing".to_string())?
+        } else {
+            binding.claim.profile_identity_digest.as_str()
+        };
+        if requested_digest != expected_digest {
             return Ok(false);
         }
     }
-    let Some(owner) = state.runtime_owner_registry.owner(&profile_digest) else {
+    let Some(owner) = state
+        .runtime_owner_registry
+        .owner(&binding.claim.profile_identity_digest)
+    else {
         return Ok(false);
     };
     let Some(lifecycle) = state
@@ -1248,7 +1275,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
         && owner.daemon_session_route == session_id
         && owner.pending_transfer.is_none()
         && lifecycle.logical_browser_id == binding.claim.logical_browser_id
-        && lifecycle.profile_identity_digest == profile_digest
+        && lifecycle.profile_identity_digest == binding.claim.profile_identity_digest
         && lifecycle.owner_generation == binding.claim.owner_generation
         && lifecycle.lifecycle_state
             == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
@@ -1344,7 +1371,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
     let principal_projection_absent = !state
         .runtime_owner_registry
         .principal_bindings
-        .contains_key(&profile_digest);
+        .contains_key(&binding.claim.profile_identity_digest);
     // A terminal owner cannot carry effect authority into its replacement.
     // Once exact cleanup and process absence are proven, a current shared-local
     // caller with profile_use permission may relaunch the same profile even if
@@ -1357,14 +1384,34 @@ fn exact_terminal_owner_allows_profile_relaunch(
     {
         return Ok(false);
     }
-    (options.runtime_profile, options.profile) =
-        retained_profile_launch_identity(profile_id, profile);
+    if migrated_canonical_route_profile {
+        options.runtime_profile = Some(profile_id.to_string());
+        options.profile = Some(
+            requested_runtime_path
+                .as_deref()
+                .ok_or_else(|| "canonical_route_viewer_profile_identity_missing".to_string())?
+                .to_string_lossy()
+                .into_owned(),
+        );
+    } else {
+        (options.runtime_profile, options.profile) =
+            retained_profile_launch_identity(profile_id, profile);
+    }
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {
         options.executable_path = None;
     }
     Ok(true)
+}
+
+pub(super) fn canonical_route_viewer_runtime_profile(profile_id: &str) -> bool {
+    profile_id
+        .strip_prefix("rdp-guac-route-")
+        .and_then(|suffix| suffix.strip_suffix("-viewer"))
+        .is_some_and(|route| {
+            route.len() == 1 && route.bytes().all(|byte| byte.is_ascii_lowercase())
+        })
 }
 
 fn apply_authenticated_orphaned_owner_recourse(

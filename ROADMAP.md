@@ -36,9 +36,17 @@ canonical route viewer must be launched during forward reconciliation, but the
 active admission drain rejects launch even with the exact transaction claim.
 P186 admits only the canonical managed route-viewer action sequence for the
 matching transaction and keeps ordinary profiles and browser effects blocked.
-PR #113 integrated the first gate as `3c7d29da`; a follow-up now aligns
-secondary header-command shaping after the first live route launch proved that
-global profile routing was not yet present at claim attachment.
+PR #113 integrated the first gate as `3c7d29da`, and PR #114 integrated exact
+secondary-command shaping as `bba8b7a3`. Runtime acceptance proved that route
+A can now launch, apply headers, and navigate under the claim. Route B then
+failed before effect because a ready generation-1 owner for its obsolete
+generation-relative profile identity survives without any browser, session,
+tab, process, principal, or lease projection. Its exact lifecycle is already
+terminal with cleanup satisfied and process-exit plus profile-lock-release
+evidence. The remaining P186 slice makes the raw session matcher honor that
+existing terminal-history contract before ambiguity evaluation and permits the
+guarded canonical route relaunch to adopt its stable runtime-profile path,
+without mutating Service State or weakening nonterminal owner authority.
 
 ## P185 | Route Viewer Runtime Profile Identity
 

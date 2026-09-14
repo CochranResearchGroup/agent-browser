@@ -5,6 +5,26 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 325 | 2026-09-14
+
+PR #114 merged the exact route-viewer secondary-command claim shaping as
+`bba8b7a3`; merged candidate digest `5610a704` passes the strengthened fixture,
+the 28-test admission sweep, format, clippy, and selected workstation checks.
+Runtime acceptance proved the admission repair through route A launch, header,
+and navigation, then route B failed before effect as
+`existing_session_profile_identity_unproven`. B and C retain ready generation-1
+owners for obsolete generation-relative profile identities without matching
+browser, session, tab, process, principal, or lease rows. Their exact lifecycle
+rows are terminal with cleanup satisfied and process-exit plus
+profile-lock-release evidence. Issue #112 is reopened. Root cause is the raw
+registry session matcher returning terminal history as live before ambiguity
+and profile selection, followed by the guarded relaunch rejecting the stable
+runtime-profile path because it differs from the historical profile digest.
+Next: preserve sole terminal relaunch, exclude exact terminal history when a
+current replacement exists, allow only exact canonical route-path migration,
+merge one repair, then resume transaction revision 17 exactly once.
+Last30Days owner generation 90 remains unchanged; do not retry tenant workflows.
+
 ## Turn 324 | 2026-09-14
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md) is CLOSED through PR #106, which merged exact validated head `91aa3204` into
