@@ -363,6 +363,13 @@ pub(crate) trait DesktopInteractionProvider {
         &mut self,
         request: &DesktopInteractionRequest,
     ) -> Result<BeforeObservation, DesktopInteractionError>;
+    /// Recaptures target evidence after pointer motion and immediately before
+    /// the first button event. Implementations must not reuse the planning
+    /// observation for this phase.
+    fn refresh_before_effect(
+        &mut self,
+        request: &DesktopInteractionRequest,
+    ) -> Result<BeforeObservation, DesktopInteractionError>;
     fn probe(
         &mut self,
         binding: &DesktopBinding,
@@ -1417,6 +1424,32 @@ fn run_claimed_interaction(
             }
         }
 
+        let refreshed_before = dependencies
+            .provider
+            .refresh_before_effect(request)
+            .and_then(|refreshed| {
+                validate_before(request, &refreshed)?;
+                validate_observation_continuity(&before, &refreshed)?;
+                Ok(refreshed)
+            })
+            .map_err(|error| {
+                post_ack_error(
+                    error,
+                    acknowledged_effect,
+                    request,
+                    transaction_id,
+                    &before,
+                    &candidate_id,
+                    target,
+                    &initial_surface,
+                    &initial_authority,
+                    &authority_digest,
+                    &motion,
+                    &effect_trace,
+                    acknowledgements.clone(),
+                )
+            })?;
+
         let down = InputEvent::LeftDown {
             at_ms: motion.duration_ms,
         };
@@ -1431,7 +1464,7 @@ fn run_claimed_interaction(
             dependencies,
             &mut effect_trace,
             &down,
-            Some(before.captured_at_ms),
+            Some(refreshed_before.captured_at_ms),
         )
         .map_err(|error| {
             post_ack_error(
@@ -1833,6 +1866,23 @@ fn validate_before(
         return Err(DesktopInteractionError::new(
             "desktop_interaction_target_unavailable",
             "the named recipe has no exact selected synthetic target",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_observation_continuity(
+    initial: &BeforeObservation,
+    refreshed: &BeforeObservation,
+) -> Result<(), DesktopInteractionError> {
+    if !same_binding(&initial.binding, &refreshed.binding)
+        || initial.selected_target_class != refreshed.selected_target_class
+        || initial.selected_bounds != refreshed.selected_bounds
+        || initial.selected_center != refreshed.selected_center
+    {
+        return Err(DesktopInteractionError::new(
+            "desktop_interaction_target_changed",
+            "the selected target or its physical desktop binding changed before input",
         ));
     }
     Ok(())
@@ -2887,6 +2937,184 @@ mod tests {
             .events
             .iter()
             .any(|event| matches!(event, InputEvent::KeyDown { .. } | InputEvent::KeyUp { .. })));
+    }
+
+    #[test]
+    fn long_motion_refreshes_continuous_target_before_single_click() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.refresh_captured_at_ms = Some(2_500);
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = SteppingClock {
+            next: 1_000,
+            step: 100,
+        };
+        let mut hcaptcha_request = request();
+        hcaptcha_request.recipe_id = HCAPTCHA_RECIPE_ID.to_string();
+
+        let receipt = run_desktop_interaction(
+            hcaptcha_request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut RejectHandoffLookup,
+                clock: &mut clock,
+            },
+        )
+        .expect("a fresh continuous target should permit one click after long motion");
+
+        assert_eq!(fixture.observation_count, 2);
+        assert_eq!(receipt.effect_state, "verified_success");
+        assert_eq!(
+            fixture
+                .inner
+                .events
+                .iter()
+                .filter(|event| matches!(event, InputEvent::LeftDown { .. }))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn stale_effect_phase_refresh_stops_before_button_down_as_uncertain_motion() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.refresh_captured_at_ms = Some(0);
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let mut hcaptcha_request = request();
+        hcaptcha_request.recipe_id = HCAPTCHA_RECIPE_ID.to_string();
+
+        let error = run_desktop_interaction(
+            hcaptcha_request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(fixture.observation_count, 2);
+        assert_eq!(error.code(), "desktop_interaction_stale_observation");
+        assert_eq!(error.receipt().unwrap().effect_state, "effect_uncertain");
+        assert!(fixture
+            .inner
+            .events
+            .iter()
+            .all(|event| !matches!(event, InputEvent::LeftDown { .. })));
+    }
+
+    #[test]
+    fn moved_target_at_effect_phase_stops_before_button_down() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.refresh_target_offset = Some(1);
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), "desktop_interaction_target_changed");
+        assert_eq!(error.receipt().unwrap().effect_state, "effect_uncertain");
+        assert!(fixture
+            .inner
+            .events
+            .iter()
+            .all(|event| !matches!(event, InputEvent::LeftDown { .. })));
+    }
+
+    #[test]
+    fn changed_effect_phase_geometry_stops_before_button_down() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.refresh_geometry_epoch = Some("geometry-2".to_string());
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), "desktop_interaction_target_changed");
+        assert!(fixture
+            .inner
+            .events
+            .iter()
+            .all(|event| !matches!(event, InputEvent::LeftDown { .. })));
+    }
+
+    #[test]
+    fn controller_change_at_effect_phase_stops_before_button_down() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let initial = fixture.authority();
+        let mut changed = initial.clone();
+        changed.controller_epoch += 1;
+        changed.route_controller_epoch += 1;
+        changed.stream_controller_epoch += 1;
+        let mut snapshots = vec![initial; 15];
+        snapshots.push(changed);
+        let mut authority = ScriptedAuthority::scripted(snapshots);
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), "desktop_interaction_authority_changed");
+        assert_eq!(
+            error.receipt().unwrap().effect_state,
+            "cancelled_after_effect"
+        );
+        assert!(fixture
+            .events
+            .iter()
+            .all(|event| !matches!(event, InputEvent::LeftDown { .. })));
     }
 
     #[test]
@@ -4297,6 +4525,19 @@ mod tests {
         }
     }
 
+    struct SteppingClock {
+        next: u64,
+        step: u64,
+    }
+
+    impl InteractionClock for SteppingClock {
+        fn now_ms(&mut self) -> u64 {
+            let value = self.next;
+            self.next += self.step;
+            value
+        }
+    }
+
     struct ScriptedAuthority {
         snapshots: Vec<ControllerAuthority>,
         index: usize,
@@ -4365,6 +4606,10 @@ mod tests {
         inner: SyntheticFixture,
         before_status: String,
         captured_at_ms: u64,
+        refresh_captured_at_ms: Option<u64>,
+        refresh_target_offset: Option<i64>,
+        refresh_geometry_epoch: Option<String>,
+        observation_count: usize,
         probe_count: usize,
         probe_drift: Option<(usize, ProbeDrift)>,
         event_failure: Option<EventFailure>,
@@ -4379,6 +4624,10 @@ mod tests {
                 inner,
                 before_status: "matched".to_string(),
                 captured_at_ms: 900,
+                refresh_captured_at_ms: None,
+                refresh_target_offset: None,
+                refresh_geometry_epoch: None,
+                observation_count: 0,
                 probe_count: 0,
                 probe_drift: None,
                 event_failure: None,
@@ -4490,6 +4739,13 @@ mod tests {
                 }),
                 selected_center: Some(PixelPoint { x: 160, y: 100 }),
             })
+        }
+
+        fn refresh_before_effect(
+            &mut self,
+            request: &DesktopInteractionRequest,
+        ) -> Result<BeforeObservation, DesktopInteractionError> {
+            self.observe_before(request)
         }
 
         fn probe(
@@ -4604,8 +4860,22 @@ mod tests {
             request: &DesktopInteractionRequest,
         ) -> Result<BeforeObservation, DesktopInteractionError> {
             let mut observation = self.inner.observe_before(request)?;
+            self.observation_count += 1;
             observation.observation_status = self.before_status.clone();
-            observation.captured_at_ms = self.captured_at_ms;
+            observation.captured_at_ms = if self.observation_count > 1 {
+                self.refresh_captured_at_ms.unwrap_or(self.captured_at_ms)
+            } else {
+                self.captured_at_ms
+            };
+            if self.observation_count > 1 {
+                if let Some(offset) = self.refresh_target_offset {
+                    observation.selected_bounds.as_mut().unwrap().x += offset;
+                    observation.selected_center.as_mut().unwrap().x += offset;
+                }
+                if let Some(epoch) = &self.refresh_geometry_epoch {
+                    observation.binding.geometry_epoch = epoch.clone();
+                }
+            }
             if observation.observation_status != "matched" {
                 observation.selected_candidate_id = None;
                 observation.selected_target_class = None;
@@ -4613,6 +4883,13 @@ mod tests {
                 observation.selected_center = None;
             }
             Ok(observation)
+        }
+
+        fn refresh_before_effect(
+            &mut self,
+            request: &DesktopInteractionRequest,
+        ) -> Result<BeforeObservation, DesktopInteractionError> {
+            self.observe_before(request)
         }
 
         fn probe(

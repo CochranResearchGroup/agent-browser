@@ -291,6 +291,22 @@ Exit: deterministic tests cover long trajectories, geometry drift, controller
 change, stale refresh, and zero-effect rejection. The live hCaptcha attempt is
 still not retried in this workfront.
 
+W1 source checkpoint: the desktop transaction now requires a distinct fresh
+observation after pointer motion and before button-down. The refreshed target
+must retain the same recipe target class, physical bounds, center, browser,
+session, profile, display allocation, stream, route, coordinate mapping, and
+geometry epoch as the planning observation. The existing guarded-event fence
+then revalidates controller authority, surface and process identity, and input
+provider generation before the button event. Capture freshness is timestamped
+immediately after capture, before locator work, so recognition latency consumes
+the 750 ms budget. Provider-free tests cover a successful long trajectory,
+stale refresh, target movement, geometry change, and controller change while
+preserving `effect_uncertain` for acknowledged motion with perception failure
+and `cancelled_after_effect` for authority revocation. Formatting, strict
+workspace Clippy, all 37 desktop-interaction-focused tests, all 7
+hCaptcha-focused tests, and both controlled-X11-provider-focused tests pass.
+No live hCaptcha retry or browser effect was run.
+
 ### W2 | Desktop services extraction
 
 - Extract the transaction kernel into `agent-browser-desktop-services`.

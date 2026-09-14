@@ -40,6 +40,7 @@ pub(crate) struct ControlledX11Provider {
     display_name: String,
     executor: ProviderEffectExecutor<ConfiguredX11Sink>,
     initial_capture: Option<DesktopCaptureResult>,
+    initial_captured_at_ms: u64,
     controller_epoch: u64,
     process_identity_digest: String,
     captcha_target: Option<PixelBounds>,
@@ -141,6 +142,7 @@ impl ControlledX11Provider {
             max_bytes: HARD_MAX_BYTES,
         })
         .map_err(|error| provider_error(error.code()))?;
+        let initial_captured_at_ms = now_ms();
         let provider_id = if is_captcha_recipe(&request.recipe_id) {
             "controlled-x11-xdotool".to_string()
         } else {
@@ -185,6 +187,7 @@ impl ControlledX11Provider {
                 display_name: capture_binding.display_name,
                 executor,
                 initial_capture: Some(initial_capture),
+                initial_captured_at_ms,
                 controller_epoch: route.controller_epoch,
                 process_identity_digest,
                 captcha_target: None,
@@ -218,25 +221,12 @@ impl ControlledX11Provider {
             geometry_epoch: capture.context.geometry_epoch.clone(),
         }
     }
-}
 
-impl DesktopInteractionProvider for ControlledX11Provider {
-    fn evidence(&self) -> DesktopInteractionProviderEvidence {
-        DesktopInteractionProviderEvidence {
-            provider_id: self.provider_id.clone(),
-            provider_version: self.admission.generation_id.clone(),
-            capability: self.admission.capability.clone(),
-        }
-    }
-
-    fn observe_before(
+    fn observation_from_capture(
         &mut self,
-        _request: &DesktopInteractionRequest,
+        capture: DesktopCaptureResult,
+        captured_at_ms: u64,
     ) -> Result<BeforeObservation, DesktopInteractionError> {
-        let capture = self
-            .initial_capture
-            .take()
-            .ok_or_else(|| provider_error("desktop_input_provider_observation_reused"))?;
         let (bounds, candidate_id, target_class, observation_id, observation_sha256) =
             if is_captcha_recipe(&self.request.recipe_id) {
                 let target = match self.request.recipe_id.as_str() {
@@ -290,7 +280,7 @@ impl DesktopInteractionProvider for ControlledX11Provider {
             context_id: capture.context.context_id,
             frame_id: capture.frame_receipt.frame_id,
             frame_sha256: capture.frame_receipt.content_sha256,
-            captured_at_ms: now_ms(),
+            captured_at_ms,
             observation_id,
             observation_sha256,
             observation_status: "matched".to_string(),
@@ -299,6 +289,36 @@ impl DesktopInteractionProvider for ControlledX11Provider {
             selected_bounds: Some(bounds),
             selected_center: Some(center),
         })
+    }
+}
+
+impl DesktopInteractionProvider for ControlledX11Provider {
+    fn evidence(&self) -> DesktopInteractionProviderEvidence {
+        DesktopInteractionProviderEvidence {
+            provider_id: self.provider_id.clone(),
+            provider_version: self.admission.generation_id.clone(),
+            capability: self.admission.capability.clone(),
+        }
+    }
+
+    fn observe_before(
+        &mut self,
+        _request: &DesktopInteractionRequest,
+    ) -> Result<BeforeObservation, DesktopInteractionError> {
+        let capture = self
+            .initial_capture
+            .take()
+            .ok_or_else(|| provider_error("desktop_input_provider_observation_reused"))?;
+        self.observation_from_capture(capture, self.initial_captured_at_ms)
+    }
+
+    fn refresh_before_effect(
+        &mut self,
+        _request: &DesktopInteractionRequest,
+    ) -> Result<BeforeObservation, DesktopInteractionError> {
+        let capture = self.capture()?;
+        let captured_at_ms = now_ms();
+        self.observation_from_capture(capture, captured_at_ms)
     }
 
     fn probe(

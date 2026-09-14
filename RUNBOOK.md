@@ -43,6 +43,15 @@ fixture, formatting, strict Clippy, 108 lease-authority tests, 7 hCaptcha tests,
 fixture, and planning audit. The active-lane catalog change is proposed on the
 topic branch and becomes canonical only through protected-main integration.
 
+W1 source implementation now recaptures and revalidates the selected target
+after motion and before button-down, while the existing guarded-event fence
+revalidates authority, surface, process, display, route, geometry, and provider
+generation. Freshness starts at capture completion before locator work. The
+provider-free long-motion, stale-refresh, moved-target, changed-geometry, and
+effect-phase controller-change cases pass with the existing effect taxonomy.
+Formatting, strict Clippy, 37 desktop-interaction tests, 7 hCaptcha tests, and
+2 controlled-X11-provider tests pass. No live hCaptcha or browser effect ran.
+
 ## Turn 328 | 2026-09-14
 
 PR #120 merged atomic route profile-record synchronization as `f65bf907`;
