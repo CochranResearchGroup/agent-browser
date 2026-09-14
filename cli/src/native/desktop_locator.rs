@@ -33,7 +33,7 @@ const TURNSTILE_TOKEN_ID: &str = "verify-you-are-human";
 const TURNSTILE_TEMPLATE_THRESHOLD: u32 = 8_200;
 pub(crate) const HCAPTCHA_LOCATOR_ID: &str = "hcaptcha-checkbox-v1";
 pub(crate) const HCAPTCHA_TARGET_CLASS: &str = "hcaptcha_checkbox";
-const HCAPTCHA_PROFILE_VERSION: &str = "p181-v1";
+const HCAPTCHA_PROFILE_VERSION: &str = "p181-v2";
 const HCAPTCHA_PROMPT_TOKEN_ID: &str = "i-am-human";
 const HCAPTCHA_BRAND_TOKEN_ID: &str = "hcaptcha-brand";
 const HCAPTCHA_CHALLENGE_TOKEN_ID: &str = "hcaptcha-challenge-open";
@@ -282,7 +282,7 @@ fn locator_profile(locator_id: &str) -> Result<LocatorProfile, DesktopLocatorErr
             locator_id: HCAPTCHA_LOCATOR_ID,
             profile_version: HCAPTCHA_PROFILE_VERSION,
             profile_sha256: digest_text(
-                "hcaptcha-checkbox-v1\x00p181-v1\x001000,1250,1500\x008200\x00250\x00i-am-human\x00hcaptcha-brand\x00checkbox-left-bounded-v1\x00tesseract-tsv-v1",
+                "hcaptcha-checkbox-v1\x00p181-v2\x001000,1250,1500\x008200\x00250\x00i-am-human\x00hcaptcha-brand\x00checkbox-left-30px-v2\x00tesseract-tsv-v1",
             ),
             required_token_id: HCAPTCHA_PROMPT_TOKEN_ID,
             target_class: HCAPTCHA_TARGET_CLASS,
@@ -328,7 +328,7 @@ fn locate_bound_frame(
     let template_size = match profile.kind {
         LocatorKind::Synthetic => scaled(12, scale_millis)?,
         LocatorKind::CloudflareTurnstile => scaled(24, scale_millis)?,
-        LocatorKind::Hcaptcha => scaled(28, scale_millis)?,
+        LocatorKind::Hcaptcha => scaled(30, scale_millis)?,
     };
     let raw_matches = match profile.kind {
         LocatorKind::Synthetic => scan_template(&image, theme, template_size)?,
@@ -1190,7 +1190,7 @@ fn best_hcaptcha_checkbox(
             if x.saturating_add(size) > image.width() || y.saturating_add(size) > image.height() {
                 continue;
             }
-            let score = turnstile_checkbox_score(image, bounds);
+            let score = hcaptcha_checkbox_score(image, bounds);
             if score < 7_000 {
                 continue;
             }
@@ -1234,6 +1234,36 @@ fn hcaptcha_phrase_supports_bounds(
     let bounds_center = bounds.y.saturating_add(bounds.height / 2);
     (minimum_gap..=maximum_gap).contains(&gap)
         && phrase_center.abs_diff(bounds_center) <= vertical_radius
+}
+
+fn hcaptcha_checkbox_score(image: &RgbaImage, bounds: PixelBounds) -> u32 {
+    let mut border_dark = 0_u32;
+    let mut border_count = 0_u32;
+    let mut interior_light = 0_u32;
+    let mut interior_count = 0_u32;
+    for offset_y in 0..bounds.height {
+        for offset_x in 0..bounds.width {
+            let pixel = image.get_pixel(bounds.x + offset_x, bounds.y + offset_y);
+            let luminance = (u32::from(pixel[0]) + u32::from(pixel[1]) + u32::from(pixel[2])) / 3;
+            let border = offset_x == 0
+                || offset_y == 0
+                || offset_x + 1 == bounds.width
+                || offset_y + 1 == bounds.height;
+            if border {
+                border_count += 1;
+                border_dark += u32::from(luminance <= 150);
+            } else {
+                interior_count += 1;
+                interior_light += u32::from(luminance >= 210);
+            }
+        }
+    }
+    if border_count == 0 || interior_count == 0 {
+        return 0;
+    }
+    let border_score = border_dark * 10_000 / border_count;
+    let interior_score = interior_light * 10_000 / interior_count;
+    (border_score * 7 + interior_score * 3) / 10
 }
 
 fn template_score(image: &RgbaImage, theme: Theme, bounds: PixelBounds) -> u32 {
@@ -1735,14 +1765,6 @@ fn normalized_hcaptcha_tokens(tsv: &str) -> Result<Vec<OcrTokenEvidence>, Deskto
         if fields.len() < 12 || fields[0] != "5" {
             continue;
         }
-        let confidence = fields[10]
-            .split('.')
-            .next()
-            .and_then(|value| value.parse::<i32>().ok())
-            .unwrap_or(-1);
-        if confidence < 70 {
-            continue;
-        }
         let key = (
             parse_tsv_u32(fields[1])?,
             parse_tsv_u32(fields[2])?,
@@ -1755,6 +1777,20 @@ fn normalized_hcaptcha_tokens(tsv: &str) -> Result<Vec<OcrTokenEvidence>, Deskto
             .collect::<String>()
             .to_ascii_lowercase();
         if normalized.is_empty() {
+            continue;
+        }
+        let confidence = fields[10]
+            .split('.')
+            .next()
+            .and_then(|value| value.parse::<i32>().ok())
+            .unwrap_or(-1);
+        let minimum_confidence =
+            if ["hcaptcha", "hhcaptcha", "captcha"].contains(&normalized.as_str()) {
+                10
+            } else {
+                70
+            };
+        if confidence < minimum_confidence {
             continue;
         }
         lines.entry(key).or_default().push(Word {
@@ -1795,10 +1831,10 @@ fn normalized_hcaptcha_tokens(tsv: &str) -> Result<Vec<OcrTokenEvidence>, Deskto
     let mut tokens = Vec::new();
     for words in lines.values() {
         for (index, word) in words.iter().enumerate() {
-            if ["hcaptcha", "captcha"].contains(&word.normalized.as_str()) {
+            if ["hcaptcha", "hhcaptcha", "captcha"].contains(&word.normalized.as_str()) {
                 tokens.push(span(std::slice::from_ref(word), HCAPTCHA_BRAND_TOKEN_ID));
             }
-            if ["iam", "lam"].contains(&word.normalized.as_str())
+            if ["iam", "lam", "tam"].contains(&word.normalized.as_str())
                 && words.get(index + 1).map(|next| next.normalized.as_str()) == Some("human")
             {
                 tokens.push(span(&words[index..=index + 1], HCAPTCHA_PROMPT_TOKEN_ID));
@@ -2068,6 +2104,26 @@ mod tests {
     }
 
     #[test]
+    fn hcaptcha_tsv_accepts_observed_widget_ocr_confusions() {
+        let tsv = concat!(
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n",
+            "5\t1\t21\t1\t1\t1\t290\t327\t34\t38\t52.2\tia\n",
+            "5\t1\t21\t1\t1\t2\t339\t342\t28\t10\t91.8\tTam\n",
+            "5\t1\t21\t1\t1\t3\t373\t341\t45\t11\t91.8\thuman\n",
+            "5\t1\t23\t1\t1\t1\t520\t353\t44\t10\t12.7\thhCaptcha\n"
+        );
+
+        let tokens = normalized_hcaptcha_tokens(tsv).unwrap();
+
+        assert!(tokens
+            .iter()
+            .any(|token| token.token_id == HCAPTCHA_PROMPT_TOKEN_ID));
+        assert!(tokens
+            .iter()
+            .any(|token| token.token_id == HCAPTCHA_BRAND_TOKEN_ID));
+    }
+
+    #[test]
     fn hcaptcha_candidate_requires_brand_and_visible_checkbox() {
         let prompt = OcrTokenEvidence {
             token_id: HCAPTCHA_PROMPT_TOKEN_ID.to_string(),
@@ -2141,6 +2197,57 @@ mod tests {
     }
 
     #[test]
+    fn hcaptcha_candidate_accepts_real_thirty_pixel_one_pixel_border() {
+        let prompt = OcrTokenEvidence {
+            token_id: HCAPTCHA_PROMPT_TOKEN_ID.to_string(),
+            bounds: PixelBounds {
+                x: 339,
+                y: 341,
+                width: 79,
+                height: 11,
+            },
+        };
+        let brand = OcrTokenEvidence {
+            token_id: HCAPTCHA_BRAND_TOKEN_ID.to_string(),
+            bounds: PixelBounds {
+                x: 520,
+                y: 353,
+                width: 44,
+                height: 10,
+            },
+        };
+        let bounds = PixelBounds {
+            x: 294,
+            y: 331,
+            width: 30,
+            height: 30,
+        };
+        let mut image = RgbaImage::from_pixel(900, 700, Rgba([250, 250, 250, 255]));
+        for y in bounds.y..bounds.y + bounds.height {
+            for x in bounds.x..bounds.x + bounds.width {
+                let border = x == bounds.x
+                    || y == bounds.y
+                    || x + 1 == bounds.x + bounds.width
+                    || y + 1 == bounds.y + bounds.height;
+                image.put_pixel(
+                    x,
+                    y,
+                    if border {
+                        Rgba([90, 90, 90, 255])
+                    } else {
+                        Rgba([250, 250, 250, 255])
+                    },
+                );
+            }
+        }
+
+        let matched = hcaptcha_candidates(&image, &[prompt, brand], 30, 1000).unwrap();
+
+        assert_eq!(matched.len(), 1);
+        assert_eq!(matched[0].bounds, bounds);
+    }
+
+    #[test]
     fn duplicate_hcaptcha_widgets_are_ambiguous() {
         let fixture: Fixture = serde_json::from_value(json!({
             "fixtureId": "duplicate-hcaptcha",
@@ -2161,23 +2268,23 @@ mod tests {
         for bounds in [
             PixelBounds {
                 x: 80,
-                y: 233,
-                width: 28,
-                height: 28,
+                y: 232,
+                width: 30,
+                height: 30,
             },
             PixelBounds {
                 x: 80,
-                y: 333,
-                width: 28,
-                height: 28,
+                y: 332,
+                width: 30,
+                height: 30,
             },
         ] {
             for y in bounds.y..bounds.y + bounds.height {
                 for x in bounds.x..bounds.x + bounds.width {
-                    let border = x < bounds.x + 2
-                        || y < bounds.y + 2
-                        || x + 2 >= bounds.x + bounds.width
-                        || y + 2 >= bounds.y + bounds.height;
+                    let border = x == bounds.x
+                        || y == bounds.y
+                        || x + 1 == bounds.x + bounds.width
+                        || y + 1 == bounds.y + bounds.height;
                     image.put_pixel(
                         x,
                         y,
