@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -66,7 +66,7 @@ secondary acceptance axis, not a premise of the extraction:
 P181 is active on `platform/lease-authority-crate` through work item #99. The
 immutable implementation baseline is
 `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; joined candidate
-`dd7f2f1c36f0d409910cce2c5e539f5c59530f0c` is published for draft PR #106.
+`744fa0444037d548e99be0e843f1a912e255315e` is published for draft PR #106.
 P0 through P6 are complete. The candidate includes current `main`, the P182
 adjacent-revision convergence fixture, and the tracked workspace lockfile
 registration. The architecture contract and mutation self-tests are green,
@@ -91,7 +91,19 @@ source-equivalent checkpoint `38012fd2`. Run 34802213548 passed every Lease
 Authority compartment at hardened checkpoint `3c7e2bcc` and failed only an
 unrelated production-scale Service Store timing fixture at 502 ms against its
 500 ms threshold; the immediately preceding run passed that fixture. Required
-target-platform CI for the joined candidate remains open. Issue #71 is closed
+Manual full CI run 34838219043 exposed nine non-Linux compile errors because
+four Linux-derived observation helpers had no fail-closed non-Linux variants.
+Checkpoint `744fa044` adds those variants with the existing
+`lease_authority_protocol_browser_process_platform_unsupported` contract. The
+architecture guard, all 108 crate tests, formatting, and workspace strict
+Clippy pass after the repair. Local Windows cross checks stop in `ring` before
+the crate because the WSL host lacks the required MinGW or MSVC native tools,
+so exact cross-platform verification remains CI-owned. The same full run's
+Native E2E lane had one isolated profile-continuity failure and a navigation
+cancellation fixture that retained the shared profile browser, cascading into
+12 later fail-closed tests. Browser E2E repair is outside P181's no-browser
+authority and does not erase the source, measurement, or native-Linux results.
+Required target-platform CI for the repaired candidate remains open. Issue #71 is closed
 in the forge, but P181 has no authority to treat that tracker state as Plan 0144
 acceptance or to reopen it. Its public, effect-admission, and installed gates
 remain separate.
@@ -638,7 +650,7 @@ Hard stops:
 | seam | implemented: no upward imports, one owner, old owner deleted, architecture guard green | final P7 review |
 | correctness | qualified locally: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined P182 fixtures pass | joined target-platform CI |
 | security | qualified: private signing and custody guard plus fresh architecture and security review pass | final closed-world P7 readback |
-| compatibility | qualified locally and at source-equivalent native-Linux CI | joined Windows compilation and Linux custody CI |
+| compatibility | non-Linux fail-closed variants repaired; qualified locally and at source-equivalent native-Linux CI | repaired Windows and macOS compilation plus Linux custody CI |
 | acceleration | measured: focused median improved 91.95 percent; downstream and cold did not regress | formal promotion withheld because focused selections were not literally identical |
 | CI | source-equivalent comprehensive native-Linux CI, local format, strict Clippy, and focused selections pass | dispatch and evaluate joined target-platform CI |
 | custody | plan, lane, branch, draft PR #106, and remote candidate `dd7f2f1c` agree | merged-main receipt and truthful issue closure |
@@ -670,8 +682,8 @@ target passes.
 
 ## Next Action
 
-Dispatch target-platform CI for the joined candidate, evaluate Linux custody
-and Windows compilation, then perform the final closed-world P7 readback. Keep
+Dispatch target-platform CI for repaired checkpoint `744fa044`, evaluate Linux
+custody plus Windows and macOS compilation, then perform the final closed-world P7 readback. Keep
 draft PR #106 unmerged until those gates pass. Preserve the P6 measured result
 without promoting it to the stricter acceleration claim, and do not claim
 runtime or Plan 0144 acceptance.

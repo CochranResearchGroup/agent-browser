@@ -7,24 +7,24 @@ Keep this file at or below 200 lines under policy 0043.
 ## Turn 320 | 2026-09-14
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Joined candidate
-`dd7f2f1c` extracts the canonical kernel and protected stack into
+is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Repaired candidate
+`744fa044` extracts the canonical kernel and protected stack into
 `agent-browser-lease-authority`, deletes the old owner, and leaves one private
 CLI Service State adapter. The architecture and mutation guards preserve all
 106 baseline invariant labels as 108 crate tests plus three CLI adapter tests.
 
-Native-Linux CI at source-equivalent `38012fd2` passed the comprehensive Rust
-and no-launch lanes. The `3c7e2bcc` run passed every Lease Authority and other
-Rust compartment but failed the unrelated production-scale Service Store
-timing assertion at 502 ms against its 500 ms threshold; the immediately prior
-run passed that same fixture. Local crate, retained-adapter, joined-fixture,
-formatting, and strict-Clippy gates pass through `cargo-safe.sh`.
+Native-Linux comprehensive and no-launch CI pass. Full run 34838219043 exposed
+nine missing non-Linux observation-helper variants; `744fa044` restores their
+existing fail-closed unsupported-platform contract. The architecture guard,
+108 crate tests, formatting, and workspace strict Clippy pass after repair.
+Exact Windows and macOS compilation must be revalidated in CI.
 
 P6 consumed its exact 23-invocation ceiling. The focused median fell from
 150.53 to 12.11 seconds, while downstream and cold checks did not regress. The
 strict acceleration-promotion claim is withheld because the frozen selections
-were not literally identical. Next: obtain joined target-platform validation
-and complete P7 review. The PR remains draft. No runtime, browser, profile,
+were not literally identical. The full run's browser E2E failures are retained
+separately because P181 does not authorize browser-fixture repair. Next: rerun
+target-platform validation and complete P7 review. The PR remains draft. No runtime, browser, profile,
 provider, installation, production, release, or Plan 0144 acceptance claim is
 authorized or made.
 

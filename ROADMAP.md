@@ -44,7 +44,7 @@ allowed on the old installed generation.
 State: OPEN
 
 Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-has joined candidate `dd7f2f1c` in draft PR #106. The old native
+has repaired joined candidate `744fa044` in draft PR #106. The old native
 owner is deleted, the kernel and protected stack live in
 `agent-browser-lease-authority`, and the CLI retains only a private Service
 State and repository adapter. The architecture guard and its mutation tests are
@@ -53,8 +53,9 @@ adapter, joined-fixture, formatting, and strict-Clippy checks pass. The bounded
 P6 packet measured a 91.95 percent focused-loop reduction with no downstream or
 cold regression. Its strict promotion claim is withheld because the frozen
 focused selections were not literally identical. Source-equivalent
-native-Linux comprehensive CI passed; joined target-platform validation and
-acceptance remain open. Work item
+native-Linux comprehensive CI passed. The first full target run exposed missing
+non-Linux fail-closed helper variants; those are repaired and locally green,
+while exact cross-platform revalidation remains open. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
 is in progress on `platform/lease-authority-crate` from baseline `16d4fb22`.
 P181 authorizes the bounded source extraction and provider-free validation but
