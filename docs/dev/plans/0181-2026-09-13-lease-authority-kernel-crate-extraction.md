@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan version: 8
+Plan version: 9
 
 State: OPEN
 
@@ -66,8 +66,9 @@ secondary acceptance axis, not a premise of the extraction:
 P181 is active on `platform/lease-authority-crate` through work item #99. The
 immutable implementation baseline is
 `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; joined candidate
-`b52024b811d5c0d0fd15607091101475300070fc` includes current `main` and is
-locally qualified for draft PR #106.
+`8c0a62880501999e565ca71da607a7f4c0309059` includes current `main` at
+`3c7d29da7b175b7e6bb43d70fc63dd6908b1b4ab` and is locally qualified for
+draft PR #106.
 P0 through P6 are complete. The candidate includes current `main`, the P182
 adjacent-revision convergence fixture, and the tracked workspace lockfile
 registration. The architecture contract and mutation self-tests are green,
@@ -124,6 +125,16 @@ as validation-boundary coupling. P7 now adds one path-filtered, non-fail-fast
 Linux, macOS, and Windows crate workflow. This is a discriminating
 target-platform gate, not another broad run, and it does not reset either broad
 CI receipt or the P6 measurement ledger.
+Focused run 34857388895 then exposed one crate-owned Windows fixture defect:
+persisted test owner bindings used Unix-only absolute profile paths. Checkpoint
+`b6aa71dd` makes those fixtures platform-native without relaxing protected-state
+validation. Exact-head focused run 34857911397 passes the crate on Linux,
+macOS ARM, macOS x86, and Windows. Ordinary PR CI run 34857911400 also passes
+all fast jobs, including Rust Quality, the comprehensive Rust suite, no-launch
+service smokes, Workstation Fixtures, Dashboard, and Service Client. After
+joining P186 from current `main`, format, strict workspace Clippy, all 108 crate
+tests, both architecture guards, and patch hygiene pass locally. No P181 source
+or validation gate remains; merge custody is the only remaining step.
 Issue #71 is closed in the forge, but P181 has no authority to treat that
 tracker state as Plan 0144 acceptance or to reopen it. Its public,
 effect-admission, and installed gates remain separate.
@@ -678,11 +689,11 @@ Hard stops:
 | Axis | Current evidence state | Remaining proof |
 | --- | --- | --- |
 | seam | accepted: no upward imports, one owner, old owner deleted, architecture guard green after current-main join | none inside P181 |
-| correctness | qualified: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined P182 fixtures and native-Linux comprehensive CI pass | focused cross-platform crate workflow |
+| correctness | accepted: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined fixtures, native-Linux comprehensive CI, and exact-head focused run 34857911397 pass | none inside P181 |
 | security | accepted: private signing and custody guard plus fresh architecture, security, and closed-world review pass | none inside P181 |
-| compatibility | non-Linux fail-closed variants repaired; macOS ARM and Windows compiled the extracted crate before unrelated CLI failure or cancellation | focused Linux, macOS ARM, macOS x86, and Windows crate jobs |
+| compatibility | accepted: non-Linux fail-closed variants and platform-native fixtures pass focused Linux, macOS ARM, macOS x86, and Windows crate jobs | none inside P181 |
 | acceleration | measured: focused median improved 91.95 percent; downstream and cold did not regress | formal promotion withheld because focused selections were not literally identical |
-| CI | native-Linux CI, ordinary PR CI, and joined local gates pass; repair run 34846719359 is terminal failed outside the extraction surface | new focused target-platform workflow on the exact head |
+| CI | accepted: focused run 34857911397 and ordinary PR CI run 34857911400 pass; joined-current-main local gates pass | none inside P181 |
 | custody | plan, lane, branch, and draft PR #106 preserve the joined candidate | merged-main receipt and truthful issue closure after the focused gate clears |
 | runtime | not applicable and not claimed by P181 | none; runtime proof remains under Plan 0144 authority |
 
@@ -712,10 +723,9 @@ target passes.
 
 ## Next Action
 
-Validate the focused workflow contract locally, publish the current-main joined
-branch, and inspect its automatically triggered Linux, macOS ARM, macOS x86,
-and Windows crate jobs. If those jobs and ordinary PR CI pass, perform the final
-published-diff self-review and merge PR #106. Keep the inherited workspace
-cross-platform and browser E2E defects separate; do not rerun broad CI under
-P181. Preserve the P6 measured result without promoting it to the stricter
-acceleration claim, and do not claim runtime or Plan 0144 acceptance.
+Publish joined checkpoint `8c0a6288`, verify focused and ordinary PR CI on that
+exact head, perform the final published-diff self-review, and merge PR #106.
+Keep the inherited workspace cross-platform and browser E2E defects separate;
+do not rerun broad CI under P181. Preserve the P6 measured result without
+promoting it to the stricter acceleration claim, and do not claim runtime or
+Plan 0144 acceptance.

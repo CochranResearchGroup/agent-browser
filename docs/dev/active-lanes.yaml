@@ -100,14 +100,14 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: c843b07aaff5a83763ca627e33968360207bd585
+    checkpoint: 8c0a62880501999e565ca71da607a7f4c0309059
     remote_ref: refs/remotes/origin/platform/lease-authority-crate
     integration_receipt: null
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#99]
     dependencies: []
-    overlaps: [P182, P183, P184, P185]
-    reconciled_overlaps: [P182, P183, P184, P185]
+    overlaps: [P182, P183, P184, P185, P186]
+    reconciled_overlaps: [P182, P183, P184, P185, P186]
     updated_at: 2026-09-14
   - id: P180
     product_lane: PL-BUGFIX

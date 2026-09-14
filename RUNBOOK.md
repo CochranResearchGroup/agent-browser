@@ -9,7 +9,7 @@ Keep this file at or below 200 lines under policy 0043.
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
 is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Candidate
-`09b3afe8` extracts the canonical kernel and protected stack into
+`8c0a6288` joins current `main` and extracts the canonical kernel and protected stack into
 `agent-browser-lease-authority`, deletes the old owner, and leaves one private
 CLI Service State adapter. All 108 crate tests, three retained adapter tests,
 architecture guards, format, strict Clippy, and comprehensive native-Linux CI
@@ -23,9 +23,12 @@ outside P181 authority and does not invalidate its provider-free source proof.
 P6 remains a measured 91.95 percent focused-loop improvement without the
 stricter acceleration-promotion claim. Joined-tree P7 architecture, crate,
 format, strict-Clippy, and patch-hygiene checks pass. The broad-run allowance
-remains exhausted. P7 now adds a path-filtered non-fail-fast cross-platform
-crate workflow so inherited CLI and browser E2E defects cannot mask the crate's
-own result. No runtime, browser, profile, provider,
+remains exhausted. Focused run 34857911397 passes the crate on Linux, macOS ARM,
+macOS x86, and Windows after `b6aa71dd` corrected Unix-only test paths.
+Ordinary PR CI run 34857911400 is green. After joining P186, local format,
+strict Clippy, 108 crate tests, architecture guards, and patch hygiene pass.
+Only exact-head revalidation and merge custody remain. No runtime, browser,
+profile, provider,
 installation, production, release, or Plan 0144 acceptance claim is made.
 
 ## Turn 323 | 2026-09-14
