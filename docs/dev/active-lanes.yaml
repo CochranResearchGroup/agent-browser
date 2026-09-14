@@ -11,7 +11,7 @@ lanes:
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     checkpoint: c68e1ea62c35f8201d36dfc61fde4e697b248d7b
-    remote_ref: null
+    remote_ref: refs/remotes/origin/fix/plan-0186-stale-route-owner-reconcile
     integration_receipt: bba8b7a3eee1658211c02c44944f61c468c45745
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#112]
