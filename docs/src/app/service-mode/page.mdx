@@ -1225,6 +1225,14 @@ journal request ID. Correct invalid requests before resubmitting. Runtime
 provenance uses the server's deployment environment; clients cannot submit
 <code>runtimeEnvironmentId</code>.
 
+<code>desktop_interaction_authority_required</code> stops before desktop input
+and reports the <code>profile_access</code> axis,
+<code>child_admission</code> phase, and
+<code>effectState: "no_effect"</code>. Inspect the Service trace and compare the
+controller lease <code>viewerId</code> with the interaction
+<code>agentName</code> before any new attempt. Never change identity labels to
+borrow controller authority.
+
 `service_tab_route_mismatch` means the supplied handle conflicts with the routed
 browser or session. It stops at `child_admission` with `effectState: "no_effect"`.
 Compare the explicit session selector with the original handle, or use the

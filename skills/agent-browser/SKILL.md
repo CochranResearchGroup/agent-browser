@@ -2143,6 +2143,12 @@ journal request ID as HTTP `id` or MCP error `data.requestId`. Correct invalid
 requests before resubmitting. Runtime provenance uses the server's deployment
 environment; clients cannot submit `runtimeEnvironmentId`.
 
+`desktop_interaction_authority_required` stops before desktop input and reports
+the `profile_access` axis, `child_admission` phase, and
+`effectState: "no_effect"`. Inspect the Service trace and compare the controller
+lease `viewerId` with the interaction `agentName` before any new attempt. Never
+change identity labels to borrow controller authority.
+
 A retained-browser identity rejection such as
 `runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a
 successful retryable convergence response. Inspect the profile recovery plan

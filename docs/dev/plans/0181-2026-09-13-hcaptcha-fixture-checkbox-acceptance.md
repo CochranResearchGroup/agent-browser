@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: BLOCKED
+State: ACTIVE
 
 Consolidation: required
 
@@ -247,6 +247,54 @@ explicit interaction attempt budget and a fresh controller lease whose
 `viewerId` exactly matches the interaction `agentName`. No solver, reset,
 second click, image selection, audio action, accessibility action, production
 mutation, or release is authorized.
+
+## 2026-09-14 Effect Classification And Acceptance Resumption
+
+The operator explicitly resumed the plan after reviewing the distinction
+between the test-orchestration identity mismatch and the product's generic
+failure classification. The zero-input authority rejection remains valid
+evidence and is not retried or erased. This successor adds one new interaction
+attempt after repairing the product's failure projection.
+
+The consolidated implementation batch now includes an exact Service recourse
+mapping for `desktop_interaction_authority_required`. Because the native guard
+returns before any input event, the public failure must retain the native code
+and report `effectState=no_effect`, `phase=child_admission`, and an
+inspect-before-retry disposition with controller-authority recourse. It must
+not fall through to `service_operation_failed` and `effect_uncertain`.
+
+The critical path is serialized:
+
+1. Add one public-interface regression that demonstrates the current generic
+   classification, then implement the smallest exact classifier branch.
+2. Synchronize the required CLI help, README, agent skill, docs site, and inline
+   documentation for the corrected recourse behavior.
+3. Run focused classifier and Service-envelope checks, selected changed-surface
+   validation, Rust formatting, and strict workspace Clippy.
+4. Build and install at most one additional optimized development candidate,
+   verify its exact generation and that production remains unchanged, then run
+   development runtime and provider readiness checks.
+5. If the preserved fixture and browser remain ready, acquire one fresh
+   controller lease and submit one desktop interaction with both `viewerId`
+   and `agentName` set to `codex-p181-hcaptcha`.
+6. Capture the terminal state and stop. A passed checkbox, an image, audio, or
+   accessibility challenge, an inconclusive result, readiness loss, or any
+   authority failure is terminal for this successor.
+
+Successor bounds are one classifier implementation attempt, one completed
+candidate build and development installation, one controller takeover, and one
+desktop interaction call. No additional provider apply, widget reset, second
+click, challenge-solving input, production mutation, or release is authorized.
+The successor active-work ceiling is 90 minutes. Reassess after two checkpoints
+or 30 minutes without outcome progress. The primary agent owns the critical
+path; no worker assignment is needed for this tightly coupled repair and live
+acceptance sequence.
+
+Acceptance requires both axes to remain separate: provider-free checks prove
+the corrected no-effect recourse, while the installed fixture attempt proves
+the original one-click hCaptcha behavior. The classifier repair does not itself
+authorize a retry, and a successful interaction does not replace the required
+source and Service-envelope validation.
 
 ## Non-Goals
 
