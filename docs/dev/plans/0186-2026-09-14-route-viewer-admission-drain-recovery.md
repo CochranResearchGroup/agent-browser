@@ -157,7 +157,7 @@ clippy with warnings denied, patch hygiene, and validation selection from
   `3f398a578987998d2605edd30a5e7fb371fc0515576e4148d7049b6abaa238a9`
   passes the source-free workstation fixture with a terminal legacy route-B
   owner under the active transaction drain. Rust format, workspace clippy with
-  warnings denied, and patch hygiene pass on this source head.
+  warnings denied, and patch hygiene pass on source checkpoint `c68e1ea6`.
 
 ## Delivery Sequence And Budget
 

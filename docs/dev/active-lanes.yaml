@@ -10,7 +10,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: bba8b7a3eee1658211c02c44944f61c468c45745
+    checkpoint: c68e1ea62c35f8201d36dfc61fde4e697b248d7b
     remote_ref: null
     integration_receipt: bba8b7a3eee1658211c02c44944f61c468c45745
     integration: merge
