@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-13
+Updated: 2026-09-14
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -44,15 +44,17 @@ allowed on the old installed generation.
 State: OPEN
 
 Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-has a hardened source checkpoint at `3c7e2bcc` in draft PR #106. The old native
+has joined candidate `dd7f2f1c` in draft PR #106. The old native
 owner is deleted, the kernel and protected stack live in
 `agent-browser-lease-authority`, and the CLI retains only a private Service
 State and repository adapter. The architecture guard and its mutation tests are
-green, all 106 baseline invariant labels remain mapped, and exact-head
-native-Linux CI has passed formatting, strict Clippy, and the complete
-workstation fixture job. The comprehensive suite is still running. Local Cargo validation is waiting for
-the repository wrapper to admit a build without weakening its host reserve;
-build measurement, target-platform validation, and acceptance remain open. Work item
+green, all 106 baseline invariant labels remain mapped, and local crate,
+adapter, joined-fixture, formatting, and strict-Clippy checks pass. The bounded
+P6 packet measured a 91.95 percent focused-loop reduction with no downstream or
+cold regression. Its strict promotion claim is withheld because the frozen
+focused selections were not literally identical. Source-equivalent
+native-Linux comprehensive CI passed; joined target-platform validation and
+acceptance remain open. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
 is in progress on `platform/lease-authority-crate` from baseline `16d4fb22`.
 P181 authorizes the bounded source extraction and provider-free validation but

@@ -28,7 +28,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 3c7e2bcc006743274fdcb6f1bcb5f5ff816540c9
+    checkpoint: dd7f2f1c36f0d409910cce2c5e539f5c59530f0c
     remote_ref: refs/remotes/origin/platform/lease-authority-crate
     integration_receipt: null
     integration: merge
@@ -36,7 +36,7 @@ lanes:
     dependencies: []
     overlaps: [P182]
     reconciled_overlaps: [P182]
-    updated_at: 2026-09-13
+    updated_at: 2026-09-14
   - id: P180
     product_lane: PL-BUGFIX
     objective: Repair preserving upgrades by quiescing proven browserless lanes before admission drain

@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -64,13 +64,12 @@ secondary acceptance axis, not a premise of the extraction:
 ## Current State
 
 P181 is active on `platform/lease-authority-crate` through work item #99. The
-published implementation baseline is
-`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; hardened source checkpoint
-`3c7e2bcc` is published for draft PR #106. P0 through the P4 source migration
-and the P5 validation wiring are implemented. Exact-head native-Linux CI has
-passed formatting, strict Clippy, dashboard, service-client, version-sync, and
-the complete workstation fixture job; the comprehensive Rust job remains in
-progress. The architecture contract and its mutation self-tests are green,
+immutable implementation baseline is
+`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; joined candidate
+`dd7f2f1c36f0d409910cce2c5e539f5c59530f0c` is published for draft PR #106.
+P0 through P6 are complete. The candidate includes current `main`, the P182
+adjacent-revision convergence fixture, and the tracked workspace lockfile
+registration. The architecture contract and mutation self-tests are green,
 Cargo metadata reports the third workspace member, the old native owner is
 deleted, and one private CLI adapter retains repository, Service State, and
 runtime-owner joins. Exact label comparison preserves all 106 baseline
@@ -84,19 +83,27 @@ image dependencies; public signing-key and secret-loader APIs; and public
 claim-map, terminal-record, signed-proof, or private-key fields. Closed-world
 mutation checks cover each accepted guard family.
 
-The immutable baseline preparation and four candidate Cargo validation
-attempts were not admitted because the Cargo wrapper reported host memory
-pressure; no Cargo scope, rustc process, test, or benchmark sample started. The
-latest readback had approximately 23 GiB available while the wrapper required
-approximately 30 GiB to preserve its configured reserve and one build claim.
-Unrelated browser and service processes are outside P181 cleanup authority.
-Native-Linux draft-PR CI is therefore the first compile signal; its completed
-exact-head gates are valid CI evidence, while the comprehensive suite remains
-pending and local Cargo validation remains required when admission becomes
-available. Issue #71 is currently closed in the forge, but P181 has no authority
-to treat that tracker state as Plan 0144
+Local admission recovered without changing wrapper controls. All 108 crate
+tests, all three retained adapter tests, the five joined P182 `prepared_`
+tests, formatting, and workspace strict Clippy pass. Native-Linux CI run
+34801395695 passed the comprehensive Rust and workstation lanes at
+source-equivalent checkpoint `38012fd2`. Run 34802213548 passed every Lease
+Authority compartment at hardened checkpoint `3c7e2bcc` and failed only an
+unrelated production-scale Service Store timing fixture at 502 ms against its
+500 ms threshold; the immediately preceding run passed that fixture. Required
+target-platform CI for the joined candidate remains open. Issue #71 is closed
+in the forge, but P181 has no authority to treat that tracker state as Plan 0144
 acceptance or to reopen it. Its public, effect-admission, and installed gates
 remain separate.
+
+The bounded 23-invocation P6 packet measured a focused candidate median of
+12.11 seconds against 150.53 seconds at baseline, a 91.95 percent reduction.
+The downstream workspace-check median improved 6.29 percent, and the
+directional cold pair improved 5.47 percent. The strict acceleration-promotion
+claim is withheld because the baseline ran 106 legacy filtered tests while the
+candidate ran 108 crate tests and the three retained adapter tests were
+validated separately. The complete receipt is in
+[the P6 measurement note](../notes/0181-3-2026-09-14-lease-authority-build-measurement.md).
 
 The candidate workspace contains the `agent-browser` binary crate plus the
 `agent-browser-cdp` and `agent-browser-lease-authority` library crates. The
@@ -476,6 +483,14 @@ not comparably measured. A correctness regression blocks integration. A
 focused-loop regression triggers one bounded diagnosis and then repair or a
 recommendation not to land the split.
 
+P6 completed on 2026-09-14 at the exact 23-invocation ceiling. The candidate
+showed a 91.95 percent lower focused median, a 6.29 percent lower downstream
+median, and a 5.47 percent lower directional cold result. All valid samples
+passed. One admitted wrong-target downstream invocation was interrupted,
+preserved, excluded, and replaced under the single replacement allowance. The
+measured improvement is retained, but the formal acceleration-promotion claim
+is withheld because the focused selections were not literally identical.
+
 ### P7 | Review, Documentation, Integration, And Closeout
 
 Owner: primary agent.
@@ -618,16 +633,16 @@ Hard stops:
 
 ## Evidence And Exit
 
-| Axis | Required evidence | Invalid substitutes |
+| Axis | Current evidence state | Remaining proof |
 | --- | --- | --- |
-| seam | frozen dependency graph, no upward imports, one owner, deletion test | smaller files or more modules |
-| correctness | one-for-one mapping of all 106 baseline tests into crate-side or retained CLI selections, zero lost invariants, complete provider-free suite | moving every fixture or focused green tests alone |
-| security | private signing and custody, redaction, zeroization, corruption and endpoint tests | visibility alone |
-| compatibility | identical schema, errors, hashes, identities, replay, and target behavior | successful compilation |
-| acceleration | comparable focused, downstream, cold, and complete measurements | Plan 0151 timing or one warm run |
-| CI | formatting, strict Clippy, architecture guards, selected checks, target CI | local state alone |
-| custody | work item, plan, lane, branch, PR, remote SHA, and merged-main readback agree | chat or local branch |
-| runtime | explicitly not claimed by P181 | source merge or tests |
+| seam | implemented: no upward imports, one owner, old owner deleted, architecture guard green | final P7 review |
+| correctness | qualified locally: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined P182 fixtures pass | joined target-platform CI |
+| security | qualified: private signing and custody guard plus fresh architecture and security review pass | final closed-world P7 readback |
+| compatibility | qualified locally and at source-equivalent native-Linux CI | joined Windows compilation and Linux custody CI |
+| acceleration | measured: focused median improved 91.95 percent; downstream and cold did not regress | formal promotion withheld because focused selections were not literally identical |
+| CI | source-equivalent comprehensive native-Linux CI, local format, strict Clippy, and focused selections pass | dispatch and evaluate joined target-platform CI |
+| custody | plan, lane, branch, draft PR #106, and remote candidate `dd7f2f1c` agree | merged-main receipt and truthful issue closure |
+| runtime | not applicable and not claimed by P181 | none; runtime proof remains under Plan 0144 authority |
 
 P181 completes only when:
 
@@ -655,9 +670,8 @@ target passes.
 
 ## Next Action
 
-Resolve the exact-head comprehensive Rust and workstation CI results. When the
-repository Cargo wrapper can preserve its configured reserve, run the local P5
-crate, retained-CLI, and complete-suite validation without weakening admission,
-then execute the frozen P6 baseline and candidate measurement ledger. Do not
-mark the draft PR ready, merge, or claim build acceleration until those gates
-and target-platform validation are complete.
+Dispatch target-platform CI for the joined candidate, evaluate Linux custody
+and Windows compilation, then perform the final closed-world P7 readback. Keep
+draft PR #106 unmerged until those gates pass. Preserve the P6 measured result
+without promoting it to the stricter acceleration claim, and do not claim
+runtime or Plan 0144 acceptance.

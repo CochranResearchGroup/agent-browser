@@ -7,8 +7,8 @@ Keep this file at or below 200 lines under policy 0043.
 ## Turn 320 | 2026-09-14
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Hardened source
-checkpoint `3c7e2bcc` extracts the canonical kernel and protected stack into
+is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Joined candidate
+`dd7f2f1c` extracts the canonical kernel and protected stack into
 `agent-browser-lease-authority`, deletes the old owner, and leaves one private
 CLI Service State adapter. The architecture and mutation guards preserve all
 106 baseline invariant labels as 108 crate tests plus three CLI adapter tests.
@@ -17,13 +17,16 @@ Native-Linux CI at source-equivalent `38012fd2` passed the comprehensive Rust
 and no-launch lanes. The `3c7e2bcc` run passed every Lease Authority and other
 Rust compartment but failed the unrelated production-scale Service Store
 timing assertion at 502 ms against its 500 ms threshold; the immediately prior
-run passed that same fixture. Local Cargo admission has recovered: all 108 crate
-tests and the three retained adapter tests pass through `cargo-safe.sh`.
+run passed that same fixture. Local crate, retained-adapter, joined-fixture,
+formatting, and strict-Clippy gates pass through `cargo-safe.sh`.
 
-Next: reconcile current `main`, freeze the joined candidate, run the bounded P6
-comparison, and obtain target-platform validation. The PR remains draft. No
-runtime, browser, profile, provider, installation, production, release, build
-acceleration, or Plan 0144 acceptance claim is authorized or made.
+P6 consumed its exact 23-invocation ceiling. The focused median fell from
+150.53 to 12.11 seconds, while downstream and cold checks did not regress. The
+strict acceleration-promotion claim is withheld because the frozen selections
+were not literally identical. Next: obtain joined target-platform validation
+and complete P7 review. The PR remains draft. No runtime, browser, profile,
+provider, installation, production, release, or Plan 0144 acceptance claim is
+authorized or made.
 
 ## Turn 319 | 2026-09-13
 
