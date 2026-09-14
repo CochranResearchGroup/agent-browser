@@ -25,6 +25,18 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P185 | Route Viewer Runtime Profile Identity
+
+State: OPEN
+
+Current state: [Plan 0185](docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md)
+and [issue #110](https://github.com/CochranResearchGroup/agent-browser/issues/110)
+own the post-commit reconciliation blocker exposed by the P184 candidate. The
+canonical Guacamole route opener treated managed profile names as relative
+custom paths, so immutable support generations changed their identity. P185
+switches the shared route-viewer workflow to stable managed runtime profiles,
+then resumes the existing forward-only transaction without a new install.
+
 ## P184 | Resumable Candidate Generation Retention
 
 State: OPEN
@@ -36,6 +48,8 @@ own the candidate-custody defect exposed after P183 integration. The newest
 generation GC removed its exact staged candidate. P184 pins only the newest
 resumable candidate and rollback source while leaving superseded blocked
 history reclaimable, then returns P183 to one changed-source install attempt.
+P184 source merged through PR #109 as `3b7e8411`; installed acceptance now
+depends on P185 forward completion.
 
 ## P183 | Registered Owner Browser-Missing Migration Repair
 
