@@ -4,6 +4,29 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 318 | 2026-09-13
+
+[Plan 0181](docs/dev/plans/0181-2026-09-13-authentication-resume-state-reconciliation.md)
+is OPEN through [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
+on branch `fix/issue-96-auth-resume-state-reconciliation` from integrated
+`main` at `44e5dc16`. P181 is a second `PL-BUGFIX` lane whose source writes are
+disjoint from P180's installer repair and whose installed acceptance explicitly
+depends on P180's runtime handback.
+
+Current source retries one stale prepared Service State candidate once, then
+returns `service_state_stale_revision` if an active writer advances the
+revision again. Authentication resume records its initial page observation
+through that repository before reserving or performing any credential or page
+effect. The first source packet will reproduce two adjacent stale candidates
+and test a bounded serialized fallback while preserving the ordinary optimistic
+path, revision fencing, and pure-mutator contract.
+
+No installed-runtime read, Authentication Run action, browser action, provider
+effect, or Service State mutation is authorized before P180 records its exact
+installed acceptance and explicit handback. Preserve
+`authrun-8b8d1c46947be0910b540a4e`, its browser, tab, handle, zero-transition
+state, and both failed no-effect jobs.
+
 ## Turn 317 | 2026-09-13
 
 [Plan 0180](docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md)
@@ -40,14 +63,11 @@ build job. Publication, integration, and installed acceptance remain open. No
 installation, runtime handoff, browser closure, service mutation, or Books
 Receipts action occurred.
 
-Issue #96 is queued behind P180 installed acceptance as a distinct follow-up.
-Its current preserved Authentication Run is
-`authrun-8b8d1c46947be0910b540a4e`; two resume jobs failed with adjacent
-`service_state_stale_revision` and `no_effect`, while the run remains at
-transition 0 with zero actions and observations. Do not retry, cancel, replace,
-or create a duplicate profile lane from P180. Re-anchor the same run, tab,
-handle, installed identity, and writer evidence only after issue #95 hands the
-shared runtime back.
+Issue #96 has moved to P181 for disjoint provider-free source work. Its live
+acceptance remains queued behind P180. Do not retry, cancel, replace, or create
+a duplicate profile lane from P180. Re-anchor the same run, tab, handle,
+installed identity, and writer evidence only after issue #95 hands the shared
+runtime back.
 
 ## Turn 316 | 2026-09-13
 
