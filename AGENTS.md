@@ -317,6 +317,14 @@ run when the CI workflow is started manually or when the pushed head commit
 message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E
 Tests, Windows Integration Test, and Global Install.
 
+Lease Authority changes also run the path-filtered
+`.github/workflows/lease-authority.yml` workflow. Its non-fail-fast matrix runs
+the `agent-browser-lease-authority` package directly on Linux, macOS ARM,
+macOS x86, and Windows. Treat that workflow as the authoritative
+target-platform gate for the extracted crate; workspace-wide cross-platform
+or browser E2E failures remain separate evidence unless they touch the crate or
+its adapter contract.
+
 At a completed repair batch, before merge readiness or governed runtime
 effects, match validation to every touched surface since the batch baseline,
 not only the final commit. Follow policy 0042 for intermediate custody commits

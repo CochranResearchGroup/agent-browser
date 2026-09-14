@@ -2,9 +2,9 @@
 
 Date: 2026-09-13
 
-Plan version: 7
+Plan version: 8
 
-State: BLOCKED
+State: OPEN
 
 Lane: P181
 
@@ -63,7 +63,7 @@ secondary acceptance axis, not a premise of the extraction:
 
 ## Current State
 
-P181 is blocked on `platform/lease-authority-crate` through work item #99. The
+P181 is active on `platform/lease-authority-crate` through work item #99. The
 immutable implementation baseline is
 `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; joined candidate
 `b52024b811d5c0d0fd15607091101475300070fc` includes current `main` and is
@@ -112,14 +112,18 @@ the same profile-continuity defect appeared first, then the navigation
 cancellation fixture retained its shared-profile browser and caused the later
 fail-closed cascade. The failing CLI bodies and browser fixture are unchanged
 by P181. These failures do not invalidate the accepted source, Linux, security,
-or measurement evidence, but the plan's broad-validation repair allowance is
-exhausted and its explicit hard stop prohibits a third broad run or merge.
+or measurement evidence. The plan's broad-validation repair allowance remains
+exhausted, so no third workspace-wide run is permitted.
 
 The joined tree passes the architecture contract, all 108 crate tests,
 formatting, workspace strict Clippy, and patch hygiene. The final closed-world
 P7 readback found no extraction regression after joining P183 and P184. P181
-therefore preserves a qualified, published source candidate while remaining
-BLOCKED on target-platform completion outside its authorized write scope.
+therefore preserves a qualified, published source candidate. The operator
+directed continued planning and execution after the root problem was identified
+as validation-boundary coupling. P7 now adds one path-filtered, non-fail-fast
+Linux, macOS, and Windows crate workflow. This is a discriminating
+target-platform gate, not another broad run, and it does not reset either broad
+CI receipt or the P6 measurement ledger.
 Issue #71 is closed in the forge, but P181 has no authority to treat that
 tracker state as Plan 0144 acceptance or to reopen it. Its public,
 effect-admission, and installed gates remain separate.
@@ -529,6 +533,8 @@ Owner: primary agent.
 - Update Cargo guidance, `AGENTS.md` architecture and testing sections, inline
   module documentation, and the plan. Executable test-compartment and
   validation-selector changes belong to P5 and must already be validated.
+- Keep one path-filtered cross-platform workflow that tests the crate package
+  directly and does not cancel sibling targets after one failure.
 - Update ROADMAP, RUNBOOK, work item, and active-lane projection with separate
   source, measurement, integration, and runtime claims.
 - Publish a pull request from the exact validated branch and merge only after
@@ -538,10 +544,11 @@ Exit: remote `main` contains the accepted extraction through a merged pull
 request, the lane and work item close truthfully, and no runtime claim is made.
 
 The fresh-context review, finding adjudication, and closed-world guard
-verification are complete. The joined `b52024b8` tree passes the architecture
-contract, 108 crate tests, format, and strict workspace Clippy. Documentation
-is reconciled with current `main`. Integration and work-item closure remain
-blocked because the one permitted broad repair run completed non-green.
+verification are complete. The joined tree passes the architecture contract,
+108 crate tests, format, and strict workspace Clippy. Documentation is
+reconciled with current `main`. The remaining integration gate is the focused
+cross-platform crate workflow plus ordinary PR CI, not another workspace-wide
+or browser E2E replay.
 
 ### Complete Delivery Budget
 
@@ -660,7 +667,8 @@ Hard stops:
 - canonical profile identity would have two implementations;
 - an existing schema, error, hash, replay, or custody invariant changes without
   a separately reviewed decision;
-- the broad validation plus one repair still fails;
+- the broad validation plus one repair leaves a P181-attributable failure and
+  no narrower target-specific gate can discriminate the extraction;
 - the complete delivery or effort bound is exhausted; or
 - work requires an installed, provider, production, credential, browser,
   profile, or destructive effect.
@@ -670,12 +678,12 @@ Hard stops:
 | Axis | Current evidence state | Remaining proof |
 | --- | --- | --- |
 | seam | accepted: no upward imports, one owner, old owner deleted, architecture guard green after current-main join | none inside P181 |
-| correctness | qualified: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined P182 fixtures and native-Linux comprehensive CI pass | target-platform completion remains blocked outside P181 |
+| correctness | qualified: all 106 baseline labels map to 108 crate tests plus three retained adapter tests; joined P182 fixtures and native-Linux comprehensive CI pass | focused cross-platform crate workflow |
 | security | accepted: private signing and custody guard plus fresh architecture, security, and closed-world review pass | none inside P181 |
-| compatibility | non-Linux fail-closed variants repaired; macOS ARM and Windows compiled the extracted crate before unrelated CLI failure or cancellation | complete Windows and macOS workspace jobs remain missing |
+| compatibility | non-Linux fail-closed variants repaired; macOS ARM and Windows compiled the extracted crate before unrelated CLI failure or cancellation | focused Linux, macOS ARM, macOS x86, and Windows crate jobs |
 | acceleration | measured: focused median improved 91.95 percent; downstream and cold did not regress | formal promotion withheld because focused selections were not literally identical |
-| CI | native-Linux CI and joined local gates pass; repair run 34846719359 is terminal failed outside the extraction surface | a future authorized integration packet must re-establish a green target-platform gate without resetting this plan's exhausted broad-run allowance |
-| custody | plan, lane, branch, and draft PR #106 preserve candidate `b52024b8`; merge is intentionally withheld | merged-main receipt and truthful issue closure after the external gate clears |
+| CI | native-Linux CI, ordinary PR CI, and joined local gates pass; repair run 34846719359 is terminal failed outside the extraction surface | new focused target-platform workflow on the exact head |
+| custody | plan, lane, branch, and draft PR #106 preserve the joined candidate | merged-main receipt and truthful issue closure after the focused gate clears |
 | runtime | not applicable and not claimed by P181 | none; runtime proof remains under Plan 0144 authority |
 
 P181 completes only when:
@@ -704,12 +712,10 @@ target passes.
 
 ## Next Action
 
-Preserve draft PR #106 and the published branch without another broad run or
-merge. The exact remaining prerequisites are green inherited CLI compilation
-on macOS and a browser E2E lane that cleans up the navigation-cancellation
-fixture. Those repairs require separate work-item authority. After they land on
-`main`, a bounded integration successor may join that source, re-establish the
-missing target-platform evidence, and complete PR integration without
-resetting P181's historical validation or measurement ledgers. Preserve the P6
-measured result without promoting it to the stricter acceleration claim, and do
-not claim runtime or Plan 0144 acceptance.
+Validate the focused workflow contract locally, publish the current-main joined
+branch, and inspect its automatically triggered Linux, macOS ARM, macOS x86,
+and Windows crate jobs. If those jobs and ordinary PR CI pass, perform the final
+published-diff self-review and merge PR #106. Keep the inherited workspace
+cross-platform and browser E2E defects separate; do not rerun broad CI under
+P181. Preserve the P6 measured result without promoting it to the stricter
+acceleration claim, and do not claim runtime or Plan 0144 acceptance.

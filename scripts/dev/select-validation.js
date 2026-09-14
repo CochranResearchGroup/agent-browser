@@ -319,6 +319,7 @@ function isLeaseAuthorityCrateSurface(file) {
     file === 'cli/src/native/service_lease_authority.rs' ||
     file.startsWith('cli/src/native/service_lease_authority/') ||
     file.startsWith('crates/agent-browser-lease-authority/') ||
+    file === '.github/workflows/lease-authority.yml' ||
     file === 'scripts/ci/rust-tests.sh' ||
     file === 'scripts/test-lease-authority-crate-architecture.js'
   );

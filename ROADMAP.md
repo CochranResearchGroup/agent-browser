@@ -82,7 +82,7 @@ allowed on the old installed generation.
 
 ## P181 | Lease-Authority Kernel Crate Extraction
 
-State: BLOCKED
+State: OPEN
 
 Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
 has current-main joined candidate `b52024b8` in draft PR #106. The old native
@@ -98,8 +98,10 @@ native-Linux comprehensive CI passed. The repair full run compiled the new
 crate on macOS ARM and Windows, but inherited CLI compilation failed on macOS,
 Windows was cancelled by fail-fast, and the browser E2E navigation fixture
 retained its shared-profile browser. The joined architecture, crate, format,
-and strict-Clippy gates pass. P181 is BLOCKED because its one broad repair run
-remained non-green; no third run or merge is permitted in this plan. Work item
+and strict-Clippy gates pass. The broad-run allowance remains exhausted, but
+P181 is OPEN for one path-filtered non-fail-fast workflow that tests the crate
+directly on Linux, macOS ARM, macOS x86, and Windows. This narrower gate
+separates extraction evidence from inherited CLI and browser failures. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
 is in progress on `platform/lease-authority-crate` from baseline `16d4fb22`.
 P181 authorizes the bounded source extraction and provider-free validation but
