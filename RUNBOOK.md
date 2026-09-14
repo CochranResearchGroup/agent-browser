@@ -52,6 +52,15 @@ effect-phase controller-change cases pass with the existing effect taxonomy.
 Formatting, strict Clippy, 37 desktop-interaction tests, 7 hCaptcha tests, and
 2 controlled-X11-provider tests pass. No live hCaptcha or browser effect ran.
 
+W2 source extraction now places the provider-neutral transaction kernel and
+process-local route coordinator in `agent-browser-desktop-services`. CLI-owned
+dispatch, Service State projection, durable filesystem persistence, capture,
+OCR, X11 input, and external route fencing remain adapters. The architecture
+guard is green; formatting, strict Clippy, 3 independent crate tests, 37 CLI
+desktop-interaction tests, 7 hCaptcha tests, 108 lease-authority tests, 3 CDP
+tests, and remote-view documentation checks pass. No public behavior or live
+runtime state changed.
+
 ## Turn 328 | 2026-09-14
 
 PR #120 merged atomic route profile-record synchronization as `f65bf907`;

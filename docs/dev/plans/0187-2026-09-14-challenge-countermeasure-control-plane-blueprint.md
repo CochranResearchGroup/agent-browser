@@ -350,6 +350,24 @@ Service-State and external-fence adapters. Extract only its process-local pure
 coordination primitive; keep external fence acquisition and service route
 resolution in the CLI adapter.
 
+W2 source checkpoint: `agent-browser-desktop-services` now owns the provider,
+authority, clock, ledger, handoff, request, observation, event, receipt, and
+error contracts; deterministic motion planning; phase and identity validation;
+event sequencing and cleanup; verification; effect classification; replay; and
+the process-local route coordinator. The CLI retains command parsing, provider
+admission and wiring, Service State handoff projection, the durable filesystem
+ledger adapter, stream redaction, capture, OCR, X11 input, and external route
+fences. The architecture guard rejects upward native imports and CDP, async,
+HTTP, image, Service State, locator, or platform-provider dependencies.
+
+The architecture contract, strict workspace Clippy, formatting, 3 independent
+desktop-services tests, all 37 CLI desktop-interaction tests, all 7
+hCaptcha-focused tests, all 108 lease-authority tests, all 3 CDP tests, and the
+remote-view documentation check pass. The prior CLI transaction kernel is
+absent; existing Turnstile and hCaptcha tests call the extracted entrypoint
+through the CLI adapters with no receipt, error-code, or effect behavior change.
+No runtime, browser, provider, production, or release effect ran.
+
 ### W3 | Challenge control extraction
 
 - Promote the frozen guard request, capability, receipt, and threat model into

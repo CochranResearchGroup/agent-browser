@@ -4,8 +4,10 @@
 //! filesystem adapters remain in the CLI package.
 
 mod coordinator;
+mod transaction;
 
 pub use coordinator::{
     DesktopControlCoordinator, DesktopControlEventGuard, DesktopControllerMutationGuard,
     DesktopInteractionClaim,
 };
+pub use transaction::*;

@@ -191,3 +191,63 @@ impl Drop for DesktopControllerMutationGuard {
         self.route.changed.notify_all();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::DesktopControlCoordinator;
+    use std::sync::mpsc;
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn controller_mutation_cancels_and_drains_current_event() {
+        let coordinator = Arc::new(DesktopControlCoordinator::new());
+        let claim = coordinator.claim("route-a", "interaction-a").unwrap();
+        let event = claim.begin_event().unwrap();
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let mutation_coordinator = coordinator.clone();
+        let mutation = thread::spawn(move || {
+            let guard = mutation_coordinator
+                .begin_controller_mutation("route-a")
+                .unwrap();
+            finished_tx.send(()).unwrap();
+            drop(guard);
+        });
+
+        assert!(finished_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        drop(event);
+        finished_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(
+            claim.begin_event().unwrap_err(),
+            "desktop_interaction_authority_changed"
+        );
+        mutation.join().unwrap();
+    }
+
+    #[test]
+    fn unrelated_routes_do_not_share_a_fence() {
+        let coordinator = DesktopControlCoordinator::new();
+        let claim_a = coordinator.claim("route-a", "interaction-a").unwrap();
+        let event_a = claim_a.begin_event().unwrap();
+        let claim_b = coordinator.claim("route-b", "interaction-b").unwrap();
+        let event_b = claim_b.begin_event().unwrap();
+        drop(event_b);
+        drop(claim_b);
+        drop(event_a);
+        drop(claim_a);
+    }
+
+    #[test]
+    fn duplicate_route_claim_is_rejected_until_release() {
+        let coordinator = DesktopControlCoordinator::new();
+        let first = coordinator.claim("route-a", "interaction-a").unwrap();
+        assert_eq!(
+            coordinator.claim("route-a", "interaction-b").unwrap_err(),
+            "desktop_interaction_conflict"
+        );
+        drop(first);
+        let second = coordinator.claim("route-a", "interaction-b").unwrap();
+        drop(second);
+    }
+}

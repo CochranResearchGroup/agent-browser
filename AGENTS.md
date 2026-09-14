@@ -115,7 +115,11 @@ transport, command lifecycle, and protocol types under
 owns lease claims, fencing, signing and verification, the protected protocol
 and durable store, custody, and pure principal and profile-identity mechanics
 under `crates/agent-browser-lease-authority/`. Service State joins and browser
-or runtime-owner orchestration remain CLI adapters. Browser process launch,
+or runtime-owner orchestration remain CLI adapters. The
+`agent-browser-desktop-services` library package owns provider-neutral desktop
+transaction contracts, deterministic event sequencing, and process-local
+route coordination. Service State, durable filesystem, capture, locator, and
+platform-input implementations remain CLI adapters. Browser process launch,
 Chrome and Lightpanda selection, `BrowserManager`, the automation daemon,
 snapshots, and state remain in `cli/src/native/`. The `--engine` flag selects
 Chrome vs Lightpanda. The `install` command downloads Chrome from Chrome for
