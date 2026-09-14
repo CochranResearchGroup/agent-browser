@@ -49,6 +49,7 @@ version = "0.28.0"
 dependencies = [
  "aes-gcm",
  "agent-browser-cdp",
+ "agent-browser-desktop-services",
  "agent-browser-lease-authority",
  "async-trait",
  "base64",
@@ -88,6 +89,15 @@ dependencies = [
  "socket2",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "agent-browser-desktop-services"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

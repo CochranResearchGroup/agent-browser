@@ -318,6 +318,38 @@ No live hCaptcha retry or browser effect was run.
 Exit: existing Turnstile and hCaptcha provider-free interaction tests pass
 through the extracted interface with no public behavior change.
 
+#### W2 architecture brief
+
+Context and constraints: `desktop_interaction.rs` currently combines the pure
+transaction state machine with CLI dispatch, Service State handoff lookup,
+durable filesystem ledger I/O, and platform provider wiring. The extraction
+must preserve serialized receipts and error codes byte-for-byte, retain the CLI
+as the first adapter, and introduce no runtime or live effect.
+
+Repository shape: `crates/agent-browser-desktop-services/` owns interaction
+contracts, deterministic planning, phase validation, event sequencing, cleanup,
+verification, and the provider-free in-memory ledger. `cli/src/native/` retains
+command parsing, stream redaction, Service State projection, durable ledger
+files, provider admission, capture, OCR, X11 input, and global runtime wiring.
+
+Module contracts: the shared crate accepts only injected provider, authority,
+clock, claim/coordinator, operation-ledger, and handoff traits. Platform and
+Service adapters translate their local evidence into those contracts. The
+crate has no upward CLI/native import and no CDP, async runtime, HTTP, image,
+dashboard, generated-client, Service State, locator, or X11 dependency.
+
+Testing and rollout: first freeze the dependency rule in
+`test:desktop-services-crate-architecture`, then move one provider-free
+transaction vertical at a time while keeping the existing CLI-focused tests
+green. Add an independent crate test lane before deleting the old kernel.
+Rollback is a normal commit revert because this phase changes source ownership
+only and performs no installed-runtime or provider mutation.
+
+Open risk: route claim serialization currently shares a module with
+Service-State and external-fence adapters. Extract only its process-local pure
+coordination primitive; keep external fence acquisition and service route
+resolution in the CLI adapter.
+
 ### W3 | Challenge control extraction
 
 - Promote the frozen guard request, capability, receipt, and threat model into
