@@ -14,6 +14,33 @@ movement into `agent-browser-lease-authority` and retain seven in the CLI as
 adapter-boundary tests. This is a test-placement ledger, not evidence that the
 extraction or any provider/runtime gate is complete.
 
+## Final source-placement reconciliation
+
+The extracted source preserves all 106 frozen authority and protocol test
+identities. The final security boundary places 103 of those tests in
+`agent-browser-lease-authority` and retains three in the CLI adapter. Five new
+principal and profile-identity tests bring the crate total to 108; they do not
+replace any frozen invariant.
+
+The three retained CLI tests are:
+
+- `service_state_round_trips_active_claims_and_history_separately`;
+- `effect_boundary_rejects_diverged_owner_principal_binding`; and
+- `repository_boundary_atomically_admits_exactly_one_contender`.
+
+Four initially retained tests moved to the crate because keeping their existing
+private-key fixtures in the CLI would expose signing keys, proof fields,
+authority maps, or raw plan issuance across the crate boundary:
+
+- `public_signing_oracle_requires_the_exact_private_profile_capability`;
+- `exact_holder_release_fences_authority_and_replays_terminal_receipt`;
+- `strict_controller_recovery_advances_the_fence_and_replays_after_controller_revocation`; and
+- `administrative_revocation_is_exact_holder_independent_and_replayable`.
+
+Those four now exercise typed authenticated kernel operations with private
+signing fixtures inside the crate. Their placement changed; their test names and
+security invariants did not. Final baseline accounting is `103 + 3 = 106`.
+
 Frozen seams:
 
 - Move pure principal registry, authentication, rotation, and digest mechanics.
@@ -26,7 +53,7 @@ Frozen seams:
 - Protocol implementation imports switch to the crate; no CLI/native import
   may point upward from the crate.
 
-## Retained CLI adapter tests (7)
+## Initial retained CLI adapter classification (7)
 
 These remain in the CLI because they prove product integration boundaries that
 cannot be owned by the kernel crate:
@@ -50,7 +77,7 @@ cannot be owned by the kernel crate:
   administrative revocation is routed through the CLI repository/service
   adapter and its replay contract.
 
-## Moved tests (99)
+## Initial moved classification (99)
 
 ### `cli/src/native/service_lease_authority.rs` (15)
 

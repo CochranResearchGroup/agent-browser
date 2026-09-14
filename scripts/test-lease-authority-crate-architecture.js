@@ -44,8 +44,26 @@ function check(root) {
   requireCondition(!cliSources.some((source) => /(?:crate::native::|super(?:::\s*super)*::)service_lease_authority\b/.test(source)), 'CLI source must not import the removed native service_lease_authority owner');
   requireCondition(cliSources.some((source) => /\b(?:use|pub\s+use)\s+agent_browser_lease_authority(?:::|\s*;)/.test(source)), 'CLI consumers must import agent_browser_lease_authority directly');
   requireCondition(!/\bagent-browser\s*=/.test(crateManifest), 'Lease-authority crate must not depend back on the agent-browser package');
+  const forbiddenDependencies = ['agent-browser-cdp', 'tokio', 'reqwest', 'image'];
+  requireCondition(
+    !forbiddenDependencies.some((dependency) => new RegExp(`^\\s*${dependency}\\s*=`, 'm').test(crateManifest)),
+    'Lease-authority crate must not depend on CDP, browser, async-runtime, HTTP, image, dashboard, or generated-client packages',
+  );
   const crateSources = rustFilesUnder(join(root, 'crates/agent-browser-lease-authority/src')).map((file) => readFileSync(file, 'utf8'));
   requireCondition(!crateSources.some((source) => /(?:crate::native::|\bagent_browser::native::|\bagent_browser_cli::native::)/.test(source)), 'Lease-authority crate must not import CLI/native paths upward');
+  const joinedCrateSources = crateSources.join('\n');
+  requireCondition(
+    !/\bpub(?:\([^)]*\))?\s+(?:struct|enum)\s+LeaseAuthority(?:SigningKey|VerificationKeyring|SigningKeyFile)\b/.test(joinedCrateSources),
+    'Lease-authority signing keys and verification keyrings must remain private',
+  );
+  requireCondition(
+    !/\bpub(?:\([^)]*\))?\s+fn\s+(?:load_or_create_lease_authority_signing_key|load_selected_lease_authority_signing_key|from_private_bytes(?:_at_epoch)?)\b/.test(joinedCrateSources),
+    'Lease-authority secret loaders and private-key constructors must remain private',
+  );
+  requireCondition(
+    !/\bpub(?:\([^)]*\))?\s+(?:active_claims|terminal_records|signed_proof|private_key)\s*:/.test(joinedCrateSources),
+    'Lease-authority mutable maps, signed proofs, and private key fields must remain private',
+  );
   return failures;
 }
 
@@ -77,6 +95,8 @@ function selfTest() {
       ['retained facade', 'retained-facade'], ['missing direct dependency', 'missing-dependency'],
       ['reverse dependency', 'reverse-dependency'], ['missing direct import', 'missing-import'],
       ['upward crate import', 'upward-crate-import'],
+      ['forbidden dependency', 'forbidden-dependency'], ['public signing type', 'public-signing-type'],
+      ['public secret loader', 'public-secret-loader'], ['public claim map', 'public-claim-map'],
     ];
     for (const [label, mutation] of cases) {
       const mutated = mkdtempSync(join(tmpdir(), `agent-browser-lease-authority-${mutation}-`));
@@ -96,6 +116,10 @@ function selfTest() {
         if (mutation === 'reverse-dependency') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/Cargo.toml'), '[package]\nname = "agent-browser-lease-authority"\n[dependencies]\nagent-browser = { path = "../../cli" }\n');
         if (mutation === 'missing-import') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'pub fn adapter() {}\n');
         if (mutation === 'upward-crate-import') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'use crate::native::service_lease_authority::Authority;\n');
+        if (mutation === 'forbidden-dependency') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/Cargo.toml'), '[package]\nname = "agent-browser-lease-authority"\n[dependencies]\ntokio = "1"\n');
+        if (mutation === 'public-signing-type') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub struct LeaseAuthoritySigningKey;\n');
+        if (mutation === 'public-secret-loader') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub fn load_or_create_lease_authority_signing_key() {}\n');
+        if (mutation === 'public-claim-map') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub struct Authority { pub active_claims: usize }\n');
         if (!check(mutated).length) throw new Error(`${label} mutation was not rejected`);
       } finally { rmSync(mutated, { recursive: true, force: true }); }
     }
