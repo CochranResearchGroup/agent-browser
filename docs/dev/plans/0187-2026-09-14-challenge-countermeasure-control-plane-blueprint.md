@@ -45,11 +45,11 @@ challenge should be avoided, attempted, verified, cooled down, or handed to a
 human. It must remain useful when no CAPTCHA is present and when a future
 challenge family does not use a checkbox.
 
-Current `origin/main` is 36 commits ahead of this branch and this branch is 20
-commits ahead of `origin/main`, with 64 changed files. The branch-local Plan
-0180 and Plan 0181 identifiers collide with different plans on current main.
-Those identifiers and branch custody must be normalized before implementation
-is proposed for integration.
+At the planning-start snapshot, `origin/main` was 36 commits ahead of this
+branch and this branch was 20 commits ahead of `origin/main`, with 64 changed
+files. The branch-local Plan 0180 and Plan 0181 identifiers collide with
+different plans on current main. Those identifiers and branch custody must be
+normalized before implementation is proposed for integration.
 
 ## Product Outcomes
 
