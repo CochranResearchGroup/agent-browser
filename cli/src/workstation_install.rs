@@ -6977,12 +6977,13 @@ fn begin_admission_draining_after_quiescence_with<Quiesce>(
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
     admission_drain_path: &Path,
     full_shutdown: bool,
+    pre_drain_quiescence_required: bool,
     quiesce: Quiesce,
 ) -> Result<(), String>
 where
     Quiesce: FnOnce(&crate::runtime_adoption::UpgradeTransaction, &Path) -> Result<(), String>,
 {
-    if !full_shutdown {
+    if pre_drain_quiescence_required {
         quiesce(transaction, admission_drain_path)?;
     }
     persist_upgrade_transition(
@@ -6995,6 +6996,19 @@ where
         persist_admission_drain(admission_drain_path, transaction)?;
     }
     Ok(())
+}
+
+fn pre_drain_quiescence_required(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+    isolated_root: bool,
+    full_shutdown: bool,
+) -> bool {
+    !isolated_root
+        && !full_shutdown
+        && transaction.runtime_migrations.iter().any(|migration| {
+            migration.disposition
+                == crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer
+        })
 }
 
 fn clear_admission_drain(path: &Path) -> Result<(), String> {
@@ -7261,11 +7275,14 @@ fn activate_prepared_payload_transaction(
     crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
     let full_shutdown =
         crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?.is_some();
+    let pre_drain_quiescence_required =
+        pre_drain_quiescence_required(&prepared.transaction, isolated_root, full_shutdown);
     begin_admission_draining_after_quiescence_with(
         &prepared.transaction_path,
         &mut prepared.transaction,
         &prepared.admission_drain_path,
         full_shutdown,
+        pre_drain_quiescence_required,
         |transaction, admission_drain_path| {
             quiesce_browserless_shared_runtime_lanes_before_admission_drain(
                 transaction,
@@ -8599,9 +8616,7 @@ fn quiesce_browserless_shared_runtime_lanes_before_admission_drain(
             source_is_runtime_host,
         )?;
         if source.is_runtime_host && runtime_transfer_source_ready_at(&source, &source_session) {
-            if source.socket_dir != source_socket_dir {
-                return Err("runtime_host_quiesce_source_socket_changed".to_string());
-            }
+            require_runtime_host_quiesce_source_socket(&source_socket_dir, &source.socket_dir)?;
             primary_sessions.insert(source_session);
         }
     }
@@ -8615,6 +8630,16 @@ fn quiesce_browserless_shared_runtime_lanes_before_admission_drain(
         &source_socket_dir,
         admission_drain_path,
     )
+}
+
+fn require_runtime_host_quiesce_source_socket(
+    selected_socket_dir: &Path,
+    source_socket_dir: &Path,
+) -> Result<(), String> {
+    if source_socket_dir != selected_socket_dir {
+        return Err("runtime_host_quiesce_source_socket_changed".to_string());
+    }
+    Ok(())
 }
 
 fn quiesce_browserless_shared_runtime_lanes_with<Observe, Close>(
@@ -17379,11 +17404,15 @@ mod tests {
     #[test]
     fn shared_runtime_host_quiesce_closes_only_proven_browserless_competing_lanes() {
         let actions = std::cell::RefCell::new(Vec::new());
-        let primary_sessions = std::collections::BTreeSet::from(["bill-soylei".to_string()]);
+        let primary_sessions = std::collections::BTreeSet::from([
+            "bill-soylei".to_string(),
+            "accounting-primary".to_string(),
+        ]);
         let closed = quiesce_browserless_shared_runtime_lanes_with(
             &primary_sessions,
             vec![
                 "bill-soylei".to_string(),
+                "accounting-primary".to_string(),
                 "dashboard-service-backend".to_string(),
                 "dashboard-service-backend".to_string(),
             ],
@@ -17433,18 +17462,40 @@ mod tests {
         let transaction_path = transaction_path(&root, &transaction.transaction_id);
         write_private_json_atomic(&transaction_path, &transaction).unwrap();
         let admission_drain_path = root.join("admission-drain.json");
+        let actions = std::cell::RefCell::new(Vec::new());
+        let primary_sessions = std::collections::BTreeSet::from(["bill-soylei".to_string()]);
 
         begin_admission_draining_after_quiescence_with(
             &transaction_path,
             &mut transaction,
             &admission_drain_path,
             false,
+            true,
             |_, drain_path| {
-                if drain_path.exists() {
-                    return Err(
-                        "runtime_admission_draining: legacy runtime rejected close".to_string()
-                    );
-                }
+                let closed = quiesce_browserless_shared_runtime_lanes_with(
+                    &primary_sessions,
+                    vec![
+                        "bill-soylei".to_string(),
+                        "dashboard-service-backend".to_string(),
+                    ],
+                    |session| {
+                        assert!(!drain_path.exists());
+                        actions.borrow_mut().push(format!("status:{session}"));
+                        Ok(serde_json::json!({
+                            "data": {
+                                "control_plane": {
+                                    "browser_health": "NotStarted"
+                                }
+                            }
+                        }))
+                    },
+                    |session| {
+                        assert!(!drain_path.exists());
+                        actions.borrow_mut().push(format!("close:{session}"));
+                        Ok(serde_json::json!({"success": true}))
+                    },
+                )?;
+                assert_eq!(closed, vec!["dashboard-service-backend"]);
                 Ok(())
             },
         )
@@ -17455,6 +17506,32 @@ mod tests {
             crate::runtime_adoption::UpgradeTransactionState::AdmissionDraining
         );
         assert!(admission_drain_path.is_file());
+        assert_eq!(
+            *actions.borrow(),
+            vec![
+                "status:dashboard-service-backend",
+                "close:dashboard-service-backend"
+            ]
+        );
+        let exact_claim = serde_json::json!({
+            "runtimeAdmissionClaim": {
+                "transactionId": transaction.transaction_id,
+                "transactionRevision": transaction.revision,
+            }
+        });
+        assert!(crate::runtime_adoption::require_runtime_admission(
+            &admission_drain_path,
+            "close",
+            &exact_claim,
+        )
+        .unwrap_err()
+        .contains("runtime_admission_draining"));
+        crate::runtime_adoption::require_runtime_admission(
+            &admission_drain_path,
+            "runtime_handoff_prepare",
+            &serde_json::json!({}),
+        )
+        .unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -17477,17 +17554,27 @@ mod tests {
         let transaction_path = transaction_path(&root, &transaction.transaction_id);
         write_private_json_atomic(&transaction_path, &transaction).unwrap();
         let admission_drain_path = root.join("admission-drain.json");
+        let close_count = std::cell::Cell::new(0_u8);
 
         let error = begin_admission_draining_after_quiescence_with(
             &transaction_path,
             &mut transaction,
             &admission_drain_path,
             false,
-            |_, _| Err("legacy_runtime_close_interrupted".to_string()),
+            true,
+            |_, drain_path| {
+                assert!(!drain_path.exists());
+                close_count.set(close_count.get().saturating_add(1));
+                Err("runtime_host_service_state_writer_not_quiesced:before=91:after=92".to_string())
+            },
         )
         .unwrap_err();
 
-        assert_eq!(error, "legacy_runtime_close_interrupted");
+        assert_eq!(
+            error,
+            "runtime_host_service_state_writer_not_quiesced:before=91:after=92"
+        );
+        assert_eq!(close_count.get(), 1);
         assert_eq!(
             transaction.state,
             crate::runtime_adoption::UpgradeTransactionState::StateMigrationValidated
@@ -17504,8 +17591,10 @@ mod tests {
             &mut transaction,
             &admission_drain_path,
             false,
+            true,
             |_, drain_path| {
                 assert!(!drain_path.exists());
+                close_count.set(close_count.get().saturating_add(1));
                 Ok(())
             },
         )
@@ -17515,6 +17604,7 @@ mod tests {
             crate::runtime_adoption::UpgradeTransactionState::AdmissionDraining
         );
         assert!(admission_drain_path.is_file());
+        assert_eq!(close_count.get(), 2);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -17544,6 +17634,7 @@ mod tests {
             &mut transaction,
             &admission_drain_path,
             true,
+            false,
             |_, _| {
                 quiesce_called.set(true);
                 Ok(())
@@ -17558,6 +17649,55 @@ mod tests {
         );
         assert!(!admission_drain_path.exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pre_drain_quiescence_is_limited_to_nonisolated_cooperative_transfer() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-pre-drain-scope-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+
+        assert!(!pre_drain_quiescence_required(&transaction, false, false));
+        transaction
+            .runtime_migrations
+            .push(crate::runtime_adoption::RuntimeMigrationRecord {
+                logical_browser_id: "session:bill-soylei".to_string(),
+                session_names: vec!["bill-soylei".to_string()],
+                profile_identity_digest: "profile-digest".to_string(),
+                classification:
+                    crate::runtime_adoption::RuntimeClassification::CooperativeLiveOwner,
+                disposition: crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer,
+                adoption_receipt_id: None,
+                reason_codes: Vec::new(),
+            });
+        assert!(pre_drain_quiescence_required(&transaction, false, false));
+        assert!(!pre_drain_quiescence_required(&transaction, true, false));
+        assert!(!pre_drain_quiescence_required(&transaction, false, true));
+    }
+
+    #[test]
+    fn pre_drain_quiescence_rejects_changed_runtime_host_socket() {
+        assert!(require_runtime_host_quiesce_source_socket(
+            Path::new("/run/user/1000/agent-browser/runtime-hosts/selected"),
+            Path::new("/run/user/1000/agent-browser/runtime-hosts/selected"),
+        )
+        .is_ok());
+        assert_eq!(
+            require_runtime_host_quiesce_source_socket(
+                Path::new("/run/user/1000/agent-browser/runtime-hosts/selected"),
+                Path::new("/run/user/1000/agent-browser/runtime-hosts/replacement"),
+            )
+            .unwrap_err(),
+            "runtime_host_quiesce_source_socket_changed"
+        );
     }
 
     #[test]
