@@ -138,6 +138,9 @@ interaction evidence rather than CAPTCHA completion.
 
 ## 2026-09-14 Blocked Checkpoint
 
+- The qualified source packet is commit
+  `1d71ed39aa19fa6273e2b80f184d9c2d68a474ea` on
+  `feature/turnstile-desktop-challenge`.
 - Source qualification passed: Rust format, strict workspace Clippy, focused
   hCaptcha, locator, interaction, and service-contract tests, 158 workstation
   installer tests, route-confusion gates, service collections no-launch, and

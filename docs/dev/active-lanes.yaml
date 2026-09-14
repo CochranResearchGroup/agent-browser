@@ -10,7 +10,7 @@ lanes:
     target: main
     plan_state: BLOCKED
     custody_state: ACTIVE_WORKTREE
-    checkpoint: f11b1c51007c46ec91d1cac682a6d0fb4ed68b7b
+    checkpoint: 1d71ed39aa19fa6273e2b80f184d9c2d68a474ea
     remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     integration_receipt: null
     integration: merge
