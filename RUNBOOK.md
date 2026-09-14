@@ -23,9 +23,13 @@ reconcile but not the launch, headers, navigation, and cleanup that reconcile
 requires when no viewer survives. [Plan 0186](docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
 and [issue #112](https://github.com/CochranResearchGroup/agent-browser/issues/112)
 own a canonical-viewer-only admission repair. Ordinary and tenant profiles
-must remain blocked. Next: integrate P186, complete the exact revision-bound
-forward resume, then install one exact integrated generation. Do not retry any
-tenant browser workflow.
+must remain blocked. PR #113 merged the first repair as `3c7d29da`; exact
+candidate `34318d21` admitted route A launch, but `set headers` lacked the
+global runtime profile at claim attachment and its generated launch failed
+before effect. The temporary host was terminated with no display left. Next:
+integrate exact session-profile shaping, complete the revision-bound forward
+resume, then install one exact integrated generation. Do not retry any tenant
+browser workflow.
 
 ## Turn 320 | 2026-09-13
 
