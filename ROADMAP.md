@@ -56,7 +56,11 @@ the obsolete `userDataDir` into the generic profile field. P186 now has a red
 and green main-preflight regression at `e073f710`: configuration-derived route
 paths may yield to exact owner continuity, while caller-authored `--profile`
 values remain hard constraints. P186 remains open for integration and
-exact-merge runtime acceptance.
+exact-merge runtime acceptance. PR #118 merged that preflight repair as
+`851fcebf`; live route A then reached post-launch registration and exposed the
+same migration gap in lifecycle persistence. Source checkpoint `bbbf5abc`
+adds an atomic, canonical-route-only terminal owner and lifecycle digest
+migration with fail-closed cleanup, collision, and principal-binding guards.
 
 ## P185 | Route Viewer Runtime Profile Identity
 
