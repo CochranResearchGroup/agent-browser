@@ -101,7 +101,7 @@ allowed on the old installed generation.
 State: OPEN
 
 Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-has current-main joined candidate `8c0a6288` in draft PR #106. The old native
+has current-main joined candidate `5ceb709c` in draft PR #106. The old native
 owner is deleted, the kernel and protected stack live in
 `agent-browser-lease-authority`, and the CLI retains only a private Service
 State and repository adapter. The architecture guard and its mutation tests are
@@ -117,11 +117,13 @@ retained its shared-profile browser. The joined architecture, crate, format,
 and strict-Clippy gates pass. The broad-run allowance remains exhausted, but
 P181's path-filtered non-fail-fast workflow passes the crate directly on Linux,
 macOS ARM, macOS x86, and Windows in run 34857911397. Ordinary PR CI run
-34857911400 is also green. The initial Windows fixture failure was repaired at
+34857911400 is also green. Final pre-join head `8a57dce5` also passed focused
+run 34861501476 and ordinary CI run 34861501499. The initial Windows fixture failure was repaired at
 `b6aa71dd` with platform-native absolute test paths while retaining fail-closed
-protected-state validation. Joined-current-main local format, strict-Clippy,
-crate, architecture, and patch-hygiene gates pass. Only exact-head revalidation
-and merge custody remain. Work item
+protected-state validation. Current `main` at `bba8b7a3` is joined cleanly at
+`5ceb709c`, preserving the extracted owner and P186 route-command admission
+repair. Focused admission, format, strict-Clippy, architecture, and mutation
+checks pass locally; joined-head CI and merge custody remain. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
 is in progress on `platform/lease-authority-crate` from baseline `16d4fb22`.
 P181 authorizes the bounded source extraction and provider-free validation but

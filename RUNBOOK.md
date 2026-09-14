@@ -9,27 +9,23 @@ Keep this file at or below 200 lines under policy 0043.
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
 is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Candidate
-`8c0a6288` joins current `main` and extracts the canonical kernel and protected stack into
-`agent-browser-lease-authority`, deletes the old owner, and leaves one private
-CLI Service State adapter. All 108 crate tests, three retained adapter tests,
-architecture guards, format, strict Clippy, and comprehensive native-Linux CI
-pass.
+`5ceb709c` joins current `main` at `bba8b7a3`, extracts the canonical kernel and
+protected stack into `agent-browser-lease-authority`, deletes the old owner,
+and leaves one private CLI Service State adapter.
 
 Full CI run 34846719359 is terminal. macOS ARM compiled the extracted crate and
 then failed in inherited CLI-only code; Windows also reached the extracted
 crate before fail-fast cancellation. Native E2E passed 42 tests, then retained
 one navigation fixture browser and cascaded to 14 failures. Browser repair is
 outside P181 authority and does not invalidate its provider-free source proof.
-P6 remains a measured 91.95 percent focused-loop improvement without the
-stricter acceleration-promotion claim. Joined-tree P7 architecture, crate,
-format, strict-Clippy, and patch-hygiene checks pass. The broad-run allowance
-remains exhausted. Focused run 34857911397 passes the crate on Linux, macOS ARM,
-macOS x86, and Windows after `b6aa71dd` corrected Unix-only test paths.
-Ordinary PR CI run 34857911400 is green. After joining P186, local format,
-strict Clippy, 108 crate tests, architecture guards, and patch hygiene pass.
-Only exact-head revalidation and merge custody remain. No runtime, browser,
-profile, provider,
-installation, production, release, or Plan 0144 acceptance claim is made.
+P6 measured a 91.95 percent focused-loop improvement without the stricter
+promotion claim. Focused run 34857911397 passes Linux, both macOS targets, and
+Windows after `b6aa71dd` fixed Unix-only fixture paths; ordinary CI run
+34857911400 is green. Final pre-join head `8a57dce5` also passes focused run
+34861501476 and ordinary run 34861501499. The second P186 repair merged to
+`main` afterward and is joined cleanly at `5ceb709c`; joined-head validation and
+local seam checks pass, while joined-head CI and merge custody remain. No runtime, browser, profile, provider, installation,
+production, release, or Plan 0144 acceptance claim is made.
 
 ## Turn 323 | 2026-09-14
 

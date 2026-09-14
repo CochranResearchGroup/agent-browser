@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan version: 9
+Plan version: 10
 
 State: OPEN
 
@@ -66,8 +66,8 @@ secondary acceptance axis, not a premise of the extraction:
 P181 is active on `platform/lease-authority-crate` through work item #99. The
 immutable implementation baseline is
 `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; joined candidate
-`8c0a62880501999e565ca71da607a7f4c0309059` includes current `main` at
-`3c7d29da7b175b7e6bb43d70fc63dd6908b1b4ab` and is locally qualified for
+`5ceb709c` includes current `main` at
+`bba8b7a3eee1658211c02c44944f61c468c45745` and is being qualified for
 draft PR #106.
 P0 through P6 are complete. The candidate includes current `main`, the P182
 adjacent-revision convergence fixture, and the tracked workspace lockfile
@@ -132,9 +132,13 @@ validation. Exact-head focused run 34857911397 passes the crate on Linux,
 macOS ARM, macOS x86, and Windows. Ordinary PR CI run 34857911400 also passes
 all fast jobs, including Rust Quality, the comprehensive Rust suite, no-launch
 service smokes, Workstation Fixtures, Dashboard, and Service Client. After
-joining P186 from current `main`, format, strict workspace Clippy, all 108 crate
-tests, both architecture guards, and patch hygiene pass locally. No P181 source
-or validation gate remains; merge custody is the only remaining step.
+joining P186, final head `8a57dce5` passed focused run 34861501476 on all four
+targets and ordinary CI run 34861501499, including the comprehensive Rust suite
+and no-launch smokes. `main` then advanced through the second P186 repair in PR
+#114. Merge checkpoint `5ceb709c` preserves the extracted-crate calls while
+adding exact route-command admission shaping. The focused joined admission
+test, format, strict workspace Clippy, architecture guard, and guard mutation
+self-test pass. Exact joined-head CI and merge custody remain.
 Issue #71 is closed in the forge, but P181 has no authority to treat that
 tracker state as Plan 0144 acceptance or to reopen it. Its public,
 effect-admission, and installed gates remain separate.
@@ -693,7 +697,7 @@ Hard stops:
 | security | accepted: private signing and custody guard plus fresh architecture, security, and closed-world review pass | none inside P181 |
 | compatibility | accepted: non-Linux fail-closed variants and platform-native fixtures pass focused Linux, macOS ARM, macOS x86, and Windows crate jobs | none inside P181 |
 | acceleration | measured: focused median improved 91.95 percent; downstream and cold did not regress | formal promotion withheld because focused selections were not literally identical |
-| CI | accepted: focused run 34857911397 and ordinary PR CI run 34857911400 pass; joined-current-main local gates pass | none inside P181 |
+| CI | accepted through `8a57dce5`: focused run 34861501476 and ordinary PR CI run 34861501499 pass; current-main join `5ceb709c` passes focused admission, format, strict Clippy, architecture, and mutation checks | exact joined-head focused and ordinary CI |
 | custody | plan, lane, branch, and draft PR #106 preserve the joined candidate | merged-main receipt and truthful issue closure after the focused gate clears |
 | runtime | not applicable and not claimed by P181 | none; runtime proof remains under Plan 0144 authority |
 
@@ -723,8 +727,9 @@ target passes.
 
 ## Next Action
 
-Publish joined checkpoint `8c0a6288`, verify focused and ordinary PR CI on that
-exact head, perform the final published-diff self-review, and merge PR #106.
+Qualify and publish joined checkpoint `5ceb709c`, verify focused and ordinary PR
+CI on the resulting exact head, perform the final published-diff self-review,
+and merge PR #106.
 Keep the inherited workspace cross-platform and browser E2E defects separate;
 do not rerun broad CI under P181. Preserve the P6 measured result without
 promoting it to the stricter acceleration claim, and do not claim runtime or
