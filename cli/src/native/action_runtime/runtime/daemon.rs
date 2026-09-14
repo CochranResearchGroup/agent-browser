@@ -1406,12 +1406,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
 }
 
 pub(crate) fn canonical_route_viewer_runtime_profile(profile_id: &str) -> bool {
-    profile_id
-        .strip_prefix("rdp-guac-route-")
-        .and_then(|suffix| suffix.strip_suffix("-viewer"))
-        .is_some_and(|route| {
-            route.len() == 1 && route.bytes().all(|byte| byte.is_ascii_lowercase())
-        })
+    crate::native::runtime_lifecycle::canonical_route_viewer_runtime_profile(profile_id)
 }
 
 fn apply_authenticated_orphaned_owner_recourse(
