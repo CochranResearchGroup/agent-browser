@@ -5,6 +5,31 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 321 | 2026-09-14
+
+P183 source merged through PR #107 as `12848e34`. Exact integrated candidate
+digest `e4beadf0` passed the repaired migration preview with zero protected
+removals. Its preserving apply stopped before selector or payload mutation in
+transaction `upgrade-310bb0f1-e659-40c6-aab5-3062ad9c4489` because three
+prior-boot browser projections retained valid tabs despite absent recorded
+PIDs. Exact selected-host Service reconciliation removed those dead browser,
+tab, and process projections while preserving registered owners.
+
+The installed interlock then exposed [P184](docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
+and [issue #108](https://github.com/CochranResearchGroup/agent-browser/issues/108):
+GC removed candidate generation `0.28.0-e4beadf07f66-0c92aecf29d1` while its
+newest census-blocked transaction still advertised resume. Exact resume failed
+before effect because the immutable generation was absent. Do not retry or
+fabricate it.
+
+The P184 red fixture reproduced the missing candidate reference. The repair
+pins only the newest resumable census-blocked candidate and rollback source;
+nine retention tests, the historical 49-transaction anti-bloat fixture, and the
+workstation GC reference fixture pass. The full 161-test focused workstation
+suite, Rust format, workspace clippy, patch hygiene, and all selected JavaScript
+fixtures also pass. Next: publish and merge P184, then build one exact integrated
+candidate and perform one changed-source preserving apply.
+
 ## Turn 320 | 2026-09-13
 
 [Plan 0183](docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md)

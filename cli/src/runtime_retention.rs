@@ -129,6 +129,14 @@ pub(crate) fn plan_generation_retention(
     now: DateTime<Utc>,
 ) -> GenerationRetentionPlan {
     let mut plan = GenerationRetentionPlan::default();
+    let latest_transaction_id = transactions
+        .iter()
+        .max_by(|left, right| {
+            transaction_timestamp(left)
+                .cmp(&transaction_timestamp(right))
+                .then_with(|| left.transaction_id.cmp(&right.transaction_id))
+        })
+        .map(|transaction| transaction.transaction_id.as_str());
     if let Some(selected) = selected {
         add_reference(&mut plan.references, selected, "selected_generation");
     }
@@ -177,11 +185,15 @@ pub(crate) fn plan_generation_retention(
                 }
             }
             UpgradeTransactionState::OldGenerationRetirable
-            | UpgradeTransactionState::BlockedAmbiguousRuntime
             | UpgradeTransactionState::BlockedInflightEffect
             | UpgradeTransactionState::BlockedCandidateIncompatible
             | UpgradeTransactionState::FailedPreservedOldGeneration
             | UpgradeTransactionState::FailedEffectUncertain => {}
+            UpgradeTransactionState::BlockedAmbiguousRuntime => {
+                if Some(transaction.transaction_id.as_str()) == latest_transaction_id {
+                    add_transaction_references(&mut plan.references, transaction);
+                }
+            }
             UpgradeTransactionState::RollbackBeforeCommit
             | UpgradeTransactionState::RollbackAfterCommit => {
                 if let Some(old) = transaction.old_generation_id.as_deref() {
@@ -605,6 +617,44 @@ mod tests {
         );
         assert!(!plan.references.contains_key("generation-ancient"));
         assert_eq!(plan.finalizable_transaction_ids, vec!["superseded"]);
+    }
+
+    #[test]
+    fn latest_census_block_retains_resumable_candidate_without_pinning_older_blocks() {
+        let mut latest = accepted(
+            "latest-block",
+            "generation-selected",
+            "generation-resumable",
+            "2026-08-20T11:00:00Z",
+        );
+        latest.state = UpgradeTransactionState::BlockedAmbiguousRuntime;
+        latest.dashboard_validation_summary = None;
+        latest.presentation_validation_summary = None;
+        latest.terminal_result = None;
+
+        let mut historical = accepted(
+            "historical-block",
+            "generation-ancient",
+            "generation-superseded",
+            "2026-08-19T11:00:00Z",
+        );
+        historical.state = UpgradeTransactionState::BlockedAmbiguousRuntime;
+        historical.dashboard_validation_summary = None;
+        historical.presentation_validation_summary = None;
+        historical.terminal_result = None;
+
+        let plan = plan_generation_retention(
+            Some("generation-selected"),
+            &[historical, latest],
+            at("2026-08-20T12:00:00Z"),
+        );
+
+        assert_eq!(
+            plan.references["generation-resumable"],
+            vec!["transaction_candidate_generation"]
+        );
+        assert!(!plan.references.contains_key("generation-superseded"));
+        assert!(!plan.references.contains_key("generation-ancient"));
     }
 
     #[test]

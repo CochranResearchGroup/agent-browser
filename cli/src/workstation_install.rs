@@ -15273,9 +15273,25 @@ mod tests {
         );
         transaction.old_generation_id = Some("transaction-old".to_string());
         transaction.state = crate::runtime_adoption::UpgradeTransactionState::Accepted;
+        transaction.checkpoints[0].recorded_at = "2026-08-20T10:00:00Z".to_string();
         write_private_json_atomic(
             &transaction_path(&root, &transaction.transaction_id),
             &transaction,
+        )
+        .unwrap();
+
+        let mut resumable = new_upgrade_transaction(
+            &paths,
+            "resumable-candidate".to_string(),
+            "c".repeat(64),
+            "d".repeat(64),
+        );
+        resumable.old_generation_id = Some("selected-generation".to_string());
+        resumable.state = crate::runtime_adoption::UpgradeTransactionState::BlockedAmbiguousRuntime;
+        resumable.checkpoints[0].recorded_at = "2026-08-20T11:00:00Z".to_string();
+        write_private_json_atomic(
+            &transaction_path(&root, &resumable.transaction_id),
+            &resumable,
         )
         .unwrap();
 
@@ -15311,7 +15327,7 @@ mod tests {
 
         assert_eq!(
             references["selected-generation"],
-            vec!["selected_generation"]
+            vec!["selected_generation", "transaction_old_generation"]
         );
         assert_eq!(
             references["transaction-old"],
@@ -15319,6 +15335,10 @@ mod tests {
         );
         assert_eq!(
             references["transaction-candidate"],
+            vec!["transaction_candidate_generation"]
+        );
+        assert_eq!(
+            references["resumable-candidate"],
             vec!["transaction_candidate_generation"]
         );
         assert_eq!(
