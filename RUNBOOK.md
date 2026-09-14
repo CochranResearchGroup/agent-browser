@@ -4,6 +4,30 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
+## Turn 319 | 2026-09-13
+
+[Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
+is OPEN through [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
+on `fix/issue-96-auth-resume-state-reconciliation`. Its source writes are
+disjoint from P180, integrated at `44e5dc16`. The operator released Agent #95's
+runtime custody to P182 on 2026-09-13 without installing a candidate.
+
+The published P182 source packet at `4f9e1741` reproduces two adjacent stale
+candidates and adds one serialized pure-mutator fallback after the first stale
+candidate. P181 must reconcile any later adjacent adapter edit. PR #98's
+completed fast gates passed; Rust was still running. Host pressure blocked both
+local focused builds before compilation.
+
+The installed production identity remains generation
+`0.28.0-d0186990d375-3a6142188dd0` with binary digest
+`d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`;
+the latest candidate transaction is terminally rolled back. The exact run is
+still `ready` at transition 0 with zero observations, action receipts, or
+pending effect on the same browser, session, and tab. Do not resume on the old
+generation. Next: qualify and merge PR #98, install one integrated P180 plus
+P182 candidate, re-anchor runtime and run evidence, then issue at most one
+same-run recourse.
+
 ## Turn 318 | 2026-09-13
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
@@ -60,14 +84,11 @@ build job. Publication, integration, and installed acceptance remain open. No
 installation, runtime handoff, browser closure, service mutation, or Books
 Receipts action occurred.
 
-Issue #96 is queued behind P180 installed acceptance as a distinct follow-up.
-Its current preserved Authentication Run is
-`authrun-8b8d1c46947be0910b540a4e`; two resume jobs failed with adjacent
-`service_state_stale_revision` and `no_effect`, while the run remains at
-transition 0 with zero actions and observations. Do not retry, cancel, replace,
-or create a duplicate profile lane from P180. Re-anchor the same run, tab,
-handle, installed identity, and writer evidence only after issue #95 hands the
-shared runtime back.
+Issue #96 has moved to P182 for disjoint provider-free source work. Its live
+acceptance remains queued behind P180. Do not retry, cancel, replace, or create
+a duplicate profile lane from P180. Re-anchor the same run, tab, handle,
+installed identity, and writer evidence only after issue #95 hands the shared
+runtime back.
 
 ## Turn 316 | 2026-09-13
 

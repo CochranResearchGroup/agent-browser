@@ -25,6 +25,20 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P182 | Authentication Resume State Reconciliation
+
+State: OPEN
+
+Current state: [Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
+and [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
+own the repeated adjacent-revision collision that prevents the preserved
+Authentication Run from recording its initial observation. The source repair
+is published in PR #98. P180's repair is integrated at `44e5dc16`, and the
+operator released Agent #95's runtime custody without an accepted install.
+P182 now owns one integrated P180 plus P182 candidate window. The existing run,
+browser, tab, handle, and zero-effect state must be preserved, and no resume is
+allowed on the old installed generation.
+
 ## P181 | Lease-Authority Kernel Crate Extraction
 
 State: OPEN
@@ -53,9 +67,10 @@ does not recognize the newer claimed-close exception, so the preserving
 upgrade fails with `runtime_admission_draining`. The repair must quiesce exact
 browserless lanes before drain, prove interruption safety, and retain all
 browser-bearing and unknown lanes. No installed or consumer acceptance is yet
-claimed. Issue #96 is queued as the next serialized bugfix investigation after
-P180 installed acceptance; its preserved Authentication Run and same-handle
-recourse must not be retried or replaced during this installer batch.
+claimed. P182 may proceed with disjoint provider-free source work, but its
+installed acceptance and same-run recourse remain queued after P180 installed
+acceptance. The preserved Authentication Run must not be retried or replaced
+during this installer batch.
 
 ## P179 | Policy Selector v0.1.26 Integration
 
