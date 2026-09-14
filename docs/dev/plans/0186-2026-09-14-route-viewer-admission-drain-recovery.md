@@ -177,7 +177,10 @@ clippy with warnings denied, patch hygiene, and validation selection from
   passes the source-free fixture but fails the first live route-A open before
   effect. A corrected unit regression that omits command-payload
   `runtimeProfile` fails red with `existing_session_profile_identity_unproven`
-  and passes when the guard accepts either exact normalized representation.
+  and passes at source checkpoint `82c319e7` when the guard accepts either
+  exact normalized representation. The canonical-name boundary, both existing
+  exact-terminal-owner tests, custom-profile compatibility, Rust format, and
+  workspace clippy with warnings denied also pass.
 
 ## Delivery Sequence And Budget
 
