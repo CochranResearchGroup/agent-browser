@@ -10762,14 +10762,26 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
         crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path(),
     );
     let registry = repository.load()?;
-    let source_backend = registry
-        .fallback_backend()
-        .ok_or_else(|| "runtime source ingress backend is missing before finalize".to_string())?
-        .clone();
-    let source_is_runtime_host =
-        source_backend.topology == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost;
     let source_host_retirement_recorded =
         source_runtime_host_retirement_is_recorded(&prepared.transaction);
+    let source_backend = match registry.fallback_backend() {
+        Some(source) => source.clone(),
+        None => {
+            let supervisor = crate::session_supervisor::runtime_host_supervisor_observation()?;
+            if source_retirement_can_defer_to_supervisor(
+                &prepared.transaction,
+                &prepared.runtime_handoffs,
+                supervisor.main_pid,
+                supervisor.manifests.len(),
+                supervisor.active_state == "active" && supervisor.sub_state == "running",
+            ) {
+                return Ok(());
+            }
+            return Err("runtime source ingress backend is missing before finalize".to_string());
+        }
+    };
+    let source_is_runtime_host =
+        source_backend.topology == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost;
     let preserve_source_runtime_host = source_is_runtime_host && !source_host_retirement_recorded;
     for handoff in &mut prepared.runtime_handoffs {
         if handoff.should_finalize_source() {
@@ -10911,6 +10923,25 @@ fn source_runtime_host_retirement_is_recorded(
         .as_ref()
         .and_then(|convergence| convergence.old_host.as_ref())
         .is_some()
+}
+
+fn source_retirement_can_defer_to_supervisor(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+    handoffs: &[PreparedRuntimeHandoff],
+    supervisor_main_pid: Option<u32>,
+    supervisor_manifest_count: usize,
+    supervisor_running: bool,
+) -> bool {
+    let old_host = transaction
+        .runtime_host_convergence
+        .as_ref()
+        .and_then(|convergence| convergence.old_host.as_ref());
+    old_host.is_some_and(|old| supervisor_main_pid == Some(old.pid))
+        && supervisor_manifest_count > 0
+        && supervisor_running
+        && handoffs
+            .iter()
+            .all(|handoff| !handoff.should_finalize_source())
 }
 
 /// A shared runtime host owns several lanes, so finalizing one lane must not
@@ -17301,6 +17332,87 @@ mod tests {
         };
 
         prove_finalized_source_exit(&transaction, &[handoff], true).unwrap();
+    }
+
+    #[test]
+    fn missing_fallback_defers_only_browserless_supervised_source_retirement() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-deferred-source-retirement-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.runtime_host_convergence =
+            Some(crate::runtime_adoption::RuntimeHostConvergenceRecord {
+                schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+                deadline_at: runtime_adoption_timestamp(),
+                deadline_unix_seconds: 0,
+                queue_transfer_policy: "drain_then_commit".to_string(),
+                old_host: Some(crate::runtime_adoption::RuntimeHostIdentityEvidence {
+                    endpoint_key: crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY.to_string(),
+                    generation_id: "generation-old".to_string(),
+                    binary_sha256: "c".repeat(64),
+                    pid: 41,
+                    process_start_token: "linux:boot:41".to_string(),
+                    socket_identity: "unix:1:41".to_string(),
+                    observation_only: false,
+                }),
+                candidate_host: None,
+                lanes: Vec::new(),
+            });
+
+        assert!(source_retirement_can_defer_to_supervisor(
+            &transaction,
+            &[],
+            Some(41),
+            1,
+            true,
+        ));
+        assert!(!source_retirement_can_defer_to_supervisor(
+            &transaction,
+            &[],
+            Some(42),
+            1,
+            true,
+        ));
+        assert!(!source_retirement_can_defer_to_supervisor(
+            &transaction,
+            &[],
+            Some(41),
+            0,
+            true,
+        ));
+        assert!(!source_retirement_can_defer_to_supervisor(
+            &transaction,
+            &[],
+            Some(41),
+            1,
+            false,
+        ));
+
+        let handoff = PreparedRuntimeHandoff {
+            source_session: "source-session".to_string(),
+            candidate_session: "candidate-session".to_string(),
+            source_socket_dir: None,
+            source_runtime_host: true,
+            source_process_identity: None,
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            committed: true,
+            source_finalized: false,
+            irreversible_source_revocation: false,
+        };
+        assert!(!source_retirement_can_defer_to_supervisor(
+            &transaction,
+            &[handoff],
+            Some(41),
+            1,
+            true,
+        ));
     }
 
     #[test]
