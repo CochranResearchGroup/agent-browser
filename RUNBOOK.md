@@ -4,7 +4,7 @@ Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 318 | 2026-09-13
+## Turn 319 | 2026-09-13
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
 is OPEN in `PL-PLATFORM`. It defines in-process dependency deepening before
@@ -20,26 +20,30 @@ is in progress on `platform/lease-authority-crate` from published baseline
 validation but no runtime, browser, profile, provider, installation, or
 production effect.
 
-P0 through the P4 source migration are implemented at published checkpoint
-`b7cd01bd` in draft PR #106. The architecture contract is green, Cargo metadata
-reports the third workspace member, the old owner is deleted, and all 106
-baseline authority/protocol test labels remain mapped as 108 crate tests plus
-three CLI adapter tests, including five new principal/profile tests. The CLI
-keeps one private Service State and repository adapter; signing keys, authority
-maps, proof fields, and raw plan issuance remain private to the crate.
+P0 through P4 and the P5 validation wiring are implemented at hardened,
+published checkpoint `3c7e2bcc` in draft PR #106. The architecture contract,
+its dependency and private-surface mutation self-tests, Cargo metadata, and
+one-for-one baseline invariant mapping are green. The old owner is deleted;
+108 crate tests and three CLI adapter tests cover all 106 baseline labels plus
+five new principal/profile tests. A fresh-context architecture and security
+review found no source defect and its one validation-coverage finding is fixed.
+The CLI keeps one private Service State and repository adapter; signing keys,
+authority maps, proof fields, and raw plan issuance remain private to the crate.
 
 The immutable baseline preparation and candidate Cargo attempts remain
-unadmitted under host memory pressure. No Cargo scope, rustc process, test, or
-benchmark sample has started. Draft-PR native-Linux CI is the first pending
-compile signal; local provider-free validation remains required once the wrapper
-can preserve its configured reserve. Issue #71's forge closure is tracker state,
-not acceptance of Plan 0144's separately open public, effect, and installed
-gates.
+unadmitted under host memory pressure. No local Cargo scope, rustc process,
+test, or benchmark sample has started. Exact-head native-Linux CI passes format,
+strict Clippy, dashboard, service-client, version-sync, and the complete
+workstation fixture job. Its comprehensive Rust job remains in progress. Local
+provider-free validation remains required once the wrapper can preserve its
+configured reserve. Issue #71's forge closure is tracker state, not acceptance
+of Plan 0144's separately open public, effect, and installed gates.
 
-Next action: resolve the first compile signal, run P5 validation in increasing
-cost order, then freeze the validated candidate before P6 measurement. No
-runtime, browser, profile, provider, installation, or production effect is
-authorized.
+Next action: resolve the comprehensive CI result, then run local P5 validation
+and the frozen P6 comparison when Cargo admission becomes available. Do not
+mark the PR ready or merge before complete provider-free, measurement, and
+target-platform gates. No runtime, browser, profile, provider, installation,
+or production effect is authorized.
 
 ## Turn 317 | 2026-09-13
 

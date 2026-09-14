@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -65,31 +65,44 @@ secondary acceptance axis, not a premise of the extraction:
 
 P181 is active on `platform/lease-authority-crate` through work item #99. The
 published implementation baseline is
-`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; source checkpoint `b7cd01bd` is
-published for draft PR #106. P0 through the P4 source migration are implemented
-but not yet compile-validated. The architecture contract is green, Cargo
-metadata reports the third workspace member, the old native owner is deleted,
-and one private CLI adapter retains repository, Service State, and runtime-owner
-joins. Exact label comparison preserves all 106 baseline authority and protocol
-tests as 108 crate tests plus three CLI adapter tests, including five additional
-principal and profile-identity tests.
+`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; hardened source checkpoint
+`3c7e2bcc` is published for draft PR #106. P0 through the P4 source migration
+and the P5 validation wiring are implemented. Exact-head native-Linux CI has
+passed formatting, strict Clippy, dashboard, service-client, version-sync, and
+the complete workstation fixture job; the comprehensive Rust job remains in
+progress. The architecture contract and its mutation self-tests are green,
+Cargo metadata reports the third workspace member, the old native owner is
+deleted, and one private CLI adapter retains repository, Service State, and
+runtime-owner joins. Exact label comparison preserves all 106 baseline
+authority and protocol tests as 108 crate tests plus three CLI adapter tests,
+including five additional principal and profile-identity tests.
+
+A fresh-context architecture and security review found no semantic or security
+defect in the extraction. Its one validation finding was accepted: the
+architecture guard now rejects forbidden browser, async-runtime, HTTP, and
+image dependencies; public signing-key and secret-loader APIs; and public
+claim-map, terminal-record, signed-proof, or private-key fields. Closed-world
+mutation checks cover each accepted guard family.
 
 The immutable baseline preparation and four candidate Cargo validation
-attempts were not admitted because the Cargo wrapper reported host memory pressure; no Cargo
-scope, rustc process, test, or benchmark sample started. The latest readback had
-approximately 24 GiB available while the wrapper required approximately 30 GiB
-to preserve its configured reserve and one build claim. Unrelated browser and
-service processes are outside P181 cleanup authority. Native-Linux draft-PR CI
-is therefore the first pending compile signal; local Cargo validation remains
-required when admission becomes available. Issue #71 is currently closed in the
-forge, but P181 has no authority to treat that tracker state as Plan 0144
+attempts were not admitted because the Cargo wrapper reported host memory
+pressure; no Cargo scope, rustc process, test, or benchmark sample started. The
+latest readback had approximately 23 GiB available while the wrapper required
+approximately 30 GiB to preserve its configured reserve and one build claim.
+Unrelated browser and service processes are outside P181 cleanup authority.
+Native-Linux draft-PR CI is therefore the first compile signal; its completed
+exact-head gates are valid CI evidence, while the comprehensive suite remains
+pending and local Cargo validation remains required when admission becomes
+available. Issue #71 is currently closed in the forge, but P181 has no authority
+to treat that tracker state as Plan 0144
 acceptance or to reopen it. Its public, effect-admission, and installed gates
 remain separate.
 
 The candidate workspace contains the `agent-browser` binary crate plus the
 `agent-browser-cdp` and `agent-browser-lease-authority` library crates. The
 baseline Lease-authority kernel was a cohesive native module inside the binary
-compilation unit; checkpoint `b7cd01bd` moves that owner into the new crate.
+compilation unit; checkpoint `3c7e2bcc` moves that owner into the new crate and
+hardens the executable architecture boundary.
 
 Current baseline evidence:
 
@@ -642,7 +655,9 @@ target passes.
 
 ## Next Action
 
-Complete P0 by freezing the one-for-one invariant ledger and accepting the red
-architecture contract. Then begin P1. Recheck P144 source custody immediately
-before the first authority-source edit. The baseline preparation remains due
-from the immutable baseline before candidate measurement.
+Resolve the exact-head comprehensive Rust and workstation CI results. When the
+repository Cargo wrapper can preserve its configured reserve, run the local P5
+crate, retained-CLI, and complete-suite validation without weakening admission,
+then execute the frozen P6 baseline and candidate measurement ledger. Do not
+mark the draft PR ready, merge, or claim build acceleration until those gates
+and target-platform validation are complete.
