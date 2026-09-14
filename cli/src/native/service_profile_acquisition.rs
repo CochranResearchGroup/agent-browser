@@ -25,8 +25,8 @@ use super::service_profile_access_policy::{
     ServiceProfileAccessPolicy,
 };
 use super::{
-    action_runtime, service_lease_authority, service_model, service_principal, service_resources,
-    service_store, service_trace,
+    action_runtime, service_lease_authority_adapter, service_model, service_principal,
+    service_resources, service_store, service_trace,
 };
 use agent_browser_lease_authority::{ActiveLeaseClaim, LeaseResourceKey};
 

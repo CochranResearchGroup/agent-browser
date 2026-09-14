@@ -7,7 +7,9 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+#[cfg(test)]
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use super::service_model::{BrowserSession, LeaseState, ServiceState};
 pub(crate) use agent_browser_lease_authority::{
