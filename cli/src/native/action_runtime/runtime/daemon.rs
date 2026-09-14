@@ -1234,11 +1234,19 @@ fn exact_terminal_owner_allows_profile_relaunch(
         .as_deref()
         .map(agent_browser_lease_authority::canonical_profile_identity_digest)
         .transpose()?;
+    // Early managed route records stored the runtime-profile name instead of
+    // its physical directory. That name resolves to the requested stable path,
+    // so the digest comparison alone cannot identify the historical owner as
+    // the migration source.
+    let configured_profile_is_canonical_runtime_name =
+        profile.user_data_dir.as_deref() == Some(profile_id);
     let migrated_canonical_route_profile =
         requested_runtime_digest.as_deref().is_some_and(|digest| {
-            digest != configured_profile_digest
+            (digest != configured_profile_digest
                 && (binding.claim.profile_identity_digest == configured_profile_digest
-                    || binding.claim.profile_identity_digest == digest)
+                    || binding.claim.profile_identity_digest == digest))
+                || (configured_profile_is_canonical_runtime_name
+                    && binding.claim.profile_identity_digest != digest)
         });
     if !migrated_canonical_route_profile
         && configured_profile_digest != binding.claim.profile_identity_digest
