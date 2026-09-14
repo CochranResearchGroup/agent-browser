@@ -2,31 +2,81 @@
 
 Current execution and stop-state index. Detailed checkpoints through Turn 312
 are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
+[Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 320 | 2026-09-14
+## Turn 322 | 2026-09-14
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Repaired candidate
-`744fa044` extracts the canonical kernel and protected stack into
+is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Candidate
+`09b3afe8` extracts the canonical kernel and protected stack into
 `agent-browser-lease-authority`, deletes the old owner, and leaves one private
-CLI Service State adapter. The architecture and mutation guards preserve all
-106 baseline invariant labels as 108 crate tests plus three CLI adapter tests.
+CLI Service State adapter. All 108 crate tests, three retained adapter tests,
+architecture guards, format, strict Clippy, and comprehensive native-Linux CI
+pass.
 
-Native-Linux comprehensive and no-launch CI pass. Full run 34838219043 exposed
-nine missing non-Linux observation-helper variants; `744fa044` restores their
-existing fail-closed unsupported-platform contract. The architecture guard,
-108 crate tests, formatting, and workspace strict Clippy pass after repair.
-Exact Windows and macOS compilation must be revalidated in CI.
+Full CI run 34846719359 is terminal. macOS ARM compiled the extracted crate and
+then failed in inherited CLI-only code; Windows also reached the extracted
+crate before fail-fast cancellation. Native E2E passed 42 tests, then retained
+one navigation fixture browser and cascaded to 14 failures. Browser repair is
+outside P181 authority and does not invalidate its provider-free source proof.
+P6 remains a measured 91.95 percent focused-loop improvement without the
+stricter acceleration-promotion claim. P181 is joined with current `main` for
+closed-world P7 review; PR integration remains gated on truthful disposition of
+the incomplete target-platform lane. No runtime, browser, profile, provider,
+installation, production, release, or Plan 0144 acceptance claim is made.
 
-P6 consumed its exact 23-invocation ceiling. The focused median fell from
-150.53 to 12.11 seconds, while downstream and cold checks did not regress. The
-strict acceleration-promotion claim is withheld because the frozen selections
-were not literally identical. The full run's browser E2E failures are retained
-separately because P181 does not authorize browser-fixture repair. Next: rerun
-target-platform validation and complete P7 review. The PR remains draft. No runtime, browser, profile,
-provider, installation, production, release, or Plan 0144 acceptance claim is
-authorized or made.
+## Turn 321 | 2026-09-14
+
+P183 source merged through PR #107 as `12848e34`. Exact integrated candidate
+digest `e4beadf0` passed the repaired migration preview with zero protected
+removals. Its preserving apply stopped before selector or payload mutation in
+transaction `upgrade-310bb0f1-e659-40c6-aab5-3062ad9c4489` because three
+prior-boot browser projections retained valid tabs despite absent recorded
+PIDs. Exact selected-host Service reconciliation removed those dead browser,
+tab, and process projections while preserving registered owners.
+
+The installed interlock then exposed [P184](docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
+and [issue #108](https://github.com/CochranResearchGroup/agent-browser/issues/108):
+GC removed candidate generation `0.28.0-e4beadf07f66-0c92aecf29d1` while its
+newest census-blocked transaction still advertised resume. Exact resume failed
+before effect because the immutable generation was absent. Do not retry or
+fabricate it.
+
+The P184 red fixture reproduced the missing candidate reference. The repair
+pins only the newest resumable census-blocked candidate and rollback source;
+nine retention tests, the historical 49-transaction anti-bloat fixture, and the
+workstation GC reference fixture pass. The full 161-test focused workstation
+suite, Rust format, workspace clippy, patch hygiene, and all selected JavaScript
+fixtures also pass. Next: publish and merge P184, then build one exact integrated
+candidate and perform one changed-source preserving apply.
+
+## Turn 320 | 2026-09-13
+
+[Plan 0183](docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md)
+is OPEN through [issue #104](https://github.com/CochranResearchGroup/agent-browser/issues/104).
+The integrated P180 plus P182 candidate at source `caff5e08` and digest
+`6b808d53` passed dry-run, but its single preserving apply stopped before
+payload mutation in transaction
+`upgrade-1f5e27b1-28ee-4277-a1ca-c15b4dddde32`.
+
+The exact blocker is an invalid `browser_missing` tab for
+`session:terminal-profile-4efa5eaf85940d2924b62480`. Its browser, session,
+tab authority, work lease, runtime lifecycle, and process identity are absent,
+but a matching generation 90 owner remains bound to the active registered
+Last30Days principal and capability. Post-reboot installed reconciliation
+failed before effect through retired legacy-daemon routing. P183 is now a
+migration-only repair that synthesizes inert referential placeholders while
+preserving owner authority. No second apply is allowed before focused source
+proof, integration, candidate preview, and a fresh ready dry-run.
+
+The migration-only regression and its fail-closed matrix pass, as do the full
+focused migration module, Rust format, and workspace clippy. Candidate digest
+`e30af9fb` accepts the formerly blocking row without mutation and preserves the
+Last30Days tab, principal, capability, and generation 90 owner. The preview
+reports zero protected removals and also exposes 117 browser plus 115 session
+placeholder additions from older retained references. Review that class diff
+again from the integrated commit before the single remaining apply gate.
 
 ## Turn 319 | 2026-09-13
 
@@ -146,52 +196,3 @@ P177 leaves the active-lane catalog. P169 remains a published clean
 `f6b263f0`. Production maintenance and provider-backed acceptance remain
 quarantined under issue #76. The canonical checkout is fast-forwarded only
 after this closeout receipt integrates; no runtime mutation is part of closeout.
-
-## Turn 313 | 2026-09-13
-
-[Plan 0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
-is OPEN through [issue #65](https://github.com/CochranResearchGroup/agent-browser/issues/65).
-Policies 0047 through 0049, selector v0.1.25, the owned-fork registry, issue
-forms, labels, and issues #65 through #85 are published on
-`platform/plan-0177-execution`. The formerly untracked profile-selection note
-is preserved and split into issues #67, #81, and #66.
-
-Canonical `main` is clean and equal to `origin/main`. The prior no-op local and
-remote branch is retired after PR63 custody. A concurrent installer repair is
-tracked by [Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md),
-issue #84, and PR83; it is not Plan 0177 implementation. Turnstile is
-published at `ba90ef38`, includes current main, has one P169 identity, and is
-paused behind issue #66 because live acceptance remains unproven.
-
-Production is singular and not mid-install, but maintenance and provider-backed
-acceptance are quarantined by issue #76 after two current-scale Service State
-monitor lock timeouts. Issue #77 owns unknown stale process roots. Development
-core is isolated; current-source provenance, status ports, and presentation
-provider readiness remain issues #79, #78, and #80. No runtime mutation occurred.
-
-### Active Planning Ledger
-
-- [Plan 0012](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md)
-  is OPEN under issue #68; Plans 0018 and 0021 are superseded into it.
-- [Plan 0078](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md)
-  is BLOCKED under issue #85 on distinct XRDP route-display allocation.
-- [Plan 0111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md)
-  is OPEN under issue #69 for atomic shared-browser owner authority.
-- [Plan 0116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md)
-  is OPEN under issue #70 for cooperative surrender and singular convergence.
-- [Plan 0144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md)
-  is OPEN under issue #71 for its remaining public, effect, and installed gates.
-- [Plan 0158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
-  is BLOCKED under issue #72 pending explicit protected-campaign reopening.
-- [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
-  remains OPEN as the umbrella production-readiness authority.
-- [Plan 0162](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md)
-  is OPEN under issue #73 for source work and separately gated installed proof.
-- [Plan 0163](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md)
-  is OPEN under issue #74 for provider-free source work; destructive use is gated.
-- [Plan 0165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
-  is BLOCKED under issue #75 on sealed authentication and read-only acceptance.
-
-Closed or superseded during reconciliation: Plans 0018, 0021, 0037, 0045,
-0069, 0091, 0114, 0123, and 0137. ROADMAP lanes P13, P14, P44, P69, and P91
-are closed. Retained implementation and evidence remain in Git and their plans.

@@ -25,6 +25,33 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P184 | Resumable Candidate Generation Retention
+
+State: OPEN
+
+Current state: [Plan 0184](docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
+and [issue #108](https://github.com/CochranResearchGroup/agent-browser/issues/108)
+own the candidate-custody defect exposed after P183 integration. The newest
+`blocked_ambiguous_runtime` transaction advertises resume, but unattended
+generation GC removed its exact staged candidate. P184 pins only the newest
+resumable candidate and rollback source while leaving superseded blocked
+history reclaimable, then returns P183 to one changed-source install attempt.
+
+## P183 | Registered Owner Browser-Missing Migration Repair
+
+State: OPEN
+
+Current state: [Plan 0183](docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md)
+and [issue #104](https://github.com/CochranResearchGroup/agent-browser/issues/104)
+own the source blocker exposed by the first integrated P180 plus P182 install.
+The first apply stopped before payload mutation because one invalid historical tab
+references an absent browser while an exact generation 90 registered-principal
+owner remains ready. P183 preserves that owner and capability binding while
+materializing non-effect-capable browser and released-session placeholders,
+then returns one integrated candidate to preserving installed acceptance. PR
+#107 merged the source repair as `12848e34`; installed acceptance now depends
+on P184 because the interlock removed the resumable candidate generation.
+
 ## P182 | Authentication Resume State Reconciliation
 
 State: OPEN
