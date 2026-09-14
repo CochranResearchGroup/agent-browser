@@ -7,11 +7,9 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 324 | 2026-09-14
 
-[Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Candidate
-`5ceb709c` joins current `main` at `bba8b7a3`, extracts the canonical kernel and
-protected stack into `agent-browser-lease-authority`, deletes the old owner,
-and leaves one private CLI Service State adapter.
+[Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md) is CLOSED through PR #106, which merged exact validated head `91aa3204` into
+`main` as `b5a78faf`. The new crate owns the canonical kernel and protected
+stack; the old owner is deleted and the CLI retains one private adapter.
 
 Full CI run 34846719359 is terminal. macOS ARM compiled the extracted crate and
 then failed in inherited CLI-only code; Windows also reached the extracted
@@ -23,9 +21,11 @@ promotion claim. Focused run 34857911397 passes Linux, both macOS targets, and
 Windows after `b6aa71dd` fixed Unix-only fixture paths; ordinary CI run
 34857911400 is green. Final pre-join head `8a57dce5` also passes focused run
 34861501476 and ordinary run 34861501499. The second P186 repair merged to
-`main` afterward and is joined cleanly at `5ceb709c`; joined-head validation and
-local seam checks pass, while joined-head CI and merge custody remain. No runtime, browser, profile, provider, installation,
-production, release, or Plan 0144 acceptance claim is made.
+`main` afterward and was joined cleanly. Exact focused run 34864731916 passes
+Linux, both macOS targets, and Windows. Ordinary run 34864731908 passes every
+fast gate, including comprehensive Rust and no-launch smokes. No runtime,
+browser, profile, provider, installation, production, release, or Plan 0144
+acceptance claim is made. No P181 execution remains.
 
 ## Turn 323 | 2026-09-14
 

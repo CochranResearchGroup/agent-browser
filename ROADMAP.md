@@ -98,10 +98,10 @@ allowed on the old installed generation.
 
 ## P181 | Lease-Authority Kernel Crate Extraction
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-has current-main joined candidate `5ceb709c` in draft PR #106. The old native
+is integrated through PR #106 as merge `b5a78faf`. The old native
 owner is deleted, the kernel and protected stack live in
 `agent-browser-lease-authority`, and the CLI retains only a private Service
 State and repository adapter. The architecture guard and its mutation tests are
@@ -122,11 +122,12 @@ run 34861501476 and ordinary CI run 34861501499. The initial Windows fixture fai
 `b6aa71dd` with platform-native absolute test paths while retaining fail-closed
 protected-state validation. Current `main` at `bba8b7a3` is joined cleanly at
 `5ceb709c`, preserving the extracted owner and P186 route-command admission
-repair. Focused admission, format, strict-Clippy, architecture, and mutation
-checks pass locally; joined-head CI and merge custody remain. Work item
+repair. Exact head `91aa3204` passes focused four-platform run 34864731916 and
+ordinary CI run 34864731908, including comprehensive Rust and no-launch smokes.
+The validated head is an ancestor of `main`; no P181 gate remains. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
-is in progress on `platform/lease-authority-crate` from baseline `16d4fb22`.
-P181 authorizes the bounded source extraction and provider-free validation but
+is complete from baseline `16d4fb22`.
+P181 authorized the bounded source extraction and provider-free validation but
 no runtime, browser, profile, provider, installation, or production effect.
 
 ## P180 | Pre-Drain Browserless Lane Quiescence Repair
