@@ -16,6 +16,10 @@ _Avoid_: Client ID, principal, browser session
 The revisioned rules that authorize a Client Subject to observe, use, coordinate, administer, or reclaim a browser resource.
 _Avoid_: Lease, runtime ownership proof, profile identity
 
+**Lease-authority kernel**:
+The singular authority for active resource claims, monotonic revisions, fencing tokens, and effect authorization. Historical events, terminal records, and projections describe prior outcomes but never become current authority.
+_Avoid_: Access policy, Service State lease, runtime ownership proof
+
 **Shared-local profile**:
 A profile whose default policy allows locally trusted Client Subjects to reuse one managed browser and receive attributable tabs without first enrolling a strict identity.
 _Avoid_: Unowned profile, public profile, exclusive profile

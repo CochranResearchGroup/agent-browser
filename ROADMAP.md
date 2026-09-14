@@ -39,6 +39,20 @@ P182 now owns one integrated P180 plus P182 candidate window. The existing run,
 browser, tab, handle, and zero-effect state must be preserved, and no resume is
 allowed on the old installed generation.
 
+## P181 | Lease-Authority Kernel Crate Extraction
+
+State: PLANNED
+
+Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
+defines a bounded `PL-PLATFORM` successor that first removes the Lease-authority
+kernel's Service State, principal, and runtime-profile dependency leaks, then
+extracts one independently testable Rust crate and measures the focused build
+loop under comparable conditions. It depends on source-writer reconciliation
+with Plan 0144 and issue #71. Work item
+[CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
+is ready. P181 is not active, has no active-lane entry yet, and authorizes no
+source implementation or runtime effect.
+
 ## P180 | Pre-Drain Browserless Lane Quiescence Repair
 
 State: OPEN
