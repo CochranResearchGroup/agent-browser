@@ -36,6 +36,13 @@ is open and in progress; issue #66 remains the blocked fixture leaf. W0 still
 requires merge validation and published branch custody. No hCaptcha retry,
 browser input, provider mutation, production mutation, or release is authorized.
 
+W0 source and custody validation passes at published activation checkpoint
+`342bb8fa`: version sync, lease-crate architecture, presentation-provider
+fixture, formatting, strict Clippy, 108 lease-authority tests, 7 hCaptcha tests,
+32 desktop-interaction tests, route-confusion gates, the source-free workstation
+fixture, and planning audit. The active-lane catalog change is proposed on the
+topic branch and becomes canonical only through protected-main integration.
+
 ## Turn 328 | 2026-09-14
 
 PR #120 merged atomic route profile-record synchronization as `f65bf907`;

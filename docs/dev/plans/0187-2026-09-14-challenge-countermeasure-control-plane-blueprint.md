@@ -268,6 +268,17 @@ in progress. Plan 0188 and Plan 0189 are the normalized challenge packet
 identities. The integration branch is published; validation remains the final
 W0 exit gate.
 
+W0 source and custody acceptance: activation checkpoint
+`342bb8fa94eaf714f70f34328894e5d2867fbfe7` is published with the branch-local
+active-lane proposal. Version synchronization, lease-authority architecture,
+development presentation-provider fixtures, Rust formatting, strict workspace
+Clippy, all 108 lease-authority tests, all 7 hCaptcha-focused tests, all 32
+desktop-interaction-focused tests, route-confusion gates, the source-free
+workstation fixture, and the planning audit pass. The canonical active-lane
+projection remains pending through the protected-main pull request; issue #127
+and the draft pull request provide shared discovery in the interim. W1 may
+begin only on this same registered branch and remains provider-free.
+
 ### W1 | Desktop transaction correctness
 
 - Freeze the phase-bound freshness contract with provider-free tests.
