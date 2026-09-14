@@ -86,7 +86,7 @@ impl XDoToolSink {
                     pointer_y = value.parse::<i32>().ok();
                 }
             }
-            return Ok(XTestSceneProbe {
+            Ok(XTestSceneProbe {
                 pointer_x: pointer_x.ok_or_else(|| {
                     DesktopInputProviderError::new("desktop_input_focus_probe_unavailable")
                 })?,
@@ -94,7 +94,7 @@ impl XDoToolSink {
                     DesktopInputProviderError::new("desktop_input_focus_probe_unavailable")
                 })?,
                 controlled_fixture_focused: active_pid == self.expected_browser_pid,
-            });
+            })
         }
         #[cfg(not(unix))]
         Err(DesktopInputProviderError::new(
@@ -110,7 +110,7 @@ impl ClosedX11Sink for XDoToolSink {
             let args = xdotool_event_args(event)?;
             let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
             run_xdotool(&self.display_name, &refs)?;
-            return Ok(format!("xdotool-acknowledgement:{}", uuid::Uuid::new_v4()));
+            Ok(format!("xdotool-acknowledgement:{}", uuid::Uuid::new_v4()))
         }
         #[cfg(not(unix))]
         Err(DesktopInputProviderError::new(

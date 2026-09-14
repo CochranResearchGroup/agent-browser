@@ -10,7 +10,7 @@ const PRODUCTION_RUNTIME_SCHEMA: &str = "agent-browser.runtime-generation.v1";
 const PROVIDER_ID: &str = "controlled-x11-xtest";
 const PROVIDER_CAPABILITY: &str = "guarded_pointer_keyboard_v1";
 const RECIPE_ID: &str = "p131-controlled-x11-v1";
-const RECIPE_IDS: [&str; 2] = [RECIPE_ID, "cloudflare-turnstile-v1"];
+const RECIPE_IDS: [&str; 3] = [RECIPE_ID, "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProviderAdmission {
@@ -163,7 +163,7 @@ mod tests {
                     "providerId": "controlled-x11-xtest",
                     "capability": "guarded_pointer_keyboard_v1",
                     "recipeId": "p131-controlled-x11-v1",
-                    "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"]
+                    "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"]
                 }
             }))
             .unwrap(),
@@ -181,7 +181,11 @@ mod tests {
         assert_eq!(admission.recipe_id, "p131-controlled-x11-v1");
         assert_eq!(
             admission.recipe_ids,
-            ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"]
+            [
+                "p131-controlled-x11-v1",
+                "cloudflare-turnstile-v1",
+                "hcaptcha-checkbox-v1"
+            ]
         );
         assert_eq!(admission.generation_id, "0.28.0-fixture");
     }
@@ -213,7 +217,7 @@ mod tests {
                     "providerId": "controlled-x11-xtest",
                     "capability": "guarded_pointer_keyboard_v1",
                     "recipeId": "p131-controlled-x11-v1",
-                    "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"]
+                    "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"]
                 }
             }))
             .unwrap(),
@@ -227,7 +231,11 @@ mod tests {
             assert_eq!(admission.recipe_id, "p131-controlled-x11-v1");
             assert_eq!(
                 admission.recipe_ids,
-                ["p131-controlled-x11-v1", "cloudflare-turnstile-v1"]
+                [
+                    "p131-controlled-x11-v1",
+                    "cloudflare-turnstile-v1",
+                    "hcaptcha-checkbox-v1"
+                ]
             );
             assert_eq!(admission.generation_id, "0.28.0-production");
         }

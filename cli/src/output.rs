@@ -6123,7 +6123,7 @@ Usage:
   agent-browser desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]
   agent-browser desktop evidence observe --browser-id <id> [--episode-id <id>] [--evidence-surface stacking_or_occlusion|passkey_chooser] [--service-tab-handle-json <json> --trigger-selector <css>] [--include-frame]
   agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]
-  agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1|p131-controlled-x11-v1|cloudflare-turnstile-v1> --service-name <name> --agent-name <name> --task-name <name>
+  agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1|p131-controlled-x11-v1|cloudflare-turnstile-v1|hcaptcha-checkbox-v1> --service-name <name> --agent-name <name> --task-name <name>
 
 `desktop capture` asks the service worker to resolve one retained browser to
 its exact ready stream, route, and display allocation. It captures one PNG of
@@ -6138,8 +6138,9 @@ receive the bounded `imageBase64` value in the immediate response.
 `desktop locate` captures a fresh bound frame and runs one registered,
 deterministic locator profile. `cloudflare-turnstile-v1` uses bounded
 Tesseract phrase evidence plus fixed checkbox geometry and performs no input.
-It accepts no caller-supplied pixels or template
-paths and performs no pointer, keyboard, or challenge-solving effect. A result
+`hcaptcha-checkbox-v1` separately requires a visible checkbox corroborated
+by the human prompt and hCaptcha brand. Neither accepts caller-supplied pixels
+or template paths or performs a pointer, keyboard, or challenge-solving effect. A result
 status is `matched`, `not_found`, or `ambiguous`. Text output prints the stable
 context, frame, geometry epoch, locator profile, selection, and candidate count
 without base64. JSON retains structured candidates and, only when requested,
@@ -6182,6 +6183,9 @@ provider selection. The `cloudflare-turnstile-v1` recipe uniquely locates the
 visible phrase, moves through the controlled xdotool adapter, recaptures to
 prove a hover-revealed checkbox before button-down, clicks once, and verifies
 the challenge state disappeared. It never retries automatically.
+The `hcaptcha-checkbox-v1` recipe applies the same one-click and no-keyboard
+ceiling to its separately detected widget. A post-click `challenge_open` or
+`inconclusive` state is terminal and never starts challenge solving.
 
 The stress receipt covers source-only replay, cleanup, verification,
 prompt-intervention, and opaque-handoff projections. Every individual receipt
@@ -6209,7 +6213,7 @@ Options:
   --controller-lease-id <id>
                           Require the exact current controller lease
   --operation-id <id>     Supply the opaque idempotency identity for this operation
-  --recipe-id <id>        Select p110-pointer-keyboard-v1, p110-foundation-stress-v1, p131-controlled-x11-v1, or cloudflare-turnstile-v1
+  --recipe-id <id>        Select p110-pointer-keyboard-v1, p110-foundation-stress-v1, p131-controlled-x11-v1, cloudflare-turnstile-v1, or hcaptcha-checkbox-v1
   --service-name <name>   Desktop action service attribution
   --agent-name <name>     Desktop action agent attribution
   --task-name <name>      Desktop action task attribution
@@ -6225,11 +6229,13 @@ Examples:
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --include-visualization --json
   agent-browser desktop locate --browser-id browser-123 --locator-id cloudflare-turnstile-v1 --json
+  agent-browser desktop locate --browser-id browser-123 --locator-id hcaptcha-checkbox-v1 --json
   agent-browser desktop evidence observe --browser-id browser-123 --episode-id scene-check-1 --service-name DesktopEvidence --agent-name codex --task-name inspect-stacking --json
   agent-browser --session fixture-daemon desktop prompt observe --browser-id browser-123 --session-name fixture-browser --prompt-profile-id p110-external-prompt-v1 --service-name DesktopPerception --agent-name fixture-agent --task-name observe-fixture
   agent-browser desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1 --include-visualization --json
   agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-foundation-stress-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name stress-synthetic-control --json
   agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id turnstile-1 --recipe-id cloudflare-turnstile-v1 --service-name DesktopInteractor --agent-name codex --task-name verify-turnstile --json
+  agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id hcaptcha-1 --recipe-id hcaptcha-checkbox-v1 --service-name DesktopInteractor --agent-name codex --task-name verify-hcaptcha-checkbox --json
 "##
         }
 

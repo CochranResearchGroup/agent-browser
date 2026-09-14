@@ -18,10 +18,11 @@ use super::desktop_input_provider_admission::{
     revalidate_current_provider_admission, ProviderAdmission,
 };
 use super::desktop_interaction::{
-    AfterObservation, BeforeObservation, ControllerAuthority, ControllerAuthorityRepository,
-    DesktopBinding, DesktopInteractionError, DesktopInteractionProvider,
-    DesktopInteractionProviderEvidence, DesktopInteractionRequest, EventAcknowledgement,
-    InputEvent, InteractionClock, PixelBounds, PixelPoint, SurfaceSnapshot, TURNSTILE_RECIPE_ID,
+    is_captcha_recipe, AfterObservation, BeforeObservation, ControllerAuthority,
+    ControllerAuthorityRepository, DesktopBinding, DesktopInteractionError,
+    DesktopInteractionProvider, DesktopInteractionProviderEvidence, DesktopInteractionRequest,
+    EventAcknowledgement, InputEvent, InteractionClock, PixelBounds, PixelPoint, SurfaceSnapshot,
+    HCAPTCHA_RECIPE_ID, TURNSTILE_RECIPE_ID,
 };
 use super::service_model::{controller_authority_fence_matches, ServiceState};
 use super::service_store::{
@@ -41,20 +42,20 @@ pub(crate) struct ControlledX11Provider {
     initial_capture: Option<DesktopCaptureResult>,
     controller_epoch: u64,
     process_identity_digest: String,
-    turnstile_target: Option<PixelBounds>,
+    captcha_target: Option<PixelBounds>,
     provider_id: String,
 }
 
 enum ConfiguredX11Sink {
     Fixture(XTestSink),
-    Turnstile(XDoToolSink),
+    Challenge(XDoToolSink),
 }
 
 impl ConfiguredX11Sink {
     fn probe(&self) -> Result<XTestSceneProbe, DesktopInputProviderError> {
         match self {
             Self::Fixture(sink) => sink.probe(),
-            Self::Turnstile(sink) => sink.probe(),
+            Self::Challenge(sink) => sink.probe(),
         }
     }
 }
@@ -63,7 +64,7 @@ impl ClosedX11Sink for ConfiguredX11Sink {
     fn emit(&mut self, event: &ControlledX11Event) -> Result<String, DesktopInputProviderError> {
         match self {
             Self::Fixture(sink) => sink.emit(event),
-            Self::Turnstile(sink) => sink.emit(event),
+            Self::Challenge(sink) => sink.emit(event),
         }
     }
 }
@@ -140,13 +141,13 @@ impl ControlledX11Provider {
             max_bytes: HARD_MAX_BYTES,
         })
         .map_err(|error| provider_error(error.code()))?;
-        let provider_id = if request.recipe_id == TURNSTILE_RECIPE_ID {
+        let provider_id = if is_captcha_recipe(&request.recipe_id) {
             "controlled-x11-xdotool".to_string()
         } else {
             admission.provider_id.clone()
         };
-        let sink = if request.recipe_id == TURNSTILE_RECIPE_ID {
-            ConfiguredX11Sink::Turnstile(
+        let sink = if is_captcha_recipe(&request.recipe_id) {
+            ConfiguredX11Sink::Challenge(
                 XDoToolSink::new(
                     &capture_binding.display_name,
                     browser.pid.ok_or_else(|| {
@@ -186,7 +187,7 @@ impl ControlledX11Provider {
                 initial_capture: Some(initial_capture),
                 controller_epoch: route.controller_epoch,
                 process_identity_digest,
-                turnstile_target: None,
+                captcha_target: None,
                 provider_id,
             },
             authority,
@@ -237,16 +238,24 @@ impl DesktopInteractionProvider for ControlledX11Provider {
             .take()
             .ok_or_else(|| provider_error("desktop_input_provider_observation_reused"))?;
         let (bounds, candidate_id, target_class, observation_id, observation_sha256) =
-            if self.request.recipe_id == TURNSTILE_RECIPE_ID {
-                let target = super::desktop_locator::locate_cloudflare_turnstile(&capture)
-                    .map_err(|_| provider_error("desktop_interaction_target_unavailable"))?;
+            if is_captcha_recipe(&self.request.recipe_id) {
+                let target = match self.request.recipe_id.as_str() {
+                    TURNSTILE_RECIPE_ID => {
+                        super::desktop_locator::locate_cloudflare_turnstile(&capture)
+                    }
+                    HCAPTCHA_RECIPE_ID => {
+                        super::desktop_locator::locate_hcaptcha_checkbox(&capture)
+                    }
+                    _ => unreachable!("guarded by is_captcha_recipe"),
+                }
+                .map_err(|_| provider_error("desktop_interaction_target_unavailable"))?;
                 let bounds = PixelBounds {
                     x: i64::from(target.bounds.0),
                     y: i64::from(target.bounds.1),
                     width: target.bounds.2,
                     height: target.bounds.3,
                 };
-                self.turnstile_target = Some(bounds);
+                self.captcha_target = Some(bounds);
                 (
                     bounds,
                     target.candidate_id,
@@ -354,14 +363,20 @@ impl DesktopInteractionProvider for ControlledX11Provider {
         effect_key: &str,
         event: &InputEvent,
     ) -> Result<EventAcknowledgement, DesktopInteractionError> {
-        if self.request.recipe_id == TURNSTILE_RECIPE_ID
+        if is_captcha_recipe(&self.request.recipe_id)
             && matches!(event, InputEvent::LeftDown { .. })
         {
             let capture = self.capture()?;
-            let target = super::desktop_locator::locate_cloudflare_turnstile(&capture)
-                .map_err(|_| provider_error("desktop_interaction_target_unavailable"))?;
+            let target = match self.request.recipe_id.as_str() {
+                TURNSTILE_RECIPE_ID => {
+                    super::desktop_locator::locate_cloudflare_turnstile(&capture)
+                }
+                HCAPTCHA_RECIPE_ID => super::desktop_locator::locate_hcaptcha_checkbox(&capture),
+                _ => unreachable!("guarded by is_captcha_recipe"),
+            }
+            .map_err(|_| provider_error("desktop_interaction_target_unavailable"))?;
             let expected = self
-                .turnstile_target
+                .captcha_target
                 .ok_or_else(|| provider_error("desktop_interaction_target_unavailable"))?;
             if !target.visible_control
                 || target.bounds
@@ -426,7 +441,9 @@ impl DesktopInteractionProvider for ControlledX11Provider {
         &mut self,
         _binding: &DesktopBinding,
     ) -> Result<AfterObservation, DesktopInteractionError> {
-        let (capture, passed, text_sha256) = if self.request.recipe_id == TURNSTILE_RECIPE_ID {
+        let (capture, verification_state, text_sha256) = if self.request.recipe_id
+            == TURNSTILE_RECIPE_ID
+        {
             let mut result = None;
             for _ in 0..10 {
                 let capture = self.capture()?;
@@ -446,15 +463,43 @@ impl DesktopInteractionProvider for ControlledX11Provider {
             }
             let (capture, passed) = result
                 .ok_or_else(|| provider_error("desktop_interaction_verification_unavailable"))?;
-            (capture, passed, None)
+            (
+                capture,
+                if passed { "passed" } else { "inconclusive" },
+                None,
+            )
+        } else if self.request.recipe_id == HCAPTCHA_RECIPE_ID {
+            let mut result = None;
+            for _ in 0..4 {
+                let capture = self.capture()?;
+                if super::desktop_locator::hcaptcha_challenge_is_open(&capture).unwrap_or(false) {
+                    result = Some((capture, "challenge_open"));
+                    break;
+                }
+                match super::desktop_locator::observe_hcaptcha_checkbox(&capture) {
+                    Ok(None) => {
+                        result = Some((capture, "passed"));
+                        break;
+                    }
+                    Ok(Some(_)) | Err(_) => result = Some((capture, "inconclusive")),
+                }
+                std::thread::sleep(Duration::from_millis(300));
+            }
+            let (capture, state) = result
+                .ok_or_else(|| provider_error("desktop_interaction_verification_unavailable"))?;
+            (capture, state, None)
         } else {
             let capture = self.capture()?;
             let passed = locate_unique_color(&capture.image_bytes, SUCCESS_RGB).is_ok();
-            (capture, passed, passed.then(|| digest_text(FIXED_TEXT)))
+            (
+                capture,
+                if passed { "passed" } else { "failed" },
+                passed.then(|| digest_text(FIXED_TEXT)),
+            )
         };
         let observation_sha256 = digest_text(&format!(
             "{}\0{}",
-            capture.frame_receipt.content_sha256, passed
+            capture.frame_receipt.content_sha256, verification_state
         ));
         Ok(AfterObservation {
             binding: Self::binding(&capture),
@@ -463,7 +508,7 @@ impl DesktopInteractionProvider for ControlledX11Provider {
             frame_sha256: capture.frame_receipt.content_sha256,
             observation_id: format!("desktop-observation-{}", &observation_sha256[..24]),
             observation_sha256,
-            verification_state: if passed { "passed" } else { "failed" }.to_string(),
+            verification_state: verification_state.to_string(),
             text_sha256,
         })
     }

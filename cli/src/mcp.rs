@@ -1353,7 +1353,7 @@ fn service_mcp_tools() -> Vec<Value> {
                         "additionalProperties": false,
                         "required": ["recipeId"],
                         "properties": {
-                            "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1", "cloudflare-turnstile-v1"] }
+                            "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1", "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"] }
                         },
                         "description": "Repository-owned synthetic interaction recipe. Raw input fields are not accepted."
                     },
@@ -5283,7 +5283,7 @@ fn desktop_interact_tool_schema() -> Value {
                 "sessionName": { "type": "string", "description": "Optional daemon session used only to narrow routing." },
                 "controllerLeaseId": { "type": "string", "description": "Existing primary controller lease id." },
                 "operationId": { "type": "string", "description": "Required caller-generated opaque idempotency identity; never a daemon selector." },
-                "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1", "cloudflare-turnstile-v1"], "description": "Registered repository-owned interaction recipe." },
+                "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1", "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"], "description": "Registered repository-owned interaction recipe." },
                 "jobTimeoutMs": { "type": "integer", "minimum": 1 },
                 "serviceName": { "type": "string", "description": "Required calling service name." },
                 "agentName": { "type": "string", "description": "Required calling agent name." },
@@ -6956,6 +6956,7 @@ fn desktop_interact_service_request(arguments: &Value) -> Result<Value, JsonRpcE
             | "p110-foundation-stress-v1"
             | "p131-controlled-x11-v1"
             | "cloudflare-turnstile-v1"
+            | "hcaptcha-checkbox-v1"
     ) {
         return Err(JsonRpcError::invalid_params(
             "desktop_interact recipeId must be registered",

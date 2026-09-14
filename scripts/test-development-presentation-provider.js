@@ -180,8 +180,9 @@ try {
     ...guardedBefore, defaultDevelopment: { changed: true },
   }));
   const routeOpenerSource = readFileSync('scripts/open-rdp-guac-route-displays.js', 'utf8');
-  assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'set'/);
-  assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'open'/);
+  assert.match(routeOpenerSource, /'open',\s*url,\s*'--headers'/);
+  assert.doesNotMatch(routeOpenerSource, /'open',\s*'about:blank'/);
+  assert.doesNotMatch(routeOpenerSource, /'set',\s*'headers'/);
   assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'close'/);
   assert.match(routeOpenerSource, /AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER/);
   assert.match(routeOpenerSource, /routeViewerProfile\(route, slug\)/);

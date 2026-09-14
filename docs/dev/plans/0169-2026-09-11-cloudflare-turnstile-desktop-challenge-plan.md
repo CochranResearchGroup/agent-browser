@@ -45,6 +45,13 @@ change this plan's live effect gate or authorize a browser launch,
 installation, profile mutation, desktop input, live challenge attempt, or
 retry.
 
+The operator subsequently authorized the bounded
+[Plan 0181 hCaptcha fixture packet](0181-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md).
+That successor owns a distinct `hcaptcha-checkbox-v1` profile, one repaired
+development-provider apply, and exactly one local fixture checkbox click. It
+does not reinterpret hCaptcha as Turnstile or close this plan's separate
+Turnstile acceptance gate.
+
 A second California Secretary of State fieldwork route exposed a distinct
 challenge family. Imperva supplies the blocking interstitial, while a nested
 hCaptcha checkbox frame supplies the visible `I am human` control and a

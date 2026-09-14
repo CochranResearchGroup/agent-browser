@@ -503,7 +503,8 @@ pub fn service_contracts_metadata() -> Value {
                         "p110-pointer-keyboard-v1",
                         "p110-foundation-stress-v1",
                         "p131-controlled-x11-v1",
-                        "cloudflare-turnstile-v1"
+                        "cloudflare-turnstile-v1",
+                        "hcaptcha-checkbox-v1"
                     ],
                     "requiresControllerLease": true,
                     "requiresOperationId": true,

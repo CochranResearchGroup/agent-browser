@@ -846,14 +846,19 @@ challenge-solving effect.
 ```bash
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id cloudflare-turnstile-v1 --json
+agent-browser desktop locate --browser-id browser-123 --locator-id hcaptcha-checkbox-v1 --json
 ```
 
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance. Do not treat source presence as installed-runtime or live proof.
 
-PoC 2 registers only `p110-control-v1` for the repository's synthetic
-verification control. It is not a Turnstile, passkey, or general UI profile.
-The required `--locator-id` selects that registered profile. The caller cannot
+`p110-control-v1` is the repository synthetic profile.
+`cloudflare-turnstile-v1` and `hcaptcha-checkbox-v1` are separate
+observation-only challenge profiles. The hCaptcha profile requires the human
+prompt, nearby hCaptcha brand, and visible checkbox geometry. None is a
+passkey or general UI profile. The required `--locator-id` selects a
+registered profile. The caller cannot
 supply pixels, a template path, provider routing, or display coordinates.
 `--max-candidates` defaults to 8 and has a hard maximum of 32.
 `--include-visualization` adds a response-only `visualizationBase64` value in
@@ -1013,8 +1018,8 @@ handoff scenarios without adding a production provider.
 HTTP and generated-client requests use `action: "desktop_interact"`, top-level
 `browserId`, `controllerLeaseId`, `operationId`, and either
 `p110-pointer-keyboard-v1`, `p110-foundation-stress-v1`,
-`p131-controlled-x11-v1`, or `cloudflare-turnstile-v1` as
-`recipe.recipeId`. Supply all three
+`p131-controlled-x11-v1`, `cloudflare-turnstile-v1`, or
+`hcaptcha-checkbox-v1` as `recipe.recipeId`. Supply all three
 attribution labels. MCP clients can use the canonical `service_request` or the
 dedicated `desktop_interact` tool. Client helpers are
 `createServiceDesktopInteractRequest()`, `requestServiceDesktopInteract()`,
@@ -1028,6 +1033,13 @@ recaptures after hover, and refuses button-down unless checkbox geometry appears
 at the same region. It clicks at most once and never retries automatically.
 Callers cannot provide OCR text, pixels, coordinates, commands, timing, or a
 provider executable.
+
+Use `hcaptcha-checkbox-v1` only for a visible hCaptcha checkbox on an exactly
+bound service-owned X11 browser. First run `desktop locate` with the same
+locator ID. The locator requires the human prompt, nearby hCaptcha brand, and
+visible checkbox geometry. The recipe emits at most one click and no keyboard
+events. Treat `challenge_open` and `inconclusive` as terminal; never select
+images, invoke audio or accessibility controls, reset, or retry.
 
 Treat partial-effect receipts as non-retryable. Receipt metadata omits frame
 pixels, plaintext typed content, and the full motion path. No recipe is a

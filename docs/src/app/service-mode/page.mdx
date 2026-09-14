@@ -427,8 +427,11 @@ input.
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance and does not prove that an installed runtime contains the feature.
 
-PoC 2 registers only `p110-control-v1` for the repository's synthetic
-verification control. It is not a Turnstile, passkey, or general UI profile.
+`p110-control-v1` remains the repository synthetic profile.
+`cloudflare-turnstile-v1` and `hcaptcha-checkbox-v1` are separate,
+observation-only challenge profiles. The hCaptcha profile requires the human
+prompt, nearby hCaptcha brand, and visible checkbox geometry. None is a
+passkey or general UI profile.
 
 Use the CLI:
 
@@ -436,6 +439,7 @@ Use the CLI:
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
 agent-browser desktop locate --browser-id browser-123 --locator-id cloudflare-turnstile-v1 --json
+agent-browser desktop locate --browser-id browser-123 --locator-id hcaptcha-checkbox-v1 --json
 ```
 
 Use the canonical service request from HTTP:
@@ -648,7 +652,7 @@ const interaction = await runServiceDesktopInteraction({
     <tr>
       <td><code>recipe.recipeId</code></td>
       <td>Required</td>
-      <td>Use <code>p110-pointer-keyboard-v1</code>, <code>p110-foundation-stress-v1</code>, <code>p131-controlled-x11-v1</code>, or <code>cloudflare-turnstile-v1</code>.</td>
+      <td>Use <code>p110-pointer-keyboard-v1</code>, <code>p110-foundation-stress-v1</code>, <code>p131-controlled-x11-v1</code>, <code>cloudflare-turnstile-v1</code>, or <code>hcaptcha-checkbox-v1</code>.</td>
     </tr>
     <tr>
       <td><code>serviceName</code>, <code>agentName</code>, <code>taskName</code></td>
@@ -687,6 +691,12 @@ browser. It derives a checkbox region from the exact phrase, moves through the
 fixed xdotool adapter, recaptures after hover, and refuses button-down unless
 the checkbox appears at the same region. It emits at most one click, performs
 fresh after-state verification, and never retries automatically.
+
+The <code>hcaptcha-checkbox-v1</code> recipe requires separate prompt, brand,
+geometry, and visible-checkbox evidence. It emits at most one click with no
+keyboard input. A <code>challenge_open</code> or <code>inconclusive</code>
+post-click result is terminal and does not authorize image, audio, or
+accessibility challenge solving.
 
 The persisted foundation-stress receipt projects operation presence, replay,
 cleanup, verification, prompt intervention, and the typed live-entry gate.

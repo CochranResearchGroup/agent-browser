@@ -3,14 +3,14 @@ work_item_tracking: required
 lanes:
   - id: P169
     product_lane: PL-CHALLENGE
-    objective: Qualify one bounded Turnstile interaction through the governed desktop workflow
-    plan: docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md
+    objective: Qualify one bounded hCaptcha fixture checkbox interaction through the governed desktop workflow
+    plan: docs/dev/plans/0181-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md
     plan_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     branch: feature/turnstile-desktop-challenge
     target: main
     plan_state: BLOCKED
-    custody_state: PAUSED_REF
-    checkpoint: c6f0b447a03a586991561824ad0e744974267e81
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: f11b1c51007c46ec91d1cac682a6d0fb4ed68b7b
     remote_ref: refs/remotes/origin/feature/turnstile-desktop-challenge
     integration_receipt: null
     integration: merge

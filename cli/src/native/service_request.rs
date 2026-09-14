@@ -1688,6 +1688,7 @@ fn reject_desktop_interact_request(
                 | "p110-foundation-stress-v1"
                 | "p131-controlled-x11-v1"
                 | "cloudflare-turnstile-v1"
+                | "hcaptcha-checkbox-v1"
         )
     ) {
         return Err(issue(
@@ -3177,6 +3178,21 @@ mod tests {
         assert_eq!(
             controlled.command["recipe"]["recipeId"],
             "p131-controlled-x11-v1"
+        );
+        let hcaptcha = normalize(json!({
+            "action": "desktop_interact",
+            "browserId": "browser-1",
+            "controllerLeaseId": "lease-1",
+            "operationId": "hcaptcha-operation-1",
+            "recipe": { "recipeId": "hcaptcha-checkbox-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "verify-hcaptcha-checkbox"
+        }))
+        .unwrap();
+        assert_eq!(
+            hcaptcha.command["recipe"]["recipeId"],
+            "hcaptcha-checkbox-v1"
         );
         assert!(normalized.command["operationPrincipalId"]
             .as_str()

@@ -15,7 +15,6 @@ const dryRun = process.argv.includes('--dry-run');
 const allowSingleRoute = process.argv.includes('--allow-single-route');
 const waitMs = numberArg('--wait-ms') ?? 8000;
 const agentBrowserTimeoutMs = numberArg('--agent-browser-timeout-ms') ?? 600000;
-const routeNavigationTimeoutMs = numberArg('--route-navigation-timeout-ms') ?? 600000;
 const routeDisplayTimeoutMs = numberArg('--route-display-timeout-ms') ?? 600000;
 
 loadAgentBrowserEnv();
@@ -348,6 +347,10 @@ function openRoute(route, index) {
       error: token.error,
     })}`);
   }
+  const headerUser = guacamoleHeaderUser();
+  if (token.authMode !== 'header' || !headerUser) {
+    throw new Error(`guacamole_route_${slug}_header_auth_required`);
+  }
 
   // `--profile` names a registered runtime profile. Passing an absolute
   // user-data directory here is reinterpreted as `custom:<digest>`, which is
@@ -368,34 +371,13 @@ function openRoute(route, index) {
     '--args',
     '--no-sandbox',
     'open',
-    'about:blank',
+    url,
+    '--headers',
+    JSON.stringify({ 'Remote-User': headerUser }),
   ];
   const opened = runAgentBrowser(openArgs, `open Guacamole route ${label}`);
-  const headerUser = guacamoleHeaderUser();
   let displayName;
   try {
-    if (token.authMode !== 'header' || !headerUser) {
-      throw new Error(`guacamole_route_${slug}_header_auth_required`);
-    }
-    runAgentBrowser([
-      '--json',
-      '--session',
-      session,
-      '--profile',
-      profile,
-      'set',
-      'headers',
-      JSON.stringify({ 'Remote-User': headerUser }),
-    ], `configure Guacamole header authentication for route ${label}`);
-    navigateRoute([
-      '--json',
-      '--session',
-      session,
-      '--profile',
-      profile,
-      'open',
-      url,
-    ], `reload authenticated Guacamole route ${label}`);
     displayName = waitForRouteDisplay(route, index);
   } catch (error) {
     commandResult(agentBrowserCommand(), [
@@ -429,21 +411,6 @@ function openRoute(route, index) {
       },
     },
   };
-}
-
-function navigateRoute(args, label) {
-  const command = agentBrowserCommand();
-  if (!command) {
-    throw new Error('agent_browser_command_missing: install agent-browser or set AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD');
-  }
-  const result = commandResult(command, args, { timeout: routeNavigationTimeoutMs });
-  if (result.error?.code === 'ETIMEDOUT') return;
-  if (result.error) {
-    throw new Error(`${label} failed using ${command}\n${result.error.message}`.trim());
-  }
-  if (result.status !== 0) {
-    throw new Error(`${label} failed using ${command}\n${result.stdout}${result.stderr}`.trim());
-  }
 }
 
 function waitForRouteDisplay(route, index) {

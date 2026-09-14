@@ -20,10 +20,15 @@ pub(crate) const RECIPE_ID: &str = "p110-pointer-keyboard-v1";
 pub(crate) const FOUNDATION_STRESS_RECIPE_ID: &str = "p110-foundation-stress-v1";
 pub(crate) const CONTROLLED_X11_RECIPE_ID: &str = "p131-controlled-x11-v1";
 pub(crate) const TURNSTILE_RECIPE_ID: &str = "cloudflare-turnstile-v1";
+pub(crate) const HCAPTCHA_RECIPE_ID: &str = "hcaptcha-checkbox-v1";
 const RECIPE_VERSION: &str = "v1";
 const FIXED_TEXT: &str = "fixture-ready";
 const COORDINATE_SPACE: &str = "desktop_physical_pixels";
 const FRESHNESS_LIMIT_MS: u64 = 750;
+
+pub(crate) fn is_captcha_recipe(recipe_id: &str) -> bool {
+    [TURNSTILE_RECIPE_ID, HCAPTCHA_RECIPE_ID].contains(&recipe_id)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DesktopInteractionRequest {
@@ -1008,7 +1013,13 @@ fn parse_configured_interaction_request(
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
         .ok_or_else(|| "desktop_interact requires recipe.recipeId".to_string())?;
-    if ![CONTROLLED_X11_RECIPE_ID, TURNSTILE_RECIPE_ID].contains(&recipe_id.as_str()) {
+    if ![
+        CONTROLLED_X11_RECIPE_ID,
+        TURNSTILE_RECIPE_ID,
+        HCAPTCHA_RECIPE_ID,
+    ]
+    .contains(&recipe_id.as_str())
+    {
         return Err("desktop_interaction_unsupported: recipe is not registered".to_string());
     }
     Ok(DesktopInteractionRequest {
@@ -1515,7 +1526,7 @@ fn run_claimed_interaction(
         }
 
         let mut event_time = motion.duration_ms + hold_ms;
-        let recipe_text = (request.recipe_id != TURNSTILE_RECIPE_ID).then_some(FIXED_TEXT);
+        let recipe_text = (!is_captcha_recipe(&request.recipe_id)).then_some(FIXED_TEXT);
         for (index, key) in recipe_text.unwrap_or_default().chars().enumerate() {
             event_time += key_delay_ms(index, &motion.seed_digest);
             let down = InputEvent::KeyDown {
@@ -1763,6 +1774,7 @@ fn validate_request(request: &DesktopInteractionRequest) -> Result<(), DesktopIn
         FOUNDATION_STRESS_RECIPE_ID,
         CONTROLLED_X11_RECIPE_ID,
         TURNSTILE_RECIPE_ID,
+        HCAPTCHA_RECIPE_ID,
     ]
     .contains(&request.recipe_id.as_str())
         || request.browser_id.trim().is_empty()
@@ -1776,8 +1788,8 @@ fn validate_request(request: &DesktopInteractionRequest) -> Result<(), DesktopIn
         || request.task_name.trim().is_empty()
         || request.caller_id.trim().is_empty()
         || request.request_id.trim().is_empty()
-        || (request.recipe_id != TURNSTILE_RECIPE_ID && request.agent_name != "fixture-agent")
-        || (request.recipe_id == TURNSTILE_RECIPE_ID && request.agent_name.trim().is_empty())
+        || (!is_captcha_recipe(&request.recipe_id) && request.agent_name != "fixture-agent")
+        || (is_captcha_recipe(&request.recipe_id) && request.agent_name.trim().is_empty())
         || FIXED_TEXT.len() > 32
         || !FIXED_TEXT.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b' ' || byte == b'-'
@@ -1810,10 +1822,10 @@ fn validate_before(
     if before.observation_status != "matched"
         || before.selected_candidate_id.is_none()
         || before.selected_target_class.as_deref()
-            != Some(if request.recipe_id == TURNSTILE_RECIPE_ID {
-                super::desktop_locator::TURNSTILE_TARGET_CLASS
-            } else {
-                "synthetic_verification_control"
+            != Some(match request.recipe_id.as_str() {
+                TURNSTILE_RECIPE_ID => super::desktop_locator::TURNSTILE_TARGET_CLASS,
+                HCAPTCHA_RECIPE_ID => super::desktop_locator::HCAPTCHA_TARGET_CLASS,
+                _ => "synthetic_verification_control",
             })
         || before.selected_bounds.is_none()
         || before.selected_center.is_none()
@@ -2432,7 +2444,9 @@ fn effect_error(
 ) -> DesktopInteractionError {
     receipt.cleanup_state = cleanup_state.to_string();
     receipt.effect_state = effect_state.to_string();
-    receipt.verification_state = "not_verified".to_string();
+    if receipt.verification_state != "challenge_open" {
+        receipt.verification_state = "not_verified".to_string();
+    }
     receipt.stop_reason = Some(code.to_string());
     DesktopInteractionError {
         code,
@@ -2550,12 +2564,12 @@ fn base_receipt(
         duration_ms: motion.duration_ms,
         acknowledgement_ids,
         cleanup_state: "not_needed".to_string(),
-        text_length: if request.recipe_id == TURNSTILE_RECIPE_ID {
+        text_length: if is_captcha_recipe(&request.recipe_id) {
             0
         } else {
             FIXED_TEXT.len()
         },
-        text_sha256: if request.recipe_id == TURNSTILE_RECIPE_ID {
+        text_sha256: if is_captcha_recipe(&request.recipe_id) {
             digest_text("")
         } else {
             digest_text(FIXED_TEXT)
@@ -2619,12 +2633,12 @@ fn authority_digest(
 fn recipe_sha256(recipe_id: &str) -> String {
     digest_text(&format!(
         "{recipe_id}\0{RECIPE_VERSION}\0{}\0{}\0fixed_cubic_bezier_v1",
-        if recipe_id == TURNSTILE_RECIPE_ID {
-            super::desktop_locator::TURNSTILE_LOCATOR_ID
-        } else {
-            "p110-control-v1"
+        match recipe_id {
+            TURNSTILE_RECIPE_ID => super::desktop_locator::TURNSTILE_LOCATOR_ID,
+            HCAPTCHA_RECIPE_ID => super::desktop_locator::HCAPTCHA_LOCATOR_ID,
+            _ => "p110-control-v1",
         },
-        if recipe_id == TURNSTILE_RECIPE_ID {
+        if is_captcha_recipe(recipe_id) {
             ""
         } else {
             FIXED_TEXT
@@ -2819,6 +2833,53 @@ mod tests {
                 .events
                 .iter()
                 .filter(|event| matches!(event, InputEvent::LeftDown { .. }))
+                .count(),
+            1
+        );
+        assert!(!fixture
+            .events
+            .iter()
+            .any(|event| matches!(event, InputEvent::KeyDown { .. } | InputEvent::KeyUp { .. })));
+    }
+
+    #[test]
+    fn hcaptcha_recipe_emits_exactly_one_click_and_no_keyboard_input() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let mut hcaptcha_request = request();
+        hcaptcha_request.recipe_id = HCAPTCHA_RECIPE_ID.to_string();
+
+        let receipt = run_desktop_interaction(
+            hcaptcha_request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut RejectHandoffLookup,
+                clock: &mut clock,
+            },
+        )
+        .expect("hCaptcha fixture should verify after one click");
+
+        assert_eq!(receipt.effect_state, "verified_success");
+        assert_eq!(receipt.text_length, 0);
+        assert_eq!(
+            fixture
+                .events
+                .iter()
+                .filter(|event| matches!(event, InputEvent::LeftDown { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(
+            fixture
+                .events
+                .iter()
+                .filter(|event| matches!(event, InputEvent::LeftUp { .. }))
                 .count(),
             1
         );
@@ -3626,6 +3687,7 @@ mod tests {
     fn verification_failures_return_uncertain_receipts() {
         for mode in [
             AfterMode::Unchanged,
+            AfterMode::ChallengeOpen,
             AfterMode::Unavailable,
             AfterMode::BindingDrift,
         ] {
@@ -3654,6 +3716,12 @@ mod tests {
                     | "desktop_interaction_verification_unavailable"
             ));
             assert_eq!(error.receipt().unwrap().effect_state, "effect_uncertain");
+            if mode == AfterMode::ChallengeOpen {
+                assert_eq!(
+                    error.receipt().unwrap().verification_state,
+                    "challenge_open"
+                );
+            }
         }
     }
 
@@ -4288,6 +4356,7 @@ mod tests {
         #[default]
         Passed,
         Unchanged,
+        ChallengeOpen,
         Unavailable,
         BindingDrift,
     }
@@ -4392,7 +4461,7 @@ mod tests {
             &mut self,
             request: &DesktopInteractionRequest,
         ) -> Result<BeforeObservation, DesktopInteractionError> {
-            self.turnstile = request.recipe_id == TURNSTILE_RECIPE_ID;
+            self.turnstile = is_captcha_recipe(&request.recipe_id);
             Ok(BeforeObservation {
                 binding: self.binding(),
                 context_id: "context-before".to_string(),
@@ -4404,10 +4473,12 @@ mod tests {
                 observation_status: "matched".to_string(),
                 selected_candidate_id: Some("candidate-1".to_string()),
                 selected_target_class: Some(
-                    if self.turnstile {
-                        super::super::desktop_locator::TURNSTILE_TARGET_CLASS
-                    } else {
-                        "synthetic_verification_control"
+                    match request.recipe_id.as_str() {
+                        TURNSTILE_RECIPE_ID => {
+                            super::super::desktop_locator::TURNSTILE_TARGET_CLASS
+                        }
+                        HCAPTCHA_RECIPE_ID => super::super::desktop_locator::HCAPTCHA_TARGET_CLASS,
+                        _ => "synthetic_verification_control",
                     }
                     .to_string(),
                 ),
@@ -4622,6 +4693,7 @@ mod tests {
             match self.after_mode {
                 AfterMode::Passed => {}
                 AfterMode::Unchanged => after.verification_state = "unchanged".to_string(),
+                AfterMode::ChallengeOpen => after.verification_state = "challenge_open".to_string(),
                 AfterMode::BindingDrift => {
                     after.binding.geometry_epoch = "geometry-drift".to_string()
                 }

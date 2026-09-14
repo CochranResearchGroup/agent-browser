@@ -31,6 +31,13 @@ pub(crate) const TURNSTILE_TARGET_CLASS: &str = "cloudflare_turnstile_checkbox";
 const TURNSTILE_PROFILE_VERSION: &str = "p169-v1";
 const TURNSTILE_TOKEN_ID: &str = "verify-you-are-human";
 const TURNSTILE_TEMPLATE_THRESHOLD: u32 = 8_200;
+pub(crate) const HCAPTCHA_LOCATOR_ID: &str = "hcaptcha-checkbox-v1";
+pub(crate) const HCAPTCHA_TARGET_CLASS: &str = "hcaptcha_checkbox";
+const HCAPTCHA_PROFILE_VERSION: &str = "p181-v1";
+const HCAPTCHA_PROMPT_TOKEN_ID: &str = "i-am-human";
+const HCAPTCHA_BRAND_TOKEN_ID: &str = "hcaptcha-brand";
+const HCAPTCHA_CHALLENGE_TOKEN_ID: &str = "hcaptcha-challenge-open";
+const HCAPTCHA_TEMPLATE_THRESHOLD: u32 = 8_200;
 const COORDINATE_SPACE: &str = "desktop_physical_pixels";
 const NORMALIZATION_VERSION: &str = "rgba8-srgb-integer-v1";
 const TEMPLATE_DETECTOR_ID: &str = "rgba-template";
@@ -246,6 +253,7 @@ struct LocatorProfile {
 enum LocatorKind {
     Synthetic,
     CloudflareTurnstile,
+    Hcaptcha,
 }
 
 fn locator_profile(locator_id: &str) -> Result<LocatorProfile, DesktopLocatorError> {
@@ -269,6 +277,16 @@ fn locator_profile(locator_id: &str) -> Result<LocatorProfile, DesktopLocatorErr
             required_token_id: TURNSTILE_TOKEN_ID,
             target_class: TURNSTILE_TARGET_CLASS,
             kind: LocatorKind::CloudflareTurnstile,
+        }),
+        HCAPTCHA_LOCATOR_ID => Ok(LocatorProfile {
+            locator_id: HCAPTCHA_LOCATOR_ID,
+            profile_version: HCAPTCHA_PROFILE_VERSION,
+            profile_sha256: digest_text(
+                "hcaptcha-checkbox-v1\x00p181-v1\x001000,1250,1500\x008200\x00250\x00i-am-human\x00hcaptcha-brand\x00checkbox-left-bounded-v1\x00tesseract-tsv-v1",
+            ),
+            required_token_id: HCAPTCHA_PROMPT_TOKEN_ID,
+            target_class: HCAPTCHA_TARGET_CLASS,
+            kind: LocatorKind::Hcaptcha,
         }),
         _ => Err(DesktopLocatorError::new(
             "desktop_locator_not_found",
@@ -310,11 +328,15 @@ fn locate_bound_frame(
     let template_size = match profile.kind {
         LocatorKind::Synthetic => scaled(12, scale_millis)?,
         LocatorKind::CloudflareTurnstile => scaled(24, scale_millis)?,
+        LocatorKind::Hcaptcha => scaled(28, scale_millis)?,
     };
     let raw_matches = match profile.kind {
         LocatorKind::Synthetic => scan_template(&image, theme, template_size)?,
         LocatorKind::CloudflareTurnstile => {
             turnstile_candidates(&image, &ocr.tokens, template_size, scale_millis)?
+        }
+        LocatorKind::Hcaptcha => {
+            hcaptcha_candidates(&image, &ocr.tokens, template_size, scale_millis)?
         }
     };
     let mut candidates = Vec::new();
@@ -331,15 +353,26 @@ fn locate_bound_frame(
                     && turnstile_bounds_for_phrase(token.bounds, template_size, scale_millis)
                         == Some(template_match.bounds)
             }),
+            LocatorKind::Hcaptcha => ocr.tokens.iter().find(|token| {
+                token.token_id == profile.required_token_id
+                    && hcaptcha_phrase_supports_bounds(
+                        token.bounds,
+                        template_match.bounds,
+                        template_size,
+                        scale_millis,
+                    )
+            }),
         };
         let Some(token) = token else { continue };
         let score = match profile.kind {
             LocatorKind::Synthetic => (template_match.score * 7 + 10_000 * 3) / 10,
             LocatorKind::CloudflareTurnstile => (template_match.score * 4 + 10_000 * 6) / 10,
+            LocatorKind::Hcaptcha => (template_match.score * 4 + 10_000 * 6) / 10,
         };
         let threshold = match profile.kind {
             LocatorKind::Synthetic => TEMPLATE_THRESHOLD,
             LocatorKind::CloudflareTurnstile => TURNSTILE_TEMPLATE_THRESHOLD,
+            LocatorKind::Hcaptcha => HCAPTCHA_TEMPLATE_THRESHOLD,
         };
         if score < threshold {
             continue;
@@ -397,6 +430,16 @@ fn locate_bound_frame(
                 LocatorKind::CloudflareTurnstile => {
                     vec!["checkbox_visible", "required_phrase_corroborated"]
                 }
+                LocatorKind::Hcaptcha if !template_match.visible => vec![
+                    "checkbox_hidden",
+                    "human_prompt_corroborated",
+                    "hcaptcha_brand_corroborated",
+                ],
+                LocatorKind::Hcaptcha => vec![
+                    "checkbox_visible",
+                    "human_prompt_corroborated",
+                    "hcaptcha_brand_corroborated",
+                ],
             },
             ambiguity_evidence: Vec::new(),
         });
@@ -414,16 +457,21 @@ fn locate_bound_frame(
         .first()
         .zip(candidates.get(1))
         .map(|(leader, runner_up)| leader.score.saturating_sub(runner_up.score));
+    let duplicate_hcaptcha = profile.kind == LocatorKind::Hcaptcha && candidates.len() > 1;
     let status = if candidates.is_empty() {
         "not_found"
-    } else if ambiguity_gap.is_some_and(|gap| gap < AMBIGUITY_MARGIN) {
-        let gap = ambiguity_gap.expect("checked above");
+    } else if duplicate_hcaptcha || ambiguity_gap.is_some_and(|gap| gap < AMBIGUITY_MARGIN) {
+        let gap = ambiguity_gap.unwrap_or(0);
         candidates[0]
             .ambiguity_evidence
             .push(format!("runner_up_gap:{gap}"));
         candidates[1]
             .ambiguity_evidence
-            .push(format!("leader_gap:{gap}"));
+            .push(if duplicate_hcaptcha {
+                "duplicate_hcaptcha_widget".to_string()
+            } else {
+                format!("leader_gap:{gap}")
+            });
         "ambiguous"
     } else {
         "matched"
@@ -501,11 +549,12 @@ pub(crate) async fn handle_desktop_locate(cmd: &Value) -> Result<Value, String> 
             max_bytes: DEFAULT_MAX_BYTES,
         })
         .map_err(|error| error.to_string())?;
-        let provider: &dyn OcrEvidenceProvider = if request.locator_id == TURNSTILE_LOCATOR_ID {
-            &TesseractTsvOcrProvider
-        } else {
-            &PinnedGlyphOcrProvider
-        };
+        let provider: &dyn OcrEvidenceProvider =
+            if [TURNSTILE_LOCATOR_ID, HCAPTCHA_LOCATOR_ID].contains(&request.locator_id.as_str()) {
+                &TesseractTsvOcrProvider
+            } else {
+                &PinnedGlyphOcrProvider
+            };
         locate_bound_frame(
             capture,
             &request.locator_id,
@@ -581,6 +630,79 @@ pub(crate) fn observe_cloudflare_turnstile(
                 .map_err(|_| "desktop_locator_detector_failed: observation encoding failed")?,
         ),
     }))
+}
+
+/// Locate one hCaptcha checkbox for the configured interaction provider. The
+/// profile requires a visible checkbox plus prompt and brand corroboration.
+pub(crate) fn locate_hcaptcha_checkbox(
+    frame: &DesktopCaptureResult,
+) -> Result<LocatedDesktopTarget, String> {
+    observe_hcaptcha_checkbox(frame)?.ok_or_else(|| {
+        "desktop_interaction_target_unavailable: hCaptcha observation is not_found".to_string()
+    })
+}
+
+pub(crate) fn observe_hcaptcha_checkbox(
+    frame: &DesktopCaptureResult,
+) -> Result<Option<LocatedDesktopTarget>, String> {
+    let result = locate_bound_frame(
+        frame.clone(),
+        HCAPTCHA_LOCATOR_ID,
+        2,
+        false,
+        &TesseractTsvOcrProvider,
+    )
+    .map_err(|error| error.to_string())?;
+    if result.observation.status == "not_found" {
+        return Ok(None);
+    }
+    if result.observation.status != "matched" {
+        return Err(format!(
+            "desktop_interaction_target_unavailable: hCaptcha observation is {}",
+            result.observation.status
+        ));
+    }
+    let candidate = result.observation.candidates.first().ok_or_else(|| {
+        "desktop_interaction_target_unavailable: no hCaptcha candidate".to_string()
+    })?;
+    Ok(Some(LocatedDesktopTarget {
+        candidate_id: candidate.candidate_id.clone(),
+        target_class: candidate.target_class,
+        bounds: (
+            candidate.bounds.x,
+            candidate.bounds.y,
+            candidate.bounds.width,
+            candidate.bounds.height,
+        ),
+        center: (candidate.center.x, candidate.center.y),
+        visible_control: candidate.decoy_evidence.contains(&"checkbox_visible"),
+        observation_id: result.observation.observation_id.clone(),
+        observation_sha256: digest_bytes(
+            &serde_json::to_vec(&result.observation)
+                .map_err(|_| "desktop_locator_detector_failed: observation encoding failed")?,
+        ),
+    }))
+}
+
+/// Classify only the terminal condition that forbids further automated input.
+/// OCR evidence remains response-local and no challenge content is persisted.
+pub(crate) fn hcaptcha_challenge_is_open(frame: &DesktopCaptureResult) -> Result<bool, String> {
+    let profile = locator_profile(HCAPTCHA_LOCATOR_ID).map_err(|error| error.to_string())?;
+    let image = validate_bound_frame(frame).map_err(|error| error.to_string())?;
+    let evidence = TesseractTsvOcrProvider
+        .evidence(&image, &profile)
+        .map_err(|error| error.to_string())?;
+    validate_ocr_evidence(&evidence, image.width(), image.height())
+        .map_err(|error| error.to_string())?;
+    let challenge = evidence
+        .tokens
+        .iter()
+        .any(|token| token.token_id == HCAPTCHA_CHALLENGE_TOKEN_ID);
+    let brand = evidence
+        .tokens
+        .iter()
+        .any(|token| token.token_id == HCAPTCHA_BRAND_TOKEN_ID);
+    Ok(challenge && brand)
 }
 
 /// Remove response-only visualization pixels before long-lived projection.
@@ -979,6 +1101,141 @@ fn turnstile_checkbox_score(image: &RgbaImage, bounds: PixelBounds) -> u32 {
     (border_score * 7 + interior_score * 3) / 10
 }
 
+fn hcaptcha_candidates(
+    image: &RgbaImage,
+    tokens: &[OcrTokenEvidence],
+    size: u32,
+    scale_millis: u32,
+) -> Result<Vec<TemplateMatch>, DesktopLocatorError> {
+    let brands = tokens
+        .iter()
+        .filter(|token| token.token_id == HCAPTCHA_BRAND_TOKEN_ID)
+        .collect::<Vec<_>>();
+    let mut matches = Vec::new();
+    let prompts = tokens
+        .iter()
+        .filter(|token| token.token_id == HCAPTCHA_PROMPT_TOKEN_ID)
+        .collect::<Vec<_>>();
+    if prompts.len() > HARD_MAX_CANDIDATES || brands.len() > HARD_MAX_CANDIDATES {
+        return Err(DesktopLocatorError::new(
+            "desktop_locator_detector_failed",
+            "hCaptcha detector exceeded its fixed evidence budget",
+        ));
+    }
+    for prompt in prompts {
+        let brand_gap = scaled(320, scale_millis)?;
+        let brand_band = scaled(64, scale_millis)?;
+        let prompt_center_y = prompt.bounds.y.saturating_add(prompt.bounds.height / 2);
+        let Some(brand) = brands.iter().find(|brand| {
+            let brand_center_y = brand.bounds.y.saturating_add(brand.bounds.height / 2);
+            brand.bounds.x > prompt.bounds.x
+                && brand.bounds.x <= prompt.bounds.x.saturating_add(brand_gap)
+                && brand_center_y.abs_diff(prompt_center_y) <= brand_band
+        }) else {
+            continue;
+        };
+        let Some((bounds, score)) =
+            best_hcaptcha_checkbox(image, prompt.bounds, size, scale_millis)?
+        else {
+            continue;
+        };
+        matches.push(TemplateMatch {
+            bounds,
+            score,
+            evidence_id: digest_text(&format!(
+                "hcaptcha-checkbox-left-v1\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+                bounds.x,
+                bounds.y,
+                bounds.width,
+                bounds.height,
+                brand.bounds.x,
+                brand.bounds.y,
+                score
+            )),
+            visible: true,
+        });
+    }
+    Ok(matches)
+}
+
+fn best_hcaptcha_checkbox(
+    image: &RgbaImage,
+    phrase: PixelBounds,
+    size: u32,
+    scale_millis: u32,
+) -> Result<Option<(PixelBounds, u32)>, DesktopLocatorError> {
+    let minimum_gap = scaled(4, scale_millis)?;
+    let maximum_gap = scaled(24, scale_millis)?;
+    let vertical_radius = scaled(6, scale_millis)?;
+    let phrase_center = phrase.y.saturating_add(phrase.height / 2);
+    let base_y = phrase_center.saturating_sub(size / 2);
+    let mut best: Option<(PixelBounds, u32)> = None;
+    for gap in minimum_gap..=maximum_gap {
+        let Some(x) = phrase.x.checked_sub(size.saturating_add(gap)) else {
+            continue;
+        };
+        for offset in 0..=vertical_radius.saturating_mul(2) {
+            let Some(y) = base_y
+                .checked_add(offset)
+                .and_then(|value| value.checked_sub(vertical_radius))
+            else {
+                continue;
+            };
+            let bounds = PixelBounds {
+                x,
+                y,
+                width: size,
+                height: size,
+            };
+            if x.saturating_add(size) > image.width() || y.saturating_add(size) > image.height() {
+                continue;
+            }
+            let score = turnstile_checkbox_score(image, bounds);
+            if score < 7_000 {
+                continue;
+            }
+            if best.as_ref().is_none_or(|(current_bounds, current_score)| {
+                score > *current_score
+                    || (score == *current_score
+                        && (bounds.y, bounds.x) < (current_bounds.y, current_bounds.x))
+            }) {
+                best = Some((bounds, score));
+            }
+        }
+    }
+    Ok(best)
+}
+
+fn hcaptcha_phrase_supports_bounds(
+    phrase: PixelBounds,
+    bounds: PixelBounds,
+    size: u32,
+    scale_millis: u32,
+) -> bool {
+    if bounds.width != size || bounds.height != size {
+        return false;
+    }
+    let Some(right) = bounds.x.checked_add(bounds.width) else {
+        return false;
+    };
+    let Some(gap) = phrase.x.checked_sub(right) else {
+        return false;
+    };
+    let Ok(minimum_gap) = scaled(4, scale_millis) else {
+        return false;
+    };
+    let Ok(maximum_gap) = scaled(24, scale_millis) else {
+        return false;
+    };
+    let Ok(vertical_radius) = scaled(6, scale_millis) else {
+        return false;
+    };
+    let phrase_center = phrase.y.saturating_add(phrase.height / 2);
+    let bounds_center = bounds.y.saturating_add(bounds.height / 2);
+    (minimum_gap..=maximum_gap).contains(&gap)
+        && phrase_center.abs_diff(bounds_center) <= vertical_radius
+}
+
 fn template_score(image: &RgbaImage, theme: Theme, bounds: PixelBounds) -> u32 {
     let mut difference = 0_u64;
     let mut channels = 0_u64;
@@ -1098,6 +1355,7 @@ fn detector_receipts(
         match profile.kind {
             LocatorKind::Synthetic => TEMPLATE_THRESHOLD,
             LocatorKind::CloudflareTurnstile => TURNSTILE_TEMPLATE_THRESHOLD,
+            LocatorKind::Hcaptcha => HCAPTCHA_TEMPLATE_THRESHOLD,
         },
     );
     template_parameters.insert("maximumEvaluations".to_string(), MAX_TEMPLATE_EVALUATIONS);
@@ -1267,7 +1525,10 @@ impl OcrEvidenceProvider for TesseractTsvOcrProvider {
         image: &RgbaImage,
         profile: &LocatorProfile,
     ) -> Result<OcrEvidence, DesktopLocatorError> {
-        if profile.kind != LocatorKind::CloudflareTurnstile {
+        if !matches!(
+            profile.kind,
+            LocatorKind::CloudflareTurnstile | LocatorKind::Hcaptcha
+        ) {
             return Err(DesktopLocatorError::new(
                 "desktop_locator_detector_failed",
                 "ambient OCR profile mismatch",
@@ -1278,7 +1539,7 @@ impl OcrEvidenceProvider for TesseractTsvOcrProvider {
             let _ = image;
             return Err(DesktopLocatorError::new(
                 "desktop_locator_detector_unavailable",
-                "registered Turnstile OCR provider is unavailable",
+                "registered CAPTCHA OCR provider is unavailable",
             ));
         }
         #[cfg(unix)]
@@ -1302,7 +1563,7 @@ impl OcrEvidenceProvider for TesseractTsvOcrProvider {
                 .map_err(|_| {
                     DesktopLocatorError::new(
                         "desktop_locator_detector_unavailable",
-                        "registered Turnstile OCR provider is unavailable",
+                        "registered CAPTCHA OCR provider is unavailable",
                     )
                 })?;
             child
@@ -1311,41 +1572,50 @@ impl OcrEvidenceProvider for TesseractTsvOcrProvider {
                 .ok_or_else(|| {
                     DesktopLocatorError::new(
                         "desktop_locator_detector_failed",
-                        "registered Turnstile OCR input is unavailable",
+                        "registered CAPTCHA OCR input is unavailable",
                     )
                 })?
                 .write_all(&png)
                 .map_err(|_| {
                     DesktopLocatorError::new(
                         "desktop_locator_detector_failed",
-                        "registered Turnstile OCR input failed",
+                        "registered CAPTCHA OCR input failed",
                     )
                 })?;
             let output = child.wait_with_output().map_err(|_| {
                 DesktopLocatorError::new(
                     "desktop_locator_detector_failed",
-                    "registered Turnstile OCR execution failed",
+                    "registered CAPTCHA OCR execution failed",
                 )
             })?;
             if output.status.code() == Some(124) {
                 return Err(DesktopLocatorError::new(
                     "desktop_locator_detector_failed",
-                    "registered Turnstile OCR timed out",
+                    "registered CAPTCHA OCR timed out",
                 ));
             }
             if !output.status.success() || output.stdout.len() > 1024 * 1024 {
                 return Err(DesktopLocatorError::new(
                     "desktop_locator_detector_failed",
-                    "registered Turnstile OCR returned invalid bounded evidence",
+                    "registered CAPTCHA OCR returned invalid bounded evidence",
                 ));
             }
             let tsv = std::str::from_utf8(&output.stdout).map_err(|_| {
                 DesktopLocatorError::new(
                     "desktop_locator_detector_failed",
-                    "registered Turnstile OCR returned invalid bounded evidence",
+                    "registered CAPTCHA OCR returned invalid bounded evidence",
                 )
             })?;
-            let tokens = normalized_turnstile_tokens(tsv)?;
+            let tokens = match profile.kind {
+                LocatorKind::CloudflareTurnstile => normalized_turnstile_tokens(tsv)?,
+                LocatorKind::Hcaptcha => normalized_hcaptcha_tokens(tsv)?,
+                LocatorKind::Synthetic => {
+                    return Err(DesktopLocatorError::new(
+                        "desktop_locator_detector_failed",
+                        "ambient OCR profile mismatch",
+                    ))
+                }
+            };
             Ok(OcrEvidence {
                 provider_version: "tesseract-tsv-5-v1".to_string(),
                 evidence_hash: hash_tokens("tesseract-tsv-5-v1", &tokens),
@@ -1367,7 +1637,7 @@ fn encode_ocr_png(image: &RgbaImage) -> Result<Vec<u8>, DesktopLocatorError> {
         .map_err(|_| {
             DesktopLocatorError::new(
                 "desktop_locator_detector_failed",
-                "registered Turnstile OCR image encoding failed",
+                "registered CAPTCHA OCR image encoding failed",
             )
         })?;
     Ok(bytes)
@@ -1453,11 +1723,128 @@ fn normalized_turnstile_tokens(tsv: &str) -> Result<Vec<OcrTokenEvidence>, Deskt
     Ok(tokens)
 }
 
+fn normalized_hcaptcha_tokens(tsv: &str) -> Result<Vec<OcrTokenEvidence>, DesktopLocatorError> {
+    #[derive(Debug)]
+    struct Word {
+        normalized: String,
+        bounds: PixelBounds,
+    }
+    let mut lines: BTreeMap<(u32, u32, u32, u32), Vec<Word>> = BTreeMap::new();
+    for row in tsv.lines().skip(1) {
+        let fields = row.split('\t').collect::<Vec<_>>();
+        if fields.len() < 12 || fields[0] != "5" {
+            continue;
+        }
+        let confidence = fields[10]
+            .split('.')
+            .next()
+            .and_then(|value| value.parse::<i32>().ok())
+            .unwrap_or(-1);
+        if confidence < 70 {
+            continue;
+        }
+        let key = (
+            parse_tsv_u32(fields[1])?,
+            parse_tsv_u32(fields[2])?,
+            parse_tsv_u32(fields[3])?,
+            parse_tsv_u32(fields[4])?,
+        );
+        let normalized = fields[11]
+            .chars()
+            .filter(char::is_ascii_alphabetic)
+            .collect::<String>()
+            .to_ascii_lowercase();
+        if normalized.is_empty() {
+            continue;
+        }
+        lines.entry(key).or_default().push(Word {
+            normalized,
+            bounds: PixelBounds {
+                x: parse_tsv_u32(fields[6])?,
+                y: parse_tsv_u32(fields[7])?,
+                width: parse_tsv_u32(fields[8])?,
+                height: parse_tsv_u32(fields[9])?,
+            },
+        });
+    }
+
+    fn span(words: &[Word], token_id: &str) -> OcrTokenEvidence {
+        let left = words.iter().map(|word| word.bounds.x).min().unwrap_or(0);
+        let top = words.iter().map(|word| word.bounds.y).min().unwrap_or(0);
+        let right = words
+            .iter()
+            .map(|word| word.bounds.x.saturating_add(word.bounds.width))
+            .max()
+            .unwrap_or(left);
+        let bottom = words
+            .iter()
+            .map(|word| word.bounds.y.saturating_add(word.bounds.height))
+            .max()
+            .unwrap_or(top);
+        OcrTokenEvidence {
+            token_id: token_id.to_string(),
+            bounds: PixelBounds {
+                x: left,
+                y: top,
+                width: right.saturating_sub(left),
+                height: bottom.saturating_sub(top),
+            },
+        }
+    }
+
+    let mut tokens = Vec::new();
+    for words in lines.values() {
+        for (index, word) in words.iter().enumerate() {
+            if ["hcaptcha", "captcha"].contains(&word.normalized.as_str()) {
+                tokens.push(span(std::slice::from_ref(word), HCAPTCHA_BRAND_TOKEN_ID));
+            }
+            if ["iam", "lam"].contains(&word.normalized.as_str())
+                && words.get(index + 1).map(|next| next.normalized.as_str()) == Some("human")
+            {
+                tokens.push(span(&words[index..=index + 1], HCAPTCHA_PROMPT_TOKEN_ID));
+            }
+        }
+        for window in words.windows(3) {
+            let normalized = window
+                .iter()
+                .map(|word| word.normalized.as_str())
+                .collect::<Vec<_>>();
+            if normalized == ["i", "am", "human"] {
+                tokens.push(span(window, HCAPTCHA_PROMPT_TOKEN_ID));
+            }
+            if normalized == ["select", "all", "images"] {
+                tokens.push(span(window, HCAPTCHA_CHALLENGE_TOKEN_ID));
+            }
+        }
+        for window in words.windows(2) {
+            let normalized = window
+                .iter()
+                .map(|word| word.normalized.as_str())
+                .collect::<Vec<_>>();
+            if matches!(
+                normalized.as_slice(),
+                ["please", "select"] | ["accessibility", "challenge"] | ["listen", "to"]
+            ) {
+                tokens.push(span(window, HCAPTCHA_CHALLENGE_TOKEN_ID));
+            }
+        }
+    }
+    tokens.sort_by(|left, right| {
+        left.bounds
+            .y
+            .cmp(&right.bounds.y)
+            .then_with(|| left.bounds.x.cmp(&right.bounds.x))
+            .then_with(|| left.token_id.cmp(&right.token_id))
+    });
+    tokens.dedup_by(|left, right| left.token_id == right.token_id && left.bounds == right.bounds);
+    Ok(tokens)
+}
+
 fn parse_tsv_u32(value: &str) -> Result<u32, DesktopLocatorError> {
     value.parse::<u32>().map_err(|_| {
         DesktopLocatorError::new(
             "desktop_locator_detector_failed",
-            "registered Turnstile OCR returned malformed geometry",
+            "registered CAPTCHA OCR returned malformed geometry",
         )
     })
 }
@@ -1638,6 +2025,228 @@ mod tests {
         assert_eq!(hidden_matches.len(), 1);
         assert_eq!(hidden_matches[0].bounds, bounds);
         assert!(!hidden_matches[0].visible);
+    }
+
+    #[test]
+    fn hcaptcha_tsv_requires_prompt_and_brand_and_marks_challenge_prompts() {
+        let tsv = concat!(
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n",
+            "5\t1\t2\t1\t1\t1\t120\t240\t7\t15\t96.5\tI\n",
+            "5\t1\t2\t1\t1\t2\t132\t240\t20\t15\t95.0\tam\n",
+            "5\t1\t2\t1\t1\t3\t157\t240\t45\t15\t96.9\thuman\n",
+            "5\t1\t3\t1\t1\t1\t310\t238\t62\t15\t94.0\thCaptcha\n",
+            "5\t1\t4\t1\t1\t1\t200\t80\t44\t16\t93.0\tPlease\n",
+            "5\t1\t4\t1\t1\t2\t250\t80\t40\t16\t92.0\tselect\n"
+        );
+
+        let tokens = normalized_hcaptcha_tokens(tsv).unwrap();
+
+        assert!(tokens
+            .iter()
+            .any(|token| token.token_id == HCAPTCHA_PROMPT_TOKEN_ID));
+        assert!(tokens
+            .iter()
+            .any(|token| token.token_id == HCAPTCHA_BRAND_TOKEN_ID));
+        assert!(tokens
+            .iter()
+            .any(|token| token.token_id == HCAPTCHA_CHALLENGE_TOKEN_ID));
+
+        let generic_tsv = concat!(
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n",
+            "5\t1\t2\t1\t1\t1\t120\t240\t20\t15\t96.5\tWe\n",
+            "5\t1\t2\t1\t1\t2\t145\t240\t24\t15\t95.0\tare\n",
+            "5\t1\t2\t1\t1\t3\t174\t240\t45\t15\t96.9\thuman\n",
+            "5\t1\t3\t1\t1\t1\t310\t238\t62\t15\t94.0\thCaptcha\n"
+        );
+        let generic_tokens = normalized_hcaptcha_tokens(generic_tsv).unwrap();
+        assert!(!generic_tokens
+            .iter()
+            .any(|token| token.token_id == HCAPTCHA_PROMPT_TOKEN_ID));
+        assert!(generic_tokens
+            .iter()
+            .any(|token| token.token_id == HCAPTCHA_BRAND_TOKEN_ID));
+    }
+
+    #[test]
+    fn hcaptcha_candidate_requires_brand_and_visible_checkbox() {
+        let prompt = OcrTokenEvidence {
+            token_id: HCAPTCHA_PROMPT_TOKEN_ID.to_string(),
+            bounds: PixelBounds {
+                x: 120,
+                y: 240,
+                width: 82,
+                height: 15,
+            },
+        };
+        let brand = OcrTokenEvidence {
+            token_id: HCAPTCHA_BRAND_TOKEN_ID.to_string(),
+            bounds: PixelBounds {
+                x: 310,
+                y: 238,
+                width: 62,
+                height: 15,
+            },
+        };
+        let bounds = PixelBounds {
+            x: 80,
+            y: 233,
+            width: 28,
+            height: 28,
+        };
+        let mut visible = RgbaImage::from_pixel(900, 700, Rgba([245, 245, 245, 255]));
+        for y in bounds.y..bounds.y + bounds.height {
+            for x in bounds.x..bounds.x + bounds.width {
+                let border = x < bounds.x + 2
+                    || y < bounds.y + 2
+                    || x + 2 >= bounds.x + bounds.width
+                    || y + 2 >= bounds.y + bounds.height;
+                visible.put_pixel(
+                    x,
+                    y,
+                    if border {
+                        Rgba([70, 70, 70, 255])
+                    } else {
+                        Rgba([250, 250, 250, 255])
+                    },
+                );
+            }
+        }
+
+        let matched = hcaptcha_candidates(&visible, &[prompt.clone(), brand], 28, 1000).unwrap();
+        let missing_brand = hcaptcha_candidates(&visible, &[prompt.clone()], 28, 1000).unwrap();
+        let hidden = RgbaImage::from_pixel(900, 700, Rgba([245, 245, 245, 255]));
+        let hidden_control = hcaptcha_candidates(
+            &hidden,
+            &[
+                prompt,
+                OcrTokenEvidence {
+                    token_id: HCAPTCHA_BRAND_TOKEN_ID.to_string(),
+                    bounds: PixelBounds {
+                        x: 310,
+                        y: 238,
+                        width: 62,
+                        height: 15,
+                    },
+                },
+            ],
+            28,
+            1000,
+        )
+        .unwrap();
+
+        assert_eq!(matched.len(), 1);
+        assert!(matched[0].visible);
+        assert!(missing_brand.is_empty());
+        assert!(hidden_control.is_empty());
+    }
+
+    #[test]
+    fn duplicate_hcaptcha_widgets_are_ambiguous() {
+        let fixture: Fixture = serde_json::from_value(json!({
+            "fixtureId": "duplicate-hcaptcha",
+            "width": 900,
+            "height": 700,
+            "theme": "light",
+            "scaleMillis": 1000,
+            "targets": [],
+            "decoys": [],
+            "expectedStatus": "ambiguous",
+            "expectedCandidateCount": 2,
+            "expectedObservationSha256": "unused",
+            "expectedVisualizationSha256": "unused"
+        }))
+        .unwrap();
+        let (mut frame, _) = render_fixture(&fixture);
+        let mut image = RgbaImage::from_pixel(900, 700, Rgba([245, 245, 245, 255]));
+        for bounds in [
+            PixelBounds {
+                x: 80,
+                y: 233,
+                width: 28,
+                height: 28,
+            },
+            PixelBounds {
+                x: 80,
+                y: 333,
+                width: 28,
+                height: 28,
+            },
+        ] {
+            for y in bounds.y..bounds.y + bounds.height {
+                for x in bounds.x..bounds.x + bounds.width {
+                    let border = x < bounds.x + 2
+                        || y < bounds.y + 2
+                        || x + 2 >= bounds.x + bounds.width
+                        || y + 2 >= bounds.y + bounds.height;
+                    image.put_pixel(
+                        x,
+                        y,
+                        if border {
+                            Rgba([70, 70, 70, 255])
+                        } else {
+                            Rgba([250, 250, 250, 255])
+                        },
+                    );
+                }
+            }
+        }
+        frame.image_bytes = encode_png(&image);
+        frame.frame_receipt.byte_length = frame.image_bytes.len();
+        frame.frame_receipt.content_sha256 = digest_bytes(&frame.image_bytes);
+        let tokens = vec![
+            OcrTokenEvidence {
+                token_id: HCAPTCHA_PROMPT_TOKEN_ID.to_string(),
+                bounds: PixelBounds {
+                    x: 120,
+                    y: 240,
+                    width: 82,
+                    height: 15,
+                },
+            },
+            OcrTokenEvidence {
+                token_id: HCAPTCHA_BRAND_TOKEN_ID.to_string(),
+                bounds: PixelBounds {
+                    x: 310,
+                    y: 238,
+                    width: 62,
+                    height: 15,
+                },
+            },
+            OcrTokenEvidence {
+                token_id: HCAPTCHA_PROMPT_TOKEN_ID.to_string(),
+                bounds: PixelBounds {
+                    x: 120,
+                    y: 340,
+                    width: 82,
+                    height: 15,
+                },
+            },
+            OcrTokenEvidence {
+                token_id: HCAPTCHA_BRAND_TOKEN_ID.to_string(),
+                bounds: PixelBounds {
+                    x: 310,
+                    y: 338,
+                    width: 62,
+                    height: 15,
+                },
+            },
+        ];
+
+        let result = locate_bound_frame(
+            frame,
+            HCAPTCHA_LOCATOR_ID,
+            8,
+            false,
+            &FixtureOcrProvider::new(tokens),
+        )
+        .unwrap();
+
+        assert_eq!(result.observation.status, "ambiguous");
+        assert!(result.observation.selected_candidate_id.is_none());
+        assert_eq!(result.observation.candidates.len(), 2);
+        assert!(result.observation.candidates[1]
+            .ambiguity_evidence
+            .contains(&"duplicate_hcaptcha_widget".to_string()));
     }
 
     #[test]
