@@ -1,6 +1,24 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P186
+    product_lane: PL-BUGFIX
+    objective: Recreate missing canonical route viewers under the exact install admission claim
+    plan: docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md
+    plan_ref: refs/heads/fix/plan-0186-route-viewer-drain-recovery
+    branch: fix/plan-0186-route-viewer-drain-recovery
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: null
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    work_items: [CochranResearchGroup/agent-browser#112]
+    dependencies: [P185]
+    overlaps: [P181]
+    reconciled_overlaps: [P181]
+    updated_at: 2026-09-14
   - id: P185
     product_lane: PL-BUGFIX
     objective: Preserve canonical route viewer identity across immutable support generations
@@ -9,15 +27,15 @@ lanes:
     branch: fix/plan-0185-route-viewer-runtime-profile
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 70662a34c78a33106411fbe0658146fe2474d5bb
+    custody_state: INTEGRATED
+    checkpoint: ffc6e5100911354529f8bdc2e922df767c5db26b
     remote_ref: refs/remotes/origin/fix/plan-0185-route-viewer-runtime-profile
-    integration_receipt: null
+    integration_receipt: ffc6e5100911354529f8bdc2e922df767c5db26b
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#110]
     dependencies: [P184]
-    overlaps: [P181]
-    reconciled_overlaps: [P181]
+    overlaps: [P181, P186]
+    reconciled_overlaps: [P181, P186]
     updated_at: 2026-09-14
   - id: P184
     product_lane: PL-BUGFIX

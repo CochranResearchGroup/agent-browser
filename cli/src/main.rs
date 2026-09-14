@@ -668,6 +668,7 @@ fn attribute_prestart_launch(
         "clientSubjectId",
         "identityAssurance",
         "traceId",
+        "runtimeAdmissionClaim",
     ] {
         if let Some(value) = command.get(field) {
             launch[field] = value.clone();
@@ -3308,7 +3309,9 @@ fn apply_runtime_admission_claim_from_sources(
     if !command
         .get("action")
         .and_then(serde_json::Value::as_str)
-        .is_some_and(|action| matches!(action, "service_reconcile" | "stream_status"))
+        .is_some_and(|action| {
+            crate::runtime_adoption::runtime_admission_claim_action_allowed(action, command)
+        })
     {
         return;
     }
@@ -3615,13 +3618,43 @@ mod tests {
             })
         );
 
-        let mut navigate = json!({"action": "navigate"});
+        let mut route_navigate = json!({
+            "action": "navigate",
+            "runtimeProfile": "rdp-guac-route-a-viewer",
+        });
         apply_runtime_admission_claim_from_sources(
-            &mut navigate,
+            &mut route_navigate,
             Some("upgrade-test".to_string()),
             Some("9".to_string()),
         );
-        assert!(navigate.get("runtimeAdmissionClaim").is_none());
+        assert_eq!(
+            route_navigate["runtimeAdmissionClaim"],
+            json!({
+                "transactionId": "upgrade-test",
+                "transactionRevision": 9,
+            })
+        );
+        let mut route_launch = json!({"action": "launch"});
+        attribute_prestart_launch(
+            &mut route_launch,
+            &route_navigate,
+            "rdp-guac-route-a-viewer",
+        );
+        assert_eq!(
+            route_launch["runtimeAdmissionClaim"],
+            route_navigate["runtimeAdmissionClaim"]
+        );
+
+        let mut ordinary_navigate = json!({
+            "action": "navigate",
+            "runtimeProfile": "bill-soylei",
+        });
+        apply_runtime_admission_claim_from_sources(
+            &mut ordinary_navigate,
+            Some("upgrade-test".to_string()),
+            Some("9".to_string()),
+        );
+        assert!(ordinary_navigate.get("runtimeAdmissionClaim").is_none());
 
         let mut invalid_revision = json!({"action": "service_reconcile"});
         apply_runtime_admission_claim_from_sources(

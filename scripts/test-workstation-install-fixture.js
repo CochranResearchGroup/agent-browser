@@ -234,6 +234,84 @@ try {
     0,
     'the installed agent-browser payload must be executable',
   );
+  const admissionRoot = join(home, '.agent-browser', 'runtime-adoption');
+  mkdirSync(admissionRoot, { recursive: true });
+  writeFileSync(
+    join(admissionRoot, 'admission-drain.json'),
+    JSON.stringify({
+      schemaVersion: 'agent-browser.runtime-adoption.v1',
+      transactionId: 'upgrade-fixture',
+      candidateGenerationId: 'candidate-fixture',
+      transactionRevision: 7,
+      recordedAt: '2026-09-14T00:00:00Z',
+    }),
+  );
+  const admissionEnv = {
+    ...process.env,
+    HOME: home,
+    XDG_RUNTIME_DIR: xdgRoot,
+    AGENT_BROWSER_RUNTIME_HOST: '1',
+    AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID: 'upgrade-fixture',
+    AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_REVISION: '7',
+  };
+  const routeViewerAdmission = spawnSync(
+    installedBinary,
+    [
+      '--json',
+      '--session',
+      'rdp-guac-route-a-viewer',
+      '--runtime-profile',
+      'rdp-guac-route-a-viewer',
+      '--executable-path',
+      '/bin/false',
+      'open',
+      'about:blank',
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...admissionEnv,
+        AGENT_BROWSER_SOCKET_DIR: join(xdgRoot, 'route-admission-socket'),
+      },
+    },
+  );
+  assert.notEqual(routeViewerAdmission.status, 0);
+  assert.doesNotMatch(
+    JSON.parse(routeViewerAdmission.stdout).error,
+    /runtime_admission_draining/,
+    'the exact transaction claim must pass canonical route-viewer launch admission',
+  );
+  const ordinaryProfileAdmission = spawnSync(
+    installedBinary,
+    [
+      '--json',
+      '--session',
+      'ordinary-profile',
+      '--runtime-profile',
+      'bill-soylei',
+      '--executable-path',
+      '/bin/false',
+      'open',
+      'about:blank',
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...admissionEnv,
+        AGENT_BROWSER_SOCKET_DIR: join(xdgRoot, 'ordinary-admission-socket'),
+      },
+    },
+  );
+  assert.notEqual(
+    ordinaryProfileAdmission.status,
+    0,
+    'the transaction claim must not admit an ordinary managed profile',
+  );
+  assert.match(
+    JSON.parse(ordinaryProfileAdmission.stdout).error,
+    /runtime_admission_draining/,
+    'ordinary managed profiles must remain blocked by the admission drain',
+  );
   for (const unit of expectedUnits) {
     const unitPath = join(installRoot, '.config', 'systemd', 'user', unit);
     assert.ok(existsSync(unitPath), `apply must install ${unit}`);

@@ -5,7 +5,7 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 323 | 2026-09-14
+## Turn 324 | 2026-09-14
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
 is OPEN in `PL-PLATFORM` through issue #99 and draft PR #106. Candidate
@@ -28,7 +28,7 @@ crate workflow so inherited CLI and browser E2E defects cannot mask the crate's
 own result. No runtime, browser, profile, provider,
 installation, production, release, or Plan 0144 acceptance claim is made.
 
-## Turn 322 | 2026-09-14
+## Turn 323 | 2026-09-14
 
 P184 merged through PR #109 as `3b7e8411`; its exact integrated binary digest
 is `a2899457`. Fresh preview had zero protected removals, changes, or removals.
@@ -38,19 +38,17 @@ State with no changes, and selected generation
 `upgrade-8c858bc3-4507-48a0-8eea-c85cd3326fbf` is forward-only at revision 17
 with admission drained and exact resume as its only completion action.
 
-The apply and one exact resume both stopped at `open canonical Guacamole route
-displays`; active units were restored. [Plan 0185](docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md)
-and [issue #110](https://github.com/CochranResearchGroup/agent-browser/issues/110)
-own the root defect: route viewer names were passed through custom-path flag
-`--profile`, so a generation-specific working directory changed the derived
-identity and the stable session failed as
-`existing_session_profile_identity_unproven`. The intended A, B, and C managed
-profiles remain present. Red contracts reproduce the wrong flag. Next: merge
-the `--runtime-profile` repair, refresh the current candidate support payload,
-then invoke one revision-bound forward resume. The rebuilt embedded bundle and
-all selected workstation fixtures pass; the development provider fixture also
-passes under its expected `022` artifact umask. Do not create another install
-transaction or retry any tenant browser workflow.
+P185's managed-profile repair merged through PR #111 as `ffc6e510`, and exact
+integrated candidate `bce36a4c` built successfully. Reboot then removed all
+route viewers. A transaction-bound attempt to recreate route A failed before
+effect as `runtime_admission_draining`: the drain permits claimed Service
+reconcile but not the launch, headers, navigation, and cleanup that reconcile
+requires when no viewer survives. [Plan 0186](docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
+and [issue #112](https://github.com/CochranResearchGroup/agent-browser/issues/112)
+own a canonical-viewer-only admission repair. Ordinary and tenant profiles
+must remain blocked. Next: integrate P186, complete the exact revision-bound
+forward resume, then install one exact integrated generation. Do not retry any
+tenant browser workflow.
 
 ## Turn 320 | 2026-09-13
 
