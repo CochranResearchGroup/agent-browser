@@ -2,9 +2,9 @@
 
 Date: 2026-09-13
 
-Plan version: 10
+Plan version: 11
 
-State: OPEN
+State: CLOSED
 
 Lane: P181
 
@@ -63,12 +63,10 @@ secondary acceptance axis, not a premise of the extraction:
 
 ## Current State
 
-P181 is active on `platform/lease-authority-crate` through work item #99. The
-immutable implementation baseline is
-`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`; joined candidate
-`5ceb709c` includes current `main` at
-`bba8b7a3eee1658211c02c44944f61c468c45745` and is being qualified for
-draft PR #106.
+P181 is complete. PR #106 merged exact validated head
+`91aa32044fdad14af72e383237a12354532d8502` into `main` as
+`b5a78faf17caa0db912784dbf22dd60fe617710a` on 2026-09-14. The immutable
+implementation baseline remains `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`.
 P0 through P6 are complete. The candidate includes current `main`, the P182
 adjacent-revision convergence fixture, and the tracked workspace lockfile
 registration. The architecture contract and mutation self-tests are green,
@@ -138,7 +136,11 @@ and no-launch smokes. `main` then advanced through the second P186 repair in PR
 #114. Merge checkpoint `5ceb709c` preserves the extracted-crate calls while
 adding exact route-command admission shaping. The focused joined admission
 test, format, strict workspace Clippy, architecture guard, and guard mutation
-self-test pass. Exact joined-head CI and merge custody remain.
+self-test pass. Exact joined-head focused run 34864731916 passes Linux, macOS
+ARM, macOS x86, and Windows. Ordinary CI run 34864731908 passes Rust Quality,
+the comprehensive Rust suite, no-launch service smokes, Workstation Fixtures,
+Dashboard, Service Client, and Version Sync. The validated head is an ancestor
+of merge receipt `b5a78faf`; no P181 gate remains.
 Issue #71 is closed in the forge, but P181 has no authority to treat that
 tracker state as Plan 0144 acceptance or to reopen it. Its public,
 effect-admission, and installed gates remain separate.
@@ -697,8 +699,8 @@ Hard stops:
 | security | accepted: private signing and custody guard plus fresh architecture, security, and closed-world review pass | none inside P181 |
 | compatibility | accepted: non-Linux fail-closed variants and platform-native fixtures pass focused Linux, macOS ARM, macOS x86, and Windows crate jobs | none inside P181 |
 | acceleration | measured: focused median improved 91.95 percent; downstream and cold did not regress | formal promotion withheld because focused selections were not literally identical |
-| CI | accepted through `8a57dce5`: focused run 34861501476 and ordinary PR CI run 34861501499 pass; current-main join `5ceb709c` passes focused admission, format, strict Clippy, architecture, and mutation checks | exact joined-head focused and ordinary CI |
-| custody | plan, lane, branch, and draft PR #106 preserve the joined candidate | merged-main receipt and truthful issue closure after the focused gate clears |
+| CI | accepted: exact head `91aa3204` passes focused run 34864731916 on four targets and ordinary run 34864731908, including comprehensive Rust and no-launch smokes | none inside P181 |
+| custody | accepted: PR #106 merged exact validated head `91aa3204` into `main` as `b5a78faf` | none inside P181 |
 | runtime | not applicable and not claimed by P181 | none; runtime proof remains under Plan 0144 authority |
 
 P181 completes only when:
@@ -727,10 +729,6 @@ target passes.
 
 ## Next Action
 
-Qualify and publish joined checkpoint `5ceb709c`, verify focused and ordinary PR
-CI on the resulting exact head, perform the final published-diff self-review,
-and merge PR #106.
-Keep the inherited workspace cross-platform and browser E2E defects separate;
-do not rerun broad CI under P181. Preserve the P6 measured result without
-promoting it to the stricter acceleration claim, and do not claim runtime or
-Plan 0144 acceptance.
+No P181 execution remains. Preserve the P6 measurement without promoting it to
+the stricter acceleration claim. Runtime installation, provider effects, and
+Plan 0144 acceptance remain outside this closed source-extraction plan.
