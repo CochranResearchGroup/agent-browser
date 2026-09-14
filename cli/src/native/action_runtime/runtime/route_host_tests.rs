@@ -554,7 +554,7 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
             .user_data_dir;
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-odollo-fedex".to_string(),
         profile_identity_digest: profile_digest,
@@ -818,7 +818,7 @@ fn test_existing_session_rejects_explicit_profile_conflict() {
     fs::create_dir_all(&owned_path).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-books".to_string(),
-        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
             &owned_path,
         )
         .unwrap(),
@@ -987,7 +987,7 @@ fn authenticated_principal_recovers_exact_orphaned_owner_without_foreign_bypass(
     fs::create_dir_all(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "orphaned-owner-odollo-fedex".to_string(),
-        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
             &user_data_dir,
         )
         .unwrap(),
@@ -1157,7 +1157,7 @@ fn authenticated_principal_recovers_exact_released_terminal_projection() {
     fs::create_dir_all(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "released-owner-odollo-fedex".to_string(),
-        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
             &user_data_dir,
         )
         .unwrap(),
@@ -1262,7 +1262,7 @@ fn exact_terminal_custom_profile_can_reopen_after_proven_close() {
     let user_data_dir = home.join("custom-profile");
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "terminal-provider-owner".to_string(),
         profile_identity_digest: profile_identity_digest.clone(),
@@ -1282,7 +1282,7 @@ fn exact_terminal_custom_profile_can_reopen_after_proven_close() {
     runtime_owner_registry.lifecycle_records.insert(
         browser_id.clone(),
         crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-            logical_browser_id: browser_id,
+            logical_browser_id: browser_id.clone(),
             profile_identity_digest,
             owner_generation: 5,
             lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
@@ -1348,7 +1348,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         .user_data_dir;
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "terminal-provider-owner".to_string(),
         profile_identity_digest: profile_identity_digest.clone(),
@@ -1688,6 +1688,220 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
 }
 
 #[test]
+fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
+    let guard = EnvGuard::new(&[
+        "HOME",
+        crate::runtime_host::RUNTIME_HOST_PROCESS_ENV,
+        "AGENT_BROWSER_PROFILE",
+        "AGENT_BROWSER_RUNTIME_PROFILE",
+    ]);
+    let home = unique_socket_dir("terminal-legacy-route-profile-relaunch-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = "rdp-guac-route-b-viewer";
+    let session_id = profile_id;
+    let browser_id = format!("session:{session_id}");
+    let legacy_user_data_dir = home.join("legacy-generation-relative-route-profile");
+    fs::create_dir_all(&legacy_user_data_dir).unwrap();
+    let current_user_data_dir = crate::runtime_profile::resolve_profile(None, Some(profile_id))
+        .unwrap()
+        .user_data_dir;
+    fs::create_dir_all(&current_user_data_dir).unwrap();
+    let legacy_profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&legacy_user_data_dir)
+            .unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "terminal-legacy-route-owner".to_string(),
+        profile_identity_digest: legacy_profile_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 1,
+        browser_id: browser_id.clone(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+    runtime_owner_registry.lifecycle_records.insert(
+        browser_id.clone(),
+        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+            logical_browser_id: browser_id.clone(),
+            profile_identity_digest: legacy_profile_digest.clone(),
+            owner_generation: 1,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state:
+                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".to_string(),
+                "profile_lock_released".to_string(),
+            ],
+            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+        },
+    );
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(legacy_user_data_dir.to_string_lossy().into_owned()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        runtime_owner_registry,
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+
+    // CLI command normalization may preserve the explicit global selection in
+    // either LaunchOptions or the generated launch payload. Neither form needs
+    // to repeat the same identity in both places.
+    for (command, mut options) in [
+        (
+            json!({ "action": "launch" }),
+            LaunchOptions {
+                runtime_profile: Some(profile_id.to_string()),
+                ..LaunchOptions::default()
+            },
+        ),
+        (
+            json!({ "action": "launch", "runtimeProfile": profile_id }),
+            LaunchOptions::default(),
+        ),
+    ] {
+        let selection =
+            apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+
+        assert_eq!(selection, None);
+        assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+        assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
+    }
+
+    // A shared runtime host inherits process environment from the lane that
+    // started it. A later lane must resolve from its own command and Service
+    // State instead of accepting the first lane's process-wide profile.
+    guard.set(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV, "1");
+    guard.set(
+        "AGENT_BROWSER_PROFILE",
+        home.join("route-a-profile").to_str().unwrap(),
+    );
+    guard.set("AGENT_BROWSER_RUNTIME_PROFILE", "rdp-guac-route-a-viewer");
+    let unattributed_launch = json!({ "action": "launch" });
+    assert_eq!(
+        runtime_profile_from_sources(&unattributed_launch, true),
+        None
+    );
+    assert_eq!(
+        launch_profile_from_sources(&unattributed_launch, true),
+        None
+    );
+    let command = json!({ "action": "launch", "runtimeProfile": profile_id });
+    let mut options = LaunchOptions {
+        profile: launch_profile_from_sources(&command, true),
+        runtime_profile: runtime_profile_from_sources(&command, true),
+        ..LaunchOptions::default()
+    };
+    let selection =
+        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+    assert_eq!(selection, None);
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
+
+    // Older canonical route records may retain only the runtime-profile name
+    // as userDataDir. That value already resolves to the stable runtime path,
+    // but its terminal owner can still name the historical physical path.
+    let mut relative_profile_record = state.clone();
+    relative_profile_record
+        .profiles
+        .get_mut(profile_id)
+        .unwrap()
+        .user_data_dir = Some(profile_id.to_string());
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&relative_profile_record)
+        .unwrap();
+    let mut options = LaunchOptions {
+        runtime_profile: Some(profile_id.to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_service_profile_selection(
+            &mut options,
+            &json!({ "action": "launch" }),
+            Some(session_id),
+        )
+        .unwrap(),
+        None
+    );
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
+
+    let mut partially_migrated = state.clone();
+    let current_profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&current_user_data_dir)
+            .unwrap();
+    let mut current_owner = partially_migrated
+        .runtime_owner_registry
+        .owners
+        .remove(&legacy_profile_digest)
+        .unwrap();
+    current_owner.profile_identity_digest = current_profile_digest.clone();
+    current_owner.owner_generation += 1;
+    partially_migrated
+        .runtime_owner_registry
+        .owners
+        .insert(current_profile_digest.clone(), current_owner);
+    let lifecycle = partially_migrated
+        .runtime_owner_registry
+        .lifecycle_records
+        .get_mut(&browser_id)
+        .unwrap();
+    lifecycle.profile_identity_digest = current_profile_digest;
+    lifecycle.owner_generation += 1;
+    let mut options = LaunchOptions {
+        runtime_profile: Some(profile_id.to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_existing_session_profile_selection(
+            &mut options,
+            &json!({ "action": "launch" }),
+            Some(session_id),
+            &partially_migrated,
+        )
+        .unwrap(),
+        None
+    );
+    assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn legacy_terminal_profile_migration_is_limited_to_canonical_route_viewers() {
+    assert!(super::daemon::canonical_route_viewer_runtime_profile(
+        "rdp-guac-route-a-viewer"
+    ));
+    assert!(super::daemon::canonical_route_viewer_runtime_profile(
+        "rdp-guac-route-z-viewer"
+    ));
+    for lookalike in [
+        "rdp-guac-route-aa-viewer",
+        "rdp-guac-route-1-viewer",
+        "rdp-guac-route-A-viewer",
+        "rdp-guac-route-a-viewer-extra",
+        "ordinary-profile",
+    ] {
+        assert!(!super::daemon::canonical_route_viewer_runtime_profile(
+            lookalike
+        ));
+    }
+}
+
+#[test]
 fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_binding() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("terminal-owner-shared-local-relaunch-home");
@@ -1699,7 +1913,7 @@ fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_b
     let user_data_dir = home.join("bill-profile");
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner_generation = 17;
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "terminal-bill-owner".to_string(),
@@ -1738,10 +1952,9 @@ fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_b
         crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
             principal_id: "principal:registered-old-owner".to_string(),
             profile_id: profile_id.to_string(),
-            profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
-                &user_data_dir,
-            )
-            .unwrap(),
+            profile_identity_digest:
+                agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)
+                    .unwrap(),
             capability_id: "profile-capability-v1:historical".to_string(),
             provenance:
                 crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
@@ -1806,7 +2019,7 @@ fn test_registered_work_lease_preserves_profile_selection_after_owner_exit() {
     let user_data_dir = home.join(profile_id);
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-odollo-fedex".to_string(),
         profile_identity_digest: profile_digest.clone(),
@@ -1931,7 +2144,7 @@ fn test_existing_session_rejects_contradictory_browser_profile() {
     fs::create_dir_all(&owned_path).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-odollo".to_string(),
-        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
             &owned_path,
         )
         .unwrap(),
@@ -3242,12 +3455,14 @@ fn test_service_profile_lease_guard_allows_same_session_reuse() {
 
 #[tokio::test]
 async fn canonical_profile_claim_fences_the_prelaunch_effect() {
-    use crate::native::service_lease_authority::{
+    use crate::native::service_lease_authority_adapter::{
         acquire_lease_claim_with_receipt_in_repository, issue_lease_effect_authorization_for_state,
-        AcquireLeaseClaimRequest, LeaseClaimMode, LeaseEffectIntent, LeaseResourceKey,
     };
     use crate::native::service_principal::{
         register_profile_capability, ServicePrincipalRegistrationRequest,
+    };
+    use agent_browser_lease_authority::{
+        AcquireLeaseClaimRequest, LeaseClaimMode, LeaseEffectIntent, LeaseResourceKey,
     };
 
     let guard = EnvGuard::new(&["HOME"]);
@@ -3368,7 +3583,7 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
             .unwrap_err();
     assert_eq!(error, "lease_authority_unsupported_schema");
 
-    let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+    let profile_identity_digest = agent_browser_lease_authority::canonical_profile_identity_digest(
         &crate::runtime_profile::resolve_profile(
             Some(profile_path.to_str().unwrap()),
             Some("acs-profile"),
@@ -4587,7 +4802,8 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         RuntimeLifecycleRecord, RuntimeOwnerRegistry,
     };
     let digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&home.join("profile")).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(&home.join("profile"))
+            .unwrap();
     snapshot.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(ProfileOwner {
         owner_id: "closed-owner".into(),
         profile_identity_digest: digest.clone(),
@@ -4692,8 +4908,10 @@ fn configured_runtime_alias_preserves_exact_owner_selection() {
         .user_data_dir;
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "p160-alias-owner".into(),
-        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(&path)
-            .unwrap(),
+        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
+            &path,
+        )
+        .unwrap(),
         state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
         owner_generation: 4,
         browser_id: "session:carrier-evidence".into(),
@@ -4789,7 +5007,7 @@ fn existing_session_selection_recovers_stable_browser_from_legacy_owner_alias() 
     };
     let process_digest = crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
     let profile_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-legacy-alias".to_string(),
         profile_identity_digest: profile_digest.clone(),
@@ -5145,7 +5363,7 @@ fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profi
     assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
 
     let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let retained_owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-stale-transfer-generation-57".to_string(),
         profile_identity_digest: profile_identity_digest.clone(),

@@ -679,7 +679,7 @@ pub(crate) fn configured_profile_alias_matches_active_browser(
     }) {
         return false;
     }
-    crate::runtime_profile::canonical_profile_identity_digest(active_path)
+    agent_browser_lease_authority::canonical_profile_identity_digest(active_path)
         .is_ok_and(|digest| digest == binding.claim.profile_identity_digest)
 }
 

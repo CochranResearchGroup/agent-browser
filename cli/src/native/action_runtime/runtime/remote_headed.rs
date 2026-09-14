@@ -20,9 +20,7 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
-use crate::native::service_lease_authority::{
-    authorize_lease_effect_in_repository, LeaseEffectAuthorization, LeaseEffectContext,
-};
+use crate::native::service_lease_authority_adapter::authorize_lease_effect_in_repository;
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -46,6 +44,7 @@ use crate::native::state;
 use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
+use agent_browser_lease_authority::{LeaseEffectAuthorization, LeaseEffectContext};
 use serde_json::{json, Map, Value};
 use std::env;
 use std::fs;
@@ -482,7 +481,7 @@ pub(crate) fn persist_current_browser_health(
 #[cfg(target_os = "linux")]
 pub(crate) fn persist_protected_current_browser_health(
     state: &mut DaemonState,
-    owner: &crate::native::service_lease_authority::ProtectedBrowserOwner,
+    owner: &agent_browser_lease_authority::ProtectedBrowserOwner,
     host: ServiceBrowserHost,
     health: ServiceBrowserHealth,
     metadata: Option<ServiceLaunchMetadata>,

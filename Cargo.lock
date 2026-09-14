@@ -49,6 +49,7 @@ version = "0.28.0"
 dependencies = [
  "aes-gcm",
  "agent-browser-cdp",
+ "agent-browser-lease-authority",
  "async-trait",
  "base64",
  "chrono",
@@ -87,6 +88,22 @@ dependencies = [
  "socket2",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "agent-browser-lease-authority"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "dirs",
+ "getrandom 0.2.17",
+ "hex",
+ "libc",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "uuid",
 ]
 
 [[package]]

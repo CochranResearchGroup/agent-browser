@@ -522,17 +522,62 @@ fn runtime_admission_claim_matches(
     command: &serde_json::Value,
     drain: &RuntimeAdmissionDrain,
 ) -> bool {
-    matches!(
+    (matches!(
         action,
-        "close" | "service_reconcile" | "service_remote_view_browser_reattach" | "stream_status"
-    ) && command
-        .pointer("/runtimeAdmissionClaim/transactionId")
-        .and_then(serde_json::Value::as_str)
-        == Some(drain.transaction_id.as_str())
+        "service_reconcile" | "stream_status" | "service_remote_view_browser_reattach"
+    ) || (canonical_route_viewer_admission_action(action, command)
+        && route_viewer_native_attribution_matches(command)))
+        && command
+            .pointer("/runtimeAdmissionClaim/transactionId")
+            .and_then(serde_json::Value::as_str)
+            == Some(drain.transaction_id.as_str())
         && command
             .pointer("/runtimeAdmissionClaim/transactionRevision")
             .and_then(serde_json::Value::as_u64)
             == Some(drain.transaction_revision)
+}
+
+pub(crate) fn runtime_admission_claim_action_allowed(
+    action: &str,
+    command: &serde_json::Value,
+) -> bool {
+    matches!(
+        action,
+        "service_reconcile" | "stream_status" | "service_remote_view_browser_reattach"
+    ) || canonical_route_viewer_admission_action(action, command)
+}
+
+fn canonical_route_viewer_admission_action(action: &str, command: &serde_json::Value) -> bool {
+    matches!(action, "launch" | "navigate" | "headers" | "close")
+        && command
+            .get("runtimeProfile")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(canonical_route_viewer_runtime_profile)
+}
+
+fn route_viewer_native_attribution_matches(command: &serde_json::Value) -> bool {
+    command
+        .get("serviceName")
+        .and_then(serde_json::Value::as_str)
+        == Some("agent-browser-cli")
+        && command.get("agentName").and_then(serde_json::Value::as_str)
+            == command
+                .get("runtimeProfile")
+                .and_then(serde_json::Value::as_str)
+}
+
+fn canonical_route_viewer_runtime_profile(profile: &str) -> bool {
+    profile
+        .strip_prefix("rdp-guac-route-")
+        .and_then(|suffix| suffix.strip_suffix("-viewer"))
+        .is_some_and(|route| {
+            route.split('-').all(|segment| {
+                !segment.is_empty()
+                    && segment.chars().all(|character| {
+                        character.is_ascii_lowercase() || character.is_ascii_digit()
+                    })
+            })
+        })
 }
 
 fn runtime_admission_action_allowed(action: &str) -> bool {
@@ -2299,7 +2344,7 @@ fn base_fragment() -> RuntimeEvidenceSummary {
 }
 
 fn canonical_profile_digest(value: &str) -> Result<String, String> {
-    crate::runtime_profile::canonical_profile_identity_digest(std::path::Path::new(value))
+    agent_browser_lease_authority::canonical_profile_identity_digest(std::path::Path::new(value))
 }
 
 fn source_revision(value: &(impl Serialize + ?Sized)) -> Result<String, String> {
@@ -3257,6 +3302,74 @@ mod tests {
             }),
         )
         .unwrap();
+        for action in ["launch", "navigate", "headers", "close"] {
+            require_runtime_admission(
+                &path,
+                action,
+                &serde_json::json!({
+                    "runtimeProfile": "rdp-guac-route-a-viewer",
+                    "serviceName": "agent-browser-cli",
+                    "agentName": "rdp-guac-route-a-viewer",
+                    "runtimeAdmissionClaim": {
+                        "transactionId": "upgrade-test",
+                        "transactionRevision": 4,
+                    }
+                }),
+            )
+            .unwrap();
+        }
+        assert!(require_runtime_admission(
+            &path,
+            "navigate",
+            &serde_json::json!({
+                "runtimeProfile": "bill-soylei",
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .is_err());
+        assert!(require_runtime_admission(
+            &path,
+            "navigate",
+            &serde_json::json!({
+                "runtimeProfile": "rdp-guac-route-a-viewer",
+                "serviceName": "agent-browser-cli",
+                "agentName": "another-route-viewer",
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .is_err());
+        assert!(require_runtime_admission(
+            &path,
+            "headers",
+            &serde_json::json!({
+                "runtimeProfile": "rdp-guac-route-a-viewer-shadow",
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .is_err());
+        let claimed_close_error = require_runtime_admission(
+            &path,
+            "close",
+            &serde_json::json!({
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .unwrap_err();
+        assert!(claimed_close_error.contains("runtime_admission_draining"));
+        assert!(require_runtime_admission(&path, "close", &serde_json::json!({})).is_err());
+        require_runtime_admission(&path, "service_status", &serde_json::json!({})).unwrap();
         require_runtime_admission(
             &path,
             "service_remote_view_browser_reattach",
@@ -3268,19 +3381,6 @@ mod tests {
             }),
         )
         .unwrap();
-        require_runtime_admission(&path, "service_status", &serde_json::json!({})).unwrap();
-        require_runtime_admission(
-            &path,
-            "close",
-            &serde_json::json!({
-                "runtimeAdmissionClaim": {
-                    "transactionId": "upgrade-test",
-                    "transactionRevision": 4,
-                }
-            }),
-        )
-        .unwrap();
-        assert!(require_runtime_admission(&path, "close", &serde_json::json!({})).is_err());
         assert!(require_runtime_admission(
             &path,
             "service_remote_view_browser_reattach",

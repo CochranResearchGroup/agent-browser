@@ -630,11 +630,38 @@ fn apply_existing_lane_profile_to_flags(
     command: &serde_json::Value,
     state: &native::service_model::ServiceState,
 ) -> Result<(), String> {
+    // An explicit runtime-profile selector loads its configured userDataDir
+    // before CLI provenance is recorded. For a canonical route with retained
+    // owner evidence, that path is a startup default rather than an explicit
+    // caller assertion. Let continuity choose the proven current generation.
+    // A caller-authored --profile remains a hard identity constraint.
+    let configured_profile_is_inherited = flags.cli_runtime_profile
+        && !flags.cli_profile
+        && flags.runtime_profile.as_deref() == Some(flags.session.as_str())
+        && flags
+            .runtime_profile
+            .as_deref()
+            .is_some_and(native::action_runtime::runtime::canonical_route_viewer_runtime_profile)
+        && flags
+            .runtime_profile
+            .as_ref()
+            .and_then(|profile| flags.configured_runtime_profiles.get(profile))
+            .and_then(|path| path.as_deref())
+            == flags.profile.as_deref()
+        && matches!(
+            state
+                .runtime_owner_registry
+                .binding_for_session(&flags.session),
+            Ok(Some(_))
+        );
+    let selected_profile = (!configured_profile_is_inherited)
+        .then(|| flags.profile.clone())
+        .flatten();
     let mut request = command.clone();
     native::service_request_provenance::attribute_native_session(&mut request, &flags.session);
     for (field, value) in [
         ("runtimeProfile", flags.runtime_profile.as_ref()),
-        ("profile", flags.profile.as_ref()),
+        ("profile", selected_profile.as_ref()),
     ] {
         if let Some(value) = value {
             request[field] = json!(value);
@@ -642,7 +669,7 @@ fn apply_existing_lane_profile_to_flags(
     }
     let mut options = LaunchOptions {
         runtime_profile: flags.runtime_profile.clone(),
-        profile: flags.profile.clone(),
+        profile: selected_profile,
         ..LaunchOptions::default()
     };
     native::action_runtime::runtime::apply_existing_session_profile_selection(
@@ -668,6 +695,7 @@ fn attribute_prestart_launch(
         "clientSubjectId",
         "identityAssurance",
         "traceId",
+        "runtimeAdmissionClaim",
     ] {
         if let Some(value) = command.get(field) {
             launch[field] = value.clone();
@@ -740,7 +768,9 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
     match clean.get(1).map(|s| s.as_str()) {
         Some("create") => {
             let runtime_name = selected_runtime_name(clean, flags, 2);
-            if let Err(e) = runtime_profile::validate_runtime_profile_name(&runtime_name) {
+            if let Err(e) =
+                agent_browser_lease_authority::validate_runtime_profile_name(&runtime_name)
+            {
                 if flags.json {
                     print_json_error(e);
                 } else {
@@ -1838,13 +1868,13 @@ fn main() {
     // passwordless helper and runs before user-scoped environment loading.
     #[cfg(target_os = "linux")]
     if let Ok(value) =
-        env::var(native::service_lease_authority::LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV)
+        env::var(agent_browser_lease_authority::LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV)
     {
         if value != "1" {
             eprintln!("lease_authority_bootstrap_process_marker_invalid");
             exit(1);
         }
-        if let Err(error) = native::service_lease_authority::run_linux_lease_authority_bootstrap() {
+        if let Err(error) = agent_browser_lease_authority::run_linux_lease_authority_bootstrap() {
             eprintln!("{error}");
             exit(1);
         }
@@ -1855,14 +1885,13 @@ fn main() {
     // system unit. Dispatch happens before user-scoped environment loading so
     // a repository or home .env file cannot configure the authority process.
     #[cfg(target_os = "linux")]
-    if let Ok(value) =
-        env::var(native::service_lease_authority::LEASE_AUTHORITY_SERVICE_PROCESS_ENV)
+    if let Ok(value) = env::var(agent_browser_lease_authority::LEASE_AUTHORITY_SERVICE_PROCESS_ENV)
     {
         if value != "1" {
             eprintln!("lease_authority_service_process_marker_invalid");
             exit(1);
         }
-        if let Err(error) = native::service_lease_authority::run_linux_lease_authority_service() {
+        if let Err(error) = agent_browser_lease_authority::run_linux_lease_authority_service() {
             eprintln!("{error}");
             exit(1);
         }
@@ -2181,6 +2210,8 @@ fn main() {
         &mut cmd,
         env::var(crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV).ok(),
         env::var(crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_REVISION_ENV).ok(),
+        &flags.session,
+        flags.runtime_profile.as_deref(),
     );
 
     let authority_selected_session = match cmd.get("action").and_then(|value| value.as_str()) {
@@ -3303,14 +3334,9 @@ fn apply_runtime_admission_claim_from_sources(
     command: &mut serde_json::Value,
     transaction_id: Option<String>,
     transaction_revision: Option<String>,
+    cli_session: &str,
+    cli_runtime_profile: Option<&str>,
 ) {
-    if !command
-        .get("action")
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|action| matches!(action, "service_reconcile" | "stream_status"))
-    {
-        return;
-    }
     let Some(transaction_id) = transaction_id.filter(|value| !value.trim().is_empty()) else {
         return;
     };
@@ -3319,6 +3345,30 @@ fn apply_runtime_admission_claim_from_sources(
     else {
         return;
     };
+    let Some(action) = command
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+    else {
+        return;
+    };
+    if matches!(action.as_str(), "launch" | "navigate" | "headers" | "close") {
+        if command.get("runtimeProfile").is_none()
+            && cli_runtime_profile.is_some_and(|profile| profile == cli_session)
+        {
+            command["runtimeProfile"] = json!(cli_runtime_profile);
+        }
+        if command
+            .get("runtimeProfile")
+            .and_then(serde_json::Value::as_str)
+            != Some(cli_session)
+        {
+            return;
+        }
+    }
+    if !crate::runtime_adoption::runtime_admission_claim_action_allowed(&action, command) {
+        return;
+    }
     command["runtimeAdmissionClaim"] = json!({
         "transactionId": transaction_id,
         "transactionRevision": transaction_revision,
@@ -3591,6 +3641,8 @@ mod tests {
             &mut reconcile,
             Some("upgrade-test".to_string()),
             Some("9".to_string()),
+            "workstation-reconcile",
+            None,
         );
         assert_eq!(
             reconcile["runtimeAdmissionClaim"],
@@ -3605,6 +3657,8 @@ mod tests {
             &mut stream_status,
             Some("upgrade-test".to_string()),
             Some("9".to_string()),
+            "runtime-host",
+            None,
         );
         assert_eq!(
             stream_status["runtimeAdmissionClaim"],
@@ -3614,19 +3668,69 @@ mod tests {
             })
         );
 
-        let mut navigate = json!({"action": "navigate"});
+        let mut route_navigate = json!({
+            "action": "navigate",
+            "runtimeProfile": "rdp-guac-route-a-viewer",
+        });
         apply_runtime_admission_claim_from_sources(
-            &mut navigate,
+            &mut route_navigate,
             Some("upgrade-test".to_string()),
             Some("9".to_string()),
+            "rdp-guac-route-a-viewer",
+            Some("rdp-guac-route-a-viewer"),
         );
-        assert!(navigate.get("runtimeAdmissionClaim").is_none());
+        assert_eq!(
+            route_navigate["runtimeAdmissionClaim"],
+            json!({
+                "transactionId": "upgrade-test",
+                "transactionRevision": 9,
+            })
+        );
+        let mut route_launch = json!({"action": "launch"});
+        attribute_prestart_launch(
+            &mut route_launch,
+            &route_navigate,
+            "rdp-guac-route-a-viewer",
+        );
+        assert_eq!(
+            route_launch["runtimeAdmissionClaim"],
+            route_navigate["runtimeAdmissionClaim"]
+        );
+
+        let mut route_headers = json!({"action": "headers"});
+        apply_runtime_admission_claim_from_sources(
+            &mut route_headers,
+            Some("upgrade-test".to_string()),
+            Some("9".to_string()),
+            "rdp-guac-route-a-viewer",
+            Some("rdp-guac-route-a-viewer"),
+        );
+        assert_eq!(route_headers["runtimeProfile"], "rdp-guac-route-a-viewer");
+        assert_eq!(
+            route_headers["runtimeAdmissionClaim"],
+            route_navigate["runtimeAdmissionClaim"]
+        );
+
+        let mut ordinary_navigate = json!({
+            "action": "navigate",
+            "runtimeProfile": "bill-soylei",
+        });
+        apply_runtime_admission_claim_from_sources(
+            &mut ordinary_navigate,
+            Some("upgrade-test".to_string()),
+            Some("9".to_string()),
+            "bill-soylei",
+            Some("bill-soylei"),
+        );
+        assert!(ordinary_navigate.get("runtimeAdmissionClaim").is_none());
 
         let mut invalid_revision = json!({"action": "service_reconcile"});
         apply_runtime_admission_claim_from_sources(
             &mut invalid_revision,
             Some("upgrade-test".to_string()),
             Some("not-a-revision".to_string()),
+            "workstation-reconcile",
+            None,
         );
         assert!(invalid_revision.get("runtimeAdmissionClaim").is_none());
     }
@@ -4001,6 +4105,126 @@ mod tests {
                 .as_deref(),
             Some("work")
         );
+    }
+
+    #[test]
+    fn explicit_canonical_route_runtime_profile_migrates_configured_legacy_path() {
+        use crate::runtime_owner_transfer::{
+            CleanupObligationState, ProfileOwner, RuntimeLaneLifecycleState,
+            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+        };
+
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-main-route-profile-provenance-{}",
+            std::process::id()
+        ));
+        let legacy_profile = home.join("legacy-route-profile");
+        std::fs::create_dir_all(home.join(".agent-browser")).unwrap();
+        std::fs::create_dir_all(&legacy_profile).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        std::fs::write(
+            home.join(".agent-browser/config.json"),
+            serde_json::to_vec(&json!({
+                "runtimeProfiles": {
+                    "rdp-guac-route-a-viewer": {
+                        "browserFamily": "chromium",
+                        "userDataDir": legacy_profile,
+                    }
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let profile_id = "rdp-guac-route-a-viewer";
+        let browser_id = format!("session:{profile_id}");
+        let legacy_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(&legacy_profile)
+                .unwrap();
+        let owner = ProfileOwner {
+            owner_id: "terminal-legacy-route-owner".to_string(),
+            profile_identity_digest: legacy_digest.clone(),
+            state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+            owner_generation: 1,
+            browser_id: browser_id.clone(),
+            daemon_session_route: profile_id.to_string(),
+            process_instance_digest: "1".repeat(64),
+            browser_family: "chromium".to_string(),
+            cdp_endpoint_identity_digest: "2".repeat(64),
+            target_set_digest: "3".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        };
+        let mut owner_registry = RuntimeOwnerRegistry::from_owner(owner);
+        owner_registry.lifecycle_records.insert(
+            browser_id.clone(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: browser_id,
+                profile_identity_digest: legacy_digest,
+                owner_generation: 1,
+                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state: CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        let state = native::service_model::ServiceState {
+            profiles: std::collections::BTreeMap::from([(
+                profile_id.to_string(),
+                native::service_model::BrowserProfile {
+                    id: profile_id.to_string(),
+                    user_data_dir: Some(legacy_profile.to_string_lossy().into_owned()),
+                    ..native::service_model::BrowserProfile::default()
+                },
+            )]),
+            runtime_owner_registry: owner_registry,
+            ..native::service_model::ServiceState::default()
+        };
+        let args = vec![
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            profile_id.to_string(),
+            "--runtime-profile".to_string(),
+            profile_id.to_string(),
+            "open".to_string(),
+            "about:blank".to_string(),
+        ];
+        let mut flags = parse_flags(&args);
+
+        apply_existing_lane_profile_to_flags(&mut flags, &json!({"action": "navigate"}), &state)
+            .unwrap();
+
+        let stable_profile = crate::runtime_profile::resolve_profile(None, Some(profile_id))
+            .unwrap()
+            .user_data_dir;
+        assert_eq!(flags.runtime_profile.as_deref(), Some(profile_id));
+        assert_eq!(flags.profile.as_deref(), stable_profile.to_str());
+
+        let mut explicit_profile_flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            profile_id.to_string(),
+            "--runtime-profile".to_string(),
+            profile_id.to_string(),
+            "--profile".to_string(),
+            legacy_profile.to_string_lossy().into_owned(),
+            "open".to_string(),
+            "about:blank".to_string(),
+        ]);
+        assert_eq!(
+            apply_existing_lane_profile_to_flags(
+                &mut explicit_profile_flags,
+                &json!({"action": "navigate"}),
+                &state,
+            )
+            .unwrap_err(),
+            "existing_session_profile_identity_unproven"
+        );
+        let _ = std::fs::remove_dir_all(home);
     }
 
     #[test]

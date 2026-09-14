@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-13
+Updated: 2026-09-14
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -24,6 +24,164 @@ checkpoints. They do not define permanent product ownership. New substantive
 plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
+
+## P186 | Route Viewer Admission Drain Recovery
+
+State: OPEN
+
+Current state: [Plan 0186](docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
+and [issue #112](https://github.com/CochranResearchGroup/agent-browser/issues/112)
+own the post-reboot recovery defect exposed after P185 integration. A missing
+canonical route viewer must be launched during forward reconciliation, but the
+active admission drain rejects launch even with the exact transaction claim.
+P186 admits only the canonical managed route-viewer action sequence for the
+matching transaction and keeps ordinary profiles and browser effects blocked.
+PR #113 integrated the first gate as `3c7d29da`, and PR #114 integrated exact
+secondary-command shaping as `bba8b7a3`. Runtime acceptance proved that route
+A can now launch, apply headers, and navigate under the claim. Route B then
+failed before effect because a ready generation-1 owner for its obsolete
+generation-relative profile identity survives without any browser, session,
+tab, process, principal, or lease projection. Its exact lifecycle is already
+terminal with cleanup satisfied and process-exit plus profile-lock-release
+evidence. The remaining P186 slice makes the raw session matcher honor that
+existing terminal-history contract before ambiguity evaluation and permits the
+guarded canonical route relaunch to adopt its stable runtime-profile path,
+without mutating Service State or weakening nonterminal owner authority.
+PR #116 merged this slice as `e9a9496a`, but exact-merge live acceptance found
+one final CLI-shape mismatch before effect: the explicit global runtime profile
+is not guaranteed to be repeated in both normalized launch representations.
+PR #117 merged that correction as `acf5d4c6`; its exact candidate still failed
+before daemon startup because runtime-profile configuration had already copied
+the obsolete `userDataDir` into the generic profile field. P186 now has a red
+and green main-preflight regression at `e073f710`: configuration-derived route
+paths may yield to exact owner continuity, while caller-authored `--profile`
+values remain hard constraints. P186 remains open for integration and
+exact-merge runtime acceptance. PR #118 merged that preflight repair as
+`851fcebf`; live route A then reached post-launch registration and exposed the
+same migration gap in lifecycle persistence. Source checkpoint `bbbf5abc`
+adds an atomic, canonical-route-only terminal owner and lifecycle digest
+migration with fail-closed cleanup, collision, and principal-binding guards.
+PR #119 merged that transition as `0a2c8800`; exact-merge live validation then
+proved the owner and lifecycle advanced, but the retained profile record kept
+the legacy path and blocked navigation. Source checkpoint `fefc0dca` brings
+that profile record into the same atomic terminal-replacement transaction and
+accepts the already-migrated recovery shape. PR #120 merged it as `f65bf907`.
+Its exact candidate brought route A to display readiness, then route B failed
+only when sharing the host that A started; route B succeeds alone. Checkpoint
+`d83dd8fd` removes first-lane process-profile fallback from shared-host lane
+resolution while retaining explicit lane fields and current Service State.
+PR #121 merged that repair as `5d07b94f`, but exact-merge acceptance exposed a
+second direct environment read in auto-launch option construction. Checkpoint
+`fb754890` applies the same shared-host isolation to that final entry point.
+P186 remains open for integration and simultaneous three-route acceptance.
+
+## P185 | Route Viewer Runtime Profile Identity
+
+State: OPEN
+
+Current state: [Plan 0185](docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md)
+and [issue #110](https://github.com/CochranResearchGroup/agent-browser/issues/110)
+own the post-commit reconciliation blocker exposed by the P184 candidate. The
+canonical Guacamole route opener treated managed profile names as relative
+custom paths, so immutable support generations changed their identity. PR #111
+merged the stable managed-profile repair as `ffc6e510`. Installed acceptance
+now depends on P186 because reboot removed every reusable route viewer while
+the transaction's admission drain remains active.
+
+## P184 | Resumable Candidate Generation Retention
+
+State: OPEN
+
+Current state: [Plan 0184](docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
+and [issue #108](https://github.com/CochranResearchGroup/agent-browser/issues/108)
+own the candidate-custody defect exposed after P183 integration. The newest
+`blocked_ambiguous_runtime` transaction advertises resume, but unattended
+generation GC removed its exact staged candidate. P184 pins only the newest
+resumable candidate and rollback source while leaving superseded blocked
+history reclaimable, then returns P183 to one changed-source install attempt.
+P184 source merged through PR #109 as `3b7e8411`; installed acceptance now
+depends on P185 forward completion.
+
+## P183 | Registered Owner Browser-Missing Migration Repair
+
+State: OPEN
+
+Current state: [Plan 0183](docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md)
+and [issue #104](https://github.com/CochranResearchGroup/agent-browser/issues/104)
+own the source blocker exposed by the first integrated P180 plus P182 install.
+The first apply stopped before payload mutation because one invalid historical tab
+references an absent browser while an exact generation 90 registered-principal
+owner remains ready. P183 preserves that owner and capability binding while
+materializing non-effect-capable browser and released-session placeholders,
+then returns one integrated candidate to preserving installed acceptance. PR
+#107 merged the source repair as `12848e34`; installed acceptance now depends
+on P184 because the interlock removed the resumable candidate generation.
+
+## P182 | Authentication Resume State Reconciliation
+
+State: OPEN
+
+Current state: [Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
+and [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
+own the repeated adjacent-revision collision that prevents the preserved
+Authentication Run from recording its initial observation. The source repair
+is published in PR #98. P180's repair is integrated at `44e5dc16`, and the
+operator released Agent #95's runtime custody without an accepted install.
+P182 now owns one integrated P180 plus P182 candidate window. The existing run,
+browser, tab, handle, and zero-effect state must be preserved, and no resume is
+allowed on the old installed generation.
+
+## P181 | Lease-Authority Kernel Crate Extraction
+
+State: CLOSED
+
+Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
+is integrated through PR #106 as merge `b5a78faf`. The old native
+owner is deleted, the kernel and protected stack live in
+`agent-browser-lease-authority`, and the CLI retains only a private Service
+State and repository adapter. The architecture guard and its mutation tests are
+green, all 106 baseline invariant labels remain mapped, and local crate,
+adapter, joined-fixture, formatting, and strict-Clippy checks pass. The bounded
+P6 packet measured a 91.95 percent focused-loop reduction with no downstream or
+cold regression. Its strict promotion claim is withheld because the frozen
+focused selections were not literally identical. Source-equivalent
+native-Linux comprehensive CI passed. The repair full run compiled the new
+crate on macOS ARM and Windows, but inherited CLI compilation failed on macOS,
+Windows was cancelled by fail-fast, and the browser E2E navigation fixture
+retained its shared-profile browser. The joined architecture, crate, format,
+and strict-Clippy gates pass. The broad-run allowance remains exhausted, but
+P181's path-filtered non-fail-fast workflow passes the crate directly on Linux,
+macOS ARM, macOS x86, and Windows in run 34857911397. Ordinary PR CI run
+34857911400 is also green. Final pre-join head `8a57dce5` also passed focused
+run 34861501476 and ordinary CI run 34861501499. The initial Windows fixture failure was repaired at
+`b6aa71dd` with platform-native absolute test paths while retaining fail-closed
+protected-state validation. Current `main` at `bba8b7a3` is joined cleanly at
+`5ceb709c`, preserving the extracted owner and P186 route-command admission
+repair. Exact head `91aa3204` passes focused four-platform run 34864731916 and
+ordinary CI run 34864731908, including comprehensive Rust and no-launch smokes.
+The validated head is an ancestor of `main`; no P181 gate remains. Work item
+[CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
+is complete from baseline `16d4fb22`.
+P181 authorized the bounded source extraction and provider-free validation but
+no runtime, browser, profile, provider, installation, or production effect.
+
+## P180 | Pre-Drain Browserless Lane Quiescence Repair
+
+State: OPEN
+
+Current state: [Plan 0180](docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md)
+and [issue #95](https://github.com/CochranResearchGroup/agent-browser/issues/95)
+own the installer compatibility repair exposed by Books Receipts Plan 0240.
+The committed activation path writes admission drain before asking the selected
+old runtime to close a proven browserless competing lane. That old generation
+does not recognize the newer claimed-close exception, so the preserving
+upgrade fails with `runtime_admission_draining`. The repair must quiesce exact
+browserless lanes before drain, prove interruption safety, and retain all
+browser-bearing and unknown lanes. No installed or consumer acceptance is yet
+claimed. P182 may proceed with disjoint provider-free source work, but its
+installed acceptance and same-run recourse remain queued after P180 installed
+acceptance. The preserved Authentication Run must not be retried or replaced
+during this installer batch.
 
 ## P179 | Policy Selector v0.1.26 Integration
 
@@ -53,7 +211,7 @@ separate issue #84 and PR #83 lane.
 
 ## P178 | Browserless Runtime Lane Quiescence
 
-State: BLOCKED
+State: OPEN
 
 Current state: [Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md),
 [issue #84](https://github.com/CochranResearchGroup/agent-browser/issues/84),
@@ -125,23 +283,22 @@ State: BLOCKED
 
 Current state: [Plan 0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md)
 and [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66)
-own the existing bounded Turnstile implementation. The branch is reconciled to
-the Plan 0177 checkpoint but has since drifted behind current `main`; the leaf
-remains paused because live interaction acceptance is unproven. No retry or new
-feature scope is authorized. The
+own the existing bounded Turnstile implementation. That leaf remains paused
+because live interaction acceptance is unproven. No retry is authorized. The
 [desktop guard architecture note](docs/dev/notes/0179-2026-09-13-captcha-and-desktop-automation-guard-architecture.md)
 preserves the broader staged design under this single P169 lane.
 
 [Plan 0187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
-is the planning-only parent blueprint for the broader product trunk. It defines
+is the active parent blueprint for the broader product trunk under
+[issue #127](https://github.com/CochranResearchGroup/agent-browser/issues/127). It defines
 the provider-neutral challenge lifecycle and policy control plane, the shared
 desktop transaction capability, provider and consumer branches, and workfronts
-W0 through W8. Activation is gated on a parent work item, plan-ID and branch
-custody normalization against current main, and a bounded implementation plan.
-It authorizes no source work, runtime effect, or hCaptcha retry.
+W0 through W8. W0 is reconciling current main on
+`challenge/p169-control-plane`; W1 through W4 are the first provider-free
+implementation batch. It authorizes no runtime effect or hCaptcha retry.
 
 The operator resumed provider-free anti-bot feature work on 2026-09-13.
-[Plan 0180](docs/dev/plans/0180-2026-09-13-captcha-guard-contract-and-threat-model.md)
+[Plan 0188](docs/dev/plans/0188-2026-09-13-captcha-guard-contract-and-threat-model.md)
 closed the first architecture packet at
 `c6f0b447a03a586991561824ad0e744974267e81`: guard request, capability,
 receipt, threat model, dependency direction, and deterministic fixtures are
@@ -149,12 +306,12 @@ frozen. This did not authorize installation, browser or profile mutation,
 desktop input, a live challenge attempt, or retry. Plan 0169 remains blocked on
 its separate live-interaction acceptance gate.
 
-[Plan 0181](docs/dev/plans/0181-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)
+[Plan 0189](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)
 adds the separate hCaptcha fixture locator and one-click recipe. Its
 provider-free implementation and corrected no-effect classification for
 pre-input controller-authority rejection pass, but the installed acceptance
 attempt `r163653` stopped before `LeftDown` because the original observation
-expired during the guarded pointer trajectory. Plan 0181 and P169 are BLOCKED
+expired during the guarded pointer trajectory. Plan 0189 remains BLOCKED
 on a separately planned interaction-freshness repair and a new explicit live
 interaction budget. No retry, reset, challenge solving, provider apply,
 production mutation, or release is authorized.

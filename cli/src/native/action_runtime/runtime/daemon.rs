@@ -308,6 +308,12 @@ pub(crate) fn use_real_keychain_from_env() -> bool {
 pub(crate) fn runtime_profile_from_env() -> Option<String> {
     env::var("AGENT_BROWSER_RUNTIME_PROFILE").ok()
 }
+/// A shared host inherits process environment from the lane that started it.
+/// Later lanes must resolve profile identity from their attributed command and
+/// Service State, never from those first-lane process defaults.
+pub(crate) fn shared_runtime_host_process() -> bool {
+    parse_env_bool(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV)
+}
 pub(crate) fn runtime_profile_from_sources(
     cmd: &Value,
     include_env_profile: bool,
@@ -316,7 +322,11 @@ pub(crate) fn runtime_profile_from_sources(
         .and_then(|v| v.as_str())
         .or_else(|| cmd.get("profileId").and_then(|v| v.as_str()))
         .map(str::to_string)
-        .or_else(|| include_env_profile.then(runtime_profile_from_env).flatten())
+        .or_else(|| {
+            (include_env_profile && !shared_runtime_host_process())
+                .then(runtime_profile_from_env)
+                .flatten()
+        })
 }
 pub(crate) fn launch_profile_from_sources(
     cmd: &Value,
@@ -329,7 +339,7 @@ pub(crate) fn launch_profile_from_sources(
     if command_profile.is_some() {
         return command_profile;
     }
-    include_env_profile
+    (include_env_profile && !shared_runtime_host_process())
         .then(|| env::var("AGENT_BROWSER_PROFILE").ok())
         .flatten()
 }
@@ -838,7 +848,8 @@ pub(crate) fn apply_existing_session_profile_selection(
         .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
     let user_data_dir =
         resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), profile_id)?;
-    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    let profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
     if profile_digest != binding.claim.profile_identity_digest {
         return Err("existing_session_profile_identity_inconsistent".to_string());
     }
@@ -884,7 +895,9 @@ pub(crate) fn apply_existing_session_profile_selection(
                     if field == "profile" {
                         resolved_service_profile_identity_path(Some(requested), profile_id)
                             .and_then(|path| {
-                                crate::runtime_profile::canonical_profile_identity_digest(&path)
+                                agent_browser_lease_authority::canonical_profile_identity_digest(
+                                    &path,
+                                )
                             })
                             .is_ok_and(|digest| digest == profile_digest)
                     } else {
@@ -1029,7 +1042,8 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
     }
     let user_data_dir =
         resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), &profile_id)?;
-    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    let profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
     let owner = state.runtime_owner_registry.owner(&profile_digest);
     let exact_observed_owner = |owner: &crate::runtime_owner_transfer::ProfileOwner| {
         route_authorization
@@ -1097,7 +1111,7 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
         let requested_path =
             resolved_service_profile_identity_path(Some(requested_path), &profile_id)?;
         let requested_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&requested_path)?;
+            agent_browser_lease_authority::canonical_profile_identity_digest(&requested_path)?;
         if requested_digest != profile_digest {
             return Err("explicit_profile_conflicts_with_authenticated_cold_route".to_string());
         }
@@ -1137,9 +1151,11 @@ fn exact_terminal_owner_allows_profile_relaunch(
         .or(options.profile.as_deref())
         .filter(|profile| crate::runtime_profile::looks_like_path(profile));
     let requested_digest = if let Some(path) = requested_path {
-        Some(crate::runtime_profile::canonical_profile_identity_digest(
-            &crate::runtime_profile::resolve_profile(Some(path), None)?.user_data_dir,
-        )?)
+        Some(
+            agent_browser_lease_authority::canonical_profile_identity_digest(
+                &crate::runtime_profile::resolve_profile(Some(path), None)?.user_data_dir,
+            )?,
+        )
     } else if command_profile_id.is_none()
         && command_profile.is_none()
         && options.runtime_profile.is_none()
@@ -1158,7 +1174,8 @@ fn exact_terminal_owner_allows_profile_relaunch(
                 let path =
                     resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), id)
                         .ok()?;
-                (crate::runtime_profile::canonical_profile_identity_digest(&path).ok()? == digest)
+                (agent_browser_lease_authority::canonical_profile_identity_digest(&path).ok()?
+                    == digest)
                     .then_some(id.as_str())
             });
             let matched = matches.next();
@@ -1201,22 +1218,61 @@ fn exact_terminal_owner_allows_profile_relaunch(
     };
     let user_data_dir =
         resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), profile_id)?;
-    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
-    if profile_digest != binding.claim.profile_identity_digest
-        || binding.claim.daemon_session_route != session_id
+    let configured_profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
+    if binding.claim.daemon_session_route != session_id {
+        return Ok(false);
+    }
+    let requested_runtime_path = (session_id == profile_id
+        && canonical_route_viewer_runtime_profile(profile_id)
+        && (command_profile_id.as_deref() == Some(profile_id)
+            || options.runtime_profile.as_deref() == Some(profile_id)))
+    .then(|| crate::runtime_profile::resolve_profile(None, Some(profile_id)))
+    .transpose()?
+    .map(|profile| profile.user_data_dir);
+    let requested_runtime_digest = requested_runtime_path
+        .as_deref()
+        .map(agent_browser_lease_authority::canonical_profile_identity_digest)
+        .transpose()?;
+    // Early managed route records stored the runtime-profile name instead of
+    // its physical directory. That name resolves to the requested stable path,
+    // so the digest comparison alone cannot identify the historical owner as
+    // the migration source.
+    let configured_profile_is_canonical_runtime_name =
+        profile.user_data_dir.as_deref() == Some(profile_id);
+    let migrated_canonical_route_profile =
+        requested_runtime_digest.as_deref().is_some_and(|digest| {
+            (digest != configured_profile_digest
+                && (binding.claim.profile_identity_digest == configured_profile_digest
+                    || binding.claim.profile_identity_digest == digest))
+                || (configured_profile_is_canonical_runtime_name
+                    && binding.claim.profile_identity_digest != digest)
+        });
+    if !migrated_canonical_route_profile
+        && configured_profile_digest != binding.claim.profile_identity_digest
     {
         return Ok(false);
     }
     if let Some(requested_path) = options.profile.as_deref().or(command_profile.as_deref()) {
         let requested_path =
             resolved_service_profile_identity_path(Some(requested_path), profile_id)?;
-        if crate::runtime_profile::canonical_profile_identity_digest(&requested_path)?
-            != profile_digest
-        {
+        let requested_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(&requested_path)?;
+        let expected_digest = if migrated_canonical_route_profile {
+            requested_runtime_digest
+                .as_deref()
+                .ok_or_else(|| "canonical_route_viewer_profile_identity_missing".to_string())?
+        } else {
+            binding.claim.profile_identity_digest.as_str()
+        };
+        if requested_digest != expected_digest {
             return Ok(false);
         }
     }
-    let Some(owner) = state.runtime_owner_registry.owner(&profile_digest) else {
+    let Some(owner) = state
+        .runtime_owner_registry
+        .owner(&binding.claim.profile_identity_digest)
+    else {
         return Ok(false);
     };
     let Some(lifecycle) = state
@@ -1240,7 +1296,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
         && owner.daemon_session_route == session_id
         && owner.pending_transfer.is_none()
         && lifecycle.logical_browser_id == binding.claim.logical_browser_id
-        && lifecycle.profile_identity_digest == profile_digest
+        && lifecycle.profile_identity_digest == binding.claim.profile_identity_digest
         && lifecycle.owner_generation == binding.claim.owner_generation
         && lifecycle.lifecycle_state
             == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
@@ -1336,7 +1392,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
     let principal_projection_absent = !state
         .runtime_owner_registry
         .principal_bindings
-        .contains_key(&profile_digest);
+        .contains_key(&binding.claim.profile_identity_digest);
     // A terminal owner cannot carry effect authority into its replacement.
     // Once exact cleanup and process absence are proven, a current shared-local
     // caller with profile_use permission may relaunch the same profile even if
@@ -1349,14 +1405,29 @@ fn exact_terminal_owner_allows_profile_relaunch(
     {
         return Ok(false);
     }
-    (options.runtime_profile, options.profile) =
-        retained_profile_launch_identity(profile_id, profile);
+    if migrated_canonical_route_profile {
+        options.runtime_profile = Some(profile_id.to_string());
+        options.profile = Some(
+            requested_runtime_path
+                .as_deref()
+                .ok_or_else(|| "canonical_route_viewer_profile_identity_missing".to_string())?
+                .to_string_lossy()
+                .into_owned(),
+        );
+    } else {
+        (options.runtime_profile, options.profile) =
+            retained_profile_launch_identity(profile_id, profile);
+    }
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {
         options.executable_path = None;
     }
     Ok(true)
+}
+
+pub(crate) fn canonical_route_viewer_runtime_profile(profile_id: &str) -> bool {
+    crate::native::runtime_lifecycle::canonical_route_viewer_runtime_profile(profile_id)
 }
 
 fn apply_authenticated_orphaned_owner_recourse(
@@ -1417,7 +1488,8 @@ fn apply_authenticated_orphaned_owner_recourse(
     }
     let user_data_dir =
         resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), &profile_id)?;
-    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    let profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
     let principal_binding = state
         .runtime_owner_registry
         .principal_bindings
@@ -1581,7 +1653,8 @@ fn apply_registered_session_profile_continuity(
         .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
             profile_id,
         )?);
-    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    let profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
     let Some(principal_binding) = state
         .runtime_owner_registry
         .principal_bindings
@@ -1604,7 +1677,7 @@ fn apply_registered_session_profile_continuity(
         return Err("explicit_profile_conflicts_with_registered_work_lease".to_string());
     }
     if let Some(requested_path) = options.profile.as_deref() {
-        let requested_digest = crate::runtime_profile::canonical_profile_identity_digest(
+        let requested_digest = agent_browser_lease_authority::canonical_profile_identity_digest(
             std::path::Path::new(requested_path),
         )?;
         if requested_digest != profile_digest {
@@ -1693,11 +1766,11 @@ fn apply_shared_local_session_profile_continuity(
             profile_id,
         )?);
     if let Some(requested_path) = options.profile.as_deref() {
-        let requested_digest = crate::runtime_profile::canonical_profile_identity_digest(
+        let requested_digest = agent_browser_lease_authority::canonical_profile_identity_digest(
             std::path::Path::new(requested_path),
         )?;
         let profile_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+            agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
         if requested_digest != profile_digest {
             return Err("explicit_profile_conflicts_with_shared_local_session".to_string());
         }

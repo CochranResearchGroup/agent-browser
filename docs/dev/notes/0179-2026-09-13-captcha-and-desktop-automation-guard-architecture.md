@@ -8,9 +8,9 @@ Disposition: design baseline adopted and refined by Plan 0187
 
 Governing plan: Plan 0187
 
-Related leaf plans: Plan 0169, branch-local Plan 0180, and branch-local Plan 0181
+Related leaf plans: Plan 0169, Plan 0188, and Plan 0189
 
-Source branch: `feature/turnstile-desktop-challenge`
+Source branch: `challenge/p169-control-plane`
 
 ## 2026-09-14 Product-Trunk Refinement
 

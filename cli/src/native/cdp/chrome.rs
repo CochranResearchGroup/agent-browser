@@ -1071,7 +1071,7 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     };
     validate_profile_browser_family(options, &chrome_path)?;
     if let Some(runtime_profile) = options.runtime_profile.as_deref() {
-        crate::runtime_profile::validate_runtime_profile_name(runtime_profile)?;
+        agent_browser_lease_authority::validate_runtime_profile_name(runtime_profile)?;
     }
 
     let max_attempts = 3;

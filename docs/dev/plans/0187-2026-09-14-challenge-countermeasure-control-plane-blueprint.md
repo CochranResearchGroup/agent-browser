@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-State: PLANNED
+State: OPEN
 
 Consolidation: required
 
@@ -10,9 +10,9 @@ Product lane: PL-CHALLENGE
 
 Lane: P169
 
-Work item: parent issue pending; issue #66 remains the Turnstile and hCaptcha leaf
+Work item: `CochranResearchGroup/agent-browser#127`; issue #66 remains the Turnstile and hCaptcha leaf
 
-Planning branch: `feature/turnstile-desktop-challenge`
+Branch: `challenge/p169-control-plane`
 
 Target: `main`
 
@@ -26,8 +26,9 @@ transaction capability it consumes, the challenge-family and consumer branches
 that plug into it, and the workfront needed to deliver those pieces in small
 vertical slices.
 
-This plan is an architecture and sequencing authority only. It does not
-authorize source implementation, a browser launch, desktop input, provider
+The operator activated this plan on 2026-09-14. W0 through W4 authorize
+repository reconciliation, provider-free source implementation, documentation,
+and validation. They do not authorize a browser launch, desktop input, provider
 mutation, a challenge attempt, a retry, production mutation, or release.
 
 ## Consolidation
@@ -35,8 +36,8 @@ mutation, a challenge attempt, a retry, production mutation, or release.
 The current branch contains three related layers that have become conflated:
 
 1. Plan 0169 proves a Turnstile-specific desktop interaction leaf.
-2. The branch-local Plan 0180 freezes a provider-neutral CAPTCHA guard contract.
-3. The branch-local Plan 0181 adds an hCaptcha fixture leaf and exposes an
+2. The branch-local Plan 0188 freezes a provider-neutral CAPTCHA guard contract.
+3. The branch-local Plan 0189 adds an hCaptcha fixture leaf and exposes an
    interaction-freshness defect during the guarded pointer trajectory.
 
 The first two challenge families are useful probes, but neither is the product
@@ -47,9 +48,9 @@ challenge family does not use a checkbox.
 
 At the planning-start snapshot, `origin/main` was 36 commits ahead of this
 branch and this branch was 20 commits ahead of `origin/main`, with 64 changed
-files. The branch-local Plan 0180 and Plan 0181 identifiers collide with
-different plans on current main. Those identifiers and branch custody must be
-normalized before implementation is proposed for integration.
+files. The challenge packets were then numbered Plan 0180 and Plan 0181, which
+collided with different plans on current main. W0 renumbers them as Plan 0188
+and Plan 0189 before establishing the integration baseline.
 
 ## Product Outcomes
 
@@ -203,8 +204,8 @@ backends, a sister repository, and release work.
 
 Current-main reconciliation is required before W1 or W2 begins, but rewriting
 the published `feature/turnstile-desktop-challenge` history is not justified.
-The 2026-09-14 decision is to preserve its exact tip
-`b06e75c04a48fa1501a142e93a5846d0a90052e1`, create a new branch with the
+The 2026-09-14 decision is to preserve its exact decision tip
+`2ae7a68332b7a505c74bbd1e987d8a82fb52409d`, create a new branch with the
 `challenge/` product-lane prefix from that tip, and merge the freshly fetched
 `origin/main` checkpoint into the new branch.
 
@@ -216,8 +217,11 @@ request, but it remained durable shared custody. Rebasing it would replay 18
 unique non-merge patches and require a history rewrite without improving build
 performance.
 
-A read-only synthetic merge reported three textual conflicts: `RUNBOOK.md`,
-`scripts/open-rdp-guac-route-displays.js`, and
+A read-only synthetic merge initially reported three textual conflicts. By the
+execution fetch, current main had advanced to
+`994ed7b5f5c1deda5a968fa94a6ae3a82f04e2fc` and added one conflict in
+`cli/src/native/action_runtime/runtime/launch.rs`. The other conflicts were
+`RUNBOOK.md`, `scripts/open-rdp-guac-route-displays.js`, and
 `scripts/test-development-presentation-provider.js`. The newly integrated
 `agent-browser-lease-authority` crate does not directly edit
 `desktop_interaction.rs`, `controlled_x11_provider.rs`, or
@@ -225,12 +229,11 @@ A read-only synthetic merge reported three textual conflicts: `RUNBOOK.md`,
 the future desktop transaction module must consume. Building W2 against the
 pre-extraction authority shape would create immediate rework.
 
-The merge resolution must preserve both sides' semantics, renumber the
-branch-local Plan 0180 and Plan 0181 files that collide with current main, and
-rerun planning, architecture, changed-surface, Rust formatting, and strict
-Clippy gates before the new branch becomes an implementation baseline. The old
-published branch remains a recovery and evidence ref. No force push is part of
-this reconciliation.
+The merge resolution preserves both sides' semantics and renames the challenge
+packets to Plan 0188 and Plan 0189. Planning, architecture, changed-surface,
+Rust formatting, and strict Clippy gates must pass before the new branch becomes
+an implementation baseline. The old published branch remains a recovery and
+evidence ref. No force push is part of this reconciliation.
 
 ## Workfront
 

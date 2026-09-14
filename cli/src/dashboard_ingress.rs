@@ -2573,7 +2573,7 @@ mod tests {
             .unwrap();
         owner.browser_id = "session:historical-source-session".to_string();
         owner.profile_identity_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&profile_dir).unwrap();
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_dir).unwrap();
 
         let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
 

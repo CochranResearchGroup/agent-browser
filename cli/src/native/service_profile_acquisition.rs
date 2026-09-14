@@ -14,7 +14,6 @@ use sha2::{Digest, Sha256};
 
 use super::service_access::ServiceAccessPlanRequest;
 use super::service_contracts::SERVICE_REQUEST_ACTIONS;
-use super::service_lease_authority::{ActiveLeaseClaim, LeaseResourceKey};
 use super::service_model::{
     BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
     ControlInputProvider, LeaseState, ProfileOrigin, ServiceState, ViewStreamProvider,
@@ -26,9 +25,10 @@ use super::service_profile_access_policy::{
     ServiceProfileAccessPolicy,
 };
 use super::{
-    action_runtime, service_lease_authority, service_model, service_principal, service_resources,
-    service_store, service_trace,
+    action_runtime, service_lease_authority_adapter, service_model, service_principal,
+    service_resources, service_store, service_trace,
 };
+use agent_browser_lease_authority::{ActiveLeaseClaim, LeaseResourceKey};
 
 #[path = "service_profile_recovery.rs"]
 mod recovery;
@@ -1264,10 +1264,9 @@ pub(crate) fn lifecycle_replacement_decision(
         .as_deref()
         .map(std::path::PathBuf::from)
         .or_else(|| crate::runtime_profile::runtime_profile_user_data_dir(&profile.id).ok());
-    let Some(profile_identity_digest) = profile_path
-        .as_deref()
-        .and_then(|path| crate::runtime_profile::canonical_profile_identity_digest(path).ok())
-    else {
+    let Some(profile_identity_digest) = profile_path.as_deref().and_then(|path| {
+        agent_browser_lease_authority::canonical_profile_identity_digest(path).ok()
+    }) else {
         return json!({
             "available": false,
             "profileId": profile.id,

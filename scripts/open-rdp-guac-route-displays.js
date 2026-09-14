@@ -352,9 +352,9 @@ function openRoute(route, index) {
     throw new Error(`guacamole_route_${slug}_header_auth_required`);
   }
 
-  // `--profile` names a registered runtime profile. Passing an absolute
-  // user-data directory here is reinterpreted as `custom:<digest>`, which is
-  // not a valid runtime-profile name and prevents workstation reconciliation.
+  // Route viewers use registered runtime profiles. `--profile` means a custom
+  // filesystem path, so a relative viewer name would resolve beneath the
+  // generation-specific support directory and change identity on upgrade.
   const profile = routeViewerProfile(route, slug);
   const session = route.viewerSession || profile;
   const executable = route.viewerExecutable ||
@@ -365,7 +365,7 @@ function openRoute(route, index) {
     '--json',
     '--session',
     session,
-    '--profile',
+    '--runtime-profile',
     profile,
     ...(executable ? ['--executable-path', executable] : []),
     '--args',
@@ -384,7 +384,7 @@ function openRoute(route, index) {
       '--json',
       '--session',
       session,
-      '--profile',
+      '--runtime-profile',
       profile,
       'close',
     ], { timeout: 30000 });

@@ -235,6 +235,176 @@ try {
     0,
     'the installed agent-browser payload must be executable',
   );
+  const admissionRoot = join(home, '.agent-browser', 'runtime-adoption');
+  mkdirSync(admissionRoot, { recursive: true });
+  writeFileSync(
+    join(admissionRoot, 'admission-drain.json'),
+    JSON.stringify({
+      schemaVersion: 'agent-browser.runtime-adoption.v1',
+      transactionId: 'upgrade-fixture',
+      candidateGenerationId: 'candidate-fixture',
+      transactionRevision: 7,
+      recordedAt: '2026-09-14T00:00:00Z',
+    }),
+  );
+  const admissionEnv = {
+    ...process.env,
+    HOME: home,
+    XDG_RUNTIME_DIR: xdgRoot,
+    AGENT_BROWSER_RUNTIME_HOST: '1',
+    AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID: 'upgrade-fixture',
+    AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_REVISION: '7',
+  };
+  const legacyRouteProfile = 'rdp-guac-route-b-viewer';
+  const legacyRouteBrowser = `session:${legacyRouteProfile}`;
+  const legacyRouteUserData = join(home, 'legacy-generation-route-profile');
+  const currentRouteUserData = join(
+    home,
+    '.agent-browser',
+    'runtime-profiles',
+    legacyRouteProfile,
+    'user-data',
+  );
+  mkdirSync(legacyRouteUserData, { recursive: true });
+  mkdirSync(currentRouteUserData, { recursive: true });
+  const profileIdentityDigest = (path) => createHash('sha256')
+    .update(`agent-browser.profile-identity.v1\n${resolve(path)}`)
+    .digest('hex');
+  const legacyRouteProfileDigest = profileIdentityDigest(legacyRouteUserData);
+  const serviceStateDir = join(home, '.agent-browser', 'service');
+  mkdirSync(serviceStateDir, { recursive: true });
+  writeFileSync(
+    join(serviceStateDir, 'state.json'),
+    JSON.stringify({
+      profiles: {
+        [legacyRouteProfile]: {
+          id: legacyRouteProfile,
+          name: legacyRouteProfile,
+          userDataDir: legacyRouteUserData,
+          persistent: true,
+        },
+      },
+      runtimeOwnerRegistry: {
+        revision: 1,
+        owners: {
+          [legacyRouteProfileDigest]: {
+            ownerId: 'legacy-route-owner',
+            profileIdentityDigest: legacyRouteProfileDigest,
+            state: 'ready',
+            ownerGeneration: 1,
+            browserId: legacyRouteBrowser,
+            daemonSessionRoute: legacyRouteProfile,
+            processInstanceDigest: '1'.repeat(64),
+            browserFamily: 'chrome',
+            cdpEndpointIdentityDigest: '2'.repeat(64),
+            targetSetDigest: '3'.repeat(64),
+          },
+        },
+        lifecycleRecords: {
+          [legacyRouteBrowser]: {
+            logicalBrowserId: legacyRouteBrowser,
+            profileIdentityDigest: legacyRouteProfileDigest,
+            ownerGeneration: 1,
+            lifecycleState: 'terminal',
+            cleanupObligationState: 'satisfied',
+            terminalEvidence: ['exact_process_exited', 'profile_lock_released'],
+          },
+        },
+      },
+    }),
+  );
+  const routeAdmissionSocket = join(xdgRoot, 'route-admission-socket');
+  const routeViewerAdmission = spawnSync(
+    installedBinary,
+    [
+      '--json',
+      '--session',
+      legacyRouteProfile,
+      '--runtime-profile',
+      legacyRouteProfile,
+      '--executable-path',
+      '/bin/false',
+      'open',
+      'about:blank',
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...admissionEnv,
+        AGENT_BROWSER_SOCKET_DIR: routeAdmissionSocket,
+      },
+    },
+  );
+  assert.notEqual(routeViewerAdmission.status, 0);
+  assert.doesNotMatch(
+    JSON.parse(routeViewerAdmission.stdout).error,
+    /runtime_admission_draining/,
+    'the exact transaction claim must pass canonical route-viewer launch admission',
+  );
+  assert.doesNotMatch(
+    JSON.parse(routeViewerAdmission.stdout).error,
+    /existing_session_profile_identity_(?:unproven|inconsistent|ambiguous)/,
+    'terminal legacy route-owner history must not block the stable runtime-profile launch',
+  );
+  const routeHeaderAdmission = spawnSync(
+    installedBinary,
+    [
+      '--json',
+      '--session',
+      'rdp-guac-route-a-viewer',
+      '--runtime-profile',
+      'rdp-guac-route-a-viewer',
+      '--executable-path',
+      '/bin/false',
+      'set',
+      'headers',
+      '{}',
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...admissionEnv,
+        AGENT_BROWSER_SOCKET_DIR: routeAdmissionSocket,
+      },
+    },
+  );
+  assert.notEqual(routeHeaderAdmission.status, 0);
+  assert.doesNotMatch(
+    JSON.parse(routeHeaderAdmission.stdout).error,
+    /runtime_admission_draining/,
+    'secondary route-viewer commands must retain exact claimed launch admission',
+  );
+  const ordinaryProfileAdmission = spawnSync(
+    installedBinary,
+    [
+      '--json',
+      '--session',
+      'ordinary-profile',
+      '--runtime-profile',
+      'bill-soylei',
+      '--executable-path',
+      '/bin/false',
+      'open',
+      'about:blank',
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...admissionEnv,
+        AGENT_BROWSER_SOCKET_DIR: join(xdgRoot, 'ordinary-admission-socket'),
+      },
+    },
+  );
+  assert.notEqual(
+    ordinaryProfileAdmission.status,
+    0,
+    'the transaction claim must not admit an ordinary managed profile',
+  );
+  assert.match(
+    JSON.parse(ordinaryProfileAdmission.stdout).error,
+    /runtime_admission_draining/,
+    'ordinary managed profiles must remain blocked by the admission drain',
+  );
   for (const unit of expectedUnits) {
     const unitPath = join(installRoot, '.config', 'systemd', 'user', unit);
     assert.ok(existsSync(unitPath), `apply must install ${unit}`);
@@ -377,6 +547,16 @@ try {
     /'open',\s*'about:blank'|'set',\s*'headers'/.test(routeOpenerSource),
     false,
     'Guacamole route sessions must not require an unbound second navigation',
+  );
+  assert.match(
+    routeOpenerSource,
+    /'--runtime-profile',\s*profile/,
+    'canonical route viewers must use stable managed runtime-profile identity',
+  );
+  assert.equal(
+    /'--profile',\s*profile/.test(routeOpenerSource),
+    false,
+    'canonical route viewer names must not be interpreted as generation-relative custom paths',
   );
   assert.equal(
     /'eval'|--base64|--stdin/.test(routeOpenerSource),

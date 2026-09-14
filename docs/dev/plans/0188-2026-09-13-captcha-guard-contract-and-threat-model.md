@@ -1,4 +1,4 @@
-# Plan 0180 | CAPTCHA Guard Contract And Threat Model
+# Plan 0188 | CAPTCHA Guard Contract And Threat Model
 
 Date: 2026-09-13
 
@@ -12,7 +12,7 @@ Lane: P169
 
 Work item: `CochranResearchGroup/agent-browser#66`
 
-Branch: `feature/turnstile-desktop-challenge`
+Branch: `challenge/p169-control-plane`
 
 Target: `main`
 

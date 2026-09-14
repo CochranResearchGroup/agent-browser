@@ -1,6 +1,6 @@
 # CAPTCHA Guard Contract v1
 
-Status: frozen for Plan 0180 provider-free validation
+Status: frozen for Plan 0188 provider-free validation
 
 Owner: PL-CHALLENGE
 

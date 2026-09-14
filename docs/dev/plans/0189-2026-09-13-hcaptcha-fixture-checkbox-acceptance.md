@@ -1,4 +1,4 @@
-# Plan 0181 | hCaptcha Fixture Checkbox Acceptance
+# Plan 0189 | hCaptcha Fixture Checkbox Acceptance
 
 Date: 2026-09-13
 
@@ -12,7 +12,7 @@ Lane: P169
 
 Work item: `CochranResearchGroup/agent-browser#66`
 
-Branch: `feature/turnstile-desktop-challenge`
+Branch: `challenge/p169-control-plane`
 
 Target: `main`
 
@@ -30,7 +30,7 @@ retrying if an image, audio, or accessibility challenge opens.
 
 Plan 0169 owns the existing `cloudflare-turnstile-v1` locator and guarded X11
 recipe. Its discovery checkpoint correctly records that an hCaptcha checkbox
-is a separate challenge family and must not be treated as Turnstile. Plan 0180
+is a separate challenge family and must not be treated as Turnstile. Plan 0188
 froze the provider-neutral CAPTCHA guard contracts without adding another
 locator or solver.
 

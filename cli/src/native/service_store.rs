@@ -216,9 +216,10 @@ pub trait ServiceStateRepository {
     fn load_snapshot(&self) -> Result<ServiceState, String>;
 
     /// Apply a pure in-memory state transformation. Durable repositories may
-    /// replay the closure once against a newer revision when a concurrent
-    /// writer commits while this candidate is being prepared. Callers must do
-    /// external I/O before or after this closure, never inside it.
+    /// replay the closure once against a newer revision while holding exclusive
+    /// persistence authority when a concurrent writer commits during initial
+    /// preparation. Callers must do external I/O before or after this closure,
+    /// never inside it.
     fn mutate<R>(
         &self,
         mutator: impl FnMut(&mut ServiceState) -> Result<R, String>,
@@ -609,8 +610,9 @@ where
 
     /// Evaluate a mutation predicate against the same baseline used to prepare
     /// the update. A false predicate performs no save and does not advance the
-    /// authority revision. One stale candidate is replayed from a fresh load;
-    /// transaction recovery retains its ordinary load semantics.
+    /// authority revision. One stale candidate is replayed from a fresh load
+    /// under exclusive persistence authority; transaction recovery retains its
+    /// ordinary load semantics.
     pub(crate) fn mutate_if<R>(
         &self,
         predicate: impl FnMut(&ServiceState) -> bool,
@@ -633,6 +635,13 @@ where
                 .state_path()
                 .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
             for attempt in 0..2 {
+                if attempt == 1 {
+                    return self.mutate_serialized_after_stale_candidate(
+                        timeout,
+                        &mut predicate,
+                        &mut mutator,
+                    );
+                }
                 let baseline = self.load_snapshot_with_lock_timeout(timeout)?;
                 if !predicate(&baseline) {
                     return Ok(None);
@@ -666,20 +675,14 @@ where
                         self.store.load_without_recovery()?
                     };
                     if current.state_revision != baseline_revision {
-                        if attempt == 0 {
-                            record_service_state_lock_terminal(
-                                "file",
-                                "prepared_noop_check",
-                                "exclusive",
-                                "stale_candidate_replay",
-                                Duration::ZERO,
-                            );
-                            continue;
-                        }
-                        return Err(format!(
-                            "service_state_stale_revision: expected={baseline_revision}; actual={}",
-                            current.state_revision
-                        ));
+                        record_service_state_lock_terminal(
+                            "file",
+                            "prepared_noop_check",
+                            "exclusive",
+                            "stale_candidate_replay",
+                            Duration::ZERO,
+                        );
+                        continue;
                     }
                     return Ok(Some(result));
                 }
@@ -706,20 +709,14 @@ where
                     self.store.load_without_recovery()?
                 };
                 if current.state_revision != baseline_revision {
-                    if attempt == 0 {
-                        record_service_state_lock_terminal(
-                            "file",
-                            "prepared_commit",
-                            "exclusive",
-                            "stale_candidate_replay",
-                            Duration::ZERO,
-                        );
-                        continue;
-                    }
-                    return Err(format!(
-                        "service_state_stale_revision: expected={baseline_revision}; actual={}",
-                        current.state_revision
-                    ));
+                    record_service_state_lock_terminal(
+                        "file",
+                        "prepared_commit",
+                        "exclusive",
+                        "stale_candidate_replay",
+                        Duration::ZERO,
+                    );
+                    continue;
                 }
                 drop(process_guard);
                 file_guard.set_phase("commit_prepared");
@@ -758,6 +755,63 @@ where
         }
         let result = mutator(&mut state)?;
         self.store.save(&state)?;
+        Ok(Some(result))
+    }
+
+    fn mutate_serialized_after_stale_candidate<R>(
+        &self,
+        timeout: Duration,
+        predicate: &mut impl FnMut(&ServiceState) -> bool,
+        mutator: &mut impl FnMut(&mut ServiceState) -> Result<R, String>,
+    ) -> Result<Option<R>, String> {
+        let path = self
+            .store
+            .state_path()
+            .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
+        let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
+        let mut file_guard = acquire_service_state_file_lock_until(
+            path,
+            ServiceStateFileLockMode::Exclusive,
+            deadline,
+            "prepared_contended_commit",
+        )?;
+        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        let process_guard =
+            acquire_service_state_process_lock(lock, deadline, "prepared_contended_commit")?;
+        file_guard.set_phase("load_current");
+        let baseline = if self.store.recovery_required() {
+            self.store.load()?
+        } else {
+            self.store.load_without_recovery()?
+        };
+        file_guard.set_state_summary(&baseline, None);
+        if !predicate(&baseline) {
+            return Ok(None);
+        }
+
+        let baseline_revision = baseline.state_revision;
+        let mut candidate = baseline.clone();
+        candidate.state_revision = baseline_revision
+            .checked_add(1)
+            .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+        file_guard.set_phase("mutate");
+        let result = mutator(&mut candidate)?;
+        let candidate_revision = candidate.state_revision;
+        candidate.state_revision = baseline_revision;
+        if candidate == baseline {
+            return Ok(Some(result));
+        }
+        candidate.state_revision = candidate_revision;
+
+        drop(process_guard);
+        file_guard.set_phase("prepare_contended");
+        let transaction = self
+            .store
+            .prepare_save(&candidate)?
+            .ok_or_else(|| "service_state_prepared_save_missing".to_string())?;
+        file_guard.set_state_summary(&candidate, Some(transaction.state_payload.len()));
+        file_guard.set_phase("commit_prepared");
+        self.store.save_prepared(&transaction)?;
         Ok(Some(result))
     }
 }
@@ -2878,8 +2932,118 @@ mod tests {
             .expect("no-op mutation should replay from the newer revision");
 
         assert_eq!(mutator_count.load(std::sync::atomic::Ordering::SeqCst), 2);
-        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 4);
+        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 3);
         assert_eq!(state.lock().unwrap().state_revision, 8);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn prepared_mutation_converges_after_two_adjacent_revision_changes() {
+        struct TwiceStalePreparedStore {
+            path: PathBuf,
+            state: Arc<Mutex<ServiceState>>,
+            load_count: Arc<std::sync::atomic::AtomicUsize>,
+            commit_count: Arc<std::sync::atomic::AtomicUsize>,
+        }
+
+        impl ServiceStateStore for TwiceStalePreparedStore {
+            fn load(&self) -> Result<ServiceState, String> {
+                self.load_without_recovery()
+            }
+
+            fn load_without_recovery(&self) -> Result<ServiceState, String> {
+                let load_index = self
+                    .load_count
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut state = self.state.lock().unwrap();
+                // The baseline performs optimistic baseline and commit loads at
+                // indices 0 and 1, then 2 and 3. Both commit loads lose an
+                // adjacent revision race. The repaired replay replaces the
+                // second optimistic pair with one exclusive load at index 2.
+                if matches!(load_index, 1 | 3) {
+                    state.state_revision += 1;
+                }
+                Ok(state.clone())
+            }
+
+            fn save(&self, _state: &ServiceState) -> Result<(), String> {
+                Err("unexpected_unprepared_save".to_string())
+            }
+
+            fn state_path(&self) -> Option<&Path> {
+                Some(&self.path)
+            }
+
+            fn supports_prepared_save(&self) -> bool {
+                true
+            }
+
+            fn prepare_save(
+                &self,
+                state: &ServiceState,
+            ) -> Result<Option<ServiceStateTransaction>, String> {
+                Ok(Some(ServiceStateTransaction {
+                    state_payload: serde_json::to_string(state).unwrap(),
+                    handoff_payload: String::new(),
+                    owner_registry_payload: None,
+                    lifecycle_registry_payload: None,
+                }))
+            }
+
+            fn save_prepared(&self, transaction: &ServiceStateTransaction) -> Result<(), String> {
+                self.commit_count
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                *self.state.lock().unwrap() =
+                    serde_json::from_str(&transaction.state_payload).unwrap();
+                Ok(())
+            }
+        }
+
+        let path = unique_state_path("prepared-twice-stale-convergence");
+        let state = Arc::new(Mutex::new(ServiceState::default()));
+        let load_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let commit_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let repository = LockedServiceStateRepository::new(TwiceStalePreparedStore {
+            path: path.clone(),
+            state: Arc::clone(&state),
+            load_count: Arc::clone(&load_count),
+            commit_count: Arc::clone(&commit_count),
+        });
+        let mutator_count = std::sync::atomic::AtomicUsize::new(0);
+
+        let result = repository
+            .mutate(|candidate| {
+                mutator_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                candidate.jobs.insert(
+                    "authentication-observation".to_string(),
+                    crate::native::service_model::ServiceJob {
+                        id: "authentication-observation".to_string(),
+                        action: "service_authentication_run_resume".to_string(),
+                        ..crate::native::service_model::ServiceJob::default()
+                    },
+                );
+                Ok("recorded")
+            })
+            .expect("a pure mutation should converge after repeated adjacent writers");
+
+        let state = state.lock().unwrap();
+        assert_eq!(result, "recorded");
+        assert_eq!(mutator_count.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 3);
+        assert_eq!(commit_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(state.state_revision, 2);
+        assert_eq!(
+            state
+                .jobs
+                .keys()
+                .filter(|id| id.as_str() == "authentication-observation")
+                .count(),
+            1
+        );
+        assert!(service_state_lock_diagnostics()
+            .recent
+            .iter()
+            .any(|activity| activity.operation == "prepared_contended_commit"));
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 

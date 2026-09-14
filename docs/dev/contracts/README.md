@@ -139,7 +139,7 @@ crate dependency direction for guarded challenge automation.
 `captcha-guard-capability.v1.schema.json`, and
 `captcha-guard-receipt.v1.schema.json` define the internal request,
 capability, and receipt records. They do not add a public service action in
-Plan 0180.
+Plan 0188.
 
 `examples/captcha-guard-contract-fixtures.v1.json` contains deterministic
 positive and adversarial records. Run `pnpm test:captcha-guard-contract` to

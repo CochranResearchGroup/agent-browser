@@ -111,10 +111,15 @@ Match the existing style in that file.
 This is a Rust workspace. The `agent-browser` binary package lives in `cli/`,
 and the focused `agent-browser-cdp` library package owns the CDP websocket
 transport, command lifecycle, and protocol types under
-`crates/agent-browser-cdp/`. Browser process launch, Chrome and Lightpanda
-selection, `BrowserManager`, the automation daemon, snapshots, and state remain
-in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
-`install` command downloads Chrome from Chrome for Testing directly.
+`crates/agent-browser-cdp/`. The `agent-browser-lease-authority` library package
+owns lease claims, fencing, signing and verification, the protected protocol
+and durable store, custody, and pure principal and profile-identity mechanics
+under `crates/agent-browser-lease-authority/`. Service State joins and browser
+or runtime-owner orchestration remain CLI adapters. Browser process launch,
+Chrome and Lightpanda selection, `BrowserManager`, the automation daemon,
+snapshots, and state remain in `cli/src/native/`. The `--engine` flag selects
+Chrome vs Lightpanda. The `install` command downloads Chrome from Chrome for
+Testing directly.
 
 ## Isolated Development Runtime
 
@@ -215,13 +220,14 @@ serial inside its process, gives every CLI process a disposable home and XDG
 runtime tree, and partitions CLI tests into disjoint action, browser, service,
 stream, other native, workstation, and remaining core compartments. Two
 balanced lanes overlap through the existing Cargo admission wrapper. The
-support lane then runs the CDP crate and CLI integration-test binaries.
+support lane then runs the Lease Authority crate, CDP crate, and CLI
+integration-test binaries.
 First-failure logs remain separate and are printed before each compartment
 result.
 
 Use `scripts/ci/rust-tests.sh --focused <filter>` during implementation or to
-re-run one failed invariant. Use `--compartment <name>` for `transport`,
-`cli-native`, one of the narrower `cli-native-*` groups, `cli-workstation`,
+re-run one failed invariant. Use `--compartment <name>` for `lease-authority`,
+`transport`, `cli-native`, one of the narrower `cli-native-*` groups, `cli-workstation`,
 `cli-core`, or `cli-integration`, and `--list-compartments` for machine-readable
 discovery. The runner defaults
 `RUST_MIN_STACK` to 16 MiB so state-heavy async fixtures do not require
@@ -310,6 +316,14 @@ when intentionally validating the optimized CI profile locally. The slow gates
 run when the CI workflow is started manually or when the pushed head commit
 message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E
 Tests, Windows Integration Test, and Global Install.
+
+Lease Authority changes also run the path-filtered
+`.github/workflows/lease-authority.yml` workflow. Its non-fail-fast matrix runs
+the `agent-browser-lease-authority` package directly on Linux, macOS ARM,
+macOS x86, and Windows. Treat that workflow as the authoritative
+target-platform gate for the extracted crate; workspace-wide cross-platform
+or browser E2E failures remain separate evidence unless they touch the crate or
+its adapter contract.
 
 At a completed repair batch, before merge readiness or governed runtime
 effects, match validation to every touched surface since the batch baseline,

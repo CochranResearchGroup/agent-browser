@@ -1,6 +1,6 @@
 # Agent Browser Notes Index
 
-Updated: 2026-09-13
+Updated: 2026-09-14
 
 This index consolidates reusable and actionable note families without moving,
 renaming, rewriting, or deleting historical evidence. There are more than 250
@@ -87,6 +87,9 @@ reuse after those contracts are frozen.
 - [Service State contention acceptance series](0143-2026-08-29-plan-0142-structured-client-recourse-checkpoint.md)
 - [Frozen-candidate stress campaign](0158-1-2026-09-02-historical-failure-registry.md)
 - [Service State lock repair evidence](0167-2026-09-11-plan-0167-service-state-lock-repair-evidence.md)
+- [Lease Authority baseline admission](0181-1-2026-09-13-lease-authority-baseline-admission.md)
+- [Lease Authority invariant ledger](0181-2-2026-09-13-lease-authority-invariant-ledger.md)
+- [Lease Authority build measurement](0181-3-2026-09-14-lease-authority-build-measurement.md)
 
 [Plan 0161](../plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
 is assigned to this lane. It owns the profile aggregate, sealed repair and reset

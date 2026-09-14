@@ -16,7 +16,8 @@ use super::daemon::{
     keychain_password_from_env, launch_args_from_sources,
     launch_command_with_effective_service_defaults, launch_hash, launch_profile_from_sources,
     require_stock_chrome_capability_selection, runtime_profile_from_env,
-    runtime_profile_from_sources, use_real_keychain_from_env, CloseBehavior,
+    runtime_profile_from_sources, shared_runtime_host_process, use_real_keychain_from_env,
+    CloseBehavior,
 };
 use super::profile_lease::apply_auto_launch_command_hints;
 #[cfg(target_os = "linux")]
@@ -75,13 +76,6 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
-#[cfg(target_os = "linux")]
-use crate::native::service_lease_authority::{
-    complete_protected_browser_adoption_success, complete_protected_browser_launch_success,
-    mark_protected_browser_adoption_uncertain, mark_protected_browser_launch_uncertain,
-    ProtectedBrowserAdoptionPreparation, ProtectedBrowserLaunchPermit, ProtectedBrowserOwner,
-    ProtectedBrowserOwnerLease,
-};
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -108,6 +102,13 @@ use crate::native::webdriver::safari;
 use crate::runtime_profile::{
     clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
+};
+#[cfg(target_os = "linux")]
+use agent_browser_lease_authority::{
+    complete_protected_browser_adoption_success, complete_protected_browser_launch_success,
+    mark_protected_browser_adoption_uncertain, mark_protected_browser_launch_uncertain,
+    ProtectedBrowserAdoptionPreparation, ProtectedBrowserLaunchPermit, ProtectedBrowserOwner,
+    ProtectedBrowserOwnerLease,
 };
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -1138,8 +1139,12 @@ pub(crate) fn launch_options_from_env() -> LaunchOptions {
         proxy_bypass: env::var("AGENT_BROWSER_PROXY_BYPASS").ok(),
         proxy_username: env::var("AGENT_BROWSER_PROXY_USERNAME").ok(),
         proxy_password: env::var("AGENT_BROWSER_PROXY_PASSWORD").ok(),
-        profile: env::var("AGENT_BROWSER_PROFILE").ok(),
-        runtime_profile: runtime_profile_from_env(),
+        profile: (!shared_runtime_host_process())
+            .then(|| env::var("AGENT_BROWSER_PROFILE").ok())
+            .flatten(),
+        runtime_profile: (!shared_runtime_host_process())
+            .then(runtime_profile_from_env)
+            .flatten(),
         expected_browser_family: None,
         allow_file_access: env::var("AGENT_BROWSER_ALLOW_FILE_ACCESS")
             .map(|v| v == "1" || v == "true")

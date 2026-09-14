@@ -88,6 +88,11 @@ function selectRecommendations(files, base) {
     add('scripts/ci/cargo-safe.sh test -p agent-browser-cdp --manifest-path Cargo.toml', 'CDP transport behavior changed');
   }
 
+  if (files.some(isLeaseAuthorityCrateSurface)) {
+    add('node scripts/test-lease-authority-crate-architecture.js', 'Lease-authority crate ownership and dependency direction changed');
+    add('scripts/ci/cargo-safe.sh test -p agent-browser-lease-authority --manifest-path Cargo.toml', 'Lease-authority kernel behavior changed');
+  }
+
   if (files.some(isCdpTabStreamingSurface)) {
     add(
       'pnpm test:service-cdp-tab-streaming-live',
@@ -286,7 +291,8 @@ function isRustWorkspaceSurface(file) {
     file === 'cli/Cargo.toml' ||
     file === 'cli/build.rs' ||
     file.startsWith('cli/src/') ||
-    file.startsWith('crates/agent-browser-cdp/')
+    file.startsWith('crates/agent-browser-cdp/') ||
+    file.startsWith('crates/agent-browser-lease-authority/')
   );
 }
 
@@ -300,6 +306,22 @@ function isCdpCrateSurface(file) {
     file.startsWith('crates/agent-browser-cdp/') ||
     file === 'scripts/ci/rust-tests.sh' ||
     file === 'scripts/test-cdp-crate-architecture.js'
+  );
+}
+
+function isLeaseAuthorityCrateSurface(file) {
+  return (
+    file === 'Cargo.toml' ||
+    file === 'Cargo.lock' ||
+    file === 'cli/Cargo.toml' ||
+    file === 'cli/src/native/mod.rs' ||
+    file === 'cli/src/native/service_lease_authority_adapter.rs' ||
+    file === 'cli/src/native/service_lease_authority.rs' ||
+    file.startsWith('cli/src/native/service_lease_authority/') ||
+    file.startsWith('crates/agent-browser-lease-authority/') ||
+    file === '.github/workflows/lease-authority.yml' ||
+    file === 'scripts/ci/rust-tests.sh' ||
+    file === 'scripts/test-lease-authority-crate-architecture.js'
   );
 }
 

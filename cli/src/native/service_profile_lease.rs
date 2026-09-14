@@ -21,10 +21,7 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-use super::service_lease_authority::{
-    release_lease_claim_for_authenticated_state, ActiveLeaseClaim, LeaseClaimMode,
-    LeaseClaimTerminalReceipt,
-};
+use super::service_lease_authority_adapter::release_lease_claim_for_authenticated_state;
 use super::service_model::{
     LeaseState, ServiceEvent, ServiceEventKind, ServiceState, TabLifecycle,
 };
@@ -39,6 +36,7 @@ use super::service_profile_access_policy::ProfileAccessMode;
 use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
+use agent_browser_lease_authority::{ActiveLeaseClaim, LeaseClaimMode, LeaseClaimTerminalReceipt};
 
 pub(crate) const PROFILE_LEASE_SCHEMA_VERSION: &str = "agent-browser.profile-lease.v1";
 pub(crate) const PROFILE_LEASE_RECONCILE_PLAN_SCHEMA_VERSION: &str =
@@ -827,7 +825,7 @@ fn mutate_profile_lease(command: &serde_json::Value) -> Result<serde_json::Value
                     .map_err(|_| "lease_authority_time_invalid".to_string())?;
                 let claim_expires_at = chrono::DateTime::parse_from_rfc3339(claim.expires_at())
                     .map_err(|_| "lease_authority_claim_expiry_invalid".to_string())?;
-                let effect_intent = super::service_lease_authority::LeaseEffectIntent {
+                let effect_intent = agent_browser_lease_authority::LeaseEffectIntent {
                     action_class: "lease_release".to_string(),
                     audience: "lease_authority_kernel".to_string(),
                     operation_idempotency_key: release_idempotency_key.to_string(),
@@ -2523,9 +2521,10 @@ mod tests {
             Some(&profile_id),
         )
         .unwrap();
-        let expected =
-            crate::runtime_profile::canonical_profile_identity_digest(&resolved.user_data_dir)
-                .unwrap();
+        let expected = agent_browser_lease_authority::canonical_profile_identity_digest(
+            &resolved.user_data_dir,
+        )
+        .unwrap();
         let mut owner = state
             .runtime_owner_registry
             .owners
@@ -2553,7 +2552,7 @@ mod tests {
         let profile_id = "odollo-fulfillment";
         let principal_id = "principal:odollo-fulfillment";
         let profile_path = "/tmp/agent-browser-p134/odollo-fulfillment";
-        let digest = crate::runtime_profile::canonical_profile_identity_digest(
+        let digest = agent_browser_lease_authority::canonical_profile_identity_digest(
             std::path::Path::new(profile_path),
         )
         .unwrap();
@@ -2638,11 +2637,13 @@ mod tests {
         state.profiles.get_mut(&profile_id).unwrap().user_data_dir = Some("Default".to_string());
         let resolved =
             crate::runtime_profile::resolve_profile(Some("Default"), Some(&profile_id)).unwrap();
-        let expected =
-            crate::runtime_profile::canonical_profile_identity_digest(&resolved.user_data_dir)
+        let expected = agent_browser_lease_authority::canonical_profile_identity_digest(
+            &resolved.user_data_dir,
+        )
+        .unwrap();
+        let raw =
+            agent_browser_lease_authority::canonical_profile_identity_digest(Path::new("Default"))
                 .unwrap();
-        let raw = crate::runtime_profile::canonical_profile_identity_digest(Path::new("Default"))
-            .unwrap();
         assert_ne!(
             expected, raw,
             "named profile must not be rooted at caller cwd"
@@ -3312,15 +3313,15 @@ mod tests {
         let claim_now = chrono::Utc::now();
         let claim = state
             .acquire_lease_claim_with_receipt(
-                super::super::service_lease_authority::AcquireLeaseClaimRequest {
-                    resource: super::super::service_lease_authority::LeaseResourceKey::profile(
+                agent_browser_lease_authority::AcquireLeaseClaimRequest {
+                    resource: agent_browser_lease_authority::LeaseResourceKey::profile(
                         &authority.profile_id,
                     ),
                     parent_claim_id: None,
                     principal_id: authority.principal_id.clone(),
                     capability_id: authority.capability_id.clone(),
                     capability_revision: authority.capability_revision,
-                    mode: super::super::service_lease_authority::LeaseClaimMode::Ephemeral,
+                    mode: agent_browser_lease_authority::LeaseClaimMode::Ephemeral,
                     expected_claim_revision: 0,
                     idempotency_key: "acquire:canonical-public-release".to_string(),
                     now: claim_now.to_rfc3339(),
@@ -3381,9 +3382,7 @@ mod tests {
         assert!(persisted
             .lease_authority()
             .current_claim(
-                &super::super::service_lease_authority::LeaseResourceKey::profile(
-                    &authority.profile_id,
-                ),
+                &agent_browser_lease_authority::LeaseResourceKey::profile(&authority.profile_id,),
                 &service_now_timestamp(),
             )
             .is_none());
@@ -3400,15 +3399,15 @@ mod tests {
         guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
         let (mut state, authority, _) = state_with_lease();
         let claim_now = chrono::Utc::now();
-        let mut request = super::super::service_lease_authority::AcquireLeaseClaimRequest {
-            resource: super::super::service_lease_authority::LeaseResourceKey::profile(
+        let mut request = agent_browser_lease_authority::AcquireLeaseClaimRequest {
+            resource: agent_browser_lease_authority::LeaseResourceKey::profile(
                 &authority.profile_id,
             ),
             parent_claim_id: None,
             principal_id: authority.principal_id.clone(),
             capability_id: authority.capability_id.clone(),
             capability_revision: authority.capability_revision,
-            mode: super::super::service_lease_authority::LeaseClaimMode::Strict,
+            mode: agent_browser_lease_authority::LeaseClaimMode::Strict,
             expected_claim_revision: 0,
             idempotency_key: "acquire:canonical-public-strict-recovery".to_string(),
             now: claim_now.to_rfc3339(),
@@ -3577,7 +3576,7 @@ mod tests {
 
     #[test]
     fn canonical_profile_claim_is_the_only_doctor_authority() {
-        use crate::native::service_lease_authority::{
+        use agent_browser_lease_authority::{
             AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey,
         };
 
