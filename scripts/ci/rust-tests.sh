@@ -19,14 +19,16 @@ fi
 
 cargo_test=("$script_dir/cargo-safe.sh" test --manifest-path "$manifest_path")
 cdp_cargo_test=("$script_dir/cargo-safe.sh" test -p agent-browser-cdp --manifest-path "$repo_root/Cargo.toml")
+lease_authority_cargo_test=("$script_dir/cargo-safe.sh" test -p agent-browser-lease-authority --manifest-path "$repo_root/Cargo.toml")
 if [[ -n "$profile" ]]; then
   cargo_test+=(--profile "$profile")
   cdp_cargo_test+=(--profile "$profile")
+  lease_authority_cargo_test+=(--profile "$profile")
 fi
 
 usage() {
   echo "Usage: scripts/ci/rust-tests.sh [--focused <filter> | --compartment <name> | --list-compartments]"
-  echo "Compartments: transport, cli-native, cli-native-actions, cli-native-browser, cli-native-service, cli-native-stream, cli-native-other, cli-workstation, cli-core, cli-integration"
+  echo "Compartments: lease-authority, transport, cli-native, cli-native-actions, cli-native-browser, cli-native-service, cli-native-stream, cli-native-other, cli-workstation, cli-core, cli-integration"
 }
 
 run_cli_isolated() {
@@ -53,6 +55,11 @@ run_cli_isolated() {
 run_transport() {
   echo "Running Rust compartment: transport"
   "${cdp_cargo_test[@]}"
+}
+
+run_lease_authority() {
+  echo "Running Rust compartment: lease-authority"
+  "${lease_authority_cargo_test[@]}"
 }
 
 run_cli_native() {
@@ -130,6 +137,7 @@ run_cli_integration() {
 
 run_compartment() {
   case "$1" in
+    lease-authority) run_lease_authority ;;
     transport) run_transport ;;
     cli-native) run_cli_native ;;
     cli-native-actions) run_cli_native_actions ;;
@@ -188,6 +196,7 @@ run_comprehensive() {
     run_and_record cli-native-browser run_cli_native_browser "$log_root" || lane_status=1
     run_and_record cli-native-stream run_cli_native_stream "$log_root" || lane_status=1
     run_and_record cli-core run_cli_core "$log_root" || lane_status=1
+    run_and_record lease-authority run_lease_authority "$log_root" || lane_status=1
     run_and_record transport run_transport "$log_root" || lane_status=1
     run_and_record cli-integration run_cli_integration "$log_root" || lane_status=1
     exit "$lane_status"
@@ -209,7 +218,7 @@ run_comprehensive() {
   set -e
 
   for compartment in cli-native-actions cli-native-service cli-native-other \
-    cli-workstation cli-native-browser cli-native-stream cli-core transport cli-integration \
+    cli-workstation cli-native-browser cli-native-stream cli-core lease-authority transport cli-integration \
     cli-native-service-performance; do
     cat "$log_root/$compartment.log"
     cat "$log_root/$compartment.result"
@@ -242,7 +251,7 @@ case "${1:-}" in
     run_compartment "$2"
     ;;
   --list-compartments)
-    printf '%s\n' transport cli-native cli-native-actions cli-native-browser \
+    printf '%s\n' lease-authority transport cli-native cli-native-actions cli-native-browser \
       cli-native-service cli-native-stream cli-native-other cli-workstation cli-core cli-integration
     ;;
   -h|--help)

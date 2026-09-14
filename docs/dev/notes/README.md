@@ -24,6 +24,8 @@ integration by itself.
 
 - [Native confirm timeout](0160-2026-09-08-soylei-native-confirm-timeout-report.md)
 - [Service State lock repair evidence](0167-2026-09-11-plan-0167-service-state-lock-repair-evidence.md)
+- [Lease Authority baseline admission](0181-1-2026-09-13-lease-authority-baseline-admission.md)
+- [Lease Authority invariant ledger](0181-2-2026-09-13-lease-authority-invariant-ledger.md)
 - [Retained tab identity and profile-path launch conflict](0168-2026-09-12-retained-tab-session-identity-conflict-and-profile-path-launch.md)
 - [Wrong-tab close and skipped release](0156-2026-09-06-tab-release-skipped-close-and-wrong-tab-close.md)
 - [Exclusive-profile lease divergence](0134-2026-08-26-exclusive-profile-lease-holder-reuse-divergence.md)

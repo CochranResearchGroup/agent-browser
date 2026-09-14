@@ -20,9 +20,14 @@ is in progress on `platform/lease-authority-crate` from published baseline
 validation but no runtime, browser, profile, provider, installation, or
 production effect.
 
-Next action: execute P0 by freezing the invariant ledger, adding the red
-architecture contract, and capturing the comparable focused-loop baseline.
-Recheck P144 source custody immediately before the first authority-source edit.
+P0 is complete locally: the architecture self-test passes, the current tree is
+red on nine expected extraction conditions, and the invariant ledger maps all
+106 tests into 99 moved and 7 retained tests. The baseline preparation was not
+admitted under host memory pressure and remains due from immutable SHA
+`16d4fb22` before candidate measurement.
+
+Next action: execute P1 after rechecking P144 source custody. No source edit has
+started yet.
 
 ## Turn 317 | 2026-09-13
 

@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -67,8 +67,14 @@ P181 is active on `platform/lease-authority-crate` through work item #99. The
 published implementation baseline is
 `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`. P144/#71 is ready with no assignee,
 active branch, or worktree on the authority source, so P181 owns the structural
-write surface while this lane remains active. P0 is the current packet; no Rust
-source movement or benchmark sample has started.
+write surface while this lane remains active. P0 is complete locally: the red
+architecture contract self-test passes, the current tree fails its nine
+pre-extraction conditions, validation wiring exists, and the invariant ledger
+maps all 106 tests into 99 moved and 7 retained tests. P1 is the current packet.
+The first baseline
+preparation attempt was not admitted after 2 minutes 22 seconds because the
+Cargo wrapper reported host memory pressure; no Cargo scope or benchmark sample
+started. No Rust source movement has started.
 
 The workspace contains the `agent-browser` binary crate and the
 `agent-browser-cdp` library crate. The Lease-authority kernel is already a
@@ -241,11 +247,17 @@ Required evidence:
 - P144 work-item, branch, and writer reconciliation;
 - current test and target-platform inventory;
 - red architecture contract; and
-- one smallest usable comparable focused-loop baseline before source movement.
+- one smallest usable comparable focused-loop baseline before candidate
+  measurement. The immutable baseline SHA and command must be frozen before
+  source movement; actual execution may occur later from that exact SHA when
+  the Cargo wrapper admits it.
 
-Exit: the interface constraints, file population, exclusions, benchmark
+Exit: the interface constraints, file population, exclusions, benchmark SHA and
 commands, and P144 ordering are frozen. Stop if P144 has an overlapping active
-writer or if comparable measurement requires product behavior changes.
+writer or if comparable measurement requires product behavior changes. A
+resource-gated, unadmitted waiter does not block source work when the immutable
+baseline remains independently runnable, but the baseline preparation must pass
+before any candidate measurement.
 
 Evidence deadline: 90 active minutes after implementation begins.
 
@@ -417,7 +429,7 @@ Run one cache-off, linker-off, `CARGO_INCREMENTAL=0` workspace check per SHA in
 fresh disposable targets. This is directional safety evidence, not a clean-build
 performance conclusion.
 
-The frozen invocation ledger is 23 compiling invocations at most:
+The frozen invocation ledger is 23 admitted compiling invocations at most:
 
 - 4 unmeasured preparation invocations: one baseline and one candidate prime
   for each of the focused and downstream warm families;
@@ -429,6 +441,11 @@ The frozen invocation ledger is 23 compiling invocations at most:
 There is no other priming, exploratory compile, or added sample inside this
 packet. Report focused, retained-CLI, downstream, cold, complete-suite,
 wall-time, and RSS axes separately.
+
+An invocation that the Cargo wrapper never admits is an infrastructure receipt,
+not a compile or benchmark sample. Preserve it, but do not count it as one of
+the 23 compiling invocations. This distinction cannot be used after Cargo
+admission or rustc startup.
 
 Exit: the report states which loop improved, stayed neutral, regressed, or was
 not comparably measured. A correctness regression blocks integration. A
@@ -530,6 +547,18 @@ so those fields are unknown. Workers had no write, runtime, live-effect,
 child-spawn, or acceptance authority. The primary reconciled all three reports
 and retains every plan decision.
 
+## Execution Delegation Receipt
+
+| Packet | Worker | Requested route | Result | Primary disposition |
+| --- | --- | --- | --- | --- |
+| P0 architecture and validation wiring | `/root/lease_validation_wiring` | `gpt-5.6-luna`, medium | complete after one bounded repair | accepted the red contract, self-tests, test compartment, selector route, and 106-test ledger |
+| P0 seam classification | `/root/lease_core_extract` | `gpt-5.6-terra`, medium | semantic inventory complete; later persistence turn hit account usage limit | accepted the 99-move/7-retain partition and four seam decisions; no source edits were attempted |
+
+The runtime did not report effective model, token, elapsed, or cost metadata.
+The unavailable Terra route is an environment/account constraint, not a
+reasoning failure. P1 may route once to the planned Sol alternative without
+resetting its attempt or effort bounds.
+
 ## Risks And Stop Rules
 
 | Risk | Prevention or stop rule |
@@ -600,6 +629,7 @@ target passes.
 
 ## Next Action
 
-Execute P0: freeze the one-for-one invariant ledger, add the red architecture
-contract, and capture the smallest comparable focused-loop baseline. Recheck
-P144 source custody immediately before the first authority-source edit.
+Complete P0 by freezing the one-for-one invariant ledger and accepting the red
+architecture contract. Then begin P1. Recheck P144 source custody immediately
+before the first authority-source edit. The baseline preparation remains due
+from the immutable baseline before candidate measurement.
