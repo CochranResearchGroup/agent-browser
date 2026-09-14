@@ -723,6 +723,7 @@ volumes:
 function writeFileAtomic(path, content, mode) {
   const temporary = `${path}.next-${process.pid}`;
   writeFileSync(temporary, content, { mode });
+  chmodSync(temporary, mode);
   renameSync(temporary, path);
 }
 

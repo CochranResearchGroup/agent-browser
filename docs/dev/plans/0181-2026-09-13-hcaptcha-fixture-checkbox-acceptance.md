@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: BLOCKED
+State: ACTIVE
 
 Consolidation: required
 
@@ -158,6 +158,31 @@ interaction evidence rather than CAPTCHA completion.
   acquisition, pointer movement, or checkbox click is authorized in this
   packet. Resume requires a successor diagnosis and a new explicit effect
   budget.
+
+## 2026-09-14 Successor Provider Diagnosis
+
+The operator resumed the lane after the blocked checkpoint. This successor may
+inspect the retained quarantine evidence, make at most one source-backed
+provider repair, run provider-free validation, and perform at most one new
+development-provider apply. It must not rebuild or reinstall the already
+qualified candidate unless diagnosis proves a candidate source defect that
+cannot be repaired in the provider bundle alone.
+
+If the provider becomes ready with non-null presentation capacity, the original
+one-click fixture boundary resumes. Credentials must be loaded directly from
+the operator-managed private environment file without copying, printing, or
+persisting their values. A second provider quarantine, missing capacity, or any
+visual, audio, or accessibility challenge is an immediate stop. The cumulative
+goal ceiling remains unchanged; reassess after 30 minutes or two checkpoints
+without acceptance progress.
+
+The retained container log identified the quarantine cause: Guacamole could
+not read the staged defaults extension because the JAR was mode `0600` under a
+hardened process umask. The atomic writer requested `0644` but did not enforce
+the final mode after creation. The repair applies the requested mode explicitly,
+and the provider fixture now stages under umask `0077` to cover this failure.
+Provider fixture and development-runtime fixture validation pass; fresh staging
+produces a mode `0644` JAR and provider preflight passes.
 
 ## Non-Goals
 

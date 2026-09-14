@@ -464,7 +464,13 @@ try {
   assert.ok(bundle.routeUsers.every((route) => route.legacyConnectionName === ''));
   assert.equal(bundle.ingress.pathPrefix, '/guacamole');
   assert.equal(bundle.ingress.upstream, 'http://127.0.0.1:8093/guacamole');
-  const staged = stageDevelopmentPresentationProviderBundle({ env });
+  const previousUmask = process.umask(0o077);
+  let staged;
+  try {
+    staged = stageDevelopmentPresentationProviderBundle({ env });
+  } finally {
+    process.umask(previousUmask);
+  }
   assert.equal(staged.success, true);
   assert.equal(staged.authorizesProviderEffects, false);
   assert.equal(readFileSync(join(descriptor.root, 'compose.yml'), 'utf8'), bundle.files['compose.yml']);
