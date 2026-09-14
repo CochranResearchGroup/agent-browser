@@ -8,11 +8,9 @@ Keep this file at or below 200 lines under policy 0043.
 
 [Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
 is OPEN through [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
-on branch `fix/issue-96-auth-resume-state-reconciliation` from integrated
-`main` at `44e5dc16`. P182 is a second `PL-BUGFIX` lane whose source writes are
-disjoint from P180's installer repair. P180 merged at `44e5dc16`, and the
-operator explicitly released Agent #95's shared-runtime custody to P182 on
-2026-09-13 without installing a candidate.
+on `fix/issue-96-auth-resume-state-reconciliation`. Its source writes are
+disjoint from P180, integrated at `44e5dc16`. The operator released Agent #95's
+runtime custody to P182 on 2026-09-13 without installing a candidate.
 
 The published P182 source packet at `4f9e1741` reproduces two adjacent stale
 candidates and adds one serialized pure-mutator fallback after the first stale
@@ -33,7 +31,7 @@ same-run recourse.
 ## Turn 318 | 2026-09-13
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is PLANNED in `PL-PLATFORM`. It defines in-process dependency deepening before
+is OPEN in `PL-PLATFORM`. It defines in-process dependency deepening before
 extracting `agent-browser-lease-authority`, direct consumer migration with no
 permanent facade, a one-for-one partition of 106 baseline test invariants
 between the crate and retained CLI integration coverage, and comparable focused
@@ -41,12 +39,14 @@ loop and downstream build measurements. P181 is a structural successor
 to Plan 0144, not a replacement for issue #71's public, effect, or installed
 gates. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
-is ready. The lane has no active-lane entry yet and authorizes no source,
-runtime, browser, profile, provider, installation, or production effect.
+is in progress on `platform/lease-authority-crate` from published baseline
+`16d4fb22`. P181 authorizes the bounded source extraction and provider-free
+validation but no runtime, browser, profile, provider, installation, or
+production effect.
 
-The planning branch integrated through PR #100 at `16d4fb22`. Next action:
-recheck P144 source custody, add the active lane, and create the implementation
-worktree from current `origin/main`.
+Next action: execute P0 by freezing the invariant ledger, adding the red
+architecture contract, and capturing the comparable focused-loop baseline.
+Recheck P144 source custody immediately before the first authority-source edit.
 
 ## Turn 317 | 2026-09-13
 

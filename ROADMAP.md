@@ -41,7 +41,7 @@ allowed on the old installed generation.
 
 ## P181 | Lease-Authority Kernel Crate Extraction
 
-State: PLANNED
+State: OPEN
 
 Current state: [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
 defines a bounded `PL-PLATFORM` successor that first removes the Lease-authority
@@ -50,8 +50,9 @@ extracts one independently testable Rust crate and measures the focused build
 loop under comparable conditions. It depends on source-writer reconciliation
 with Plan 0144 and issue #71. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
-is ready. P181 is not active, has no active-lane entry yet, and authorizes no
-source implementation or runtime effect.
+is in progress on `platform/lease-authority-crate` from baseline `16d4fb22`.
+P181 authorizes the bounded source extraction and provider-free validation but
+no runtime, browser, profile, provider, installation, or production effect.
 
 ## P180 | Pre-Drain Browserless Lane Quiescence Repair
 
