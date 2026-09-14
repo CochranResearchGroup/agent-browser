@@ -99,7 +99,9 @@ clippy with warnings denied, patch hygiene, and validation selection from
   failed that fixture with the exact `runtime_admission_draining` signature.
 - The follow-up header-shaping regression and the 28-test admission sweep pass;
   exact session-profile equality is required before secondary commands receive
-  the route scope.
+  the route scope. Optimized follow-up candidate
+  `4b4ca13a6b1241d689b13f07d162ee9d6da312b66cd03c8b07fa8818acab5bdb`
+  passes the strengthened source-free fixture.
 - Rust format, workspace clippy with warnings denied, validation selection,
   workstation host provision, fresh VM harness, Guacamole assets, PostgreSQL
   durability, route-user synchronization, and patch hygiene all pass.
