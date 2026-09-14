@@ -5,30 +5,29 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 321 | 2026-09-14
+## Turn 322 | 2026-09-14
 
-P183 source merged through PR #107 as `12848e34`. Exact integrated candidate
-digest `e4beadf0` passed the repaired migration preview with zero protected
-removals. Its preserving apply stopped before selector or payload mutation in
-transaction `upgrade-310bb0f1-e659-40c6-aab5-3062ad9c4489` because three
-prior-boot browser projections retained valid tabs despite absent recorded
-PIDs. Exact selected-host Service reconciliation removed those dead browser,
-tab, and process projections while preserving registered owners.
+P184 merged through PR #109 as `3b7e8411`; its exact integrated binary digest
+is `a2899457`. Fresh preview had zero protected removals, changes, or removals.
+The changed-source apply preserved the external browser, committed Service
+State with no changes, and selected generation
+`0.28.0-a28994570dd3-9d43d7f4e826`. Transaction
+`upgrade-8c858bc3-4507-48a0-8eea-c85cd3326fbf` is forward-only at revision 17
+with admission drained and exact resume as its only completion action.
 
-The installed interlock then exposed [P184](docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
-and [issue #108](https://github.com/CochranResearchGroup/agent-browser/issues/108):
-GC removed candidate generation `0.28.0-e4beadf07f66-0c92aecf29d1` while its
-newest census-blocked transaction still advertised resume. Exact resume failed
-before effect because the immutable generation was absent. Do not retry or
-fabricate it.
-
-The P184 red fixture reproduced the missing candidate reference. The repair
-pins only the newest resumable census-blocked candidate and rollback source;
-nine retention tests, the historical 49-transaction anti-bloat fixture, and the
-workstation GC reference fixture pass. The full 161-test focused workstation
-suite, Rust format, workspace clippy, patch hygiene, and all selected JavaScript
-fixtures also pass. Next: publish and merge P184, then build one exact integrated
-candidate and perform one changed-source preserving apply.
+The apply and one exact resume both stopped at `open canonical Guacamole route
+displays`; active units were restored. [Plan 0185](docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md)
+and [issue #110](https://github.com/CochranResearchGroup/agent-browser/issues/110)
+own the root defect: route viewer names were passed through custom-path flag
+`--profile`, so a generation-specific working directory changed the derived
+identity and the stable session failed as
+`existing_session_profile_identity_unproven`. The intended A, B, and C managed
+profiles remain present. Red contracts reproduce the wrong flag. Next: merge
+the `--runtime-profile` repair, refresh the current candidate support payload,
+then invoke one revision-bound forward resume. The rebuilt embedded bundle and
+all selected workstation fixtures pass; the development provider fixture also
+passes under its expected `022` artifact umask. Do not create another install
+transaction or retry any tenant browser workflow.
 
 ## Turn 320 | 2026-09-13
 

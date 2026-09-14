@@ -423,7 +423,7 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
           '--json',
           '--session',
           route.viewerSession,
-          '--profile',
+          '--runtime-profile',
           route.viewerProfile,
           'close',
         ], {
@@ -566,7 +566,7 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       const close = run(command, [
         '--json',
         '--session', route.viewerSession,
-        '--profile', route.viewerProfile,
+        '--runtime-profile', route.viewerProfile,
         'close',
       ], {
         env: {

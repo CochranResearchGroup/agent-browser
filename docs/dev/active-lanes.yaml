@@ -1,6 +1,24 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P185
+    product_lane: PL-BUGFIX
+    objective: Preserve canonical route viewer identity across immutable support generations
+    plan: docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md
+    plan_ref: refs/heads/fix/plan-0185-route-viewer-runtime-profile
+    branch: fix/plan-0185-route-viewer-runtime-profile
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 3b7e8411e24e0ea7508fd525ecd77573f7704676
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    work_items: [CochranResearchGroup/agent-browser#110]
+    dependencies: [P184]
+    overlaps: [P181]
+    reconciled_overlaps: [P181]
+    updated_at: 2026-09-14
   - id: P184
     product_lane: PL-BUGFIX
     objective: Retain the newest resumable census-blocked candidate without pinning superseded history
@@ -9,15 +27,15 @@ lanes:
     branch: fix/plan-0184-resumable-candidate-retention
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: d6c6b5a60f79af15e51716eadfa20fd5b165e2a8
+    custody_state: INTEGRATED
+    checkpoint: 3b7e8411e24e0ea7508fd525ecd77573f7704676
     remote_ref: refs/remotes/origin/fix/plan-0184-resumable-candidate-retention
-    integration_receipt: null
+    integration_receipt: 3b7e8411e24e0ea7508fd525ecd77573f7704676
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#108]
     dependencies: [P183]
-    overlaps: [P181]
-    reconciled_overlaps: [P181]
+    overlaps: [P181, P185]
+    reconciled_overlaps: [P181, P185]
     updated_at: 2026-09-14
   - id: P183
     product_lane: PL-BUGFIX

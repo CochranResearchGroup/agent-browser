@@ -180,12 +180,22 @@ try {
     ...guardedBefore, defaultDevelopment: { changed: true },
   }));
   const routeOpenerSource = readFileSync('scripts/open-rdp-guac-route-displays.js', 'utf8');
-  assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'set'/);
-  assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'open'/);
-  assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'close'/);
+  assert.match(routeOpenerSource, /'--runtime-profile',\s*profile,\s*'set'/);
+  assert.match(routeOpenerSource, /'--runtime-profile',\s*profile,\s*'open'/);
+  assert.match(routeOpenerSource, /'--runtime-profile',\s*profile,\s*'close'/);
+  assert.doesNotMatch(routeOpenerSource, /'--profile',\s*profile/);
   assert.match(routeOpenerSource, /AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER/);
   assert.match(routeOpenerSource, /routeViewerProfile\(route, slug\)/);
   assert.doesNotMatch(routeOpenerSource, /join\(profileRoot, slug\)/);
+  const providerEffectsSource = readFileSync(
+    'scripts/lib/development-presentation-provider-system-effects.js',
+    'utf8',
+  );
+  assert.doesNotMatch(
+    providerEffectsSource,
+    /'--profile',\s*route\.viewerProfile/,
+    'development route cleanup must preserve the managed runtime-profile identity',
+  );
   assert.equal(descriptor.environment, 'development');
   assert.equal(descriptor.warmSlots, 4);
   assert.equal(descriptor.hardMaxSlots, 6);
