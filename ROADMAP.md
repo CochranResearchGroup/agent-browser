@@ -50,8 +50,13 @@ without mutating Service State or weakening nonterminal owner authority.
 PR #116 merged this slice as `e9a9496a`, but exact-merge live acceptance found
 one final CLI-shape mismatch before effect: the explicit global runtime profile
 is not guaranteed to be repeated in both normalized launch representations.
-P186 remains open for that bounded evidence correction and exact-merge
-acceptance.
+PR #117 merged that correction as `acf5d4c6`; its exact candidate still failed
+before daemon startup because runtime-profile configuration had already copied
+the obsolete `userDataDir` into the generic profile field. P186 now has a red
+and green main-preflight regression at `e073f710`: configuration-derived route
+paths may yield to exact owner continuity, while caller-authored `--profile`
+values remain hard constraints. P186 remains open for integration and
+exact-merge runtime acceptance.
 
 ## P185 | Route Viewer Runtime Profile Identity
 

@@ -8,7 +8,7 @@ Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-cli-runtime-profile-evidence`
+Branch: `fix/plan-0186-runtime-profile-config-provenance`
 
 Target: `main`
 
@@ -73,14 +73,17 @@ the real CLI can retain the explicit global `--runtime-profile` selection in
 only one. The source-free fixture did not distinguish those normalization
 shapes.
 
-After reboot, no canonical route viewer survived. The repaired opener used the
-stable managed profile, but its first route-A launch failed before effect as
-`runtime_admission_draining`. The CLI attaches a transaction claim only to
-Service reconciliation and stream status. The drain accepts claimed Service
-reconciliation, stream status, and browser reattach, while workstation
-reconciliation itself requires launch, header configuration, navigation, and
-cleanup when a canonical viewer is absent. The resulting clean-host resume is
-therefore impossible despite coherent transaction and candidate identities.
+PR #117 merged the normalized-representation repair as `acf5d4c6`. Exact
+merged candidate SHA-256
+`95d9509f2da8e002cb5f55fd8334399de8d3e93a9b523e2cd922b6de58d9d1ba`
+passes the source-free fixture, but its first live route-A open still stopped
+before effect with `existing_session_profile_identity_unproven`. No candidate
+daemon or browser was created. The live CLI differs from the fixture before
+daemon startup: explicit `--runtime-profile rdp-guac-route-a-viewer` loads the
+runtime profile's obsolete configured `userDataDir` into the generic profile
+field before CLI provenance is recorded. Main preflight then misclassifies
+that inherited startup default as an explicit caller path and rejects the
+guarded stable-path migration.
 
 ## Consolidated Batch
 
@@ -102,6 +105,10 @@ therefore impossible despite coherent transaction and candidate identities.
 - Treat the exact profile in either normalized launch representation as the
   explicit CLI evidence; continue to reject a conflicting command-payload
   profile.
+- When an explicit canonical route runtime profile has an exact retained owner
+  binding, distinguish its configuration-derived `userDataDir` from a
+  caller-authored `--profile`. Let continuity replace only the inherited path;
+  preserve an explicit profile as a hard conflict.
 - Preserve active, retained, closing, transferring, unknown, mismatched, and
   cleanup-unsatisfied owners, along with registered-principal authority and
   every ambiguous nonterminal state.
@@ -181,6 +188,16 @@ clippy with warnings denied, patch hygiene, and validation selection from
   exact normalized representation. The canonical-name boundary, both existing
   exact-terminal-owner tests, custom-profile compatibility, Rust format, and
   workspace clippy with warnings denied also pass.
+- PR #117 merged the normalized-shape correction as `acf5d4c6`; exact merged
+  candidate SHA-256
+  `95d9509f2da8e002cb5f55fd8334399de8d3e93a9b523e2cd922b6de58d9d1ba`
+  passes the source-free fixture but reproduces the no-effect live denial.
+  The production config confirms that selecting route A injects its legacy
+  `userDataDir` into `profile`. The main-preflight regression fails red on
+  `acf5d4c6` with `existing_session_profile_identity_unproven` and passes at
+  source checkpoint `e073f710`; it also proves that an explicit conflicting
+  `--profile` remains denied. The adjacent terminal legacy-route test and
+  workspace clippy with warnings denied pass.
 
 ## Delivery Sequence And Budget
 

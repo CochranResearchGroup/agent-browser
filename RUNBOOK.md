@@ -5,16 +5,20 @@ are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-t
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 326 | 2026-09-14
+## Turn 327 | 2026-09-14
 
-PR #116 merged terminal route-owner reconciliation as `e9a9496a`. Exact merged
-candidate `3bb31e5c` passes the source-free fixture, but live route-A open
-stopped before effect as `existing_session_profile_identity_unproven`. The
-fixture did not distinguish the two normalized locations for the explicit
-global profile. A corrected focused test fails red on the merge and passes when
-either exact representation is accepted without requiring duplication. P186
-and issue #112 remain open; do not retry the unchanged candidate or tenant
-flows.
+PR #117 merged the normalized profile-evidence repair as `acf5d4c6`; exact
+candidate `95d9509f` passes the source-free fixture but live route-A open again
+stopped before effect as `existing_session_profile_identity_unproven`. No
+candidate daemon or browser started. Production configuration proved the
+remaining pre-daemon cause: explicit canonical `--runtime-profile` selection
+copies its obsolete configured `userDataDir` into `profile` before CLI
+provenance is recorded, so main preflight treats an inherited default as an
+explicit conflict. The exact main-preflight regression fails red on main and
+passes at `e073f710`; an actual CLI `--profile` remains fail-closed. Next:
+integrate this final provenance repair, build the exact merge once, validate
+the source-free fixture, and only then retry route reconciliation. Do not retry
+the unchanged candidate or tenant workflows.
 
 ## Turn 325 | 2026-09-14
 
