@@ -10,13 +10,13 @@ Lane: P181
 
 Product lane: PL-PLATFORM
 
-Branch: `platform/lease-authority-crate-plan`
+Planning branch: `platform/lease-authority-crate-plan`
 
-Implementation branch: `platform/lease-authority-crate`
+Branch: `platform/lease-authority-crate`
 
 Target: `main`
 
-Integration: pull request and merge
+Integration: merge
 
 Work item: [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
 
