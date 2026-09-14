@@ -199,6 +199,39 @@ modules, and proves them with Turnstile and hCaptcha fixtures. It excludes live
 retry, visual challenge solving, consumer-wide integration, cross-platform
 backends, a sister repository, and release work.
 
+## W0 Reconciliation Decision
+
+Current-main reconciliation is required before W1 or W2 begins, but rewriting
+the published `feature/turnstile-desktop-challenge` history is not justified.
+The 2026-09-14 decision is to preserve its exact tip
+`b06e75c04a48fa1501a142e93a5846d0a90052e1`, create a new branch with the
+`challenge/` product-lane prefix from that tip, and merge the freshly fetched
+`origin/main` checkpoint into the new branch.
+
+At decision time, `origin/main` was
+`5d07b94f8db301378a73f103bd6e8d2b6d195c68`, 84 commits ahead of the challenge
+branch, while the challenge branch had 22 unique commits including four prior
+main-join merge commits. The published branch was unprotected and had no pull
+request, but it remained durable shared custody. Rebasing it would replay 18
+unique non-merge patches and require a history rewrite without improving build
+performance.
+
+A read-only synthetic merge reported three textual conflicts: `RUNBOOK.md`,
+`scripts/open-rdp-guac-route-displays.js`, and
+`scripts/test-development-presentation-provider.js`. The newly integrated
+`agent-browser-lease-authority` crate does not directly edit
+`desktop_interaction.rs`, `controlled_x11_provider.rs`, or
+`desktop_locator.rs`, but it changes the authority kernel and CLI adapter that
+the future desktop transaction module must consume. Building W2 against the
+pre-extraction authority shape would create immediate rework.
+
+The merge resolution must preserve both sides' semantics, renumber the
+branch-local Plan 0180 and Plan 0181 files that collide with current main, and
+rerun planning, architecture, changed-surface, Rust formatting, and strict
+Clippy gates before the new branch becomes an implementation baseline. The old
+published branch remains a recovery and evidence ref. No force push is part of
+this reconciliation.
+
 ## Workfront
 
 ### W0 | Custody and integration normalization
@@ -208,7 +241,8 @@ backends, a sister repository, and release work.
 - Create a parent forge work item for the control-plane trunk and retain issue
   #66 as the current leaf.
 - Assign one active implementation plan and update the active-lane catalog.
-- Select an integration branch or fresh worktree within the lane limit.
+- Create the `challenge/` integration branch from the preserved feature tip and
+  merge current `origin/main` without rewriting the old published branch.
 
 Exit: current main, plan IDs, work item, branch, active lane, and baseline
 commit agree. No source implementation starts before this checkpoint.
