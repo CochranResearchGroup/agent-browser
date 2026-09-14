@@ -8,7 +8,7 @@ Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-runtime-host-lane-profile-isolation`
+Branch: `fix/plan-0186-relative-route-profile-identity`
 
 Target: `main`
 
@@ -132,6 +132,17 @@ source helpers. Its focused regression fails red on the merge and passes at
 `fb754890` when shared-host auto-launch options also omit process-wide profile
 defaults.
 
+During the next recovery attempt, a separate clean local build at `5d07b94f`
+with SHA-256
+`8f89b0c5d61de26c811b4d9bc5fa6ebe56f4b91c4f12a7c4c845d336a826e3a1`
+passed the pinned fixture. An existing route-A display and a new route-B
+viewer then reached simultaneous readiness, while route C stopped before effect as
+`existing_session_profile_identity_unproven`. Route C has the same exact
+terminal owner and cleanup evidence, but its profile record stores the
+canonical runtime-profile name as `userDataDir` rather than an absolute legacy
+path. That name already resolves to the stable runtime path, which hid the
+historical owner mismatch from the migration predicate.
+
 ## Consolidated Batch
 
 - Recognize only canonical managed `rdp-guac-route-*-viewer` profiles as the
@@ -165,6 +176,9 @@ defaults.
 - Prevent a shared runtime host from resolving a later lane through the
   process-wide profile name or path inherited from the lane that started the
   host. Preserve environment fallback for non-shared legacy execution.
+- Recognize an exact canonical route profile name stored as its own
+  `userDataDir` as the stable path while retaining every terminal-owner,
+  cleanup, projection, principal, and canonical-name migration guard.
 - Preserve active, retained, closing, transferring, unknown, mismatched, and
   cleanup-unsatisfied owners, along with registered-principal authority and
   every ambiguous nonterminal state.

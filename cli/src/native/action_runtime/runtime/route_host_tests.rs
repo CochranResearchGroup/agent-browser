@@ -1812,6 +1812,34 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
     assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
     assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
 
+    // Older canonical route records may retain only the runtime-profile name
+    // as userDataDir. That value already resolves to the stable runtime path,
+    // but its terminal owner can still name the historical physical path.
+    let mut relative_profile_record = state.clone();
+    relative_profile_record
+        .profiles
+        .get_mut(profile_id)
+        .unwrap()
+        .user_data_dir = Some(profile_id.to_string());
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&relative_profile_record)
+        .unwrap();
+    let mut options = LaunchOptions {
+        runtime_profile: Some(profile_id.to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_service_profile_selection(
+            &mut options,
+            &json!({ "action": "launch" }),
+            Some(session_id),
+        )
+        .unwrap(),
+        None
+    );
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
+
     let mut partially_migrated = state.clone();
     let current_profile_digest =
         agent_browser_lease_authority::canonical_profile_identity_digest(&current_user_data_dir)
