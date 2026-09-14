@@ -8,7 +8,7 @@ Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-terminal-profile-lifecycle-migration`
+Branch: `fix/plan-0186-route-profile-record-sync`
 
 Target: `main`
 
@@ -97,6 +97,19 @@ logical browser's terminal lifecycle record under the historical digest. The
 lifecycle transition therefore needs the same exact canonical profile
 migration already admitted by prelaunch selection.
 
+PR #119 merged the lifecycle migration as `0a2c8800`. Exact merged candidate
+SHA-256
+`2b0fd4f270db39dd041c68c545493d2bf4ea9be124deb155c48189d2d9d89a5e`
+passes the pinned source-free fixture. Live route A then created a stable-path
+browser and atomically advanced its owner and lifecycle to generation 4, but
+the following navigation was denied because the retained `BrowserProfile`
+record still named the legacy path. Exact cleanup closed the browser, removed
+its session projection, returned the stable lifecycle to terminal with
+satisfied cleanup, and terminated the task-owned candidate host. The remaining
+repair must update the canonical profile record in the same repository
+transaction as terminal replacement and accept this already-migrated owner
+with stale profile metadata on the next guarded preflight.
+
 ## Consolidated Batch
 
 - Recognize only canonical managed `rdp-guac-route-*-viewer` profiles as the
@@ -121,8 +134,9 @@ migration already admitted by prelaunch selection.
   binding, distinguish its configuration-derived `userDataDir` from a
   caller-authored `--profile`. Let continuity replace only the inherited path;
   preserve an explicit profile as a hard conflict.
-- Atomically move the exact terminal route owner and lifecycle record from the
-  historical profile digest to the stable digest as one next-generation owner.
+- Atomically move the exact terminal route owner, lifecycle record, and
+  `BrowserProfile.userDataDir` from the historical profile identity to the
+  stable identity as one next-generation owner.
   Require canonical route and browser identity, complete terminal cleanup
   evidence, no destination owner, no colliding lifecycle, and no principal
   binding on either digest.
@@ -226,6 +240,18 @@ clippy with warnings denied, patch hygiene, and validation selection from
   All 19 runtime-lifecycle tests pass, including new denial coverage for
   noncanonical routes, incomplete cleanup evidence, and registered-principal
   bindings. Rust format and workspace clippy with warnings denied pass.
+- PR #119 merged the owner and lifecycle migration as `0a2c8800`; exact
+  candidate SHA-256
+  `2b0fd4f270db39dd041c68c545493d2bf4ea9be124deb155c48189d2d9d89a5e`
+  passes the pinned source-free fixture. Live route A proved that migration
+  commits, then exposed the unsynchronized `BrowserProfile.userDataDir` before
+  navigation. Both new regressions fail red on the merge: one reproduces the
+  current stable terminal owner plus legacy profile record preflight, and one
+  proves the profile record remains legacy after a successful migration. Both
+  pass at source checkpoint `fefc0dca` when canonical terminal replacement
+  synchronizes the profile record atomically. All 19 runtime-lifecycle tests,
+  the adjacent route-host regression, Rust format, and workspace clippy with
+  warnings denied pass.
 
 ## Delivery Sequence And Budget
 

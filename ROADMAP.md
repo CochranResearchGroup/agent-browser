@@ -61,6 +61,11 @@ exact-merge runtime acceptance. PR #118 merged that preflight repair as
 same migration gap in lifecycle persistence. Source checkpoint `bbbf5abc`
 adds an atomic, canonical-route-only terminal owner and lifecycle digest
 migration with fail-closed cleanup, collision, and principal-binding guards.
+PR #119 merged that transition as `0a2c8800`; exact-merge live validation then
+proved the owner and lifecycle advanced, but the retained profile record kept
+the legacy path and blocked navigation. Source checkpoint `fefc0dca` brings
+that profile record into the same atomic terminal-replacement transaction and
+accepts the already-migrated recovery shape.
 
 ## P185 | Route Viewer Runtime Profile Identity
 
