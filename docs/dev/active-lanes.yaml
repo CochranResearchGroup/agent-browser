@@ -10,15 +10,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: caff5e085eda4ba31b32af183a9d5909e19d5465
-    remote_ref: null
+    checkpoint: 87a1d7ece02fa05260a5f2a79f7aa57105f95336
+    remote_ref: refs/remotes/origin/fix/plan-0183-inert-tab-owner-reconciliation
     integration_receipt: null
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#104]
     dependencies: [P180, P182]
     overlaps: [P181]
     reconciled_overlaps: [P181]
-    updated_at: 2026-09-13
+    updated_at: 2026-09-14
   - id: P182
     product_lane: PL-BUGFIX
     objective: Make durable Authentication Run resume converge under an active Service State writer
