@@ -308,6 +308,12 @@ pub(crate) fn use_real_keychain_from_env() -> bool {
 pub(crate) fn runtime_profile_from_env() -> Option<String> {
     env::var("AGENT_BROWSER_RUNTIME_PROFILE").ok()
 }
+/// A shared host inherits process environment from the lane that started it.
+/// Later lanes must resolve profile identity from their attributed command and
+/// Service State, never from those first-lane process defaults.
+fn shared_runtime_host_process() -> bool {
+    parse_env_bool(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV)
+}
 pub(crate) fn runtime_profile_from_sources(
     cmd: &Value,
     include_env_profile: bool,
@@ -316,7 +322,11 @@ pub(crate) fn runtime_profile_from_sources(
         .and_then(|v| v.as_str())
         .or_else(|| cmd.get("profileId").and_then(|v| v.as_str()))
         .map(str::to_string)
-        .or_else(|| include_env_profile.then(runtime_profile_from_env).flatten())
+        .or_else(|| {
+            (include_env_profile && !shared_runtime_host_process())
+                .then(runtime_profile_from_env)
+                .flatten()
+        })
 }
 pub(crate) fn launch_profile_from_sources(
     cmd: &Value,
@@ -329,7 +339,7 @@ pub(crate) fn launch_profile_from_sources(
     if command_profile.is_some() {
         return command_profile;
     }
-    include_env_profile
+    (include_env_profile && !shared_runtime_host_process())
         .then(|| env::var("AGENT_BROWSER_PROFILE").ok())
         .flatten()
 }

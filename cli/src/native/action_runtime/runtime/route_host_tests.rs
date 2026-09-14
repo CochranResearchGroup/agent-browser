@@ -1689,7 +1689,12 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
 
 #[test]
 fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
-    let guard = EnvGuard::new(&["HOME"]);
+    let guard = EnvGuard::new(&[
+        "HOME",
+        crate::runtime_host::RUNTIME_HOST_PROCESS_ENV,
+        "AGENT_BROWSER_PROFILE",
+        "AGENT_BROWSER_RUNTIME_PROFILE",
+    ]);
     let home = unique_socket_dir("terminal-legacy-route-profile-relaunch-home");
     fs::create_dir_all(&home).unwrap();
     guard.set("HOME", home.to_str().unwrap());
@@ -1776,6 +1781,36 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
         assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
         assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
     }
+
+    // A shared runtime host inherits process environment from the lane that
+    // started it. A later lane must resolve from its own command and Service
+    // State instead of accepting the first lane's process-wide profile.
+    guard.set(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV, "1");
+    guard.set(
+        "AGENT_BROWSER_PROFILE",
+        home.join("route-a-profile").to_str().unwrap(),
+    );
+    guard.set("AGENT_BROWSER_RUNTIME_PROFILE", "rdp-guac-route-a-viewer");
+    let unattributed_launch = json!({ "action": "launch" });
+    assert_eq!(
+        runtime_profile_from_sources(&unattributed_launch, true),
+        None
+    );
+    assert_eq!(
+        launch_profile_from_sources(&unattributed_launch, true),
+        None
+    );
+    let command = json!({ "action": "launch", "runtimeProfile": profile_id });
+    let mut options = LaunchOptions {
+        profile: launch_profile_from_sources(&command, true),
+        runtime_profile: runtime_profile_from_sources(&command, true),
+        ..LaunchOptions::default()
+    };
+    let selection =
+        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+    assert_eq!(selection, None);
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), current_user_data_dir.to_str());
 
     let mut partially_migrated = state.clone();
     let current_profile_digest =
