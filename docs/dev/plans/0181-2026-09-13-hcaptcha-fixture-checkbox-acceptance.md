@@ -184,6 +184,15 @@ and the provider fixture now stages under umask `0077` to cover this failure.
 Provider fixture and development-runtime fixture validation pass; fresh staging
 produces a mode `0644` JAR and provider preflight passes.
 
+The successor apply then completed as `provider_ready_ingress_pending` with
+production unchanged. Its receipt is
+`/home/ecochran76/.local/share/agent-browser-dev/presentation-provider/receipts/apply-1789390799829-704539.json`.
+Provider-required doctor passes. Development Service Status reports three
+`warm_idle` presentation slots, no binding warnings, and a configured hard
+maximum of six. The operator-supplied credential path did not exist at the
+literal location provided; no alternative credential copy was used and the
+fixture remains unstarted with zero input emitted.
+
 ## Non-Goals
 
 - Solving image, audio, accessibility, or multi-round challenges
