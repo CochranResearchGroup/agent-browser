@@ -2183,6 +2183,8 @@ fn main() {
         &mut cmd,
         env::var(crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV).ok(),
         env::var(crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_REVISION_ENV).ok(),
+        &flags.session,
+        flags.runtime_profile.as_deref(),
     );
 
     let authority_selected_session = match cmd.get("action").and_then(|value| value.as_str()) {
@@ -3305,16 +3307,9 @@ fn apply_runtime_admission_claim_from_sources(
     command: &mut serde_json::Value,
     transaction_id: Option<String>,
     transaction_revision: Option<String>,
+    cli_session: &str,
+    cli_runtime_profile: Option<&str>,
 ) {
-    if !command
-        .get("action")
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|action| {
-            crate::runtime_adoption::runtime_admission_claim_action_allowed(action, command)
-        })
-    {
-        return;
-    }
     let Some(transaction_id) = transaction_id.filter(|value| !value.trim().is_empty()) else {
         return;
     };
@@ -3323,6 +3318,30 @@ fn apply_runtime_admission_claim_from_sources(
     else {
         return;
     };
+    let Some(action) = command
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+    else {
+        return;
+    };
+    if matches!(action.as_str(), "launch" | "navigate" | "headers" | "close") {
+        if command.get("runtimeProfile").is_none()
+            && cli_runtime_profile.is_some_and(|profile| profile == cli_session)
+        {
+            command["runtimeProfile"] = json!(cli_runtime_profile);
+        }
+        if command
+            .get("runtimeProfile")
+            .and_then(serde_json::Value::as_str)
+            != Some(cli_session)
+        {
+            return;
+        }
+    }
+    if !crate::runtime_adoption::runtime_admission_claim_action_allowed(&action, command) {
+        return;
+    }
     command["runtimeAdmissionClaim"] = json!({
         "transactionId": transaction_id,
         "transactionRevision": transaction_revision,
@@ -3595,6 +3614,8 @@ mod tests {
             &mut reconcile,
             Some("upgrade-test".to_string()),
             Some("9".to_string()),
+            "workstation-reconcile",
+            None,
         );
         assert_eq!(
             reconcile["runtimeAdmissionClaim"],
@@ -3609,6 +3630,8 @@ mod tests {
             &mut stream_status,
             Some("upgrade-test".to_string()),
             Some("9".to_string()),
+            "runtime-host",
+            None,
         );
         assert_eq!(
             stream_status["runtimeAdmissionClaim"],
@@ -3626,6 +3649,8 @@ mod tests {
             &mut route_navigate,
             Some("upgrade-test".to_string()),
             Some("9".to_string()),
+            "rdp-guac-route-a-viewer",
+            Some("rdp-guac-route-a-viewer"),
         );
         assert_eq!(
             route_navigate["runtimeAdmissionClaim"],
@@ -3645,6 +3670,20 @@ mod tests {
             route_navigate["runtimeAdmissionClaim"]
         );
 
+        let mut route_headers = json!({"action": "headers"});
+        apply_runtime_admission_claim_from_sources(
+            &mut route_headers,
+            Some("upgrade-test".to_string()),
+            Some("9".to_string()),
+            "rdp-guac-route-a-viewer",
+            Some("rdp-guac-route-a-viewer"),
+        );
+        assert_eq!(route_headers["runtimeProfile"], "rdp-guac-route-a-viewer");
+        assert_eq!(
+            route_headers["runtimeAdmissionClaim"],
+            route_navigate["runtimeAdmissionClaim"]
+        );
+
         let mut ordinary_navigate = json!({
             "action": "navigate",
             "runtimeProfile": "bill-soylei",
@@ -3653,6 +3692,8 @@ mod tests {
             &mut ordinary_navigate,
             Some("upgrade-test".to_string()),
             Some("9".to_string()),
+            "bill-soylei",
+            Some("bill-soylei"),
         );
         assert!(ordinary_navigate.get("runtimeAdmissionClaim").is_none());
 
@@ -3661,6 +3702,8 @@ mod tests {
             &mut invalid_revision,
             Some("upgrade-test".to_string()),
             Some("not-a-revision".to_string()),
+            "workstation-reconcile",
+            None,
         );
         assert!(invalid_revision.get("runtimeAdmissionClaim").is_none());
     }

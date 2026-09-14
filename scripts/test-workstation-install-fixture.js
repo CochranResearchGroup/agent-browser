@@ -254,6 +254,7 @@ try {
     AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID: 'upgrade-fixture',
     AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_REVISION: '7',
   };
+  const routeAdmissionSocket = join(xdgRoot, 'route-admission-socket');
   const routeViewerAdmission = spawnSync(
     installedBinary,
     [
@@ -271,7 +272,7 @@ try {
       encoding: 'utf8',
       env: {
         ...admissionEnv,
-        AGENT_BROWSER_SOCKET_DIR: join(xdgRoot, 'route-admission-socket'),
+        AGENT_BROWSER_SOCKET_DIR: routeAdmissionSocket,
       },
     },
   );
@@ -280,6 +281,34 @@ try {
     JSON.parse(routeViewerAdmission.stdout).error,
     /runtime_admission_draining/,
     'the exact transaction claim must pass canonical route-viewer launch admission',
+  );
+  const routeHeaderAdmission = spawnSync(
+    installedBinary,
+    [
+      '--json',
+      '--session',
+      'rdp-guac-route-a-viewer',
+      '--runtime-profile',
+      'rdp-guac-route-a-viewer',
+      '--executable-path',
+      '/bin/false',
+      'set',
+      'headers',
+      '{}',
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...admissionEnv,
+        AGENT_BROWSER_SOCKET_DIR: routeAdmissionSocket,
+      },
+    },
+  );
+  assert.notEqual(routeHeaderAdmission.status, 0);
+  assert.doesNotMatch(
+    JSON.parse(routeHeaderAdmission.stdout).error,
+    /runtime_admission_draining/,
+    'secondary route-viewer commands must retain exact claimed launch admission',
   );
   const ordinaryProfileAdmission = spawnSync(
     installedBinary,

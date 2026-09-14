@@ -8,7 +8,7 @@ Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-route-viewer-drain-recovery`
+Branch: `fix/plan-0186-route-viewer-command-scope`
 
 Target: `main`
 
@@ -32,6 +32,14 @@ The existing forward-only transaction remains at revision 17 with candidate
 generation `0.28.0-a28994570dd3-9d43d7f4e826` selected and the admission drain
 active.
 
+PR #113 merged the first scoped-admission repair as `3c7d29da`. Exact merged
+candidate `34318d21bf7104c982a0d73a33c24875538c9b309cd459273559a08b47fc121a`
+admitted route A's initial launch, but the next header command failed before
+effect as `runtime_admission_draining`. Unlike navigation, `set headers` did
+not carry the global managed profile when the CLI attached its claim, so its
+generated prestart launch also lacked that claim. The task-owned temporary
+host was terminated after its scoped cleanup left no route display.
+
 After reboot, no canonical route viewer survived. The repaired opener used the
 stable managed profile, but its first route-A launch failed before effect as
 `runtime_admission_draining`. The CLI attaches a transaction claim only to
@@ -48,6 +56,8 @@ therefore impossible despite coherent transaction and candidate identities.
 - Attach the exact environment-derived transaction ID and revision to the
   route viewer's launch, navigation, header, and close commands.
 - Propagate that already-scoped claim to the generated prestart launch.
+- Materialize the managed route scope for secondary commands only when the CLI
+  session and runtime profile are exactly equal.
 - Keep missing claims, stale revisions, ordinary profiles, and lookalike route
   profile names denied.
 - Integrate one candidate, resume the existing transaction, then install the
@@ -83,9 +93,15 @@ clippy with warnings denied, patch hygiene, and validation selection from
 
 - Both focused regressions failed red on the old admission contract.
 - The final admission-focused Rust sweep passed 28 tests with zero failures.
-- Optimized candidate `18af9f54f67a51d9e2ba0e6d5b379b8b22f3e11cd1d3c3f30ce15f402637bf20`
+- Preliminary candidate `18af9f54f67a51d9e2ba0e6d5b379b8b22f3e11cd1d3c3f30ce15f402637bf20`
+  and exact PR #113 merge candidate `34318d21bf7104c982a0d73a33c24875538c9b309cd459273559a08b47fc121a`
   passed the source-free workstation fixture. The previously built P185 binary
   failed that fixture with the exact `runtime_admission_draining` signature.
+- The follow-up header-shaping regression and the 28-test admission sweep pass;
+  exact session-profile equality is required before secondary commands receive
+  the route scope. Optimized follow-up candidate
+  `4b4ca13a6b1241d689b13f07d162ee9d6da312b66cd03c8b07fa8818acab5bdb`
+  passes the strengthened source-free fixture.
 - Rust format, workspace clippy with warnings denied, validation selection,
   workstation host provision, fresh VM harness, Guacamole assets, PostgreSQL
   durability, route-user synchronization, and patch hygiene all pass.

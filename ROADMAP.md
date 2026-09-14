@@ -36,6 +36,9 @@ canonical route viewer must be launched during forward reconciliation, but the
 active admission drain rejects launch even with the exact transaction claim.
 P186 admits only the canonical managed route-viewer action sequence for the
 matching transaction and keeps ordinary profiles and browser effects blocked.
+PR #113 integrated the first gate as `3c7d29da`; a follow-up now aligns
+secondary header-command shaping after the first live route launch proved that
+global profile routing was not yet present at claim attachment.
 
 ## P185 | Route Viewer Runtime Profile Identity
 
