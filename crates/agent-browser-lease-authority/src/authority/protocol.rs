@@ -6480,6 +6480,45 @@ fn derive_browser_owner_process_observation(
 }
 
 #[cfg(not(target_os = "linux"))]
+fn derive_browser_owner_executor_observation(
+    _binding: &LeaseAuthorityOwnerBinding,
+) -> Result<BrowserOwnerExecutorObservation, LeaseAuthorityProtocolError> {
+    Err(LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_platform_unsupported",
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn derive_browser_adoption_physical_observation(
+    _binding: &LeaseAuthorityOwnerBinding,
+) -> Result<BrowserAdoptionPhysicalObservation, LeaseAuthorityProtocolError> {
+    Err(LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_platform_unsupported",
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn derive_browser_adoption_attachment_observation(
+    _candidate: &EffectExecutorIdentityEvidence,
+    _physical: &BrowserAdoptionPhysicalObservation,
+) -> Result<BrowserAdoptionAttachmentObservation, LeaseAuthorityProtocolError> {
+    Err(LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_platform_unsupported",
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn derive_browser_effect_channel_observation(
+    _binding: &LeaseAuthorityOwnerBinding,
+    _executor: &BrowserOwnerExecutorObservation,
+    _physical: &BrowserAdoptionPhysicalObservation,
+) -> Result<BrowserEffectChannelObservation, LeaseAuthorityProtocolError> {
+    Err(LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_platform_unsupported",
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
 fn derive_effect_executor_identity(
     _peer: custody::LeaseAuthorityRequestPeerIdentity,
 ) -> Result<EffectExecutorIdentityEvidence, LeaseAuthorityProtocolError> {
