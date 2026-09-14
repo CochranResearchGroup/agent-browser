@@ -12,11 +12,13 @@ exact candidate `e7e98600` passes the pinned source-free fixture. Route A then
 reached display readiness, but route B failed before effect only when A had
 started the shared host first. B succeeded alone and was closed cleanly. A
 focused regression reproduces the failure: a shared host inherited A's
-process-wide profile defaults and applied them while resolving B. It fails red
-on the merge and passes at `d83dd8fd` when shared-host execution ignores those
-process defaults and relies on attributed lane fields plus Service State.
-Format and workspace clippy pass under the 8 GB reserve. The task-owned
-candidate browser and hosts are closed. Next: integrate once, build the exact
+process-wide profile defaults and applied them while resolving B. PR #121
+merged the first command-source guard as `5d07b94f`; exact candidate `852d9f58`
+passes the pinned fixture but reproduced the B denial through a second direct
+environment read in auto-launch option construction. Its focused regression
+fails red on the merge and passes at `fb754890`; both cross-lane tests, format,
+and clippy pass under the 8 GB reserve. The task-owned candidate browser and
+hosts are closed. Next: integrate this final entry-point guard, build the exact
 merge once, run the pinned fixture, then require simultaneous three-route
 readiness before resuming transaction revision 21. Do not retry tenant
 workflows.

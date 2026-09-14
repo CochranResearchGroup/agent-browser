@@ -123,6 +123,15 @@ from its first lane. Source checkpoint `d83dd8fd` prevents those first-lane
 defaults from participating inside a shared runtime-host process; attributed
 lane fields and current Service State remain authoritative.
 
+PR #121 merged that command-source repair as `5d07b94f`; exact candidate
+SHA-256 `852d9f58c385f9c798dcd66e64e27d344f1518f3de24f13af42e8ef17ab2235a`
+passes the pinned fixture, but simultaneous acceptance reproduced the same
+no-effect B denial. The auto-launch path has a second constructor that read
+the first lane's process environment directly instead of using the repaired
+source helpers. Its focused regression fails red on the merge and passes at
+`fb754890` when shared-host auto-launch options also omit process-wide profile
+defaults.
+
 ## Consolidated Batch
 
 - Recognize only canonical managed `rdp-guac-route-*-viewer` profiles as the
@@ -277,6 +286,13 @@ clippy with warnings denied, patch hygiene, and validation selection from
   cross-lane environment regression fails red on `f65bf907` with
   `existing_session_profile_identity_unproven` and passes at `d83dd8fd`.
   Rust format and workspace clippy with warnings denied pass.
+- PR #121 merged the first shared-host guard as `5d07b94f`; exact candidate
+  SHA-256
+  `852d9f58c385f9c798dcd66e64e27d344f1518f3de24f13af42e8ef17ab2235a`
+  passes the pinned fixture but reproduces the no-effect B denial through the
+  separate auto-launch environment constructor. That focused regression fails
+  red on the merge and passes at `fb754890`; both cross-lane regressions, Rust
+  format, and workspace clippy with warnings denied pass.
 
 ## Delivery Sequence And Budget
 

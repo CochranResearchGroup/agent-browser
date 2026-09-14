@@ -10,9 +10,9 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: d83dd8fd2824454ee6bcb65a1036ab5b98aafedf
+    checkpoint: fb75489058232464dcb1b9131bfa2e3b25cabe5f
     remote_ref: refs/remotes/origin/fix/plan-0186-runtime-host-lane-profile-isolation
-    integration_receipt: f65bf9077c15da2d6258cfa8ee933a7e590b4a39
+    integration_receipt: 5d07b94f8db301378a73f103bd6e8d2b6d195c68
     integration: merge
     work_items: [CochranResearchGroup/agent-browser#112]
     dependencies: [P185]
