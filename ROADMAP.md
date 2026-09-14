@@ -27,53 +27,18 @@ field evidence and acceptance records into the same model.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0186](docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
-and [issue #112](https://github.com/CochranResearchGroup/agent-browser/issues/112)
-own the post-reboot recovery defect exposed after P185 integration. A missing
-canonical route viewer must be launched during forward reconciliation, but the
-active admission drain rejects launch even with the exact transaction claim.
-P186 admits only the canonical managed route-viewer action sequence for the
-matching transaction and keeps ordinary profiles and browser effects blocked.
-PR #113 integrated the first gate as `3c7d29da`, and PR #114 integrated exact
-secondary-command shaping as `bba8b7a3`. Runtime acceptance proved that route
-A can now launch, apply headers, and navigate under the claim. Route B then
-failed before effect because a ready generation-1 owner for its obsolete
-generation-relative profile identity survives without any browser, session,
-tab, process, principal, or lease projection. Its exact lifecycle is already
-terminal with cleanup satisfied and process-exit plus profile-lock-release
-evidence. The remaining P186 slice makes the raw session matcher honor that
-existing terminal-history contract before ambiguity evaluation and permits the
-guarded canonical route relaunch to adopt its stable runtime-profile path,
-without mutating Service State or weakening nonterminal owner authority.
-PR #116 merged this slice as `e9a9496a`, but exact-merge live acceptance found
-one final CLI-shape mismatch before effect: the explicit global runtime profile
-is not guaranteed to be repeated in both normalized launch representations.
-PR #117 merged that correction as `acf5d4c6`; its exact candidate still failed
-before daemon startup because runtime-profile configuration had already copied
-the obsolete `userDataDir` into the generic profile field. P186 now has a red
-and green main-preflight regression at `e073f710`: configuration-derived route
-paths may yield to exact owner continuity, while caller-authored `--profile`
-values remain hard constraints. P186 remains open for integration and
-exact-merge runtime acceptance. PR #118 merged that preflight repair as
-`851fcebf`; live route A then reached post-launch registration and exposed the
-same migration gap in lifecycle persistence. Source checkpoint `bbbf5abc`
-adds an atomic, canonical-route-only terminal owner and lifecycle digest
-migration with fail-closed cleanup, collision, and principal-binding guards.
-PR #119 merged that transition as `0a2c8800`; exact-merge live validation then
-proved the owner and lifecycle advanced, but the retained profile record kept
-the legacy path and blocked navigation. Source checkpoint `fefc0dca` brings
-that profile record into the same atomic terminal-replacement transaction and
-accepts the already-migrated recovery shape. PR #120 merged it as `f65bf907`.
-Its exact candidate brought route A to display readiness, then route B failed
-only when sharing the host that A started; route B succeeds alone. Checkpoint
-`d83dd8fd` removes first-lane process-profile fallback from shared-host lane
-resolution while retaining explicit lane fields and current Service State.
-PR #121 merged that repair as `5d07b94f`, but exact-merge acceptance exposed a
-second direct environment read in auto-launch option construction. Checkpoint
-`fb754890` applies the same shared-host isolation to that final entry point.
-P186 remains open for integration and simultaneous three-route acceptance.
+closed after the complete repair batch merged through PR #129 as `f84ae098`.
+Exact candidate `66ac712c` passed its pinned source-free fixture and accepted a
+default preserving workstation transaction. A, B, and C finalized as separate
+route-viewer lanes with exact handoff and owner-transfer receipts. Final doctor
+passes with one selected runtime host, one dashboard process, zero legacy
+daemons, no admission drain, a healthy monitor, and 43 healthy profile leases.
+The protected Last30Days generation-90 owner remained unchanged. Authenticated
+dashboard operator-journey evidence is deferred as a nonblocking installation
+warning outside P186. Issue #112 owns the public completion receipt.
 
 ## P185 | Route Viewer Runtime Profile Identity
 
