@@ -2,13 +2,13 @@
 
 Date: 2026-09-14
 
-State: OPEN
+State: CLOSED
 
 Lane: P186
 
 Product lane: PL-BUGFIX
 
-Branch: `fix/plan-0186-relative-route-profile-identity`
+Final branch: `fix/p186-drain-owner-status`
 
 Target: `main`
 
@@ -26,6 +26,21 @@ including viewers whose terminal owner history names a generation-relative
 profile path, without admitting ordinary browser effects or tenant profiles.
 
 ## Current State
+
+Plan 0186 closed on 2026-09-14. The complete repair batch integrated through
+PRs #113, #114, #116 through #126, and #129. Final integration commit
+`f84ae0980a9ae366f0c11924f3824634c4c55cf1` produced candidate SHA-256
+`66ac712c6a91a26395d3369fb40ec111e5e46a101a736e35c7c0acce999e7e76`.
+Transaction `upgrade-bacc8671-6067-4820-bb0f-7d264a446615` accepted that exact
+candidate and finalized distinct A, B, and C route-viewer lanes with separate
+handoff sessions and owner-transfer receipts. The validation browsers later
+reached exact terminal cleanup; they are not required to remain resident after
+acceptance. Current installed readback selects only the final generation, has
+one runtime host, one dashboard process, zero legacy daemons, no admission
+drain, a healthy runtime monitor, and 43 healthy profile leases. Doctor exits
+zero. The Last30Days protected owner remains generation 90 and unchanged.
+
+The historical diagnosis below is retained as the repair record.
 
 P185 merged through PR #111 as `ffc6e510`; its exact integrated candidate is
 SHA-256 `bce36a4c7cab42f64601c94e40cf4c7c45b2d9d814779fa4baf4f1d2dce10c97`.
@@ -307,6 +322,21 @@ clippy with warnings denied, patch hygiene, and validation selection from
   separate auto-launch environment constructor. That focused regression fails
   red on the merge and passes at `fb754890`; both cross-lane regressions, Rust
   format, and workspace clippy with warnings denied pass.
+- PR #122 merged the second shared-host auto-launch guard as `5ffeb35d`, and PR
+  #123 merged canonical relative-profile recognition as `a9a3055d`. PRs #124
+  through #126 then repaired resumed candidate-host transition proof, deferred
+  missing-fallback retirement to supervisor takeover, and made exact already
+  selected dashboard promotion idempotent. Their focused transaction tests,
+  Rust format, and workspace clippy with warnings denied passed.
+- PR #129 merged the installer-race status correction as `f84ae098`. Its
+  focused drain-owner regression, Rust format, workspace clippy with warnings
+  denied, patch hygiene, optimized candidate build, and source-free workstation
+  fixture passed. No full CI replay was run for this final focused repair.
+- The exact merged candidate dry-run was ready and its default preserving apply
+  accepted transaction `upgrade-bacc8671-6067-4820-bb0f-7d264a446615` without
+  full shutdown. A bounded installed reconciliation completed under the new
+  binary with zero failures. Final doctor returned success with only
+  nonblocking workspace-candidate and dashboard operator-journey warnings.
 
 ## Delivery Sequence And Budget
 
@@ -340,3 +370,18 @@ matching installed SHA, one supervised production runtime host, no admission
 drain, three distinct canonical route displays, coherent stream publication,
 and unchanged Last30Days principal, capability, owner identity, and owner
 generation.
+
+## Closure Evidence
+
+| Requirement | Evidence | State |
+| --- | --- | --- |
+| Source repair | PRs #113, #114, #116 through #126, and #129 are merged; final `main` receipt is `f84ae0980a9ae366f0c11924f3824634c4c55cf1` | complete |
+| Candidate qualification | Exact candidate SHA-256 `66ac712c6a91a26395d3369fb40ec111e5e46a101a736e35c7c0acce999e7e76` passed the source-free workstation fixture | complete |
+| Route-viewer acceptance | Transaction `upgrade-bacc8671-6067-4820-bb0f-7d264a446615` finalized A, B, and C as distinct handoff lanes with exact owner-transfer receipts; later cleanup is terminal and satisfied | complete |
+| Installed identity | Selected generation `0.28.0-66ac712c6a91-a1a0f1eaa3a0` matches the exact candidate SHA | complete |
+| Runtime coherence | Doctor exits zero; one runtime host, one dashboard process, zero legacy daemons, no admission drain, healthy monitor, and 43 healthy leases | complete |
+| Protected authority | Last30Days owner identity and generation 90 remain unchanged | complete |
+| Deferred evidence | Authenticated dashboard operator-journey evidence remains a nonblocking installation warning and is outside this plan's route-viewer repair objective | not applicable |
+
+No tenant workflow, authentication flow, credential, provider, profile reset,
+formal release, or accounting mutation was part of this closure.
