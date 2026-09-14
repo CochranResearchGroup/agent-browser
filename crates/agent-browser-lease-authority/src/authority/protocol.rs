@@ -7081,6 +7081,16 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
+    fn test_profile_path(profile_id: &str) -> String {
+        format!(r"C:\agent-browser\profiles\{profile_id}")
+    }
+
+    #[cfg(not(windows))]
+    fn test_profile_path(profile_id: &str) -> String {
+        format!("/var/lib/agent-browser/profiles/{profile_id}")
+    }
+
     fn protected_kernel_with_current_browser_owner() -> (
         LeaseAuthorityProtocolKernel,
         String,
@@ -7157,7 +7167,7 @@ mod tests {
         let process = BrowserProcessIdentityEvidence {
             pid: 4242,
             start_token: "browser-start-1".to_string(),
-            profile_path: "/var/lib/agent-browser/profiles/adoption-profile".to_string(),
+            profile_path: test_profile_path("adoption-profile"),
             executable_path: "/opt/agent-browser/chrome".to_string(),
             executable_sha256:
                 "sha256:6666666666666666666666666666666666666666666666666666666666666666"
@@ -8904,7 +8914,7 @@ mod tests {
         let browser_process = BrowserProcessIdentityEvidence {
             pid: 4242,
             start_token: "987654".to_string(),
-            profile_path: "/var/lib/agent-browser/profiles/last30days".to_string(),
+            profile_path: test_profile_path("last30days"),
             executable_path: "/opt/agent-browser/chrome".to_string(),
             executable_sha256:
                 "sha256:6666666666666666666666666666666666666666666666666666666666666666"
