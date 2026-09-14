@@ -7,7 +7,7 @@ Keep this file at or below 200 lines under policy 0043.
 ## Turn 318 | 2026-09-13
 
 [Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
-is PLANNED in `PL-PLATFORM`. It defines in-process dependency deepening before
+is OPEN in `PL-PLATFORM`. It defines in-process dependency deepening before
 extracting `agent-browser-lease-authority`, direct consumer migration with no
 permanent facade, a one-for-one partition of 106 baseline test invariants
 between the crate and retained CLI integration coverage, and comparable focused
@@ -15,12 +15,14 @@ loop and downstream build measurements. P181 is a structural successor
 to Plan 0144, not a replacement for issue #71's public, effect, or installed
 gates. Work item
 [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
-is ready. The lane has no active-lane entry yet and authorizes no source,
-runtime, browser, profile, provider, installation, or production effect.
+is in progress on `platform/lease-authority-crate` from published baseline
+`16d4fb22`. P181 authorizes the bounded source extraction and provider-free
+validation but no runtime, browser, profile, provider, installation, or
+production effect.
 
-Next action: publish and integrate the planning branch. Then recheck P144 source
-custody, add the active lane, and create the implementation worktree from
-current `origin/main`.
+Next action: execute P0 by freezing the invariant ledger, adding the red
+architecture contract, and capturing the comparable focused-loop baseline.
+Recheck P144 source custody immediately before the first authority-source edit.
 
 ## Turn 317 | 2026-09-13
 

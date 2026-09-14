@@ -4,23 +4,23 @@ Date: 2026-09-13
 
 Plan version: 1
 
-State: PLANNED
+State: OPEN
 
 Lane: P181
 
 Product lane: PL-PLATFORM
 
-Branch: `platform/lease-authority-crate-plan`
+Planning branch: `platform/lease-authority-crate-plan`
 
-Implementation branch: `platform/lease-authority-crate`
+Branch: `platform/lease-authority-crate`
 
 Target: `main`
 
-Integration: pull request and merge
+Integration: merge
 
 Work item: [CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
 
-Source baseline: `44e5dc16971cb7a09ad36842d0b517a7369eb853`
+Source baseline: `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`
 
 Depends on:
 
@@ -31,10 +31,12 @@ Depends on:
 
 Consolidation: required
 
-Authority: PLAN AND REPOSITORY DOCUMENTATION ONLY. This plan does not yet
-authorize source implementation, issue mutation, active-lane registration,
-runtime installation, protected-authority upgrade, browser or profile use,
-provider effects, production state changes, release publication, or cleanup.
+Authority: SOURCE IMPLEMENTATION AND PROVIDER-FREE VALIDATION ONLY. This plan
+authorizes the bounded crate extraction, repository documentation, work-item
+and lane coordination, local builds, and provider-free tests. It does not
+authorize runtime installation, protected-authority upgrade, browser or profile
+use, provider effects, production state changes, release publication, or
+destructive cleanup.
 
 ## Objective
 
@@ -60,6 +62,13 @@ secondary acceptance axis, not a premise of the extraction:
    acceleration.
 
 ## Current State
+
+P181 is active on `platform/lease-authority-crate` through work item #99. The
+published implementation baseline is
+`16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`. P144/#71 is ready with no assignee,
+active branch, or worktree on the authority source, so P181 owns the structural
+write surface while this lane remains active. P0 is the current packet; no Rust
+source movement or benchmark sample has started.
 
 The workspace contains the `agent-browser` binary crate and the
 `agent-browser-cdp` library crate. The Lease-authority kernel is already a
@@ -591,8 +600,6 @@ target passes.
 
 ## Next Action
 
-Publish this plan branch for review and integration. Activation then requires
-an active-lane entry and a clean implementation worktree from current
-`origin/main`. P144 source-writer reconciliation is currently clear: issue #71
-is `state/ready`, has no assignee, and no bounded local or cataloged branch owns
-the authority source. Recheck that evidence immediately before source work.
+Execute P0: freeze the one-for-one invariant ledger, add the red architecture
+contract, and capture the smallest comparable focused-loop baseline. Recheck
+P144 source custody immediately before the first authority-source edit.
