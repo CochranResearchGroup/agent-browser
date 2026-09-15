@@ -36,8 +36,18 @@ and exact task-owned residue evidence.
 
 Issue #131 is separately closed through PR #147. Current `origin/main` at lane
 admission is `6e052f147c7bf549476be7af581df4a13039c54c`; it contains both repairs and
-has no open pull request or competing #87 branch. Production installation has
-not occurred for this combined source.
+has no open pull request or competing #87 branch.
+
+Candidate `73001841` adds the missing foreground call-seam proof. The legacy
+oracle admits a second optimistic attempt, accepts two independent writer
+processes, and deterministically returns `service_state_stale_revision`. Current
+bounded replay accepts only the first writer per launch, serializes the pure
+projection replay, and succeeds for two sequential foreground projections. Both
+writer updates survive, each browser projection appears exactly once, and every
+helper, holder, transaction, barrier, and disposable-state path is gone. No
+launch adapter repair is required. All 43 `service_store` tests, the exact
+owned-launch cleanup test, format, and strict workspace Clippy pass. Production
+installation has not occurred for this combined source.
 
 ## Consolidated Batch
 
@@ -115,6 +125,28 @@ against the frozen published diff and has no runtime authority.
 | Integration | Published branch, linked pull request, exact-head checks, and merged-main readback | The source and evidence enter protected `origin/main` |
 | Candidate identity | Production artifact manifest, source ancestry, executable-input closure, and binary digest | One production-shaped artifact is bound to verified canonical source |
 | Installed coherence | Shared runtime transaction, installed manifest and binary digest, supervisor and listener census, doctor, Service State readback, and disposable launch smoke | The installed runtime matches the candidate, is coherent and healthy, and the bounded foreground acceptance passes without residue |
+
+## Execution Evidence
+
+- Red-capability oracle:
+  `foreground_launch_projection_fixture_rejects_legacy_optimistic_retry`
+  observes two independent writer processes and the historical typed stale-
+  revision failure before any foreground browser projection commits.
+- Current-source acceptance:
+  `foreground_launch_projection_converges_twice_under_cross_process_revision_churn`
+  completes two sequential projections, each after one independent writer,
+  with final revision 4, both writer jobs, two unique browser records, and no
+  duplicate projection.
+- Exact cleanup: every writer child exits successfully; writer outcome,
+  barrier, durable holder, transaction, and disposable state paths are absent
+  after readback. The existing
+  `failed_owned_launch_persistence_runs_cleanup_exactly_once` contract also
+  passes.
+- Focused validation: all 43 `native::service_store::tests` pass.
+- Changed-surface validation: `git diff --check`, Rust format, and strict
+  workspace Clippy pass at source checkpoint `73001841`.
+- Integration, canonical CI, production artifact identity, installation, and
+  installed acceptance remain pending.
 
 ## Stop Condition
 

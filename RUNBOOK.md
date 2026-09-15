@@ -11,6 +11,16 @@ Keep this file at or below 200 lines under policy 0043.
 - [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)
 
+## Turn 343 | 2026-09-15
+
+P196 source checkpoint `73001841` proves #76 already repairs #87's foreground
+projection race. The legacy oracle takes two independent writer processes and
+returns the historical stale-revision error; current replay completes two
+sequential foreground projections after one writer each, preserves all updates,
+records no duplicate, and clears exact residue. All 43 store tests, owned-launch
+cleanup, format, and strict Clippy pass. Protected integration is next; no
+browser, profile, provider, production runtime, or installation effect occurred.
+
 ## Turn 342 | 2026-09-15
 
 P196 and issue #87 are active on `fix/issue-87-foreground-launch-cas` from

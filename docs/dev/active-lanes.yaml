@@ -10,12 +10,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE
-    checkpoint: 6e052f147c7bf549476be7af581df4a13039c54c
+    checkpoint: 73001841df308e63cccad2b64365d4109e57d0b3
     remote_ref: refs/remotes/origin/fix/issue-87-foreground-launch-cas
     integration_receipt: null
     integration: merge through the protected `main` workflow after exact foreground acceptance and changed-surface qualification
-    validation_status: pending
-    validation_ref: null
+    validation_status: passed
+    validation_ref: 73001841df308e63cccad2b64365d4109e57d0b3
     work_items: [CochranResearchGroup/agent-browser#87]
     dependencies: []
     overlaps: []
