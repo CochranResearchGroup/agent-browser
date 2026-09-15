@@ -27,11 +27,11 @@ field evidence and acceptance records into the same model.
 
 ## P191 | Repository Worktree And Lane Reconciliation
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0191](docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md)
 and [issue #139](https://github.com/CochranResearchGroup/agent-browser/issues/139)
-own the exact repository cleanup campaign. Five integrated or disposable
+close the exact repository cleanup campaign through PR #140. Five integrated or disposable
 auxiliary worktrees have been removed after their dirty task artifacts were
 preserved. P180 and P183 through P185 now close from merged source plus P186
 cumulative installed acceptance. P182 remains open only for its preserved

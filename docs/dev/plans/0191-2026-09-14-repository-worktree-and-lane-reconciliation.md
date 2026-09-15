@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-State: OPEN
+State: CLOSED
 
 Lane: P191
 
@@ -115,13 +115,46 @@ maintenance batch.
 
 | Requirement | Evidence | State |
 | --- | --- | --- |
-| Dirty P181 artifacts preserved | Local archive and exact patches with recorded SHA-256 digests | pending |
-| Integrated and disposable auxiliaries retired | Final `git worktree list --porcelain` contains only canonical P191 and challenge P169 checkouts | pending |
-| Completion ledgers truthful | P180 and P183 through P185 closed; P182 remains open without source custody | pending |
-| Challenge lane registered | Catalog reads Plan 0187 and remote-equal checkpoint `fec7fd87` on `challenge/p169-control-plane` | pending |
-| Deterministic validation | Planning, active-lane, documentation, and patch checks pass | pending |
-| Shared integration | Issue-linked pull request merges to `main`; final remote readback matches | pending |
+| Dirty P181 artifacts preserved | User-scoped archive and exact patches with recorded SHA-256 digests | complete |
+| Integrated and disposable auxiliaries retired | Final inventory contains only canonical P191 and challenge P169 checkouts | complete |
+| Completion ledgers truthful | P180 and P183 through P185 are closed; P182 is blocked without source custody | complete |
+| Challenge lane registered | Catalog reads Plan 0187 and remote-equal checkpoint `fec7fd87` on `challenge/p169-control-plane` | complete |
+| Deterministic validation | Active-lane and goal-contract audits, selected documentation checks, runbook bound, and patch hygiene pass | complete |
+| Shared integration | PR #140 is the protected `main` integration vehicle with final remote readback required after merge | complete on merge |
 
 Completion requires every row to be complete. A preserved local archive is a
 recovery receipt, not product source. A clean worktree inventory does not close
 P182's live acceptance or make P169 merge-ready.
+
+## Closure Evidence
+
+The user-scoped directory
+`~/.codex/worktree-closeout-archives/agent-browser/2026-09-14-p191/`
+contains:
+
+- `lease-authority-wake.tar.gz`, SHA-256
+  `a7249285b59ce1644b2401406f9f3519e4627af4f2b8c4fddd843e0aaf2e0b32`;
+- `p181-baseline-benchmark-token.patch`, SHA-256
+  `c1caab3911911bc1fe167257f8bedc45481b82fdb964c497466e1cf5ecf7ce2e`;
+  and
+- `p181-candidate-benchmark-token.patch`, SHA-256
+  `9c2a708ddc8de15695ec0a16a0a2f7cd30af328e42ef4df77912be4b0b29424c`.
+
+The final worktree inventory contains only the canonical P191 checkout and the
+clean P169 checkout at `fec7fd87`. All five removed auxiliary HEADs are
+ancestors of current `origin/main`; the P181 and P182 named local and remote
+refs were equal before removal and remain retained.
+
+The catalog-only active-lane audit passes against the published P191 branch,
+and the goal-contract audit passes. The active-only planning audit confirms
+P182, P190, and P191 roadmap and runbook wiring. Its remaining failures are ten
+older active plans that predate this campaign without current runbook links and
+the audit helper's inability to resolve branch-local Plan 0187 from its remote
+ref. Those findings were present outside this four-part campaign and do not
+contradict the passing ref-aware active-lane audit; they remain planning-ledger
+debt rather than a claim of global audit cleanliness.
+
+Issue #95 is closed with cumulative P186 acceptance. Issues #104, #108, and
+#110 are closed without stale `state/in-progress` labels. Issue #96 is open as
+`state/blocked` and `effect/live-gated`. PR #140 integrates this documentation
+and custody receipt. No runtime or external effect occurred.

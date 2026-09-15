@@ -5,7 +5,7 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 334 | 2026-09-14
 
-[Plan 0191](docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md) and issue #139 reconcile repository custody before further development.
+[Plan 0191](docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md) is CLOSED through issue #139 and PR #140 after reconciling repository custody.
 Eight P181 wake lifecycle files are preserved in a user-scoped archive with
 SHA-256 `a7249285b59ce1644b2401406f9f3519e4627af4f2b8c4fddd843e0aaf2e0b32`;
 both detached benchmark diffs have standalone patches. Five integrated or
