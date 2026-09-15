@@ -495,6 +495,10 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
   `0050-collaborative-development-workflow.md` before
   starting or resuming a substantive development lane, assigning top-level session ownership,
   delegating work, creating a lane runtime, or integrating parallel branches.
+- Read policy `0051-shared-runtime-effect-custody.md` before any production or
+  staging install, recovery, reconcile, supervisor, ingress, browser, profile,
+  or Service State mutation. A prior chat checkpoint or file lock is not live
+  effect custody.
 - Read policies `0048-forge-issue-reporting.md` and
   `0049-github-issue-operations.md` before any issue provider mutation,
   including settings, labels, issue creation, editing, assignment, planning,
@@ -554,6 +558,7 @@ Read and follow:
 - `docs/dev/policies/0048-forge-issue-reporting.md`
 - `docs/dev/policies/0049-github-issue-operations.md`
 - `docs/dev/policies/0050-collaborative-development-workflow.md`
+- `docs/dev/policies/0051-shared-runtime-effect-custody.md`
 
 ## Scope
 
