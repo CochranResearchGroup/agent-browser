@@ -34,10 +34,14 @@ and [issue #136](https://github.com/CochranResearchGroup/agent-browser/issues/13
 define an advisory candidate, build, install, and recovery surface over the
 existing workstation transaction. It will expose evidence, recommendations,
 alternatives, and consequences while fencing concurrent corrupting commits.
-It will seal one production artifact and reuse it after merge when executable
-inputs are equivalent. Policies 0051 and 0052 now reject permanent coordinator
-or permission-service semantics. P190 is not admitted for implementation and
-has no active-lane entry or worktree while current checkout drift remains.
+Fast `ci` development builds remain non-promotable. The lane will instead build
+one production-shaped release artifact, test those exact bytes in an isolated
+development namespace, and promote them after merge when executable inputs are
+equivalent. Test runs also receive deterministic identity, deduplication,
+receipt-reuse, isolation, and cleanup rules. Policies 0051 and 0052 reject
+permanent coordinator or permission-service semantics. P190 is not admitted
+for implementation and has no active-lane entry or worktree while current
+checkout drift remains.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

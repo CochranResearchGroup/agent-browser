@@ -49,6 +49,15 @@ recommendations, alternatives, and consequences without turning ordinary
 contention into `permission_denied`. It must reuse sealed build artifacts when
 their executable-input closure remains equivalent after merge.
 
+Plan 0190 version 2 adds development-build and test coordination. The existing
+development publisher can preserve an explicitly selected binary as an
+immutable development generation, but the ordinary `ci` build differs from the
+production Cargo profile and is not promotable. The planned path builds one
+production-shaped release artifact, tests those exact bytes in an isolated
+development namespace, and later reclassifies the same artifact for production
+only after merged-source ancestry, executable-input equivalence, complete
+embedded assets, bound test receipts, and production preflight all pass.
+
 ## Upstream Candidate
 
 The shared policy library should consider a reusable runtime-effect

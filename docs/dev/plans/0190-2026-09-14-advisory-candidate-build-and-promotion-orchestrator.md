@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 1
+Plan version: 2
 
 State: PLANNED
 
@@ -11,6 +11,8 @@ Lane: P190
 Product lane: PL-PLATFORM
 
 Planning branch: `platform/p190-advisory-candidate-orchestrator-plan`
+
+Amendment branch: `platform/p190-dev-build-test-promotion-amendment`
 
 Implementation branch: `platform/p190-advisory-candidate-orchestrator`
 
@@ -21,6 +23,8 @@ Integration: merge
 Work item: [issue #136](https://github.com/CochranResearchGroup/agent-browser/issues/136)
 
 Source baseline: `d101eb1516a26a8ae40821c7da69bba77e43f78d`
+
+Version 2 baseline: `4e047fb4b51f605094b3557eb0cb0de1a2643a1e`
 
 Consolidation: required
 
@@ -43,6 +47,15 @@ The missing layer is a common candidate identity and advisory state machine
 that lets independent sessions discover, join, queue, cancel, discard,
 supersede, install, recover, or roll back without racing or rebuilding by
 default.
+
+The existing development publisher accepts an explicit binary, copies those
+exact bytes into an immutable development generation, and supplies the
+development environment through its launcher and units rather than a different
+compiled executable. The production workstation installer stages its own
+current executable and binds that binary digest into the upgrade transaction.
+Therefore a release-profile binary can be tested in development and later
+installed unchanged. The existing `ci` binary is not that artifact because its
+Cargo profile differs from production.
 
 The Plan 0186 installer collision showed that a process lock can serialize two
 commands while still leaving their intent and candidate ownership ambiguous.
@@ -73,6 +86,12 @@ to be reconciled.
 - Keep ordinary iteration on `pnpm build:development-candidate`. Use a full
   production candidate build only at qualification or when the input digest
   proves a rebuild necessary.
+- Do not promote the current `ci`-profile development binary as a production
+  build. It inherits release optimization but uses thin LTO and 16 codegen
+  units, while the production profile uses full LTO and one codegen unit.
+- Allow one production-shaped release artifact to be installed and tested in an
+  isolated development namespace, then promote those exact sealed bytes after
+  integration when every qualification condition remains true.
 
 ## Consolidated Batch
 
@@ -82,9 +101,10 @@ Add a focused `agent-browser-candidate` Rust crate that owns pure manifest,
 input-closure digest, advisory decision, and state-transition logic. Its
 manifest records schema version, candidate ID, source commit and tree,
 executable-input digest, target, toolchain, Cargo profile, features, reviewed
-environment-input digest, binary digest, support-manifest digest, creation
-time, and validation receipt locators. It stores no credentials, browser data,
-tenant payloads, or raw environment secrets.
+environment-input digest, embedded dashboard and asset digests, binary digest,
+support-manifest digest, creation time, artifact class, resolved build-profile
+configuration digest, and validation receipt locators. It stores no
+credentials, browser data, tenant payloads, or raw environment secrets.
 
 The first implementation packet must inventory the actual build dependency
 closure before freezing the digest contract. At minimum it evaluates Rust
@@ -92,12 +112,79 @@ workspace sources and manifests, `Cargo.lock`, build scripts, embedded assets,
 package-version inputs, target, toolchain, profile, features, and an explicit
 allowlist of build-affecting environment values. Documentation and merge
 metadata stay outside the closure unless the build demonstrably embeds them.
+The existing `cli/build.rs` embeds the exact source revision and clean or dirty
+tree state. Preserve those values as provenance while comparing the separately
+defined executable-input closure. Verify the embedded dashboard is complete and
+bind its digest; a placeholder or stale dashboard makes a candidate
+non-promotable.
 
 Deduplicate an active build by that input digest plus target, toolchain,
 profile, features, and reviewed environment digest. An equivalent request joins
 or observes the same build and receives its sealed artifact. Distinct admitted
 builds use isolated outputs and the existing Cargo resource-admission wrapper;
 they do not compete for one mutable target or hold the runtime install record.
+
+### Development build and test coordination
+
+Support two explicit artifact classes:
+
+- `fast_iteration`: the existing `ci` profile for economical compile and
+  provider-free development loops. Repeat it whenever the executable-input
+  digest changes; equivalent requests join the active build or reuse its
+  artifact. This class is never directly production-promotable.
+- `production_shaped`: the full production `release` profile with complete
+  embedded dashboard and assets, fixed target, toolchain, features, reviewed
+  environment inputs, and a clean source commit. Build this class once near the
+  qualification boundary and publish the exact binary into an isolated
+  development runtime for acceptance.
+
+Each lane receives a stable development namespace with disjoint install root,
+pseudo-home, runtime directory, sockets, ports, profiles, browser state, and
+optional provider resources. Namespace allocation is deterministic and
+observable. Tests must not borrow production identity or another lane's
+resources.
+
+Identify each test run by candidate digest, test-suite revision and exact
+selection, fixture digest, target platform, runtime capability manifest, and
+relevant environment-input digest. Equivalent requests join an active run.
+They may reuse a completed receipt only when the test declares itself hermetic,
+the complete identity still matches, and the receipt proves terminal cleanup.
+A changed identity starts a new run. Never reuse failed, partial, cancelled,
+quarantined, or provider-backed evidence outside its exact scope.
+
+Provider-free tests may overlap when output directories, homes, runtime trees,
+ports, profiles, and process groups are disjoint. Serialize only tests that
+genuinely share Chrome, a desktop, a provider, a production-like supervisor, or
+another workstation resource. Cancellation and timeout preserve the receipt
+and trigger exact task-owned residue inspection; client exit is not cleanup
+proof.
+
+### Development-to-production promotion
+
+Promotion is an evidence-backed reclassification of an immutable
+`production_shaped` artifact, not recompilation and not copying a development
+runtime into production. The same binary digest becomes eligible for the
+existing workstation transaction only when all of these are true:
+
+- the manifest says `release`, full LTO, one codegen unit, expected target,
+  toolchain, features, and reviewed environment inputs;
+- the embedded dashboard and every required support asset are complete and
+  digest-bound;
+- the build source tree was clean and the exact source commit is now an
+  ancestor of current canonical `origin/main` through the merged pull request;
+- current `origin/main` has an equivalent executable-input closure, with any
+  difference limited to excluded documentation or merge provenance;
+- all required provider-free, development-runtime, source-free workstation,
+  and selected acceptance receipts bind the exact binary digest and remain in
+  scope;
+- development-runtime doctor and exact task-owned residue checks pass; and
+- production preflight validates the sealed binary and support-manifest digests
+  before any runtime mutation.
+
+If any condition is false or unprovable, report `rebuild_required` with the
+exact differing input or missing receipt. The ordinary `fast_iteration`
+artifact can inform qualification but cannot be relabeled or installed as the
+production candidate.
 
 ### Existing transaction adapter
 
@@ -180,26 +267,29 @@ contention, drift, or a non-recommended operator choice.
    build.
 2. Implement the pure candidate crate with digest, equivalence, idempotency,
    advice, and state-transition tests.
-3. Seal development and production candidate artifacts through the existing
-   build entry points. Prove tamper detection and artifact pinning.
-4. Add read-only CLI inspection and status adapters, then align output, README,
+3. Add explicit fast-iteration and production-shaped artifact manifests,
+   same-input build joining, isolated outputs, and tamper detection.
+4. Add development namespace and test-run identities, receipt reuse, exact
+   cleanup, and shared-resource serialization.
+5. Add read-only CLI inspection and status adapters, then align output, README,
    repository skill, docs site, and inline documentation.
-5. Add explicit effect transitions over the existing workstation transaction,
+6. Add explicit effect transitions over the existing workstation transaction,
    with compare-and-swap, fencing, join, queue, cancellation, supersede,
    recovery, and rollback receipts.
-6. Run concurrency, crash, timeout, lock-duration, garbage-collection, and
-   doctor-readback acceptance. Qualify one production artifact and prove
-   post-merge executable-input equivalence before reusing it.
-7. Perform any production install only as a separately user-directed operation
+7. Build one production-shaped artifact, install it into the isolated
+   development runtime, run selected acceptance, and prove post-merge
+   executable-input equivalence without rebuilding.
+8. Perform any production install only as a separately user-directed operation
    after source integration and final state readback.
 
-Budget the implementation as six source packets plus the separate operational
-gate. Permit one development-candidate baseline build and one production
-candidate build. A second production build requires a recorded changed-input,
-missing-artifact, or verification-failure reason. Use focused provider-free
-tests per packet, one final selected validation set, and at most one bounded
-repair cycle before revising the plan. Do not start broad CI merely to observe
-progress.
+Budget the implementation as seven source packets plus the separate operational
+gate. Permit fast-iteration builds whenever their executable-input digest
+changes; equivalent requests must join or reuse instead of compiling again.
+Permit one production-shaped build. A second production-shaped build requires a
+recorded changed-input, missing-artifact, or verification-failure reason. Use
+focused provider-free tests per packet, reuse exact hermetic receipts, run one
+final selected validation set, and allow at most one bounded repair cycle
+before revising the plan. Do not start broad CI merely to observe progress.
 
 ## Worker Assignments
 
@@ -212,7 +302,7 @@ generated-client surfaces have one active writer per transition.
 
 ## Test Plan
 
-Provider-free fixtures must cover:
+Provider-free and isolated-development fixtures must cover:
 
 - identical and changed executable-input closures across a merge;
 - docs-only and merge-metadata changes that preserve artifact reuse;
@@ -220,6 +310,17 @@ Provider-free fixtures must cover:
 - duplicate same-candidate requests joining one operation;
 - duplicate same-input build requests producing one sealed artifact;
 - distinct admitted builds using isolated outputs and Cargo resource claims;
+- fast-iteration artifacts failing production-promotion eligibility;
+- a production-shaped artifact retaining one digest through isolated
+  development publication and production preflight;
+- clean source-commit ancestry plus equivalent post-merge executable inputs;
+- changed build profile, dashboard, asset, toolchain, feature, target, or
+  reviewed environment input requiring a rebuild;
+- duplicate test requests joining one run or reusing one exact hermetic receipt;
+- changed suite, fixture, capability, target, or environment identity starting
+  a new run;
+- parallel isolated provider-free runs and serialized shared-resource runs;
+- cancelled and timed-out tests preserving receipts and proving exact residue;
 - different-candidate wait, queue, cancel, discard, and supersede choices;
 - crash or timeout before effect, between commits, after runtime replacement,
   and before final doctor acceptance;
@@ -253,6 +354,13 @@ Plan 0190 is implementation-complete only when:
   preserve fencing and return durable typed receipts;
 - a sealed artifact is reused after merge when executable inputs are equivalent
   and rebuilt only with an exact recorded reason when they are not;
+- ordinary `ci` artifacts cannot pass production promotion, while one
+  production-shaped artifact can retain the same digest through isolated
+  development acceptance and workstation preflight;
+- equivalent development builds and hermetic tests join or reuse prior work,
+  while changed inputs produce isolated new work;
+- concurrent development lanes retain disjoint runtime, port, profile, browser,
+  provider, process, and output identities with exact residue readback;
 - active and queued artifacts survive generation cleanup until disposition;
 - all introduced user-facing contracts are documented in every required
   surface and selected provider-free gates pass; and
