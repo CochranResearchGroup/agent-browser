@@ -517,6 +517,35 @@ fn wait_for_production_scale_prepare_barrier() -> Result<(), String> {
 }
 
 #[cfg(test)]
+fn wait_for_foreground_precommit_barrier(attempt: usize) -> Result<(), String> {
+    let Some(root) = std::env::var_os("AGENT_BROWSER_TEST_FOREGROUND_PRECOMMIT_BARRIER_ROOT")
+    else {
+        return Ok(());
+    };
+    let root = PathBuf::from(root);
+    let ready_path = root.with_extension(format!("attempt-{attempt}-ready"));
+    let release_path = root.with_extension(format!("attempt-{attempt}-release"));
+    fs::write(&ready_path, b"ready")
+        .map_err(|error| format!("foreground_precommit_ready_write_failed:{error}"))?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !release_path.exists() {
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "foreground_precommit_release_timeout:attempt={attempt}"
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn foreground_legacy_optimistic_retry_enabled() -> bool {
+    std::env::var("AGENT_BROWSER_TEST_FOREGROUND_LEGACY_OPTIMISTIC_RETRY")
+        .is_ok_and(|value| value == "1")
+}
+
+#[cfg(test)]
 fn wait_for_production_scale_load_current_barrier() -> Result<(), String> {
     let Some(ready_path) =
         std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_LOAD_CURRENT_READY_PATH")
@@ -727,6 +756,18 @@ where
                 .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
             for attempt in 0..2 {
                 if attempt == 1 {
+                    #[cfg(test)]
+                    if foreground_legacy_optimistic_retry_enabled() {
+                        // Preserve the former second optimistic attempt only as
+                        // a red-capability oracle for the foreground race fixture.
+                    } else {
+                        return self.mutate_serialized_after_stale_candidate(
+                            timeout,
+                            &mut predicate,
+                            &mut mutator,
+                        );
+                    }
+                    #[cfg(not(test))]
                     return self.mutate_serialized_after_stale_candidate(
                         timeout,
                         &mut predicate,
@@ -773,6 +814,12 @@ where
                             "stale_candidate_replay",
                             Duration::ZERO,
                         );
+                        #[cfg(test)]
+                        if attempt == 1 && foreground_legacy_optimistic_retry_enabled() {
+                            return Err(format!(
+                                "service_state_stale_revision: expected={baseline_revision}; actual={current_revision}"
+                            ));
+                        }
                         continue;
                     }
                     return Ok(Some(result));
@@ -782,6 +829,9 @@ where
                     .store
                     .prepare_save(&candidate)?
                     .ok_or_else(|| "service_state_prepared_save_missing".to_string())?;
+
+                #[cfg(test)]
+                wait_for_foreground_precommit_barrier(attempt)?;
 
                 let commit_deadline = Instant::now() + timeout.max(Duration::from_millis(1));
                 let mut file_guard = acquire_service_state_file_lock_until(
@@ -809,6 +859,12 @@ where
                         "stale_candidate_replay",
                         Duration::ZERO,
                     );
+                    #[cfg(test)]
+                    if attempt == 1 && foreground_legacy_optimistic_retry_enabled() {
+                        return Err(format!(
+                            "service_state_stale_revision: expected={baseline_revision}; actual={current_revision}"
+                        ));
+                    }
                     continue;
                 }
                 drop(process_guard);
@@ -3476,13 +3532,15 @@ mod tests {
         let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(
             PathBuf::from(state_path),
         ));
+        let effect_id = std::env::var("AGENT_BROWSER_TEST_PRODUCTION_SCALE_EFFECT_ID")
+            .unwrap_or_else(|_| "slow-preparation-effect".to_string());
         let mut mutator_invocations = 0_u64;
         let outcome = repository.mutate(|state| {
             mutator_invocations += 1;
             state.jobs.insert(
-                "slow-preparation-effect".to_string(),
+                effect_id.clone(),
                 crate::native::service_model::ServiceJob {
-                    id: "slow-preparation-effect".to_string(),
+                    id: effect_id.clone(),
                     action: "snapshot".to_string(),
                     ..crate::native::service_model::ServiceJob::default()
                 },
@@ -3494,6 +3552,238 @@ mod tests {
             Err(error) => format!("error:{error}"),
         };
         fs::write(outcome_path, outcome).expect("helper outcome should be recorded");
+    }
+
+    fn run_foreground_revision_writer(path: &Path, effect_id: &str, outcome_path: &Path) {
+        let mut child = std::process::Command::new(
+            std::env::current_exe().expect("current Rust test executable should resolve"),
+        )
+        .args([
+            "--exact",
+            "native::service_store::tests::production_scale_mutation_helper",
+            "--nocapture",
+        ])
+        .env("AGENT_BROWSER_TEST_PRODUCTION_SCALE_STATE_PATH", path)
+        .env(
+            "AGENT_BROWSER_TEST_PRODUCTION_SCALE_OUTCOME_PATH",
+            outcome_path,
+        )
+        .env("AGENT_BROWSER_TEST_PRODUCTION_SCALE_EFFECT_ID", effect_id)
+        .env_remove("AGENT_BROWSER_TEST_FOREGROUND_PRECOMMIT_BARRIER_ROOT")
+        .env_remove("AGENT_BROWSER_TEST_FOREGROUND_LEGACY_OPTIMISTIC_RETRY")
+        .spawn()
+        .expect("foreground revision writer should start");
+        assert!(
+            child
+                .wait()
+                .expect("foreground revision writer should exit")
+                .success(),
+            "foreground revision writer process failed"
+        );
+        assert_eq!(
+            fs::read_to_string(outcome_path)
+                .expect("foreground revision writer should record its outcome"),
+            "ok:1"
+        );
+        fs::remove_file(outcome_path).expect("writer outcome should be removed after readback");
+    }
+
+    fn persist_foreground_projection_under_churn(
+        path: &Path,
+        session_id: &str,
+        barrier_root: &Path,
+        writer_prefix: &str,
+    ) -> (Result<(), String>, usize) {
+        std::env::set_var(
+            "AGENT_BROWSER_TEST_FOREGROUND_PRECOMMIT_BARRIER_ROOT",
+            barrier_root,
+        );
+        let path_for_thread = path.to_path_buf();
+        let session_for_thread = session_id.to_string();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let projection = std::thread::spawn(move || {
+            let repository =
+                LockedServiceStateRepository::new(JsonServiceStateStore::new(path_for_thread));
+            let result =
+                crate::native::service_health::persist_service_browser_record_in_repository(
+                    &repository,
+                    &session_for_thread,
+                    BrowserHost::LocalHeaded,
+                    BrowserHealth::Ready,
+                    Some(std::process::id()),
+                    Some("http://127.0.0.1:9222".to_string()),
+                    None,
+                    Some(crate::native::service_lifecycle::ServiceLaunchMetadata::default()),
+                    None,
+                );
+            sender
+                .send(result)
+                .expect("foreground projection result receiver should remain available");
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut writer_count = 0_usize;
+        let result = loop {
+            match receiver.try_recv() {
+                Ok(result) => break result,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    panic!("foreground projection result channel disconnected")
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+            assert!(
+                Instant::now() < deadline,
+                "foreground projection did not reach a terminal result"
+            );
+            let attempt = writer_count;
+            let ready_path = barrier_root.with_extension(format!("attempt-{attempt}-ready"));
+            if ready_path.exists() {
+                let effect_id = format!("{writer_prefix}-writer-{attempt}");
+                let outcome_path =
+                    barrier_root.with_extension(format!("attempt-{attempt}-writer-outcome"));
+                run_foreground_revision_writer(path, &effect_id, &outcome_path);
+                fs::write(
+                    barrier_root.with_extension(format!("attempt-{attempt}-release")),
+                    b"release",
+                )
+                .expect("foreground projection attempt should be released");
+                writer_count += 1;
+            } else {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        };
+        projection
+            .join()
+            .expect("foreground projection thread should not panic");
+        for attempt in 0..writer_count {
+            fs::remove_file(barrier_root.with_extension(format!("attempt-{attempt}-ready")))
+                .expect("foreground ready barrier should be removed");
+            fs::remove_file(barrier_root.with_extension(format!("attempt-{attempt}-release")))
+                .expect("foreground release barrier should be removed");
+        }
+        (result, writer_count)
+    }
+
+    #[test]
+    fn foreground_launch_projection_fixture_rejects_legacy_optimistic_retry() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_TEST_FOREGROUND_PRECOMMIT_BARRIER_ROOT",
+            "AGENT_BROWSER_TEST_FOREGROUND_LEGACY_OPTIMISTIC_RETRY",
+        ]);
+        guard.set("AGENT_BROWSER_TEST_FOREGROUND_LEGACY_OPTIMISTIC_RETRY", "1");
+        let path = unique_state_path("foreground-launch-legacy-optimistic-retry");
+        let store = JsonServiceStateStore::new(&path);
+        store
+            .save(&ServiceState::default())
+            .expect("legacy foreground launch fixture should save");
+        let barrier = path.with_extension("legacy-foreground-barrier");
+
+        let (result, writer_count) = persist_foreground_projection_under_churn(
+            &path,
+            "legacy-foreground-launch",
+            &barrier,
+            "legacy-foreground",
+        );
+        guard.remove("AGENT_BROWSER_TEST_FOREGROUND_PRECOMMIT_BARRIER_ROOT");
+        guard.remove("AGENT_BROWSER_TEST_FOREGROUND_LEGACY_OPTIMISTIC_RETRY");
+
+        let error = result.expect_err("legacy optimistic retry must lose the second revision race");
+        assert!(
+            error.starts_with("service_state_stale_revision:"),
+            "{error}"
+        );
+        assert_eq!(writer_count, 2);
+        let final_state = store
+            .load()
+            .expect("legacy red fixture state should remain readable");
+        assert!(!final_state
+            .browsers
+            .contains_key("session:legacy-foreground-launch"));
+        assert!(final_state.jobs.contains_key("legacy-foreground-writer-0"));
+        assert!(final_state.jobs.contains_key("legacy-foreground-writer-1"));
+        assert!(!service_state_lock_holder_path(&path).exists());
+        assert!(!service_state_transaction_path(&path).exists());
+        fs::remove_dir_all(path.parent().unwrap())
+            .expect("legacy foreground fixture state should be removed");
+    }
+
+    #[test]
+    fn foreground_launch_projection_converges_twice_under_cross_process_revision_churn() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_TEST_FOREGROUND_PRECOMMIT_BARRIER_ROOT",
+            "AGENT_BROWSER_TEST_FOREGROUND_LEGACY_OPTIMISTIC_RETRY",
+        ]);
+        guard.remove("AGENT_BROWSER_TEST_FOREGROUND_LEGACY_OPTIMISTIC_RETRY");
+        let path = unique_state_path("foreground-launch-cross-process-revision-churn");
+        let store = JsonServiceStateStore::new(&path);
+        store
+            .save(&ServiceState::default())
+            .expect("foreground launch fixture should save");
+
+        let first_barrier = path.with_extension("first-foreground-barrier");
+        let (first, first_writer_count) = persist_foreground_projection_under_churn(
+            &path,
+            "foreground-launch-one",
+            &first_barrier,
+            "foreground-one",
+        );
+        assert!(
+            first.is_ok(),
+            "first foreground launch projection failed: {first:?}"
+        );
+
+        let second_barrier = path.with_extension("second-foreground-barrier");
+        let (second, second_writer_count) = persist_foreground_projection_under_churn(
+            &path,
+            "foreground-launch-two",
+            &second_barrier,
+            "foreground-two",
+        );
+        assert!(
+            second.is_ok(),
+            "second foreground launch projection failed: {second:?}"
+        );
+        guard.remove("AGENT_BROWSER_TEST_FOREGROUND_PRECOMMIT_BARRIER_ROOT");
+
+        let final_state = store
+            .load()
+            .expect("foreground launch final state should remain readable");
+        assert_eq!(first_writer_count, 1);
+        assert_eq!(second_writer_count, 1);
+        assert_eq!(final_state.state_revision, 4);
+        for effect_id in ["foreground-one-writer-0", "foreground-two-writer-0"] {
+            assert!(final_state.jobs.contains_key(effect_id));
+        }
+        for session_id in ["foreground-launch-one", "foreground-launch-two"] {
+            let browser_id = format!("session:{session_id}");
+            let browser = final_state
+                .browsers
+                .get(&browser_id)
+                .unwrap_or_else(|| panic!("missing foreground browser projection {browser_id}"));
+            assert_eq!(browser.active_session_ids, vec![session_id.to_string()]);
+            assert_eq!(
+                final_state
+                    .browsers
+                    .keys()
+                    .filter(|id| id.as_str() == browser_id)
+                    .count(),
+                1
+            );
+        }
+        assert!(
+            !service_state_lock_holder_path(&path).exists(),
+            "foreground launches must not retain a lock holder"
+        );
+        assert!(
+            !service_state_transaction_path(&path).exists(),
+            "foreground launches must not retain a transaction"
+        );
+        fs::remove_dir_all(path.parent().unwrap())
+            .expect("foreground launch disposable state should be removed");
+        assert!(
+            !path.parent().unwrap().exists(),
+            "foreground launch disposable state directory remained"
+        );
     }
 
     #[test]

@@ -25,6 +25,21 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P196 | Foreground Launch Stale Revision Acceptance
+
+State: OPEN
+
+Current state: [Plan 0196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)
+reactivates [issue #87](https://github.com/CochranResearchGroup/agent-browser/issues/87)
+after #76's shared persistence dependency integrated. Candidate `73001841`
+adds the missing provider-free multi-process foreground-launch projection
+regression. Its legacy oracle reproduces the typed stale-revision failure after
+two independent writers; current replay succeeds for two sequential projections,
+preserves both writer updates, records each projection once, and leaves no
+task-owned residue. No adapter repair is required. All 43 store tests, exact
+owned-launch cleanup, format, and strict Clippy pass. Protected integration is
+next, followed by one production candidate consolidating #76, #131, and #87.
+
 ## P195 | Custom Profile Identity Repair
 
 State: CLOSED
