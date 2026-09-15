@@ -11,6 +11,10 @@
   name one coordination owner for those surfaces instead of allowing every lane
   to edit them independently. A person or session may fill more than one role
   when the portfolio is small and the ownership remains unambiguous.
+- Keep source-lane ownership separate from shared-runtime effect custody. A
+  catalog entry may identify the lane allowed to request custody, but it does
+  not acquire or prove a live lease. Covered production and staging mutations
+  follow `0051-shared-runtime-effect-custody.md`.
 - Keep plan outcome state separate from Git custody state. Use a small plan vocabulary such as `PLANNED`, `OPEN`, `BLOCKED`, `CLOSED`, and `CANCELLED`, and a custody vocabulary such as `ACTIVE_WORKTREE`, `PAUSED_REF`, `INTEGRATION_READY`, `INTEGRATED`, `ARCHIVED`, and `DISCARD_APPROVED`.
 - Keep detailed plans with their topic branches. Expose deterministic metadata for lane, state, branch, target, integration method, dependencies, overlaps, and base or checkpoint evidence so an auditor can read it from an explicit ref without checkout.
 - Do not put absolute worktree paths, ephemeral agent identifiers, secrets, tenant data, or private runtime details in the shared catalog. Derive local worktree locations during reconciliation.

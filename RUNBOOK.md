@@ -1,10 +1,20 @@
 # Runbook
 
-Current execution and stop-state index. Detailed checkpoints through Turn 312
-are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
+Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md) preserves checkpoints through Turn 312.
 [Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
 [Superseded Plan 0186 checkpoints through Turn 328 are preserved separately](RUNBOOK-history-2026-09-14-p186-through-turn328.md).
 Keep this file at or below 200 lines under policy 0043.
+
+## Turn 330 | 2026-09-14
+
+Issue #132 owns a `PL-PLATFORM` policy correction after the Plan 0186 installer
+collision proved comments and file locks do not establish runtime effect
+custody. Policy 0051 defines one atomic environment lease with
+command-bound validation, renewal, transfer, release, stale-owner recovery, and
+auditable receipts. Until runtime enforcement lands, one coordinator session
+must serialize production and staging effects with fresh pre-command readback.
+This docs-only slice performs no runtime mutation. Next: validate, merge, and
+close the policy work item; runtime enforcement remains a separate delivery.
 
 ## Turn 329 | 2026-09-14
 

@@ -39,6 +39,10 @@
   volatile ownership from current evidence before admitting new work. A static
   inventory may declare expected routes, displays, identities, and capacity; it
   cannot establish current occupancy by itself.
+- Keep current effect custody distinct from runtime occupancy and historical
+  ownership. A live process does not prove command authority, and an absent
+  process does not release a custody lease. Shared environment mutations follow
+  `0051-shared-runtime-effect-custody.md`.
 - A runtime denial must report the blocked operation, the current evidence, the
   unavailable-work impact, and one supported recovery action. It must not leave
   an owned profile indefinitely unusable merely because historical state was

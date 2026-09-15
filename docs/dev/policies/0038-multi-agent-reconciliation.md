@@ -21,6 +21,11 @@
   bounded work. Session topology is an implementation choice; ownership,
   evidence, and reconciliation must remain clear across session replacement.
 - If a collision reveals weak lane boundaries, update the plan or policy so the same overlap is less likely next time.
+- When the collision involves a shared runtime effect, suspend new effects
+  until the authoritative custody lease and runtime receipts select one
+  controller. Agent idleness, command exit, chat handoff, and file-lock release
+  are insufficient by themselves. Apply
+  `0051-shared-runtime-effect-custody.md`.
 - Do not treat an agent session ending as Git closure. The responsible owner must leave a clean published checkpoint and an explicit custody or integration disposition before its worktree can be removed safely.
 
 ## Adoption Notes

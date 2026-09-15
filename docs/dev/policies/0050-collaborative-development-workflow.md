@@ -56,6 +56,10 @@
   the commit entered the branch through a merged pull request. Normal deployment
   uses the current verified remote tip; an authorized rollback may select a
   previously merged commit on that branch with an incident or rollback record.
+- Before any shared production or staging runtime mutation, acquire and validate
+  the single-owner lease defined by
+  `0051-shared-runtime-effect-custody.md`. Forge coordination and source custody
+  remain necessary, but neither is runtime effect custody.
 - Record the repository, canonical remote ref, exact commit, actor, target
   environment, validation, authorization, and post-deploy readback. Deployment
   automation must fail closed when the candidate is local-only, the remote

@@ -65,6 +65,10 @@ ownership and evidence.
   data by convenience.
 - Until per-lane isolation is proven, serialize use of any shared development
   runtime. Runtime availability is capacity evidence, not effect authority.
+- Serialize every shared production or staging mutation through the atomic
+  custody contract in `0051-shared-runtime-effect-custody.md`. Source-lane
+  ownership, an active issue, a custody comment, and an installer file lock do
+  not grant that live-effect lease.
 - Serialize authenticated browser or provider canaries unless an explicit plan
   proves separate profiles and independent effect boundaries. Multiple runtimes
   do not authorize parallel external effects.
