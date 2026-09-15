@@ -12809,6 +12809,19 @@ fn materialize_guacamole_assets(staged_support: &Path) -> Result<(), String> {
         }
     }
     materialize_guacamole_defaults_extension(&guacamole_dir)?;
+    let extension_dir = guacamole_dir.join("extensions");
+    set_public_directory(&extension_dir)?;
+    for entry in fs::read_dir(&extension_dir).map_err(display_io(
+        "read Guacamole extension staging",
+        &extension_dir,
+    ))? {
+        let path = entry
+            .map_err(|error| format!("Unable to read Guacamole extension entry: {error}"))?
+            .path();
+        if path.is_file() {
+            set_public_file(&path)?;
+        }
+    }
     Ok(())
 }
 
@@ -13184,6 +13197,26 @@ fn set_executable(path: &Path) -> Result<(), String> {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o755))
             .map_err(display_io("set executable permissions on", path))?;
+    }
+    Ok(())
+}
+
+fn set_public_directory(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755))
+            .map_err(display_io("set public directory permissions on", path))?;
+    }
+    Ok(())
+}
+
+fn set_public_file(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o644))
+            .map_err(display_io("set public file permissions on", path))?;
     }
     Ok(())
 }
@@ -16795,6 +16828,29 @@ mod tests {
                     & 0o111,
                 0
             );
+            assert_eq!(
+                fs::metadata(root.join("guacamole/extensions"))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o755
+            );
+            for relative in [
+                "guacamole/extensions/guac-manifest.json",
+                "guacamole/extensions/agent-browser-defaults.js",
+                "guacamole/extensions/agent-browser-defaults.jar",
+            ] {
+                assert_eq!(
+                    fs::metadata(root.join(relative))
+                        .unwrap()
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o644,
+                    "container-readable Guacamole extension mode for {relative}"
+                );
+            }
         }
 
         fs::remove_dir_all(&root).unwrap();
