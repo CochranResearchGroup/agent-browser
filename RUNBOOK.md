@@ -13,15 +13,17 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 341 | 2026-09-15
 
-[Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md) candidate `fd5bb67f` fixes issue #131 without touching P194's `service_store.rs`.
-The red launch-path regression is green; focused and native-service Rust, strict Clippy, docs, and selected workstation checks pass. Protected integration
+[Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md) candidate `fd5bb67f` fixes issue #131 without touching P194's `service_store.rs`. The red launch-path regression is green; focused and native-service Rust, strict Clippy, docs, and selected workstation checks pass. Protected integration
 remains. No browser, install, provider, production, or release effect occurred; exact disposable workstation fixture residue was terminated after validation.
 
 ## Turn 340 | 2026-09-15
 
-P194 candidate `9fa6c586` repairs issue #76's production-scale `prepared_commit/load_current` timeout with a revision-only freshness probe and bounded parser stack.
-The 9.64 MB red case failed at 1,002 ms on unchanged logic, then passed on the candidate. All 41 `service_store` tests, format, and strict Clippy pass,
-including issue #87's pure adjacent-revision convergence. Protected integration remains; no production or browser effect occurred.
+P194 and issue #76 are closed after PR #146 merged source head `510bf266` as
+`f1435195`. The revision-only freshness probe and bounded parser stack pass the
+9.64 MB regression, all 41 `service_store` tests, issue #87's pure adjacent-
+revision case, format, strict Clippy, and canonical CI run 35007032152. No
+production install, monitor retry, browser, profile, provider, or Service State
+effect occurred; those live gates remain separate.
 
 ## Turn 339 | 2026-09-15
 

@@ -40,20 +40,18 @@ release effect occurred.
 
 ## P194 | Service State Load-Current Contention Repair
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0194](docs/dev/plans/0194-2026-09-15-service-state-load-current-contention-repair.md)
 and [issue #76](https://github.com/CochranResearchGroup/agent-browser/issues/76)
-own the residual production-scale `prepared_commit/load_current` timeout. Plan
-0167's 9.64 MB multi-process slow-preparation fixture and durable holder
-telemetry remain accepted. Candidate `9fa6c586` adds the missing slow-full-
-reload red case and uses a revision-only persisted freshness probe when recovery
-is not pending, retaining the explicit bounded JSON parser stack. The baseline failed at 1,002 ms in
-`prepared_commit/load_current`; the candidate passes the 9.64 MB replay, all
-41 `service_store` tests, format, and strict Clippy without increasing the
-one-second deadline. Issue #87's one-revision pure-replay case remains green.
-Protected integration is pending; production installation and monitor soak
-remain separately live-gated.
+are closed after PR #146 merged as `f1435195`. Candidate `9fa6c586` adds the
+missing 9.64 MB slow-full-reload red case and uses a revision-only persisted
+freshness probe with a bounded parser stack when recovery is not pending. The
+baseline failed at 1,002 ms in `prepared_commit/load_current`; the candidate
+passes that replay, all 41 `service_store` tests, format, strict Clippy, issue
+#87's pure adjacent-revision case, and canonical CI run 35007032152 without
+increasing the one-second deadline. Production installation and monitor soak
+remain separately live-gated and were not executed by this source plan.
 
 ## P191 | Repository Worktree And Lane Reconciliation
 

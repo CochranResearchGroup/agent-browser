@@ -22,25 +22,6 @@ lanes:
     reconciled_overlaps: [P190]
     blocker: W5 is integrated; W6 is unstarted and not admitted, while issue #66 retains the separately live-gated challenge acceptance leaf
     updated_at: 2026-09-15
-  - id: P194
-    product_lane: PL-BUGFIX
-    objective: Eliminate the residual production-scale Service State prepared-commit lock timeout without extending the ordinary deadline
-    plan: docs/dev/plans/0194-2026-09-15-service-state-load-current-contention-repair.md
-    plan_ref: refs/heads/fix/issue-76-service-state-lock
-    branch: fix/issue-76-service-state-lock
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 9fa6c5869c528f9b9136d2a5e035680f182e2501
-    remote_ref: refs/remotes/origin/fix/issue-76-service-state-lock
-    integration: merge through the protected `main` workflow after provider-free qualification
-    validation_status: red reproduced at 1002 ms; candidate passes 41 service_store tests, exact production-scale replay, format, and strict Clippy
-    work_items: [CochranResearchGroup/agent-browser#76, CochranResearchGroup/agent-browser#87]
-    dependencies: []
-    overlaps: [P195]
-    reconciled_overlaps: [P195]
-    blocker: production installation and monitor soak remain live-gated; provider-free source work is active
-    updated_at: 2026-09-15
   - id: P195
     product_lane: PL-BUGFIX
     objective: Preserve valid custom profile path identity without reinterpreting it as a managed runtime-profile name
@@ -56,7 +37,7 @@ lanes:
     validation_status: red reproduced; candidate passes focused and native-service Rust, format, strict Clippy, docs, and selected workstation checks
     work_items: [CochranResearchGroup/agent-browser#131]
     dependencies: []
-    overlaps: [P194]
-    reconciled_overlaps: [P194]
-    blocker: protected integration remains; P195 is source-disjoint from P194 and permits no browser, profile, install, provider, production, or release effect
+    overlaps: []
+    reconciled_overlaps: []
+    blocker: protected integration remains; P195 permits no browser, profile, install, provider, production, or release effect
     updated_at: 2026-09-15
