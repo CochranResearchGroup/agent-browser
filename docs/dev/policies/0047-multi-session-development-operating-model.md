@@ -11,10 +11,11 @@ ownership and evidence.
 - Use one top-level Codex session as the owner of each substantive development
   lane. A lane session owns one work item, one bounded plan, one short-lived
   branch, one worktree, its acceptance evidence, and its handoff.
-- Keep one separate coordinator session for intake, roadmap priority,
-  dependency joins, shared-contract decisions, active-lane reconciliation, and
-  final integration. Small conflict resolution and shared-authority edits are
-  the coordinator's normal coding boundary.
+- Treat portfolio coordination as a responsibility, not a permanent agent
+  identity or permission role. The user may direct any session to perform
+  intake, priority, dependency joins, shared-contract decisions, lane
+  reconciliation, or integration. Serialize each shared-authority transition
+  and record its result before another session changes the same surface.
 - Use subagents inside a lane only for concrete, bounded support work. The lane
   owner reconciles every result and remains accountable for the outcome.
 - Keep routine delegation one level deep. A lane owner's subagent must not
@@ -28,12 +29,11 @@ ownership and evidence.
 
 - Use the five product lanes in `docs/dev/product-lanes.md`: `PL-BUGFIX`,
   `PL-AUTH`, `PL-CHALLENGE`, `PL-RECIPES`, and `PL-PLATFORM`.
-- Keep the normal repository-wide hard limit at six substantive active
-  worktrees: one per product lane plus one additional disjoint bugfix
-  worktree. The operative limit is lower when fewer top-level development
-  sessions have been explicitly admitted. One admitted session owns at most
-  one primary worktree, so four admitted development sessions permit four
-  primary worktrees.
+- Treat six substantive active worktrees as the repository-wide hard warning
+  threshold: one per product lane plus one additional disjoint bugfix worktree.
+  The expected population is lower when fewer top-level development sessions
+  are active. One active session normally owns at most one primary worktree, so
+  four development sessions normally correspond to four primary worktrees.
 - Reserve bugfix capacity for production-impacting defects. Pause the
   lowest-priority conflicting lane when needed, start the repair from current
   `origin/main`, integrate it first, then reconcile affected feature branches.
@@ -41,9 +41,9 @@ ownership and evidence.
   overlapping writes, live-effect serialization, and review load may require
   fewer concurrent lanes.
 - Apply `0052-session-and-worktree-admission.md` to every portfolio assignment,
-  worktree creation, session handoff, and session closeout. The coordinator
-  creates or assigns primary worktrees serially; lane sessions do not create
-  additional durable checkouts for reviewers, benchmarks, fixtures, or
+  worktree creation, session handoff, and session closeout. Create or assign
+  primary worktrees serially from a refreshed inventory. Do not create
+  additional durable checkouts merely for reviewers, benchmarks, fixtures, or
   replacement workers.
 
 ## Git And Shared Authority
@@ -53,10 +53,10 @@ ownership and evidence.
 - Register substantive lanes in `docs/dev/active-lanes.yaml` before parallel
   execution and publish a recoverable remote checkpoint at the earliest safe
   boundary.
-- The coordinator owns `ROADMAP.md`, `RUNBOOK.md`,
-  `docs/dev/active-lanes.yaml`, issue taxonomy, shared schemas, and other
-  declared integration surfaces. Lane sessions may propose changes but must not
-  independently rewrite those authorities.
+- `ROADMAP.md`, `RUNBOOK.md`, `docs/dev/active-lanes.yaml`, issue taxonomy,
+  shared schemas, and other declared integration surfaces have one active
+  writer per transition. The user may assign that work to any session; no
+  session owns those authorities permanently.
 - Freeze shared schemas and interfaces before parallel implementations depend
   on them. Record dependencies and overlaps rather than discovering them at
   merge time.
@@ -74,21 +74,22 @@ ownership and evidence.
   data by convenience.
 - Until per-lane isolation is proven, serialize use of any shared development
   runtime. Runtime availability is capacity evidence, not effect authority.
-- Serialize every shared production or staging mutation through the atomic
-  custody contract in `0051-shared-runtime-effect-custody.md`. Source-lane
-  ownership, an active issue, a custody comment, and an installer file lock do
-  not grant that live-effect lease.
+- Coordinate every shared production or staging mutation through policy 0051.
+  Its transaction and fencing protect runtime integrity; they do not determine
+  operator authority or require a permanent coordinator agent.
 - Serialize authenticated browser or provider canaries unless an explicit plan
   proves separate profiles and independent effect boundaries. Multiple runtimes
   do not authorize parallel external effects.
-- Promotion flows from lane evidence to integration, staging acceptance, and
-  production under the applicable release and effect authority.
+- Promotion flows from lane evidence to integration, artifact qualification,
+  and an explicit user-directed staging or production transition. Reuse a
+  sealed artifact when its executable inputs remain equivalent after merge;
+  do not require a second build merely because integration changed metadata.
 
 ## Request And Delivery Discipline
 
 - Use the lifecycle: work item to bounded plan to lane owner to worktree and
   branch to isolated development runtime when needed to review and acceptance
-  to coordinator integration to the separate staging or production gate.
+  to serialized integration to an advisory staging or production transition.
 - Every work item and plan names its outcome, non-goals, owner, dependencies,
   expected writes, acceptance evidence, stop condition, and effect boundary.
 - Handoffs state the current ref and checkpoint, worktree and branch locator,

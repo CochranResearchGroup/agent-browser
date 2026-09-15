@@ -19,9 +19,9 @@
   tracker. Claim it with an accountable owner and an `in progress` state before
   editing so another contributor or agent can discover the active lane.
 - An `in progress` work item does not by itself admit another local checkout.
-  In this repository the coordinator must assign the primary worktree through
+  In this repository, create or assign the primary worktree serially under
   `0052-session-and-worktree-admission.md` after reconciling the complete local
-  worktree population.
+  population. This coordination step is not a permission decision.
 - Keep the work-item projection concise. It must identify the objective,
   accountable owner, current status, affected surface, risk or live effect,
   branch, durable plan locator when one exists, known overlaps or dependencies,
@@ -60,10 +60,10 @@
   the commit entered the branch through a merged pull request. Normal deployment
   uses the current verified remote tip; an authorized rollback may select a
   previously merged commit on that branch with an incident or rollback record.
-- Before any shared production or staging runtime mutation, acquire and validate
-  the single-owner lease defined by
-  `0051-shared-runtime-effect-custody.md`. Forge coordination and source custody
-  remain necessary, but neither is runtime effect custody.
+- Before any shared production or staging runtime mutation, inspect and join or
+  establish the exact operation defined by policy 0051. The operation record
+  and fencing protect integrity but do not grant permission or override current
+  user authority.
 - Record the repository, canonical remote ref, exact commit, actor, target
   environment, validation, authorization, and post-deploy readback. Deployment
   automation must fail closed when the candidate is local-only, the remote

@@ -27,11 +27,11 @@
   are insufficient by themselves. Apply
   `0051-shared-runtime-effect-custody.md`.
 - Do not treat an agent session ending as Git closure. The responsible owner must leave a clean published checkpoint and an explicit custody or integration disposition before its worktree can be removed safely.
-- Do not treat an agent session starting as worktree authority. The coordinator
-  admits and assigns primary worktrees under
-  `0052-session-and-worktree-admission.md`. A reviewer, benchmark, or red-team
-  pass remains inside its parent lane and must not leave an unexplained
-  checkout after the bounded pass ends.
+- Do not treat an agent session starting as worktree authority. Coordination is
+  not a permanent permission role; serialize each primary-worktree admission
+  under policy 0052 with current inventory evidence. A reviewer, benchmark, or
+  red-team pass remains inside its parent lane and must not leave an
+  unexplained checkout after the bounded pass ends.
 
 ## Adoption Notes
 
