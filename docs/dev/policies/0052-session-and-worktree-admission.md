@@ -24,6 +24,15 @@ attributable and disposable.
 - No agent title grants worktree authority. The session performing an admission
   is temporarily responsible for the inventory, collision check, creation
   receipt, and handoff. The user may redirect that responsibility at any time.
+- Treat tracker state and worktree admission as separate decisions. A READY
+  item is eligible for assignment but does not reserve a session or authorize a
+  checkout. BLOCKED umbrellas, live operational gates, and TRIAGE evidence
+  items remain coordination records until their exact blocker or scope is
+  resolved.
+- Use a subagent within an admitted lane only when the task can return to the
+  lane owner without independent Git or runtime custody. If the work needs its
+  own durable branch, merge decision, candidate build, or terminal disposition,
+  it is a top-level lane and must pass this admission procedure.
 
 ## Admission Procedure
 
