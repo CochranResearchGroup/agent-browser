@@ -11,6 +11,18 @@ Keep this file at or below 200 lines under policy 0043.
 - [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 336 | 2026-09-15
+
+P169 W0 through W4 are integrated. PR #128 merged source checkpoint
+`d7c59be2` into `main` as `e2bd73ff`. Exact-head PR CI passed after one bounded
+rerun of a diagnosed timing-threshold flake. Merge-commit CI run 34977471104
+and Lease Authority run 34977470855 pass; the latter covers Linux, Windows,
+and both macOS targets. The source branch remains durably published while its
+clean checkout is retired after this reconciliation lands. Plan 0187 and issue
+#127 remain OPEN because W5 through W8 are not delivered; W5 is unstarted and
+not admitted. Issue #66 remains the separately live-gated leaf. No browser,
+CAPTCHA, provider, installed-runtime, production, or release effect occurred.
+
 ## Turn 335 | 2026-09-14
 
 P169 remains the valid antibot worktree and is ready for protected-main

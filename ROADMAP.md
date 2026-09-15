@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-14
+Updated: 2026-09-15
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -35,9 +35,9 @@ close the exact repository cleanup campaign through PR #140. Five integrated or 
 auxiliary worktrees have been removed after their dirty task artifacts were
 preserved. P180 and P183 through P185 now close from merged source plus P186
 cumulative installed acceptance. P182 remains open only for its preserved
-same-run operational acceptance. The surviving challenge checkout is
-registered as P169 on `challenge/p169-control-plane` at `fec7fd87` through
-Plan 0187, issue #127, leaf issue #66, and draft PR #128.
+same-run operational acceptance. The then-surviving challenge checkout was
+registered as P169 through Plan 0187, issue #127, leaf issue #66, and PR #128.
+Its W0 through W4 source later integrated into `main` as `e2bd73ff`.
 
 ## P190 | Advisory Candidate Build And Promotion Orchestrator
 
@@ -61,19 +61,19 @@ prior checkout drift but does not itself activate P190.
 
 State: OPEN
 
-Current state: branch-local
-[Plan 0187](https://github.com/CochranResearchGroup/agent-browser/blob/challenge/p169-control-plane/docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md),
+Current state:
+[Plan 0187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md),
 [issue #127](https://github.com/CochranResearchGroup/agent-browser/issues/127),
 leaf [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66),
-and draft [PR #128](https://github.com/CochranResearchGroup/agent-browser/pull/128)
-own the active provider-neutral challenge control-plane lane. Local and remote
-source custody agrees at `406323bbb61201a59dcf3fc7eea64e2b2631738e`, which
-already contains current `main` checkpoint `58349195`. W0 through W4 are
-complete: the phase-bound freshness repair, desktop-services extraction,
-challenge-control extraction, and two-profile provider-free Service slice pass
-their local source gates. Final integration-custody documentation and exact-head
-CI remain before protected-main integration. W5 is unstarted and not admitted.
-This registration authorizes no challenge attempt, retry, browser effect,
+and merged [PR #128](https://github.com/CochranResearchGroup/agent-browser/pull/128)
+own the provider-neutral challenge control-plane lane. Source checkpoint
+`d7c59be2` integrated into `main` as `e2bd73ff`. Exact-head PR CI, merge-commit
+CI run 34977471104, and the four-platform Lease Authority run 34977470855 pass.
+W0 through W4 are integrated: the phase-bound freshness repair,
+desktop-services extraction, challenge-control extraction, and two-profile
+provider-free Service slice. W5 is the next workfront but remains unstarted and
+not admitted. Issue #66 retains the separately live-gated challenge acceptance
+leaf. This registration authorizes no challenge attempt, retry, browser effect,
 provider effect, runtime mutation, or release.
 
 ## P186 | Route Viewer Admission Drain Recovery

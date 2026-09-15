@@ -33,19 +33,16 @@ mutation, a challenge attempt, a retry, production mutation, or release.
 
 ## Current State
 
-W0 through W3 are complete on `challenge/p169-control-plane` through parent
-issue #127. Reconciliation checkpoint
-`cd898b39970a62c01ce10cad90631c606172d7a0` joins current `main` checkpoint
-`58349195ccdc5fb2eb53966b31170029594e78a2` without rewriting the preserved
-feature branch at `2ae7a68332b7a505c74bbd1e987d8a82fb52409d`. Challenge packets
-remain normalized as Plan 0188 and Plan 0189. The prior Rust failure was a
-fixture migration gap after stock Chrome became capability-gated; repair
-checkpoint `3146523d1f4b1e99f622c4efa1c6e8a979539ff5` keeps the production guard
-fail-closed and gives unrelated launch fixtures an explicit test executable.
-The exact 256-test native-actions compartment, formatting, strict Clippy, the
-challenge-control architecture contract, and the challenge-control crate tests
-pass. W4 is complete through Plan 0192. W5 is the next unstarted workfront. No
-live effect is authorized.
+W0 through W4 are integrated through parent issue #127. Source checkpoint
+`d7c59be27003189dc20fa21d79dbceed0d50a0c5` merged through PR #128 into
+`main` as `e2bd73ff6c90063cf074b885cfda6ea52fa4e3af`. Exact-head PR CI passed
+after one bounded rerun of a diagnosed timing-threshold flake. Merge-commit CI
+run 34977471104 and four-platform Lease Authority run 34977470855 also pass.
+The integrated batch contains the phase-bound freshness repair, extracted
+desktop-services and challenge-control crates, and Plan 0192's two-profile
+provider-free Service slice. W5 is the next unstarted workfront and is not
+admitted. Issue #66 retains the separately live-gated challenge acceptance
+leaf. No live effect is authorized by this integration receipt.
 
 ## Consolidation
 
