@@ -1,20 +1,20 @@
 # Runbook
 
-Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md) preserves checkpoints through Turn 312.
-[Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
-[Superseded Plan 0186 checkpoints through Turn 328 are preserved separately](RUNBOOK-history-2026-09-14-p186-through-turn328.md).
+Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md) preserves checkpoints through Turn 312; [Turn 313](RUNBOOK-history-2026-09-13-turn313.md) and [superseded P186 checkpoints through Turn 328](RUNBOOK-history-2026-09-14-p186-through-turn328.md) are separate.
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 333 | 2026-09-14
+## Turn 334 | 2026-09-14
 
-[Plan 0190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md) and issue #136 define a deterministic advisory candidate, build, install, and recovery orchestrator over the existing workstation transaction. Policies 0051 and 0052 distinguish user authority from integrity fencing and reject a
-permanent coordinator or generic permission-service model. Plan version 2 adds
-development build and test identity, same-input deduplication, isolated lane
-runtimes, exact receipt reuse, and residue checks. Fast `ci` binaries remain
-non-promotable; one production-shaped release artifact may be tested in
-development and promoted as the same bytes after merge when its source and executable inputs qualify. P190 is not admitted for
-implementation and has no active-lane entry or worktree while existing checkout drift remains. This planning slice performs no build, install, runtime, or
-worktree cleanup effect.
+[Plan 0191](docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md) and issue #139 reconcile repository custody before further development.
+Eight P181 wake lifecycle files are preserved in a user-scoped archive with
+SHA-256 `a7249285b59ce1644b2401406f9f3519e4627af4f2b8c4fddd843e0aaf2e0b32`;
+both detached benchmark diffs have standalone patches. Five integrated or
+disposable auxiliaries are removed, leaving canonical P191 and challenge P169.
+P180 and P183 through P185 close from merged source plus P186 installed
+acceptance. P182 remains OPEN without source custody because its same-run
+acceptance was not exercised. P169 now points to Plan 0187, issues #127 and
+#66, draft PR #128, and remote-equal `fec7fd87`; its conflict and failed Rust
+gate remain. P190 stays PLANNED. No runtime or external effect occurred.
 
 ## Turn 329 | 2026-09-14
 

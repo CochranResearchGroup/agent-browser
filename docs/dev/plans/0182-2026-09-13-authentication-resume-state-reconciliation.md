@@ -32,46 +32,22 @@ safe same-run continuation after the source repair and serialized runtime gate.
 
 ## Current State
 
-The preserved run is `authrun-8b8d1c46947be0910b540a4e`. Two resume jobs
-failed before effect with adjacent `service_state_stale_revision` results:
-each prepared against revision N and found revision N plus one at commit. The
-run remains `ready` at transition 0 with zero actions, zero observations, and
-no pending effect. No retry, cancellation, replacement run, or duplicate
-profile lane is authorized by this plan.
+PR #98 merged exact source head
+`dbe70d8d48908e0b5452595176a7dd26548d24dd` as
+`caff5e085eda4ba31b32af183a9d5909e19d5465`. The source branch is an ancestor
+of current `main`, its local and remote refs agree, and P191 retired the clean
+integrated source and red-team worktrees. There is no active P182 source lane.
 
-Current source loads and prepares a pure repository mutation outside the
-exclusive file-lock interval. On a stale commit candidate it replays the
-mutation once from a new snapshot, but a second adjacent writer commit returns
-`service_state_stale_revision`. Authentication resume uses this repository for
-the initial page-observation transition before any credential or page effect.
-The repeated issue therefore points first to bounded starvation in shared
-Service State persistence, not to an Authentication Run state-machine defect.
-
-P180's source repair is integrated on `main` at `44e5dc16`. On 2026-09-13 the
-operator explicitly released Agent #95's shared-runtime custody to P182. P180
-did not install an accepted candidate before handback: the selected production
-generation remains `0.28.0-d0186990d375-3a6142188dd0`, the installed binary
-digest remains `d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`,
-and the latest candidate transaction is terminally rolled back. P182 therefore
-owns the one later integrated-candidate window, which must contain both the
-merged P180 repair and this P182 repair. The handback permits read-only
-reinspection now; it does not authorize a resume on the old generation.
-
-Fresh reinspection preserved the exact run identity and returned `ready` at
-transition 0 with zero observations, zero action receipts, and no pending
-effect. It remains bound to browser
-`session:terminal-profile-67534c4dbefc554fd23fff53`, session
-`terminal-profile-67534c4dbefc554fd23fff53`, and tab
-`target:D34843BCDD95B71F5339ABCCE040048E`. Both earlier resume jobs remain
-terminal `no_effect` failures. No resume, cancellation, replacement run, tab
-request, or provider effect occurred during reinspection.
-
-A concurrent `PL-PLATFORM` session has opened P181 for Lease Authority crate
-extraction. Its plan explicitly retains `ServiceStateRepository`
-implementations in the CLI while moving Lease Authority code and later product
-adapters. P182 owns the narrow `service_store.rs` contention repair. P181 must
-consume P182's published checkpoint or reconcile any adjacent adapter edit;
-neither lane may rewrite the other's implementation silently.
+Plan 0186 subsequently installed and accepted a cumulative generation that
+contains the repository contention repair, but it deliberately performed no
+authentication workflow. The preserved run
+`authrun-8b8d1c46947be0910b540a4e` therefore remains the outstanding acceptance
+boundary. Its last recorded evidence was `ready` at transition 0 with zero
+observations, zero action receipts, no pending effect, and two terminal
+`no_effect` failures on the same browser, session, and tab. Issue #96 and this
+plan remain OPEN until a separately authorized fresh readback supports at most
+one same-run recourse. No retry, cancellation, replacement run, or duplicate
+profile lane is authorized by repository cleanup.
 
 ## Consolidated Batch
 
