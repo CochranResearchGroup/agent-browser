@@ -56,11 +56,14 @@ platform dependencies even when an authentication reset is the selected action.
 - [Operator-visible window focus gap](0133-2026-08-25-operator-visible-window-focus-gap-handoff.md)
 - [Stealth Chromium instrumentation boundary](0114-2026-08-14-chromium-instrumentation-boundary-and-install.md)
 
-The current Turnstile and CAPTCHA roadmap sources live on
-`feature/turnstile-desktop-challenge` at `17791566`. Plan 0169 is the active
-challenge proof. The roadmap currently labeled P173 must receive a new unique
-plan identifier before integration because canonical P173 already names the
-closed retained-browser repair.
+The active challenge product trunk lives on
+`challenge/p169-control-plane` at `fec7fd87` through branch-local Plan 0187,
+issue #127, leaf issue #66, and draft PR #128. The original
+`feature/turnstile-desktop-challenge` ref remains historical custody for the
+Turnstile-specific proof; it is not the active worktree or catalog branch.
+Branch-local Plans 0188 and 0189 preserve the provider-neutral guard contract
+and blocked hCaptcha leaf respectively. No challenge replay or browser effect
+is authorized by this index.
 
 ## PL-RECIPES | Reusable Automation
 
@@ -90,6 +93,8 @@ reuse after those contracts are frozen.
 - [Lease Authority baseline admission](0181-1-2026-09-13-lease-authority-baseline-admission.md)
 - [Lease Authority invariant ledger](0181-2-2026-09-13-lease-authority-invariant-ledger.md)
 - [Lease Authority build measurement](0181-3-2026-09-14-lease-authority-build-measurement.md)
+- [Shared runtime effect custody policy feedback](2026-09-14-runtime-effect-custody-policy-feedback.md)
+- [Session and worktree admission policy feedback](2026-09-14-session-worktree-admission-policy-feedback.md)
 
 [Plan 0161](../plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
 is assigned to this lane. It owns the profile aggregate, sealed repair and reset

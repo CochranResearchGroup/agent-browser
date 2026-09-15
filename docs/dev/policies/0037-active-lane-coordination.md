@@ -11,6 +11,10 @@
   name one coordination owner for those surfaces instead of allowing every lane
   to edit them independently. A person or session may fill more than one role
   when the portfolio is small and the ownership remains unambiguous.
+- Keep source-lane ownership separate from shared-runtime effect custody. A
+  catalog entry may identify the lane allowed to request custody, but it does
+  not acquire or prove a live lease. Covered production and staging mutations
+  follow `0051-shared-runtime-effect-custody.md`.
 - Keep plan outcome state separate from Git custody state. Use a small plan vocabulary such as `PLANNED`, `OPEN`, `BLOCKED`, `CLOSED`, and `CANCELLED`, and a custody vocabulary such as `ACTIVE_WORKTREE`, `PAUSED_REF`, `INTEGRATION_READY`, `INTEGRATED`, `ARCHIVED`, and `DISCARD_APPROVED`.
 - Keep detailed plans with their topic branches. Expose deterministic metadata for lane, state, branch, target, integration method, dependencies, overlaps, and base or checkpoint evidence so an auditor can read it from an explicit ref without checkout.
 - Do not put absolute worktree paths, ephemeral agent identifiers, secrets, tenant data, or private runtime details in the shared catalog. Derive local worktree locations during reconciliation.
@@ -22,6 +26,11 @@
   require a local checkout only when evaluating local worktree claims.
 - Fetching is a caller-controlled operation. A lane auditor must remain read-only and must not fetch, merge, rebase, push, delete refs, remove worktrees, edit plans, or infer authority from a clean report.
 - Register normal work before parallel execution begins. An urgent lane may start first only when delay creates greater risk; register and publish its first recoverable checkpoint at the earliest safe boundary.
+- Treat lane registration as necessary but not sufficient for local worktree
+  admission. Assign at most one primary worktree to each active top-level
+  development session through one serialized transition under policy 0052;
+  unregistered and detached checkouts remain part of the required local
+  inventory. No permanent coordinator agent is required.
 - Do not silently resolve catalog conflicts. Duplicate lane ids, two lanes claiming one branch, missing custody, stale checkpoints, active local/remote mismatch, plan/catalog drift, and unresolved overlaps fail closed until reconciled.
 - Keep the catalog current through the repository's protected-default-branch workflow. A lane branch may propose its own registration, but it is not globally discoverable until that projection lands on the configured default ref.
 - Reconcile worktree lifecycle with lane state. An integrated, archived, paused,

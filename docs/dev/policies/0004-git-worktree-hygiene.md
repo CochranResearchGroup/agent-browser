@@ -4,6 +4,10 @@
 
 - Start branch-sensitive work by checking `git status`.
 - Inventory all registered worktrees with `git worktree list --porcelain` before creating, closing, pruning, or reassigning one; the current checkout alone is not the repository topology.
+- In this repository, apply `0052-session-and-worktree-admission.md` before
+  creating or assigning any primary or auxiliary worktree. Serialize the exact
+  Git transition from current inventory evidence; no agent role grants or
+  withholds the operator's authority to change the portfolio.
 - Before creating a worktree, decide whether an existing clean checkout already
   owns the intended branch and lane. Continue in the correct existing worktree
   when it is safe; do not create duplicate checkouts merely to avoid orienting

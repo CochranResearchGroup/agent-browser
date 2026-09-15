@@ -1,23 +1,28 @@
 # Runbook
 
-Current execution and stop-state index. Detailed checkpoints through Turn 312
-are preserved in [the September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md).
-[Turn 313 is preserved separately](RUNBOOK-history-2026-09-13-turn313.md).
-[Turns 314 through 320 are archived](RUNBOOK-history-2026-09-14-turn314-through-turn320.md).
-[The P169 challenge history through its Turn 319 is archived separately](RUNBOOK-history-2026-09-14-p169-through-turn319.md).
-[Superseded Plan 0186 checkpoints through Turn 328 are preserved separately](RUNBOOK-history-2026-09-14-p186-through-turn328.md).
+Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md) preserves checkpoints through Turn 312; [Turn 313](RUNBOOK-history-2026-09-13-turn313.md) and [superseded P186 checkpoints through Turn 328](RUNBOOK-history-2026-09-14-p186-through-turn328.md) are separate.
+[Turns 314 through 320](RUNBOOK-history-2026-09-14-turn314-through-turn320.md) and [P169 history through its Turn 319](RUNBOOK-history-2026-09-14-p169-through-turn319.md) remain preserved separately.
 Keep this file at or below 200 lines under policy 0043.
 
 ## Active Plan Locator Index
 
-Current open, planned, or blocked plan locators retained outside the recent
-turn summaries:
-
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), and [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md)
 - [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md), [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), and [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md)
 - [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
-- [P180](docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md), [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P183](docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md), and [P184](docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
-- [P185](docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), and [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)
+- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
+
+## Turn 334 | 2026-09-14
+
+[Plan 0191](docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md) is CLOSED through issue #139 and PR #140 after reconciling repository custody.
+Eight P181 wake lifecycle files are preserved in a user-scoped archive with
+SHA-256 `a7249285b59ce1644b2401406f9f3519e4627af4f2b8c4fddd843e0aaf2e0b32`;
+both detached benchmark diffs have standalone patches. Five integrated or
+disposable auxiliaries are removed, leaving canonical P191 and challenge P169.
+P180 and P183 through P185 close from merged source plus P186 installed
+acceptance. P182 remains BLOCKED without source custody because its same-run
+acceptance was not exercised. P169 now points to Plan 0187, issues #127 and
+#66, draft PR #128, and remote-equal `fec7fd87`; its conflict and failed Rust
+gate remain. [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md) stays PLANNED. No runtime or external effect occurred.
 
 ## Turn 329 | 2026-09-14
 

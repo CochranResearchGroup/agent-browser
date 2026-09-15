@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-State: OPEN
+State: CLOSED
 
 Lane: P184
 
@@ -116,3 +116,15 @@ requires an exact integrated candidate, reviewed no-effect preview, one accepted
 transaction, matching installed SHA, one selected supervised runtime host,
 coherent stream publication, no admission drain, and unchanged Last30Days
 principal, capability, owner identity, and owner generation.
+
+## Closure Evidence
+
+PR #109 merged exact source head
+`182e431b1f6520bd215cb8d37fd3a6ec93fb68bf` as
+`3b7e8411e24e0ea7508fd525ecd77573f7704676`, and issue #108 closed. The
+successor recovery chain retained the required candidate custody through Plan
+0186's accepted preserving transaction. Final installed readback matched its
+qualified generation, selected one supervised runtime host, removed admission
+drain, restored coherent publication, and preserved the protected Last30Days
+generation-90 authority. This closes P184 without retaining its integrated
+source lane.

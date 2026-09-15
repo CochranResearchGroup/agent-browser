@@ -25,6 +25,54 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P191 | Repository Worktree And Lane Reconciliation
+
+State: CLOSED
+
+Current state: [Plan 0191](docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md)
+and [issue #139](https://github.com/CochranResearchGroup/agent-browser/issues/139)
+close the exact repository cleanup campaign through PR #140. Five integrated or disposable
+auxiliary worktrees have been removed after their dirty task artifacts were
+preserved. P180 and P183 through P185 now close from merged source plus P186
+cumulative installed acceptance. P182 remains open only for its preserved
+same-run operational acceptance. The surviving challenge checkout is
+registered as P169 on `challenge/p169-control-plane` at `fec7fd87` through
+Plan 0187, issue #127, leaf issue #66, and draft PR #128.
+
+## P190 | Advisory Candidate Build And Promotion Orchestrator
+
+State: PLANNED
+
+Current state: [Plan 0190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
+and [issue #136](https://github.com/CochranResearchGroup/agent-browser/issues/136)
+define an advisory candidate, build, install, and recovery surface over the
+existing workstation transaction. It will expose evidence, recommendations,
+alternatives, and consequences while fencing concurrent corrupting commits.
+Fast `ci` development builds remain non-promotable. The lane will instead build
+one production-shaped release artifact, test those exact bytes in an isolated
+development namespace, and promote them after merge when executable inputs are
+equivalent. Test runs also receive deterministic identity, deduplication,
+receipt-reuse, isolation, and cleanup rules. Policies 0051 and 0052 reject
+permanent coordinator or permission-service semantics. P190 is not admitted
+for implementation and has no active-lane entry or worktree. P191 clears the
+prior checkout drift but does not itself activate P190.
+
+## P169 | Challenge Countermeasure Control Plane
+
+State: OPEN
+
+Current state: branch-local
+[Plan 0187](https://github.com/CochranResearchGroup/agent-browser/blob/challenge/p169-control-plane/docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md),
+[issue #127](https://github.com/CochranResearchGroup/agent-browser/issues/127),
+leaf [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66),
+and draft [PR #128](https://github.com/CochranResearchGroup/agent-browser/pull/128)
+own the active provider-neutral challenge control-plane lane. Local and remote
+branch custody agree at `fec7fd8729679c1649c838ef5d317ea86179323f`. The
+branch is eight commits behind current `main`, the pull request is conflicting,
+and its Rust gate failed. Reconcile those source and provider-free validation
+gaps before integration. This registration authorizes no challenge attempt,
+retry, browser effect, provider effect, or runtime mutation.
+
 ## P186 | Route Viewer Admission Drain Recovery
 
 State: CLOSED
@@ -42,59 +90,48 @@ warning outside P186. Issue #112 owns the public completion receipt.
 
 ## P185 | Route Viewer Runtime Profile Identity
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0185](docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md)
 and [issue #110](https://github.com/CochranResearchGroup/agent-browser/issues/110)
-own the post-commit reconciliation blocker exposed by the P184 candidate. The
-canonical Guacamole route opener treated managed profile names as relative
-custom paths, so immutable support generations changed their identity. PR #111
-merged the stable managed-profile repair as `ffc6e510`. Installed acceptance
-now depends on P186 because reboot removed every reusable route viewer while
-the transaction's admission drain remains active.
+closed after PR #111 merged the stable managed-profile repair as `ffc6e510`.
+Plan 0186's accepted cumulative transaction finalized canonical route viewers
+A, B, and C as distinct managed-profile handoff lanes, then proved terminal
+cleanup and coherent final doctor state. Issue #110 is closed.
 
 ## P184 | Resumable Candidate Generation Retention
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0184](docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
 and [issue #108](https://github.com/CochranResearchGroup/agent-browser/issues/108)
-own the candidate-custody defect exposed after P183 integration. The newest
-`blocked_ambiguous_runtime` transaction advertises resume, but unattended
-generation GC removed its exact staged candidate. P184 pins only the newest
-resumable candidate and rollback source while leaving superseded blocked
-history reclaimable, then returns P183 to one changed-source install attempt.
-P184 source merged through PR #109 as `3b7e8411`; installed acceptance now
-depends on P185 forward completion.
+closed after PR #109 merged candidate retention as `3b7e8411` and the successor
+recovery chain retained candidate custody through Plan 0186's accepted
+preserving transaction. Final installed and protected-authority readback
+passed. Issue #108 is closed.
 
 ## P183 | Registered Owner Browser-Missing Migration Repair
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0183](docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md)
 and [issue #104](https://github.com/CochranResearchGroup/agent-browser/issues/104)
-own the source blocker exposed by the first integrated P180 plus P182 install.
-The first apply stopped before payload mutation because one invalid historical tab
-references an absent browser while an exact generation 90 registered-principal
-owner remains ready. P183 preserves that owner and capability binding while
-materializing non-effect-capable browser and released-session placeholders,
-then returns one integrated candidate to preserving installed acceptance. PR
-#107 merged the source repair as `12848e34`; installed acceptance now depends
-on P184 because the interlock removed the resumable candidate generation.
+closed after PR #107 merged the migration repair as `12848e34`. Plan 0186's
+accepted cumulative install retained the protected Last30Days generation-90
+owner and proved coherent final runtime state. Issue #104 is closed.
 
 ## P182 | Authentication Resume State Reconciliation
 
-State: OPEN
+State: BLOCKED
 
 Current state: [Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
 and [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
-own the repeated adjacent-revision collision that prevents the preserved
-Authentication Run from recording its initial observation. The source repair
-is published in PR #98. P180's repair is integrated at `44e5dc16`, and the
-operator released Agent #95's runtime custody without an accepted install.
-P182 now owns one integrated P180 plus P182 candidate window. The existing run,
-browser, tab, handle, and zero-effect state must be preserved, and no resume is
-allowed on the old installed generation.
+retain the separately gated same-run Authentication Run acceptance. PR #98
+merged exact source head `dbe70d8d` as `caff5e08`, and the clean integrated
+source and red-team worktrees are retired. Plan 0186 installed the cumulative
+source without exercising authentication. The preserved run and its last
+recorded zero-effect state remain unchanged; repository cleanup authorizes no
+resume, cancellation, or replacement.
 
 ## P181 | Lease-Authority Kernel Crate Extraction
 
@@ -132,21 +169,15 @@ no runtime, browser, profile, provider, installation, or production effect.
 
 ## P180 | Pre-Drain Browserless Lane Quiescence Repair
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0180](docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md)
 and [issue #95](https://github.com/CochranResearchGroup/agent-browser/issues/95)
-own the installer compatibility repair exposed by Books Receipts Plan 0240.
-The committed activation path writes admission drain before asking the selected
-old runtime to close a proven browserless competing lane. That old generation
-does not recognize the newer claimed-close exception, so the preserving
-upgrade fails with `runtime_admission_draining`. The repair must quiesce exact
-browserless lanes before drain, prove interruption safety, and retain all
-browser-bearing and unknown lanes. No installed or consumer acceptance is yet
-claimed. P182 may proceed with disjoint provider-free source work, but its
-installed acceptance and same-run recourse remain queued after P180 installed
-acceptance. The preserved Authentication Run must not be retried or replaced
-during this installer batch.
+closed after PR #97 merged exact source head `949101b7` as `44e5dc16`. Plan
+0186's later cumulative candidate passed a default preserving install and final
+runtime-coherence doctor, satisfying P180's deferred installed boundary. Issue
+#95 closes from that evidence. P182's authentication acceptance remains a
+separate open gate.
 
 ## P179 | Policy Selector v0.1.26 Integration
 
