@@ -122,7 +122,7 @@ owner and proved coherent final runtime state. Issue #104 is closed.
 
 ## P182 | Authentication Resume State Reconciliation
 
-State: OPEN
+State: BLOCKED
 
 Current state: [Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
 and [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)

@@ -11,10 +11,10 @@ SHA-256 `a7249285b59ce1644b2401406f9f3519e4627af4f2b8c4fddd843e0aaf2e0b32`;
 both detached benchmark diffs have standalone patches. Five integrated or
 disposable auxiliaries are removed, leaving canonical P191 and challenge P169.
 P180 and P183 through P185 close from merged source plus P186 installed
-acceptance. P182 remains OPEN without source custody because its same-run
+acceptance. P182 remains BLOCKED without source custody because its same-run
 acceptance was not exercised. P169 now points to Plan 0187, issues #127 and
 #66, draft PR #128, and remote-equal `fec7fd87`; its conflict and failed Rust
-gate remain. P190 stays PLANNED. No runtime or external effect occurred.
+gate remain. [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md) stays PLANNED. No runtime or external effect occurred.
 
 ## Turn 329 | 2026-09-14
 
