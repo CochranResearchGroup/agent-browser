@@ -10,13 +10,13 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 85b4ee92f5f3703e70040a89aaef54175f073940
+    checkpoint: aba2d993b3e854b9b765f840441e8973e3ff10b4
     remote_ref: refs/remotes/origin/challenge/p169-task-orchestration
     integration: merge through the protected `main` workflow after provider-free W5 validation
-    validation_status: pending
+    validation_status: local_qualified_pending_pr_ci
     work_items: [CochranResearchGroup/agent-browser#127, CochranResearchGroup/agent-browser#66]
     dependencies: []
     overlaps: [P190]
     reconciled_overlaps: [P190]
-    blocker: W5 is admitted for provider-free source and contract work only; browser, CAPTCHA, credential, provider, install, shared-runtime, production, and release effects remain prohibited
+    blocker: W5 is locally qualified and awaits protected-main PR and exact-head CI; browser, CAPTCHA, credential, provider, install, shared-runtime, production, and release effects remain prohibited
     updated_at: 2026-09-15

@@ -73,7 +73,10 @@ W0 through W4 are integrated: the phase-bound freshness repair,
 desktop-services extraction, challenge-control extraction, and two-profile
 provider-free Service slice. [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md)
 admits W5 on `challenge/p169-task-orchestration` for one durable task-level
-Service lifecycle and provider-free fixture driver. Issue #66 retains the
+Service lifecycle and provider-free fixture driver. W5 source checkpoint
+`aba2d993` is locally qualified with exact principal and retained-tab custody,
+digest-only replay, one composite terminal receipt, and bounded status and
+resource summaries; protected-main integration remains pending. Issue #66 retains the
 separately live-gated challenge acceptance leaf. This registration authorizes
 no challenge attempt, retry, browser effect, provider effect, credential use,
 runtime mutation, installation, or release.

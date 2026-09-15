@@ -30,11 +30,14 @@ challenge completion, and downstream admission distinct.
 
 ## Current State
 
-W5 is admitted for one provider-free implementation packet from merged-main
-checkpoint `85b4ee92f5f3703e70040a89aaef54175f073940`. The primary worktree is
-clean on `challenge/p169-task-orchestration`. No W5 source change, build,
-browser, challenge, provider, credential, installation, shared-runtime,
-production, or release effect has occurred.
+W5 is implemented and locally qualified at source checkpoint
+`aba2d993b3e854b9b765f840441e8973e3ff10b4`. The durable Service task owns
+start, status, resume, cancel, exact tab-handle and principal binding,
+digest-only idempotency and operation replay, deadlines, transition budgets,
+provider-free execution, and bounded status and resource summaries. Protected
+integration and exact-head CI remain pending. No browser, challenge, provider,
+credential, installation, shared-runtime, production, or release effect has
+occurred.
 
 ## Current Baseline
 
@@ -170,3 +173,18 @@ Exit requires evidence that:
 
 Stop before any live challenge, browser, provider, credential, installation,
 shared-runtime, production, or release action.
+
+## Requirement Evidence
+
+| Requirement | Implemented | Qualified | Integrated | Evidence or remaining gate |
+| --- | --- | --- | --- | --- |
+| Pure lifecycle and composite receipt | yes | yes | pending | 10 challenge-control tests and both crate architecture guards pass at `aba2d993` |
+| Durable exact-handle and principal custody | yes | yes | pending | focused Service task and no-launch dispatch tests pass; persisted operation and idempotency identities are digest-only |
+| Start, status, resume, cancel and replay | yes | yes | pending | one disposable Service State fixture exercises every action, terminal replay, cancellation, deadline refusal, and no browser launch |
+| Status and resource summaries | yes | yes | pending | the dispatch fixture observes active, terminal, cooldown, intervention, and zero pending-effect projections |
+| CLI, HTTP, MCP, schema, ledger, client, and docs parity | yes | yes | pending | API/MCP parity, full service-client suite, generated-client checks, TypeScript, and docs build pass |
+| Workspace quality | yes | yes | pending | formatting, diff hygiene, and strict workspace Clippy pass |
+| Protected integration | pending | pending | no | publish the receipt commit, open the protected-main PR, and require exact-head CI |
+
+The local qualification used repository-owned provider-free fixtures only.
+Installed-runtime and live acceptance are intentionally not applicable to W5.

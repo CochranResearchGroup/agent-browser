@@ -11,6 +11,18 @@ Keep this file at or below 200 lines under policy 0043.
 - [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 338 | 2026-09-15
+
+P169 W5 source checkpoint `aba2d993` implements the durable provider-free
+challenge task in [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md).
+Start, status, resume, and cancel share exact principal and retained-tab
+custody, digest-only replay identities, one composite terminal receipt, and
+bounded Service Status and resource summaries. Focused Rust, request/schema,
+MCP/API parity, full generated-client, documentation, architecture, formatting,
+and strict-Clippy gates pass. Protected-main PR and exact-head CI remain.
+No browser, CAPTCHA, provider, credential, installed-runtime, production, or
+release effect occurred.
+
 ## Turn 337 | 2026-09-15
 
 P169 W5 is admitted through [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md)
