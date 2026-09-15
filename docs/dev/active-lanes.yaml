@@ -9,8 +9,8 @@ lanes:
     branch: challenge/p169-control-plane
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 3146523d1f4b1e99f622c4efa1c6e8a979539ff5
+    custody_state: INTEGRATION_READY
+    checkpoint: 406323bbb61201a59dcf3fc7eea64e2b2631738e
     remote_ref: refs/remotes/origin/challenge/p169-control-plane
     integration_receipt: null
     integration: merge through the protected `main` workflow after custody normalization
@@ -18,5 +18,5 @@ lanes:
     dependencies: []
     overlaps: [P190]
     reconciled_overlaps: [P190]
-    blocker: W4 two-profile provider-free vertical slice and composite no-launch Service receipt remain before integration readiness
+    blocker: W0 through W4 are complete; exact-head CI and protected-main integration remain. W5 is unstarted and not admitted
     updated_at: 2026-09-14

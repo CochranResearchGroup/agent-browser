@@ -13,16 +13,17 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 335 | 2026-09-14
 
-P169 remains the valid antibot worktree. Plan 0187 joined current `main`
-checkpoint `58349195` through merge `cd898b39` while preserving all challenge
-history. The failed Rust gate was a deterministic fixture migration gap after
-stock Chrome became capability-gated, not a product-policy defect. Checkpoint
-`3146523d` supplies explicit test executables only to unrelated launch fixtures;
-the production guard remains fail-closed. The exact 256-test native-actions
-compartment, formatting, strict Clippy, the challenge-control architecture
-contract, and all three pure crate tests pass. W0 through W3 are complete; W4
-is next. No browser, provider, installed-runtime, production, or release effect
-occurred.
+P169 remains the valid antibot worktree and is ready for protected-main
+integration after exact-head CI. Plan 0187 joined current `main` checkpoint
+`58349195` without rewriting challenge history. Published source checkpoint
+`406323bb` completes W0 through W4: phase-bound interaction freshness,
+`agent-browser-desktop-services`, the pure `agent-browser-challenge-control`
+crate, and a two-profile Turnstile and hCaptcha provider-free Service slice.
+Both profiles use one generic five-outcome evaluator and the no-launch action
+always reports `emittedEffects=false`. Focused crate, CLI, schema, generated
+client, architecture, documentation, formatting, and strict-Clippy gates pass.
+W5 is unstarted and not admitted. No browser, challenge, provider,
+installed-runtime, production, or release effect occurred.
 
 ## Turn 334 | 2026-09-14
 

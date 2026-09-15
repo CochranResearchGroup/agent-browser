@@ -67,11 +67,14 @@ Current state: branch-local
 leaf [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66),
 and draft [PR #128](https://github.com/CochranResearchGroup/agent-browser/pull/128)
 own the active provider-neutral challenge control-plane lane. Local and remote
-branch custody agree at `fec7fd8729679c1649c838ef5d317ea86179323f`. The
-branch is eight commits behind current `main`, the pull request is conflicting,
-and its Rust gate failed. Reconcile those source and provider-free validation
-gaps before integration. This registration authorizes no challenge attempt,
-retry, browser effect, provider effect, or runtime mutation.
+source custody agrees at `406323bbb61201a59dcf3fc7eea64e2b2631738e`, which
+already contains current `main` checkpoint `58349195`. W0 through W4 are
+complete: the phase-bound freshness repair, desktop-services extraction,
+challenge-control extraction, and two-profile provider-free Service slice pass
+their local source gates. Final integration-custody documentation and exact-head
+CI remain before protected-main integration. W5 is unstarted and not admitted.
+This registration authorizes no challenge attempt, retry, browser effect,
+provider effect, runtime mutation, or release.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
