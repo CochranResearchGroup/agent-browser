@@ -2,7 +2,7 @@
 
 Date: 2026-09-15
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -17,7 +17,7 @@ Branch: `fix/issue-76-service-state-lock`
 
 Target: `main`
 
-Integration: merge through the protected `main` workflow after provider-free qualification
+Integration: merged through PR #146 as `f1435195bcdde4f63fb2371cfdb4008c74b34875`
 
 Corrective successor to: [Plan 0167](0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md)
 
@@ -46,9 +46,10 @@ therefore has a residual test gap even though the broader Plan 0167 regression
 is green.
 
 PR 142 is integrated into `main`; its clean challenge worktree was removed
-during P194 admission. This plan replaces the stale P169 active-lane projection.
-No production runtime, browser, profile, provider, or Service State mutation is
-authorized by this plan.
+during P194 admission. Before PR #146 merged, P194 reconciled with the later
+P169 closeout so both product-lane records remained intact. No production
+runtime, browser, profile, provider, or Service State mutation is authorized by
+this plan.
 
 Candidate checkpoint `9fa6c586` replaces the full reload with a persisted
 revision-only probe when transaction recovery is not pending. Stores without a
@@ -59,7 +60,8 @@ retained values cannot consume a constrained caller stack. The red fixture
 failed on unchanged production logic at 1,002 ms with an active
 `prepared_commit/load_current` holder and passed on the candidate with a
 9,642,672-byte fixture. All 41 `service_store` tests, format, and strict
-workspace Clippy pass. Protected integration remains open.
+workspace Clippy pass. PR #146 merged the reconciled source as `f1435195`;
+canonical merge-commit CI run 35007032152 passed every ordinary fast gate.
 
 ## Consolidated Batch
 
@@ -153,6 +155,14 @@ published diff and has no runtime or integration authority.
 - Quality gates: Rust format check and strict workspace Clippy passed.
 - The large-state constrained-worker test also exercises the revision probe's
   explicit bounded parser stack.
+- PR #146 merged reconciled source head `510bf266` as canonical merge commit
+  `f1435195`. Both commits have Git tree
+  `bae40f4c21375f066334621f59249f09e6376dac`.
+- Canonical CI run 35007032152 passed Version Sync Check, Dashboard, Service
+  Client, Rust Quality, Workstation Fixtures, the comprehensive provider-free
+  Rust suite, and the no-launch Service smokes. Slow and live gates remained
+  intentionally skipped.
+- Issue #76 closed as completed through the merged pull request.
 - No production runtime, browser, profile, provider, install, retry, or Service
   State effect occurred.
 
@@ -162,3 +172,7 @@ Stop this source batch after protected integration and exact source validation,
 or earlier if the red fixture disproves the `load_current` hypothesis and no
 other ranked hypothesis can be discriminated within the remaining ceiling.
 Do not cross into production installation or monitor retry under this plan.
+
+The source stop condition is satisfied. Production installation and monitor
+soak remain a separate live-effect gate and are not evidence required to close
+this provider-free repair plan.

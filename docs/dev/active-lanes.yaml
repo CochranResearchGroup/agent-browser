@@ -22,22 +22,3 @@ lanes:
     reconciled_overlaps: [P190]
     blocker: W5 is integrated; W6 is unstarted and not admitted, while issue #66 retains the separately live-gated challenge acceptance leaf
     updated_at: 2026-09-15
-  - id: P194
-    product_lane: PL-BUGFIX
-    objective: Eliminate the residual production-scale Service State prepared-commit lock timeout without extending the ordinary deadline
-    plan: docs/dev/plans/0194-2026-09-15-service-state-load-current-contention-repair.md
-    plan_ref: refs/heads/fix/issue-76-service-state-lock
-    branch: fix/issue-76-service-state-lock
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 9fa6c5869c528f9b9136d2a5e035680f182e2501
-    remote_ref: refs/remotes/origin/fix/issue-76-service-state-lock
-    integration: merge through the protected `main` workflow after provider-free qualification
-    validation_status: red reproduced at 1002 ms; candidate passes 41 service_store tests, exact production-scale replay, format, and strict Clippy
-    work_items: [CochranResearchGroup/agent-browser#76, CochranResearchGroup/agent-browser#87]
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
-    blocker: production installation and monitor soak remain live-gated; provider-free source work is active
-    updated_at: 2026-09-15
