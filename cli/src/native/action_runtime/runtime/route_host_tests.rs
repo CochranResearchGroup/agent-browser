@@ -539,6 +539,88 @@ fn test_apply_service_profile_selection_resolves_explicit_runtime_profile_direct
 }
 
 #[test]
+fn test_apply_service_profile_selection_resolves_custom_directory_without_runtime_profile() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("explicit-custom-profile-home");
+    let user_data_dir = home.join("custom-profile");
+    fs::create_dir_all(&user_data_dir).expect("custom profile path should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let profile_id = service_profile_id(user_data_dir.to_str(), None).unwrap();
+    let service_state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.clone(),
+            BrowserProfile {
+                id: profile_id.clone(),
+                user_data_dir: Some(user_data_dir.display().to_string()),
+                browser_build: Some(BrowserBuild::StockChrome),
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&service_state)
+        .expect("service state should be persisted");
+    let mut options = LaunchOptions::default();
+
+    let selected = apply_service_profile_selection(
+        &mut options,
+        &json!({
+            "action": "launch",
+            "serviceName": "custom-profile-fixture",
+            "profileId": profile_id,
+            "browserBuild": "stock_chrome",
+        }),
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(selected, Some(ProfileSelectionReason::ExplicitProfile));
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+    assert!(options.runtime_profile.is_none());
+    assert!(options.executable_path.is_none());
+}
+
+#[test]
+fn test_apply_service_profile_selection_selects_custom_directory_without_runtime_profile() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("selected-custom-profile-home");
+    let user_data_dir = home.join("custom-profile");
+    fs::create_dir_all(&user_data_dir).expect("custom profile path should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let profile_id = service_profile_id(user_data_dir.to_str(), None).unwrap();
+    let service_state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.clone(),
+            BrowserProfile {
+                id: profile_id,
+                user_data_dir: Some(user_data_dir.display().to_string()),
+                shared_service_ids: vec!["custom-profile-fixture".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&service_state)
+        .expect("service state should be persisted");
+    let mut options = LaunchOptions::default();
+
+    let selected = apply_service_profile_selection(
+        &mut options,
+        &json!({ "action": "launch", "serviceName": "custom-profile-fixture" }),
+        None,
+    )
+    .unwrap();
+
+    assert!(selected.is_some());
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+    assert!(options.runtime_profile.is_none());
+}
+
+#[test]
 fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("existing-owner-profile-home");
@@ -2479,6 +2561,50 @@ fn test_apply_auto_launch_command_hints_preserves_explicit_profile_id() {
     assert!(effective_command.get("profile").is_none());
     let _ = fs::remove_dir_all(&home);
 }
+
+#[test]
+fn custom_profile_path_does_not_become_a_managed_runtime_profile() {
+    let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH", "HOME"]);
+    guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+    let home = unique_socket_dir("auto-launch-custom-profile-path");
+    let user_data_dir = home.join("custom-profile");
+    fs::create_dir_all(&user_data_dir).expect("custom profile path should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&ServiceState::default())
+        .unwrap();
+    let profile_id = service_profile_id(user_data_dir.to_str(), None).unwrap();
+    let command = json!({
+        "action": "launch",
+        "executablePath": "/bin/false",
+        "profile": user_data_dir.display().to_string(),
+        "profileId": profile_id,
+    });
+    let mut options = LaunchOptions::default();
+
+    let (_host, selection_reason, _browser_capability_launch, effective_command) =
+        apply_auto_launch_command_hints(&mut options, &command, None, "test-session").unwrap();
+
+    assert!(selection_reason.is_none());
+    assert_eq!(
+        options.profile.as_deref(),
+        Some(
+            user_data_dir
+                .to_str()
+                .expect("custom profile path should be utf-8")
+        )
+    );
+    assert!(
+        options.runtime_profile.is_none(),
+        "opaque custom service profile IDs are not managed runtime-profile names"
+    );
+    assert_eq!(
+        effective_command.get("profileId").and_then(Value::as_str),
+        Some(profile_id.as_str())
+    );
+    let _ = fs::remove_dir_all(&home);
+}
+
 #[test]
 fn test_apply_auto_launch_command_hints_uses_effective_service_default() {
     let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);

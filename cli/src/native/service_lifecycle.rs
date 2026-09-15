@@ -94,6 +94,15 @@ pub(crate) fn service_profile_id(
         .map(|profile| format!("custom:{}", stable_short_hash(profile)))
 }
 
+/// Return the managed runtime-profile name represented by a service profile ID.
+///
+/// Custom service profile IDs are opaque joins for explicit user-data
+/// directories. They must never enter the named runtime-profile subsystem.
+pub(crate) fn runtime_profile_name_for_service_profile_id(profile_id: &str) -> Option<String> {
+    let profile_id = profile_id.trim();
+    (!profile_id.is_empty() && !profile_id.starts_with("custom:")).then(|| profile_id.to_string())
+}
+
 pub(crate) fn select_service_profile_for_request(
     service_state: &ServiceState,
     request: &ProfileSelectionRequest,
@@ -789,6 +798,29 @@ mod tests {
         assert_eq!(
             profile_id,
             service_profile_id(Some("/tmp/browser-profile"), None).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_service_profile_id_distinguishes_custom_profile_paths() {
+        let profile_ids = (0..4096)
+            .map(|index| {
+                service_profile_id(Some(&format!("/tmp/browser-profile-{index}")), None).unwrap()
+            })
+            .collect::<std::collections::HashSet<_>>();
+
+        assert_eq!(profile_ids.len(), 4096);
+    }
+
+    #[test]
+    fn test_custom_service_profile_id_is_not_a_managed_runtime_profile_name() {
+        assert_eq!(
+            runtime_profile_name_for_service_profile_id("managed-profile"),
+            Some("managed-profile".to_string())
+        );
+        assert_eq!(
+            runtime_profile_name_for_service_profile_id("custom:14805924951506933012"),
+            None
         );
     }
 
