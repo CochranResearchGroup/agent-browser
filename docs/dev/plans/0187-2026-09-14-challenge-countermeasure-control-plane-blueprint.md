@@ -40,10 +40,12 @@ after one bounded rerun of a diagnosed timing-threshold flake. Merge-commit CI
 run 34977471104 and four-platform Lease Authority run 34977470855 also pass.
 The integrated batch contains the phase-bound freshness repair, extracted
 desktop-services and challenge-control crates, and Plan 0192's two-profile
-provider-free Service slice. W5 is admitted through Plan 0193 on
-`challenge/p169-task-orchestration` for provider-free source, contract, and
-validation work. Issue #66 retains the separately live-gated challenge
-acceptance leaf. No live effect is authorized by this admission.
+provider-free Service slice. W5 is also integrated through Plan 0193 and PR
+#142. Exact source head `709641e9` merged into `main` as `81de07cf`; source-head
+CI run 34993316164 and merge-commit CI run 34997057075 pass. W6 consumer
+integration is next but remains unstarted and not admitted. Issue #66 retains
+the separately live-gated challenge acceptance leaf. No live effect is
+authorized by this integration receipt.
 
 ## Consolidation
 
@@ -434,6 +436,10 @@ idempotency, custody, and projection seams proven by Authentication Run while
 keeping challenge policy in the extracted challenge-control crate. Its initial
 driver is provider-free and cannot emit browser or desktop effects.
 
+W5 is complete through PR #142. The exact source and merge-commit fast CI runs
+pass, including the provider-free fixtures and no-launch Service smokes. No W5
+execution remains.
+
 ### W6 | Consumer integration
 
 - Integrate authentication, recipe, and navigation consumers one at a time.
@@ -465,8 +471,8 @@ itself.
 
 ## Delivery Sequence And Budget
 
-Execute W0 through W4 in order. W5 and W6 follow only after that trunk is
-accepted. W7 and W8 are independent successor investments.
+W0 through W5 are integrated. W6 follows only through a separately admitted
+consumer packet. W7 and W8 are independent successor investments.
 
 Estimated focused engineering effort:
 

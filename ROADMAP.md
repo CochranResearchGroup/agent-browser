@@ -82,21 +82,22 @@ Current state:
 [Plan 0187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md),
 [issue #127](https://github.com/CochranResearchGroup/agent-browser/issues/127),
 leaf [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66),
-and merged [PR #128](https://github.com/CochranResearchGroup/agent-browser/pull/128)
+merged [PR #128](https://github.com/CochranResearchGroup/agent-browser/pull/128),
+and merged [PR #142](https://github.com/CochranResearchGroup/agent-browser/pull/142)
 own the provider-neutral challenge control-plane lane. Source checkpoint
 `d7c59be2` integrated into `main` as `e2bd73ff`. Exact-head PR CI, merge-commit
 CI run 34977471104, and the four-platform Lease Authority run 34977470855 pass.
 W0 through W4 are integrated: the phase-bound freshness repair,
 desktop-services extraction, challenge-control extraction, and two-profile
 provider-free Service slice. [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md)
-admits W5 on `challenge/p169-task-orchestration` for one durable task-level
-Service lifecycle and provider-free fixture driver. W5 source checkpoint
-`709641e9` integrated through PR #142 as merge commit `81de07cf`; its clean
-primary worktree is retired. Plan 0187 and issue #127 remain open for W6 through
-W8, but no P169 implementation checkout is currently admitted. Issue #66 retains the
-separately live-gated challenge acceptance leaf. This registration authorizes
-no challenge attempt, retry, browser effect, provider effect, credential use,
-runtime mutation, installation, or release.
+is CLOSED after W5 source head `709641e9` merged as `81de07cf`. Source-head CI
+run 34993316164 and merge-commit CI run 34997057075 pass. W5 adds exact
+principal and retained-tab custody, digest-only replay, one composite terminal
+receipt, and bounded status and resource summaries. W6 consumer integration is
+next but remains unstarted and not admitted. Issue #66 retains the separately
+live-gated challenge acceptance leaf. This registration authorizes no challenge
+attempt, retry, browser effect, provider effect, credential use, runtime
+mutation, installation, or release.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

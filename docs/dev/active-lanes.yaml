@@ -1,6 +1,27 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P169
+    product_lane: PL-CHALLENGE
+    objective: Deliver a provider-neutral challenge countermeasure control plane and bounded challenge-family adapters
+    plan: docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md
+    plan_ref: refs/remotes/origin/main
+    branch: challenge/p169-control-plane
+    target: main
+    plan_state: OPEN
+    custody_state: INTEGRATED
+    checkpoint: d7c59be27003189dc20fa21d79dbceed0d50a0c5
+    remote_ref: refs/remotes/origin/challenge/p169-control-plane
+    integration_receipt: 81de07cfb5790685ff506bdabff3609e92fd5eeb
+    integration: merge through the protected `main` workflow after custody normalization
+    validation_status: passed
+    validation_ref: 81de07cfb5790685ff506bdabff3609e92fd5eeb
+    work_items: [CochranResearchGroup/agent-browser#127, CochranResearchGroup/agent-browser#66]
+    dependencies: []
+    overlaps: [P190]
+    reconciled_overlaps: [P190]
+    blocker: W5 is integrated; W6 is unstarted and not admitted, while issue #66 retains the separately live-gated challenge acceptance leaf
+    updated_at: 2026-09-15
   - id: P194
     product_lane: PL-BUGFIX
     objective: Eliminate the residual production-scale Service State prepared-commit lock timeout without extending the ordinary deadline
