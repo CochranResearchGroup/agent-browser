@@ -2602,7 +2602,8 @@ fn test_apply_auto_launch_command_hints_preserves_retained_remote_headed_surface
         display_name: Some(":10".to_string()),
     };
     let command = json!(
-        { "action" : "launch", "headless" : true, "runtimeProfile" : "stealthcdp-default"
+        { "action" : "launch", "headless" : true, "runtimeProfile" : "stealthcdp-default",
+        "executablePath" : "/test/fixture/browser"
         }
     );
     let mut options = LaunchOptions::default();
@@ -2665,7 +2666,7 @@ fn test_explicit_local_headless_launch_surface_overrides_retained_remote_hint() 
     };
     let command = json!(
         { "action" : "launch", "browserHost" : "local_headless", "headless" : true,
-        "headlessExplicit" : true }
+        "headlessExplicit" : true, "executablePath" : "/test/fixture/browser" }
     );
     let mut options = LaunchOptions::default();
     let (host, _, _, _) =
@@ -2682,7 +2683,8 @@ fn test_private_remote_headed_metadata_waits_for_launched_display_name() {
     guard.set("DISPLAY", ":0");
     let command = json!(
         { "action" : "navigate", "browserHost" : "remote_headed", "displayIsolation" :
-        "private_virtual_display", "headless" : false }
+        "private_virtual_display", "headless" : false, "executablePath" :
+        "/test/fixture/browser" }
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, _, effective_command) =
@@ -2704,7 +2706,8 @@ fn test_remote_headed_defaults_to_private_display_when_display_is_inherited() {
     let guard = EnvGuard::new(&["DISPLAY"]);
     guard.set("DISPLAY", ":0");
     let command = json!(
-        { "action" : "navigate", "browserHost" : "remote_headed", "headless" : false }
+        { "action" : "navigate", "browserHost" : "remote_headed", "headless" : false,
+        "executablePath" : "/test/fixture/browser" }
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, _, effective_command) =
@@ -4711,7 +4714,8 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         "action": "navigate", "url": "about:blank",
         "runtimeProfile": "cold-native", "profile": home.join("profile"),
         "clientSubjectId": "cli-session:cold-native", "identityAssurance": "self-declared",
-        "connectionInstanceId": "connection:cold-native"
+        "connectionInstanceId": "connection:cold-native",
+        "executablePath": "/test/fixture/browser"
     });
     let admitted = bind_native_service_tab_command(&command, &daemon).unwrap();
     assert_eq!(
@@ -4859,7 +4863,12 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         Some("default")
     );
     crate::apply_existing_lane_profile_to_flags(&mut flags, &session_only, &snapshot).unwrap();
-    let mut prestart = json!({"action":"launch", "runtimeProfile": flags.runtime_profile, "profile": flags.profile});
+    let mut prestart = json!({
+        "action": "launch",
+        "runtimeProfile": flags.runtime_profile,
+        "profile": flags.profile,
+        "executablePath": "/test/fixture/browser"
+    });
     crate::attribute_prestart_launch(&mut prestart, &session_only, &flags.session);
     let metadata = service_profile_lease_metadata_for_command(&prestart, Some(&flags.session))
         .unwrap()
