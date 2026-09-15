@@ -27,16 +27,15 @@ field evidence and acceptance records into the same model.
 
 ## P195 | Custom Profile Identity Repair
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md)
 and [issue #131](https://github.com/CochranResearchGroup/agent-browser/issues/131)
-own candidate `fd5bb67f` for the documented custom `--profile` path flow. The
-repair keeps opaque service identity out of managed runtime-profile validation
-while preserving explicit paths and the managed-name grammar. Focused and
-native-service Rust, strict Clippy, docs, and selected workstation gates pass.
-Protected integration remains; no browser, install, provider, production, or
-release effect occurred.
+are closed after PR #147 merged source head `ada1c62e` as `172ccdd2`. The repair
+keeps opaque service identity out of managed runtime-profile validation while
+preserving explicit paths and the managed-name grammar. Exact-head CI run
+35013644563 passes every ordinary required gate. No browser, install, profile,
+provider, production, or release effect occurred.
 
 ## P194 | Service State Load-Current Contention Repair
 

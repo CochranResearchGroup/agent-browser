@@ -2,7 +2,7 @@
 
 Date: 2026-09-15
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -16,7 +16,7 @@ Branch: `fix/issue-131-custom-profile-identity`
 
 Target: `main`
 
-Integration: merge through the protected `main` workflow after provider-free qualification
+Integration: merged through PR #147 as `172ccdd2f74db1ff9586fa9bf1c52a38f058b662`
 
 ## Objective
 
@@ -44,6 +44,13 @@ Clippy, docs build, remote-view docs, and every source-free workstation check
 selected from the full diff pass. The exact current binary also passes the
 workstation install fixture; its two exact disposable daemon residues were
 identified by deleted executable path and terminated after the pass.
+
+PR #147 merged exact source head `ada1c62e` into `main` as `172ccdd2` after
+exact-head CI run 35013644563 passed every ordinary required gate. Earlier run
+35009619406 retains one unrelated failure in the unchanged Lease Authority
+process-observation test. That exact test passed immediately in isolation, all
+108 Lease Authority crate tests then passed together, and the failure did not
+recur in the clean exact-head run.
 
 Issue #143 owns the separate retained managed-profile owner and inventory
 projection defect. P194 and issues #76 and #87 own Service State persistence
@@ -118,6 +125,24 @@ is read-only against the frozen published diff and has no runtime authority.
 | Integration | Remote branch, linked PR, exact-head checks, and merged-main readback | The repair enters `origin/main` through the protected workflow |
 | Live boundary | Explicitly not applicable | No browser, install, profile, provider, or production mutation occurs |
 
+## Execution Evidence
+
+- Candidate `fd5bb67f` introduced the custom-profile identity repair; merge
+  checkpoint `ada1c62e` reconciled current `main` without changing that source.
+- The focused `custom_profile` family passed all 7 tests after reconciliation.
+- The native-service compartment passed all 585 tests; format, strict workspace
+  Clippy, documentation builds, and every selected workstation fixture passed.
+- CI run 35013644563 passed Version Sync Check, Dashboard, Service Client, Rust
+  Quality, Workstation Fixtures, the comprehensive Rust suite, and no-launch
+  service smokes on exact source head `ada1c62e`.
+- CI run 35009619406 preserves the first failure: the unchanged Lease Authority
+  direct-child identity fixture observed stale process evidence once. The exact
+  test and the complete 108-test Lease Authority compartment passed locally,
+  and the exact-head CI rerun passed without recurrence.
+- PR #147 merged as `172ccdd2`; issue #131 closed from that merge.
+- No browser, installation, profile, provider, production, or release effect
+  occurred.
+
 ## Stop Condition
 
 Stop after protected integration and exact source validation, or earlier if a
@@ -125,3 +150,6 @@ red launch-path fixture cannot exercise the reported symptom and the missing
 installed input cannot be reconstructed provider-free. If the repair requires
 `service_store.rs` or retained-owner projection changes, stop and route that
 work through P194 or issue #143 instead of widening this lane.
+
+The source stop condition is satisfied. The documented custom profile path flow
+is integrated and issue #131 is closed; live runtime effects were not required.
