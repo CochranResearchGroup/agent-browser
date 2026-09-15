@@ -25,6 +25,19 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P196 | Foreground Launch Stale Revision Acceptance
+
+State: OPEN
+
+Current state: [Plan 0196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)
+reactivates [issue #87](https://github.com/CochranResearchGroup/agent-browser/issues/87)
+after #76's shared persistence dependency integrated. The first packet adds the
+missing provider-free multi-process foreground-launch projection regression. A
+passing current-source result will close the residual source gap without an
+adapter change; a failing result permits one bounded launch-specific repair.
+After protected integration, one production candidate will consolidate #76,
+#131, and #87 for transactional installation and exact installed acceptance.
+
 ## P195 | Custom Profile Identity Repair
 
 State: CLOSED
