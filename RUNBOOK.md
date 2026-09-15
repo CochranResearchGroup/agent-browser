@@ -11,6 +11,19 @@ Keep this file at or below 200 lines under policy 0043.
 - [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 335 | 2026-09-14
+
+P169 remains the valid antibot worktree. Plan 0187 joined current `main`
+checkpoint `58349195` through merge `cd898b39` while preserving all challenge
+history. The failed Rust gate was a deterministic fixture migration gap after
+stock Chrome became capability-gated, not a product-policy defect. Checkpoint
+`3146523d` supplies explicit test executables only to unrelated launch fixtures;
+the production guard remains fail-closed. The exact 256-test native-actions
+compartment, formatting, strict Clippy, the challenge-control architecture
+contract, and all three pure crate tests pass. W0 through W3 are complete; W4
+is next. No browser, provider, installed-runtime, production, or release effect
+occurred.
+
 ## Turn 334 | 2026-09-14
 
 [Plan 0191](docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md) is CLOSED through issue #139 and PR #140 after reconciling repository custody.

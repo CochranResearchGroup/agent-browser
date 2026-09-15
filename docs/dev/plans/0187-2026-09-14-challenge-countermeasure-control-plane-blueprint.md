@@ -33,13 +33,18 @@ mutation, a challenge attempt, a retry, production mutation, or release.
 
 ## Current State
 
-W0 is active on `challenge/p169-control-plane` through parent issue #127.
-Current-main merge checkpoint `99c85c683e40331d4d3f592c76f7ca3725d73ea7`
-is published and includes the extracted lease-authority crate. The original
-feature branch remains preserved at
-`2ae7a68332b7a505c74bbd1e987d8a82fb52409d`. Challenge packets are normalized
-as Plan 0188 and Plan 0189. Reconciliation validation and exact active-lane
-readback remain before W0 exit and W1 implementation.
+W0 through W3 are complete on `challenge/p169-control-plane` through parent
+issue #127. Reconciliation checkpoint
+`cd898b39970a62c01ce10cad90631c606172d7a0` joins current `main` checkpoint
+`58349195ccdc5fb2eb53966b31170029594e78a2` without rewriting the preserved
+feature branch at `2ae7a68332b7a505c74bbd1e987d8a82fb52409d`. Challenge packets
+remain normalized as Plan 0188 and Plan 0189. The prior Rust failure was a
+fixture migration gap after stock Chrome became capability-gated; repair
+checkpoint `3146523d1f4b1e99f622c4efa1c6e8a979539ff5` keeps the production guard
+fail-closed and gives unrelated launch fixtures an explicit test executable.
+The exact 256-test native-actions compartment, formatting, strict Clippy, the
+challenge-control architecture contract, and all three challenge-control crate
+tests pass. W4 is the next implementation packet. No live effect is authorized.
 
 ## Consolidation
 
@@ -379,6 +384,15 @@ No runtime, browser, provider, production, or release effect ran.
 
 Exit: a table-driven replay corpus proves every state transition and proves
 that no decision can directly emit desktop or browser effects.
+
+W3 source checkpoint: `agent-browser-challenge-control` owns the pure lifecycle
+state, posture, attempt-budget, cooldown, provider-selection, verification,
+replay, and intervention decisions behind one deterministic `decide` entrypoint.
+Its manifest has no browser, desktop, Service State, platform, network, async,
+or provider dependency. The architecture contract and all three crate tests
+pass, including table-driven lifecycle replay, terminal replay with no emitted
+intent, uncertainty handling, and attempt-budget exhaustion. The checkpoint is
+`fec7fd8729679c1649c838ef5d317ea86179323f`. No runtime or browser effect ran.
 
 ### W4 | Two-profile vertical slice
 
