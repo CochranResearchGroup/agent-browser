@@ -100,6 +100,16 @@ precondition failures. Focused tests and strict workspace Clippy pass. This
 checkpoint still performs no build, repository collection, runtime action, or
 shared CLI adaptation.
 
+The third pure-kernel checkpoint is `32f4f212`. It deterministically allocates
+stable lane namespaces with disjoint install, home, runtime, socket, profile,
+browser-state, output, provider, and port identities. Test-run identity binds
+the candidate, binary, suite revision and selection, fixture, target, runtime
+capability, environment, and resource class. Exact active runs join; only exact
+hermetic successful receipts with proven terminal cleanup are reusable;
+shared-resource conflicts wait; isolated provider-free work remains eligible
+to overlap. Focused tests, the candidate architecture guard, and strict
+workspace Clippy pass without creating any namespace or test process.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
