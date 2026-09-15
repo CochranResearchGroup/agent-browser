@@ -88,6 +88,18 @@ browser, profile, provider, Service State, or production effect was introduced.
 The next packet remains behind the announced bugfix integration readback
 because it begins the shared build and workstation adapter surfaces.
 
+The second pure-kernel checkpoint is `6e37707b`. Equivalent build identities
+now join an active operation or reuse an exactly verified sealed artifact;
+different identities receive deterministic disjoint output directories; failed
+operations are not reused; and a changed sealed digest fails closed. Promotion
+advice verifies the production artifact class, full release profile, clean and
+integrated source provenance, current executable-input equivalence, binary and
+support-manifest digests, exact scoped receipts, development doctor, and task
+residue. It returns explicit rebuild reasons separately from integrity
+precondition failures. Focused tests and strict workspace Clippy pass. This
+checkpoint still performs no build, repository collection, runtime action, or
+shared CLI adaptation.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
