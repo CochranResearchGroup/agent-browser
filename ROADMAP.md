@@ -71,10 +71,12 @@ own the provider-neutral challenge control-plane lane. Source checkpoint
 CI run 34977471104, and the four-platform Lease Authority run 34977470855 pass.
 W0 through W4 are integrated: the phase-bound freshness repair,
 desktop-services extraction, challenge-control extraction, and two-profile
-provider-free Service slice. W5 is the next workfront but remains unstarted and
-not admitted. Issue #66 retains the separately live-gated challenge acceptance
-leaf. This registration authorizes no challenge attempt, retry, browser effect,
-provider effect, runtime mutation, or release.
+provider-free Service slice. [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md)
+admits W5 on `challenge/p169-task-orchestration` for one durable task-level
+Service lifecycle and provider-free fixture driver. Issue #66 retains the
+separately live-gated challenge acceptance leaf. This registration authorizes
+no challenge attempt, retry, browser effect, provider effect, credential use,
+runtime mutation, installation, or release.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

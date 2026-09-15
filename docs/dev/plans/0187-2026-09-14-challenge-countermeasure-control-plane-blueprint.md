@@ -40,9 +40,10 @@ after one bounded rerun of a diagnosed timing-threshold flake. Merge-commit CI
 run 34977471104 and four-platform Lease Authority run 34977470855 also pass.
 The integrated batch contains the phase-bound freshness repair, extracted
 desktop-services and challenge-control crates, and Plan 0192's two-profile
-provider-free Service slice. W5 is the next unstarted workfront and is not
-admitted. Issue #66 retains the separately live-gated challenge acceptance
-leaf. No live effect is authorized by this integration receipt.
+provider-free Service slice. W5 is admitted through Plan 0193 on
+`challenge/p169-task-orchestration` for provider-free source, contract, and
+validation work. Issue #66 retains the separately live-gated challenge
+acceptance leaf. No live effect is authorized by this admission.
 
 ## Consolidation
 
@@ -427,6 +428,11 @@ production, or release effect ran.
 
 Exit: one task receipt explains challenge state, delivery, verification, and
 downstream admission without reconstructing multiple jobs.
+
+W5 implementation is governed by Plan 0193. It reuses the durable task,
+idempotency, custody, and projection seams proven by Authentication Run while
+keeping challenge policy in the extracted challenge-control crate. Its initial
+driver is provider-free and cannot emit browser or desktop effects.
 
 ### W6 | Consumer integration
 
