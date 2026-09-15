@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 552f692502ec63032b0a936029993510f3299fb7
+    checkpoint: e10869f44e051301501398f4417bd470cf642f28
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
-    validation_status: pending
-    validation_ref: null
+    validation_status: passed
+    validation_ref: e10869f44e051301501398f4417bd470cf642f28
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
     overlaps: [P169, P196]
     reconciled_overlaps: [P169, P196]
-    blocker: source-only packet admitted; shared adapters and candidate builds wait for the announced incoming bugfix integration and refreshed main
+    blocker: shared adapters and candidate builds wait for the announced incoming bugfix integration and refreshed main
     updated_at: 2026-09-15
 
   - id: P196

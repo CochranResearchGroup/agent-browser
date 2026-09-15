@@ -71,6 +71,23 @@ browser, profile, provider, or tenant effect. Shared adapters and costly build
 qualification wait for the announced incoming bugfix integration and a fresh
 canonical-main readback.
 
+## Implementation Progress
+
+The first source-only checkpoint is `e10869f4`. It adds the pure
+`agent-browser-candidate` crate, a durable executable-input inventory, stable
+input and manifest digests, artifact-reuse equivalence independent of merge
+provenance, typed advisory results, and revision and fencing-aware idempotent
+transitions. Production-shaped manifests fail closed when dashboard output or
+embedded support assets are absent.
+
+The focused candidate tests, candidate architecture guard, existing extracted
+crate architecture guards and tests, workspace format, and strict workspace
+Clippy pass at this checkpoint. The ordinary Rust runner now exposes the
+`candidate` compartment. No CLI adapter, candidate build, installed runtime,
+browser, profile, provider, Service State, or production effect was introduced.
+The next packet remains behind the announced bugfix integration readback
+because it begins the shared build and workstation adapter surfaces.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
