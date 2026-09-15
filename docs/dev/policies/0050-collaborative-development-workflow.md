@@ -18,6 +18,10 @@
   represents the intent; otherwise create one in the repository's configured
   tracker. Claim it with an accountable owner and an `in progress` state before
   editing so another contributor or agent can discover the active lane.
+- An `in progress` work item does not by itself admit another local checkout.
+  In this repository the coordinator must assign the primary worktree through
+  `0052-session-and-worktree-admission.md` after reconciling the complete local
+  worktree population.
 - Keep the work-item projection concise. It must identify the objective,
   accountable owner, current status, affected surface, risk or live effect,
   branch, durable plan locator when one exists, known overlaps or dependencies,

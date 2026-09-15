@@ -28,14 +28,23 @@ ownership and evidence.
 
 - Use the five product lanes in `docs/dev/product-lanes.md`: `PL-BUGFIX`,
   `PL-AUTH`, `PL-CHALLENGE`, `PL-RECIPES`, and `PL-PLATFORM`.
-- Keep the normal repository-wide limit at six substantive active worktrees:
-  one per product lane plus one additional disjoint bugfix worktree.
+- Keep the normal repository-wide hard limit at six substantive active
+  worktrees: one per product lane plus one additional disjoint bugfix
+  worktree. The operative limit is lower when fewer top-level development
+  sessions have been explicitly admitted. One admitted session owns at most
+  one primary worktree, so four admitted development sessions permit four
+  primary worktrees.
 - Reserve bugfix capacity for production-impacting defects. Pause the
   lowest-priority conflicting lane when needed, start the repair from current
   `origin/main`, integrate it first, then reconcile affected feature branches.
 - Do not fill unused capacity merely because an agent slot exists. Dependencies,
   overlapping writes, live-effect serialization, and review load may require
   fewer concurrent lanes.
+- Apply `0052-session-and-worktree-admission.md` to every portfolio assignment,
+  worktree creation, session handoff, and session closeout. The coordinator
+  creates or assigns primary worktrees serially; lane sessions do not create
+  additional durable checkouts for reviewers, benchmarks, fixtures, or
+  replacement workers.
 
 ## Git And Shared Authority
 

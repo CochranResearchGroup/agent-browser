@@ -131,12 +131,14 @@ but the integration order must preserve that dependency.
 1. Select one primary product lane before creating a plan, branch, or worktree.
 2. Record `Product lane: <ID>` in the plan and `product_lane: <ID>` in the
    active-lane catalog.
-3. Use one active implementation worktree per product lane by default. The
-   bugfix lane may hold two only when their source and runtime surfaces are
-   demonstrably disjoint.
-4. Keep the normal repository-wide limit at six substantive active worktrees:
-   one for each product lane plus one additional disjoint bugfix. Pause or
-   integrate work before exceeding it.
+3. Give each explicitly admitted top-level development session one primary
+   implementation worktree. The bugfix lane may hold two sessions only when
+   their source and runtime surfaces are demonstrably disjoint.
+4. Keep six as the repository-wide hard ceiling, not a standing allocation.
+   The current operative cap is the number of admitted top-level development
+   sessions when that number is lower. Four admitted sessions therefore permit
+   four primary worktrees. Apply policy 0052 before any primary or auxiliary
+   checkout is created or assigned.
 5. Assign each shared source surface to one active writer. Other lanes depend
    on a published checkpoint or work through an explicitly recorded overlap.
 6. Separate shared contracts from adapters. The platform lane owns common

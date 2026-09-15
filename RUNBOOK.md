@@ -5,16 +5,16 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 [Superseded Plan 0186 checkpoints through Turn 328 are preserved separately](RUNBOOK-history-2026-09-14-p186-through-turn328.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 330 | 2026-09-14
+## Turn 331 | 2026-09-14
 
-Issue #132 owns a `PL-PLATFORM` policy correction after the Plan 0186 installer
-collision proved comments and file locks do not establish runtime effect
-custody. Policy 0051 defines one atomic environment lease with
-command-bound validation, renewal, transfer, release, stale-owner recovery, and
-auditable receipts. Until runtime enforcement lands, one coordinator session
-must serialize production and staging effects with fresh pre-command readback.
-This docs-only slice performs no runtime mutation. Next: validate, merge, and
-close the policy work item; runtime enforcement remains a separate delivery.
+Issue #134 corrects the multi-session admission policy after four intended
+development sessions produced six non-canonical worktrees. Policy 0052 makes
+the operative primary-worktree cap equal the admitted top-level session count,
+reserves creation to the coordinator, and makes auxiliary checkout cleanup part
+of the parent slice. Existing dirty and detached worktrees remain preserved for
+separate reconciliation. Issue #132 and policy 0051 remain the distinct runtime
+effect-custody correction. This policy slice performs no runtime or worktree
+cleanup effect.
 
 ## Turn 329 | 2026-09-14
 
