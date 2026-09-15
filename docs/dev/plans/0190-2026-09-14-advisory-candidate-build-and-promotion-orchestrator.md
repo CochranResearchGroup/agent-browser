@@ -2,9 +2,9 @@
 
 Date: 2026-09-14
 
-Plan version: 2
+Plan version: 3
 
-State: PLANNED
+State: OPEN
 
 Lane: P190
 
@@ -25,6 +25,8 @@ Work item: [issue #136](https://github.com/CochranResearchGroup/agent-browser/is
 Source baseline: `d101eb1516a26a8ae40821c7da69bba77e43f78d`
 
 Version 2 baseline: `4e047fb4b51f605094b3557eb0cb0de1a2643a1e`
+
+Implementation baseline: `552f692502ec63032b0a936029993510f3299fb7`
 
 Consolidation: required
 
@@ -60,11 +62,14 @@ Cargo profile differs from production.
 The Plan 0186 installer collision showed that a process lock can serialize two
 commands while still leaving their intent and candidate ownership ambiguous.
 Policies 0051 and 0052 now treat coordination records as integrity mechanisms,
-not agent-role permissions. Issue #136 tracks implementation. This planning
-slice changes no executable, creates no implementation worktree, and performs
-no build, install, supervisor, browser, profile, provider, or tenant effect.
-Implementation admission waits for the current worktree and active-lane drift
-to be reconciled.
+not agent-role permissions. Issue #136 tracks implementation. Implementation
+is admitted from canonical `main` checkpoint `552f6925` on
+`platform/p190-advisory-candidate-orchestrator`. The first packet inventories
+the executable-input closure and develops the pure candidate manifest and
+advice interface without a candidate build or any install, supervisor,
+browser, profile, provider, or tenant effect. Shared adapters and costly build
+qualification wait for the announced incoming bugfix integration and a fresh
+canonical-main readback.
 
 ## Frozen Decisions
 

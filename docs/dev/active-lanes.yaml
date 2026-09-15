@@ -1,6 +1,28 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P190
+    product_lane: PL-PLATFORM
+    objective: Build the deterministic candidate identity, build coordination, and promotion advisory surface
+    plan: docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md
+    plan_ref: refs/heads/platform/p190-advisory-candidate-orchestrator
+    branch: platform/p190-advisory-candidate-orchestrator
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 552f692502ec63032b0a936029993510f3299fb7
+    remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
+    integration_receipt: null
+    integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
+    validation_status: pending
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#136]
+    dependencies: []
+    overlaps: [P169, P196]
+    reconciled_overlaps: [P169, P196]
+    blocker: source-only packet admitted; shared adapters and candidate builds wait for the announced incoming bugfix integration and refreshed main
+    updated_at: 2026-09-15
+
   - id: P196
     product_lane: PL-BUGFIX
     objective: Prove foreground launch projection convergence under adjacent Service State revisions and install one consolidated production candidate
