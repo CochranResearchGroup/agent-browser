@@ -6,6 +6,7 @@
 //! detector and receipt mechanics remain private. Source and visualization
 //! pixels remain response-only.
 
+use agent_browser_challenge_control::{HCAPTCHA_PROFILE, TURNSTILE_PROFILE};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
@@ -26,18 +27,18 @@ const OBSERVATION_SCHEMA_VERSION: &str = "v1";
 const PROFILE_VERSION: &str = "p110-v1";
 const LOCATOR_ID: &str = "p110-control-v1";
 const TARGET_CLASS: &str = "synthetic_verification_control";
-pub(crate) const TURNSTILE_LOCATOR_ID: &str = "cloudflare-turnstile-v1";
+pub(crate) const TURNSTILE_LOCATOR_ID: &str = TURNSTILE_PROFILE.locator_id;
 pub(crate) const TURNSTILE_TARGET_CLASS: &str = "cloudflare_turnstile_checkbox";
-const TURNSTILE_PROFILE_VERSION: &str = "p169-v1";
+const TURNSTILE_PROFILE_VERSION: &str = TURNSTILE_PROFILE.profile_version;
 const TURNSTILE_TOKEN_ID: &str = "verify-you-are-human";
-const TURNSTILE_TEMPLATE_THRESHOLD: u32 = 8_200;
-pub(crate) const HCAPTCHA_LOCATOR_ID: &str = "hcaptcha-checkbox-v1";
+const TURNSTILE_TEMPLATE_THRESHOLD: u32 = TURNSTILE_PROFILE.threshold as u32;
+pub(crate) const HCAPTCHA_LOCATOR_ID: &str = HCAPTCHA_PROFILE.locator_id;
 pub(crate) const HCAPTCHA_TARGET_CLASS: &str = "hcaptcha_checkbox";
-const HCAPTCHA_PROFILE_VERSION: &str = "p181-v2";
+const HCAPTCHA_PROFILE_VERSION: &str = HCAPTCHA_PROFILE.profile_version;
 const HCAPTCHA_PROMPT_TOKEN_ID: &str = "i-am-human";
 const HCAPTCHA_BRAND_TOKEN_ID: &str = "hcaptcha-brand";
 const HCAPTCHA_CHALLENGE_TOKEN_ID: &str = "hcaptcha-challenge-open";
-const HCAPTCHA_TEMPLATE_THRESHOLD: u32 = 8_200;
+const HCAPTCHA_TEMPLATE_THRESHOLD: u32 = HCAPTCHA_PROFILE.threshold as u32;
 const COORDINATE_SPACE: &str = "desktop_physical_pixels";
 const NORMALIZATION_VERSION: &str = "rgba8-srgb-integer-v1";
 const TEMPLATE_DETECTOR_ID: &str = "rgba-template";
@@ -2769,6 +2770,22 @@ mod tests {
             },
             tokens,
         )
+    }
+
+    #[test]
+    fn challenge_control_profiles_bind_exact_locator_contracts() {
+        for profile in [TURNSTILE_PROFILE, HCAPTCHA_PROFILE] {
+            let locator = locator_profile(profile.locator_id).unwrap();
+            assert_eq!(locator.locator_id, profile.locator_id);
+            assert_eq!(locator.profile_version, profile.profile_version);
+            assert_eq!(locator.profile_sha256, profile.detector_digest);
+            let threshold = match locator.kind {
+                LocatorKind::CloudflareTurnstile => TURNSTILE_TEMPLATE_THRESHOLD,
+                LocatorKind::Hcaptcha => HCAPTCHA_TEMPLATE_THRESHOLD,
+                LocatorKind::Synthetic => unreachable!(),
+            };
+            assert_eq!(threshold, u32::from(profile.threshold));
+        }
     }
 
     fn draw_fixture_control(

@@ -791,6 +791,36 @@ export interface ServiceDesktopInteractData {
   [key: string]: unknown;
 }
 
+export interface ChallengeControlProfileReceipt {
+  profileId: "turnstile-checkbox-p169-v1" | "hcaptcha-checkbox-p181-v2";
+  locatorId: "cloudflare-turnstile-v1" | "hcaptcha-checkbox-v1";
+  recipeId: "cloudflare-turnstile-v1" | "hcaptcha-checkbox-v1";
+  profileVersion: "p169-v1" | "p181-v2";
+  threshold: number;
+  detectorDigest: string;
+}
+
+export interface ChallengeCompositeReceipt {
+  schemaVersion: "challenge-composite-receipt.v1";
+  evidenceClass: "provider_free_scenario";
+  profile: ChallengeControlProfileReceipt;
+  outcome: "not_present" | "eligible" | "passed" | "denied" | "intervention_required";
+  state: "not_present" | "checkbox_present" | "passed" | "failed" | "human_intervention_required";
+  delivery: "acknowledged" | "rejected" | null;
+  verification: "passed" | null;
+  intervention: "ambiguous" | null;
+  attemptsStarted: number;
+  stepsExecuted: number;
+  pointerEvents: number;
+  keyEvents: number;
+  emittedEffects: false;
+}
+
+export interface ServiceChallengeControlEvaluateData {
+  compositeReceipt: ChallengeCompositeReceipt;
+  [key: string]: unknown;
+}
+
 export interface ServiceTabHandleTraceFilter {
   browserId?: string | null;
   profileId?: string | null;
@@ -1457,6 +1487,7 @@ export interface ServiceRequestActionDataMap {
   desktop_evidence_observe: ServiceDesktopEvidenceObserveData;
   desktop_prompt_observe: ServiceDesktopPromptObserveData;
   desktop_interact: ServiceDesktopInteractData;
+  challenge_control_evaluate: ServiceChallengeControlEvaluateData;
   service_authentication_run_start: ServiceAuthenticationRunData;
   service_authentication_run_status: ServiceAuthenticationRunData;
   service_authentication_run_resume: ServiceAuthenticationRunData;

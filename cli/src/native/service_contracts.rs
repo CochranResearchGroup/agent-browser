@@ -173,6 +173,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "desktop_evidence_observe",
     "desktop_prompt_observe",
     "desktop_interact",
+    "challenge_control_evaluate",
     "probe",
     "tab_handle_refresh",
     "tab_handle_release",

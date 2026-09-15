@@ -1191,6 +1191,15 @@ can use `service_request` or the dedicated `desktop_interact` tool. Generated
 client helpers are `createServiceDesktopInteractRequest()`,
 `requestServiceDesktopInteract()`, and `runServiceDesktopInteraction()`.
 
+Use `action: "challenge_control_evaluate"` for a no-launch, provider-free
+challenge lifecycle receipt. Supply `challengeProfileId` as either
+`turnstile-checkbox-p169-v1` or `hcaptcha-checkbox-p181-v2`, plus one
+`scenarioOutcome`: `not_present`, `eligible`, `passed`, `denied`, or
+`intervention_required`. The request accepts no pixels, coordinates, detector
+settings, provider controls, or retry options. Its composite receipt always
+reports `evidenceClass: "provider_free_scenario"` and
+`emittedEffects: false`; it is contract evidence, not live CAPTCHA acceptance.
+
 Receipts contain authority, hashed input, cleanup, and verification metadata.
 They do not contain frame pixels, plaintext typed content, or the full motion
 path. A partial input effect returns an explicit uncertain receipt and is never

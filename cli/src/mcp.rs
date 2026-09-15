@@ -1282,6 +1282,16 @@ fn service_mcp_tools() -> Vec<Value> {
                         "enum": ["p110-external-prompt-v1"],
                         "description": "Repository-owned synthetic prompt observation profile for action=desktop_prompt_observe."
                     },
+                    "challengeProfileId": {
+                        "type": "string",
+                        "enum": ["turnstile-checkbox-p169-v1", "hcaptcha-checkbox-p181-v2"],
+                        "description": "Repository-owned profile for provider-free challenge lifecycle evaluation."
+                    },
+                    "scenarioOutcome": {
+                        "type": "string",
+                        "enum": ["not_present", "eligible", "passed", "denied", "intervention_required"],
+                        "description": "Provider-free lifecycle scenario. It never emits browser or desktop effects."
+                    },
                     "controllerLeaseId": {
                         "type": "string",
                         "description": "Existing primary controller lease required by action=desktop_interact."

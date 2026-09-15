@@ -1025,6 +1025,15 @@ dedicated `desktop_interact` tool. Client helpers are
 `createServiceDesktopInteractRequest()`, `requestServiceDesktopInteract()`,
 and `runServiceDesktopInteraction()`.
 
+Use `challenge_control_evaluate` through the canonical `service_request` when
+you need a no-launch, provider-free lifecycle receipt. Choose only
+`turnstile-checkbox-p169-v1` or `hcaptcha-checkbox-p181-v2` as
+`challengeProfileId` and one of `not_present`, `eligible`, `passed`, `denied`,
+or `intervention_required` as `scenarioOutcome`. Do not send pixels,
+coordinates, selectors, detector settings, provider controls, or retry
+options. The receipt always has `evidenceClass: "provider_free_scenario"` and
+`emittedEffects: false`; never treat it as live challenge acceptance.
+
 Use `cloudflare-turnstile-v1` only for a visible Cloudflare checkbox challenge
 on an exactly bound service-owned X11 browser. First run `desktop locate` with
 the same locator ID. The interaction recipe derives coordinates from the exact

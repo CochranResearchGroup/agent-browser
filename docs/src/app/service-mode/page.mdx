@@ -625,6 +625,27 @@ const interaction = await runServiceDesktopInteraction({
 });
 ```
 
+## Evaluate a provider-free challenge lifecycle
+
+Use the generic Service request action `challenge_control_evaluate` to run a
+repository-owned Turnstile or hCaptcha scenario through the common lifecycle
+without launching a browser or emitting desktop input:
+
+```bash
+curl -X POST "http://127.0.0.1:9223/api/service/request" \
+  -H "content-type: application/json" \
+  -d '{"action":"challenge_control_evaluate","challengeProfileId":"hcaptcha-checkbox-p181-v2","scenarioOutcome":"passed","serviceName":"ChallengeControl","agentName":"fixture-agent","taskName":"evaluate-provider-free-scenario"}'
+```
+
+The two accepted profile IDs retain separate locator, recipe, version,
+threshold, digest, and fixture identities. Accepted scenario outcomes are
+`not_present`, `eligible`, `passed`, `denied`, and
+`intervention_required`. The request accepts no pixels, coordinates,
+selectors, detector settings, provider controls, or retry options. Every
+composite receipt reports `evidenceClass: "provider_free_scenario"` and
+`emittedEffects: false`; the result is contract evidence and is not live
+CAPTCHA acceptance.
+
 <table>
   <thead>
     <tr>

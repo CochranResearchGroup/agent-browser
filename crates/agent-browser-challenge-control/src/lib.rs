@@ -3,6 +3,7 @@
 //! This crate returns policy decisions only. It has no browser, desktop-input,
 //! platform, persistence, network, or runtime authority.
 
+use agent_browser_desktop_services::{HCAPTCHA_RECIPE_ID, TURNSTILE_RECIPE_ID};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,7 +109,8 @@ pub enum ChallengeEvent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum InterventionReason {
     Unsupported,
     Ambiguous,
@@ -142,6 +144,190 @@ pub enum ChallengeControlError {
     ProviderUnavailable,
     BudgetExceeded,
     CooldownActive,
+}
+
+/// Registered detection and resolution identities for one challenge family.
+/// Detector implementation details remain in the owning adapter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChallengeProfile {
+    pub profile_id: &'static str,
+    pub locator_id: &'static str,
+    pub recipe_id: &'static str,
+    pub profile_version: &'static str,
+    pub threshold: u16,
+    pub detector_digest: &'static str,
+}
+
+pub const TURNSTILE_PROFILE: ChallengeProfile = ChallengeProfile {
+    profile_id: "turnstile-checkbox-p169-v1",
+    locator_id: "cloudflare-turnstile-v1",
+    recipe_id: TURNSTILE_RECIPE_ID,
+    profile_version: "p169-v1",
+    threshold: 8_200,
+    detector_digest: "53aa91ca4826762e9d4e00854d41f6b40f83c480b718e8ec5166b92b59e5f2d2",
+};
+
+pub const HCAPTCHA_PROFILE: ChallengeProfile = ChallengeProfile {
+    profile_id: "hcaptcha-checkbox-p181-v2",
+    locator_id: "hcaptcha-checkbox-v1",
+    recipe_id: HCAPTCHA_RECIPE_ID,
+    profile_version: "p181-v2",
+    threshold: 8_200,
+    detector_digest: "c8447ef77f6c4c45780cd784aa63275da480c6afe479a5410852b2085ba8c0cf",
+};
+
+pub const CHALLENGE_PROFILES: &[ChallengeProfile] = &[TURNSTILE_PROFILE, HCAPTCHA_PROFILE];
+
+pub fn challenge_profile(profile_id: &str) -> Option<&'static ChallengeProfile> {
+    CHALLENGE_PROFILES
+        .iter()
+        .find(|profile| profile.profile_id == profile_id)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderFreeScenarioOutcome {
+    NotPresent,
+    Eligible,
+    Passed,
+    Denied,
+    InterventionRequired,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompositeEvidenceClass {
+    ProviderFreeScenario,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChallengeCompositeReceipt {
+    pub schema_version: &'static str,
+    pub evidence_class: CompositeEvidenceClass,
+    pub profile: ChallengeProfile,
+    pub outcome: ProviderFreeScenarioOutcome,
+    pub state: ChallengeState,
+    pub delivery: Option<&'static str>,
+    pub verification: Option<&'static str>,
+    pub intervention: Option<InterventionReason>,
+    pub attempts_started: u8,
+    pub steps_executed: u8,
+    pub pointer_events: u8,
+    pub key_events: u8,
+    pub emitted_effects: bool,
+}
+
+/// Evaluate a repository-owned scenario through the same provider-neutral
+/// lifecycle used by effect-capable adapters. This helper emits no effects.
+pub fn evaluate_provider_free_scenario(
+    profile: ChallengeProfile,
+    outcome: ProviderFreeScenarioOutcome,
+) -> Result<ChallengeCompositeReceipt, ChallengeControlError> {
+    let policy = ChallengePolicy {
+        policy_digest: profile.detector_digest.to_string(),
+        allowed_provider_ids: vec![profile.profile_id.to_string()],
+        max_attempts: 1,
+        max_steps: 1,
+        max_pointer_events: 2,
+        max_key_events: 0,
+        cooldown_ms: 5_000,
+        deadline_at_ms: 50_000,
+    };
+    let posture = match outcome {
+        ProviderFreeScenarioOutcome::NotPresent => ObservationPosture::NotPresent,
+        ProviderFreeScenarioOutcome::InterventionRequired => ObservationPosture::Ambiguous,
+        ProviderFreeScenarioOutcome::Eligible
+        | ProviderFreeScenarioOutcome::Passed
+        | ProviderFreeScenarioOutcome::Denied => ObservationPosture::Eligible,
+    };
+    let mut decision = decide(
+        &policy,
+        &ChallengeSnapshot::default(),
+        ChallengeEvent::Observed {
+            posture,
+            provider_id: profile.profile_id.to_string(),
+            now_ms: 1_000,
+        },
+    )?;
+    let mut delivery = None;
+    let mut verification = None;
+
+    if matches!(
+        outcome,
+        ProviderFreeScenarioOutcome::Passed | ProviderFreeScenarioOutcome::Denied
+    ) {
+        let eligible = decision_snapshot(&decision).clone();
+        decision = decide(
+            &policy,
+            &eligible,
+            ChallengeEvent::StartAttempt { now_ms: 1_001 },
+        )?;
+        let solving = decision_snapshot(&decision).clone();
+        let delivery_state = if outcome == ProviderFreeScenarioOutcome::Denied {
+            DeliveryState::Rejected
+        } else {
+            DeliveryState::Acknowledged
+        };
+        delivery = Some(match delivery_state {
+            DeliveryState::Acknowledged => "acknowledged",
+            DeliveryState::Rejected => "rejected",
+            DeliveryState::Partial | DeliveryState::Uncertain => unreachable!(),
+        });
+        decision = decide(
+            &policy,
+            &solving,
+            ChallengeEvent::EffectFinished {
+                delivery: delivery_state,
+                steps: 1,
+                pointer_events: 2,
+                key_events: 0,
+            },
+        )?;
+        if outcome == ProviderFreeScenarioOutcome::Passed {
+            let verifying = decision_snapshot(&decision).clone();
+            decision = decide(
+                &policy,
+                &verifying,
+                ChallengeEvent::Verified {
+                    completion: ChallengeCompletion::Passed,
+                },
+            )?;
+            verification = Some("passed");
+        }
+    }
+
+    let snapshot = decision_snapshot(&decision);
+    let intervention = match &decision {
+        ChallengeDecision::Terminal { intervention, .. } => *intervention,
+        _ => None,
+    };
+    Ok(ChallengeCompositeReceipt {
+        schema_version: "challenge-composite-receipt.v1",
+        evidence_class: CompositeEvidenceClass::ProviderFreeScenario,
+        profile,
+        outcome,
+        state: snapshot.state,
+        delivery,
+        verification,
+        intervention,
+        attempts_started: snapshot.attempts_started,
+        steps_executed: snapshot.steps_executed,
+        pointer_events: snapshot.pointer_events,
+        key_events: snapshot.key_events,
+        emitted_effects: false,
+    })
+}
+
+fn decision_snapshot(decision: &ChallengeDecision) -> &ChallengeSnapshot {
+    match decision {
+        ChallengeDecision::NoEffect(snapshot)
+        | ChallengeDecision::PermitAttempt(snapshot)
+        | ChallengeDecision::AwaitVerification(snapshot)
+        | ChallengeDecision::Terminal { snapshot, .. }
+        | ChallengeDecision::Replay { snapshot, .. } => snapshot,
+    }
 }
 
 pub fn decide(
@@ -489,5 +675,48 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn both_profiles_share_five_provider_free_lifecycle_scenarios() {
+        let cases = [
+            (
+                ProviderFreeScenarioOutcome::NotPresent,
+                ChallengeState::NotPresent,
+            ),
+            (
+                ProviderFreeScenarioOutcome::Eligible,
+                ChallengeState::CheckboxPresent,
+            ),
+            (ProviderFreeScenarioOutcome::Passed, ChallengeState::Passed),
+            (ProviderFreeScenarioOutcome::Denied, ChallengeState::Failed),
+            (
+                ProviderFreeScenarioOutcome::InterventionRequired,
+                ChallengeState::HumanInterventionRequired,
+            ),
+        ];
+        for profile in CHALLENGE_PROFILES {
+            for (outcome, expected_state) in cases {
+                let first = evaluate_provider_free_scenario(*profile, outcome).unwrap();
+                let second = evaluate_provider_free_scenario(*profile, outcome).unwrap();
+                assert_eq!(first, second);
+                assert_eq!(first.state, expected_state);
+                assert!(!first.emitted_effects);
+                assert_eq!(
+                    first.evidence_class,
+                    CompositeEvidenceClass::ProviderFreeScenario
+                );
+            }
+        }
+        assert_ne!(TURNSTILE_PROFILE.profile_id, HCAPTCHA_PROFILE.profile_id);
+        assert_ne!(TURNSTILE_PROFILE.locator_id, HCAPTCHA_PROFILE.locator_id);
+        assert_ne!(
+            TURNSTILE_PROFILE.profile_version,
+            HCAPTCHA_PROFILE.profile_version
+        );
+        assert_ne!(
+            TURNSTILE_PROFILE.detector_digest,
+            HCAPTCHA_PROFILE.detector_digest
+        );
     }
 }

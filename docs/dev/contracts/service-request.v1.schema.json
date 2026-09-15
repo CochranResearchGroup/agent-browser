@@ -23,6 +23,7 @@
         "desktop_evidence_observe",
         "desktop_prompt_observe",
         "desktop_interact",
+        "challenge_control_evaluate",
         "probe",
         "tab_handle_refresh",
         "tab_handle_release",
@@ -483,6 +484,16 @@
       "type": "string",
       "enum": ["p110-external-prompt-v1"],
       "description": "Repository-owned synthetic prompt observation profile for action=desktop_prompt_observe."
+    },
+    "challengeProfileId": {
+      "type": "string",
+      "enum": ["turnstile-checkbox-p169-v1", "hcaptcha-checkbox-p181-v2"],
+      "description": "Repository-owned challenge profile for action=challenge_control_evaluate. Each profile retains its own locator, interaction recipe, detector version, digest, threshold, and fixtures."
+    },
+    "scenarioOutcome": {
+      "type": "string",
+      "enum": ["not_present", "eligible", "passed", "denied", "intervention_required"],
+      "description": "Provider-free lifecycle scenario evaluated by action=challenge_control_evaluate. It is fixture evidence only and never authorizes or emits browser, provider, or desktop-input effects."
     },
     "controllerLeaseId": {
       "type": "string",

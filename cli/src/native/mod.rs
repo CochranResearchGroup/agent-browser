@@ -37,6 +37,7 @@ pub mod browser_wait;
 pub mod cancellation;
 #[allow(dead_code)]
 pub mod cdp;
+pub(crate) mod challenge_control_action;
 #[allow(dead_code)]
 pub mod clipboard;
 #[allow(dead_code)]

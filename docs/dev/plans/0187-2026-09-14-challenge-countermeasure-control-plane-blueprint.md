@@ -43,8 +43,9 @@ fixture migration gap after stock Chrome became capability-gated; repair
 checkpoint `3146523d1f4b1e99f622c4efa1c6e8a979539ff5` keeps the production guard
 fail-closed and gives unrelated launch fixtures an explicit test executable.
 The exact 256-test native-actions compartment, formatting, strict Clippy, the
-challenge-control architecture contract, and all three challenge-control crate
-tests pass. W4 is the next implementation packet. No live effect is authorized.
+challenge-control architecture contract, and the challenge-control crate tests
+pass. W4 is complete through Plan 0192. W5 is the next unstarted workfront. No
+live effect is authorized.
 
 ## Consolidation
 
@@ -405,6 +406,20 @@ intent, uncertainty handling, and attempt-budget exhaustion. The checkpoint is
 
 Exit: both challenge families traverse one lifecycle without shared detector
 heuristics or provider-specific branches in the control-plane core.
+
+W4 source checkpoint: Plan 0192 registers immutable Turnstile and hCaptcha
+profiles above one generic provider-free lifecycle evaluator. Desktop locator
+constants consume the shared profile IDs, versions, and thresholds, and a
+focused adapter test verifies the exact detector digests. Recipe IDs come from
+the extracted desktop-services crate. The no-launch
+`challenge_control_evaluate` Service action accepts only a registered profile,
+one of the five bounded scenario outcomes, and attribution labels. It returns a
+typed composite receipt marked `provider_free_scenario` and
+`emittedEffects=false`. Rust, HTTP, MCP, the field-role ledger, and generated
+client types agree. Focused lifecycle, adapter, normalization, dispatch,
+contract, client, architecture, docs, formatting, and strict Clippy gates pass.
+No browser, CAPTCHA, desktop input, provider, install, shared-runtime,
+production, or release effect ran.
 
 ### W5 | Task-shaped Service orchestration
 
