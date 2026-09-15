@@ -67,11 +67,14 @@ Current state: branch-local
 leaf [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66),
 and draft [PR #128](https://github.com/CochranResearchGroup/agent-browser/pull/128)
 own the active provider-neutral challenge control-plane lane. Local and remote
-branch custody agree at `fec7fd8729679c1649c838ef5d317ea86179323f`. The
-branch is eight commits behind current `main`, the pull request is conflicting,
-and its Rust gate failed. Reconcile those source and provider-free validation
-gaps before integration. This registration authorizes no challenge attempt,
-retry, browser effect, provider effect, or runtime mutation.
+source custody agrees at `406323bbb61201a59dcf3fc7eea64e2b2631738e`, which
+already contains current `main` checkpoint `58349195`. W0 through W4 are
+complete: the phase-bound freshness repair, desktop-services extraction,
+challenge-control extraction, and two-profile provider-free Service slice pass
+their local source gates. Final integration-custody documentation and exact-head
+CI remain before protected-main integration. W5 is unstarted and not admitted.
+This registration authorizes no challenge attempt, retry, browser effect,
+provider effect, runtime mutation, or release.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
@@ -207,7 +210,7 @@ separate issue #84 and PR #83 lane.
 
 ## P178 | Browserless Runtime Lane Quiescence
 
-State: BLOCKED
+State: OPEN
 
 Current state: [Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md),
 [issue #84](https://github.com/CochranResearchGroup/agent-browser/issues/84),
@@ -272,6 +275,45 @@ shared-tab cleanup-policy label mismatch is retained in the plan closeout for a
 future bounded contract repair.
 [Plan 0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
 is the closed execution record.
+
+## P169 | Challenge Countermeasure Control Plane
+
+State: BLOCKED
+
+Current state: [Plan 0169](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md)
+and [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66)
+own the existing bounded Turnstile implementation. That leaf remains paused
+because live interaction acceptance is unproven. No retry is authorized. The
+[desktop guard architecture note](docs/dev/notes/0179-2026-09-13-captcha-and-desktop-automation-guard-architecture.md)
+preserves the broader staged design under this single P169 lane.
+
+[Plan 0187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
+is the active parent blueprint for the broader product trunk under
+[issue #127](https://github.com/CochranResearchGroup/agent-browser/issues/127). It defines
+the provider-neutral challenge lifecycle and policy control plane, the shared
+desktop transaction capability, provider and consumer branches, and workfronts
+W0 through W8. W0 is reconciling current main on
+`challenge/p169-control-plane`; W1 through W4 are the first provider-free
+implementation batch. It authorizes no runtime effect or hCaptcha retry.
+
+The operator resumed provider-free anti-bot feature work on 2026-09-13.
+[Plan 0188](docs/dev/plans/0188-2026-09-13-captcha-guard-contract-and-threat-model.md)
+closed the first architecture packet at
+`c6f0b447a03a586991561824ad0e744974267e81`: guard request, capability,
+receipt, threat model, dependency direction, and deterministic fixtures are
+frozen. This did not authorize installation, browser or profile mutation,
+desktop input, a live challenge attempt, or retry. Plan 0169 remains blocked on
+its separate live-interaction acceptance gate.
+
+[Plan 0189](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)
+adds the separate hCaptcha fixture locator and one-click recipe. Its
+provider-free implementation and corrected no-effect classification for
+pre-input controller-authority rejection pass, but the installed acceptance
+attempt `r163653` stopped before `LeftDown` because the original observation
+expired during the guarded pointer trajectory. Plan 0189 remains BLOCKED
+on a separately planned interaction-freshness repair and a new explicit live
+interaction budget. No retry, reset, challenge solving, provider apply,
+production mutation, or release is authorized.
 
 ## P171 | Service Job Timestamp Integration And Install
 

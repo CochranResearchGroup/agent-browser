@@ -14,7 +14,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 mod x11;
-pub(crate) use x11::XTestSink;
+pub(crate) use x11::{XDoToolSink, XTestSceneProbe, XTestSink};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RouteEffectFenceIdentity {
@@ -456,6 +456,10 @@ impl<S> ProviderEffectExecutor<S>
 where
     S: ClosedX11Sink,
 {
+    pub(crate) fn sink(&self) -> &S {
+        &self.sink
+    }
+
     pub(crate) fn new(
         runtime_state_root: &Path,
         environment_id: &str,

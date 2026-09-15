@@ -1,0 +1,589 @@
+{
+  "schemaVersion": "v1",
+  "valid": [
+    {
+      "name": "observe-only-bound-candidate",
+      "schema": "request",
+      "document": {
+        "schemaVersion": "v1",
+        "operationId": "operation:observe-1",
+        "idempotencyKey": "idempotency:observe-1",
+        "policyDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "observe_only",
+        "caller": {
+          "serviceName": "fixture-service",
+          "agentName": "fixture-agent",
+          "taskName": "observe-turnstile",
+          "callerId": "caller:fixture",
+          "requestId": "request:observe-1",
+          "principalId": "principal:fixture"
+        },
+        "authorityEnvelope": {
+          "browserRef": "browser:1",
+          "sessionRef": "session:1",
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:sha256:1111",
+          "frameRef": "frame:1",
+          "frameSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "geometryEpoch": "geometry:1",
+          "candidateRef": "candidate:1",
+          "controllerAuthorityRef": "authority:observe-1",
+          "expiresAt": "2026-09-13T23:10:00Z"
+        },
+        "effectBudget": {
+          "maxAttempts": 0,
+          "maxSteps": 1,
+          "maxPointerEvents": 0,
+          "maxKeyEvents": 0,
+          "deadlineMs": 5000
+        }
+      }
+    },
+    {
+      "name": "one-bounded-automated-attempt",
+      "schema": "request",
+      "document": {
+        "schemaVersion": "v1",
+        "operationId": "operation:solve-1",
+        "idempotencyKey": "idempotency:solve-1",
+        "policyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "operator_authorized_automated_solve",
+        "caller": {
+          "serviceName": "fixture-service",
+          "agentName": null,
+          "taskName": "solve-turnstile",
+          "callerId": "caller:fixture",
+          "requestId": "request:solve-1",
+          "principalId": "principal:fixture"
+        },
+        "authorityEnvelope": {
+          "browserRef": "browser:1",
+          "sessionRef": null,
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:sha256:2222",
+          "frameRef": "frame:2",
+          "frameSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "geometryEpoch": "geometry:2",
+          "candidateRef": "candidate:2",
+          "controllerAuthorityRef": "authority:solve-1",
+          "expiresAt": "2026-09-13T23:11:00Z"
+        },
+        "effectBudget": {
+          "maxAttempts": 1,
+          "maxSteps": 8,
+          "maxPointerEvents": 16,
+          "maxKeyEvents": 0,
+          "deadlineMs": 30000
+        }
+      }
+    },
+    {
+      "name": "x11-exact-guarantees",
+      "schema": "capability",
+      "document": {
+        "schemaVersion": "v1",
+        "adapterId": "controlled-x11-v1",
+        "adapterVersion": "1.0.0",
+        "platform": "x11",
+        "modes": [
+          "observe_only",
+          "fixture_solve",
+          "operator_authorized_automated_solve"
+        ],
+        "challengeProfiles": ["cloudflare-turnstile-v1"],
+        "effectCeiling": {
+          "maxAttempts": 1,
+          "maxSteps": 8,
+          "maxPointerEvents": 16,
+          "maxKeyEvents": 0,
+          "maxDeadlineMs": 30000
+        },
+        "guarantees": {
+          "freshFrame": true,
+          "geometryEpoch": true,
+          "windowIdentity": true,
+          "processIdentity": true,
+          "controllerAuthority": true,
+          "focusCheck": true,
+          "effectJournal": true,
+          "replaySuppression": true,
+          "afterStateVerification": true
+        },
+        "rawCoordinatesAccepted": false,
+        "arbitraryCommandsAccepted": false,
+        "humanHandoff": "opaque_remote_view"
+      }
+    },
+    {
+      "name": "challenge-passed-downstream-denied",
+      "schema": "receipt",
+      "document": {
+        "schemaVersion": "v1",
+        "receiptId": "receipt:passed-1",
+        "operationId": "operation:solve-1",
+        "requestDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "challengeProfileId": "hcaptcha-imperva-v1",
+        "mode": "operator_authorized_automated_solve",
+        "state": "passed",
+        "binding": {
+          "browserRef": "browser:1",
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:sha256:2222",
+          "frameRef": "frame:3",
+          "frameSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "geometryEpoch": "geometry:3",
+          "candidateRef": "candidate:2",
+          "controllerAuthorityRef": "authority:solve-1"
+        },
+        "delivery": "acknowledged",
+        "effectSummary": {
+          "attemptsStarted": 1,
+          "stepsExecuted": 6,
+          "pointerEvents": 12,
+          "keyEvents": 0,
+          "newEffectsEmitted": 12
+        },
+        "verification": {
+          "challengeCompletion": "passed",
+          "downstreamAdmission": "denied",
+          "evidenceRefs": ["evidence:challenge-callback", "evidence:downstream-denial"]
+        },
+        "replay": {
+          "disposition": "first_execution",
+          "originalReceiptRef": null,
+          "emittedNewEffects": true
+        },
+        "humanIntervention": {
+          "required": false,
+          "reason": null,
+          "handoffId": null
+        },
+        "errors": []
+      }
+    },
+    {
+      "name": "replay-emits-no-new-effects",
+      "schema": "receipt",
+      "document": {
+        "schemaVersion": "v1",
+        "receiptId": "receipt:replay-1",
+        "operationId": "operation:solve-1",
+        "requestDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "operator_authorized_automated_solve",
+        "state": "failed",
+        "binding": {
+          "browserRef": "browser:1",
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:sha256:2222",
+          "frameRef": "frame:4",
+          "frameSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "geometryEpoch": "geometry:4",
+          "candidateRef": "candidate:2",
+          "controllerAuthorityRef": "authority:solve-1"
+        },
+        "delivery": "no_effect",
+        "effectSummary": {
+          "attemptsStarted": 0,
+          "stepsExecuted": 0,
+          "pointerEvents": 0,
+          "keyEvents": 0,
+          "newEffectsEmitted": 0
+        },
+        "verification": {
+          "challengeCompletion": "failed",
+          "downstreamAdmission": "not_checked",
+          "evidenceRefs": ["evidence:original-receipt"]
+        },
+        "replay": {
+          "disposition": "replayed",
+          "originalReceiptRef": "receipt:original-1",
+          "emittedNewEffects": false
+        },
+        "humanIntervention": {
+          "required": false,
+          "reason": null,
+          "handoffId": null
+        },
+        "errors": []
+      }
+    },
+    {
+      "name": "uncertain-effect-requires-handoff",
+      "schema": "receipt",
+      "document": {
+        "schemaVersion": "v1",
+        "receiptId": "receipt:uncertain-1",
+        "operationId": "operation:solve-2",
+        "requestDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "policyDigest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "operator_authorized_automated_solve",
+        "state": "human_intervention_required",
+        "binding": {
+          "browserRef": "browser:2",
+          "routeRef": "route:2",
+          "displayRef": "display:2",
+          "windowRef": "window:2",
+          "processRef": "process:sha256:3333",
+          "frameRef": "frame:5",
+          "frameSha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "geometryEpoch": "geometry:5",
+          "candidateRef": "candidate:3",
+          "controllerAuthorityRef": "authority:solve-2"
+        },
+        "delivery": "uncertain",
+        "effectSummary": {
+          "attemptsStarted": 1,
+          "stepsExecuted": 2,
+          "pointerEvents": 3,
+          "keyEvents": 0,
+          "newEffectsEmitted": 3
+        },
+        "verification": {
+          "challengeCompletion": "inconclusive",
+          "downstreamAdmission": "not_checked",
+          "evidenceRefs": ["evidence:uncertain-effect"]
+        },
+        "replay": {
+          "disposition": "first_execution",
+          "originalReceiptRef": null,
+          "emittedNewEffects": true
+        },
+        "humanIntervention": {
+          "required": true,
+          "reason": "uncertain_effect",
+          "handoffId": "handoff:opaque-1"
+        },
+        "errors": [
+          {
+            "code": "desktop-effect-uncertain",
+            "phase": "effect"
+          }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "caller-supplies-raw-coordinates",
+      "schema": "request",
+      "document": {
+        "schemaVersion": "v1",
+        "operationId": "operation:invalid-1",
+        "idempotencyKey": "idempotency:invalid-1",
+        "policyDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "observe_only",
+        "caller": {
+          "serviceName": "fixture-service",
+          "agentName": null,
+          "taskName": "invalid",
+          "callerId": "caller:fixture",
+          "requestId": "request:invalid-1",
+          "principalId": "principal:fixture"
+        },
+        "authorityEnvelope": {
+          "browserRef": "browser:1",
+          "sessionRef": null,
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:1",
+          "frameRef": "frame:1",
+          "frameSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "geometryEpoch": "geometry:1",
+          "candidateRef": "candidate:1",
+          "controllerAuthorityRef": "authority:1",
+          "expiresAt": "2026-09-13T23:10:00Z"
+        },
+        "effectBudget": {
+          "maxAttempts": 0,
+          "maxSteps": 1,
+          "maxPointerEvents": 0,
+          "maxKeyEvents": 0,
+          "deadlineMs": 5000
+        },
+        "coordinates": { "x": 10, "y": 20 }
+      }
+    },
+    {
+      "name": "observe-only-has-effect-budget",
+      "schema": "request",
+      "document": {
+        "schemaVersion": "v1",
+        "operationId": "operation:invalid-2",
+        "idempotencyKey": "idempotency:invalid-2",
+        "policyDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "observe_only",
+        "caller": {
+          "serviceName": "fixture-service",
+          "agentName": null,
+          "taskName": "invalid",
+          "callerId": "caller:fixture",
+          "requestId": "request:invalid-2",
+          "principalId": "principal:fixture"
+        },
+        "authorityEnvelope": {
+          "browserRef": "browser:1",
+          "sessionRef": null,
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:1",
+          "frameRef": "frame:1",
+          "frameSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "geometryEpoch": "geometry:1",
+          "candidateRef": "candidate:1",
+          "controllerAuthorityRef": "authority:1",
+          "expiresAt": "2026-09-13T23:10:00Z"
+        },
+        "effectBudget": {
+          "maxAttempts": 1,
+          "maxSteps": 2,
+          "maxPointerEvents": 2,
+          "maxKeyEvents": 0,
+          "deadlineMs": 5000
+        }
+      }
+    },
+    {
+      "name": "second-attempt-is-not-allowed",
+      "schema": "request",
+      "document": {
+        "schemaVersion": "v1",
+        "operationId": "operation:invalid-3",
+        "idempotencyKey": "idempotency:invalid-3",
+        "policyDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "operator_authorized_automated_solve",
+        "caller": {
+          "serviceName": "fixture-service",
+          "agentName": null,
+          "taskName": "invalid",
+          "callerId": "caller:fixture",
+          "requestId": "request:invalid-3",
+          "principalId": "principal:fixture"
+        },
+        "authorityEnvelope": {
+          "browserRef": "browser:1",
+          "sessionRef": null,
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:1",
+          "frameRef": "frame:1",
+          "frameSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "geometryEpoch": "geometry:1",
+          "candidateRef": "candidate:1",
+          "controllerAuthorityRef": "authority:1",
+          "expiresAt": "2026-09-13T23:10:00Z"
+        },
+        "effectBudget": {
+          "maxAttempts": 2,
+          "maxSteps": 8,
+          "maxPointerEvents": 16,
+          "maxKeyEvents": 0,
+          "deadlineMs": 30000
+        }
+      }
+    },
+    {
+      "name": "capability-exposes-raw-coordinates",
+      "schema": "capability",
+      "document": {
+        "schemaVersion": "v1",
+        "adapterId": "unsafe-adapter",
+        "adapterVersion": "1.0.0",
+        "platform": "x11",
+        "modes": ["observe_only"],
+        "challengeProfiles": [],
+        "effectCeiling": {
+          "maxAttempts": 0,
+          "maxSteps": 1,
+          "maxPointerEvents": 0,
+          "maxKeyEvents": 0,
+          "maxDeadlineMs": 5000
+        },
+        "guarantees": {
+          "freshFrame": true,
+          "geometryEpoch": true,
+          "windowIdentity": true,
+          "processIdentity": true,
+          "controllerAuthority": true,
+          "focusCheck": true,
+          "effectJournal": true,
+          "replaySuppression": true,
+          "afterStateVerification": true
+        },
+        "rawCoordinatesAccepted": true,
+        "arbitraryCommandsAccepted": false,
+        "humanHandoff": "opaque_remote_view"
+      }
+    },
+    {
+      "name": "replay-claims-new-effect",
+      "schema": "receipt",
+      "document": {
+        "schemaVersion": "v1",
+        "receiptId": "receipt:invalid-replay",
+        "operationId": "operation:solve-1",
+        "requestDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "operator_authorized_automated_solve",
+        "state": "failed",
+        "binding": {
+          "browserRef": "browser:1",
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:1",
+          "frameRef": "frame:1",
+          "frameSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "geometryEpoch": "geometry:1",
+          "candidateRef": "candidate:1",
+          "controllerAuthorityRef": "authority:1"
+        },
+        "delivery": "acknowledged",
+        "effectSummary": {
+          "attemptsStarted": 1,
+          "stepsExecuted": 1,
+          "pointerEvents": 1,
+          "keyEvents": 0,
+          "newEffectsEmitted": 1
+        },
+        "verification": {
+          "challengeCompletion": "failed",
+          "downstreamAdmission": "not_checked",
+          "evidenceRefs": []
+        },
+        "replay": {
+          "disposition": "replayed",
+          "originalReceiptRef": "receipt:original-1",
+          "emittedNewEffects": true
+        },
+        "humanIntervention": {
+          "required": false,
+          "reason": null,
+          "handoffId": null
+        },
+        "errors": []
+      }
+    },
+    {
+      "name": "passed-state-with-failed-verification",
+      "schema": "receipt",
+      "document": {
+        "schemaVersion": "v1",
+        "receiptId": "receipt:invalid-pass",
+        "operationId": "operation:solve-1",
+        "requestDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "operator_authorized_automated_solve",
+        "state": "passed",
+        "binding": {
+          "browserRef": "browser:1",
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:1",
+          "frameRef": "frame:1",
+          "frameSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "geometryEpoch": "geometry:1",
+          "candidateRef": "candidate:1",
+          "controllerAuthorityRef": "authority:1"
+        },
+        "delivery": "acknowledged",
+        "effectSummary": {
+          "attemptsStarted": 1,
+          "stepsExecuted": 1,
+          "pointerEvents": 1,
+          "keyEvents": 0,
+          "newEffectsEmitted": 1
+        },
+        "verification": {
+          "challengeCompletion": "failed",
+          "downstreamAdmission": "not_checked",
+          "evidenceRefs": []
+        },
+        "replay": {
+          "disposition": "first_execution",
+          "originalReceiptRef": null,
+          "emittedNewEffects": true
+        },
+        "humanIntervention": {
+          "required": false,
+          "reason": null,
+          "handoffId": null
+        },
+        "errors": []
+      }
+    },
+    {
+      "name": "durable-receipt-leaks-ocr",
+      "schema": "receipt",
+      "document": {
+        "schemaVersion": "v1",
+        "receiptId": "receipt:invalid-private",
+        "operationId": "operation:observe-1",
+        "requestDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "challengeProfileId": "cloudflare-turnstile-v1",
+        "mode": "observe_only",
+        "state": "checkbox_present",
+        "binding": {
+          "browserRef": "browser:1",
+          "routeRef": "route:1",
+          "displayRef": "display:1",
+          "windowRef": "window:1",
+          "processRef": "process:1",
+          "frameRef": "frame:1",
+          "frameSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "geometryEpoch": "geometry:1",
+          "candidateRef": "candidate:1",
+          "controllerAuthorityRef": "authority:1"
+        },
+        "delivery": "no_effect",
+        "effectSummary": {
+          "attemptsStarted": 0,
+          "stepsExecuted": 1,
+          "pointerEvents": 0,
+          "keyEvents": 0,
+          "newEffectsEmitted": 0
+        },
+        "verification": {
+          "challengeCompletion": "not_observed",
+          "downstreamAdmission": "not_checked",
+          "evidenceRefs": ["evidence:1"]
+        },
+        "replay": {
+          "disposition": "first_execution",
+          "originalReceiptRef": null,
+          "emittedNewEffects": false
+        },
+        "humanIntervention": {
+          "required": false,
+          "reason": null,
+          "handoffId": null
+        },
+        "errors": [],
+        "ocrText": "Verify you are human"
+      }
+    }
+  ]
+}

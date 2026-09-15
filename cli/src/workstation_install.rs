@@ -11014,6 +11014,12 @@ fn retire_finalized_source_runtime_host(
         return Err("runtime_source_host_backend_identity_changed_before_stop".to_string());
     }
     let identity_path = source_backend.socket_dir.join("runtime-host.identity.json");
+    if !identity_path.is_file() {
+        if recorded_runtime_host_is_absent(evidence)? {
+            return Ok(());
+        }
+        return Err("runtime_source_host_identity_missing_while_process_is_live".to_string());
+    }
     let identity: crate::process_identity::RecordedProcessIdentity =
         serde_json::from_slice(&fs::read(&identity_path).map_err(display_io(
             "read source runtime host identity",
@@ -11046,6 +11052,18 @@ fn retire_finalized_source_runtime_host(
         return Err("runtime_source_host_exit_timeout".to_string());
     }
     Ok(())
+}
+
+fn recorded_runtime_host_is_absent(
+    evidence: &crate::runtime_adoption::RuntimeHostIdentityEvidence,
+) -> Result<bool, String> {
+    let expected = crate::process_identity::RecordedProcessIdentity {
+        pid: evidence.pid,
+        start_token: evidence.process_start_token.clone(),
+        executable_path: None,
+        browser_family: None,
+    };
+    crate::process_identity::recorded_process_is_running(&expected).map(|running| !running)
 }
 
 fn wait_for_recorded_process_exit(
@@ -11895,6 +11913,7 @@ fn stage_payload_generation(
                 "providerId": "controlled-x11-xtest",
                 "capability": "guarded_pointer_keyboard_v1",
                 "recipeId": "p131-controlled-x11-v1",
+                "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"],
             },
         }))
         .expect("runtime generation manifest must serialize");
@@ -12030,6 +12049,7 @@ fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, 
                 "providerId": "controlled-x11-xtest",
                 "capability": "guarded_pointer_keyboard_v1",
                 "recipeId": "p131-controlled-x11-v1",
+                "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"],
             },
         }))
         .expect("legacy runtime generation manifest must serialize");
@@ -14163,6 +14183,21 @@ mod tests {
             candidate_runtime_host_socket_dir_in(runtime_root, "upgrade-retry")
         );
         assert!(socket_path.as_os_str().len() <= 103, "{socket_path:?}");
+    }
+
+    #[test]
+    fn missing_finalized_runtime_host_identity_accepts_only_absent_recorded_process() {
+        let evidence = crate::runtime_adoption::RuntimeHostIdentityEvidence {
+            endpoint_key: "runtime-host".to_string(),
+            generation_id: "generation-old".to_string(),
+            binary_sha256: "a".repeat(64),
+            pid: u32::MAX,
+            process_start_token: "missing-process".to_string(),
+            socket_identity: "unix:missing-runtime-host".to_string(),
+            observation_only: false,
+        };
+
+        assert!(recorded_runtime_host_is_absent(&evidence).unwrap());
     }
 
     #[test]

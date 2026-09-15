@@ -68,6 +68,14 @@ const IDENTITY_ASSURANCE_LEVELS: &[&str] = &[
     "operator",
     "unknown",
 ];
+const CHALLENGE_PROFILE_IDS: &[&str] = &["turnstile-checkbox-p169-v1", "hcaptcha-checkbox-p181-v2"];
+const CHALLENGE_SCENARIO_OUTCOMES: &[&str] = &[
+    "not_present",
+    "eligible",
+    "passed",
+    "denied",
+    "intervention_required",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RouteHintStage {
@@ -364,6 +372,20 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
         false,
     ),
     ServiceRequestFieldSpec::field("promptProfileId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field(
+        "challengeProfileId",
+        FieldKind::Enum(CHALLENGE_PROFILE_IDS),
+        true,
+        true,
+        false,
+    ),
+    ServiceRequestFieldSpec::field(
+        "scenarioOutcome",
+        FieldKind::Enum(CHALLENGE_SCENARIO_OUTCOMES),
+        true,
+        true,
+        false,
+    ),
     ServiceRequestFieldSpec::field("controllerLeaseId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("operationId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("authenticationRunId", FieldKind::String, true, true, false),
@@ -966,6 +988,7 @@ fn validate_safety_gates(
     reject_desktop_evidence_observe_request(action, request)?;
     reject_desktop_prompt_observe_request(action, request)?;
     reject_desktop_interact_request(action, request)?;
+    reject_challenge_control_evaluate_request(action, request)?;
     reject_authentication_run_request(action, request)?;
     reject_service_probe_request(action, request)?;
     reject_tab_handle_refresh_request(action, request)?;
@@ -973,6 +996,48 @@ fn validate_safety_gates(
     reject_service_network_capture_request(action, request)?;
     reject_service_file_transfer_request(action, request)?;
     reject_stale_monitor_service_request(request)
+}
+
+fn reject_challenge_control_evaluate_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "challenge_control_evaluate" {
+        return Ok(());
+    }
+    const TOP_LEVEL_FIELDS: &[&str] = &[
+        "action",
+        "challengeProfileId",
+        "scenarioOutcome",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "jobTimeoutMs",
+    ];
+    if let Some(field) = request
+        .keys()
+        .find(|field| !TOP_LEVEL_FIELDS.contains(&field.as_str()))
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("challenge_control_evaluate does not accept {field}"),
+        ));
+    }
+    for field in [
+        "challengeProfileId",
+        "scenarioOutcome",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ] {
+        if request.get(field).is_none() {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("challenge_control_evaluate requires {field}"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn reject_authentication_run_request(
@@ -1683,7 +1748,13 @@ fn reject_desktop_interact_request(
     }
     if !matches!(
         recipe.get("recipeId").and_then(Value::as_str),
-        Some("p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1")
+        Some(
+            "p110-pointer-keyboard-v1"
+                | "p110-foundation-stress-v1"
+                | "p131-controlled-x11-v1"
+                | "cloudflare-turnstile-v1"
+                | "hcaptcha-checkbox-v1"
+        )
     ) {
         return Err(issue(
             ServiceRequestIssueKind::InvalidBoundedRecipe,
@@ -2703,7 +2774,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 95);
+        assert_eq!(canonical_names.len(), 97);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -3173,6 +3244,21 @@ mod tests {
             controlled.command["recipe"]["recipeId"],
             "p131-controlled-x11-v1"
         );
+        let hcaptcha = normalize(json!({
+            "action": "desktop_interact",
+            "browserId": "browser-1",
+            "controllerLeaseId": "lease-1",
+            "operationId": "hcaptcha-operation-1",
+            "recipe": { "recipeId": "hcaptcha-checkbox-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "verify-hcaptcha-checkbox"
+        }))
+        .unwrap();
+        assert_eq!(
+            hcaptcha.command["recipe"]["recipeId"],
+            "hcaptcha-checkbox-v1"
+        );
         assert!(normalized.command["operationPrincipalId"]
             .as_str()
             .is_some_and(|value| value.starts_with("operation-principal-v1:")));
@@ -3232,6 +3318,63 @@ mod tests {
         ] {
             let error = normalize(request).unwrap_err();
             assert_eq!(error.message(), expected_message);
+        }
+    }
+
+    #[test]
+    fn challenge_control_evaluate_accepts_only_registered_provider_free_scenarios() {
+        let normalized = normalize(json!({
+            "action": "challenge_control_evaluate",
+            "challengeProfileId": "turnstile-checkbox-p169-v1",
+            "scenarioOutcome": "passed",
+            "serviceName": "ChallengeControl",
+            "agentName": "fixture-agent",
+            "taskName": "evaluate-provider-free-scenario"
+        }))
+        .unwrap();
+        assert_eq!(
+            normalized.command["challengeProfileId"],
+            "turnstile-checkbox-p169-v1"
+        );
+        assert_eq!(normalized.command["scenarioOutcome"], "passed");
+
+        for (request, expected_message) in [
+            (
+                json!({
+                    "action": "challenge_control_evaluate",
+                    "challengeProfileId": "caller-profile",
+                    "scenarioOutcome": "passed",
+                    "serviceName": "ChallengeControl",
+                    "agentName": "fixture-agent",
+                    "taskName": "evaluate"
+                }),
+                "challengeProfileId must be one of turnstile-checkbox-p169-v1, hcaptcha-checkbox-p181-v2",
+            ),
+            (
+                json!({
+                    "action": "challenge_control_evaluate",
+                    "challengeProfileId": "hcaptcha-checkbox-p181-v2",
+                    "scenarioOutcome": "retry",
+                    "serviceName": "ChallengeControl",
+                    "agentName": "fixture-agent",
+                    "taskName": "evaluate"
+                }),
+                "scenarioOutcome must be one of not_present, eligible, passed, denied, intervention_required",
+            ),
+            (
+                json!({
+                    "action": "challenge_control_evaluate",
+                    "challengeProfileId": "hcaptcha-checkbox-p181-v2",
+                    "scenarioOutcome": "passed",
+                    "serviceName": "ChallengeControl",
+                    "agentName": "fixture-agent",
+                    "taskName": "evaluate",
+                    "params": { "retry": true }
+                }),
+                "challenge_control_evaluate does not accept params",
+            ),
+        ] {
+            assert_eq!(normalize(request).unwrap_err().message(), expected_message);
         }
     }
 
@@ -3388,6 +3531,13 @@ mod tests {
                 request["serviceName"] = json!("DesktopInteractor");
                 request["agentName"] = json!("fixture-agent");
                 request["taskName"] = json!("verify-synthetic-control");
+            }
+            "challenge_control_evaluate" => {
+                request["challengeProfileId"] = json!("turnstile-checkbox-p169-v1");
+                request["scenarioOutcome"] = json!("not_present");
+                request["serviceName"] = json!("ChallengeControl");
+                request["agentName"] = json!("fixture-agent");
+                request["taskName"] = json!("evaluate-provider-free-scenario");
             }
             "desktop_prompt_observe" => {
                 request["browserId"] = json!("browser:desktop-fixture");

@@ -180,8 +180,10 @@ try {
     ...guardedBefore, defaultDevelopment: { changed: true },
   }));
   const routeOpenerSource = readFileSync('scripts/open-rdp-guac-route-displays.js', 'utf8');
-  assert.match(routeOpenerSource, /'--runtime-profile',\s*profile,\s*'set'/);
-  assert.match(routeOpenerSource, /'--runtime-profile',\s*profile,\s*'open'/);
+  assert.match(routeOpenerSource, /'open',\s*url,\s*'--headers'/);
+  assert.doesNotMatch(routeOpenerSource, /'open',\s*'about:blank'/);
+  assert.doesNotMatch(routeOpenerSource, /'set',\s*'headers'/);
+  assert.match(routeOpenerSource, /'--runtime-profile',\s*profile/);
   assert.match(routeOpenerSource, /'--runtime-profile',\s*profile,\s*'close'/);
   assert.doesNotMatch(routeOpenerSource, /'--profile',\s*profile/);
   assert.match(routeOpenerSource, /AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER/);
@@ -473,7 +475,13 @@ try {
   assert.ok(bundle.routeUsers.every((route) => route.legacyConnectionName === ''));
   assert.equal(bundle.ingress.pathPrefix, '/guacamole');
   assert.equal(bundle.ingress.upstream, 'http://127.0.0.1:8093/guacamole');
-  const staged = stageDevelopmentPresentationProviderBundle({ env });
+  const previousUmask = process.umask(0o077);
+  let staged;
+  try {
+    staged = stageDevelopmentPresentationProviderBundle({ env });
+  } finally {
+    process.umask(previousUmask);
+  }
   assert.equal(staged.success, true);
   assert.equal(staged.authorizesProviderEffects, false);
   assert.equal(readFileSync(join(descriptor.root, 'compose.yml'), 'utf8'), bundle.files['compose.yml']);

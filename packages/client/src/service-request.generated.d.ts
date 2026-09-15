@@ -14,6 +14,7 @@ export type ServiceRequestAction =
   | "desktop_evidence_observe"
   | "desktop_prompt_observe"
   | "desktop_interact"
+  | "challenge_control_evaluate"
   | "probe"
   | "tab_handle_refresh"
   | "tab_handle_release"
@@ -154,6 +155,8 @@ export interface ServiceRequest {
   evidenceSurface?: string;
   episodeId?: string;
   promptProfileId?: string;
+  challengeProfileId?: string;
+  scenarioOutcome?: string;
   controllerLeaseId?: string;
   operationId?: string;
   authenticationRunId?: string;
@@ -834,7 +837,7 @@ export interface ServiceDesktopPromptObserveData {
 export interface DesktopInteractionReceipt {
   transactionId: string;
   schemaVersion: "v1";
-  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1";
+  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1" | "cloudflare-turnstile-v1" | "hcaptcha-checkbox-v1";
   recipeVersion: string;
   recipeSha256: string;
   browserId: string;
@@ -897,6 +900,36 @@ export interface ServiceDesktopInteractData {
   ok: boolean;
   action: "desktop_interact";
   interactionReceipt: DesktopInteractionReceipt;
+  [key: string]: unknown;
+}
+
+export interface ChallengeControlProfileReceipt {
+  profileId: "turnstile-checkbox-p169-v1" | "hcaptcha-checkbox-p181-v2";
+  locatorId: "cloudflare-turnstile-v1" | "hcaptcha-checkbox-v1";
+  recipeId: "cloudflare-turnstile-v1" | "hcaptcha-checkbox-v1";
+  profileVersion: "p169-v1" | "p181-v2";
+  threshold: number;
+  detectorDigest: string;
+}
+
+export interface ChallengeCompositeReceipt {
+  schemaVersion: "challenge-composite-receipt.v1";
+  evidenceClass: "provider_free_scenario";
+  profile: ChallengeControlProfileReceipt;
+  outcome: "not_present" | "eligible" | "passed" | "denied" | "intervention_required";
+  state: "not_present" | "checkbox_present" | "passed" | "failed" | "human_intervention_required";
+  delivery: "acknowledged" | "rejected" | null;
+  verification: "passed" | null;
+  intervention: "ambiguous" | null;
+  attemptsStarted: number;
+  stepsExecuted: number;
+  pointerEvents: number;
+  keyEvents: number;
+  emittedEffects: false;
+}
+
+export interface ServiceChallengeControlEvaluateData {
+  compositeReceipt: ChallengeCompositeReceipt;
   [key: string]: unknown;
 }
 
@@ -1566,6 +1599,7 @@ export interface ServiceRequestActionDataMap {
   desktop_evidence_observe: ServiceDesktopEvidenceObserveData;
   desktop_prompt_observe: ServiceDesktopPromptObserveData;
   desktop_interact: ServiceDesktopInteractData;
+  challenge_control_evaluate: ServiceChallengeControlEvaluateData;
   service_authentication_run_start: ServiceAuthenticationRunData;
   service_authentication_run_status: ServiceAuthenticationRunData;
   service_authentication_run_resume: ServiceAuthenticationRunData;
@@ -1917,7 +1951,7 @@ export interface ServiceDesktopInteractRequestOptions extends Pick<ServiceReques
   sessionName?: string;
   controllerLeaseId: string;
   operationId: string;
-  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1";
+  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1" | "cloudflare-turnstile-v1" | "hcaptcha-checkbox-v1";
   serviceName: string;
   agentName: string;
   taskName: string;

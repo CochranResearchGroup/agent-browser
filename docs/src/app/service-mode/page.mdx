@@ -427,14 +427,19 @@ input.
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance and does not prove that an installed runtime contains the feature.
 
-PoC 2 registers only `p110-control-v1` for the repository's synthetic
-verification control. It is not a Turnstile, passkey, or general UI profile.
+`p110-control-v1` remains the repository synthetic profile.
+`cloudflare-turnstile-v1` and `hcaptcha-checkbox-v1` are separate,
+observation-only challenge profiles. The hCaptcha profile requires the human
+prompt, nearby hCaptcha brand, and visible checkbox geometry. None is a
+passkey or general UI profile.
 
 Use the CLI:
 
 ```bash
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id cloudflare-turnstile-v1 --json
+agent-browser desktop locate --browser-id browser-123 --locator-id hcaptcha-checkbox-v1 --json
 ```
 
 Use the canonical service request from HTTP:
@@ -620,6 +625,27 @@ const interaction = await runServiceDesktopInteraction({
 });
 ```
 
+## Evaluate a provider-free challenge lifecycle
+
+Use the generic Service request action `challenge_control_evaluate` to run a
+repository-owned Turnstile or hCaptcha scenario through the common lifecycle
+without launching a browser or emitting desktop input:
+
+```bash
+curl -X POST "http://127.0.0.1:9223/api/service/request" \
+  -H "content-type: application/json" \
+  -d '{"action":"challenge_control_evaluate","challengeProfileId":"hcaptcha-checkbox-p181-v2","scenarioOutcome":"passed","serviceName":"ChallengeControl","agentName":"fixture-agent","taskName":"evaluate-provider-free-scenario"}'
+```
+
+The two accepted profile IDs retain separate locator, recipe, version,
+threshold, digest, and fixture identities. Accepted scenario outcomes are
+`not_present`, `eligible`, `passed`, `denied`, and
+`intervention_required`. The request accepts no pixels, coordinates,
+selectors, detector settings, provider controls, or retry options. Every
+composite receipt reports `evidenceClass: "provider_free_scenario"` and
+`emittedEffects: false`; the result is contract evidence and is not live
+CAPTCHA acceptance.
+
 <table>
   <thead>
     <tr>
@@ -647,7 +673,7 @@ const interaction = await runServiceDesktopInteraction({
     <tr>
       <td><code>recipe.recipeId</code></td>
       <td>Required</td>
-      <td>Use <code>p110-pointer-keyboard-v1</code>, <code>p110-foundation-stress-v1</code>, or <code>p131-controlled-x11-v1</code>.</td>
+      <td>Use <code>p110-pointer-keyboard-v1</code>, <code>p110-foundation-stress-v1</code>, <code>p131-controlled-x11-v1</code>, <code>cloudflare-turnstile-v1</code>, or <code>hcaptcha-checkbox-v1</code>.</td>
     </tr>
     <tr>
       <td><code>serviceName</code>, <code>agentName</code>, <code>taskName</code></td>
@@ -679,6 +705,19 @@ and non-retryable.
 The foundation-stress recipe runs the same source engine across deterministic
 success, replay, conflict, cleanup, verification, prompt-intervention, and
 handoff scenarios without adding a production provider.
+
+The <code>cloudflare-turnstile-v1</code> recipe is limited to one uniquely
+recognized visible checkbox challenge on an exactly bound service-owned X11
+browser. It derives a checkbox region from the exact phrase, moves through the
+fixed xdotool adapter, recaptures after hover, and refuses button-down unless
+the checkbox appears at the same region. It emits at most one click, performs
+fresh after-state verification, and never retries automatically.
+
+The <code>hcaptcha-checkbox-v1</code> recipe requires separate prompt, brand,
+geometry, and visible-checkbox evidence. It emits at most one click with no
+keyboard input. A <code>challenge_open</code> or <code>inconclusive</code>
+post-click result is terminal and does not authorize image, audio, or
+accessibility challenge solving.
 
 The persisted foundation-stress receipt projects operation presence, replay,
 cleanup, verification, prompt intervention, and the typed live-entry gate.
@@ -1206,6 +1245,14 @@ HTTP <code>id</code> and MCP error <code>data.requestId</code> join the durable
 journal request ID. Correct invalid requests before resubmitting. Runtime
 provenance uses the server's deployment environment; clients cannot submit
 <code>runtimeEnvironmentId</code>.
+
+<code>desktop_interaction_authority_required</code> stops before desktop input
+and reports the <code>profile_access</code> axis,
+<code>child_admission</code> phase, and
+<code>effectState: "no_effect"</code>. Inspect the Service trace and compare the
+controller lease <code>viewerId</code> with the interaction
+<code>agentName</code> before any new attempt. Never change identity labels to
+borrow controller authority.
 
 `service_tab_route_mismatch` means the supplied handle conflicts with the routed
 browser or session. It stops at `child_admission` with `effectState: "no_effect"`.

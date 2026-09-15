@@ -130,6 +130,22 @@ identifiers, bounded acknowledgement summaries, and verification state, never
 frame bytes, raw OCR text, plaintext keyboard content, full motion paths,
 provider stderr, filesystem paths, or provider URLs.
 
+## CAPTCHA Guard Contract v1
+
+`captcha-guard.v1.md` freezes the provider-neutral trust boundaries, threat
+model, state vocabulary, verification semantics, redaction posture, and future
+crate dependency direction for guarded challenge automation.
+`captcha-guard-request.v1.schema.json`,
+`captcha-guard-capability.v1.schema.json`, and
+`captcha-guard-receipt.v1.schema.json` define the internal request,
+capability, and receipt records. They do not add a public service action in
+Plan 0188.
+
+`examples/captcha-guard-contract-fixtures.v1.json` contains deterministic
+positive and adversarial records. Run `pnpm test:captcha-guard-contract` to
+validate the schemas, one-attempt and observation-only limits, replay
+suppression, redaction rules, and the machine-readable dependency policy.
+
 HTTP `GET /api/service/contracts` and MCP `agent-browser://contracts` expose
 runtime compatibility metadata for these contract IDs, their shared `v1`
 version, route and tool names, and the supported service request action list.

@@ -80,6 +80,7 @@ use super::browser_navigation::{
 use super::browser_tabs::{
     handle_browser_pid, handle_tab_list, handle_tab_new_with_cold_launch, handle_window_new,
 };
+use super::challenge_control_action::handle_challenge_control_evaluate;
 use super::clipboard::handle_clipboard;
 use super::cookies::{handle_cookies_clear, handle_cookies_get, handle_cookies_set};
 use super::desktop_capture::{handle_desktop_capture, redact_desktop_capture_stream_result};
@@ -228,6 +229,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "desktop_evidence_observe"
             | "desktop_prompt_observe"
             | "desktop_interact"
+            | "challenge_control_evaluate"
             | "probe"
             | "close"
             | "confirm"
@@ -519,7 +521,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         && action != "deny"
         && !matches!(
             action,
-            "desktop_evidence_observe" | "desktop_interact" | "desktop_prompt_observe"
+            "desktop_evidence_observe"
+                | "desktop_interact"
+                | "desktop_prompt_observe"
+                | "challenge_control_evaluate"
         )
     {
         if let Some(ref ca) = state.confirm_actions {
@@ -574,6 +579,12 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
     }
     if action == "desktop_interact" {
         return match handle_desktop_interact(cmd).await {
+            Ok(data) => success_response(&id, data),
+            Err(error) => error_response(&id, &error),
+        };
+    }
+    if action == "challenge_control_evaluate" {
+        return match handle_challenge_control_evaluate(cmd) {
             Ok(data) => success_response(&id, data),
             Err(error) => error_response(&id, &error),
         };

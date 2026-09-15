@@ -93,6 +93,11 @@ function selectRecommendations(files, base) {
     add('scripts/ci/cargo-safe.sh test -p agent-browser-lease-authority --manifest-path Cargo.toml', 'Lease-authority kernel behavior changed');
   }
 
+  if (files.some(isDesktopServicesCrateSurface)) {
+    add('pnpm test:desktop-services-crate-architecture', 'desktop-services ownership and dependency direction changed');
+    add('scripts/ci/cargo-safe.sh test -p agent-browser-desktop-services --manifest-path Cargo.toml', 'desktop transaction services changed');
+  }
+
   if (files.some(isCdpTabStreamingSurface)) {
     add(
       'pnpm test:service-cdp-tab-streaming-live',
@@ -292,6 +297,7 @@ function isRustWorkspaceSurface(file) {
     file === 'cli/build.rs' ||
     file.startsWith('cli/src/') ||
     file.startsWith('crates/agent-browser-cdp/') ||
+    file.startsWith('crates/agent-browser-desktop-services/') ||
     file.startsWith('crates/agent-browser-lease-authority/')
   );
 }
@@ -322,6 +328,19 @@ function isLeaseAuthorityCrateSurface(file) {
     file === '.github/workflows/lease-authority.yml' ||
     file === 'scripts/ci/rust-tests.sh' ||
     file === 'scripts/test-lease-authority-crate-architecture.js'
+  );
+}
+
+function isDesktopServicesCrateSurface(file) {
+  return (
+    file === 'Cargo.toml' ||
+    file === 'Cargo.lock' ||
+    file === 'cli/Cargo.toml' ||
+    file === 'cli/src/native/desktop_interaction.rs' ||
+    file === 'cli/src/native/desktop_control_coordinator.rs' ||
+    file.startsWith('crates/agent-browser-desktop-services/') ||
+    file === 'scripts/ci/rust-tests.sh' ||
+    file === 'scripts/test-desktop-services-crate-architecture.js'
   );
 }
 

@@ -162,6 +162,7 @@ try {
     providerId: 'controlled-x11-xtest',
     capability: 'guarded_pointer_keyboard_v1',
     recipeId: 'p131-controlled-x11-v1',
+    recipeIds: ['p131-controlled-x11-v1', 'cloudflare-turnstile-v1', 'hcaptcha-checkbox-v1'],
   });
   for (const entry of treeManifest(selectedGenerationRoot)) {
     assert.equal(
@@ -539,8 +540,13 @@ try {
   );
   assert.match(
     routeOpenerSource,
-    /'set',\s*'headers'/,
-    'Guacamole route sessions must apply header authentication before navigation',
+    /'open',\s*url,\s*'--headers'/,
+    'Guacamole route sessions must apply scoped header authentication on first navigation',
+  );
+  assert.equal(
+    /'open',\s*'about:blank'|'set',\s*'headers'/.test(routeOpenerSource),
+    false,
+    'Guacamole route sessions must not require an unbound second navigation',
   );
   assert.match(
     routeOpenerSource,

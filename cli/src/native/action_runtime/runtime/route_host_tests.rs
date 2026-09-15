@@ -2602,7 +2602,8 @@ fn test_apply_auto_launch_command_hints_preserves_retained_remote_headed_surface
         display_name: Some(":10".to_string()),
     };
     let command = json!(
-        { "action" : "launch", "headless" : true, "runtimeProfile" : "stealthcdp-default"
+        { "action" : "launch", "headless" : true, "runtimeProfile" : "stealthcdp-default",
+        "executablePath" : "/test/fixture/browser"
         }
     );
     let mut options = LaunchOptions::default();
@@ -2665,7 +2666,7 @@ fn test_explicit_local_headless_launch_surface_overrides_retained_remote_hint() 
     };
     let command = json!(
         { "action" : "launch", "browserHost" : "local_headless", "headless" : true,
-        "headlessExplicit" : true }
+        "headlessExplicit" : true, "executablePath" : "/test/fixture/browser" }
     );
     let mut options = LaunchOptions::default();
     let (host, _, _, _) =
@@ -2682,7 +2683,8 @@ fn test_private_remote_headed_metadata_waits_for_launched_display_name() {
     guard.set("DISPLAY", ":0");
     let command = json!(
         { "action" : "navigate", "browserHost" : "remote_headed", "displayIsolation" :
-        "private_virtual_display", "headless" : false }
+        "private_virtual_display", "headless" : false, "executablePath" :
+        "/test/fixture/browser" }
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, _, effective_command) =
@@ -2704,7 +2706,8 @@ fn test_remote_headed_defaults_to_private_display_when_display_is_inherited() {
     let guard = EnvGuard::new(&["DISPLAY"]);
     guard.set("DISPLAY", ":0");
     let command = json!(
-        { "action" : "navigate", "browserHost" : "remote_headed", "headless" : false }
+        { "action" : "navigate", "browserHost" : "remote_headed", "headless" : false,
+        "executablePath" : "/test/fixture/browser" }
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, _, effective_command) =
@@ -2853,6 +2856,95 @@ fn test_apply_service_browser_capability_selection_sets_validated_executable() {
         Some(executable.to_str().expect("path should be utf-8"))
     );
     let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_browser_capability_selection_overlays_configured_registry() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_EXECUTABLE_PATH"]);
+    let home = unique_socket_dir("browser-capability-config-overlay-home");
+    let config_dir = home.join(".agent-browser");
+    fs::create_dir_all(&config_dir).expect("config directory should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let executable = home.join("chrome");
+    fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
+    fs::write(
+        config_dir.join("config.json"),
+        serde_json::to_vec(&json!({
+            "service": {
+                "browserCapabilityRegistry": {
+                    "browserHosts": [{
+                        "id": "linux-local", "hostKind": "local", "reachable": true,
+                        "lifecycleOwner": "agent_browser"
+                    }],
+                    "browserExecutables": [{
+                        "id": "stock-current", "hostId": "linux-local",
+                        "buildLabel": "stock_chrome", "executablePath": executable
+                    }],
+                    "browserCapabilities": [{
+                        "id": "stock-capability", "hostId": "linux-local",
+                        "executableId": "stock-current", "cdpSupported": true,
+                        "headedSupported": true, "headlessSupported": true
+                    }],
+                    "profileCompatibility": [{
+                        "id": "default-stock-compatible", "profileId": "default",
+                        "hostId": "linux-local", "executableId": "stock-current",
+                        "compatible": true, "requiresOperatorOverride": false
+                    }],
+                    "browserPreferenceBindings": [{
+                        "id": "stock-default", "scope": "global",
+                        "preferredHostId": "linux-local",
+                        "preferredExecutableId": "stock-current",
+                        "preferredCapabilityId": "stock-capability",
+                        "browserBuild": "stock_chrome", "priority": 50
+                    }],
+                    "validationEvidence": [{
+                        "id": "stock-launch-smoke", "hostId": "linux-local",
+                        "executableId": "stock-current", "capabilityId": "stock-capability",
+                        "kind": "launch", "state": "passed"
+                    }]
+                }
+            }
+        }))
+        .expect("config should serialize"),
+    )
+    .expect("config should be written");
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&ServiceState::default())
+        .expect("empty persisted state should be written");
+
+    let mut options = LaunchOptions {
+        runtime_profile: Some("default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let resolution = apply_service_browser_capability_selection(
+        &mut options,
+        &json!({ "browserBuild": "stock_chrome" }),
+    );
+
+    assert!(resolution.applied);
+    assert_eq!(resolution.reason, "validated_binding_applied");
+    assert_eq!(
+        options.executable_path.as_deref(),
+        Some(executable.to_str().expect("path should be utf-8"))
+    );
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_stock_chrome_capability_selection_fails_closed() {
+    let resolution = BrowserCapabilityLaunchResolution::skipped(
+        "profile_compatibility_missing_or_blocked",
+        Some(BrowserBuild::StockChrome),
+        Some("default".to_string()),
+    );
+
+    assert_eq!(
+        require_stock_chrome_capability_selection(&resolution),
+        Err(
+            "stock_chrome_capability_selection_failed: profile_compatibility_missing_or_blocked"
+                .to_string()
+        )
+    );
 }
 #[tokio::test]
 async fn test_service_browser_capability_preflight_reports_validated_binding_without_launch() {
@@ -4622,7 +4714,8 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         "action": "navigate", "url": "about:blank",
         "runtimeProfile": "cold-native", "profile": home.join("profile"),
         "clientSubjectId": "cli-session:cold-native", "identityAssurance": "self-declared",
-        "connectionInstanceId": "connection:cold-native"
+        "connectionInstanceId": "connection:cold-native",
+        "executablePath": "/test/fixture/browser"
     });
     let admitted = bind_native_service_tab_command(&command, &daemon).unwrap();
     assert_eq!(
@@ -4770,7 +4863,12 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         Some("default")
     );
     crate::apply_existing_lane_profile_to_flags(&mut flags, &session_only, &snapshot).unwrap();
-    let mut prestart = json!({"action":"launch", "runtimeProfile": flags.runtime_profile, "profile": flags.profile});
+    let mut prestart = json!({
+        "action": "launch",
+        "runtimeProfile": flags.runtime_profile,
+        "profile": flags.profile,
+        "executablePath": "/test/fixture/browser"
+    });
     crate::attribute_prestart_launch(&mut prestart, &session_only, &flags.session);
     let metadata = service_profile_lease_metadata_for_command(&prestart, Some(&flags.session))
         .unwrap()

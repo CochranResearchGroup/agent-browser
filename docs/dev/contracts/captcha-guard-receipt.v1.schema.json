@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/captcha-guard-receipt.v1.schema.json",
+  "title": "Agent Browser CAPTCHA guard receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "receiptId",
+    "operationId",
+    "requestDigest",
+    "policyDigest",
+    "challengeProfileId",
+    "mode",
+    "state",
+    "binding",
+    "delivery",
+    "effectSummary",
+    "verification",
+    "replay",
+    "humanIntervention",
+    "errors"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "v1" },
+    "receiptId": { "$ref": "#/$defs/opaqueId" },
+    "operationId": { "$ref": "#/$defs/opaqueId" },
+    "requestDigest": { "$ref": "#/$defs/sha256" },
+    "policyDigest": { "$ref": "#/$defs/sha256" },
+    "challengeProfileId": { "$ref": "#/$defs/opaqueId" },
+    "mode": {
+      "enum": [
+        "observe_only",
+        "fixture_solve",
+        "operator_authorized_automated_solve"
+      ]
+    },
+    "state": {
+      "enum": [
+        "not_present",
+        "checkbox_present",
+        "solving",
+        "verification_in_progress",
+        "passed",
+        "failed",
+        "expired",
+        "challenge_open",
+        "inconclusive",
+        "human_intervention_required"
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "browserRef",
+        "routeRef",
+        "displayRef",
+        "windowRef",
+        "processRef",
+        "frameRef",
+        "frameSha256",
+        "geometryEpoch",
+        "candidateRef",
+        "controllerAuthorityRef"
+      ],
+      "properties": {
+        "browserRef": { "$ref": "#/$defs/opaqueId" },
+        "routeRef": { "$ref": "#/$defs/opaqueId" },
+        "displayRef": { "$ref": "#/$defs/opaqueId" },
+        "windowRef": { "$ref": "#/$defs/opaqueId" },
+        "processRef": { "$ref": "#/$defs/opaqueId" },
+        "frameRef": { "$ref": "#/$defs/opaqueId" },
+        "frameSha256": { "$ref": "#/$defs/sha256" },
+        "geometryEpoch": { "$ref": "#/$defs/opaqueId" },
+        "candidateRef": { "$ref": "#/$defs/opaqueId" },
+        "controllerAuthorityRef": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "delivery": {
+      "enum": ["no_effect", "acknowledged", "partial", "uncertain", "rejected"]
+    },
+    "effectSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attemptsStarted",
+        "stepsExecuted",
+        "pointerEvents",
+        "keyEvents",
+        "newEffectsEmitted"
+      ],
+      "properties": {
+        "attemptsStarted": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "stepsExecuted": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "pointerEvents": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "keyEvents": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "newEffectsEmitted": { "type": "integer", "minimum": 0, "maximum": 128 }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challengeCompletion",
+        "downstreamAdmission",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "challengeCompletion": {
+          "enum": ["not_observed", "passed", "failed", "inconclusive"]
+        },
+        "downstreamAdmission": {
+          "enum": ["not_checked", "admitted", "denied", "inconclusive"]
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/opaqueId" }
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disposition", "originalReceiptRef", "emittedNewEffects"],
+      "properties": {
+        "disposition": { "enum": ["first_execution", "replayed"] },
+        "originalReceiptRef": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 256 },
+            { "type": "null" }
+          ]
+        },
+        "emittedNewEffects": { "type": "boolean" }
+      }
+    },
+    "humanIntervention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "reason", "handoffId"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "reason": {
+          "enum": [
+            null,
+            "unsupported",
+            "ambiguous",
+            "authority_lost",
+            "partial_effect",
+            "uncertain_effect",
+            "attempt_exhausted",
+            "externally_rejected",
+            "verification_inconclusive"
+          ]
+        },
+        "handoffId": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 256 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "phase"],
+        "properties": {
+          "code": { "$ref": "#/$defs/opaqueId" },
+          "phase": {
+            "enum": ["admission", "observation", "authority", "effect", "verification", "handoff"]
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "replay": {
+            "type": "object",
+            "properties": { "disposition": { "const": "replayed" } },
+            "required": ["disposition"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "delivery": { "const": "no_effect" },
+          "replay": {
+            "type": "object",
+            "properties": {
+              "originalReceiptRef": { "type": "string" },
+              "emittedNewEffects": { "const": false }
+            }
+          },
+          "effectSummary": {
+            "type": "object",
+            "properties": {
+              "attemptsStarted": { "const": 0 },
+              "stepsExecuted": { "const": 0 },
+              "pointerEvents": { "const": 0 },
+              "keyEvents": { "const": 0 },
+              "newEffectsEmitted": { "const": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "replay": {
+            "type": "object",
+            "properties": { "disposition": { "const": "first_execution" } },
+            "required": ["disposition"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "replay": {
+            "type": "object",
+            "properties": { "originalReceiptRef": { "type": "null" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "mode": { "const": "observe_only" } },
+        "required": ["mode"]
+      },
+      "then": {
+        "properties": {
+          "delivery": { "const": "no_effect" },
+          "effectSummary": {
+            "type": "object",
+            "properties": {
+              "attemptsStarted": { "const": 0 },
+              "pointerEvents": { "const": 0 },
+              "keyEvents": { "const": 0 },
+              "newEffectsEmitted": { "const": 0 }
+            }
+          },
+          "replay": {
+            "type": "object",
+            "properties": { "emittedNewEffects": { "const": false } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "state": { "const": "passed" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "verification": {
+            "type": "object",
+            "properties": { "challengeCompletion": { "const": "passed" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "state": { "const": "human_intervention_required" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "humanIntervention": {
+            "type": "object",
+            "properties": {
+              "required": { "const": true },
+              "reason": { "not": { "type": "null" } },
+              "handoffId": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "delivery": { "const": "partial" } },
+        "required": ["delivery"]
+      },
+      "then": {
+        "properties": {
+          "state": { "const": "human_intervention_required" },
+          "humanIntervention": {
+            "type": "object",
+            "properties": {
+              "required": { "const": true },
+              "reason": { "const": "partial_effect" },
+              "handoffId": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "delivery": { "const": "uncertain" } },
+        "required": ["delivery"]
+      },
+      "then": {
+        "properties": {
+          "state": { "const": "human_intervention_required" },
+          "humanIntervention": {
+            "type": "object",
+            "properties": {
+              "required": { "const": true },
+              "reason": { "const": "uncertain_effect" },
+              "handoffId": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "humanIntervention": {
+            "type": "object",
+            "properties": { "required": { "const": false } },
+            "required": ["required"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "humanIntervention": {
+            "type": "object",
+            "properties": {
+              "reason": { "type": "null" },
+              "handoffId": { "type": "null" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

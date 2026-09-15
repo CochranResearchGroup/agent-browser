@@ -137,6 +137,30 @@ pub(crate) fn operator_focus_failure_code(error: &str) -> Option<&str> {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    // Desktop interaction validates controller authority before it can emit an
+    // input event. Preserve that native certainty instead of projecting the
+    // conservative generic operation-failure fallback.
+    if error.split(':').next() == Some("desktop_interaction_authority_required") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "desktop_interaction_authority_required".to_string(),
+            axis: ServiceFailureAxis::ProfileAccess,
+            phase: ServiceFailurePhase::ChildAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_desktop_interaction_authority".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_service_trace".to_string(),
+                "compare_controller_viewer_and_interaction_agent".to_string(),
+            ],
+            hard_stops: vec![
+                "blind_retry".to_string(),
+                "impersonate_controller_viewer".to_string(),
+            ],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     if error.starts_with("runtime_admission_draining:") {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
@@ -910,6 +934,37 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn desktop_interaction_authority_rejection_reports_proven_no_effect() {
+        let failure = classify_service_failure(
+            "desktop_interaction_authority_required: current machine controller authority was not proven",
+        );
+
+        assert_eq!(failure.code, "desktop_interaction_authority_required");
+        assert_eq!(failure.axis, ServiceFailureAxis::ProfileAccess);
+        assert_eq!(failure.phase, ServiceFailurePhase::ChildAdmission);
+        assert_eq!(failure.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(
+            failure.retry_disposition,
+            ServiceRetryDisposition::InspectBeforeRetry
+        );
+        assert_eq!(
+            failure.recommended_action,
+            "inspect_desktop_interaction_authority"
+        );
+        assert!(!failure.reuse_allowed);
+        assert!(failure
+            .safe_next_actions
+            .contains(&"inspect_service_trace".to_string()));
+        assert!(failure
+            .safe_next_actions
+            .contains(&"compare_controller_viewer_and_interaction_agent".to_string()));
+        assert!(failure.hard_stops.contains(&"blind_retry".to_string()));
+        assert!(failure
+            .hard_stops
+            .contains(&"impersonate_controller_viewer".to_string()));
+    }
+
+    #[test]
     fn download_observation_failure_does_not_invent_an_ownership_denial() {
         for code in [
             "download_events_unavailable",
@@ -1330,5 +1385,34 @@ mod tests {
         );
         assert_eq!(response["failure"]["reuseAllowed"], false);
         assert_eq!(response["failure"]["jobId"], "viewport-job-1");
+    }
+
+    #[test]
+    fn desktop_interaction_authority_failure_response_keeps_no_effect_recourse() {
+        let mut response = json!({
+            "id": "interaction-job-1",
+            "success": false,
+            "error": "desktop_interaction_authority_required: current machine controller authority was not proven"
+        });
+
+        attach_service_failure_recourse(&mut response);
+
+        assert_eq!(
+            response["error"],
+            "desktop_interaction_authority_required: current machine controller authority was not proven"
+        );
+        assert_eq!(
+            response["failure"]["code"],
+            "desktop_interaction_authority_required"
+        );
+        assert_eq!(response["failure"]["axis"], "profile_access");
+        assert_eq!(response["failure"]["phase"], "child_admission");
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["retryDisposition"],
+            "inspect_before_retry"
+        );
+        assert_eq!(response["failure"]["reuseAllowed"], false);
+        assert_eq!(response["failure"]["jobId"], "interaction-job-1");
     }
 }

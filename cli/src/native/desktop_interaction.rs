@@ -1,277 +1,19 @@
-//! Guarded, provider-neutral desktop interaction engine.
+//! CLI adapters for the provider-neutral desktop interaction services.
 //!
-//! This module owns the deterministic recipe, motion planner, event cleanup,
-//! verification, and redacted receipt. Platform input and controller storage
-//! remain injected seams. The source proof supplies only an in-memory fixture
-//! adapter and never invokes an operating-system input facility.
+//! Command dispatch, Service State handoff lookup, durable ledger persistence,
+//! and stream redaction remain here. The transaction kernel is owned by the
+//! `agent-browser-desktop-services` crate.
 
+#[cfg(test)]
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use super::desktop_control_coordinator::{DesktopControlCoordinator, DesktopInteractionClaim};
 use super::service_model::ServiceState;
 
-pub(crate) const RECIPE_ID: &str = "p110-pointer-keyboard-v1";
-pub(crate) const FOUNDATION_STRESS_RECIPE_ID: &str = "p110-foundation-stress-v1";
-pub(crate) const CONTROLLED_X11_RECIPE_ID: &str = "p131-controlled-x11-v1";
-const RECIPE_VERSION: &str = "v1";
-const FIXED_TEXT: &str = "fixture-ready";
-const COORDINATE_SPACE: &str = "desktop_physical_pixels";
-const FRESHNESS_LIMIT_MS: u64 = 750;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DesktopInteractionRequest {
-    pub browser_id: String,
-    pub session_name: Option<String>,
-    pub controller_lease_id: String,
-    pub recipe_id: String,
-    pub operation_id: String,
-    pub operation_principal_id: String,
-    pub request_principal_source: Option<String>,
-    pub service_name: String,
-    pub task_name: String,
-    pub caller_id: String,
-    pub request_id: String,
-    pub agent_name: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DesktopBinding {
-    pub browser_id: String,
-    pub session_name: String,
-    pub profile_id: Option<String>,
-    pub display_allocation_id: String,
-    pub stream_id: String,
-    pub route_id: String,
-    pub width: u32,
-    pub height: u32,
-    pub scale_millis: u32,
-    pub coordinate_space: String,
-    pub geometry_epoch: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PixelPoint {
-    pub x: i64,
-    pub y: i64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct PixelBounds {
-    pub x: i64,
-    pub y: i64,
-    pub width: u32,
-    pub height: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct BeforeObservation {
-    pub binding: DesktopBinding,
-    pub context_id: String,
-    pub frame_id: String,
-    pub frame_sha256: String,
-    pub captured_at_ms: u64,
-    pub observation_id: String,
-    pub observation_sha256: String,
-    pub observation_status: String,
-    pub selected_candidate_id: Option<String>,
-    pub selected_target_class: Option<String>,
-    pub selected_bounds: Option<PixelBounds>,
-    pub selected_center: Option<PixelPoint>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SurfaceSnapshot {
-    pub provider_id: String,
-    pub provider_version: String,
-    pub provider_capability: String,
-    pub surface_identity_digest: String,
-    pub browser_process_identity_digest: String,
-    pub focused: bool,
-    pub client_bounds: PixelBounds,
-    pub pointer: PixelPoint,
-    pub width: u32,
-    pub height: u32,
-    pub scale_millis: u32,
-    pub coordinate_space: String,
-    pub geometry_epoch: String,
-}
-
-impl PixelBounds {
-    fn contains(self, point: PixelPoint) -> bool {
-        let width = i64::from(self.width);
-        let height = i64::from(self.height);
-        point.x >= self.x
-            && point.y >= self.y
-            && point.x < self.x.saturating_add(width)
-            && point.y < self.y.saturating_add(height)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ControllerAuthority {
-    pub browser_id: String,
-    pub display_allocation_id: String,
-    pub stream_id: String,
-    pub route_id: String,
-    pub route_controller_lease_id: String,
-    pub stream_controller_lease_id: String,
-    pub lease_id: String,
-    pub lease_record_id: String,
-    pub lease_route_id: String,
-    pub lease_browser_id: String,
-    pub lease_viewer_id: String,
-    pub lease_role: String,
-    pub lease_state: String,
-    pub lease_updated_at: String,
-    pub lease_expires_at_ms: u64,
-    pub controller_epoch: u64,
-    pub route_controller_epoch: u64,
-    pub stream_controller_epoch: u64,
-    pub route_contains_lease: bool,
-    pub stream_contains_lease: bool,
-    pub route_writable: bool,
-    pub stream_writable: bool,
-    pub route_machine_input: Option<String>,
-    pub stream_machine_input: Option<String>,
-}
-
-pub(crate) trait ControllerAuthorityRepository {
-    fn snapshot(&mut self) -> Result<ControllerAuthority, DesktopInteractionError>;
-}
-
-pub(crate) trait InteractionClock {
-    fn now_ms(&mut self) -> u64;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub(crate) enum InputEvent {
-    PointerMove {
-        point: PixelPoint,
-        at_ms: u64,
-    },
-    LeftDown {
-        at_ms: u64,
-    },
-    LeftUp {
-        at_ms: u64,
-        emergency: bool,
-    },
-    KeyDown {
-        key: char,
-        at_ms: u64,
-    },
-    KeyUp {
-        key: char,
-        at_ms: u64,
-        emergency: bool,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct EventAcknowledgement {
-    pub acknowledgement_id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct AfterObservation {
-    pub binding: DesktopBinding,
-    pub context_id: String,
-    pub frame_id: String,
-    pub frame_sha256: String,
-    pub observation_id: String,
-    pub observation_sha256: String,
-    pub verification_state: String,
-    pub text_sha256: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PromptDisposition {
-    pub state: String,
-    pub reason_code: String,
-    pub observation_sha256: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct HumanHandoffSummary {
-    pub state: String,
-    pub reason: String,
-    pub handoff_id: String,
-    pub handoff_url: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct FoundationStressContext {
-    pub prompt_disposition: PromptDisposition,
-    pub handoff_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DesktopInteractionProviderEvidence {
-    pub provider_id: String,
-    pub provider_version: String,
-    pub capability: String,
-}
-
-impl FoundationStressContext {
-    fn actionable() -> Self {
-        Self {
-            prompt_disposition: PromptDisposition {
-                state: "actionable_observation".to_string(),
-                reason_code: "synthetic_prompt_actionable".to_string(),
-                observation_sha256: digest_text("synthetic-prompt-observation"),
-            },
-            handoff_reason: Some("effect_uncertain".to_string()),
-        }
-    }
-}
-
-fn validate_foundation_stress_context(
-    context: &FoundationStressContext,
-) -> Result<(), DesktopInteractionError> {
-    if !matches!(
-        context.prompt_disposition.state.as_str(),
-        "actionable_observation" | "operator_intervention_required"
-    ) || context.prompt_disposition.reason_code.trim().is_empty()
-        || context.prompt_disposition.observation_sha256.len() != 64
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_prompt_evidence_invalid",
-            "prompt disposition evidence is invalid",
-        ));
-    }
-    if context
-        .handoff_reason
-        .as_deref()
-        .is_some_and(|reason| reason.trim().is_empty() || reason.len() > 128)
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_handoff_invalid",
-            "provider handoff need has no bounded reason",
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) trait ServiceOwnedHandoffRepository {
-    fn resolve_ready(
-        &mut self,
-        browser_id: &str,
-        session_name: &str,
-        route_id: &str,
-        display_allocation_id: &str,
-        reason: &str,
-    ) -> Result<Option<HumanHandoffSummary>, DesktopInteractionError>;
-}
+pub(crate) use agent_browser_desktop_services::*;
 
 pub(crate) struct ServiceStateHandoffRepository<'a> {
     state: &'a ServiceState,
@@ -351,195 +93,6 @@ fn validate_service_handoff_url(
     Ok(())
 }
 
-pub(crate) trait DesktopInteractionProvider {
-    fn evidence(&self) -> DesktopInteractionProviderEvidence;
-    fn observe_before(
-        &mut self,
-        request: &DesktopInteractionRequest,
-    ) -> Result<BeforeObservation, DesktopInteractionError>;
-    fn probe(
-        &mut self,
-        binding: &DesktopBinding,
-    ) -> Result<SurfaceSnapshot, DesktopInteractionError>;
-    fn execute_event(
-        &mut self,
-        binding: &DesktopBinding,
-        expected_surface: &SurfaceSnapshot,
-        effect_key: &str,
-        event: &InputEvent,
-    ) -> Result<EventAcknowledgement, DesktopInteractionError>;
-    fn observe_after(
-        &mut self,
-        binding: &DesktopBinding,
-    ) -> Result<AfterObservation, DesktopInteractionError>;
-
-    fn foundation_stress_context(
-        &mut self,
-        _binding: &DesktopBinding,
-    ) -> Result<FoundationStressContext, DesktopInteractionError> {
-        Ok(FoundationStressContext::actionable())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub(crate) enum InteractionOperationRecord {
-    InProgress {
-        request_sha256: String,
-    },
-    Complete {
-        request_sha256: String,
-        receipt: Box<InteractionReceipt>,
-    },
-    Uncertain {
-        request_sha256: String,
-        receipt: Box<InteractionReceipt>,
-    },
-}
-
-pub(crate) trait InteractionOperationLedger {
-    fn lookup(
-        &mut self,
-        caller_id: &str,
-        operation_id: &str,
-    ) -> Result<Option<InteractionOperationRecord>, DesktopInteractionError>;
-    fn begin(
-        &mut self,
-        caller_id: &str,
-        operation_id: &str,
-        request_sha256: &str,
-    ) -> Result<(), DesktopInteractionError>;
-    fn complete(
-        &mut self,
-        caller_id: &str,
-        operation_id: &str,
-        request_sha256: &str,
-        receipt: &InteractionReceipt,
-    ) -> Result<(), DesktopInteractionError>;
-    fn abort(&mut self, caller_id: &str, operation_id: &str)
-        -> Result<(), DesktopInteractionError>;
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct SerializedInteractionOperationLedger {
-    records: BTreeMap<String, InteractionOperationRecord>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct InteractionOperationLedgerSnapshot {
-    schema_version: String,
-    records: BTreeMap<String, InteractionOperationRecord>,
-}
-
-impl SerializedInteractionOperationLedger {
-    pub(crate) fn from_json(serialized: &str) -> Result<Self, DesktopInteractionError> {
-        let snapshot: InteractionOperationLedgerSnapshot = serde_json::from_str(serialized)
-            .map_err(|_| {
-                DesktopInteractionError::new(
-                    "desktop_interaction_operation_ledger_invalid",
-                    "the durable interaction operation ledger is malformed",
-                )
-            })?;
-        if snapshot.schema_version != "p110-interaction-operation-ledger.v1" {
-            return Err(DesktopInteractionError::new(
-                "desktop_interaction_operation_ledger_invalid",
-                "the durable interaction operation ledger version is unsupported",
-            ));
-        }
-        Ok(Self {
-            records: snapshot.records,
-        })
-    }
-
-    pub(crate) fn to_json(&self) -> Result<String, DesktopInteractionError> {
-        serde_json::to_string(&InteractionOperationLedgerSnapshot {
-            schema_version: "p110-interaction-operation-ledger.v1".to_string(),
-            records: self.records.clone(),
-        })
-        .map_err(|_| {
-            DesktopInteractionError::new(
-                "desktop_interaction_operation_ledger_invalid",
-                "the durable interaction operation ledger could not be serialized",
-            )
-        })
-    }
-}
-
-impl InteractionOperationLedger for SerializedInteractionOperationLedger {
-    fn lookup(
-        &mut self,
-        caller_id: &str,
-        operation_id: &str,
-    ) -> Result<Option<InteractionOperationRecord>, DesktopInteractionError> {
-        Ok(self
-            .records
-            .get(&operation_scope_sha256(caller_id, operation_id))
-            .cloned())
-    }
-
-    fn begin(
-        &mut self,
-        caller_id: &str,
-        operation_id: &str,
-        request_sha256: &str,
-    ) -> Result<(), DesktopInteractionError> {
-        self.records.insert(
-            operation_scope_sha256(caller_id, operation_id),
-            InteractionOperationRecord::InProgress {
-                request_sha256: request_sha256.to_string(),
-            },
-        );
-        Ok(())
-    }
-
-    fn complete(
-        &mut self,
-        caller_id: &str,
-        operation_id: &str,
-        request_sha256: &str,
-        receipt: &InteractionReceipt,
-    ) -> Result<(), DesktopInteractionError> {
-        let mut durable_receipt = receipt.clone();
-        durable_receipt.operation_id = digest_text(operation_id);
-        if durable_receipt.recipe_id == FOUNDATION_STRESS_RECIPE_ID {
-            durable_receipt.route_id = digest_text(&durable_receipt.route_id);
-            durable_receipt.display_allocation_id =
-                digest_text(&durable_receipt.display_allocation_id);
-            durable_receipt.stream_id = digest_text(&durable_receipt.stream_id);
-            if let Some(handoff) = durable_receipt.human_handoff.as_mut() {
-                handoff.handoff_url.clear();
-            }
-        }
-        let record = if receipt.effect_state == "effect_uncertain"
-            || receipt.effect_state == "cancelled_after_effect"
-        {
-            InteractionOperationRecord::Uncertain {
-                request_sha256: request_sha256.to_string(),
-                receipt: Box::new(durable_receipt),
-            }
-        } else {
-            InteractionOperationRecord::Complete {
-                request_sha256: request_sha256.to_string(),
-                receipt: Box::new(durable_receipt),
-            }
-        };
-        self.records
-            .insert(operation_scope_sha256(caller_id, operation_id), record);
-        Ok(())
-    }
-
-    fn abort(
-        &mut self,
-        caller_id: &str,
-        operation_id: &str,
-    ) -> Result<(), DesktopInteractionError> {
-        self.records
-            .remove(&operation_scope_sha256(caller_id, operation_id));
-        Ok(())
-    }
-}
-
 /// Dedicated service-owned file adapter. Each transition is persisted by a
 /// same-directory temporary file, file sync, atomic rename, and directory sync.
 #[derive(Debug)]
@@ -614,10 +167,10 @@ impl PersistedInteractionOperationLedger {
             &mut SerializedInteractionOperationLedger,
         ) -> Result<(), DesktopInteractionError>,
     ) -> Result<(), DesktopInteractionError> {
-        let previous = self.inner.records.clone();
+        let previous = self.inner.clone();
         mutate(&mut self.inner)?;
         if let Err(error) = self.save() {
-            self.inner.records = previous;
+            self.inner = previous;
             return Err(error);
         }
         Ok(())
@@ -660,302 +213,6 @@ impl InteractionOperationLedger for PersistedInteractionOperationLedger {
 
 fn ledger_error(code: &'static str) -> DesktopInteractionError {
     DesktopInteractionError::new(code, "the service-owned operation ledger transition failed")
-}
-
-pub(crate) struct InteractionDependencies<'a> {
-    pub provider: &'a mut dyn DesktopInteractionProvider,
-    pub authority: &'a mut dyn ControllerAuthorityRepository,
-    pub coordinator: &'a DesktopControlCoordinator,
-    pub idempotency: &'a mut dyn InteractionOperationLedger,
-    pub handoffs: &'a mut dyn ServiceOwnedHandoffRepository,
-    pub clock: &'a mut dyn InteractionClock,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct InteractionReceipt {
-    pub transaction_id: String,
-    pub schema_version: String,
-    pub recipe_id: String,
-    pub recipe_version: String,
-    pub recipe_sha256: String,
-    pub operation_id: String,
-    pub operation_request_sha256: String,
-    pub replay_state: String,
-    pub recipe_provider_id: String,
-    pub recipe_provider_version: String,
-    pub recipe_provider_capability: String,
-    pub prompt_disposition: Option<PromptDisposition>,
-    pub human_handoff: Option<HumanHandoffSummary>,
-    pub entry_gate: String,
-    pub effect_key_digest: String,
-    pub effect_key_count: usize,
-    pub attempted_effect_key_digest: String,
-    pub attempted_effect_key_count: usize,
-    pub acknowledged_effect_key_digest: String,
-    pub acknowledged_effect_key_count: usize,
-    pub attempted_event_order_sha256: String,
-    pub browser_id: String,
-    pub display_allocation_id: String,
-    pub stream_id: String,
-    pub route_id: String,
-    pub controller_epoch: u64,
-    pub authority_digest: String,
-    pub actor_digest: String,
-    pub before_context_id: String,
-    pub before_frame_id: String,
-    pub before_frame_sha256: String,
-    pub before_observation_id: String,
-    pub before_observation_sha256: String,
-    pub selected_candidate_id: String,
-    pub surface_identity_digest: String,
-    pub browser_process_identity_digest: String,
-    pub pointer_start: PixelPoint,
-    pub target: PixelPoint,
-    pub coordinate_mapping: String,
-    pub motion_profile: String,
-    pub control_point_digest: String,
-    pub emitted_path_sha256: String,
-    pub pointer_event_count: usize,
-    pub duration_ms: u64,
-    pub acknowledgement_ids: Vec<String>,
-    pub cleanup_state: String,
-    pub text_length: usize,
-    pub text_sha256: String,
-    pub after_context_id: Option<String>,
-    pub after_frame_id: Option<String>,
-    pub after_frame_sha256: Option<String>,
-    pub after_observation_id: Option<String>,
-    pub after_observation_sha256: Option<String>,
-    pub verification_state: String,
-    pub effect_state: String,
-    pub stop_reason: Option<String>,
-    pub retention: String,
-    pub persisted_pixels: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DesktopInteractionError {
-    code: &'static str,
-    message: &'static str,
-    receipt: Option<Box<InteractionReceipt>>,
-}
-
-impl DesktopInteractionError {
-    pub(crate) fn new(code: &'static str, message: &'static str) -> Self {
-        Self {
-            code,
-            message,
-            receipt: None,
-        }
-    }
-
-    pub(crate) fn code(&self) -> &'static str {
-        self.code
-    }
-
-    pub(crate) fn receipt(&self) -> Option<&InteractionReceipt> {
-        self.receipt.as_deref()
-    }
-}
-
-impl std::fmt::Display for DesktopInteractionError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for DesktopInteractionError {}
-
-pub(crate) fn run_desktop_interaction(
-    request: DesktopInteractionRequest,
-    mut dependencies: InteractionDependencies<'_>,
-) -> Result<InteractionReceipt, DesktopInteractionError> {
-    validate_request(&request)?;
-    let operation_request_sha256 = operation_request_sha256(&request);
-    match dependencies
-        .idempotency
-        .lookup(&request.operation_principal_id, &request.operation_id)?
-    {
-        Some(InteractionOperationRecord::Complete {
-            request_sha256,
-            receipt,
-        })
-        | Some(InteractionOperationRecord::Uncertain {
-            request_sha256,
-            receipt,
-        }) if request_sha256 == operation_request_sha256 => {
-            let mut receipt = *receipt;
-            receipt.operation_id = request.operation_id.clone();
-            receipt.replay_state = "replayed_terminal".to_string();
-            return Ok(receipt);
-        }
-        Some(InteractionOperationRecord::Complete { .. })
-        | Some(InteractionOperationRecord::Uncertain { .. }) => {
-            return Err(DesktopInteractionError::new(
-                "desktop_interaction_operation_conflict",
-                "the operation ID is already bound to another canonical request",
-            ));
-        }
-        Some(InteractionOperationRecord::InProgress { request_sha256 })
-            if request_sha256 != operation_request_sha256 =>
-        {
-            return Err(DesktopInteractionError::new(
-                "desktop_interaction_operation_conflict",
-                "the operation ID is already bound to another canonical request",
-            ));
-        }
-        Some(InteractionOperationRecord::InProgress { .. }) => {
-            return Err(DesktopInteractionError::new(
-                "desktop_interaction_duplicate",
-                "the interaction operation is already in progress and requires reconciliation",
-            ));
-        }
-        None => {}
-    }
-
-    let transaction_id = format!(
-        "desktop-interaction-{}",
-        &operation_scope_sha256(&request.operation_principal_id, &request.operation_id)[..24]
-    );
-    dependencies.idempotency.begin(
-        &request.operation_principal_id,
-        &request.operation_id,
-        &operation_request_sha256,
-    )?;
-    let before = match dependencies.provider.observe_before(&request) {
-        Ok(before) => before,
-        Err(error) => {
-            dependencies
-                .idempotency
-                .abort(&request.operation_principal_id, &request.operation_id)?;
-            return Err(error);
-        }
-    };
-    if let Err(error) = validate_before(&request, &before) {
-        dependencies
-            .idempotency
-            .abort(&request.operation_principal_id, &request.operation_id)?;
-        return Err(error);
-    }
-    let candidate_id = before
-        .selected_candidate_id
-        .clone()
-        .expect("validated selected candidate");
-    let target = before.selected_center.expect("validated target center");
-    let target_bounds = before.selected_bounds.expect("validated target bounds");
-    let initial_authority = match dependencies.authority.snapshot() {
-        Ok(authority) => authority,
-        Err(error) => {
-            dependencies
-                .idempotency
-                .abort(&request.operation_principal_id, &request.operation_id)?;
-            return Err(error);
-        }
-    };
-    let initial_now = dependencies.clock.now_ms();
-    let authority_digest =
-        match validate_authority(&request, &before.binding, &initial_authority, initial_now) {
-            Ok(digest) => digest,
-            Err(error) => {
-                dependencies
-                    .idempotency
-                    .abort(&request.operation_principal_id, &request.operation_id)?;
-                return Err(error);
-            }
-        };
-    let claim = match dependencies
-        .coordinator
-        .claim(&before.binding.route_id, &transaction_id)
-    {
-        Ok(claim) => claim,
-        Err(_) => {
-            dependencies
-                .idempotency
-                .abort(&request.operation_principal_id, &request.operation_id)?;
-            return Err(DesktopInteractionError::new(
-                "desktop_interaction_conflict",
-                "the route already has an interaction claim",
-            ));
-        }
-    };
-    let stress_context = if request.recipe_id == FOUNDATION_STRESS_RECIPE_ID {
-        match dependencies
-            .provider
-            .foundation_stress_context(&before.binding)
-        {
-            Ok(context) => {
-                if let Err(error) = validate_foundation_stress_context(&context) {
-                    dependencies
-                        .idempotency
-                        .abort(&request.operation_principal_id, &request.operation_id)?;
-                    return Err(error);
-                }
-                Some(context)
-            }
-            Err(error) => {
-                dependencies
-                    .idempotency
-                    .abort(&request.operation_principal_id, &request.operation_id)?;
-                return Err(error);
-            }
-        }
-    } else {
-        None
-    };
-
-    let result = run_claimed_interaction(
-        &request,
-        &transaction_id,
-        before,
-        candidate_id,
-        target,
-        target_bounds,
-        initial_authority,
-        authority_digest,
-        stress_context.as_ref(),
-        &claim,
-        &mut dependencies,
-    );
-    drop(claim);
-    match result.outcome {
-        Ok(mut receipt) => {
-            finalize_stress_receipt(
-                &request,
-                stress_context.as_ref(),
-                &mut receipt,
-                dependencies.handoffs,
-            )?;
-            dependencies.idempotency.complete(
-                &request.operation_principal_id,
-                &request.operation_id,
-                &operation_request_sha256,
-                &receipt,
-            )?;
-            Ok(receipt)
-        }
-        Err(mut error) => {
-            if let Some(receipt) = error.receipt.as_deref_mut() {
-                finalize_stress_receipt(
-                    &request,
-                    stress_context.as_ref(),
-                    receipt,
-                    dependencies.handoffs,
-                )?;
-                dependencies.idempotency.complete(
-                    &request.operation_principal_id,
-                    &request.operation_id,
-                    &operation_request_sha256,
-                    receipt,
-                )?;
-            } else {
-                dependencies
-                    .idempotency
-                    .abort(&request.operation_principal_id, &request.operation_id)?;
-            }
-            Err(error)
-        }
-    }
 }
 
 /// Dispatch the controlled provider only from an exact admitted immutable
@@ -1007,7 +264,13 @@ fn parse_configured_interaction_request(
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
         .ok_or_else(|| "desktop_interact requires recipe.recipeId".to_string())?;
-    if recipe_id != CONTROLLED_X11_RECIPE_ID {
+    if ![
+        CONTROLLED_X11_RECIPE_ID,
+        TURNSTILE_RECIPE_ID,
+        HCAPTCHA_RECIPE_ID,
+    ]
+    .contains(&recipe_id.as_str())
+    {
         return Err("desktop_interaction_unsupported: recipe is not registered".to_string());
     }
     Ok(DesktopInteractionRequest {
@@ -1257,1430 +520,6 @@ fn redact_point(value: &Value) -> Value {
     )
 }
 
-struct ClaimedResult {
-    outcome: Result<InteractionReceipt, DesktopInteractionError>,
-}
-
-#[derive(Default)]
-struct EffectTrace {
-    attempted_keys: Vec<String>,
-    acknowledged_keys: Vec<String>,
-    attempted_events: Vec<InputEvent>,
-}
-
-#[allow(clippy::too_many_arguments)]
-fn run_claimed_interaction(
-    request: &DesktopInteractionRequest,
-    transaction_id: &str,
-    before: BeforeObservation,
-    candidate_id: String,
-    target: PixelPoint,
-    target_bounds: PixelBounds,
-    initial_authority: ControllerAuthority,
-    authority_digest: String,
-    stress_context: Option<&FoundationStressContext>,
-    claim: &DesktopInteractionClaim,
-    dependencies: &mut InteractionDependencies<'_>,
-) -> ClaimedResult {
-    let outcome = (|| {
-        let provider_evidence = dependencies.provider.evidence();
-        if provider_evidence.provider_id.trim().is_empty()
-            || provider_evidence.provider_version.trim().is_empty()
-            || provider_evidence.capability != "guarded_pointer_keyboard_v1"
-        {
-            return Err(DesktopInteractionError::new(
-                "desktop_input_provider_invalid",
-                "desktop input provider evidence is incomplete or unsupported",
-            ));
-        }
-        let initial_surface = dependencies.provider.probe(&before.binding)?;
-        if initial_surface.provider_id != provider_evidence.provider_id
-            || initial_surface.provider_version != provider_evidence.provider_version
-            || initial_surface.provider_capability != provider_evidence.capability
-        {
-            return Err(DesktopInteractionError::new(
-                "desktop_input_provider_invalid",
-                "desktop surface evidence does not match its provider identity",
-            ));
-        }
-        validate_surface(&before.binding, &initial_surface, target, target_bounds)?;
-        if dependencies
-            .clock
-            .now_ms()
-            .saturating_sub(before.captured_at_ms)
-            > FRESHNESS_LIMIT_MS
-        {
-            return Err(DesktopInteractionError::new(
-                "desktop_interaction_stale_observation",
-                "the selected observation is too old for input",
-            ));
-        }
-        let recipe_sha256 = recipe_sha256(&request.recipe_id);
-        let motion = plan_motion(
-            initial_surface.pointer,
-            target,
-            before.binding.width,
-            before.binding.height,
-            &digest_text(&format!(
-                "{}\0{}\0{}\0{}:{}\0{}:{}",
-                recipe_sha256,
-                before.frame_id,
-                candidate_id,
-                initial_surface.pointer.x,
-                initial_surface.pointer.y,
-                target.x,
-                target.y
-            )),
-        )?;
-        let mut acknowledgements = Vec::new();
-        let mut effect_trace = EffectTrace::default();
-        let mut acknowledged_effect = false;
-        let mut key_down: Option<char> = None;
-
-        if stress_context.is_some_and(|context| {
-            context.prompt_disposition.state == "operator_intervention_required"
-        }) {
-            let mut receipt = base_receipt(
-                request,
-                transaction_id,
-                &before,
-                &candidate_id,
-                target,
-                &initial_surface,
-                &initial_authority,
-                &authority_digest,
-                &motion,
-                &effect_trace,
-                acknowledgements,
-            );
-            receipt.effect_state = "no_effect".to_string();
-            receipt.stop_reason = Some("desktop_prompt_operator_intervention_required".to_string());
-            return Ok(receipt);
-        }
-
-        for (index, point) in motion.points.iter().copied().enumerate().skip(1) {
-            let event = InputEvent::PointerMove {
-                point,
-                at_ms: scheduled_time(index, motion.points.len(), motion.duration_ms),
-            };
-            match execute_guarded_event(
-                request,
-                &before.binding,
-                &initial_authority,
-                &initial_surface,
-                target,
-                target_bounds,
-                claim,
-                dependencies,
-                &mut effect_trace,
-                &event,
-                None,
-            ) {
-                Ok(ack) => {
-                    acknowledgements.push(ack.acknowledgement_id);
-                    acknowledged_effect = true;
-                }
-                Err(error) if acknowledged_effect => {
-                    return Err(effect_error(
-                        error.code,
-                        error.message,
-                        base_receipt(
-                            request,
-                            transaction_id,
-                            &before,
-                            &candidate_id,
-                            target,
-                            &initial_surface,
-                            &initial_authority,
-                            &authority_digest,
-                            &motion,
-                            &effect_trace,
-                            acknowledgements,
-                        ),
-                        "not_needed",
-                        "effect_uncertain",
-                    ));
-                }
-                Err(error) => return Err(error),
-            }
-        }
-
-        let down = InputEvent::LeftDown {
-            at_ms: motion.duration_ms,
-        };
-        let ack = execute_guarded_event(
-            request,
-            &before.binding,
-            &initial_authority,
-            &initial_surface,
-            target,
-            target_bounds,
-            claim,
-            dependencies,
-            &mut effect_trace,
-            &down,
-            Some(before.captured_at_ms),
-        )
-        .map_err(|error| {
-            post_ack_error(
-                error,
-                acknowledged_effect,
-                request,
-                transaction_id,
-                &before,
-                &candidate_id,
-                target,
-                &initial_surface,
-                &initial_authority,
-                &authority_digest,
-                &motion,
-                &effect_trace,
-                acknowledgements.clone(),
-            )
-        })?;
-        acknowledgements.push(ack.acknowledgement_id);
-        let mut button_down = true;
-
-        let hold_ms = motion.hold_ms;
-        let up = InputEvent::LeftUp {
-            at_ms: motion.duration_ms + hold_ms,
-            emergency: false,
-        };
-        match execute_guarded_event(
-            request,
-            &before.binding,
-            &initial_authority,
-            &initial_surface,
-            target,
-            target_bounds,
-            claim,
-            dependencies,
-            &mut effect_trace,
-            &up,
-            None,
-        ) {
-            Ok(ack) => {
-                acknowledgements.push(ack.acknowledgement_id);
-                button_down = false;
-            }
-            Err(error) => {
-                let cleanup = emergency_release(
-                    ReleaseContext {
-                        request,
-                        provider: dependencies.provider,
-                        authority: dependencies.authority,
-                        binding: &before.binding,
-                        surface: &initial_surface,
-                        claim,
-                        acknowledgements: &mut acknowledgements,
-                        effect_trace: &mut effect_trace,
-                    },
-                    button_down,
-                    key_down,
-                    motion.duration_ms + hold_ms + 1,
-                );
-                return Err(effect_error(
-                    if cleanup {
-                        error.code
-                    } else {
-                        "desktop_input_cleanup_failed"
-                    },
-                    if cleanup {
-                        error.message
-                    } else {
-                        "input release and emergency cleanup failed"
-                    },
-                    base_receipt(
-                        request,
-                        transaction_id,
-                        &before,
-                        &candidate_id,
-                        target,
-                        &initial_surface,
-                        &initial_authority,
-                        &authority_digest,
-                        &motion,
-                        &effect_trace,
-                        acknowledgements,
-                    ),
-                    if cleanup {
-                        "released"
-                    } else {
-                        "release_failed"
-                    },
-                    "effect_uncertain",
-                ));
-            }
-        }
-
-        let mut event_time = motion.duration_ms + hold_ms;
-        for (index, key) in FIXED_TEXT.chars().enumerate() {
-            event_time += key_delay_ms(index, &motion.seed_digest);
-            let down = InputEvent::KeyDown {
-                key,
-                at_ms: event_time,
-            };
-            match execute_guarded_event(
-                request,
-                &before.binding,
-                &initial_authority,
-                &initial_surface,
-                target,
-                target_bounds,
-                claim,
-                dependencies,
-                &mut effect_trace,
-                &down,
-                None,
-            ) {
-                Ok(ack) => {
-                    acknowledgements.push(ack.acknowledgement_id);
-                    key_down = Some(key);
-                }
-                Err(error) => {
-                    return Err(with_cleanup(
-                        error,
-                        request,
-                        transaction_id,
-                        &before,
-                        &candidate_id,
-                        target,
-                        &initial_surface,
-                        &initial_authority,
-                        &authority_digest,
-                        &motion,
-                        &mut effect_trace,
-                        acknowledgements,
-                        dependencies.provider,
-                        dependencies.authority,
-                        &initial_surface,
-                        claim,
-                        button_down,
-                        key_down,
-                        event_time + 1,
-                    ));
-                }
-            }
-            let up = InputEvent::KeyUp {
-                key,
-                at_ms: event_time + 1,
-                emergency: false,
-            };
-            match execute_guarded_event(
-                request,
-                &before.binding,
-                &initial_authority,
-                &initial_surface,
-                target,
-                target_bounds,
-                claim,
-                dependencies,
-                &mut effect_trace,
-                &up,
-                None,
-            ) {
-                Ok(ack) => {
-                    acknowledgements.push(ack.acknowledgement_id);
-                    key_down = None;
-                }
-                Err(error) => {
-                    let cleanup = emergency_release(
-                        ReleaseContext {
-                            request,
-                            provider: dependencies.provider,
-                            authority: dependencies.authority,
-                            binding: &before.binding,
-                            surface: &initial_surface,
-                            claim,
-                            acknowledgements: &mut acknowledgements,
-                            effect_trace: &mut effect_trace,
-                        },
-                        button_down,
-                        key_down,
-                        event_time + 2,
-                    );
-                    return Err(effect_error(
-                        if cleanup {
-                            error.code
-                        } else {
-                            "desktop_input_cleanup_failed"
-                        },
-                        if cleanup {
-                            error.message
-                        } else {
-                            "keyboard release and emergency cleanup failed"
-                        },
-                        base_receipt(
-                            request,
-                            transaction_id,
-                            &before,
-                            &candidate_id,
-                            target,
-                            &initial_surface,
-                            &initial_authority,
-                            &authority_digest,
-                            &motion,
-                            &effect_trace,
-                            acknowledgements,
-                        ),
-                        if cleanup {
-                            "released"
-                        } else {
-                            "release_failed"
-                        },
-                        "effect_uncertain",
-                    ));
-                }
-            }
-        }
-
-        validate_guarded_boundary(
-            request,
-            &before.binding,
-            &initial_authority,
-            &initial_surface,
-            target,
-            target_bounds,
-            claim,
-            dependencies,
-        )
-        .map_err(|error| {
-            post_ack_error(
-                error,
-                true,
-                request,
-                transaction_id,
-                &before,
-                &candidate_id,
-                target,
-                &initial_surface,
-                &initial_authority,
-                &authority_digest,
-                &motion,
-                &effect_trace,
-                acknowledgements.clone(),
-            )
-        })?;
-        let after = dependencies
-            .provider
-            .observe_after(&before.binding)
-            .map_err(|_| {
-                effect_error(
-                    "desktop_interaction_verification_unavailable",
-                    "after-state evidence is unavailable",
-                    base_receipt(
-                        request,
-                        transaction_id,
-                        &before,
-                        &candidate_id,
-                        target,
-                        &initial_surface,
-                        &initial_authority,
-                        &authority_digest,
-                        &motion,
-                        &effect_trace,
-                        acknowledgements.clone(),
-                    ),
-                    "released",
-                    "effect_uncertain",
-                )
-            })?;
-        if !same_binding(&before.binding, &after.binding) {
-            return Err(effect_error(
-                "desktop_interaction_verification_unavailable",
-                "after-state desktop binding changed",
-                base_receipt(
-                    request,
-                    transaction_id,
-                    &before,
-                    &candidate_id,
-                    target,
-                    &initial_surface,
-                    &initial_authority,
-                    &authority_digest,
-                    &motion,
-                    &effect_trace,
-                    acknowledgements,
-                ),
-                "released",
-                "effect_uncertain",
-            ));
-        }
-        if after.verification_state != "passed"
-            || after.text_sha256.as_deref() != Some(digest_text(FIXED_TEXT).as_str())
-        {
-            let mut receipt = base_receipt(
-                request,
-                transaction_id,
-                &before,
-                &candidate_id,
-                target,
-                &initial_surface,
-                &initial_authority,
-                &authority_digest,
-                &motion,
-                &effect_trace,
-                acknowledgements,
-            );
-            apply_after(&mut receipt, &after);
-            return Err(effect_error(
-                "desktop_interaction_verification_failed",
-                "after-state verification did not establish the recipe outcome",
-                receipt,
-                "released",
-                "effect_uncertain",
-            ));
-        }
-
-        let mut receipt = base_receipt(
-            request,
-            transaction_id,
-            &before,
-            &candidate_id,
-            target,
-            &initial_surface,
-            &initial_authority,
-            &authority_digest,
-            &motion,
-            &effect_trace,
-            acknowledgements,
-        );
-        apply_after(&mut receipt, &after);
-        receipt.cleanup_state = "released".to_string();
-        receipt.verification_state = "passed".to_string();
-        receipt.effect_state = "verified_success".to_string();
-        Ok(receipt)
-    })();
-    ClaimedResult { outcome }
-}
-
-fn validate_request(request: &DesktopInteractionRequest) -> Result<(), DesktopInteractionError> {
-    if ![
-        RECIPE_ID,
-        FOUNDATION_STRESS_RECIPE_ID,
-        CONTROLLED_X11_RECIPE_ID,
-    ]
-    .contains(&request.recipe_id.as_str())
-        || request.browser_id.trim().is_empty()
-        || request.controller_lease_id.trim().is_empty()
-        || request.operation_id.trim().is_empty()
-        || request.operation_id.len() > 128
-        || request.operation_principal_id.trim().is_empty()
-        || request.operation_principal_id.len() > 256
-        || request.request_principal_source.as_deref() != Some("attribution_tuple_v1")
-        || request.service_name.trim().is_empty()
-        || request.task_name.trim().is_empty()
-        || request.caller_id.trim().is_empty()
-        || request.request_id.trim().is_empty()
-        || request.agent_name != "fixture-agent"
-        || FIXED_TEXT.len() > 32
-        || !FIXED_TEXT.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b' ' || byte == b'-'
-        })
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_unsupported",
-            "the interaction request does not match the named synthetic recipe",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_before(
-    request: &DesktopInteractionRequest,
-    before: &BeforeObservation,
-) -> Result<(), DesktopInteractionError> {
-    if before.binding.browser_id != request.browser_id
-        || request
-            .session_name
-            .as_deref()
-            .is_some_and(|session| session != before.binding.session_name)
-        || before.binding.coordinate_space != COORDINATE_SPACE
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_coordinate_mismatch",
-            "the observation does not match the requested physical desktop binding",
-        ));
-    }
-    if before.observation_status != "matched"
-        || before.selected_candidate_id.is_none()
-        || before.selected_target_class.as_deref() != Some("synthetic_verification_control")
-        || before.selected_bounds.is_none()
-        || before.selected_center.is_none()
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_target_unavailable",
-            "the named recipe has no exact selected synthetic target",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_authority(
-    request: &DesktopInteractionRequest,
-    binding: &DesktopBinding,
-    authority: &ControllerAuthority,
-    now_ms: u64,
-) -> Result<String, DesktopInteractionError> {
-    let lease = request.controller_lease_id.as_str();
-    let provider = authority.route_machine_input.as_deref();
-    if authority.browser_id != binding.browser_id
-        || authority.display_allocation_id != binding.display_allocation_id
-        || authority.stream_id != binding.stream_id
-        || authority.route_id != binding.route_id
-        || authority.route_controller_lease_id != lease
-        || authority.stream_controller_lease_id != lease
-        || authority.lease_id != lease
-        || authority.lease_record_id != lease
-        || authority.lease_route_id != binding.route_id
-        || authority.lease_browser_id != binding.browser_id
-        || authority.lease_viewer_id != request.agent_name
-        || authority.lease_role != "controller"
-        || authority.lease_state != "controlling"
-        || authority.lease_updated_at.trim().is_empty()
-        || !authority.route_contains_lease
-        || !authority.stream_contains_lease
-        || !authority.route_writable
-        || !authority.stream_writable
-        || provider.is_none()
-        || provider == Some("manual_attached_desktop")
-        || provider != authority.stream_machine_input.as_deref()
-        || authority.controller_epoch == 0
-        || authority.route_controller_epoch != authority.controller_epoch
-        || authority.stream_controller_epoch != authority.controller_epoch
-        || authority.lease_expires_at_ms <= now_ms
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_authority_required",
-            "current machine controller authority was not proven",
-        ));
-    }
-    Ok(authority_digest(request, binding, authority))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn execute_guarded_event(
-    request: &DesktopInteractionRequest,
-    binding: &DesktopBinding,
-    initial: &ControllerAuthority,
-    initial_surface: &SurfaceSnapshot,
-    target: PixelPoint,
-    target_bounds: PixelBounds,
-    claim: &DesktopInteractionClaim,
-    dependencies: &mut InteractionDependencies<'_>,
-    effect_trace: &mut EffectTrace,
-    event: &InputEvent,
-    freshness_capture_ms: Option<u64>,
-) -> Result<EventAcknowledgement, DesktopInteractionError> {
-    let _guard = claim.begin_event().map_err(|code| {
-        DesktopInteractionError::new(
-            if code == "desktop_interaction_conflict" {
-                "desktop_interaction_conflict"
-            } else {
-                "desktop_interaction_authority_changed"
-            },
-            "desktop event authority fence is unavailable",
-        )
-    })?;
-    let now = dependencies.clock.now_ms();
-    let current = dependencies.authority.snapshot()?;
-    let digest = validate_authority(request, binding, &current, now).map_err(|_| {
-        DesktopInteractionError::new(
-            "desktop_interaction_authority_changed",
-            "controller authority changed during interaction",
-        )
-    })?;
-    if digest != authority_digest(request, binding, initial) {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_authority_changed",
-            "controller authority changed during interaction",
-        ));
-    }
-    if freshness_capture_ms
-        .is_some_and(|captured_at| now.saturating_sub(captured_at) > FRESHNESS_LIMIT_MS)
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_stale_observation",
-            "the selected observation is too old for input",
-        ));
-    }
-    let current_surface = dependencies.provider.probe(binding)?;
-    validate_surface_stable(
-        binding,
-        initial_surface,
-        &current_surface,
-        target,
-        target_bounds,
-    )?;
-    let effect_key = provider_effect_key(request, effect_trace.attempted_keys.len());
-    effect_trace.attempted_keys.push(effect_key.clone());
-    effect_trace.attempted_events.push(event.clone());
-    let acknowledgement =
-        dependencies
-            .provider
-            .execute_event(binding, &current_surface, &effect_key, event)?;
-    effect_trace.acknowledged_keys.push(effect_key);
-    Ok(acknowledgement)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn validate_guarded_boundary(
-    request: &DesktopInteractionRequest,
-    binding: &DesktopBinding,
-    initial: &ControllerAuthority,
-    initial_surface: &SurfaceSnapshot,
-    target: PixelPoint,
-    target_bounds: PixelBounds,
-    claim: &DesktopInteractionClaim,
-    dependencies: &mut InteractionDependencies<'_>,
-) -> Result<(), DesktopInteractionError> {
-    let _guard = claim.begin_event().map_err(|_| {
-        DesktopInteractionError::new(
-            "desktop_interaction_authority_changed",
-            "desktop verification authority fence is unavailable",
-        )
-    })?;
-    let now = dependencies.clock.now_ms();
-    let current = dependencies.authority.snapshot()?;
-    let digest = validate_authority(request, binding, &current, now).map_err(|_| {
-        DesktopInteractionError::new(
-            "desktop_interaction_authority_changed",
-            "controller authority changed during interaction",
-        )
-    })?;
-    if digest != authority_digest(request, binding, initial) {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_authority_changed",
-            "controller authority changed during interaction",
-        ));
-    }
-    let surface = dependencies.provider.probe(binding)?;
-    validate_surface_stable(binding, initial_surface, &surface, target, target_bounds)
-}
-
-fn validate_surface(
-    binding: &DesktopBinding,
-    surface: &SurfaceSnapshot,
-    target: PixelPoint,
-    target_bounds: PixelBounds,
-) -> Result<(), DesktopInteractionError> {
-    if !surface.focused
-        || surface.provider_id.trim().is_empty()
-        || surface.provider_version.trim().is_empty()
-        || surface.provider_capability != "guarded_pointer_keyboard_v1"
-        || surface.surface_identity_digest.trim().is_empty()
-        || surface.browser_process_identity_digest.trim().is_empty()
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_focus_not_ready",
-            "the exact synthetic browser surface is not focused",
-        ));
-    }
-    if surface.width != binding.width
-        || surface.height != binding.height
-        || surface.scale_millis != binding.scale_millis
-        || surface.coordinate_space != binding.coordinate_space
-        || surface.geometry_epoch != binding.geometry_epoch
-        || target_bounds.width == 0
-        || target_bounds.height == 0
-        || !display_bounds(binding).contains(surface.pointer)
-        || !display_bounds(binding).contains(target)
-        || !surface.client_bounds.contains(target)
-        || !target_bounds.contains(target)
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_coordinate_mismatch",
-            "surface geometry or physical-pixel target mapping does not match the observation",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_surface_stable(
-    binding: &DesktopBinding,
-    initial: &SurfaceSnapshot,
-    current: &SurfaceSnapshot,
-    target: PixelPoint,
-    target_bounds: PixelBounds,
-) -> Result<(), DesktopInteractionError> {
-    validate_surface(binding, current, target, target_bounds)?;
-    if initial.provider_id != current.provider_id
-        || initial.provider_version != current.provider_version
-        || initial.provider_capability != current.provider_capability
-        || initial.surface_identity_digest != current.surface_identity_digest
-        || initial.browser_process_identity_digest != current.browser_process_identity_digest
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_focus_changed",
-            "focused surface identity changed during interaction",
-        ));
-    }
-    Ok(())
-}
-
-#[derive(Debug, Clone)]
-struct MotionPlan {
-    points: Vec<PixelPoint>,
-    control_points: [PixelPoint; 4],
-    duration_ms: u64,
-    hold_ms: u64,
-    seed_digest: String,
-}
-
-fn plan_motion(
-    start: PixelPoint,
-    target: PixelPoint,
-    width: u32,
-    height: u32,
-    seed_digest: &str,
-) -> Result<MotionPlan, DesktopInteractionError> {
-    let bounds = PixelBounds {
-        x: 0,
-        y: 0,
-        width,
-        height,
-    };
-    if !bounds.contains(start) || !bounds.contains(target) {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_coordinate_mismatch",
-            "pointer trajectory endpoints are outside the display",
-        ));
-    }
-    let dx = i128::from(target.x) - i128::from(start.x);
-    let dy = i128::from(target.y) - i128::from(start.y);
-    let squared = dx
-        .checked_mul(dx)
-        .and_then(|value| {
-            dy.checked_mul(dy)
-                .and_then(|right| value.checked_add(right))
-        })
-        .ok_or_else(|| {
-            DesktopInteractionError::new(
-                "desktop_interaction_coordinate_mismatch",
-                "pointer distance overflowed",
-            )
-        })?;
-    let distance = integer_sqrt(u128::try_from(squared).map_err(|_| {
-        DesktopInteractionError::new(
-            "desktop_interaction_coordinate_mismatch",
-            "pointer distance is invalid",
-        )
-    })?);
-    let distance_u64 = u64::try_from(distance).map_err(|_| {
-        DesktopInteractionError::new(
-            "desktop_interaction_coordinate_mismatch",
-            "pointer distance exceeds supported bounds",
-        )
-    })?;
-    let steps = if distance_u64 < 4 {
-        1
-    } else {
-        distance_u64.div_ceil(12).clamp(6, 64)
-    };
-    let duration_ms = (140 + distance_u64 / 3).clamp(160, 650);
-    let seed = decode_digest(seed_digest)?;
-    let side = if seed[0] & 1 == 0 { 1_i128 } else { -1_i128 };
-    let jitter_range = (distance_u64 / 20).saturating_add(1);
-    let mut bend = (distance_u64 / 10 + u64::from(seed[1]) % jitter_range).clamp(4, 48);
-    let mut controls;
-    loop {
-        let divisor = i128::from(distance_u64.max(1));
-        let offset_x = side * -dy * i128::from(bend) / divisor;
-        let offset_y = side * dx * i128::from(bend) / divisor;
-        controls = [
-            start,
-            checked_point(
-                i128::from(start.x) + dx / 3 + offset_x,
-                i128::from(start.y) + dy / 3 + offset_y,
-            )?,
-            checked_point(
-                i128::from(start.x) + dx * 2 / 3 + offset_x,
-                i128::from(start.y) + dy * 2 / 3 + offset_y,
-            )?,
-            target,
-        ];
-        if bounds.contains(controls[1]) && bounds.contains(controls[2]) {
-            break;
-        }
-        if bend == 0 {
-            controls[1] =
-                checked_point(i128::from(start.x) + dx / 3, i128::from(start.y) + dy / 3)?;
-            controls[2] = checked_point(
-                i128::from(start.x) + dx * 2 / 3,
-                i128::from(start.y) + dy * 2 / 3,
-            )?;
-            break;
-        }
-        bend -= 1;
-    }
-    let mut points = Vec::new();
-    for index in 0..=steps {
-        let point = if index == 0 {
-            start
-        } else if index == steps {
-            target
-        } else {
-            bezier_point(controls, index, steps)?
-        };
-        if !bounds.contains(point) {
-            return Err(DesktopInteractionError::new(
-                "desktop_interaction_coordinate_mismatch",
-                "planned pointer trajectory left display bounds",
-            ));
-        }
-        if points.last() != Some(&point) {
-            points.push(point);
-        }
-    }
-    if points.first() != Some(&start) || points.last() != Some(&target) {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_coordinate_mismatch",
-            "planned pointer trajectory lost an endpoint",
-        ));
-    }
-    Ok(MotionPlan {
-        points,
-        control_points: controls,
-        duration_ms,
-        hold_ms: 45 + u64::from(seed[2]) % 46,
-        seed_digest: seed_digest.to_string(),
-    })
-}
-
-fn bezier_point(
-    controls: [PixelPoint; 4],
-    index: u64,
-    steps: u64,
-) -> Result<PixelPoint, DesktopInteractionError> {
-    const SCALE: i128 = 1_000_000;
-    let s = i128::from(index) * SCALE / i128::from(steps);
-    let eased = (3 * s * s * SCALE - 2 * s * s * s) / (SCALE * SCALE);
-    let inverse = SCALE - eased;
-    let weights = [
-        inverse * inverse * inverse,
-        3 * inverse * inverse * eased,
-        3 * inverse * eased * eased,
-        eased * eased * eased,
-    ];
-    let divisor = SCALE * SCALE * SCALE;
-    let evaluate = |coordinate: fn(PixelPoint) -> i64| {
-        let total = controls
-            .iter()
-            .zip(weights)
-            .try_fold(0_i128, |sum, (point, weight)| {
-                i128::from(coordinate(*point))
-                    .checked_mul(weight)
-                    .and_then(|term| sum.checked_add(term))
-            })?;
-        Some(round_half_away(total, divisor))
-    };
-    checked_point(
-        evaluate(|point| point.x).ok_or_else(motion_overflow)?,
-        evaluate(|point| point.y).ok_or_else(motion_overflow)?,
-    )
-}
-
-fn round_half_away(value: i128, divisor: i128) -> i128 {
-    if value >= 0 {
-        (value + divisor / 2) / divisor
-    } else {
-        (value - divisor / 2) / divisor
-    }
-}
-
-fn checked_point(x: i128, y: i128) -> Result<PixelPoint, DesktopInteractionError> {
-    Ok(PixelPoint {
-        x: i64::try_from(x).map_err(|_| motion_overflow())?,
-        y: i64::try_from(y).map_err(|_| motion_overflow())?,
-    })
-}
-
-fn motion_overflow() -> DesktopInteractionError {
-    DesktopInteractionError::new(
-        "desktop_interaction_coordinate_mismatch",
-        "fixed-point pointer trajectory overflowed",
-    )
-}
-
-fn integer_sqrt(value: u128) -> u128 {
-    if value < 2 {
-        return value;
-    }
-    let mut left = 1_u128;
-    let mut right = value.min(u128::from(u64::MAX));
-    let mut answer = 1_u128;
-    while left <= right {
-        let middle = left + (right - left) / 2;
-        if middle <= value / middle {
-            answer = middle;
-            left = middle + 1;
-        } else {
-            right = middle - 1;
-        }
-    }
-    answer
-}
-
-fn scheduled_time(index: usize, count: usize, duration_ms: u64) -> u64 {
-    if count <= 1 {
-        return duration_ms;
-    }
-    duration_ms * index as u64 / (count - 1) as u64
-}
-
-fn key_delay_ms(index: usize, seed_digest: &str) -> u64 {
-    let seed = decode_digest(seed_digest).expect("internally generated SHA-256");
-    35 + (u64::from(seed[(index + 3) % seed.len()]) % 31)
-}
-
-struct ReleaseContext<'a> {
-    request: &'a DesktopInteractionRequest,
-    provider: &'a mut dyn DesktopInteractionProvider,
-    authority: &'a mut dyn ControllerAuthorityRepository,
-    binding: &'a DesktopBinding,
-    surface: &'a SurfaceSnapshot,
-    claim: &'a DesktopInteractionClaim,
-    acknowledgements: &'a mut Vec<String>,
-    effect_trace: &'a mut EffectTrace,
-}
-
-fn emergency_release(
-    context: ReleaseContext<'_>,
-    button_down: bool,
-    key_down: Option<char>,
-    at_ms: u64,
-) -> bool {
-    let event = if let Some(key) = key_down {
-        Some(InputEvent::KeyUp {
-            key,
-            at_ms,
-            emergency: true,
-        })
-    } else if button_down {
-        Some(InputEvent::LeftUp {
-            at_ms,
-            emergency: true,
-        })
-    } else {
-        None
-    };
-    let ReleaseContext {
-        request,
-        provider,
-        authority,
-        binding,
-        surface,
-        claim,
-        acknowledgements,
-        effect_trace,
-    } = context;
-    match event {
-        Some(event) => {
-            let Ok(_guard) = claim.begin_cleanup_event() else {
-                return false;
-            };
-            if authority.snapshot().is_err() {
-                return false;
-            }
-            let Ok(current_surface) = provider.probe(binding) else {
-                return false;
-            };
-            if validate_cleanup_surface_stable(binding, surface, &current_surface).is_err() {
-                return false;
-            }
-            let effect_key = provider_effect_key(request, effect_trace.attempted_keys.len());
-            effect_trace.attempted_keys.push(effect_key.clone());
-            effect_trace.attempted_events.push(event.clone());
-            match provider.execute_event(binding, &current_surface, &effect_key, &event) {
-                Ok(ack) => {
-                    effect_trace.acknowledged_keys.push(effect_key);
-                    acknowledgements.push(ack.acknowledgement_id);
-                    true
-                }
-                Err(_) => false,
-            }
-        }
-        None => true,
-    }
-}
-
-fn validate_cleanup_surface_stable(
-    binding: &DesktopBinding,
-    initial: &SurfaceSnapshot,
-    current: &SurfaceSnapshot,
-) -> Result<(), DesktopInteractionError> {
-    if !current.focused
-        || current.provider_id.trim().is_empty()
-        || current.provider_version.trim().is_empty()
-        || current.provider_capability != "guarded_pointer_keyboard_v1"
-        || current.width != binding.width
-        || current.height != binding.height
-        || current.scale_millis != binding.scale_millis
-        || current.coordinate_space != binding.coordinate_space
-        || current.geometry_epoch != binding.geometry_epoch
-        || !display_bounds(binding).contains(current.pointer)
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_coordinate_mismatch",
-            "cleanup surface geometry does not match the bound desktop",
-        ));
-    }
-    if initial.provider_id != current.provider_id
-        || initial.provider_version != current.provider_version
-        || initial.provider_capability != current.provider_capability
-        || initial.surface_identity_digest != current.surface_identity_digest
-        || initial.browser_process_identity_digest != current.browser_process_identity_digest
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_focus_changed",
-            "cleanup focused surface identity changed during interaction",
-        ));
-    }
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn with_cleanup(
-    error: DesktopInteractionError,
-    request: &DesktopInteractionRequest,
-    transaction_id: &str,
-    before: &BeforeObservation,
-    candidate_id: &str,
-    target: PixelPoint,
-    surface: &SurfaceSnapshot,
-    authority: &ControllerAuthority,
-    authority_digest: &str,
-    motion: &MotionPlan,
-    effect_trace: &mut EffectTrace,
-    mut acknowledgements: Vec<String>,
-    provider: &mut dyn DesktopInteractionProvider,
-    authority_repository: &mut dyn ControllerAuthorityRepository,
-    cleanup_surface: &SurfaceSnapshot,
-    claim: &DesktopInteractionClaim,
-    button_down: bool,
-    key_down: Option<char>,
-    at_ms: u64,
-) -> DesktopInteractionError {
-    let cleanup = emergency_release(
-        ReleaseContext {
-            request,
-            provider,
-            authority: authority_repository,
-            binding: &before.binding,
-            surface: cleanup_surface,
-            claim,
-            acknowledgements: &mut acknowledgements,
-            effect_trace,
-        },
-        button_down,
-        key_down,
-        at_ms,
-    );
-    effect_error(
-        if cleanup {
-            error.code
-        } else {
-            "desktop_input_cleanup_failed"
-        },
-        if cleanup {
-            error.message
-        } else {
-            "emergency input release failed"
-        },
-        base_receipt(
-            request,
-            transaction_id,
-            before,
-            candidate_id,
-            target,
-            surface,
-            authority,
-            authority_digest,
-            motion,
-            effect_trace,
-            acknowledgements,
-        ),
-        if cleanup {
-            "released"
-        } else {
-            "release_failed"
-        },
-        if error.code == "desktop_interaction_authority_changed" {
-            "cancelled_after_effect"
-        } else {
-            "effect_uncertain"
-        },
-    )
-}
-
-fn effect_error(
-    code: &'static str,
-    message: &'static str,
-    mut receipt: InteractionReceipt,
-    cleanup_state: &str,
-    effect_state: &str,
-) -> DesktopInteractionError {
-    receipt.cleanup_state = cleanup_state.to_string();
-    receipt.effect_state = effect_state.to_string();
-    receipt.verification_state = "not_verified".to_string();
-    receipt.stop_reason = Some(code.to_string());
-    DesktopInteractionError {
-        code,
-        message,
-        receipt: Some(Box::new(receipt)),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn post_ack_error(
-    error: DesktopInteractionError,
-    acknowledged_effect: bool,
-    request: &DesktopInteractionRequest,
-    transaction_id: &str,
-    before: &BeforeObservation,
-    candidate_id: &str,
-    target: PixelPoint,
-    surface: &SurfaceSnapshot,
-    authority: &ControllerAuthority,
-    authority_digest: &str,
-    motion: &MotionPlan,
-    effect_trace: &EffectTrace,
-    acknowledgements: Vec<String>,
-) -> DesktopInteractionError {
-    if !acknowledged_effect {
-        return error;
-    }
-    let effect_state = if error.code == "desktop_interaction_authority_changed" {
-        "cancelled_after_effect"
-    } else {
-        "effect_uncertain"
-    };
-    effect_error(
-        error.code,
-        error.message,
-        base_receipt(
-            request,
-            transaction_id,
-            before,
-            candidate_id,
-            target,
-            surface,
-            authority,
-            authority_digest,
-            motion,
-            effect_trace,
-            acknowledgements,
-        ),
-        "not_needed",
-        effect_state,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn base_receipt(
-    request: &DesktopInteractionRequest,
-    transaction_id: &str,
-    before: &BeforeObservation,
-    candidate_id: &str,
-    target: PixelPoint,
-    surface: &SurfaceSnapshot,
-    authority: &ControllerAuthority,
-    authority_digest: &str,
-    motion: &MotionPlan,
-    effect_trace: &EffectTrace,
-    acknowledgement_ids: Vec<String>,
-) -> InteractionReceipt {
-    InteractionReceipt {
-        transaction_id: transaction_id.to_string(),
-        schema_version: "v1".to_string(),
-        recipe_id: request.recipe_id.clone(),
-        recipe_version: RECIPE_VERSION.to_string(),
-        recipe_sha256: recipe_sha256(&request.recipe_id),
-        operation_id: request.operation_id.clone(),
-        operation_request_sha256: operation_request_sha256(request),
-        replay_state: "first_execution".to_string(),
-        recipe_provider_id: surface.provider_id.clone(),
-        recipe_provider_version: surface.provider_version.clone(),
-        recipe_provider_capability: surface.provider_capability.clone(),
-        prompt_disposition: None,
-        human_handoff: None,
-        entry_gate: "closed_live_evidence_required".to_string(),
-        effect_key_digest: digest_json(&effect_trace.acknowledged_keys),
-        effect_key_count: effect_trace.acknowledged_keys.len(),
-        attempted_effect_key_digest: digest_json(&effect_trace.attempted_keys),
-        attempted_effect_key_count: effect_trace.attempted_keys.len(),
-        acknowledged_effect_key_digest: digest_json(&effect_trace.acknowledged_keys),
-        acknowledged_effect_key_count: effect_trace.acknowledged_keys.len(),
-        attempted_event_order_sha256: digest_json(&effect_trace.attempted_events),
-        browser_id: before.binding.browser_id.clone(),
-        display_allocation_id: before.binding.display_allocation_id.clone(),
-        stream_id: before.binding.stream_id.clone(),
-        route_id: before.binding.route_id.clone(),
-        controller_epoch: authority.controller_epoch,
-        authority_digest: authority_digest.to_string(),
-        actor_digest: digest_text(&format!(
-            "{}\0{}",
-            request.operation_principal_id, request.agent_name
-        )),
-        before_context_id: before.context_id.clone(),
-        before_frame_id: before.frame_id.clone(),
-        before_frame_sha256: before.frame_sha256.clone(),
-        before_observation_id: before.observation_id.clone(),
-        before_observation_sha256: before.observation_sha256.clone(),
-        selected_candidate_id: candidate_id.to_string(),
-        surface_identity_digest: surface.surface_identity_digest.clone(),
-        browser_process_identity_digest: surface.browser_process_identity_digest.clone(),
-        pointer_start: surface.pointer,
-        target,
-        coordinate_mapping: "identity_physical_pixels_v1".to_string(),
-        motion_profile: "fixed_cubic_bezier_v1".to_string(),
-        control_point_digest: digest_json(&motion.control_points),
-        emitted_path_sha256: digest_json(&motion.points),
-        pointer_event_count: motion.points.len().saturating_sub(1),
-        duration_ms: motion.duration_ms,
-        acknowledgement_ids,
-        cleanup_state: "not_needed".to_string(),
-        text_length: FIXED_TEXT.len(),
-        text_sha256: digest_text(FIXED_TEXT),
-        after_context_id: None,
-        after_frame_id: None,
-        after_frame_sha256: None,
-        after_observation_id: None,
-        after_observation_sha256: None,
-        verification_state: "not_verified".to_string(),
-        effect_state: "effect_uncertain".to_string(),
-        stop_reason: None,
-        retention: "ephemeral".to_string(),
-        persisted_pixels: false,
-    }
-}
-
-fn apply_after(receipt: &mut InteractionReceipt, after: &AfterObservation) {
-    receipt.after_context_id = Some(after.context_id.clone());
-    receipt.after_frame_id = Some(after.frame_id.clone());
-    receipt.after_frame_sha256 = Some(after.frame_sha256.clone());
-    receipt.after_observation_id = Some(after.observation_id.clone());
-    receipt.after_observation_sha256 = Some(after.observation_sha256.clone());
-    receipt.verification_state = after.verification_state.clone();
-}
-
-fn display_bounds(binding: &DesktopBinding) -> PixelBounds {
-    PixelBounds {
-        x: 0,
-        y: 0,
-        width: binding.width,
-        height: binding.height,
-    }
-}
-
-fn same_binding(left: &DesktopBinding, right: &DesktopBinding) -> bool {
-    left == right
-}
-
-fn authority_digest(
-    request: &DesktopInteractionRequest,
-    binding: &DesktopBinding,
-    authority: &ControllerAuthority,
-) -> String {
-    digest_text(&format!(
-        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
-        authority.controller_epoch,
-        authority.lease_id,
-        authority.lease_updated_at,
-        binding.browser_id,
-        binding.route_id,
-        binding.stream_id,
-        binding.display_allocation_id,
-        binding.geometry_epoch,
-        request.operation_principal_id,
-        request.operation_id,
-        authority.route_machine_input.as_deref().unwrap_or("")
-    ))
-}
-
-fn recipe_sha256(recipe_id: &str) -> String {
-    digest_text(&format!(
-        "{recipe_id}\0{RECIPE_VERSION}\0p110-control-v1\0{FIXED_TEXT}\0fixed_cubic_bezier_v1"
-    ))
-}
-
-fn operation_request_sha256(request: &DesktopInteractionRequest) -> String {
-    digest_text(&format!(
-        "{}\0{}\0{}\0{}\0{}\0{}\0{}",
-        request.browser_id,
-        request.session_name.as_deref().unwrap_or(""),
-        request.controller_lease_id,
-        request.recipe_id,
-        request.service_name,
-        request.agent_name,
-        request.task_name
-    ))
-}
-
-fn operation_scope_sha256(caller_id: &str, operation_id: &str) -> String {
-    digest_text(&format!("{caller_id}\0{operation_id}"))
-}
-
-fn provider_effect_key(request: &DesktopInteractionRequest, event_index: usize) -> String {
-    digest_text(&format!(
-        "{}\0{}\0{}\0{}",
-        operation_scope_sha256(&request.operation_principal_id, &request.operation_id),
-        operation_request_sha256(request),
-        recipe_sha256(&request.recipe_id),
-        event_index
-    ))
-}
-
-fn finalize_stress_receipt(
-    request: &DesktopInteractionRequest,
-    context: Option<&FoundationStressContext>,
-    receipt: &mut InteractionReceipt,
-    handoffs: &mut dyn ServiceOwnedHandoffRepository,
-) -> Result<(), DesktopInteractionError> {
-    if request.recipe_id != FOUNDATION_STRESS_RECIPE_ID {
-        return Ok(());
-    }
-    receipt.prompt_disposition = context.map(|value| value.prompt_disposition.clone());
-    if receipt.effect_state == "effect_uncertain"
-        || receipt.effect_state == "cancelled_after_effect"
-        || receipt
-            .prompt_disposition
-            .as_ref()
-            .is_some_and(|prompt| prompt.state == "operator_intervention_required")
-    {
-        if let Some(reason) = context.and_then(|value| value.handoff_reason.as_deref()) {
-            receipt.human_handoff = handoffs.resolve_ready(
-                &receipt.browser_id,
-                request.session_name.as_deref().unwrap_or(""),
-                &receipt.route_id,
-                &receipt.display_allocation_id,
-                reason,
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn digest_text(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
-}
-
-fn digest_json<T: Serialize>(value: &T) -> String {
-    digest_text(&serde_json::to_string(value).expect("internal receipt data serializes"))
-}
-
-fn decode_digest(value: &str) -> Result<[u8; 32], DesktopInteractionError> {
-    if value.len() != 64 {
-        return Err(motion_overflow());
-    }
-    let mut bytes = [0_u8; 32];
-    for (index, byte) in bytes.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
-            .map_err(|_| motion_overflow())?;
-    }
-    Ok(bytes)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2757,6 +596,272 @@ mod tests {
         assert!(!serde_json::to_string(&receipt)
             .unwrap()
             .contains(FIXED_TEXT));
+    }
+
+    #[test]
+    fn turnstile_recipe_moves_hovers_and_clicks_without_keyboard_input() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let mut turnstile_request = request();
+        turnstile_request.recipe_id = TURNSTILE_RECIPE_ID.to_string();
+
+        let receipt = run_desktop_interaction(
+            turnstile_request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut RejectHandoffLookup,
+                clock: &mut clock,
+            },
+        )
+        .expect("Turnstile fixture should verify after one click");
+
+        assert_eq!(receipt.effect_state, "verified_success");
+        assert_eq!(receipt.text_length, 0);
+        assert!(fixture.activated);
+        assert!(fixture.typed.is_empty());
+        assert_eq!(
+            fixture
+                .events
+                .iter()
+                .filter(|event| matches!(event, InputEvent::LeftDown { .. }))
+                .count(),
+            1
+        );
+        assert!(!fixture
+            .events
+            .iter()
+            .any(|event| matches!(event, InputEvent::KeyDown { .. } | InputEvent::KeyUp { .. })));
+    }
+
+    #[test]
+    fn hcaptcha_recipe_emits_exactly_one_click_and_no_keyboard_input() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let mut hcaptcha_request = request();
+        hcaptcha_request.recipe_id = HCAPTCHA_RECIPE_ID.to_string();
+
+        let receipt = run_desktop_interaction(
+            hcaptcha_request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut RejectHandoffLookup,
+                clock: &mut clock,
+            },
+        )
+        .expect("hCaptcha fixture should verify after one click");
+
+        assert_eq!(receipt.effect_state, "verified_success");
+        assert_eq!(receipt.text_length, 0);
+        assert_eq!(
+            fixture
+                .events
+                .iter()
+                .filter(|event| matches!(event, InputEvent::LeftDown { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(
+            fixture
+                .events
+                .iter()
+                .filter(|event| matches!(event, InputEvent::LeftUp { .. }))
+                .count(),
+            1
+        );
+        assert!(!fixture
+            .events
+            .iter()
+            .any(|event| matches!(event, InputEvent::KeyDown { .. } | InputEvent::KeyUp { .. })));
+    }
+
+    #[test]
+    fn long_motion_refreshes_continuous_target_before_single_click() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.refresh_captured_at_ms = Some(2_500);
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = SteppingClock {
+            next: 1_000,
+            step: 100,
+        };
+        let mut hcaptcha_request = request();
+        hcaptcha_request.recipe_id = HCAPTCHA_RECIPE_ID.to_string();
+
+        let receipt = run_desktop_interaction(
+            hcaptcha_request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut RejectHandoffLookup,
+                clock: &mut clock,
+            },
+        )
+        .expect("a fresh continuous target should permit one click after long motion");
+
+        assert_eq!(fixture.observation_count, 2);
+        assert_eq!(receipt.effect_state, "verified_success");
+        assert_eq!(
+            fixture
+                .inner
+                .events
+                .iter()
+                .filter(|event| matches!(event, InputEvent::LeftDown { .. }))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn stale_effect_phase_refresh_stops_before_button_down_as_uncertain_motion() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.refresh_captured_at_ms = Some(0);
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let mut hcaptcha_request = request();
+        hcaptcha_request.recipe_id = HCAPTCHA_RECIPE_ID.to_string();
+
+        let error = run_desktop_interaction(
+            hcaptcha_request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(fixture.observation_count, 2);
+        assert_eq!(error.code(), "desktop_interaction_stale_observation");
+        assert_eq!(error.receipt().unwrap().effect_state, "effect_uncertain");
+        assert!(fixture
+            .inner
+            .events
+            .iter()
+            .all(|event| !matches!(event, InputEvent::LeftDown { .. })));
+    }
+
+    #[test]
+    fn moved_target_at_effect_phase_stops_before_button_down() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.refresh_target_offset = Some(1);
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), "desktop_interaction_target_changed");
+        assert_eq!(error.receipt().unwrap().effect_state, "effect_uncertain");
+        assert!(fixture
+            .inner
+            .events
+            .iter()
+            .all(|event| !matches!(event, InputEvent::LeftDown { .. })));
+    }
+
+    #[test]
+    fn changed_effect_phase_geometry_stops_before_button_down() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.refresh_geometry_epoch = Some("geometry-2".to_string());
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), "desktop_interaction_target_changed");
+        assert!(fixture
+            .inner
+            .events
+            .iter()
+            .all(|event| !matches!(event, InputEvent::LeftDown { .. })));
+    }
+
+    #[test]
+    fn controller_change_at_effect_phase_stops_before_button_down() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let initial = fixture.authority();
+        let mut changed = initial.clone();
+        changed.controller_epoch += 1;
+        changed.route_controller_epoch += 1;
+        changed.stream_controller_epoch += 1;
+        let mut snapshots = vec![initial; 15];
+        snapshots.push(changed);
+        let mut authority = ScriptedAuthority::scripted(snapshots);
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), "desktop_interaction_authority_changed");
+        assert_eq!(
+            error.receipt().unwrap().effect_state,
+            "cancelled_after_effect"
+        );
+        assert!(fixture
+            .events
+            .iter()
+            .all(|event| !matches!(event, InputEvent::LeftDown { .. })));
     }
 
     #[test]
@@ -3557,6 +1662,7 @@ mod tests {
     fn verification_failures_return_uncertain_receipts() {
         for mode in [
             AfterMode::Unchanged,
+            AfterMode::ChallengeOpen,
             AfterMode::Unavailable,
             AfterMode::BindingDrift,
         ] {
@@ -3585,6 +1691,12 @@ mod tests {
                     | "desktop_interaction_verification_unavailable"
             ));
             assert_eq!(error.receipt().unwrap().effect_state, "effect_uncertain");
+            if mode == AfterMode::ChallengeOpen {
+                assert_eq!(
+                    error.receipt().unwrap().verification_state,
+                    "challenge_open"
+                );
+            }
         }
     }
 
@@ -4079,18 +2191,6 @@ mod tests {
         assert!(fixture.events.is_empty());
     }
 
-    impl InputEvent {
-        fn at_ms(&self) -> u64 {
-            match self {
-                Self::PointerMove { at_ms, .. }
-                | Self::LeftDown { at_ms }
-                | Self::LeftUp { at_ms, .. }
-                | Self::KeyDown { at_ms, .. }
-                | Self::KeyUp { at_ms, .. } => *at_ms,
-            }
-        }
-    }
-
     fn request() -> DesktopInteractionRequest {
         DesktopInteractionRequest {
             browser_id: "browser-1".to_string(),
@@ -4160,6 +2260,19 @@ mod tests {
         }
     }
 
+    struct SteppingClock {
+        next: u64,
+        step: u64,
+    }
+
+    impl InteractionClock for SteppingClock {
+        fn now_ms(&mut self) -> u64 {
+            let value = self.next;
+            self.next += self.step;
+            value
+        }
+    }
+
     struct ScriptedAuthority {
         snapshots: Vec<ControllerAuthority>,
         index: usize,
@@ -4196,6 +2309,7 @@ mod tests {
         activated: bool,
         typed: String,
         stress_context: FoundationStressContext,
+        turnstile: bool,
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -4218,6 +2332,7 @@ mod tests {
         #[default]
         Passed,
         Unchanged,
+        ChallengeOpen,
         Unavailable,
         BindingDrift,
     }
@@ -4226,6 +2341,10 @@ mod tests {
         inner: SyntheticFixture,
         before_status: String,
         captured_at_ms: u64,
+        refresh_captured_at_ms: Option<u64>,
+        refresh_target_offset: Option<i64>,
+        refresh_geometry_epoch: Option<String>,
+        observation_count: usize,
         probe_count: usize,
         probe_drift: Option<(usize, ProbeDrift)>,
         event_failure: Option<EventFailure>,
@@ -4240,6 +2359,10 @@ mod tests {
                 inner,
                 before_status: "matched".to_string(),
                 captured_at_ms: 900,
+                refresh_captured_at_ms: None,
+                refresh_target_offset: None,
+                refresh_geometry_epoch: None,
+                observation_count: 0,
                 probe_count: 0,
                 probe_drift: None,
                 event_failure: None,
@@ -4259,6 +2382,7 @@ mod tests {
                 activated: false,
                 typed: String::new(),
                 stress_context: FoundationStressContext::actionable(),
+                turnstile: false,
             }
         }
 
@@ -4319,8 +2443,9 @@ mod tests {
 
         fn observe_before(
             &mut self,
-            _request: &DesktopInteractionRequest,
+            request: &DesktopInteractionRequest,
         ) -> Result<BeforeObservation, DesktopInteractionError> {
+            self.turnstile = is_captcha_recipe(&request.recipe_id);
             Ok(BeforeObservation {
                 binding: self.binding(),
                 context_id: "context-before".to_string(),
@@ -4331,7 +2456,16 @@ mod tests {
                 observation_sha256: "observation-before-sha".to_string(),
                 observation_status: "matched".to_string(),
                 selected_candidate_id: Some("candidate-1".to_string()),
-                selected_target_class: Some("synthetic_verification_control".to_string()),
+                selected_target_class: Some(
+                    match request.recipe_id.as_str() {
+                        TURNSTILE_RECIPE_ID => {
+                            super::super::desktop_locator::TURNSTILE_TARGET_CLASS
+                        }
+                        HCAPTCHA_RECIPE_ID => super::super::desktop_locator::HCAPTCHA_TARGET_CLASS,
+                        _ => "synthetic_verification_control",
+                    }
+                    .to_string(),
+                ),
                 selected_bounds: Some(PixelBounds {
                     x: 148,
                     y: 88,
@@ -4340,6 +2474,13 @@ mod tests {
                 }),
                 selected_center: Some(PixelPoint { x: 160, y: 100 }),
             })
+        }
+
+        fn refresh_before_effect(
+            &mut self,
+            request: &DesktopInteractionRequest,
+        ) -> Result<BeforeObservation, DesktopInteractionError> {
+            self.observe_before(request)
         }
 
         fn probe(
@@ -4424,13 +2565,15 @@ mod tests {
                 frame_sha256: "frame-after-sha".to_string(),
                 observation_id: "observation-after".to_string(),
                 observation_sha256: "observation-after-sha".to_string(),
-                verification_state: if self.activated && self.typed == FIXED_TEXT {
+                verification_state: if self.activated
+                    && (self.turnstile || self.typed == FIXED_TEXT)
+                {
                     "passed"
                 } else {
                     "unchanged"
                 }
                 .to_string(),
-                text_sha256: Some(digest_text(&self.typed)),
+                text_sha256: (!self.turnstile).then(|| digest_text(&self.typed)),
             })
         }
 
@@ -4452,8 +2595,22 @@ mod tests {
             request: &DesktopInteractionRequest,
         ) -> Result<BeforeObservation, DesktopInteractionError> {
             let mut observation = self.inner.observe_before(request)?;
+            self.observation_count += 1;
             observation.observation_status = self.before_status.clone();
-            observation.captured_at_ms = self.captured_at_ms;
+            observation.captured_at_ms = if self.observation_count > 1 {
+                self.refresh_captured_at_ms.unwrap_or(self.captured_at_ms)
+            } else {
+                self.captured_at_ms
+            };
+            if self.observation_count > 1 {
+                if let Some(offset) = self.refresh_target_offset {
+                    observation.selected_bounds.as_mut().unwrap().x += offset;
+                    observation.selected_center.as_mut().unwrap().x += offset;
+                }
+                if let Some(epoch) = &self.refresh_geometry_epoch {
+                    observation.binding.geometry_epoch = epoch.clone();
+                }
+            }
             if observation.observation_status != "matched" {
                 observation.selected_candidate_id = None;
                 observation.selected_target_class = None;
@@ -4461,6 +2618,13 @@ mod tests {
                 observation.selected_center = None;
             }
             Ok(observation)
+        }
+
+        fn refresh_before_effect(
+            &mut self,
+            request: &DesktopInteractionRequest,
+        ) -> Result<BeforeObservation, DesktopInteractionError> {
+            self.observe_before(request)
         }
 
         fn probe(
@@ -4541,6 +2705,7 @@ mod tests {
             match self.after_mode {
                 AfterMode::Passed => {}
                 AfterMode::Unchanged => after.verification_state = "unchanged".to_string(),
+                AfterMode::ChallengeOpen => after.verification_state = "challenge_open".to_string(),
                 AfterMode::BindingDrift => {
                     after.binding.geometry_epoch = "geometry-drift".to_string()
                 }

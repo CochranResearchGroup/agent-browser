@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Turnstile Practice</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="/lab.js" defer></script>
+  </head>
+  <body data-provider="turnstile" data-challenge-state="initial">
+    <main>
+      <a class="back" href="/">Back to providers</a>
+      <section class="lab-panel">
+        <h1>Cloudflare Turnstile</h1>
+        <p>Use the widget, inspect the callback state, verify its token, or reset it for another attempt.</p>
+        <div class="widget-frame" data-widget-region>
+          <div
+            class="cf-turnstile"
+            data-sitekey="{{TURNSTILE_SITEKEY}}"
+            data-callback="captchaSolved"
+            data-expired-callback="captchaExpired"
+            data-error-callback="captchaError"
+            data-action="agent_browser_lab"
+          ></div>
+        </div>
+        <div class="toolbar">
+          <button type="button" data-verify>Verify token</button>
+          <button type="button" data-reset>Reset widget</button>
+        </div>
+        <h2>Observed state</h2>
+        <output class="status" data-status></output>
+      </section>
+    </main>
+  </body>
+</html>

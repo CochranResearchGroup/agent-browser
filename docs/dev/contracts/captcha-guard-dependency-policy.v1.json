@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "v1",
+  "layers": [
+    {
+      "id": "captcha_guard",
+      "futureCrate": "agent-browser-captcha-guard",
+      "mayDependOnWorkspaceCrates": [
+        "agent-browser-desktop-services"
+      ],
+      "mustNotDependOnWorkspaceCrates": [
+        "agent-browser"
+      ],
+      "forbiddenResponsibilities": [
+        "browser_protocol",
+        "cli_parsing",
+        "credential_access",
+        "filesystem_io",
+        "image_decoding",
+        "network_io",
+        "ocr_execution",
+        "operating_system_input",
+        "process_lookup",
+        "runtime_supervision",
+        "service_state_persistence"
+      ]
+    },
+    {
+      "id": "desktop_services",
+      "futureCrate": "agent-browser-desktop-services",
+      "mayDependOnWorkspaceCrates": [],
+      "mustNotDependOnWorkspaceCrates": [
+        "agent-browser",
+        "agent-browser-captcha-guard"
+      ],
+      "forbiddenResponsibilities": [
+        "captcha_policy",
+        "cli_parsing",
+        "credential_access",
+        "runtime_supervision",
+        "service_state_persistence"
+      ]
+    },
+    {
+      "id": "agent_browser_adapter",
+      "futureCrate": "agent-browser",
+      "mayDependOnWorkspaceCrates": [
+        "agent-browser-captcha-guard",
+        "agent-browser-desktop-services"
+      ],
+      "mustNotDependOnWorkspaceCrates": [],
+      "forbiddenResponsibilities": []
+    }
+  ],
+  "enforcement": {
+    "phase": "crate_extraction",
+    "mechanism": "cargo_metadata_dependency_check",
+    "currentDisposition": "contract_frozen_enforcement_pending"
+  }
+}

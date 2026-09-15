@@ -146,6 +146,7 @@ pub(crate) fn build_cdp_free_launch_plan(
         apply_service_profile_selection(&mut launch_options, cmd, effective_session)?;
     let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, cmd);
+    super::daemon::require_stock_chrome_capability_selection(&browser_capability_launch)?;
     let mut metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
     metadata.browser_capability_launch = Some(browser_capability_launch.to_value());

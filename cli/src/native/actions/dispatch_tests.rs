@@ -119,6 +119,38 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 #[tokio::test]
+async fn challenge_control_evaluate_dispatches_without_browser_or_confirmation() {
+    let mut state = DaemonState::new();
+    state.confirm_actions = Some(ConfirmActions {
+        categories: HashSet::from(["challenge_control_evaluate".to_string()]),
+    });
+
+    let response = execute_command(
+        &json!({
+            "id": "challenge-evaluate-1",
+            "action": "challenge_control_evaluate",
+            "challengeProfileId": "hcaptcha-checkbox-p181-v2",
+            "scenarioOutcome": "passed",
+            "serviceName": "ChallengeControl",
+            "agentName": "fixture-agent",
+            "taskName": "evaluate-provider-free-scenario"
+        }),
+        &mut state,
+    )
+    .await;
+
+    assert!(action_skips_browser_launch("challenge_control_evaluate"));
+    assert!(state.browser.is_none());
+    assert!(state.pending_confirmation.is_none());
+    assert_eq!(response["success"], true);
+    assert_eq!(response["data"]["compositeReceipt"]["state"], "passed");
+    assert_eq!(
+        response["data"]["compositeReceipt"]["emittedEffects"],
+        false
+    );
+}
+
+#[tokio::test]
 async fn configured_desktop_provider_gates_precede_confirmation_and_dispatch_effects() {
     let mut state = DaemonState::new();
     state.confirm_actions = Some(ConfirmActions {

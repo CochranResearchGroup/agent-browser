@@ -7,9 +7,10 @@ use super::cdp_free_plan::{
 use super::daemon::{
     apply_authenticated_access_plan_profile_selection, apply_service_browser_capability_selection,
     apply_service_profile_selection, launch_command_with_effective_service_defaults,
-    launch_profile_from_sources, runtime_profile_from_sources, use_real_keychain_from_env,
-    BrowserCapabilityLaunchResolution, ProfileLeasePolicy, ServiceProfileLeaseGate,
-    DEFAULT_PROFILE_LEASE_WAIT_TIMEOUT_MS, PROFILE_LEASE_WAIT_POLL_MS,
+    launch_profile_from_sources, require_stock_chrome_capability_selection,
+    runtime_profile_from_sources, use_real_keychain_from_env, BrowserCapabilityLaunchResolution,
+    ProfileLeasePolicy, ServiceProfileLeaseGate, DEFAULT_PROFILE_LEASE_WAIT_TIMEOUT_MS,
+    PROFILE_LEASE_WAIT_POLL_MS,
 };
 use super::recovery::DaemonState;
 use crate::native::browser::{
@@ -394,6 +395,7 @@ pub(crate) fn apply_auto_launch_command_hints(
         apply_service_profile_selection(options, &effective_command, Some(effective_session))?;
     let browser_capability_launch =
         apply_service_browser_capability_selection(options, &effective_command);
+    require_stock_chrome_capability_selection(&browser_capability_launch)?;
     Ok((
         service_host,
         selection_reason,
@@ -429,6 +431,7 @@ pub(crate) fn apply_protected_auto_launch_command_hints(
     let service_host = apply_launch_host_hints(options, &effective_command);
     let browser_capability_launch =
         apply_service_browser_capability_selection(options, &effective_command);
+    require_stock_chrome_capability_selection(&browser_capability_launch)?;
     Ok((
         service_host,
         Some(ProfileSelectionReason::ExplicitProfile),

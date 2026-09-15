@@ -354,6 +354,7 @@ fn protected_launch_hints_use_exact_command_identity_without_session_reconciliat
         "profile": "/srv/agent-browser/profiles/last30days-facebook",
         "sessionName": "principal-profile-protected",
         "serviceName": "Last30days",
+        "executablePath": "/test/fixture/browser",
     });
 
     let (_, selection_reason, _, effective_command) =
