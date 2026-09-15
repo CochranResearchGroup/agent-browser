@@ -2,7 +2,7 @@
 
 Date: 2026-09-15
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -30,14 +30,17 @@ challenge completion, and downstream admission distinct.
 
 ## Current State
 
-W5 is implemented and locally qualified at source checkpoint
-`aba2d993b3e854b9b765f840441e8973e3ff10b4`. The durable Service task owns
+W5 is integrated. PR #142 merged exact source head
+`709641e94c207bb6f0427812267267793ec2006f` into `main` as
+`81de07cfb5790685ff506bdabff3609e92fd5eeb`. Source-head CI run 34993316164
+passes every fast gate. Merge-commit CI run 34997057075 also passes every fast
+gate on attempt 2 after one unchanged control-plane timing assertion failed on
+attempt 1 and passed on the failed-job-only rerun. The durable Service task owns
 start, status, resume, cancel, exact tab-handle and principal binding,
 digest-only idempotency and operation replay, deadlines, transition budgets,
-provider-free execution, and bounded status and resource summaries. Protected
-integration and exact-head CI remain pending. No browser, challenge, provider,
-credential, installation, shared-runtime, production, or release effect has
-occurred.
+provider-free execution, and bounded status and resource summaries. No browser,
+challenge, provider, credential, installation, shared-runtime, production, or
+release effect occurred.
 
 ## Current Baseline
 
@@ -178,13 +181,20 @@ shared-runtime, production, or release action.
 
 | Requirement | Implemented | Qualified | Integrated | Evidence or remaining gate |
 | --- | --- | --- | --- | --- |
-| Pure lifecycle and composite receipt | yes | yes | pending | 10 challenge-control tests and both crate architecture guards pass at `aba2d993` |
-| Durable exact-handle and principal custody | yes | yes | pending | focused Service task and no-launch dispatch tests pass; persisted operation and idempotency identities are digest-only |
-| Start, status, resume, cancel and replay | yes | yes | pending | one disposable Service State fixture exercises every action, terminal replay, cancellation, deadline refusal, and no browser launch |
-| Status and resource summaries | yes | yes | pending | the dispatch fixture observes active, terminal, cooldown, intervention, and zero pending-effect projections |
-| CLI, HTTP, MCP, schema, ledger, client, and docs parity | yes | yes | pending | API/MCP parity, full service-client suite, generated-client checks, TypeScript, and docs build pass |
-| Workspace quality | yes | yes | pending | formatting, diff hygiene, and strict workspace Clippy pass |
-| Protected integration | pending | pending | no | publish the receipt commit, open the protected-main PR, and require exact-head CI |
+| Pure lifecycle and composite receipt | yes | yes | yes | 10 challenge-control tests and both crate architecture guards pass; source head `709641e9` is integrated |
+| Durable exact-handle and principal custody | yes | yes | yes | focused Service task and no-launch dispatch tests pass; persisted operation and idempotency identities are digest-only |
+| Start, status, resume, cancel and replay | yes | yes | yes | one disposable Service State fixture exercises every action, terminal replay, cancellation, deadline refusal, and no browser launch |
+| Status and resource summaries | yes | yes | yes | the dispatch fixture observes active, terminal, cooldown, intervention, and zero pending-effect projections |
+| CLI, HTTP, MCP, schema, ledger, client, and docs parity | yes | yes | yes | API/MCP parity, full service-client suite, generated-client checks, TypeScript, and docs build pass |
+| Workspace quality | yes | yes | yes | formatting, diff hygiene, strict workspace Clippy, source-head CI run 34993316164, and merge-commit CI run 34997057075 pass |
+| Protected integration | yes | yes | yes | PR #142 merged `709641e9` as `81de07cf`; exact source-head and merge-commit fast CI pass |
 
 The local qualification used repository-owned provider-free fixtures only.
 Installed-runtime and live acceptance are intentionally not applicable to W5.
+
+## Next Action
+
+No Plan 0193 execution remains. Plan 0187 and issue #127 stay open for W6
+through W8. W6 consumer integration is the next sequential workfront but is
+unstarted and not admitted. Issue #66 retains the separately live-gated
+challenge acceptance leaf.
