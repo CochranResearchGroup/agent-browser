@@ -3,20 +3,20 @@ work_item_tracking: required
 lanes:
   - id: P196
     product_lane: PL-BUGFIX
-    objective: Prove foreground launch projection convergence under adjacent Service State revisions and install one consolidated production candidate
+    objective: Complete foreground projection and deployment-discovered custom-profile, retained-session, and sealed Guacamole acceptance repairs
     plan: docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md
-    plan_ref: refs/heads/fix/issue-87-foreground-launch-cas
-    branch: fix/issue-87-foreground-launch-cas
+    plan_ref: refs/heads/fix/post-install-acceptance-repairs
+    branch: fix/post-install-acceptance-repairs
     target: main
     plan_state: OPEN
     custody_state: ACTIVE
     checkpoint: 73001841df308e63cccad2b64365d4109e57d0b3
     remote_ref: refs/remotes/origin/fix/issue-87-foreground-launch-cas
-    integration_receipt: null
-    integration: merge through the protected `main` workflow after exact foreground acceptance and changed-surface qualification
-    validation_status: passed
-    validation_ref: 73001841df308e63cccad2b64365d4109e57d0b3
-    work_items: [CochranResearchGroup/agent-browser#87]
+    integration_receipt: 552f692502ec63032b0a936029993510f3299fb7
+    integration: issue 87 is integrated; merge the bounded post-install acceptance repairs through the protected `main` workflow before one replacement production build
+    validation_status: in_progress
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#87, CochranResearchGroup/agent-browser#131, CochranResearchGroup/agent-browser#143, CochranResearchGroup/agent-browser#151]
     dependencies: []
     overlaps: []
     reconciled_overlaps: []

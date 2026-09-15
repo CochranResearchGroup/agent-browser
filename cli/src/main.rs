@@ -658,7 +658,7 @@ fn apply_existing_lane_profile_to_flags(
         .then(|| flags.profile.clone())
         .flatten();
     let mut request = command.clone();
-    native::service_request_provenance::attribute_native_session(&mut request, &flags.session);
+    attribute_native_request_identity(&mut request, &flags.session);
     for (field, value) in [
         ("runtimeProfile", flags.runtime_profile.as_ref()),
         ("profile", selected_profile.as_ref()),
@@ -683,6 +683,38 @@ fn apply_existing_lane_profile_to_flags(
     Ok(())
 }
 
+fn attribute_native_request_identity(command: &mut serde_json::Value, session: &str) {
+    native::service_request_provenance::attribute_native_session(command, session);
+    if command
+        .get("clientSubjectId")
+        .and_then(serde_json::Value::as_str)
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        let field = |name| {
+            command
+                .get(name)
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        };
+        if let Some(subject) = native::service_request_provenance::stable_self_declared_subject(
+            field("serviceName"),
+            field("agentName"),
+            field("taskName"),
+        ) {
+            command["clientSubjectId"] = json!(subject);
+        }
+    }
+    if command
+        .get("clientSubjectId")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
+        && command.get("identityAssurance").is_none()
+    {
+        command["identityAssurance"] = json!("self-declared");
+    }
+}
+
 fn attribute_prestart_launch(
     launch: &mut serde_json::Value,
     command: &serde_json::Value,
@@ -701,7 +733,7 @@ fn attribute_prestart_launch(
             launch[field] = value.clone();
         }
     }
-    native::service_request_provenance::attribute_native_session(launch, session);
+    attribute_native_request_identity(launch, session);
     if let Some(id) = command.get("id") {
         launch["causedByRequestId"] = id.clone();
     }
@@ -3696,6 +3728,13 @@ mod tests {
             route_launch["runtimeAdmissionClaim"],
             route_navigate["runtimeAdmissionClaim"]
         );
+        assert_eq!(route_launch["serviceName"], "agent-browser-cli");
+        assert_eq!(route_launch["agentName"], "rdp-guac-route-a-viewer");
+        assert_eq!(
+            route_launch["clientSubjectId"],
+            "service:agent-browser-cli/agent:rdp-guac-route-a-viewer"
+        );
+        assert_eq!(route_launch["identityAssurance"], "self-declared");
 
         let mut route_headers = json!({"action": "headers"});
         apply_runtime_admission_claim_from_sources(

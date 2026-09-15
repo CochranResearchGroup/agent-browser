@@ -10,9 +10,12 @@ Product lane: PL-BUGFIX
 
 Lane: P196
 
-Work item: `CochranResearchGroup/agent-browser#87`
+Work items: `CochranResearchGroup/agent-browser#87`, reopened
+`CochranResearchGroup/agent-browser#131`, and deployment-discovered acceptance
+repairs `CochranResearchGroup/agent-browser#143` and
+`CochranResearchGroup/agent-browser#151`
 
-Branch: `fix/issue-87-foreground-launch-cas`
+Branch: `fix/post-install-acceptance-repairs`
 
 Target: `main`
 
@@ -22,8 +25,8 @@ Integration: pending protected pull request
 
 Prove that an ordinary foreground browser launch can persist its pure browser
 projection through adjacent Service State revisions without replaying the
-browser effect, then install one consolidated production candidate containing
-the integrated #76, #131, and #87 outcomes.
+browser effect, then deliver installed acceptance for the integrated #76,
+#131, and #87 outcomes plus exact defects exposed by that acceptance.
 
 ## Current State
 
@@ -34,20 +37,32 @@ but the issue still lacks a provider-free multi-process regression at the
 foreground launch projection seam, two sequential launch outcomes under churn,
 and exact task-owned residue evidence.
 
-Issue #131 is separately closed through PR #147. Current `origin/main` at lane
-admission is `6e052f147c7bf549476be7af581df4a13039c54c`; it contains both repairs and
-has no open pull request or competing #87 branch.
+Issue #131 entered `main` through PR #147. Issue #87 entered `main` through PR
+#150 at merge commit `552f692502ec63032b0a936029993510f3299fb7` after every fast
+CI gate passed. The one production candidate from that exact clean source was
+built and transactionally installed as generation
+`0.28.0-dcfa3b547433-83b9a9076b19`, binary SHA-256
+`dcfa3b5474339594d524e0011a141f023b124e0a8c20e3905eaea9834319359b`.
 
-Candidate `73001841` adds the missing foreground call-seam proof. The legacy
+Candidate `73001841` added the missing foreground call-seam proof. The legacy
 oracle admits a second optimistic attempt, accepts two independent writer
 processes, and deterministically returns `service_state_stale_revision`. Current
 bounded replay accepts only the first writer per launch, serializes the pure
 projection replay, and succeeds for two sequential foreground projections. Both
 writer updates survive, each browser projection appears exactly once, and every
 helper, holder, transaction, barrier, and disposable-state path is gone. No
-launch adapter repair is required. All 43 `service_store` tests, the exact
-owned-launch cleanup test, format, and strict workspace Clippy pass. Production
-installation has not occurred for this combined source.
+launch adapter repair was required for #87. All 43 `service_store` tests, the
+exact owned-launch cleanup test, format, and strict workspace Clippy passed.
+
+The production transaction reached accepted revision 25 and finalized after
+bounded repair of two newly exposed installer defects. The sealed Guacamole
+extension tree inherited owner-only modes and the native prestart path ran
+retained-session selection before deriving its stable self-declared subject.
+The installed runtime is coherent and doctor passes from the installed binary,
+but disposable acceptance reproduced #131's original `custom:<id>` validation
+failure before effect. Issue #131 is reopened. This plan now owns one
+consolidated follow-up source batch for those three acceptance defects before a
+replacement candidate is built.
 
 ## Consolidated Batch
 
@@ -66,6 +81,14 @@ installation has not occurred for this combined source.
    runtime transaction contract.
 5. Run doctor, identity, supervisor, listener, Service State, and bounded
    disposable foreground-launch acceptance against the exact installed bytes.
+6. Correct the three exact acceptance defects without widening their product
+   boundaries: keep custom service profile IDs out of managed runtime-profile
+   decoding, derive native self-declared identity before retained-session
+   selection, and make only the shipped Guacamole extension bundle publicly
+   readable inside an otherwise sealed generation.
+7. Requalify the changed Rust surfaces, integrate once, then perform one
+   replacement production build and transaction because executable inputs
+   changed after the first candidate's failed acceptance.
 
 ## Scope
 
@@ -84,8 +107,8 @@ installation has not occurred for this combined source.
 - Do not widen into issue #143 retained-profile inventory projection.
 - Do not perform authenticated site work, tenant mutation, challenge solving,
   profile reset, credential use, or formal release publication.
-- Do not build a second production candidate unless executable inputs change or
-  the first candidate fails a named acceptance criterion.
+- Do not build more than the one replacement production candidate now required
+  by changed executable inputs and the failed #131 acceptance criterion.
 
 ## Delivery Sequence And Budget
 
@@ -95,9 +118,9 @@ installation has not occurred for this combined source.
   correction, target 60 active minutes.
 - Qualification and protected integration: focused checks, selected gates,
   format, strict Clippy, and one pull request, target 120 active minutes.
-- Production build, install, reconciliation, and bounded acceptance: one
-  production candidate and one replacement transaction, target 120 active
-  minutes.
+- Production build, install, reconciliation, and bounded acceptance: the
+  completed initial candidate plus one replacement candidate and transaction,
+  target 180 active minutes total.
 - Overall effort ceiling: 360 active minutes. Reassess after two checkpoints or
   30 active minutes without outcome progress. Maximum work-unit attempts: 3.
   Maximum review and rework cycles: 1.
@@ -125,6 +148,9 @@ against the frozen published diff and has no runtime authority.
 | Integration | Published branch, linked pull request, exact-head checks, and merged-main readback | The source and evidence enter protected `origin/main` |
 | Candidate identity | Production artifact manifest, source ancestry, executable-input closure, and binary digest | One production-shaped artifact is bound to verified canonical source |
 | Installed coherence | Shared runtime transaction, installed manifest and binary digest, supervisor and listener census, doctor, Service State readback, and disposable launch smoke | The installed runtime matches the candidate, is coherent and healthy, and the bounded foreground acceptance passes without residue |
+| Custom profile acceptance | Disposable explicit filesystem profile through the real native prestart path | Launch, URL read, close, and exact residue cleanup pass without converting `custom:<id>` into a managed runtime profile |
+| Retained route continuity | Native prestart attribution fixture and canonical route recovery | Stable self-declared subject exists before profile selection and all three route displays recover without manual request shaping |
+| Sealed Guacamole readability | Materialization mode fixture plus replacement container startup | Extension directory and files are container-readable after sealing while secrets remain private |
 
 ## Execution Evidence
 
@@ -145,8 +171,14 @@ against the frozen published diff and has no runtime authority.
 - Focused validation: all 43 `native::service_store::tests` pass.
 - Changed-surface validation: `git diff --check`, Rust format, and strict
   workspace Clippy pass at source checkpoint `73001841`.
-- Integration, canonical CI, production artifact identity, installation, and
-  installed acceptance remain pending.
+- PR #150, canonical fast CI, production artifact identity, transaction
+  acceptance, finalization, installed doctor, one runtime host, one dashboard
+  generation, healthy monitor, and three route displays are complete.
+- The disposable custom-profile launch failed before effect with
+  `invalid_runtime_profile`, reopened #131, and was fully cleaned up. The
+  replacement source tests for custom-ID decoding, native prestart identity,
+  and Guacamole extension modes pass; broader qualification, integration, and
+  replacement installed acceptance remain pending.
 
 ## Stop Condition
 
