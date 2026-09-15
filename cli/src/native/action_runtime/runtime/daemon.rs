@@ -24,8 +24,9 @@ use crate::native::network::resolve_fetch_paused;
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
 use crate::native::service_access::{service_access_plan_for_state, ServiceAccessPlanRequest};
 use crate::native::service_lifecycle::{
-    profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
-    ProfileSelectionRequest, ServiceLaunchMetadata,
+    profile_lease_telemetry, runtime_profile_name_for_service_profile_id,
+    select_service_profile_for_request, service_profile_id, ProfileSelectionRequest,
+    ServiceLaunchMetadata,
 };
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,
@@ -648,15 +649,21 @@ pub(crate) fn apply_service_profile_selection(
     }
     let service_owned_launch = cmd.get("action").and_then(Value::as_str) == Some("launch")
         && optional_command_string(cmd, "serviceName").is_some();
+    let explicit_runtime_profile =
+        service_owned_launch.then(|| optional_command_or_params_string(cmd, "runtimeProfile"));
     let explicit_profile_id = service_owned_launch.then(|| {
-        optional_command_or_params_string(cmd, "runtimeProfile")
+        explicit_runtime_profile
+            .clone()
+            .flatten()
             .or_else(|| optional_command_or_params_string(cmd, "profileId"))
     });
     if let Some(profile_id) = explicit_profile_id.flatten() {
         let Some(profile) = service_state.profiles.get(&profile_id) else {
             return Ok(None);
         };
-        options.runtime_profile = Some(profile_id);
+        options.runtime_profile = explicit_runtime_profile
+            .flatten()
+            .or_else(|| runtime_profile_name_for_service_profile_id(&profile_id));
         if let Some(user_data_dir) = profile
             .user_data_dir
             .as_deref()
@@ -696,7 +703,7 @@ pub(crate) fn apply_service_profile_selection(
     let Some(profile) = service_state.profiles.get(&selection.profile_id) else {
         return Ok(None);
     };
-    options.runtime_profile = Some(selection.profile_id.clone());
+    options.runtime_profile = runtime_profile_name_for_service_profile_id(&selection.profile_id);
     if let Some(user_data_dir) = profile
         .user_data_dir
         .as_deref()
@@ -721,7 +728,7 @@ fn retained_profile_launch_identity(
     profile: &BrowserProfile,
 ) -> (Option<String>, Option<String>) {
     (
-        (!profile_id.starts_with("custom:")).then(|| profile_id.to_string()),
+        runtime_profile_name_for_service_profile_id(profile_id),
         profile.user_data_dir.clone(),
     )
 }

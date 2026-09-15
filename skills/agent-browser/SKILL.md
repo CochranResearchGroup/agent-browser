@@ -1136,7 +1136,7 @@ Direct local headed Chrome is still materially more reliable than a fresh headle
 
 ## Handling Authentication
 
-By default, agent-browser uses a stable runtime profile at `~/.agent-browser/runtime-profiles/default/user-data`. If a user signs in manually once, later runs reuse that state automatically. Use `--runtime-profile <name>` for a named managed profile, or `--profile <path>` for a custom user-data-dir path.
+By default, agent-browser uses a stable runtime profile at `~/.agent-browser/runtime-profiles/default/user-data`. If a user signs in manually once, later runs reuse that state automatically. Use `--runtime-profile <name>` for a named managed profile, or `--profile <path>` for a custom user-data-dir path. A custom path may have an opaque service profile ID, but that ID is not a named runtime profile.
 
 For deterministic service-owned reauthentication, first read the exact recipe
 digest with `service_authentication_recipe_status`. Start a bounded

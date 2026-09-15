@@ -25,6 +25,19 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P195 | Custom Profile Identity Repair
+
+State: OPEN
+
+Current state: [Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md)
+and [issue #131](https://github.com/CochranResearchGroup/agent-browser/issues/131)
+own candidate `fd5bb67f` for the documented custom `--profile` path flow. The
+repair keeps opaque service identity out of managed runtime-profile validation
+while preserving explicit paths and the managed-name grammar. Focused and
+native-service Rust, strict Clippy, docs, and selected workstation gates pass.
+Protected integration remains; no browser, install, provider, production, or
+release effect occurred.
+
 ## P194 | Service State Load-Current Contention Repair
 
 State: CLOSED

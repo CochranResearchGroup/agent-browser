@@ -367,7 +367,10 @@ pub(crate) fn apply_explicit_launch_identity_from_command(
     if let Some(runtime_profile) = optional_command_string(command, "runtimeProfile") {
         options.runtime_profile = Some(runtime_profile);
     } else if let Some(profile_id) = optional_command_string(command, "profileId") {
-        options.runtime_profile = Some(profile_id);
+        options.runtime_profile =
+            crate::native::service_lifecycle::runtime_profile_name_for_service_profile_id(
+                &profile_id,
+            );
     }
     if let Some(browser_family) = optional_command_string(command, "runtimeProfileBrowserFamily") {
         options.expected_browser_family = Some(browser_family);

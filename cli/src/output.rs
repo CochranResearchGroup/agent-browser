@@ -7230,7 +7230,7 @@ Locked profiles:
 Global Options:
   --json                        Output as JSON
   --runtime-profile <name>      Select runtime profile name
-  --profile <path>              Use a custom persistent user-data-dir path
+  --profile <path>              Use a custom persistent user-data-dir path, distinct from named runtime profiles
   --leave-open                  Detach on close instead of shutting down a managed runtime-profile browser
   --executable-path <path>      Custom browser executable
   --headed                      Ignored for runtime login; manual login is always headed

@@ -2171,7 +2171,9 @@ AGENT_BROWSER_PROFILE=~/.myapp-profile agent-browser open myapp.com
 ```
 
 Repeated commands with the same `--session` and `--profile <path>` reuse that
-custom directory. A planned default must not replace an explicit profile path.
+custom directory. Its opaque service profile identity remains distinct from a
+named `--runtime-profile` and is never validated as one. A planned default must
+not replace an explicit profile path.
 After an exact close proves process exit and lock release, reopening the same
 path resolves its retained profile identity. Conflicting profiles and unresolved
 ownership still fail before browser effects. Closing the last native session leaves
