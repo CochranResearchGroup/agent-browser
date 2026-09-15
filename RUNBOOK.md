@@ -13,11 +13,11 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 339 | 2026-09-15
 
-P194 candidate `6acc15ad` repairs issue #76's residual
+P194 candidate `9fa6c586` repairs issue #76's residual
 `prepared_commit/load_current` timeout. Its new 9.64 MB multi-process case
 failed on unchanged logic at 1,002 ms with exact holder attribution, then passed
 after the freshness fence switched from a full state reload to a persisted
-revision-only probe when recovery is not pending. All 41 `service_store` tests,
+revision-only probe with an explicit bounded parser stack when recovery is not pending. All 41 `service_store` tests,
 format, and strict Clippy pass, including issue #87's pure adjacent-revision
 convergence. PR #142 is merged as `81de07cf`, and its clean P169 worktree is
 retired. Protected integration remains; no production or browser effect occurred.

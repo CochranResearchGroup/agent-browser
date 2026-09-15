@@ -33,9 +33,9 @@ Current state: [Plan 0194](docs/dev/plans/0194-2026-09-15-service-state-load-cur
 and [issue #76](https://github.com/CochranResearchGroup/agent-browser/issues/76)
 own the residual production-scale `prepared_commit/load_current` timeout. Plan
 0167's 9.64 MB multi-process slow-preparation fixture and durable holder
-telemetry remain accepted. Candidate `6acc15ad` adds the missing slow-full-
+telemetry remain accepted. Candidate `9fa6c586` adds the missing slow-full-
 reload red case and uses a revision-only persisted freshness probe when recovery
-is not pending. The baseline failed at 1,002 ms in
+is not pending, retaining the explicit bounded JSON parser stack. The baseline failed at 1,002 ms in
 `prepared_commit/load_current`; the candidate passes the 9.64 MB replay, all
 41 `service_store` tests, format, and strict Clippy without increasing the
 one-second deadline. Issue #87's one-revision pure-replay case remains green.

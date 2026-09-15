@@ -10,7 +10,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 6acc15ad79af3465a7cb940072c2bff6d3035edf
+    checkpoint: 9fa6c5869c528f9b9136d2a5e035680f182e2501
     remote_ref: refs/remotes/origin/fix/issue-76-service-state-lock
     integration: merge through the protected `main` workflow after provider-free qualification
     validation_status: red reproduced at 1002 ms; candidate passes 41 service_store tests, exact production-scale replay, format, and strict Clippy

@@ -50,13 +50,16 @@ during P194 admission. This plan replaces the stale P169 active-lane projection.
 No production runtime, browser, profile, provider, or Service State mutation is
 authorized by this plan.
 
-Candidate checkpoint `6acc15ad` replaces the full reload with a persisted
+Candidate checkpoint `9fa6c586` replaces the full reload with a persisted
 revision-only probe when transaction recovery is not pending. Stores without a
 cheaper probe retain the full-load default; pending recovery still uses the
-complete recovery path. The red fixture failed on unchanged production logic at
-1,002 ms with an active `prepared_commit/load_current` holder and passed on the
-candidate with a 9,642,672-byte fixture. All 41 `service_store` tests, format,
-and strict workspace Clippy pass. Protected integration remains open.
+complete recovery path. The lightweight JSON projection retains the same
+explicit 8 MiB parser stack used by full-state persistence so deeply nested
+retained values cannot consume a constrained caller stack. The red fixture
+failed on unchanged production logic at 1,002 ms with an active
+`prepared_commit/load_current` holder and passed on the candidate with a
+9,642,672-byte fixture. All 41 `service_store` tests, format, and strict
+workspace Clippy pass. Protected integration remains open.
 
 ## Consolidated Batch
 
@@ -148,6 +151,8 @@ published diff and has no runtime or integration authority.
   atomicity, crash residue, durable holder attribution, slow preparation, slow
   current load, no-op freshness, and two-adjacent-revision convergence.
 - Quality gates: Rust format check and strict workspace Clippy passed.
+- The large-state constrained-worker test also exercises the revision probe's
+  explicit bounded parser stack.
 - No production runtime, browser, profile, provider, install, retry, or Service
   State effect occurred.
 
