@@ -121,6 +121,7 @@ pub(crate) struct ResourceSummary {
     pub(crate) cleanup_obligations_transferring: usize,
     pub(crate) cleanup_obligations_satisfied: usize,
     pub(crate) cleanup_obligations_unknown: usize,
+    pub(crate) challenge_tasks: super::service_challenge_task::ServiceChallengeTaskSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -870,6 +871,7 @@ fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> Reso
                     == crate::runtime_owner_transfer::CleanupObligationState::Unknown
             })
             .count(),
+        challenge_tasks: super::service_challenge_task::challenge_task_summary(state),
     }
 }
 

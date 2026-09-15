@@ -151,6 +151,191 @@ async fn challenge_control_evaluate_dispatches_without_browser_or_confirmation()
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn challenge_task_start_dispatches_without_browser_and_replays_durably() {
+    let env_guard = EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+    ]);
+    let _lock = crate::native::auth::AUTH_TEST_MUTEX.lock().unwrap();
+    let home = std::env::temp_dir().join(format!(
+        "agent-browser-challenge-task-action-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&home).unwrap();
+    env_guard.set("HOME", home.to_str().unwrap());
+    env_guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    env_guard.set(
+        "AGENT_BROWSER_HOME",
+        home.join(".agent-browser").to_str().unwrap(),
+    );
+
+    let profile_access = crate::native::service_profile_access_policy::ProfileChildAccess {
+        schema_version: "agent-browser.profile-child-access.v1".to_string(),
+        parent_policy_revision: 1,
+        access_decision_id: "decision-action-1".to_string(),
+        subject_id: Some("principal-action-1".to_string()),
+        identity_assurance:
+            crate::native::service_profile_access_policy::ProfileIdentityAssurance::AuthenticatedIngress,
+        connection_instance_id: Some("connection-action-1".to_string()),
+        connection_state:
+            crate::native::service_profile_access_policy::ProfileConnectionState::Active,
+        permissions: Vec::new(),
+    };
+    let mut service_state = ServiceState::default();
+    service_state.browsers.insert(
+        "browser-action-1".to_string(),
+        BrowserProcess {
+            id: "browser-action-1".to_string(),
+            profile_id: Some("profile-action-1".to_string()),
+            health: ServiceBrowserHealth::Ready,
+            active_session_ids: vec!["session-action-1".to_string()],
+            ..BrowserProcess::default()
+        },
+    );
+    service_state.sessions.insert(
+        "session-action-1".to_string(),
+        BrowserSession {
+            id: "session-action-1".to_string(),
+            service_name: Some("consumer-service".to_string()),
+            agent_name: Some("challenge-worker".to_string()),
+            task_name: Some("challenge-aware-task".to_string()),
+            profile_id: Some("profile-action-1".to_string()),
+            lease: LeaseState::Exclusive,
+            ..BrowserSession::default()
+        },
+    );
+    service_state.tabs.insert(
+        "tab-action-1".to_string(),
+        BrowserTab {
+            id: "tab-action-1".to_string(),
+            browser_id: "browser-action-1".to_string(),
+            target_id: Some("target-action-1".to_string()),
+            session_id: Some("session-action-1".to_string()),
+            lifecycle: TabLifecycle::Ready,
+            owner_session_id: Some("session-action-1".to_string()),
+            profile_access: Some(profile_access),
+            ..BrowserTab::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&service_state)
+        .unwrap();
+    let handle = service_state.service_tab_handle("tab-action-1").unwrap();
+    let command = json!({
+        "id": "challenge-task-start-action-1",
+        "action": "service_challenge_task_start",
+        "serviceName": "consumer-service",
+        "agentName": "challenge-worker",
+        "taskName": "challenge-aware-task",
+        "clientSubjectId": "principal-action-1",
+        "challengeProfileId": "turnstile-checkbox-p169-v1",
+        "sitePolicyDigest": "b".repeat(64),
+        "downstreamIntentId": "authenticate-account",
+        "fixtureScenarioId": "pass_after_acknowledged_resolution",
+        "idempotencyKey": "challenge-task-action-key-1",
+        "deadlineMs": 120000,
+        "maxTransitions": 8,
+        "serviceTabHandle": handle,
+    });
+    let mut daemon_state = DaemonState::new();
+    daemon_state.confirm_actions = Some(ConfirmActions {
+        categories: HashSet::from(["service_challenge_task_start".to_string()]),
+    });
+
+    let first = execute_command(&command, &mut daemon_state).await;
+    let replay = execute_command(&command, &mut daemon_state).await;
+
+    assert!(action_skips_browser_launch("service_challenge_task_start"));
+    assert!(daemon_state.browser.is_none());
+    assert!(daemon_state.pending_confirmation.is_none());
+    assert_eq!(first["success"], true, "{first}");
+    assert_eq!(first["data"]["state"], "ready");
+    assert_eq!(first["data"]["replayed"], false);
+    assert_eq!(replay["success"], true, "{replay}");
+    assert_eq!(replay["data"]["replayed"], true);
+    assert_eq!(
+        first["data"]["challengeTaskId"],
+        replay["data"]["challengeTaskId"]
+    );
+    assert!(!replay.to_string().contains("challenge-task-action-key-1"));
+
+    let task_id = first["data"]["challengeTaskId"].as_str().unwrap();
+    let status = execute_command(
+        &json!({
+            "id": "challenge-task-status-action-1",
+            "action": "service_challenge_task_status",
+            "clientSubjectId": "principal-action-1",
+            "challengeTaskId": task_id,
+        }),
+        &mut daemon_state,
+    )
+    .await;
+    assert_eq!(status["success"], true, "{status}");
+    assert_eq!(status["data"]["state"], "ready");
+
+    let resume_command = json!({
+        "id": "challenge-task-resume-action-1",
+        "action": "service_challenge_task_resume",
+        "clientSubjectId": "principal-action-1",
+        "challengeTaskId": task_id,
+        "operationId": "challenge-task-resume-operation-1",
+    });
+    let completed = execute_command(&resume_command, &mut daemon_state).await;
+    let completed_replay = execute_command(&resume_command, &mut daemon_state).await;
+    assert_eq!(completed["success"], true, "{completed}");
+    assert_eq!(completed["data"]["state"], "completed");
+    assert_eq!(completed["data"]["receipt"]["admission"], "admitted");
+    assert_eq!(completed["data"]["receipt"]["emittedEffects"], false);
+    assert_eq!(completed_replay["data"]["replayed"], true);
+
+    let mut cancel_start = command.clone();
+    cancel_start["id"] = json!("challenge-task-start-action-2");
+    cancel_start["idempotencyKey"] = json!("challenge-task-action-key-2");
+    let cancel_ready = execute_command(&cancel_start, &mut daemon_state).await;
+    let cancel_task_id = cancel_ready["data"]["challengeTaskId"].as_str().unwrap();
+    let cancel_command = json!({
+        "id": "challenge-task-cancel-action-1",
+        "action": "service_challenge_task_cancel",
+        "clientSubjectId": "principal-action-1",
+        "challengeTaskId": cancel_task_id,
+        "operationId": "challenge-task-cancel-operation-1",
+    });
+    let cancelled = execute_command(&cancel_command, &mut daemon_state).await;
+    assert_eq!(cancelled["success"], true, "{cancelled}");
+    assert_eq!(cancelled["data"]["state"], "cancelled");
+    assert_eq!(cancelled["data"]["effectPending"], false);
+
+    let persisted = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .load()
+        .unwrap();
+    let resources = crate::native::service_resources::service_resources_response(&persisted);
+    assert_eq!(resources["summary"]["challengeTasks"]["totalCount"], 2);
+    assert_eq!(resources["summary"]["challengeTasks"]["terminalCount"], 2);
+    assert_eq!(
+        resources["summary"]["challengeTasks"]["pendingEffectCount"],
+        0
+    );
+
+    let status = execute_command(
+        &json!({
+            "id": "challenge-task-service-status-1",
+            "action": "service_status",
+        }),
+        &mut daemon_state,
+    )
+    .await;
+    assert_eq!(status["success"], true, "{status}");
+    assert_eq!(status["data"]["challengeTaskSummary"]["totalCount"], 2);
+    assert_eq!(status["data"]["challengeTaskSummary"]["cooldownCount"], 1);
+}
+
+#[tokio::test]
 async fn configured_desktop_provider_gates_precede_confirmation_and_dispatch_effects() {
     let mut state = DaemonState::new();
     state.confirm_actions = Some(ConfirmActions {

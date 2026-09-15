@@ -59,6 +59,10 @@
         "service_authentication_run_resume",
         "service_authentication_run_cancel",
         "service_authentication_recipe_status",
+        "service_challenge_task_start",
+        "service_challenge_task_status",
+        "service_challenge_task_resume",
+        "service_challenge_task_cancel",
         "tab_list",
         "url",
         "title",
@@ -509,6 +513,26 @@
       "type": "string",
       "minLength": 1,
       "description": "Opaque durable AuthenticationRun identifier returned by service_authentication_run_start."
+    },
+    "challengeTaskId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque durable challenge task identifier returned by service_challenge_task_start."
+    },
+    "sitePolicyDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "Exact SHA-256 digest of the site policy bound to a challenge task."
+    },
+    "downstreamIntentId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque downstream intent that remains withheld unless the task receipt admits it."
+    },
+    "fixtureScenarioId": {
+      "type": "string",
+      "enum": ["ambiguous_observation", "challenge_not_present", "pass_after_acknowledged_resolution", "rejected_resolution"],
+      "description": "Registered provider-free challenge scenario. It cannot select browser or provider behavior."
     },
     "accountRef": {
       "type": "string",

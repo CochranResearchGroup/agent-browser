@@ -1200,6 +1200,18 @@ settings, provider controls, or retry options. Its composite receipt always
 reports `evidenceClass: "provider_free_scenario"` and
 `emittedEffects: false`; it is contract evidence, not live CAPTCHA acceptance.
 
+Use `service_challenge_task_start`, `service_challenge_task_status`,
+`service_challenge_task_resume`, and `service_challenge_task_cancel` when one
+durable Service task must own the provider-free challenge sequence. Start binds
+a registered challenge profile, fixture scenario, site-policy digest,
+downstream intent, caller principal, and exact current `serviceTabHandle`.
+Resume executes the registered fixture once under a unique `operationId` and
+returns one receipt that separates delivery, verification, challenge outcome,
+cooldown, intervention, and downstream admission. Replaying the same operation
+returns the persisted terminal receipt. These W5 actions never launch a
+browser, emit input, contact a provider, use credentials, or prove live CAPTCHA
+acceptance.
+
 Receipts contain authority, hashed input, cleanup, and verification metadata.
 They do not contain frame pixels, plaintext typed content, or the full motion
 path. A partial input effect returns an explicit uncertain receipt and is never

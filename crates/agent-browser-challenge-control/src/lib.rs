@@ -6,6 +6,10 @@
 use agent_browser_desktop_services::{HCAPTCHA_RECIPE_ID, TURNSTILE_RECIPE_ID};
 use serde::{Deserialize, Serialize};
 
+mod task;
+
+pub use task::*;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChallengeState {

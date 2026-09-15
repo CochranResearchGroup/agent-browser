@@ -76,6 +76,12 @@ const CHALLENGE_SCENARIO_OUTCOMES: &[&str] = &[
     "denied",
     "intervention_required",
 ];
+const CHALLENGE_TASK_FIXTURE_SCENARIO_IDS: &[&str] = &[
+    "ambiguous_observation",
+    "challenge_not_present",
+    "pass_after_acknowledged_resolution",
+    "rejected_resolution",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RouteHintStage {
@@ -389,6 +395,16 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("controllerLeaseId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("operationId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("authenticationRunId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("challengeTaskId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("sitePolicyDigest", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("downstreamIntentId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field(
+        "fixtureScenarioId",
+        FieldKind::Enum(CHALLENGE_TASK_FIXTURE_SCENARIO_IDS),
+        true,
+        true,
+        false,
+    ),
     ServiceRequestFieldSpec::field("accountRef", FieldKind::String, true, false, false),
     ServiceRequestFieldSpec::field("organizationRef", FieldKind::String, true, false, false),
     ServiceRequestFieldSpec::field("challengeProviderId", FieldKind::String, true, true, false),
@@ -989,6 +1005,7 @@ fn validate_safety_gates(
     reject_desktop_prompt_observe_request(action, request)?;
     reject_desktop_interact_request(action, request)?;
     reject_challenge_control_evaluate_request(action, request)?;
+    reject_challenge_task_request(action, request)?;
     reject_authentication_run_request(action, request)?;
     reject_service_probe_request(action, request)?;
     reject_tab_handle_refresh_request(action, request)?;
@@ -996,6 +1013,148 @@ fn validate_safety_gates(
     reject_service_network_capture_request(action, request)?;
     reject_service_file_transfer_request(action, request)?;
     reject_stale_monitor_service_request(request)
+}
+
+fn reject_challenge_task_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    let is_start = action == "service_challenge_task_start";
+    let is_status = action == "service_challenge_task_status";
+    let is_resume = action == "service_challenge_task_resume";
+    let is_cancel = action == "service_challenge_task_cancel";
+    let is_existing = is_status || is_resume || is_cancel;
+    if !(is_start || is_existing) {
+        return Ok(());
+    }
+    const COMMON_FIELDS: &[&str] = &[
+        "action",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "clientSubjectId",
+        "identityAssurance",
+        "jobTimeoutMs",
+        "serviceStateLockTimeoutMs",
+    ];
+    const START_FIELDS: &[&str] = &[
+        "challengeProfileId",
+        "sitePolicyDigest",
+        "downstreamIntentId",
+        "fixtureScenarioId",
+        "idempotencyKey",
+        "deadlineMs",
+        "maxTransitions",
+        "serviceTabHandle",
+    ];
+    const EXISTING_FIELDS: &[&str] = &["challengeTaskId", "operationId"];
+    if let Some(field) = request.keys().find(|field| {
+        !(COMMON_FIELDS.contains(&field.as_str())
+            || is_start && START_FIELDS.contains(&field.as_str())
+            || is_existing && EXISTING_FIELDS.contains(&field.as_str()))
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("{action} does not accept {field}"),
+        ));
+    }
+    for field in ["serviceName", "agentName", "taskName"] {
+        if request
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires {field}"),
+            ));
+        }
+    }
+    if is_start {
+        for field in [
+            "challengeProfileId",
+            "sitePolicyDigest",
+            "downstreamIntentId",
+            "fixtureScenarioId",
+            "idempotencyKey",
+        ] {
+            if request
+                .get(field)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+            {
+                return Err(issue(
+                    ServiceRequestIssueKind::InvalidBoundedRecipe,
+                    format!("{action} requires {field}"),
+                ));
+            }
+        }
+        validate_service_tab_handle(request, action, true)?;
+        let digest = request["sitePolicyDigest"].as_str().unwrap_or_default();
+        if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires a SHA-256 sitePolicyDigest"),
+            ));
+        }
+        if !request
+            .get("deadlineMs")
+            .and_then(Value::as_u64)
+            .is_some_and(|value| (1_000..=600_000).contains(&value))
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires deadlineMs between 1000 and 600000"),
+            ));
+        }
+        if !request
+            .get("maxTransitions")
+            .and_then(Value::as_u64)
+            .is_some_and(|value| (1..=64).contains(&value))
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires maxTransitions between 1 and 64"),
+            ));
+        }
+    } else {
+        if request
+            .get("challengeTaskId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires challengeTaskId"),
+            ));
+        }
+        if is_status && request.contains_key("operationId") {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} does not accept operationId"),
+            ));
+        }
+        if (is_resume || is_cancel)
+            && request
+                .get("operationId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires operationId"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn reject_challenge_control_evaluate_request(
@@ -2774,7 +2933,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 97);
+        assert_eq!(canonical_names.len(), 101);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -3598,6 +3757,41 @@ mod tests {
                     "siteRecipeId": "bill-login-v1"
                 });
             }
+            "service_challenge_task_start" => {
+                request = json!({
+                    "action": action,
+                    "serviceName": "consumer-service",
+                    "agentName": "challenge-worker",
+                    "taskName": "challenge-aware-task",
+                    "challengeProfileId": "turnstile-checkbox-p169-v1",
+                    "sitePolicyDigest": "a".repeat(64),
+                    "downstreamIntentId": "authenticate-account",
+                    "fixtureScenarioId": "challenge_not_present",
+                    "idempotencyKey": "challenge-task-key-fixture",
+                    "deadlineMs": 120000,
+                    "maxTransitions": 8,
+                    "serviceTabHandle": test_tab_handle(true)
+                });
+            }
+            "service_challenge_task_status" => {
+                request = json!({
+                    "action": action,
+                    "serviceName": "consumer-service",
+                    "agentName": "challenge-worker",
+                    "taskName": "challenge-aware-task",
+                    "challengeTaskId": "challenge-task-fixture"
+                });
+            }
+            "service_challenge_task_resume" | "service_challenge_task_cancel" => {
+                request = json!({
+                    "action": action,
+                    "serviceName": "consumer-service",
+                    "agentName": "challenge-worker",
+                    "taskName": "challenge-aware-task",
+                    "challengeTaskId": "challenge-task-fixture",
+                    "operationId": "operation-fixture"
+                });
+            }
             "probe" => {
                 request["serviceTabHandle"] = test_tab_handle(true);
                 request["probe"] = json!({"detectors": [{"type": "url_title"}]});
@@ -3701,6 +3895,52 @@ mod tests {
             normalize(resume).unwrap_err().message(),
             "service_authentication_run_resume requires operationId"
         );
+    }
+
+    #[test]
+    fn challenge_task_requests_are_closed_registered_and_operation_bounded() {
+        let start = json!({
+            "action": "service_challenge_task_start",
+            "serviceName": "consumer-service",
+            "agentName": "challenge-worker",
+            "taskName": "challenge-aware-task",
+            "challengeProfileId": "turnstile-checkbox-p169-v1",
+            "sitePolicyDigest": "a".repeat(64),
+            "downstreamIntentId": "authenticate-account",
+            "fixtureScenarioId": "pass_after_acknowledged_resolution",
+            "idempotencyKey": "challenge-task-key-1",
+            "deadlineMs": 120000,
+            "maxTransitions": 8,
+            "serviceTabHandle": test_tab_handle(true)
+        });
+        assert_eq!(
+            normalize(start.clone()).unwrap().command["fixtureScenarioId"],
+            "pass_after_acknowledged_resolution"
+        );
+        let mut forbidden = start;
+        forbidden["providerControls"] = json!({});
+        assert_eq!(
+            normalize(forbidden).unwrap_err().message(),
+            "unknown service request field: providerControls"
+        );
+
+        let status = json!({
+            "action": "service_challenge_task_status",
+            "serviceName": "consumer-service",
+            "agentName": "challenge-worker",
+            "taskName": "challenge-aware-task",
+            "challengeTaskId": "challenge-task-fixture"
+        });
+        assert!(normalize(status).is_ok());
+        let resume = json!({
+            "action": "service_challenge_task_resume",
+            "serviceName": "consumer-service",
+            "agentName": "challenge-worker",
+            "taskName": "challenge-aware-task",
+            "challengeTaskId": "challenge-task-fixture",
+            "operationId": "operation-fixture"
+        });
+        assert!(normalize(resume).is_ok());
     }
 
     #[test]

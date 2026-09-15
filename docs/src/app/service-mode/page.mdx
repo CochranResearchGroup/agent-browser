@@ -646,6 +646,24 @@ composite receipt reports `evidenceClass: "provider_free_scenario"` and
 `emittedEffects: false`; the result is contract evidence and is not live
 CAPTCHA acceptance.
 
+## Run a durable provider-free challenge task
+
+Use `service_challenge_task_start`, `service_challenge_task_status`,
+`service_challenge_task_resume`, and `service_challenge_task_cancel` when one
+Service task must retain custody of the complete provider-free lifecycle. Start
+binds the caller principal and exact current `serviceTabHandle` to a registered
+challenge profile, fixture scenario, site-policy digest, downstream intent,
+deadline, and transition budget. Resume and cancel require a unique
+`operationId`.
+
+The terminal task receipt keeps delivery acknowledgement, fresh verification,
+challenge outcome, cooldown, intervention, and downstream admission separate.
+An exact operation replay returns the persisted result. Service Status and
+Service resources expose bounded task counts, including active, terminal,
+cooldown, intervention, and pending-effect counts. This W5 fixture surface
+never launches a browser, emits desktop input, contacts a provider, reads
+credentials, or proves live CAPTCHA acceptance.
+
 <table>
   <thead>
     <tr>

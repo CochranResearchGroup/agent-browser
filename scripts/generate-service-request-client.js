@@ -1468,6 +1468,27 @@ export interface ServiceAuthenticationRecipeStatusData {
   policyDigest: string;
 }
 
+export interface ServiceChallengeTaskData {
+  schemaVersion: "agent-browser.service-challenge-task.v1" | string;
+  challengeTaskId: string;
+  state: "ready" | "completed" | "cancelled" | string;
+  createdAt: string;
+  deadlineAt: string;
+  requestSha256: string;
+  challengeProfileId: "turnstile-checkbox-p169-v1" | "hcaptcha-checkbox-p181-v2" | string;
+  sitePolicyDigest: string;
+  downstreamIntentId: string;
+  browserId: string;
+  sessionName: string;
+  tabId: string;
+  transitionCount: number;
+  effectPending: false;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+  receipt?: Record<string, unknown> | null;
+  replayed: boolean;
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   cdp_free_launch: ServiceCdpFreeLaunchData;
@@ -1493,6 +1514,10 @@ export interface ServiceRequestActionDataMap {
   service_authentication_run_resume: ServiceAuthenticationRunData;
   service_authentication_run_cancel: ServiceAuthenticationRunData;
   service_authentication_recipe_status: ServiceAuthenticationRecipeStatusData;
+  service_challenge_task_start: ServiceChallengeTaskData;
+  service_challenge_task_status: ServiceChallengeTaskData;
+  service_challenge_task_resume: ServiceChallengeTaskData;
+  service_challenge_task_cancel: ServiceChallengeTaskData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;
