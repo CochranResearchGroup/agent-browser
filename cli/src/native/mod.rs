@@ -59,6 +59,7 @@ pub(crate) mod desktop_evidence_action;
 #[allow(dead_code)]
 pub(crate) mod desktop_evidence_cdp;
 pub(crate) mod service_authentication_run;
+pub(crate) mod service_challenge_task;
 pub(crate) mod service_connection_lifetime;
 pub(crate) mod service_connection_reconcile;
 pub(crate) mod site_login_recipe;

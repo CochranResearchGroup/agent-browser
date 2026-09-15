@@ -1034,6 +1034,18 @@ coordinates, selectors, detector settings, provider controls, or retry
 options. The receipt always has `evidenceClass: "provider_free_scenario"` and
 `emittedEffects: false`; never treat it as live challenge acceptance.
 
+Use `service_challenge_task_start`, `service_challenge_task_status`,
+`service_challenge_task_resume`, and `service_challenge_task_cancel` for the
+durable provider-free orchestration contract. Start requires one registered
+challenge profile and fixture scenario, the exact current `serviceTabHandle`,
+caller principal, site-policy digest, downstream intent, idempotency key,
+deadline, and transition budget. Resume and cancel require a unique
+`operationId`; replaying the same operation returns the persisted result.
+Inspect the one task receipt for distinct delivery, verification, outcome,
+cooldown, intervention, and admission fields. These actions have no browser,
+provider, credential, network, or desktop-input authority and are not live
+CAPTCHA acceptance.
+
 Use `cloudflare-turnstile-v1` only for a visible Cloudflare checkbox challenge
 on an exactly bound service-owned X11 browser. First run `desktop locate` with
 the same locator ID. The interaction recipe derives coordinates from the exact

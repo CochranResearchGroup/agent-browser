@@ -1306,6 +1306,26 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minLength": 1,
                         "description": "Opaque durable AuthenticationRun identifier returned by service_authentication_run_start."
                     },
+                    "challengeTaskId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque durable challenge task identifier returned by service_challenge_task_start."
+                    },
+                    "sitePolicyDigest": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{64}$",
+                        "description": "Exact SHA-256 digest of the site policy bound to a challenge task."
+                    },
+                    "downstreamIntentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque downstream intent withheld unless the challenge task admits it."
+                    },
+                    "fixtureScenarioId": {
+                        "type": "string",
+                        "enum": ["ambiguous_observation", "challenge_not_present", "pass_after_acknowledged_resolution", "rejected_resolution"],
+                        "description": "Registered provider-free challenge-task scenario."
+                    },
                     "accountRef": {
                         "type": "string",
                         "minLength": 1,

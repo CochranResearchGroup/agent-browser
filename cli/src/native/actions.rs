@@ -137,6 +137,7 @@ use super::service_access::{
 use super::service_activity::{handle_service_events, handle_service_incident_activity};
 use super::service_authentication_run::handle_service_authentication_run;
 use super::service_browser_retirement::handle_service_browser_retirement_command;
+use super::service_challenge_task::handle_service_challenge_task;
 use super::service_config::{
     handle_service_profile_delete, handle_service_profile_freshness_update,
     handle_service_profile_policy_mutate, handle_service_profile_seeding_handoff_update,
@@ -230,6 +231,10 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "desktop_prompt_observe"
             | "desktop_interact"
             | "challenge_control_evaluate"
+            | "service_challenge_task_start"
+            | "service_challenge_task_status"
+            | "service_challenge_task_resume"
+            | "service_challenge_task_cancel"
             | "probe"
             | "close"
             | "confirm"
@@ -525,6 +530,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
                 | "desktop_interact"
                 | "desktop_prompt_observe"
                 | "challenge_control_evaluate"
+                | "service_challenge_task_start"
+                | "service_challenge_task_status"
+                | "service_challenge_task_resume"
+                | "service_challenge_task_cancel"
         )
     {
         if let Some(ref ca) = state.confirm_actions {
@@ -621,7 +630,16 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             }
         }
     }
-    if action != "confirm" && action != "deny" {
+    if action != "confirm"
+        && action != "deny"
+        && !matches!(
+            action,
+            "service_challenge_task_start"
+                | "service_challenge_task_status"
+                | "service_challenge_task_resume"
+                | "service_challenge_task_cancel"
+        )
+    {
         if let Some(ref ca) = state.confirm_actions {
             if ca.requires_confirmation(action) {
                 state.pending_confirmation = Some(PendingConfirmation {
@@ -1101,6 +1119,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
                 handle_service_authentication_run(cmd, state).await,
             "service_authentication_recipe_status" =>
                 handle_service_authentication_run(cmd, state).await,
+            "service_challenge_task_start"
+            | "service_challenge_task_status"
+            | "service_challenge_task_resume"
+            | "service_challenge_task_cancel" => handle_service_challenge_task(cmd),
             "service_jobs" => handle_service_jobs(cmd).await,
             "service_incidents" => handle_service_incidents(cmd).await,
             "service_events" => handle_service_events(cmd).await,

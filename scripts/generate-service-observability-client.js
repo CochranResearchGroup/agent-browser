@@ -1051,6 +1051,14 @@ export interface ServiceStatusResponse {
   service_state: Record<string, unknown> & {
     profilePolicyMigration?: ServiceProfilePolicyMigrationReport | null;
   };
+  challengeTaskSummary?: {
+    totalCount: number;
+    activeCount: number;
+    terminalCount: number;
+    cooldownCount: number;
+    interventionCount: number;
+    pendingEffectCount: number;
+  };
   profileAllocations: ServiceProfileAllocation[];
   manualBrowsers?: ServiceManualRuntimeBrowser[];
   retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;

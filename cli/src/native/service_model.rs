@@ -2512,6 +2512,14 @@ pub struct ServiceState {
     )]
     pub(crate) authentication_runs:
         BTreeMap<String, super::service_authentication_run::ServiceAuthenticationRunRecord>,
+    /// Durable provider-free challenge tasks. Records retain exact authority
+    /// bindings and redacted receipts, never credentials or captured evidence.
+    #[serde(
+        default,
+        skip_serializing_if = "super::service_challenge_task::challenge_task_map_is_empty"
+    )]
+    pub(crate) challenge_tasks:
+        BTreeMap<String, super::service_challenge_task::ServiceChallengeTaskRecord>,
     pub profile_seeding_handoffs: BTreeMap<String, ProfileSeedingHandoffRecord>,
     #[serde(default, skip_serializing_if = "BrowserCapabilityRegistry::is_empty")]
     pub browser_capability_registry: BrowserCapabilityRegistry,
