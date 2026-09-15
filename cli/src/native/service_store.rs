@@ -151,6 +151,12 @@ struct DurableRuntimeLifecycleRegistry {
     records: BTreeMap<String, RuntimeLifecycleRecord>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct PersistedServiceStateRevision {
+    state_revision: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceStateTransaction {
@@ -183,6 +189,14 @@ pub trait ServiceStateStore {
     /// use their normal load implementation.
     fn load_without_recovery(&self) -> Result<ServiceState, String> {
         self.load()
+    }
+
+    /// Read only the persisted freshness fence while transaction recovery is
+    /// known to be unnecessary. The default preserves compatibility for stores
+    /// without a cheaper durable revision projection.
+    fn load_revision_without_recovery(&self) -> Result<u64, String> {
+        self.load_without_recovery()
+            .map(|state| state.state_revision)
     }
 
     fn recovery_required(&self) -> bool {
@@ -355,6 +369,8 @@ impl ServiceStateStore for JsonServiceStateStore {
     }
 
     fn load_without_recovery(&self) -> Result<ServiceState, String> {
+        #[cfg(test)]
+        wait_for_production_scale_full_load_delay()?;
         let mut state_file_missing = false;
         let mut state = match fs::read_to_string(&self.path) {
             Ok(raw) => parse_service_state_json(raw, &self.path)?,
@@ -416,6 +432,29 @@ impl ServiceStateStore for JsonServiceStateStore {
         Ok(state)
     }
 
+    fn load_revision_without_recovery(&self) -> Result<u64, String> {
+        let raw = match fs::read(&self.path) {
+            Ok(raw) => raw,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+            Err(error) => {
+                return Err(format!(
+                    "Failed to read service state {}: {}",
+                    self.path.display(),
+                    error
+                ))
+            }
+        };
+        serde_json::from_slice::<PersistedServiceStateRevision>(&raw)
+            .map(|state| state.state_revision)
+            .map_err(|error| {
+                format!(
+                    "Invalid service state JSON {}: {}",
+                    self.path.display(),
+                    error
+                )
+            })
+    }
+
     fn recovery_required(&self) -> bool {
         service_state_transaction_path(&self.path).exists()
     }
@@ -466,6 +505,50 @@ fn wait_for_production_scale_prepare_barrier() -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(2));
     }
+    Ok(())
+}
+
+#[cfg(test)]
+fn wait_for_production_scale_load_current_barrier() -> Result<(), String> {
+    let Some(ready_path) =
+        std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_LOAD_CURRENT_READY_PATH")
+    else {
+        return Ok(());
+    };
+    let release_path = PathBuf::from(
+        std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_LOAD_CURRENT_RELEASE_PATH")
+            .ok_or_else(|| "production_scale_load_current_release_path_missing".to_string())?,
+    );
+    fs::write(PathBuf::from(ready_path), b"ready")
+        .map_err(|error| format!("production_scale_load_current_ready_write_failed:{error}"))?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !release_path.exists() {
+        if Instant::now() >= deadline {
+            return Err("production_scale_load_current_release_timeout".to_string());
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn wait_for_production_scale_full_load_delay() -> Result<(), String> {
+    let Some(delay_ms) = std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_FULL_LOAD_DELAY_MS")
+    else {
+        return Ok(());
+    };
+    let ready_path = PathBuf::from(
+        std::env::var_os("AGENT_BROWSER_TEST_PRODUCTION_SCALE_LOAD_CURRENT_READY_PATH")
+            .ok_or_else(|| "production_scale_load_current_ready_path_missing".to_string())?,
+    );
+    if !ready_path.exists() {
+        return Ok(());
+    }
+    let delay_ms = delay_ms
+        .to_string_lossy()
+        .parse::<u64>()
+        .map_err(|error| format!("production_scale_full_load_delay_invalid:{error}"))?;
+    std::thread::sleep(Duration::from_millis(delay_ms));
     Ok(())
 }
 
@@ -669,12 +752,12 @@ where
                     )?;
                     file_guard.set_state_summary(&baseline, None);
                     file_guard.set_phase("load_current");
-                    let current = if self.store.recovery_required() {
-                        self.store.load()?
+                    let current_revision = if self.store.recovery_required() {
+                        self.store.load()?.state_revision
                     } else {
-                        self.store.load_without_recovery()?
+                        self.store.load_revision_without_recovery()?
                     };
-                    if current.state_revision != baseline_revision {
+                    if current_revision != baseline_revision {
                         record_service_state_lock_terminal(
                             "file",
                             "prepared_noop_check",
@@ -703,12 +786,14 @@ where
                     acquire_service_state_process_lock(lock, commit_deadline, "prepared_commit")?;
                 file_guard.set_state_summary(&candidate, Some(transaction.state_payload.len()));
                 file_guard.set_phase("load_current");
-                let current = if self.store.recovery_required() {
-                    self.store.load()?
+                #[cfg(test)]
+                wait_for_production_scale_load_current_barrier()?;
+                let current_revision = if self.store.recovery_required() {
+                    self.store.load()?.state_revision
                 } else {
-                    self.store.load_without_recovery()?
+                    self.store.load_revision_without_recovery()?
                 };
-                if current.state_revision != baseline_revision {
+                if current_revision != baseline_revision {
                     record_service_state_lock_terminal(
                         "file",
                         "prepared_commit",
@@ -2347,6 +2432,44 @@ mod tests {
     }
 
     #[test]
+    fn persisted_revision_probe_matches_full_state_and_rejects_invalid_json() {
+        let path = unique_state_path("persisted-revision-probe");
+        let store = JsonServiceStateStore::new(&path);
+        let state = ServiceState {
+            state_revision: 73,
+            jobs: BTreeMap::from([(
+                "retained-job".to_string(),
+                crate::native::service_model::ServiceJob {
+                    id: "retained-job".to_string(),
+                    action: "reconcile".to_string(),
+                    result: Some(serde_json::json!({ "payload": "x".repeat(4096) })),
+                    ..crate::native::service_model::ServiceJob::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        store.save(&state).expect("state should save");
+
+        assert_eq!(
+            store
+                .load_revision_without_recovery()
+                .expect("revision probe should read current state"),
+            store
+                .load_without_recovery()
+                .expect("full state should remain readable")
+                .state_revision
+        );
+
+        fs::write(&path, b"{ invalid json")
+            .expect("invalid revision-probe fixture should be written");
+        let error = store
+            .load_revision_without_recovery()
+            .expect_err("invalid state must not yield a revision");
+        assert!(error.starts_with("Invalid service state JSON "), "{error}");
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
     fn large_remote_view_lease_state_round_trips_on_a_constrained_tokio_worker() {
         let path = unique_state_path("large-remote-view-lease-state");
         let store = JsonServiceStateStore::new(&path);
@@ -3551,6 +3674,109 @@ mod tests {
         eprintln!(
             "production_scale_cross_process_receipt fixture_bytes={fixture_bytes} contender_elapsed_ms={} commit_wait_ms={contender_commit_wait_ms} commit_hold_ms={contender_commit_hold_ms} helper_outcome={helper_outcome}",
             elapsed.as_millis(),
+        );
+    }
+
+    #[test]
+    fn production_scale_independent_mutation_survives_slow_current_load() {
+        const MINIMUM_FIXTURE_BYTES: u64 = 8 * 1024 * 1024;
+
+        let path = unique_state_path("production-scale-slow-current-load");
+        let ready_path = path.with_extension("load-current-ready");
+        let release_path = path.with_extension("load-current-release");
+        let outcome_path = path.with_extension("holder-outcome");
+        let store = JsonServiceStateStore::new(&path);
+        store
+            .save(&production_scale_state())
+            .expect("production-scale fixture should save");
+        let fixture_bytes = fs::metadata(&path)
+            .expect("production-scale fixture should exist")
+            .len();
+        assert!(
+            fixture_bytes >= MINIMUM_FIXTURE_BYTES,
+            "production-scale fixture was {fixture_bytes} bytes"
+        );
+
+        let mut holder = std::process::Command::new(
+            std::env::current_exe().expect("current Rust test executable should resolve"),
+        )
+        .args([
+            "--exact",
+            "native::service_store::tests::production_scale_mutation_helper",
+            "--nocapture",
+        ])
+        .env("AGENT_BROWSER_TEST_PRODUCTION_SCALE_STATE_PATH", &path)
+        .env(
+            "AGENT_BROWSER_TEST_PRODUCTION_SCALE_OUTCOME_PATH",
+            &outcome_path,
+        )
+        .env(
+            "AGENT_BROWSER_TEST_PRODUCTION_SCALE_LOAD_CURRENT_READY_PATH",
+            &ready_path,
+        )
+        .env(
+            "AGENT_BROWSER_TEST_PRODUCTION_SCALE_LOAD_CURRENT_RELEASE_PATH",
+            &release_path,
+        )
+        .env(
+            "AGENT_BROWSER_TEST_PRODUCTION_SCALE_FULL_LOAD_DELAY_MS",
+            "1200",
+        )
+        .spawn()
+        .expect("production-scale holder should start");
+
+        let ready_deadline = Instant::now() + Duration::from_secs(10);
+        while !ready_path.exists() {
+            assert!(
+                Instant::now() < ready_deadline,
+                "holder did not reach prepared_commit/load_current"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        fs::write(&release_path, b"release").expect("holder should be released");
+
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+        let started = Instant::now();
+        let contender = repository.mutate(|state| {
+            state.jobs.insert(
+                "slow-load-contender-effect".to_string(),
+                crate::native::service_model::ServiceJob {
+                    id: "slow-load-contender-effect".to_string(),
+                    action: "reconcile".to_string(),
+                    ..crate::native::service_model::ServiceJob::default()
+                },
+            );
+            Ok(())
+        });
+        let elapsed = started.elapsed();
+
+        assert!(holder.wait().expect("holder should exit").success());
+        let holder_outcome =
+            fs::read_to_string(&outcome_path).expect("holder outcome should be recorded");
+        let final_state = store.load().expect("final state should remain readable");
+        assert!(
+            !service_state_lock_holder_path(&path).exists(),
+            "completed processes must clear the holder sidecar"
+        );
+        assert!(
+            !service_state_transaction_path(&path).exists(),
+            "completed processes must clear the transaction"
+        );
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+
+        assert!(
+            contender.is_ok(),
+            "production-scale contender failed after {} ms: {}",
+            elapsed.as_millis(),
+            contender.expect_err("failed contender should retain its exact error")
+        );
+        assert_eq!(holder_outcome, "ok:1");
+        assert_eq!(final_state.state_revision, 2);
+        assert!(final_state.jobs.contains_key("slow-preparation-effect"));
+        assert!(final_state.jobs.contains_key("slow-load-contender-effect"));
+        eprintln!(
+            "production_scale_slow_load_receipt fixture_bytes={fixture_bytes} contender_elapsed_ms={}",
+            elapsed.as_millis()
         );
     }
 
