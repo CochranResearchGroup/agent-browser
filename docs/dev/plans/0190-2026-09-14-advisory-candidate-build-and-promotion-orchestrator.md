@@ -110,6 +110,19 @@ shared-resource conflicts wait; isolated provider-free work remains eligible
 to overlap. Focused tests, the candidate architecture guard, and strict
 workspace Clippy pass without creating any namespace or test process.
 
+The fourth pure-kernel checkpoint is `d2f7f032`. The coordination ledger now
+records idempotent request receipts, joins same-candidate requests, queues
+competing candidates in FIFO order, and supports exact cancel, discard,
+activate, supersede, and completion transitions. Active and queued artifacts
+remain pinned until disposition. Ownership-changing transitions advance a
+fencing generation; stale writers and exhausted counters fail without partial
+mutation. Liveness renewal requires new durable phase or process evidence and
+reports bounded recovery choices after a deadline. Lock traces enforce the
+coordination, install, runtime, Service State acquisition order, reverse
+release order, and a caller-selected maximum physical hold duration. Candidate
+tests and strict workspace Clippy pass; the checkpoint remains pure and causes
+no build or runtime effect.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
