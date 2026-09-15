@@ -25,6 +25,18 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P195 | Custom Profile Identity Repair
+
+State: OPEN
+
+Current state: [Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md)
+and [issue #131](https://github.com/CochranResearchGroup/agent-browser/issues/131)
+own a provider-free repair for the documented custom `--profile` path flow.
+The packet must keep the opaque service profile identity distinct from managed
+runtime-profile names, preserve the existing managed-name grammar, and avoid
+the P194 Service State persistence surface. No browser, profile, install,
+provider, production, or release effect is authorized.
+
 ## P194 | Service State Load-Current Contention Repair
 
 State: OPEN
