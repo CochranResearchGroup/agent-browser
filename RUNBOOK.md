@@ -9,19 +9,18 @@ Keep this file at or below 200 lines under policy 0043.
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), and [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md)
 - [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md), [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), and [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md)
 - [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
-- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
+- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
-## Turn 338 | 2026-09-15
+## Turn 339 | 2026-09-15
 
-P169 W5 source checkpoint `aba2d993` implements the durable provider-free
-challenge task in [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md).
-Start, status, resume, and cancel share exact principal and retained-tab
-custody, digest-only replay identities, one composite terminal receipt, and
-bounded Service Status and resource summaries. Focused Rust, request/schema,
-MCP/API parity, full generated-client, documentation, architecture, formatting,
-and strict-Clippy gates pass. Protected-main PR and exact-head CI remain.
-No browser, CAPTCHA, provider, credential, installed-runtime, production, or
-release effect occurred.
+P169 W5 is integrated and [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md)
+is CLOSED. PR #142 merged exact source head `709641e9` into `main` as
+`81de07cf`. Source-head CI run 34993316164 passes. Merge-commit CI run
+34997057075 passes on attempt 2 after one unchanged control-plane timing test
+failed once and passed on the failed-job-only rerun. W6 is next but unstarted
+and not admitted; Plan 0187 and issue #127 remain open. No browser, CAPTCHA,
+provider, credential, installed-runtime, production, or release effect
+occurred.
 
 ## Turn 337 | 2026-09-15
 
