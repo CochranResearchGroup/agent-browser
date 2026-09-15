@@ -25,6 +25,19 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P194 | Service State Load-Current Contention Repair
+
+State: OPEN
+
+Current state: [Plan 0194](docs/dev/plans/0194-2026-09-15-service-state-load-current-contention-repair.md)
+and [issue #76](https://github.com/CochranResearchGroup/agent-browser/issues/76)
+own the residual production-scale `prepared_commit/load_current` timeout. Plan
+0167's 9.64 MB multi-process slow-preparation fixture and durable holder
+telemetry remain accepted. P194 must add the missing slow-full-reload red case,
+then reduce that exact exclusive phase without increasing the one-second
+deadline. Issue #87 supplies the one-revision pure-replay acceptance case.
+Production installation and monitor soak remain separately live-gated.
+
 ## P191 | Repository Worktree And Lane Reconciliation
 
 State: CLOSED
@@ -74,9 +87,9 @@ desktop-services extraction, challenge-control extraction, and two-profile
 provider-free Service slice. [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md)
 admits W5 on `challenge/p169-task-orchestration` for one durable task-level
 Service lifecycle and provider-free fixture driver. W5 source checkpoint
-`aba2d993` is locally qualified with exact principal and retained-tab custody,
-digest-only replay, one composite terminal receipt, and bounded status and
-resource summaries; protected-main integration remains pending. Issue #66 retains the
+`709641e9` integrated through PR #142 as merge commit `81de07cf`; its clean
+primary worktree is retired. Plan 0187 and issue #127 remain open for W6 through
+W8, but no P169 implementation checkout is currently admitted. Issue #66 retains the
 separately live-gated challenge acceptance leaf. This registration authorizes
 no challenge attempt, retry, browser effect, provider effect, credential use,
 runtime mutation, installation, or release.

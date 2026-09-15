@@ -1,22 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P169
-    product_lane: PL-CHALLENGE
-    objective: Deliver a provider-neutral challenge countermeasure control plane and bounded challenge-family adapters
-    plan: docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md
-    plan_ref: refs/remotes/origin/challenge/p169-task-orchestration
-    branch: challenge/p169-task-orchestration
+  - id: P194
+    product_lane: PL-BUGFIX
+    objective: Eliminate the residual production-scale Service State prepared-commit lock timeout without extending the ordinary deadline
+    plan: docs/dev/plans/0194-2026-09-15-service-state-load-current-contention-repair.md
+    plan_ref: refs/heads/fix/issue-76-service-state-lock
+    branch: fix/issue-76-service-state-lock
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: aba2d993b3e854b9b765f840441e8973e3ff10b4
-    remote_ref: refs/remotes/origin/challenge/p169-task-orchestration
-    integration: merge through the protected `main` workflow after provider-free W5 validation
-    validation_status: local_qualified_pending_pr_ci
-    work_items: [CochranResearchGroup/agent-browser#127, CochranResearchGroup/agent-browser#66]
+    checkpoint: 81de07cfb5790685ff506bdabff3609e92fd5eeb
+    remote_ref: refs/remotes/origin/fix/issue-76-service-state-lock
+    integration: merge through the protected `main` workflow after provider-free qualification
+    validation_status: existing Plan 0167 production-scale control pending; residual slow-load red regression not yet written
+    work_items: [CochranResearchGroup/agent-browser#76, CochranResearchGroup/agent-browser#87]
     dependencies: []
-    overlaps: [P190]
-    reconciled_overlaps: [P190]
-    blocker: W5 is locally qualified and awaits protected-main PR and exact-head CI; browser, CAPTCHA, credential, provider, install, shared-runtime, production, and release effects remain prohibited
+    overlaps: []
+    reconciled_overlaps: []
+    blocker: production installation and monitor soak remain live-gated; provider-free source work is active
     updated_at: 2026-09-15
