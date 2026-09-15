@@ -54,12 +54,15 @@
   pull request and record any deferred work separately. A closed issue, merged
   pull request, successful test, deployment, or observed outcome proves only its
   own boundary.
-- Production deployment is allowed only from an exact commit on the configured
-  canonical remote branch. Fetch the remote immediately before release, resolve
-  the candidate SHA from the remote ref rather than a local branch, and verify
-  the commit entered the branch through a merged pull request. Normal deployment
-  uses the current verified remote tip; an authorized rollback may select a
-  previously merged commit on that branch with an incident or rollback record.
+- Production deployment is allowed only from source proven to have entered the
+  configured canonical remote branch. Fetch the remote immediately before
+  release and verify the candidate commit entered through a merged pull request.
+  Normal deployment uses a build from the current verified remote tip, or an
+  immutable pre-merge artifact whose exact source commit is now an ancestor of
+  that tip and whose complete executable-input closure is equivalent to the
+  tip. Record that equivalence and the artifact digest. An authorized rollback
+  may select a previously merged commit on that branch with an incident or
+  rollback record.
 - Before any shared production or staging runtime mutation, inspect and join or
   establish the exact operation defined by policy 0051. The operation record
   and fencing protect integrity but do not grant permission or override current

@@ -5,14 +5,14 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 [Superseded Plan 0186 checkpoints through Turn 328 are preserved separately](RUNBOOK-history-2026-09-14-p186-through-turn328.md).
 Keep this file at or below 200 lines under policy 0043.
 
-## Turn 332 | 2026-09-14
+## Turn 333 | 2026-09-14
 
-[Plan 0190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md) and issue #136 define a deterministic advisory candidate, build, install, and
-recovery orchestrator over the existing workstation transaction. Policies 0051
-and 0052 now distinguish user authority from integrity fencing and reject a
-permanent coordinator or generic permission-service model. The planned tool
-will build once, seal the executable-input closure, and reuse the artifact
-after merge when those inputs remain equivalent. P190 is not admitted for
+[Plan 0190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md) and issue #136 define a deterministic advisory candidate, build, install, and recovery orchestrator over the existing workstation transaction. Policies 0051 and 0052 distinguish user authority from integrity fencing and reject a
+permanent coordinator or generic permission-service model. Plan version 2 adds
+development build and test identity, same-input deduplication, isolated lane
+runtimes, exact receipt reuse, and residue checks. Fast `ci` binaries remain
+non-promotable; one production-shaped release artifact may be tested in
+development and promoted as the same bytes after merge when its source and executable inputs qualify. P190 is not admitted for
 implementation and has no active-lane entry or worktree while existing checkout drift remains. This planning slice performs no build, install, runtime, or
 worktree cleanup effect.
 

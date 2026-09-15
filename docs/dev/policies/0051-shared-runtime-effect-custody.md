@@ -87,14 +87,22 @@ must not hold the install coordination record.
   an isolated output; an equivalent request joins or waits for that claim
   instead of compiling again. Distinct builds may proceed only through the
   repository's resource-admission wrapper and must not share mutable outputs.
+- Classify ordinary `ci`-profile development binaries as fast-iteration
+  artifacts. They may prove behavior but are not production-promotable because
+  their build profile differs from the required production profile.
+- Permit a production-shaped artifact to run first in an isolated development
+  runtime. Promotion reclassifies those exact sealed bytes after qualification;
+  it does not rebuild or copy state from the development runtime.
 - Seal a production candidate once with an immutable manifest that binds its
   source commit and tree, complete executable-input digest, target, toolchain,
-  profile, features, reviewed environment inputs, binary digest, support
-  manifest digest, and validation receipts.
+  profile and resolved profile-configuration digest, features, reviewed
+  environment inputs, embedded dashboard and asset digests, binary digest,
+  support-manifest digest, and validation receipts.
 - After protected-main integration, re-read the canonical remote and determine
-  whether the sealed candidate's source entered it and whether any executable
-  input changed. Reuse the exact artifact when the executable-input closure is
-  equivalent, even when documentation or merge metadata changed.
+  whether the sealed candidate's exact source commit entered its ancestry and
+  whether any executable input changed. Reuse the exact artifact when the
+  executable-input closure is equivalent, even when documentation or merge
+  metadata changed.
 - Rebuild only when an executable input changed, a required artifact or
   manifest is missing, or the candidate cannot be verified. Do not rebuild
   merely because a merge commit has a different identifier.
@@ -119,6 +127,27 @@ must not hold the install coordination record.
 - Record requests, recommendations, selected actions, joins, queue changes,
   cancellations, supersedes, commits, recovery, rollback, and terminal
   readback in an append-only receipt surface without secrets or tenant data.
+
+## Development Test Coordination
+
+- Give each active development lane a stable namespace with disjoint install,
+  home, runtime, socket, port, profile, browser, and provider identities. A test
+  must not borrow production state or another lane's namespace.
+- Identify a test run by candidate digest, test-suite revision and selection,
+  fixture digest, target platform, runtime capability manifest, and relevant
+  environment inputs. An equivalent request joins an active run or reuses a
+  completed receipt when the test declares itself hermetic and every identity
+  still matches.
+- A changed candidate, suite, fixture, target, capability, or relevant
+  environment input starts a new run. Failed, cancelled, partial, quarantined,
+  and provider-backed receipts are never generalized beyond their exact scope.
+- Run provider-free tests concurrently only when their filesystem, process,
+  port, profile, and target outputs are isolated. Serialize tests that truly
+  share a browser, desktop, provider, production-like supervisor, or other
+  workstation resource.
+- On cancellation, timeout, or process exit, preserve the test receipt and run
+  an exact task-owned residue check. Do not interpret client exit as cleanup or
+  use broad process termination to make the next test pass.
 
 ## Interim Operation
 
