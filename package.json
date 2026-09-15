@@ -20,6 +20,7 @@
     "version": "npm run version:sync && git add cli/Cargo.toml Cargo.lock",
     "validation:select": "node scripts/dev/select-validation.js",
     "test:cdp-crate-architecture": "node scripts/test-cdp-crate-architecture.js",
+    "test:candidate-crate-architecture": "node scripts/test-candidate-crate-architecture.js",
     "test:lease-authority-crate-architecture": "node scripts/test-lease-authority-crate-architecture.js",
     "test:desktop-services-crate-architecture": "node scripts/test-desktop-services-crate-architecture.js",
     "test:challenge-control-crate-architecture": "node scripts/test-challenge-control-crate-architecture.js",
