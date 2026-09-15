@@ -25,6 +25,34 @@ ownership and evidence.
   bootstrap or a short tightly coupled batch. It is not the default topology
   for several long-lived implementation lanes.
 
+## Session Versus Subagent Decision
+
+- Give an independently mergeable substantive implementation its own top-level
+  session, primary worktree, branch, work item, and bounded plan. This is the
+  default when the work has its own outcome, source custody, validation, and
+  terminal disposition.
+- Keep tightly coupled changes under one top-level lane when they share a
+  correctness boundary or require one primary writer for the same algorithm,
+  schema, state machine, or runtime authority. A second symptom or acceptance
+  case may remain a linked work item without receiving a competing worktree.
+- Use subagents only for bounded support inside the owning lane, such as
+  read-only investigation, fixture analysis, or review of a frozen candidate.
+  The lane owner reconciles the result. A subagent does not independently own a
+  durable branch, primary worktree, build candidate, installed runtime, or live
+  effect.
+- Do not admit an umbrella item, operational acceptance gate, stale evidence
+  item, or unrefined triage item as an implementation worktree. Keep it in the
+  tracker until it becomes one bounded READY outcome or is split into such
+  outcomes.
+- Queue additional READY items when the operator-directed session portfolio is
+  full. READY means executable, not concurrently admitted. An existing active
+  feature, bugfix, or platform worktree consumes one portfolio slot even when
+  its owner is waiting on review or CI.
+- Prefer fewer genuinely independent lanes over using every available agent
+  slot. Write-surface overlap, dependency order, build pressure, review load,
+  and serialized runtime custody may reduce safe concurrency below the
+  repository warning threshold.
+
 ## Lane Portfolio And Priority
 
 - Use the five product lanes in `docs/dev/product-lanes.md`: `PL-BUGFIX`,
