@@ -33,6 +33,18 @@ current source still derives `custom:<stable-hash>` in `service_profile_id()`
 and contains launch paths that can place the derived service identity into the
 managed runtime-profile field before Chrome validation.
 
+Candidate `fd5bb67f` keeps the established opaque Service State identifier but
+maps only named service profile IDs into `LaunchOptions.runtime_profile`.
+Explicit custom directories continue through `LaunchOptions.profile`, while an
+explicit caller-supplied managed name still reaches the unchanged validator.
+The launch-path regression failed on the original source at the exact identity
+boundary and passes on the candidate. Seven custom-profile tests, the invalid
+managed-name oracle, all 585 native service tests, format, strict workspace
+Clippy, docs build, remote-view docs, and every source-free workstation check
+selected from the full diff pass. The exact current binary also passes the
+workstation install fixture; its two exact disposable daemon residues were
+identified by deleted executable path and terminated after the pass.
+
 Issue #143 owns the separate retained managed-profile owner and inventory
 projection defect. P194 and issues #76 and #87 own Service State persistence
 and locking. P195 must not edit `service_store.rs`, retained-owner projection,
@@ -58,8 +70,8 @@ or the managed profile-name grammar.
 - managed profile validation only as an unchanged compatibility oracle;
 - focused provider-free tests at the launch interface;
 - Plan 0195, roadmap, runbook, and active-lane custody records;
-- user-facing documentation only if the documented `--profile` contract must
-  change, which is not currently expected.
+- user-facing CLI, README, skill, and docs-site clarification of the existing
+  distinction between custom directories and named runtime profiles.
 
 ## Non-Goals
 
@@ -99,10 +111,10 @@ is read-only against the frozen published diff and has no runtime authority.
 | --- | --- | --- |
 | Exact reproduction | Focused provider-free launch-path test using an absolute custom profile | Baseline deterministically returns the current invalid managed-profile error |
 | Custom path behavior | The same test on the candidate | Launch shaping preserves the explicit path and does not set a custom service ID as a managed runtime profile |
-| Stable identity | Repeated and alias-aware fixture cases | The same canonical path yields one opaque identity without exposing the path |
-| Path separation and collision resistance | Distinct-path and deterministic digest cases | Distinct canonical paths produce distinct full-strength identities |
+| Stable identity | Repeated derivation fixture | The same exact path yields one opaque identity without exposing the path |
+| Path separation and collision resistance | A deterministic 4,096-path corpus | Every distinct fixture path produces a distinct opaque identity |
 | Managed-name compatibility | Existing and focused invalid-name tests | Valid managed names remain accepted and invalid names remain rejected |
-| Changed surfaces | `pnpm validation:select -- --base 81de07cfb5790685ff506bdabff3609e92fd5eeb`, focused tests, format, strict Clippy, and required broader lane | Every selected source gate passes on one frozen checkpoint |
+| Changed surfaces | `pnpm validation:select -- --base f1435195bcdde4f63fb2371cfdb4008c74b34875`, focused tests, format, strict Clippy, docs build, native service compartment, and workstation fixtures | Every selected source gate passes on the frozen candidate |
 | Integration | Remote branch, linked PR, exact-head checks, and merged-main readback | The repair enters `origin/main` through the protected workflow |
 | Live boundary | Explicitly not applicable | No browser, install, profile, provider, or production mutation occurs |
 

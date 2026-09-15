@@ -13,9 +13,9 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 341 | 2026-09-15
 
-[Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md) admits issue #131 on `fix/issue-131-custom-profile-identity` from `origin/main` checkpoint `81de07cf`.
-The packet preserves custom path identity without treating its opaque service ID as a managed runtime-profile name. It excludes P194's `service_store.rs`
-and all browser, install, provider, production, or release effects.
+[Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md) candidate `fd5bb67f` fixes issue #131 without touching P194's `service_store.rs`.
+The red launch-path regression is green; focused and native-service Rust, strict Clippy, docs, and selected workstation checks pass. Protected integration
+remains. No browser, install, provider, production, or release effect occurred; exact disposable workstation fixture residue was terminated after validation.
 
 ## Turn 340 | 2026-09-15
 

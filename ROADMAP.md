@@ -31,11 +31,12 @@ State: OPEN
 
 Current state: [Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md)
 and [issue #131](https://github.com/CochranResearchGroup/agent-browser/issues/131)
-own a provider-free repair for the documented custom `--profile` path flow.
-The packet must keep the opaque service profile identity distinct from managed
-runtime-profile names, preserve the existing managed-name grammar, and avoid
-the P194 Service State persistence surface. No browser, profile, install,
-provider, production, or release effect is authorized.
+own candidate `fd5bb67f` for the documented custom `--profile` path flow. The
+repair keeps opaque service identity out of managed runtime-profile validation
+while preserving explicit paths and the managed-name grammar. Focused and
+native-service Rust, strict Clippy, docs, and selected workstation gates pass.
+Protected integration remains; no browser, install, provider, production, or
+release effect occurred.
 
 ## P194 | Service State Load-Current Contention Repair
 

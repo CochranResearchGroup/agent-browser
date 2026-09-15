@@ -50,13 +50,13 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 81de07cfb5790685ff506bdabff3609e92fd5eeb
+    checkpoint: fd5bb67f
     remote_ref: refs/remotes/origin/fix/issue-131-custom-profile-identity
     integration: merge through the protected `main` workflow after provider-free qualification
-    validation_status: exact red launch-path regression not yet written
+    validation_status: red reproduced; candidate passes focused and native-service Rust, format, strict Clippy, docs, and selected workstation checks
     work_items: [CochranResearchGroup/agent-browser#131]
     dependencies: []
     overlaps: [P194]
     reconciled_overlaps: [P194]
-    blocker: P194 owns service_store.rs and shared persistence; P195 is source-disjoint and permits no browser, profile, install, provider, production, or release effect
+    blocker: protected integration remains; P195 is source-disjoint from P194 and permits no browser, profile, install, provider, production, or release effect
     updated_at: 2026-09-15
