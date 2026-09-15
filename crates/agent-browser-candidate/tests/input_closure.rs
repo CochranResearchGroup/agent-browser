@@ -1,6 +1,7 @@
 use agent_browser_candidate::{
-    ArtifactClass, CandidateManifest, ExecutableInput, ExecutableInputClosure,
-    ExecutableInputContext, InputCategory, SourceProvenance, SourceTreeState,
+    ArtifactClass, BuildProfileConfiguration, CandidateManifest, ExecutableInput,
+    ExecutableInputClosure, ExecutableInputContext, InputCategory, SourceProvenance,
+    SourceTreeState,
 };
 use std::collections::BTreeMap;
 
@@ -17,7 +18,7 @@ fn context() -> ExecutableInputContext {
         target: "x86_64-unknown-linux-gnu".to_string(),
         toolchain: "rustc 1.90.0".to_string(),
         cargo_profile: "release".to_string(),
-        resolved_build_profile_sha256: digest('a'),
+        resolved_build_profile: BuildProfileConfiguration::production_release(),
         features: vec!["desktop".to_string(), "service".to_string()],
         reviewed_environment_inputs: BTreeMap::from([
             ("CARGO_PROFILE_RELEASE_LTO".to_string(), digest('b')),

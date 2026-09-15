@@ -11,9 +11,13 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 mod advice;
+mod build;
+mod promotion;
 mod transition;
 
 pub use advice::*;
+pub use build::*;
+pub use promotion::*;
 pub use transition::*;
 
 pub const EXECUTABLE_INPUT_CLOSURE_SCHEMA_VERSION: &str =
@@ -74,7 +78,7 @@ pub struct ExecutableInputContext {
     pub target: String,
     pub toolchain: String,
     pub cargo_profile: String,
-    pub resolved_build_profile_sha256: String,
+    pub resolved_build_profile: BuildProfileConfiguration,
     pub features: Vec<String>,
     /// Values are SHA-256 digests of reviewed build-affecting values. Raw
     /// environment values, which may contain secrets, are never accepted.
@@ -97,10 +101,7 @@ impl ExecutableInputClosure {
         validate_nonempty("target", &context.target)?;
         validate_nonempty("toolchain", &context.toolchain)?;
         validate_nonempty("cargo_profile", &context.cargo_profile)?;
-        validate_sha256(
-            "resolved_build_profile_sha256",
-            &context.resolved_build_profile_sha256,
-        )?;
+        context.resolved_build_profile.validate()?;
 
         context.features.sort();
         context.features.dedup();
@@ -161,6 +162,42 @@ pub enum ArtifactClass {
     ProductionShaped,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BuildProfileConfiguration {
+    pub opt_level: String,
+    pub lto: String,
+    pub codegen_units: u32,
+    pub strip: bool,
+}
+
+impl BuildProfileConfiguration {
+    pub fn production_release() -> Self {
+        Self {
+            opt_level: "3".to_string(),
+            lto: "fat".to_string(),
+            codegen_units: 1,
+            strip: true,
+        }
+    }
+
+    pub fn digest(&self) -> String {
+        digest_serializable(self)
+    }
+
+    fn validate(&self) -> Result<(), CandidateError> {
+        validate_nonempty("profile_opt_level", &self.opt_level)?;
+        validate_nonempty("profile_lto", &self.lto)?;
+        if self.codegen_units == 0 {
+            return Err(CandidateError::new(
+                "invalid_codegen_units",
+                "build profile codegen units must be positive",
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceTreeState {
@@ -195,6 +232,7 @@ pub struct CandidateManifest {
     pub support_manifest_sha256: String,
     pub created_at: String,
     pub artifact_class: ArtifactClass,
+    pub resolved_build_profile: BuildProfileConfiguration,
     pub resolved_build_profile_sha256: String,
     pub validation_receipts: Vec<String>,
 }
@@ -261,7 +299,8 @@ impl CandidateManifest {
             support_manifest_sha256,
             created_at,
             artifact_class,
-            resolved_build_profile_sha256: closure.context.resolved_build_profile_sha256.clone(),
+            resolved_build_profile: closure.context.resolved_build_profile.clone(),
+            resolved_build_profile_sha256: closure.context.resolved_build_profile.digest(),
             validation_receipts: Vec::new(),
         })
     }
