@@ -4,7 +4,7 @@ Date: 2026-09-13
 
 Revised: 2026-09-14
 
-State: OPEN
+State: CLOSED
 
 Lane: P183
 
@@ -176,3 +176,14 @@ exact row without changing owner authority, a fresh dry-run is ready, one apply
 is accepted, installed SHA matches the integrated candidate, the supervisor
 and selected runtime host are coherent, admission drain is absent, and retained
 BILL identity is unchanged.
+
+## Closure Evidence
+
+PR #107 merged exact source head
+`c23ebf575ff3a6439481c7309f2ee8544452237e` as
+`12848e34a318ad7a8af3c99b2454e7b0e1db8ba9`, and issue #104 closed. Plan
+0186's later accepted cumulative preserving install retained the protected
+Last30Days owner at generation 90 while final doctor proved coherent supervisor,
+runtime-host, admission-drain, monitor, and lease state. This supplies the
+installed acceptance that P183 left to the successor chain without changing
+authentication or tenant state.

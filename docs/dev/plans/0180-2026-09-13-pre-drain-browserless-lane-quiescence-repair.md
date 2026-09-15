@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-State: OPEN
+State: CLOSED
 
 Lane: P180
 
@@ -342,3 +342,16 @@ browserless lane before drain, if pre-drain interruption cannot be made
 idempotent without a broader state-machine change, if a browser-bearing or
 unproven lane would be affected, or if one installed apply does not reach a
 coherent terminal state.
+
+## Closure Evidence
+
+PR #97 merged exact source head
+`949101b77656236ef21a0688e602f1fdf63b2d0b` as
+`44e5dc16971cb7a09ad36842d0b517a7369eb853`. Plan 0186 later qualified and
+installed a cumulative candidate containing this repair through accepted
+preserving transaction `upgrade-bacc8671-6067-4820-bb0f-7d264a446615`.
+Final doctor proved one selected runtime host, one dashboard process, no legacy
+daemon, no admission drain, a healthy monitor, and 43 healthy profile leases.
+That cumulative acceptance satisfies P180's installed transaction and runtime
+coherence boundary. It does not close P182's separately gated Authentication
+Run acceptance.

@@ -56,11 +56,14 @@ platform dependencies even when an authentication reset is the selected action.
 - [Operator-visible window focus gap](0133-2026-08-25-operator-visible-window-focus-gap-handoff.md)
 - [Stealth Chromium instrumentation boundary](0114-2026-08-14-chromium-instrumentation-boundary-and-install.md)
 
-The current Turnstile and CAPTCHA roadmap sources live on
-`feature/turnstile-desktop-challenge` at `17791566`. Plan 0169 is the active
-challenge proof. The roadmap currently labeled P173 must receive a new unique
-plan identifier before integration because canonical P173 already names the
-closed retained-browser repair.
+The active challenge product trunk lives on
+`challenge/p169-control-plane` at `fec7fd87` through branch-local Plan 0187,
+issue #127, leaf issue #66, and draft PR #128. The original
+`feature/turnstile-desktop-challenge` ref remains historical custody for the
+Turnstile-specific proof; it is not the active worktree or catalog branch.
+Branch-local Plans 0188 and 0189 preserve the provider-neutral guard contract
+and blocked hCaptcha leaf respectively. No challenge replay or browser effect
+is authorized by this index.
 
 ## PL-RECIPES | Reusable Automation
 

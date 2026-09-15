@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-State: OPEN
+State: CLOSED
 
 Lane: P185
 
@@ -119,3 +119,15 @@ acceptance, the exact installed binary and selected generation, one supervised
 runtime host, no admission drain, coherent stream publication, preserved route
 profiles, preserved external browser custody, and unchanged Last30Days
 principal, capability, owner identity, and owner generation.
+
+## Closure Evidence
+
+PR #111 merged exact source head
+`ca590fadfb178accbb25b90afa934dda739bd711` as
+`ffc6e5100911354529f8bdc2e922df767c5db26b`, and issue #110 closed. Plan
+0186's accepted cumulative transaction finalized canonical route viewers A, B,
+and C as distinct managed-profile handoff lanes. Their later cleanup was
+terminal and satisfied, and final doctor proved one runtime host, no admission
+drain, healthy monitor state, 43 healthy profile leases, and unchanged
+Last30Days generation-90 authority. This satisfies P185's deferred runtime
+acceptance.
