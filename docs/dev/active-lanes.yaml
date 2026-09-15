@@ -13,7 +13,7 @@ lanes:
     checkpoint: fec7fd8729679c1649c838ef5d317ea86179323f
     remote_ref: refs/remotes/origin/challenge/p169-control-plane
     integration_receipt: null
-    integration: "merge through the protected `main` workflow after custody normalization"
+    integration: merge through the protected `main` workflow after custody normalization
     work_items: [CochranResearchGroup/agent-browser#127, CochranResearchGroup/agent-browser#66]
     dependencies: []
     overlaps: [P190]
