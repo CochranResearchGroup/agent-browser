@@ -10,10 +10,10 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 81de07cfb5790685ff506bdabff3609e92fd5eeb
+    checkpoint: 6acc15ad79af3465a7cb940072c2bff6d3035edf
     remote_ref: refs/remotes/origin/fix/issue-76-service-state-lock
     integration: merge through the protected `main` workflow after provider-free qualification
-    validation_status: existing Plan 0167 production-scale control pending; residual slow-load red regression not yet written
+    validation_status: red reproduced at 1002 ms; candidate passes 41 service_store tests, exact production-scale replay, format, and strict Clippy
     work_items: [CochranResearchGroup/agent-browser#76, CochranResearchGroup/agent-browser#87]
     dependencies: []
     overlaps: []

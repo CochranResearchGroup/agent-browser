@@ -50,6 +50,14 @@ during P194 admission. This plan replaces the stale P169 active-lane projection.
 No production runtime, browser, profile, provider, or Service State mutation is
 authorized by this plan.
 
+Candidate checkpoint `6acc15ad` replaces the full reload with a persisted
+revision-only probe when transaction recovery is not pending. Stores without a
+cheaper probe retain the full-load default; pending recovery still uses the
+complete recovery path. The red fixture failed on unchanged production logic at
+1,002 ms with an active `prepared_commit/load_current` holder and passed on the
+candidate with a 9,642,672-byte fixture. All 41 `service_store` tests, format,
+and strict workspace Clippy pass. Protected integration remains open.
+
 ## Consolidated Batch
 
 1. Retain the existing Plan 0167 production-scale fixture as the green control.
@@ -125,6 +133,23 @@ published diff and has no runtime or integration authority.
 | Changed surfaces | `pnpm validation:select -- --base 81de07cfb5790685ff506bdabff3609e92fd5eeb`, focused tests, format, strict Clippy, and required broader lane | Every selected source gate passes on one frozen checkpoint |
 | Integration | Remote branch, linked PR, exact-head checks, and merged-main readback | Source repair enters `origin/main` through the protected workflow |
 | Live boundary | Explicitly separate later authorization and installed receipt | Production install and monitor soak remain open until separately authorized |
+
+## Execution Evidence
+
+- Green control before repair:
+  `production_scale_independent_mutations_do_not_timeout_behind_slow_preparation`.
+- Red baseline on unchanged production logic: 9,644,366 bytes, 1,002 ms,
+  `service_state_lock_timeout`, validated active holder operation
+  `prepared_commit`, phase `load_current`.
+- Candidate replay: 9,642,672 bytes, zero timeout, contender completed in
+  1,027 ms end to end while each individual lock acquisition retained the
+  ordinary one-second deadline.
+- Focused family: 41 `service_store` tests passed, including transaction
+  atomicity, crash residue, durable holder attribution, slow preparation, slow
+  current load, no-op freshness, and two-adjacent-revision convergence.
+- Quality gates: Rust format check and strict workspace Clippy passed.
+- No production runtime, browser, profile, provider, install, retry, or Service
+  State effect occurred.
 
 ## Stop Condition
 

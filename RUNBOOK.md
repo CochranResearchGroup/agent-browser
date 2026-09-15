@@ -13,13 +13,14 @@ Keep this file at or below 200 lines under policy 0043.
 
 ## Turn 339 | 2026-09-15
 
-P194 is admitted on `fix/issue-76-service-state-lock` for issue #76. Plan 0167
-already covers slow preparation at 9.64 MB; the residual incident instead names
-`prepared_commit/load_current`, whose full-state reload remains under exclusive
-ownership. P194 will first add that missing multi-process red case, then repair
-only the evidenced phase and cover issue #87's pure one-revision replay. PR #142
-is merged as `81de07cf`, and its clean P169 worktree is retired. No production,
-browser, profile, provider, installation, or retry effect occurred.
+P194 candidate `6acc15ad` repairs issue #76's residual
+`prepared_commit/load_current` timeout. Its new 9.64 MB multi-process case
+failed on unchanged logic at 1,002 ms with exact holder attribution, then passed
+after the freshness fence switched from a full state reload to a persisted
+revision-only probe when recovery is not pending. All 41 `service_store` tests,
+format, and strict Clippy pass, including issue #87's pure adjacent-revision
+convergence. PR #142 is merged as `81de07cf`, and its clean P169 worktree is
+retired. Protected integration remains; no production or browser effect occurred.
 
 ## Turn 338 | 2026-09-15
 
