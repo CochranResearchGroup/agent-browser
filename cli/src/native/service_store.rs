@@ -444,15 +444,23 @@ impl ServiceStateStore for JsonServiceStateStore {
                 ))
             }
         };
-        serde_json::from_slice::<PersistedServiceStateRevision>(&raw)
-            .map(|state| state.state_revision)
+        let display_path = self.path.display().to_string();
+        std::thread::Builder::new()
+            .name("service-state-revision-json".to_string())
+            .stack_size(SERVICE_STATE_JSON_STACK_BYTES)
+            .spawn(move || {
+                serde_json::from_slice::<PersistedServiceStateRevision>(&raw)
+                    .map(|state| state.state_revision)
+            })
             .map_err(|error| {
                 format!(
-                    "Invalid service state JSON {}: {}",
-                    self.path.display(),
-                    error
+                    "Failed to start service state revision JSON parser for {}: {}",
+                    display_path, error
                 )
-            })
+            })?
+            .join()
+            .map_err(|_| format!("Service state revision JSON parser panicked for {display_path}"))?
+            .map_err(|error| format!("Invalid service state JSON {display_path}: {error}"))
     }
 
     fn recovery_required(&self) -> bool {
@@ -2525,7 +2533,7 @@ mod tests {
 
         let runtime =
             crate::native::daemon::build_runtime(1).expect("fixture daemon runtime should build");
-        let (decoded, loaded) = runtime.block_on(async move {
+        let (decoded, loaded, revision) = runtime.block_on(async move {
             tokio::spawn(async move {
                 let decoded = decode_service_state_value(&embedded);
                 let result = store.load();
@@ -2534,7 +2542,8 @@ mod tests {
                         .save(state)
                         .expect("large service state should save from a constrained worker");
                 }
-                (decoded, result)
+                let revision = store.load_revision_without_recovery();
+                (decoded, result, revision)
             })
             .await
             .expect("service-state loader task should not crash")
@@ -2545,6 +2554,10 @@ mod tests {
 
         assert_eq!(decoded.remote_view_acquisition_leases.len(), 640);
         assert_eq!(loaded.remote_view_acquisition_leases.len(), 640);
+        assert_eq!(
+            revision.expect("revision probe should use its bounded JSON stack"),
+            loaded.state_revision
+        );
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
