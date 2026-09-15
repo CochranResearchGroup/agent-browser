@@ -502,7 +502,8 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 - Read policy `0052-session-and-worktree-admission.md` at the start and closeout
   of every top-level development session and before any primary, reviewer,
   benchmark, fixture, red-team, or replacement worktree is created or
-  assigned. Only the coordinator admits durable worktrees.
+  assigned. Serialize conflicting Git transitions; do not invent a permanent
+  coordinator or permission role.
 - Read policies `0048-forge-issue-reporting.md` and
   `0049-github-issue-operations.md` before any issue provider mutation,
   including settings, labels, issue creation, editing, assignment, planning,

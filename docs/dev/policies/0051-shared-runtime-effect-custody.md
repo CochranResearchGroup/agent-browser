@@ -1,109 +1,139 @@
-# Policy | Shared Runtime Effect Custody
+# Policy | Shared Runtime Effect Coordination And Integrity
 
 ## Purpose
 
-Prevent concurrent sessions from racing on one shared Agent Browser runtime.
-Source ownership, operator authority, process serialization, and live-effect
-custody are separate claims. None implies another.
+Coordinate concurrent Agent Browser runtime effects without turning workflow
+advice into permission authority. The operator owns the system and decides
+whether to build, cancel, discard, install, supersede, recover, or roll back.
+Tooling makes current state and consequences visible, performs the selected
+transition coherently, and prevents competing transactions from corrupting the
+runtime.
+
+## Authority Boundary
+
+- User direction and the applicable goal or work-item authority determine
+  whether an agent may request an effect. An issue, plan, branch, agent role,
+  lease, recommendation, or successful check does not independently grant or
+  revoke that authority.
+- Treat the runtime coordination lease as an integrity mechanism, not a
+  permission service. It selects the transaction currently allowed to commit
+  mutations and fences superseded writers.
+- Do not require a permanent coordinator agent. Any session acting within
+  current user authority may inspect state and request a supported transition.
+  The exact active operation, not an agent title, defines temporary execution
+  custody.
+- Ask for new user direction only when the requested effect exceeds current
+  authority or selects a materially different outcome. Do not manufacture
+  repeated approval stops for routine recovery inside an already authorized
+  operation.
 
 ## Covered Effects
 
-Apply this policy before any command that can mutate a shared production or
-staging Agent Browser environment, including:
+Apply this policy to production or staging workstation installation, recovery,
+rollback, generation retirement, effectful reconciliation or garbage
+collection, supervisor or ingress mutation, Service State migration, browser
+or profile recovery, browser closure, route replacement, and force or
+full-shutdown transitions.
 
-- workstation install, resume, recovery, rollback, or generation retirement;
-- effectful runtime reconciliation or garbage collection;
-- runtime or dashboard supervisor start, stop, restart, takeover, or ingress
-  promotion;
-- shared Service State migration, browser or profile recovery, browser closure,
-  or route replacement; and
-- any force or full-shutdown mode that can replace, terminate, or supersede a
-  shared runtime owner.
+Read-only status, doctor, journal, process census, Git, artifact inspection, and
+build operations do not require the runtime coordination lease when they
+cannot trigger repair or mutation. Builds remain isolated from production and
+must not hold the install coordination record.
 
-Read-only status, doctor, journal, process-census, Git, and build operations do
-not require effect custody when they cannot trigger repair or mutation. Builds
-remain isolated from production and confer no install authority.
+## Advisory Outcome Contract
 
-## Single-Owner Contract
+- Report observed state, evidence, recommended action, supported alternatives,
+  expected consequences, resource cost, and any integrity preconditions.
+  Recommendations are advisory and must not be represented as permission.
+- Support explicit operator-directed transitions such as start, join, wait,
+  cancel, discard, queue, supersede, install, resume, recover, and rollback
+  when the underlying runtime can perform them coherently.
+- Reserve `authorization_required` for a genuine absence of user authority.
+  Use typed operational states such as `joined_existing`, `queued`,
+  `rebuild_required`, `superseded`, `recovery_required`, or
+  `integrity_precondition_failed` for other outcomes. Do not collapse ordinary
+  contention or drift into a generic permission denial.
+- When a requested transition cannot execute safely, explain the exact
+  conflicting operation or invariant and offer the supported next actions. A
+  safety stop must protect a named integrity boundary, not enforce a preferred
+  workflow choice.
 
-- Keep at most one active effect-custody lease per target environment. The
-  environment's runtime control plane is the authority for that lease. An issue
-  comment, chat message, plan, branch, active-lane entry, shell PID, file lock,
-  or agent status is discovery evidence only.
-- Acquire custody through an atomic compare-and-swap before the first covered
-  effect. A command must submit the exact lease ID and revision, and the target
-  runtime must reject absent, stale, expired, released, transferred, or
-  mismatched custody before effect.
-- Bind the lease to the environment, accountable principal, execution session,
-  work item, bounded operation, allowed action set, source commit, candidate
-  binary digest when applicable, acquisition time, expiry, heartbeat, revision,
-  and state. Do not store secrets or tenant payloads in the lease.
-- Treat operating-system and installer file locks as short critical-section
-  serialization only. Acquiring a file lock does not acquire, renew, transfer,
-  or prove effect custody.
-- Keep one controller responsible for the complete effect sequence. A helper or
-  second session may build, inspect, or review, but it must not mutate the same
-  environment under the controller's lease.
+## Transaction And Fencing Contract
 
-## Validation And Renewal
+- Keep at most one committing install or recovery transaction per target
+  environment. Record it durably with environment, operation ID, candidate
+  identity, binary and support digests, current revision, fencing generation,
+  requested action, actor, timestamps, state, and last verified progress.
+- Acquire or change the committing transaction through atomic compare and
+  swap. Every mutating phase submits the exact operation ID, revision, and
+  fencing generation. A superseded writer cannot commit after the new
+  generation becomes active.
+- A same-candidate request joins, observes, or resumes the existing operation
+  instead of creating another. A different candidate request reports the
+  active operation and supports explicit queue, cancel, discard, or
+  transactional supersede choices.
+- A logical transaction may span a long install, but no operating-system file
+  mutex or Service State lock may span compilation, CI, artifact upload,
+  network waits, process convergence waits, or large serialization. Hold each
+  physical lock only for its bounded read, compare, or commit section.
+- Use one documented lock order for every mutation: coordination transaction,
+  install transaction, supervisor or runtime mutation, then Service State
+  commit. Release physical locks in reverse order.
 
-- Immediately before each covered effect, re-read the authoritative lease and
-  verify its environment, holder, revision, state, allowed action, source
-  commit, candidate digest, and expiry. Re-read relevant runtime transaction,
-  admission-drain, supervisor, listener, and protected-owner evidence in the
-  same preflight.
-- Renew only by compare-and-swap from the current revision. A heartbeat extends
-  time, not scope. Changing the candidate, action set, environment, or owner
-  requires a new lease or an atomic transfer.
-- A CLI process exit, timed-out client request, idle agent, completed build,
-  clean worktree, or stale chat report does not release custody. The lease
-  remains authoritative until a terminal release, transfer, expiry plus
-  successful reclamation, or environment reset produces a durable receipt.
-- After a timeout or ambiguous command result, inspect the exact operation and
-  lease receipts before retrying. Do not infer `no_effect` from client exit or
-  loss of connection.
+## Artifact Reuse
 
-## Transfer, Release, And Recovery
+- Deduplicate builds by executable-input digest, target, toolchain, profile,
+  features, and reviewed environment inputs. The first active claim builds into
+  an isolated output; an equivalent request joins or waits for that claim
+  instead of compiling again. Distinct builds may proceed only through the
+  repository's resource-admission wrapper and must not share mutable outputs.
+- Seal a production candidate once with an immutable manifest that binds its
+  source commit and tree, complete executable-input digest, target, toolchain,
+  profile, features, reviewed environment inputs, binary digest, support
+  manifest digest, and validation receipts.
+- After protected-main integration, re-read the canonical remote and determine
+  whether the sealed candidate's source entered it and whether any executable
+  input changed. Reuse the exact artifact when the executable-input closure is
+  equivalent, even when documentation or merge metadata changed.
+- Rebuild only when an executable input changed, a required artifact or
+  manifest is missing, or the candidate cannot be verified. Do not rebuild
+  merely because a merge commit has a different identifier.
+- Pin queued and active candidate generations against garbage collection until
+  they become installed, discarded, superseded, or terminally failed.
 
-- Transfer custody atomically from the current holder to one named successor.
-  Bind the transfer to the prior lease revision, a single-use nonce, the same
-  environment, the intended remaining action set, and both parties' readback.
-  The old lease becomes unusable in the same state transition that activates
-  the successor.
-- Release only after the covered operation is terminal or deliberately
-  stopped, no task-owned effect remains in flight, and the release receipt
-  records the final transaction, supervisor, listener, candidate, and protected
-  owner state relevant to the operation.
-- Reclaim an expired or apparently abandoned lease only after positive evidence
-  proves the former controller and its effectful child processes absent, no
-  covered command or transaction remains active, and current runtime state is
-  coherent. Record the stale-owner evidence and the new lease revision.
-- If two sessions claim custody, or a covered effect occurs without a valid
-  lease, stop new effects. Preserve processes and profiles, reconcile the
-  authoritative lease and runtime receipts, select one controller, and resume
-  only through a new or transferred lease. Do not solve the collision with a
-  force flag, broader shutdown, or blind retry.
+## Timeout, Recovery, And Progress
 
-## Coordination And Audit
+- A CLI exit, connection timeout, idle agent, completed build, clean worktree,
+  or stale chat report does not prove an operation terminal. Re-read the exact
+  durable operation before choosing another transition.
+- Resume a partially committed installation through the existing workstation
+  transaction. Do not start a parallel replacement or infer `no_effect` from a
+  disconnected client.
+- Expiry alone does not permit a former writer to continue or a successor to
+  commit. Recovery establishes the current fencing generation, process and
+  transaction state, selected generation, supervisor and listener state, and
+  protected runtime owners before selecting the next safe transition.
+- Renew logical custody only while durable progress is observable. A stalled
+  operation cannot heartbeat indefinitely. Queue entries do not hold the
+  committing transaction or physical locks and are revalidated when selected.
+- Record requests, recommendations, selected actions, joins, queue changes,
+  cancellations, supersedes, commits, recovery, rollback, and terminal
+  readback in an append-only receipt surface without secrets or tenant data.
 
-- Work items and active lanes state which owner may request live-effect custody
-  and name known overlaps. They must not project a local lease as globally
-  active authority unless the runtime confirms the exact current revision.
-- Record acquisition, renewal, denied attempts, transfer, release, reclamation,
-  and mismatch events in an append-only audit surface. Each receipt includes
-  environment, lease and revision, holder, operation, candidate identity when
-  applicable, timestamp, result, and redacted reason.
-- Installation and runtime tooling must eventually enforce this contract. Until
-  that enforcement is installed and proven, serialize shared production and
-  staging effects through one coordinator session and require an explicit
-  current custody checkpoint plus a fresh runtime readback before every covered
-  command. This procedural fallback reduces risk but is not equivalent to the
-  runtime-enforced contract.
+## Interim Operation
+
+Until the advisory orchestrator is implemented, perform only one user-directed
+production or staging mutation at a time. Any currently authorized session may
+perform it after fresh transaction and runtime readback; no permanent
+coordinator designation is required. Other sessions may continue builds,
+tests, inspection, and isolated development work. If the operator redirects
+the active effect, reconcile or stop the current transaction first and record
+the chosen handoff, cancellation, or supersede action.
 
 ## Adoption Notes
 
-This is an Agent Browser repo-local extension identified after the Plan 0186
-installer collision. It composes with active-lane coordination, runtime-state
-governance, multi-agent reconciliation, and collaborative development. It is a
-candidate for a reusable shared-policy module after runtime enforcement proves
-the lease schema and recovery semantics.
+This Agent Browser repo-local extension responds to the Plan 0186 installer
+collision and the subsequent policy review. It composes with active-lane
+coordination, runtime-state governance, multi-agent reconciliation, and
+collaborative development. Plan 0190 owns the deterministic advisory tool that
+will implement this contract over the existing workstation transaction.

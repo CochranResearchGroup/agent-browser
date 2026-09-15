@@ -25,6 +25,20 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P190 | Advisory Candidate Build And Promotion Orchestrator
+
+State: PLANNED
+
+Current state: [Plan 0190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
+and [issue #136](https://github.com/CochranResearchGroup/agent-browser/issues/136)
+define an advisory candidate, build, install, and recovery surface over the
+existing workstation transaction. It will expose evidence, recommendations,
+alternatives, and consequences while fencing concurrent corrupting commits.
+It will seal one production artifact and reuse it after merge when executable
+inputs are equivalent. Policies 0051 and 0052 now reject permanent coordinator
+or permission-service semantics. P190 is not admitted for implementation and
+has no active-lane entry or worktree while current checkout drift remains.
+
 ## P186 | Route Viewer Admission Drain Recovery
 
 State: CLOSED

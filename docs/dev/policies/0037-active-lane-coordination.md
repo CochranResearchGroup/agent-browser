@@ -27,10 +27,10 @@
 - Fetching is a caller-controlled operation. A lane auditor must remain read-only and must not fetch, merge, rebase, push, delete refs, remove worktrees, edit plans, or infer authority from a clean report.
 - Register normal work before parallel execution begins. An urgent lane may start first only when delay creates greater risk; register and publish its first recoverable checkpoint at the earliest safe boundary.
 - Treat lane registration as necessary but not sufficient for local worktree
-  admission. The coordinator assigns at most one primary worktree to each
-  admitted top-level development session under
-  `0052-session-and-worktree-admission.md`; unregistered and detached
-  checkouts remain part of the required local inventory.
+  admission. Assign at most one primary worktree to each active top-level
+  development session through one serialized transition under policy 0052;
+  unregistered and detached checkouts remain part of the required local
+  inventory. No permanent coordinator agent is required.
 - Do not silently resolve catalog conflicts. Duplicate lane ids, two lanes claiming one branch, missing custody, stale checkpoints, active local/remote mismatch, plan/catalog drift, and unresolved overlaps fail closed until reconciled.
 - Keep the catalog current through the repository's protected-default-branch workflow. A lane branch may propose its own registration, but it is not globally discoverable until that projection lands on the configured default ref.
 - Reconcile worktree lifecycle with lane state. An integrated, archived, paused,

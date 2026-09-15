@@ -28,19 +28,21 @@ same time, the active-lane catalog contained stale checkpoints and claimed an
 active bugfix worktree that was absent.
 
 The existing policy stated one worktree per lane and a hard repository ceiling
-of six. It did not make the current cap equal the explicitly admitted session
-portfolio, reserve worktree creation to the coordinator, or require temporary
-review and benchmark checkouts to close within their parent slice. It therefore
+of six. It did not relate the expected population to the user-directed session
+portfolio, serialize concurrent worktree creation, or require temporary review
+and benchmark checkouts to close within their parent slice. It therefore
 described the intended topology without preventing incremental accumulation.
 
 ## Local Override
 
-Policy `0052-session-and-worktree-admission.md` makes worktree creation a
-serialized coordinator action. Each admitted top-level development session may
-own one primary worktree. Auxiliary checkouts remain parent-owned, temporary,
-and blocking to further admission if they survive their bounded slice. Every
-admission inspects the complete local worktree population, including detached
-and unregistered checkouts, rather than trusting only the active-lane catalog.
+Policy `0052-session-and-worktree-admission.md` makes each worktree transition
+serialized and evidence-based without assigning permission power to a
+permanent coordinator. Each active top-level development session normally owns
+one primary worktree. Auxiliary checkouts remain parent-owned and temporary.
+Every admission inspects the complete local worktree population, including
+detached and unregistered checkouts, rather than trusting only the active-lane
+catalog. Unexpected drift suspends automatic creation and produces advice; the
+operator may still direct a specific disposition after reviewing the evidence.
 
 The current dirty or detached worktrees are preserved for reconciliation. This
 policy correction does not authorize their deletion, reset, merge, or rewrite.
@@ -48,6 +50,8 @@ policy correction does not authorize their deletion, reset, merge, or rewrite.
 ## Upstream Candidate
 
 The shared policy library should add transactional session and worktree
-admission to its multi-session and worktree modules. A reusable implementation
-should provide a repository-scoped admission lock, an admitted-portfolio
-receipt, complete local inventory classification, and exact closeout receipts.
+coordination to its multi-session and worktree modules. A reusable
+implementation should provide a repository-scoped transition lock, a portfolio
+receipt, complete local inventory classification, supported choices, and exact
+closeout receipts. The lock prevents snapshot races; it does not determine
+operator permission.

@@ -36,16 +36,23 @@ That omission lets advisory coordination be mistaken for enforceable custody.
 ## Local Override
 
 Policy `0051-shared-runtime-effect-custody.md` adds the missing Agent Browser
-contract. It makes the runtime control plane authoritative, treats file locks as
-serialization only, binds every covered effect to an exact lease revision, and
-defines transfer and stale-owner recovery. Until implementation is installed,
-one coordinator session serializes production and staging effects with fresh
-readback before every covered command.
+contract. A subsequent operator review corrected its initial authority model:
+the runtime control plane protects transaction integrity but does not decide
+whether the user may build, install, supersede, recover, or roll back. The
+revised policy treats its lease as a compare-and-swap and fencing mechanism,
+supports explicit operator-selected transitions, and rejects a permanent
+coordinator role. Until implementation is installed, sessions serialize each
+production or staging mutation from fresh transaction and runtime evidence.
+
+Plan 0190 owns the deterministic advisory orchestrator. It must report state,
+recommendations, alternatives, and consequences without turning ordinary
+contention into `permission_denied`. It must reuse sealed build artifacts when
+their executable-input closure remains equivalent after merge.
 
 ## Upstream Candidate
 
-The shared policy library should consider a reusable `shared-runtime-effect-custody`
-module for operations platforms with concurrent agent sessions. The module
-should remain separate from generic active-lane and collaborative-development
-policy because source coordination and runtime effect authority have different
-lifecycle and enforcement requirements.
+The shared policy library should consider a reusable runtime-effect
+coordination module for operations platforms with concurrent agent sessions.
+It should distinguish user authority, advisory workflow, logical transactions,
+and short physical locks. Runtime fencing may reject stale writers to preserve
+integrity, but it must not become an agent-role permission service.
