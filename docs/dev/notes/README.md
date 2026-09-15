@@ -91,6 +91,7 @@ reuse after those contracts are frozen.
 - [Lease Authority invariant ledger](0181-2-2026-09-13-lease-authority-invariant-ledger.md)
 - [Lease Authority build measurement](0181-3-2026-09-14-lease-authority-build-measurement.md)
 - [Shared runtime effect custody policy feedback](2026-09-14-runtime-effect-custody-policy-feedback.md)
+- [Session and worktree admission policy feedback](2026-09-14-session-worktree-admission-policy-feedback.md)
 
 [Plan 0161](../plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
 is assigned to this lane. It owns the profile aggregate, sealed repair and reset
