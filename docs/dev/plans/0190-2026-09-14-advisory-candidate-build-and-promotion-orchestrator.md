@@ -435,6 +435,27 @@ trash after readback. Public build and test execution adapters and
 production-shaped qualification remain. Neither installed runtime was
 mutated.
 
+Checkpoint `4043af74` exposes the isolated build execution adapter without
+touching an installed runtime. `candidate build` requires an explicit source
+checkout, artifact class, and exactly one of dry-run or apply. Dry-run returns
+the deterministic command and output plan without creating a claim or invoking
+Cargo. Apply uses an exclusive request claim below `cli/target`, disjoint target
+directories, the existing Cargo safety wrapper, compiler dep-info, and the
+frozen executable-input collector to publish an immutable binary, closure,
+build-support manifest, candidate manifest, and Rust-compatible artifact seal.
+An exact concurrent request joins rather than compiling twice; an exact sealed
+result is reused only after every artifact byte and path is revalidated.
+Source drift, cache tampering, and failed claims fail closed with durable typed
+evidence. The adapter fsyncs claims and artifact publications and never reads
+or writes production or development runtime state. Focused JavaScript command,
+planner, collector, concurrency, reuse, tamper, and failure tests pass, as do
+the complete candidate crate, the JavaScript-to-Rust seal compatibility test,
+the CLI bridge tests, strict workspace Clippy, format, architecture guard,
+rendered help, docs production build, remote-view documentation contract, and
+patch hygiene. A real rebuilt CLI dry-run returned the current dirty source
+identity and performed no build. Public test execution, explicit failed or
+abandoned build recovery, and production-shaped qualification remain.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
