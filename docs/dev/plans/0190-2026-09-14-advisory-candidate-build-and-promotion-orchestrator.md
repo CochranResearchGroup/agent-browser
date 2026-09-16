@@ -259,6 +259,24 @@ their bounded adapters. No installed runtime, browser, profile, provider, or
 Service State was touched; all mutation evidence came from disposable fixture
 roots.
 
+Checkpoint `c223a1ef` extends that same custody fence through the bounded
+publication of candidate readiness. After runtime transfer, the workstation
+adapter now revalidates the exact operation, candidate, sealed artifact,
+environment, and fencing generation while holding the coordination lock across
+the `PresentationsRebinding` and `CandidateReady` transaction writes and the
+matching admission-drain update. A superseded writer is rejected before any of
+those files change, including on durable resume. The existing generation and
+Service State commit uses the same reusable bounded-mutation guard. Five
+coordination-adapter tests, both focused workstation custody regressions,
+strict workspace Clippy, format, the candidate architecture guard, and patch
+hygiene pass. The preceding exact head also passed every required pull-request
+gate, including Rust and Workstation Fixtures. Candidate `--apply` remains
+unavailable: admission-drain and runtime-transfer mutations, dashboard
+promotion, acceptance, coordination completion, and the public transition and
+recovery adapters still require bounded custody integration. No installed
+runtime, browser, profile, provider, or Service State was touched; all mutation
+evidence came from disposable fixture roots.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,

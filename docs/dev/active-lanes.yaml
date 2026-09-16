@@ -10,18 +10,18 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 7166b08204a0c0575db7124b763c2d9be43d9711
+    checkpoint: c223a1efac539cbf7bce9c43b616f7fdbc5ae8a6
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
     validation_status: passed
-    validation_ref: 7166b08204a0c0575db7124b763c2d9be43d9711
+    validation_ref: c223a1efac539cbf7bce9c43b616f7fdbc5ae8a6
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
     overlaps: [P169]
     reconciled_overlaps: [P169]
-    blocker: candidate install apply remains unavailable; activation, runtime transfer, dashboard promotion, acceptance, coordination completion, public transition adapters, and production-shaped qualification remain; qualification retains its later gate
-    updated_at: 2026-09-15
+    blocker: candidate install apply remains unavailable; admission-drain and runtime-transfer mutations, dashboard promotion, acceptance, coordination completion, public transition and recovery adapters, and production-shaped qualification remain; qualification retains its later gate
+    updated_at: 2026-09-16
   - id: P169
     product_lane: PL-CHALLENGE
     objective: Deliver a provider-neutral challenge countermeasure control plane and bounded challenge-family adapters
