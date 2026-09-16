@@ -31,12 +31,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: e6bf565872e691f26bddd2cecb0dea17d9150c1f
+    checkpoint: d8f8f1447532632fab7d067f62599d08effeb849
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
     validation_status: provider-free, selected changed-surface checks, Packet 12 isolated exact-artifact real-browser acceptance, and Packet 13 P190 documentation reconciliation green; exact-head CI pending publication
-    validation_ref: e6bf565872e691f26bddd2cecb0dea17d9150c1f
+    validation_ref: d8f8f1447532632fab7d067f62599d08effeb849
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]

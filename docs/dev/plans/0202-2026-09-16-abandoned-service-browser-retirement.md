@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 24
+Plan version: 25
 
 State: OPEN
 
@@ -743,6 +743,8 @@ readback without conflicts at `12b9ce202d873ab6b8de2a11276a797ca8c4da6b`.
 
 Packet 13 result:
 
+- Completed P190 documentation reconciliation checkpoint:
+  `d8f8f1447532632fab7d067f62599d08effeb849`.
 - P190 integration merged cleanly with no P202 conflict. All four required
   user-facing surfaces now document the resource inventory, reviewed GC flow,
   exact-tree safety boundary, and bounded environment inputs.
