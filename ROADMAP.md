@@ -27,18 +27,18 @@ field evidence and acceptance records into the same model.
 
 ## P196 | Foreground Launch Stale Revision Acceptance
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)
-reactivates [issue #87](https://github.com/CochranResearchGroup/agent-browser/issues/87)
-after #76's shared persistence dependency integrated. Candidate `73001841`
-adds the missing provider-free multi-process foreground-launch projection
-regression. Its legacy oracle reproduces the typed stale-revision failure after
-two independent writers; current replay succeeds for two sequential projections,
-preserves both writer updates, records each projection once, and leaves no
-task-owned residue. No adapter repair is required. All 43 store tests, exact
-owned-launch cleanup, format, and strict Clippy pass. Protected integration is
-next, followed by one production candidate consolidating #76, #131, and #87.
+closed after PRs #150, #153, and #154 integrated the foreground race proof and
+the installed-acceptance repairs. Generation
+`0.28.0-15f0f3576657-30788a166073` is accepted with exact binary SHA-256
+`15f0f3576657da6cfc9a59bdb23b0b3d94fb37d73a4c11d3c1e08a6d4fcf8634`.
+Doctor reports one runtime host, one dashboard process, a healthy monitor, and
+an exact supervisor match. The fresh custom-profile open, URL read, close, and
+residue check pass; the sealed Guacamole extension loads after a targeted web
+container recreation. Issue #143 remains open for its broader retained-owner
+inventory defect.
 
 ## P195 | Custom Profile Identity Repair
 
