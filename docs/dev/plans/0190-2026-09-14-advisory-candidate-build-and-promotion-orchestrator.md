@@ -239,6 +239,26 @@ documentation describe the same temporary read-only contract. The shared
 user-scoped skill was inspected but intentionally not overwritten from an
 experimental branch.
 
+Checkpoint `7166b082` adds exact install custody and the first fenced
+workstation mutation boundary. Candidate and sealed-artifact identity are
+compared, started or joined, and receipted from one coordination-locked
+snapshot. Harmless joins may advance the ledger revision without changing the
+operation or fencing generation. A bounded mutation runs only while the same
+operation, candidate, artifact, environment, and fence remain active, and the
+coordination lock prevents cancellation or supersession during that mutation.
+The existing workstation transaction records this exact custody alongside the
+sealed artifact binding, refreshes its observed revision, and now fences the
+generation selector and Service State commit before either can change. A
+superseded writer fails before commit and leaves the selector unchanged. Five
+coordination-adapter tests, the focused workstation transaction test, strict
+workspace Clippy, format, the candidate architecture guard, and patch hygiene
+pass. Candidate `--apply` remains unavailable: activation, runtime transfer,
+dashboard promotion, acceptance, coordination completion, and the public
+cancel, discard, supersede, recovery, and rollback transitions still require
+their bounded adapters. No installed runtime, browser, profile, provider, or
+Service State was touched; all mutation evidence came from disposable fixture
+roots.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
