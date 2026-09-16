@@ -7,6 +7,7 @@
   "required": [
     "query",
     "selectedProfile",
+    "profileSelection",
     "selectedProfileSource",
     "selectedProfileMatch",
     "readiness",
@@ -169,6 +170,42 @@
           "type": "null"
         }
       ]
+    },
+    "profileSelection": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason",
+        "effect",
+        "selectedProfileId",
+        "rejectedProfileId",
+        "compatibilityIds"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["selected", "rejected", "not_found"]
+        },
+        "reason": {
+          "type": ["string", "null"]
+        },
+        "effect": {
+          "const": "no_effect"
+        },
+        "selectedProfileId": {
+          "type": ["string", "null"]
+        },
+        "rejectedProfileId": {
+          "type": ["string", "null"]
+        },
+        "compatibilityIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
     },
     "selectedProfileSource": {
       "oneOf": [

@@ -717,7 +717,11 @@ MCP `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId
 It is a read-only, no-launch planning surface. The response includes the same
 profile selector metadata and readiness summary as profile lookup, then adds the
 selected site policy, enabled providers, retained challenges, optional
-`seedingHandoff`, advisory `browserCapabilityEvidence`, and a `decision` object with `recommendedAction`,
+`seedingHandoff`, advisory `browserCapabilityEvidence`, and typed
+`profileSelection`. That selection reports `selected`, `rejected`, or
+`not_found` with `effect: "no_effect"`; an incompatible explicit retained
+profile uses `profile_compatibility_missing_or_blocked` and leaves the service
+request unavailable. The response also includes a `decision` object with `recommendedAction`,
 manual-action flags, selected profile ID, provider IDs, challenge IDs, stable
 reason strings, and `freshnessUpdate` instructions that identify the serialized
 profile freshness write path for bounded auth probes. The same decision

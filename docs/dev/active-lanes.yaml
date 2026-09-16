@@ -1,6 +1,27 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P199
+    product_lane: PL-BUGFIX
+    objective: Make access planning reject incompatible retained profiles before browser work
+    plan: docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md
+    plan_ref: refs/heads/fix/p199-compatible-access-planning
+    branch: fix/p199-compatible-access-planning
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 15dd3b58750598e3dbe023f9004af5f8429b9d98
+    remote_ref: refs/remotes/origin/fix/p199-compatible-access-planning
+    integration_receipt: null
+    integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
+    validation_status: passed
+    validation_ref: 15dd3b58750598e3dbe023f9004af5f8429b9d98
+    work_items: [CochranResearchGroup/agent-browser#67]
+    dependencies: []
+    overlaps: [P198]
+    reconciled_overlaps: [P198]
+    blocker: protected integration and refreshed exact-head CI remain; P198 source and closeout are integrated at main@7db8310f
+    updated_at: 2026-09-16
   - id: P190
     product_lane: PL-PLATFORM
     objective: Build the deterministic candidate identity, build coordination, and promotion advisory surface

@@ -46,6 +46,7 @@ pub(crate) struct ProfileAcquisitionInput<'a> {
     pub(crate) selected_profile: Option<&'a BrowserProfile>,
     pub(crate) service_state: &'a ServiceState,
     pub(crate) denied: bool,
+    pub(crate) preselection_blocker: Option<&'a str>,
     pub(crate) manual_seeding_required: bool,
     pub(crate) manual_action_required: bool,
     pub(crate) launch_posture: &'a Value,
@@ -94,6 +95,8 @@ pub(crate) fn decide_profile_acquisition(
         && lifecycle_replacement["reason"].as_str() == Some("terminal_cleanup_satisfied");
     let acquisition_blocker = if !access_decision.allowed {
         Some("profile_access_denied")
+    } else if let Some(blocker) = input.preselection_blocker {
+        Some(blocker)
     } else {
         match reuse_action {
             Some("blocked_by_explicit_session_route") => Some("explicit_session_route_invalid"),
