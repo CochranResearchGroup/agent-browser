@@ -304,6 +304,14 @@ actions for recovery; never infer apply or recovery authority from readiness.
 --census-digest <sha256|none> --json` is an exact alias for those existing
 transaction actions. Copy every guard field from transaction inspection; it
 never targets the latest transaction implicitly.
+Use `agent-browser candidate coordinate` with `queue`, `cancel-active`,
+`discard-queued`, `supersede`, or `activate-queued` only for an explicit
+operator choice. Pass a unique `--request-id`, exact candidate and artifact
+IDs, and the current `--expected-revision` and
+`--expected-fencing-generation` from `candidate status`. Every action except
+queue also requires the exact `--operation-id`. This command mutates only the
+candidate coordination ledger, but cancellation and supersession immediately
+fence stale writers.
 
 During Service State migration, a missing profile row is materialized as a
 persistent placeholder only when every referencing legacy session is unbound:

@@ -793,6 +793,7 @@ agent-browser candidate inspect --manifest ./candidate-manifest.json --input-clo
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json # Validate exact sealed bytes without creating a transaction
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json # Explicitly install the sealed bytes through the production workstation transaction
 agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json # Resume one exact retained workstation transaction
+agent-browser candidate coordinate queue --request-id queue-123 --candidate-id candidate-123 --artifact-id seal-123 --expected-revision 4 --expected-fencing-generation 2 --json # Queue one exact competing candidate without touching a runtime
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions

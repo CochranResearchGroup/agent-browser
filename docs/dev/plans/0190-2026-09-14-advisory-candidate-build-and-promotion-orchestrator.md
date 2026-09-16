@@ -419,6 +419,22 @@ hygiene pass. Public queue, cancel, discard, and supersede choice adapters and
 production-shaped qualification remain. Neither installed runtime was
 mutated.
 
+Checkpoint `8ea89766` exposes the remaining operator-selected coordination
+choices through one exact compare-and-swap command. `candidate coordinate`
+supports queue, cancel-active, discard-queued, supersede, and activate-queued;
+every request binds a unique request ID, candidate, artifact, expected ledger
+revision, and expected fencing generation, while all actions except queue also
+bind the exact operation ID. The response returns the durable receipt and
+resulting ledger and explicitly reports that no runtime effect occurred.
+Cancellation and supersession still advance the fence immediately, so a stale
+installer cannot publish after the operator's choice. Ten focused candidate
+CLI tests, a real disposable-root CLI queue receipt, strict workspace Clippy,
+format, debug CLI help readback, candidate architecture guard, docs production
+build, and patch hygiene pass. The disposable coordination root was moved to
+trash after readback. Public build and test execution adapters and
+production-shaped qualification remain. Neither installed runtime was
+mutated.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
