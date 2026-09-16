@@ -6619,15 +6619,28 @@ fn prepare_service_state_migration_transaction(
     Ok(())
 }
 
+#[cfg(test)]
 fn refresh_service_state_migration_after_full_shutdown(
     transaction_path: &Path,
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
+    let refresh = prepare_service_state_migration_after_full_shutdown(transaction)?;
+    commit_service_state_migration_after_full_shutdown(transaction_path, transaction, refresh)
+}
+
+struct PreparedFullShutdownServiceStateRefresh {
+    migration: crate::runtime_adoption::UpgradeServiceStateMigration,
+    writes: Vec<(PathBuf, Vec<u8>)>,
+}
+
+fn prepare_service_state_migration_after_full_shutdown(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<PreparedFullShutdownServiceStateRefresh, String> {
     use crate::native::service_state_migration::{
         stage_service_state_migration, ServiceStateMigrationStatus,
     };
 
-    let Some(migration) = transaction.service_state_migration.as_mut() else {
+    let Some(mut migration) = transaction.service_state_migration.clone() else {
         return Err("runtime_replacement_service_state_migration_missing".to_string());
     };
     if migration.status == "staged_validated_no_change" {
@@ -6635,8 +6648,10 @@ fn refresh_service_state_migration_after_full_shutdown(
             "runtimeReplacementBaseline".to_string(),
             Value::String("live_state_preserved_no_change".to_string()),
         );
-        write_private_json_atomic(transaction_path, transaction)?;
-        return Ok(());
+        return Ok(PreparedFullShutdownServiceStateRefresh {
+            migration,
+            writes: Vec::new(),
+        });
     }
     let state_path = PathBuf::from(&migration.authoritative_state_path);
     let current = match fs::read(&state_path) {
@@ -6671,15 +6686,16 @@ fn refresh_service_state_migration_after_full_shutdown(
             .ok_or_else(|| "runtime_replacement_service_state_stage_missing".to_string())?,
     );
     let pre_shutdown_snapshot = snapshot_path.with_extension("pre-full-shutdown.audit.json");
+    let mut writes = Vec::new();
     if !pre_shutdown_snapshot.exists() && snapshot_path.is_file() {
         let original = fs::read(&snapshot_path).map_err(display_io(
             "read pre-full-shutdown snapshot",
             &snapshot_path,
         ))?;
-        write_private_bytes_atomic(&pre_shutdown_snapshot, &original)?;
+        writes.push((pre_shutdown_snapshot.clone(), original));
     }
-    write_private_bytes_atomic(&snapshot_path, &current)?;
-    write_private_bytes_atomic(&staged_path, &staged.bytes)?;
+    writes.push((snapshot_path.clone(), current.clone()));
+    writes.push((staged_path.clone(), staged.bytes.clone()));
     migration.source_state_schema = staged.plan.source_state_schema;
     migration.target_state_schema = staged.plan.target_state_schema.to_string();
     migration.source_profile_lease_schema = staged.plan.source_profile_lease_schema;
@@ -6707,6 +6723,18 @@ fn refresh_service_state_migration_after_full_shutdown(
         "runtimeReplacementBaseline".to_string(),
         Value::String("post_full_shutdown".to_string()),
     );
+    Ok(PreparedFullShutdownServiceStateRefresh { migration, writes })
+}
+
+fn commit_service_state_migration_after_full_shutdown(
+    transaction_path: &Path,
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    refresh: PreparedFullShutdownServiceStateRefresh,
+) -> Result<(), String> {
+    for (path, bytes) in refresh.writes {
+        write_private_bytes_atomic(&path, &bytes)?;
+    }
+    transaction.service_state_migration = Some(refresh.migration);
     write_private_json_atomic(transaction_path, transaction)
 }
 
@@ -7588,23 +7616,8 @@ fn complete_runtime_transfer_phase(
                 &plan,
                 &mut fence,
             )?;
-            refresh_service_state_migration_after_full_shutdown(
-                &prepared.transaction_path,
-                &mut prepared.transaction,
-            )?;
-            persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
-            for migration in &mut prepared.transaction.runtime_migrations {
-                if migration.disposition
-                    == crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer
-                {
-                    migration.disposition =
-                        crate::runtime_adoption::RuntimeDisposition::RetiredIdle;
-                    let reason = "closed_by_reviewed_full_shutdown";
-                    if !migration.reason_codes.iter().any(|value| value == reason) {
-                        migration.reason_codes.push(reason.to_string());
-                    }
-                }
-            }
+            refresh_full_shutdown_service_state_with_custody(paths, prepared)?;
+            with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
             let candidate_socket_dir =
                 candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
             let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
@@ -7620,17 +7633,12 @@ fn complete_runtime_transfer_phase(
                 &prepared.transaction.candidate_binary_sha256,
                 true,
             )?;
-            crate::runtime_adoption::record_runtime_host_identity(
-                &mut prepared.transaction,
-                true,
-                host_identity,
-            )?;
-            stage_candidate_runtime_host_ingress(
+            commit_full_shutdown_runtime_transfer_evidence(
                 paths,
-                &mut prepared.transaction,
+                prepared,
+                host_identity,
                 candidate_backend,
             )?;
-            write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
             return Ok(());
         }
         with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
@@ -7663,6 +7671,56 @@ fn complete_runtime_transfer_phase(
         )?;
     }
     Ok(())
+}
+
+fn refresh_full_shutdown_service_state_with_custody(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
+    let refresh = prepare_service_state_migration_after_full_shutdown(&prepared.transaction)?;
+    let transaction_path = prepared.transaction_path.clone();
+    let admission_drain_path = prepared.admission_drain_path.clone();
+    with_transaction_candidate_install_custody(
+        paths,
+        &mut prepared.transaction,
+        move |transaction| {
+            commit_service_state_migration_after_full_shutdown(
+                &transaction_path,
+                transaction,
+                refresh,
+            )?;
+            persist_admission_drain(&admission_drain_path, transaction)
+        },
+    )
+}
+
+fn commit_full_shutdown_runtime_transfer_evidence(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    host_identity: crate::runtime_adoption::RuntimeHostIdentityEvidence,
+    candidate_backend: crate::runtime_host_ingress::RuntimeHostBackend,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, move |prepared| {
+        for migration in &mut prepared.transaction.runtime_migrations {
+            if migration.disposition
+                == crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer
+            {
+                migration.disposition = crate::runtime_adoption::RuntimeDisposition::RetiredIdle;
+                let reason = "closed_by_reviewed_full_shutdown";
+                if !migration.reason_codes.iter().any(|value| value == reason) {
+                    migration.reason_codes.push(reason.to_string());
+                }
+            }
+        }
+        crate::runtime_adoption::record_runtime_host_identity(
+            &mut prepared.transaction,
+            true,
+            host_identity,
+        )?;
+        stage_candidate_runtime_host_ingress(paths, &mut prepared.transaction, candidate_backend)?;
+        write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)
+    })
 }
 
 fn commit_cooperative_runtime_transfer_evidence(
@@ -15837,7 +15895,7 @@ mod tests {
     }
 
     #[test]
-    fn superseded_candidate_cannot_commit_cooperative_runtime_transfer_evidence() {
+    fn superseded_candidate_cannot_commit_runtime_transfer_evidence() {
         use crate::runtime_adoption::UpgradeTransactionState;
 
         let root = env::temp_dir().join(format!(
@@ -15921,11 +15979,20 @@ mod tests {
                 evidence: Vec::new(),
                 preserved_lane_sessions: std::collections::BTreeSet::new(),
             },
+            host_identity.clone(),
+            candidate_backend.clone(),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        let error = commit_full_shutdown_runtime_transfer_evidence(
+            &paths,
+            &mut prepared,
             host_identity,
             candidate_backend,
         )
         .unwrap_err();
-
         assert!(error.contains("candidate_install_custody_lost"));
         assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
         fs::remove_dir_all(root).unwrap();
@@ -15998,6 +16065,72 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_refresh_full_shutdown_service_state() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-full-shutdown-refresh-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("full-shutdown-refresh", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "full-shutdown-refresh-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error =
+            refresh_full_shutdown_service_state_with_custody(&paths, &mut prepared).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert!(!admission_drain_path.exists());
         fs::remove_dir_all(root).unwrap();
     }
 
