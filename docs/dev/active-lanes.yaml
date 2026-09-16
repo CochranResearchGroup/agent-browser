@@ -20,7 +20,7 @@ lanes:
     dependencies: []
     overlaps: [P197]
     reconciled_overlaps: [P197]
-    blocker: exact-head source and production-shaped candidate qualification passed; separately admitted isolated development publication and acceptance, protected integration, and post-merge equivalence readback remain
+    blocker: development publication and the three-cycle browser smoke passed with production unchanged; development doctor remains nonzero only on the presentation-provider axis, whose explicit binding inputs and mutation authority are absent; protected integration and post-merge equivalence readback remain
     updated_at: 2026-09-16
   - id: P197
     product_lane: PL-CHALLENGE

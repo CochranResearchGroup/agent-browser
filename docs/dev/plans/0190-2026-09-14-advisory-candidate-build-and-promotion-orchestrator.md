@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 6
+Plan version: 7
 
 State: OPEN
 
@@ -608,9 +608,37 @@ selections passed as hermetic provider-free run
 `candidate-test-22d4831c-98da-402c-88bb-59ace19740b9`; its reusable receipt is
 `cli/target/candidate-test-state/completed/afcce16eb797d80bcaaa09d9c2d4c5377cdf1d860bbd39b58230bddf1241577b.json`.
 Terminal cleanup was proven and no P190 candidate build or test Cargo process
-remained. No browser, profile, provider, production runtime, development
-runtime, supervisor, or Service State was mutated. Shared isolated-development
-runtime custody remains the next operational gate.
+remained. At that source-qualification checkpoint, no browser, profile,
+provider, production runtime, development runtime, supervisor, or Service
+State had been mutated.
+
+The user subsequently authorized one bounded development-only operation: install
+the exact sealed candidate, synchronize the development skill, run doctor and
+three disposable browser-launch smokes, and prove production remained
+unchanged. The installer selected development generation
+`0.28.0-3b19e6830858` from the sealed candidate and verified installed binary
+SHA-256
+`3b19e68308589d07d7d3268cda978b4ea63d7b7f3d2376b1d8921814178d6f2f`.
+Development runtime status was ready with runtime-host PID `31493`, backend PID
+`31617`, and dashboard PID `31620`, all using that generation. Development
+skill source and target SHA-256 were both
+`8720e2b908168f2dcfded2df6e5ffec881d803aeb74c3884d41ce0e0fa9f7d72`.
+
+All three disposable development browser cycles opened `about:blank`, read the
+URL, closed the exact session, proved no matching process remained, and moved
+only their exact disposable profiles to trash. Production stayed on generation
+`0.28.0-15f0f3576657-30788a166073`; its runtime-host, backend, and dashboard
+PIDs remained `1066`, `825`, and `826` before and after the operation.
+
+Development doctor remains nonzero: 55 checks passed and nine failures were
+confined to the presentation-provider configuration, loaded extension,
+Guacamole container and port, four warm display routes, and warm-display
+uniqueness. Provider mutation was outside the user's authorization, and the
+required explicit public operator URL and immutable external ingress revision
+were absent, so no provider repair was attempted. The remaining operational
+gate is an explicitly admitted provider repair followed by a clean doctor
+readback. Protected integration and post-merge executable-input equivalence
+readback remain subsequent gates.
 
 ## Frozen Decisions
 
