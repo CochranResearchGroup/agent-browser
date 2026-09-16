@@ -119,11 +119,9 @@ pub(crate) mod service_commands {
                 .browsers
                 .get(browser_id)
                 .ok_or_else(|| "protected_browser_owner_observation_invalid".to_string())?;
-            crate::native::service_health::validate_protected_browser_owner_observation(
+            crate::native::service_health::validate_protected_browser_owner_observation_for_inventory(
                 observation,
-                browser_id,
-                &observation.daemon_session_route,
-                browser.pid,
+                browser,
             )?;
         }
         let protected_browser_owner_observations =
