@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 26
+Plan version: 27
 
 State: OPEN
 
@@ -71,14 +71,12 @@ status harness-contract mismatch. Packet 12 corrected that mismatch
 provider-free and the one renewed real-browser acceptance passed. No additional
 browser replay is authorized.
 
-P190 and P197 remain active. P190 has no expected P202 source overlap but is
-the current writer for shared CLI help, README, agent skill, and command docs.
-P197 is the current writer for generated service-request contracts. P202 will
-keep those writers authoritative, use disjoint lifecycle/status surfaces where
-possible, and record a dependency or serialize integration before touching an
-overlapping shared surface. If the repair requires changing the core
-`service_store.rs` lock/CAS algorithm, P202 stops and joins the owning
-persistence lane.
+P190 is integrated and closed. It released its shared-documentation custody,
+and Packet 13 reconciled the required CLI help, README, agent skill, and command
+documentation against current `main`. P197 remains active and is the current
+writer for generated service-request contracts. P202 keeps that writer
+authoritative and records or serializes any overlapping integration. The repair
+did not require changing the core `service_store.rs` lock/CAS algorithm.
 
 ## Consolidated Batch
 
@@ -171,11 +169,12 @@ release; P202 must not reuse either behavior. W4 and W5 own disjoint
 implementation packets. Worker outputs remain advisory until primary review,
 focused validation, and integration.
 
-P190 remains primary writer for its candidate-orchestration source and current
-shared command documentation. P197 remains primary writer for its challenge
-consumer source and generated service-request contracts. P202 is primary writer
-for abandoned-browser lifecycle, resource/status projection, and its focused
-fixtures after the worker join.
+P190 completed and integrated its candidate-orchestration source, then released
+shared command-documentation custody. P202 completed the bounded Packet 13
+documentation reconciliation after that integration. P197 remains primary
+writer for its challenge consumer source and generated service-request
+contracts. P202 is primary writer for abandoned-browser lifecycle,
+resource/status projection, and its focused fixtures after the worker join.
 
 ## Evidence And Exit
 
@@ -204,12 +203,12 @@ Exit requires current evidence that:
 | --- | --- | --- |
 | Existing exact-tree effect primitive | `service_resources` rechecks reviewed process, process-group, profile, package-launch, and owner-generation identity before signaling and proves exit plus profile-lock release | reusable partial primitive |
 | Existing record-only retirement | `service_browser_retirement` seals an inert row digest and removes only an unreferenced browser row | reusable but insufficient |
-| Abandoned live-lane classification | Decision matrix now accepts complete inactive exact-owned lanes and rejects active work, explicit retention, protected profiles, foreign identity, and incomplete census | provider-free green |
-| Per-lane resource and activity projection | Status joins browser root, descendants, tabs, RSS, lease activity, policy thresholds, and cleanup disposition | implemented; broader validation pending |
-| Sealed activity-aware plan/apply | Nine focused transaction tests cover reserve, revalidation, drift, repository CAS revisions, normalization, and terminal finalize | provider-free green |
-| Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof | provider-free green; real-browser replay pending |
-| Provider-free and real-browser acceptance | Provider-free suites pass. The cumulative fourth and terminal disposable replay reached the exact-tree effect but finalize returned `abandoned_browser_retirement:ExitUnproven`. Independent readback found no fixture process or temporary-directory residue. | provider-free green; real-browser gate blocked on exit proof |
-| Integration | Draft PR #168 is open from validated head `e7ae2a9a`; P190 retains shared documentation ownership | draft; blocked on documentation and renewed live acceptance |
+| Abandoned live-lane classification | Decision matrix accepts complete inactive exact-owned lanes and rejects active work, explicit retention, protected profiles, foreign identity, incomplete census, and authoritative occupancy | provider-free and comprehensive Rust green |
+| Per-lane resource and activity projection | Status joins browser root, descendants, tabs, RSS, lease activity, policy thresholds, and cleanup disposition; Packet 13 completed user-facing parity | complete |
+| Sealed activity-aware plan/apply | Twenty-one retirement-focused tests cover reservation, revalidation, exact descendant identity, authoritative occupancy, drift, repository CAS revisions, normalization, exit recourse, lock release, and terminal finalize | provider-free and comprehensive Rust green |
+| Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof; Packet 12 proved the accepted terminal projection with one lifecycle record and retirement receipt | provider-free and isolated real-browser acceptance green |
+| Provider-free and real-browser acceptance | Provider-free suites pass. Packet 12's sole renewed exact-artifact disposable replay passed, and fresh readback found no matching fixture process or temporary-directory residue. | complete |
+| Integration | Draft PR #168 is open at published review head `ce008eb2`; P190 is integrated and closed, Packet 13 documentation reconciliation is complete, and P197 is the only active overlap | exact-head CI and final integration pending |
 
 ## Implementation Checkpoint 1
 
