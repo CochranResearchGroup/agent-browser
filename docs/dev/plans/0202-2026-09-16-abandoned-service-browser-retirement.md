@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 11
+Plan version: 12
 
 State: OPEN
 
@@ -56,6 +56,13 @@ before activity-aware ownership classification. The repair now projects the
 joined lane, classifies only complete service-owned evidence, and uses a sealed
 reserve, effect, and finalize transaction without changing the core store CAS
 algorithm.
+
+Final published-diff review reopened the source before merge readiness. Two
+provider-free P1 counterexamples remain: authoritative occupancy can be
+invisible until finalization after the process effect, and apply can replace a
+reviewed candidate with a newly observed process tree for the same browser ID.
+Packet 9 owns both defects as one pre-effect authority batch. No additional
+browser replay is authorized.
 
 P190 and P197 remain active. P190 has no expected P202 source overlap but is
 the current writer for shared CLI help, README, agent skill, and command docs.
@@ -465,6 +472,41 @@ Packet 8 result at source checkpoint `979b5cb8854b0a49980f2dff7fa7523ebc999544`:
 - No browser replay, installed-runtime mutation, provider effect, or shared
   P190/P197 documentation edit occurred. Changed-surface validation is
   complete; shared-documentation reconciliation remains the next gate.
+
+## Pre-Effect Authority Packet 9
+
+This provider-free packet reopens the candidate after final published-diff
+review and must close both P1 authority gaps before documentation or merge
+readiness.
+
+- Milestone A: planning, reservation, and every pre-signal revalidation reject
+  current authoritative occupancy, including an occupied presentation slot and
+  any exact-profile claim or lease evidence that grants current work custody.
+  A finalization-only occupancy check is not effect authority.
+- Milestone B: a valid review token authorizes only the exact candidate identity
+  present in the reviewed candidate set. The per-candidate fresh snapshot may
+  confirm that identity, but must never substitute a new root, descendant set,
+  process group, profile, owner generation, or package-launch identity for the
+  same logical browser ID.
+- W11 `/root/p202_resource_implementation`: normal-tier read-only inventory of
+  authoritative occupancy projections and the smallest provider-free fixtures.
+- W12 `/root/p202_exit_cause`: strongest-tier read-only trace from reviewed
+  candidate identity through fresh plan construction, with the minimum
+  fail-closed binding contract and deterministic two-snapshot regression.
+- Primary writer: P202 lane owner, limited to retirement planning/apply,
+  resource classification, and focused provider-free fixtures.
+- Feedback loop A: the existing eligible retirement fixture must fail planning
+  and produce no reservation or signal when exact current occupancy is added.
+- Feedback loop B: a reviewed candidate followed by a fresh eligible replacement
+  with the same browser ID must be rejected before reservation; an unchanged
+  candidate remains admissible.
+- Validation: red/green focused authority fixtures, complete retirement tests,
+  selector-required format and strict Clippy, then one comprehensive
+  provider-free Rust requalification for the completed reopened batch.
+- Bound: one consolidated implementation cycle and no browser, installed
+  runtime, provider, protected-profile, foreign-process, or shared-doc effect.
+  Stop if the repair requires the core `service_store.rs` lock/CAS algorithm or
+  a Lease Authority mutation outside the existing read-only projection.
 
 ## Stop Condition
 
