@@ -1402,9 +1402,11 @@ fn resume_prepared_payload_transaction(
         validation,
         (!isolated_root).then_some(paths.binary.as_path()),
     ) {
-        if prepared.transaction.state
-            == crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
-        {
+        if matches!(
+            prepared.transaction.state,
+            crate::runtime_adoption::UpgradeTransactionState::Accepted
+                | crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
+        ) {
             return Err(error);
         }
         return Err(rollback_resumed_transaction(
@@ -1844,6 +1846,7 @@ fn recover_operator_required_upgrade_for_root(
                 "accepted_after_supervisor_transition_recovery",
             )?;
         }
+        ensure_transaction_candidate_install_completed(&paths, &transaction)?;
         if let Err(error) = clear_admission_drain(&drain_path) {
             transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
             persist_upgrade_transition(
@@ -3498,9 +3501,11 @@ fn run_workstation_install(args: &[String]) {
             validation,
             (!isolated_root).then_some(paths.binary.as_path()),
         ) {
-            if prepared.transaction.state
-                == crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
-            {
+            if matches!(
+                prepared.transaction.state,
+                crate::runtime_adoption::UpgradeTransactionState::Accepted
+                    | crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
+            ) {
                 fail(&error, parsed.json);
             }
             let rollback = rollback_prepared_payload_transaction(
@@ -10486,6 +10491,46 @@ fn with_candidate_install_custody<T>(
     })
 }
 
+fn complete_candidate_install_custody<T>(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    mutation: impl FnOnce(&mut PreparedPayloadTransaction) -> Result<T, String>,
+) -> Result<T, String> {
+    let custody = candidate_install_custody_from_transaction(&prepared.transaction)?;
+    let Some(custody) = custody else {
+        return mutation(prepared);
+    };
+    let coordination =
+        crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
+    let request_id = format!("complete-{}", prepared.transaction.transaction_id);
+    coordination
+        .complete_active_install(&custody, &request_id, |proof| {
+            prepared.transaction.successor_fields.insert(
+                "candidateInstallCustody".to_string(),
+                serde_json::to_value(proof).map_err(|error| {
+                    format!("candidate_install_custody_serialize_failed:{error}")
+                })?,
+            );
+            mutation(prepared)
+        })
+        .map(|(result, _)| result)
+}
+
+fn ensure_transaction_candidate_install_completed(
+    paths: &InstallPaths,
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    let Some(custody) = candidate_install_custody_from_transaction(transaction)? else {
+        return Ok(());
+    };
+    let coordination =
+        crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
+    let request_id = format!("complete-{}", transaction.transaction_id);
+    coordination
+        .ensure_install_completed(&custody, &request_id)
+        .map(|_| ())
+}
+
 fn with_transaction_candidate_install_custody<T>(
     paths: &InstallPaths,
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
@@ -11088,7 +11133,7 @@ fn accept_prepared_payload_transaction(
             ));
         }
     }
-    with_candidate_install_custody(paths, prepared, |prepared| {
+    complete_candidate_install_custody(paths, prepared, |prepared| {
         prepared.transaction.dashboard_validation_summary = Some(validation.dashboard_summary);
         prepared.transaction.presentation_validation_summary =
             Some(validation.presentation_summary);
@@ -11099,20 +11144,19 @@ fn accept_prepared_payload_transaction(
             &mut prepared.transaction,
             UpgradeTransactionState::Accepted,
             "accepted",
+        )
+    })?;
+    if let Err(error) = clear_admission_drain(&prepared.admission_drain_path) {
+        prepared.transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            UpgradeTransactionState::OperatorRecoveryRequired,
+            "operator_recovery_required",
         )?;
-        if let Err(error) = clear_admission_drain(&prepared.admission_drain_path) {
-            prepared.transaction.stop_reason =
-                Some("accepted_admission_drain_not_cleared".to_string());
-            persist_upgrade_transition(
-                &prepared.transaction_path,
-                &mut prepared.transaction,
-                UpgradeTransactionState::OperatorRecoveryRequired,
-                "operator_recovery_required",
-            )?;
-            return Err(error);
-        }
-        Ok(())
-    })
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
@@ -15880,6 +15924,81 @@ mod tests {
         );
         assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
         assert_eq!(fs::read(&admission_drain_path).unwrap(), drain_before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn accepted_candidate_completes_install_coordination() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-terminal-install-coordination-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("transaction-acceptance", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::PostCommitValidating;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        accept_prepared_payload_transaction(
+            &paths,
+            &mut prepared,
+            PostCommitValidationReceipt {
+                dashboard_summary: "validated".to_string(),
+                presentation_summary: "validated".to_string(),
+            },
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::Accepted
+        );
+        assert!(!admission_drain_path.exists());
+        let ledger = coordination.read().unwrap();
+        assert!(ledger.active().is_none());
+        assert_eq!(
+            ledger.receipts().last().map(|receipt| receipt.outcome),
+            Some(agent_browser_candidate::CoordinationOutcome::Completed)
+        );
+        let persisted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&transaction_path).unwrap()).unwrap();
+        assert_eq!(persisted.state, UpgradeTransactionState::Accepted);
+        assert_eq!(persisted.terminal_result.as_deref(), Some("accepted"));
         fs::remove_dir_all(root).unwrap();
     }
 

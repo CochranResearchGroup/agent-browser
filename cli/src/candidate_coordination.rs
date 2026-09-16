@@ -181,6 +181,116 @@ impl CandidateCoordinationStore {
         };
         mutation(&proof)
     }
+
+    /// Commits the exact active install as terminal only after its bounded
+    /// workstation acceptance mutation succeeds under the same lock.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn complete_active_install<T>(
+        &self,
+        custody: &CandidateInstallCustody,
+        request_id: &str,
+        mutation: impl FnOnce(&CandidateInstallCustody) -> Result<T, String>,
+    ) -> Result<(T, CoordinationReceipt), String> {
+        let _lock = CandidateCoordinationLock::acquire(&self.lock_path)?;
+        let ledger = self.read()?;
+        let active = ledger
+            .active()
+            .filter(|active| {
+                active.operation_id == custody.operation_id
+                    && active.candidate_id == custody.candidate_id
+                    && active.artifact_id == custody.artifact_id
+                    && active.fencing_generation == custody.fencing_generation
+            })
+            .ok_or_else(|| format!("candidate_install_custody_lost:{}", custody.operation_id))?;
+        if ledger.environment_id != custody.environment_id {
+            return Err("candidate_install_environment_changed".to_string());
+        }
+        let proof = CandidateInstallCustody {
+            schema_version: INSTALL_CUSTODY_SCHEMA_VERSION.to_string(),
+            environment_id: ledger.environment_id.clone(),
+            operation_id: active.operation_id.clone(),
+            candidate_id: active.candidate_id.clone(),
+            artifact_id: active.artifact_id.clone(),
+            revision: ledger.revision,
+            fencing_generation: active.fencing_generation,
+            acquisition_outcome: custody.acquisition_outcome,
+        };
+        let result = mutation(&proof)?;
+        let operation_id = proof.operation_id.clone();
+        let (receipt, _) = self.commit_request(
+            ledger.clone(),
+            CoordinationRequest {
+                request_id: request_id.to_string(),
+                candidate_id: proof.candidate_id.clone(),
+                artifact_id: proof.artifact_id.clone(),
+                expected_revision: ledger.revision,
+                expected_fencing_generation: ledger.fencing_generation,
+                action: CoordinationAction::CompleteActive { operation_id },
+            },
+        )?;
+        if receipt.outcome != CoordinationOutcome::Completed
+            || receipt.operation_id.as_deref() != Some(proof.operation_id.as_str())
+            || receipt.active_operation_id.is_some()
+        {
+            return Err("candidate_install_completion_receipt_invalid".to_string());
+        }
+        Ok((result, receipt))
+    }
+
+    /// Finishes a previously accepted install after a crash between the
+    /// workstation acceptance commit and the coordination commit. Replaying an
+    /// already completed operation is read-only and returns its durable
+    /// receipt.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn ensure_install_completed(
+        &self,
+        custody: &CandidateInstallCustody,
+        request_id: &str,
+    ) -> Result<CoordinationReceipt, String> {
+        let _lock = CandidateCoordinationLock::acquire(&self.lock_path)?;
+        let ledger = self.read()?;
+        if ledger.environment_id != custody.environment_id {
+            return Err("candidate_install_environment_changed".to_string());
+        }
+        if let Some(receipt) = ledger.receipts().iter().rev().find(|receipt| {
+            receipt.outcome == CoordinationOutcome::Completed
+                && receipt.operation_id.as_deref() == Some(custody.operation_id.as_str())
+                && receipt.fencing_generation > custody.fencing_generation
+        }) {
+            return Ok(receipt.clone());
+        }
+        let active = ledger.active().filter(|active| {
+            active.operation_id == custody.operation_id
+                && active.candidate_id == custody.candidate_id
+                && active.artifact_id == custody.artifact_id
+                && active.fencing_generation == custody.fencing_generation
+        });
+        if active.is_none() {
+            return Err(format!(
+                "candidate_install_custody_lost:{}",
+                custody.operation_id
+            ));
+        }
+        let operation_id = custody.operation_id.clone();
+        let (receipt, _) = self.commit_request(
+            ledger.clone(),
+            CoordinationRequest {
+                request_id: request_id.to_string(),
+                candidate_id: custody.candidate_id.clone(),
+                artifact_id: custody.artifact_id.clone(),
+                expected_revision: ledger.revision,
+                expected_fencing_generation: ledger.fencing_generation,
+                action: CoordinationAction::CompleteActive { operation_id },
+            },
+        )?;
+        if receipt.outcome != CoordinationOutcome::Completed
+            || receipt.operation_id.as_deref() != Some(custody.operation_id.as_str())
+            || receipt.active_operation_id.is_some()
+        {
+            return Err("candidate_install_completion_receipt_invalid".to_string());
+        }
+        Ok(receipt)
+    }
 }
 
 fn load_ledger(path: &Path, environment_id: &str) -> Result<CoordinationLedger, String> {
@@ -546,5 +656,68 @@ mod tests {
 
         assert!(error.contains("candidate_install_artifact_contended"));
         assert_eq!(fs::read(&store.ledger_path).unwrap(), before);
+    }
+
+    #[test]
+    fn terminal_install_commit_holds_custody_through_acceptance_mutation() {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        let custody = store
+            .start_or_join_install("install-a", "candidate-a", "artifact-a")
+            .unwrap();
+
+        let (observed_revision, receipt) = store
+            .complete_active_install(&custody, "complete-install-a", |proof| {
+                let current = fixture.store().read().unwrap();
+                let error = fixture
+                    .store()
+                    .apply(CoordinationRequest {
+                        request_id: "supersede-during-completion".to_string(),
+                        candidate_id: "candidate-b".to_string(),
+                        artifact_id: "artifact-b".to_string(),
+                        expected_revision: current.revision,
+                        expected_fencing_generation: current.fencing_generation,
+                        action: CoordinationAction::Supersede {
+                            operation_id: custody.operation_id.clone(),
+                        },
+                    })
+                    .unwrap_err();
+                assert!(error.contains("lock_contended"));
+                Ok(proof.revision)
+            })
+            .unwrap();
+
+        assert_eq!(observed_revision, custody.revision);
+        assert_eq!(receipt.outcome, CoordinationOutcome::Completed);
+        assert_eq!(
+            receipt.operation_id.as_deref(),
+            Some(custody.operation_id.as_str())
+        );
+        let ledger = store.read().unwrap();
+        assert!(ledger.active().is_none());
+        assert!(ledger.fencing_generation > custody.fencing_generation);
+        assert!(!store.lock_path.exists());
+    }
+
+    #[test]
+    fn accepted_install_completion_recovery_is_idempotent() {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        let custody = store
+            .start_or_join_install("install-a", "candidate-a", "artifact-a")
+            .unwrap();
+
+        let receipt = store
+            .ensure_install_completed(&custody, "complete-install-a")
+            .unwrap();
+        let bytes = fs::read(&store.ledger_path).unwrap();
+        let replay = store
+            .ensure_install_completed(&custody, "complete-install-a")
+            .unwrap();
+
+        assert_eq!(replay, receipt);
+        assert_eq!(receipt.outcome, CoordinationOutcome::Completed);
+        assert_eq!(fs::read(&store.ledger_path).unwrap(), bytes);
+        assert!(store.read().unwrap().active().is_none());
     }
 }
