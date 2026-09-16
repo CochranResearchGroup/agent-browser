@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     digest_serializable, validate_nonempty, validate_sha256, ArtifactClass,
-    BuildProfileConfiguration, CandidateError, ExecutableInputClosure,
+    BuildProfileConfiguration, CandidateError, CandidateManifest, ExecutableInputClosure,
 };
 
 pub const BUILD_IDENTITY_SCHEMA_VERSION: &str = "agent-browser.candidate-build-identity.v1";
@@ -129,6 +129,46 @@ impl SealedArtifact {
                     &self.support_manifest_sha256,
                     &self.candidate_manifest_sha256,
                 )
+    }
+
+    /// Verify that one exact serialized candidate manifest is the document
+    /// sealed by this artifact and that both describe the same build inputs
+    /// and payload digests.
+    pub fn validate_candidate_manifest(
+        &self,
+        manifest: &CandidateManifest,
+        closure: &ExecutableInputClosure,
+        observed_manifest_sha256: &str,
+    ) -> Result<(), CandidateError> {
+        validate_sha256("candidate_manifest_sha256", observed_manifest_sha256)?;
+        if !self.verify() {
+            return Err(CandidateError::new(
+                "sealed_artifact_tampered",
+                "sealed artifact fields do not match its seal digest",
+            ));
+        }
+        if self.candidate_manifest_sha256 != observed_manifest_sha256 {
+            return Err(CandidateError::new(
+                "candidate_manifest_digest_mismatch",
+                "candidate manifest bytes do not match the sealed digest",
+            ));
+        }
+        manifest.validate_against_closure(closure)?;
+        if self.identity != BuildIdentity::new(closure, manifest.artifact_class) {
+            return Err(CandidateError::new(
+                "sealed_artifact_identity_mismatch",
+                "sealed build identity does not match the candidate manifest input closure",
+            ));
+        }
+        if self.binary_sha256 != manifest.binary_sha256
+            || self.support_manifest_sha256 != manifest.support_manifest_sha256
+        {
+            return Err(CandidateError::new(
+                "sealed_artifact_payload_mismatch",
+                "sealed payload digests do not match the candidate manifest",
+            ));
+        }
+        Ok(())
     }
 }
 

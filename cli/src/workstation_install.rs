@@ -7203,12 +7203,59 @@ fn prepare_payload_transaction_from_source(
     runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
     source: &WorkstationPayloadSource,
 ) -> Result<PreparedPayloadTransaction, String> {
+    prepare_payload_transaction_from_source_with_candidate_binding(
+        root,
+        paths,
+        args,
+        isolated_root,
+        runtime_replacement_plan,
+        source,
+        None,
+    )
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn prepare_reviewed_candidate_payload_transaction(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
+    candidate: &ReviewedCandidatePayload,
+) -> Result<PreparedPayloadTransaction, String> {
+    prepare_payload_transaction_from_source_with_candidate_binding(
+        root,
+        paths,
+        args,
+        isolated_root,
+        runtime_replacement_plan,
+        &candidate.source,
+        Some(&candidate.binding),
+    )
+}
+
+fn prepare_payload_transaction_from_source_with_candidate_binding(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
+    source: &WorkstationPayloadSource,
+    candidate_binding: Option<&CandidateArtifactTransactionBinding>,
+) -> Result<PreparedPayloadTransaction, String> {
     use crate::runtime_adoption::{persist_runtime_census, UpgradeTransactionState};
 
     let (generation_id, binary_sha256, support_manifest_sha256) =
         candidate_generation_identity_from_source(paths, args, source)?;
     let mut transaction =
         new_upgrade_transaction(paths, generation_id, binary_sha256, support_manifest_sha256);
+    if let Some(binding) = candidate_binding {
+        transaction.successor_fields.insert(
+            "candidateArtifact".to_string(),
+            serde_json::to_value(binding)
+                .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))?,
+        );
+    }
     match (args.runtime_replacement_policy, runtime_replacement_plan) {
         (RuntimeReplacementPolicy::Preserve, None) => {}
         (RuntimeReplacementPolicy::FullShutdown, Some(plan)) => {
@@ -11779,6 +11826,78 @@ impl WorkstationPayloadSource {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CandidateArtifactTransactionBinding {
+    schema_version: &'static str,
+    candidate_id: String,
+    artifact_class: agent_browser_candidate::ArtifactClass,
+    source_commit: String,
+    source_tree: String,
+    build_operation_id: String,
+    artifact_seal_sha256: String,
+    candidate_manifest_sha256: String,
+    executable_input_sha256: String,
+    binary_sha256: String,
+    build_support_manifest_sha256: String,
+    validation_receipts: Vec<String>,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug, Clone)]
+struct ReviewedCandidatePayload {
+    source: WorkstationPayloadSource,
+    binding: CandidateArtifactTransactionBinding,
+}
+
+impl ReviewedCandidatePayload {
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn from_documents(
+        binary_path: PathBuf,
+        manifest_bytes: &[u8],
+        closure_bytes: &[u8],
+        sealed_artifact_bytes: &[u8],
+    ) -> Result<Self, String> {
+        use agent_browser_candidate::{
+            ArtifactClass, CandidateManifest, ExecutableInputClosure, SealedArtifact,
+        };
+
+        let manifest: CandidateManifest = serde_json::from_slice(manifest_bytes)
+            .map_err(|error| format!("candidate_manifest_invalid_json:{error}"))?;
+        let closure: ExecutableInputClosure = serde_json::from_slice(closure_bytes)
+            .map_err(|error| format!("candidate_input_closure_invalid_json:{error}"))?;
+        let sealed: SealedArtifact = serde_json::from_slice(sealed_artifact_bytes)
+            .map_err(|error| format!("candidate_sealed_artifact_invalid_json:{error}"))?;
+        let candidate_manifest_sha256 = workstation_bytes_sha256(manifest_bytes);
+        sealed
+            .validate_candidate_manifest(&manifest, &closure, &candidate_manifest_sha256)
+            .map_err(|error| error.to_string())?;
+        if manifest.artifact_class != ArtifactClass::ProductionShaped {
+            return Err("workstation_candidate_not_production_shaped".to_string());
+        }
+
+        let source =
+            WorkstationPayloadSource::reviewed(binary_path, manifest.binary_sha256.clone())?;
+        Ok(Self {
+            source,
+            binding: CandidateArtifactTransactionBinding {
+                schema_version: "agent-browser.candidate-artifact-binding.v1",
+                candidate_id: manifest.candidate_id,
+                artifact_class: manifest.artifact_class,
+                source_commit: manifest.source.commit,
+                source_tree: manifest.source.tree,
+                build_operation_id: sealed.operation_id,
+                artifact_seal_sha256: sealed.seal_sha256,
+                candidate_manifest_sha256,
+                executable_input_sha256: manifest.executable_input_sha256,
+                binary_sha256: manifest.binary_sha256,
+                build_support_manifest_sha256: manifest.support_manifest_sha256,
+                validation_receipts: manifest.validation_receipts,
+            },
+        })
+    }
+}
+
 #[derive(Debug)]
 struct StagedWorkstationGeneration {
     generation_id: String,
@@ -15081,6 +15200,149 @@ mod tests {
             fs::read_dir(transaction_dir).unwrap().count(),
             transaction_count,
             "digest drift must fail before a second transaction is recorded"
+        );
+
+        remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn reviewed_candidate_artifact_binds_exact_seal_into_upgrade_transaction() {
+        use agent_browser_candidate::{
+            ArtifactClass, BuildIdentity, BuildProfileConfiguration, CandidateManifest,
+            ExecutableInput, ExecutableInputClosure, ExecutableInputContext, InputCategory,
+            SealedArtifact, SourceProvenance, SourceTreeState,
+        };
+        use std::collections::BTreeMap;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-reviewed-candidate-artifact-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let source_path = root.join("candidate/agent-browser");
+        fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        fs::write(&source_path, b"sealed production candidate bytes").unwrap();
+        let binary_sha256 = workstation_file_sha256(&source_path).unwrap();
+        let closure = ExecutableInputClosure::new(
+            ExecutableInputContext {
+                target: "x86_64-unknown-linux-gnu".to_string(),
+                toolchain: "rustc 1.90.0".to_string(),
+                cargo_profile: "release".to_string(),
+                resolved_build_profile: BuildProfileConfiguration::production_release(),
+                features: vec!["service".to_string()],
+                reviewed_environment_inputs: BTreeMap::new(),
+            },
+            vec![
+                ExecutableInput {
+                    path: "cli/src/main.rs".to_string(),
+                    sha256: "a".repeat(64),
+                    category: InputCategory::RustSource,
+                },
+                ExecutableInput {
+                    path: "packages/dashboard/out/index.html".to_string(),
+                    sha256: "b".repeat(64),
+                    category: InputCategory::EmbeddedDashboard,
+                },
+                ExecutableInput {
+                    path: "scripts/install-agent-browser-privileges.sh".to_string(),
+                    sha256: "c".repeat(64),
+                    category: InputCategory::EmbeddedAsset,
+                },
+            ],
+        )
+        .unwrap();
+        let build_support_manifest_sha256 = "d".repeat(64);
+        let mut manifest = CandidateManifest::new(
+            SourceProvenance {
+                commit: "e".repeat(40),
+                tree: "f".repeat(64),
+                state: SourceTreeState::Clean,
+            },
+            &closure,
+            ArtifactClass::ProductionShaped,
+            binary_sha256.clone(),
+            build_support_manifest_sha256.clone(),
+            "2026-09-16T01:00:00Z".to_string(),
+        )
+        .unwrap();
+        manifest.validation_receipts = vec!["receipt://provider-free/exact-head".to_string()];
+        let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
+        let manifest_sha256 = workstation_bytes_sha256(&manifest_bytes);
+        let sealed = SealedArtifact::new(
+            "build-operation-1",
+            BuildIdentity::new(&closure, ArtifactClass::ProductionShaped),
+            binary_sha256.clone(),
+            build_support_manifest_sha256.clone(),
+            manifest_sha256.clone(),
+        )
+        .unwrap();
+        let closure_bytes = serde_json::to_vec(&closure).unwrap();
+        let sealed_bytes = serde_json::to_vec(&sealed).unwrap();
+        let reviewed = ReviewedCandidatePayload::from_documents(
+            source_path,
+            &manifest_bytes,
+            &closure_bytes,
+            &sealed_bytes,
+        )
+        .unwrap();
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+
+        let prepared = prepare_reviewed_candidate_payload_transaction(
+            &root, &paths, &args, true, None, &reviewed,
+        )
+        .unwrap();
+        let binding = &prepared.transaction.successor_fields["candidateArtifact"];
+        assert_eq!(
+            binding["schemaVersion"],
+            "agent-browser.candidate-artifact-binding.v1"
+        );
+        assert_eq!(binding["candidateId"], manifest.candidate_id);
+        assert_eq!(binding["buildOperationId"], sealed.operation_id);
+        assert_eq!(binding["artifactSealSha256"], sealed.seal_sha256);
+        assert_eq!(binding["candidateManifestSha256"], manifest_sha256);
+        assert_eq!(
+            binding["buildSupportManifestSha256"],
+            build_support_manifest_sha256
+        );
+        assert_eq!(
+            binding["executableInputSha256"],
+            manifest.executable_input_sha256
+        );
+        assert_eq!(
+            binding["validationReceipts"],
+            serde_json::json!(manifest.validation_receipts)
+        );
+        assert_eq!(prepared.transaction.candidate_binary_sha256, binary_sha256);
+        assert_ne!(
+            prepared.transaction.candidate_support_manifest_sha256,
+            binding["buildSupportManifestSha256"],
+            "build support identity must remain distinct from install-specific support"
+        );
+
+        let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+        let transaction_count = fs::read_dir(&transaction_dir).unwrap().count();
+        let mut changed_manifest_bytes = manifest_bytes;
+        changed_manifest_bytes.push(b'\n');
+        let error = ReviewedCandidatePayload::from_documents(
+            reviewed.source.binary_path.clone(),
+            &changed_manifest_bytes,
+            &closure_bytes,
+            &sealed_bytes,
+        )
+        .unwrap_err();
+        assert!(error.contains("candidate_manifest_digest_mismatch"));
+        assert_eq!(
+            fs::read_dir(transaction_dir).unwrap().count(),
+            transaction_count,
+            "manifest drift must fail before another transaction is recorded"
         );
 
         remove_generation_tree(&root).unwrap();

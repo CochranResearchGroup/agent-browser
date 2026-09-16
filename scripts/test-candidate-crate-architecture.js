@@ -162,7 +162,10 @@ for (const forbiddenEffect of [
 const workstationInstaller = read('cli/src/workstation_install.rs');
 for (const requiredBoundary of [
   'WorkstationPayloadSource',
+  'ReviewedCandidatePayload',
   'prepare_payload_transaction_from_source',
+  'prepare_reviewed_candidate_payload_transaction',
+  'agent-browser.candidate-artifact-binding.v1',
   'workstation_payload_source_digest_mismatch',
   'workstation_payload_source_changed_during_staging',
 ]) {
@@ -171,6 +174,10 @@ for (const requiredBoundary of [
     `candidate promotion must retain the existing workstation staging seam: ${requiredBoundary}`,
   );
 }
+requireCondition(
+  read('crates/agent-browser-candidate/src/build.rs').includes('validate_candidate_manifest'),
+  'candidate kernel must validate exact manifest bytes against the sealed build artifact',
+);
 for (const documentationPath of [
   'cli/src/output.rs',
   'README.md',
