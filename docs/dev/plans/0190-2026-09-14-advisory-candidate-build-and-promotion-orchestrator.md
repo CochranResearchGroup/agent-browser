@@ -471,6 +471,33 @@ completed compatible-access-profile repair, before this checkpoint. Public
 test execution and production-shaped qualification remain; neither runtime was
 mutated.
 
+Checkpoint `41db948c` exposes exact provider-free test coordination and
+execution. `candidate test` verifies the candidate manifest, executable-input
+closure, artifact seal, binary bytes, and exact source-checkout revision before
+deriving a canonical test identity. Named `candidate-kernel`,
+`candidate-build-adapter`, and `candidate-cli` selections bind deterministic
+command, fixture, platform-capability, and environment digests. Dry-run creates
+no state and reports join, reuse, or start advice. Apply first executes the
+exact candidate binary's help surface, then runs only the named provider-free
+suites with private HOME, XDG, temporary, Cargo, log, output, and receipt roots
+below `cli/target`; Cargo admission retains its required host control socket.
+An exact active run joins, a failed receipt is preserved without blocking a new
+attempt, and only an exact successful hermetic receipt with terminal cleanup
+proof is reused. Deserialized identities and records must remain canonical.
+Four CLI adapter fixtures, all five development-coordination kernel tests, the
+complete candidate crate, strict workspace Clippy, format, candidate
+architecture guard, rebuilt CLI help, docs production build, remote-view
+documentation contract, and patch hygiene pass. No browser, provider, profile,
+or installed runtime was touched. Abandoned active build or test recovery and
+production-shaped qualification remain.
+
+Checkpoint `21bd6afd` corrects the candidate CLI suite commands to enter
+through `scripts/ci/rust-tests.sh --focused`. The runner preserves the real
+user-systemd runtime directory needed by the WSL Cargo admission wrapper while
+continuing to give every CLI test process its own disposable HOME and XDG
+trees. The four focused adapter fixtures, strict workspace Clippy, format,
+candidate architecture guard, and patch hygiene pass after this correction.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,

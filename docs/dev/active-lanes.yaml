@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 45b93fee98a7477ee9e2384c16b1bf412e815ea7
+    checkpoint: 21bd6afdbb035bc49151f3dab2d5ba9a2a0ba6e2
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
     validation_status: passed
-    validation_ref: 45b93fee98a7477ee9e2384c16b1bf412e815ea7
+    validation_ref: 21bd6afdbb035bc49151f3dab2d5ba9a2a0ba6e2
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
     overlaps: [P169, P197]
     reconciled_overlaps: [P169, P197]
-    blocker: public test execution, abandoned active-build recovery, and production-shaped qualification remain; qualification retains its later gate
+    blocker: abandoned active build or test recovery and production-shaped qualification remain; qualification retains its later gate
     updated_at: 2026-09-16
   - id: P197
     product_lane: PL-CHALLENGE
