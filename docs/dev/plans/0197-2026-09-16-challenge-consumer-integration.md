@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -43,11 +43,15 @@ verification, cooldown, intervention, and downstream admission. The task is
 principal-owned, exact-handle-bound, idempotent, deadline-bounded, and exercised
 through provider-free fixtures.
 
-Source checkpoint `3158503b16bef22fa955077cc9de1dbbc4315849`
+Published checkpoint `38f7b1e2a51a25e6e9748130ea09b7015af38e67`
 implements one pure consumer-admission contract plus one shared Service adapter.
-Authentication Run and navigation now call that adapter before consumer
-execution. Their durable responses retain challenge outcome, consumer
-admission, and later consumer failure as separate facts.
+Authentication Run calls that adapter before its first effect and durably
+retains the admission beside later authentication failure. Navigation calls the
+adapter inside its action handler, but a completion audit found that the shared
+dispatcher may perform confirmation, runtime-admission, recovery, or auto-launch
+work before it reaches that handler. A later navigation error also drops the
+computed admission from the response. Those two related findings reopen the
+navigation integration and supersede the prior docs-only remaining-state claim.
 
 P190 remains active on `platform/p190-advisory-candidate-orchestrator`. Its
 current implementation owns candidate build and workstation coordination. P197
@@ -99,6 +103,10 @@ effective site policy requires challenge admission.
    generated client, and focused provider-free documentation needed for this
    contract. Shared README, global CLI help, command docs, and agent-skill edits
    remain deferred while P190 owns those surfaces.
+7. Hoist challenge-aware navigation admission to the outer command boundary so
+   it runs before confirmation, runtime admission, browser recovery, launch, or
+   dispatch. Carry the same typed admission through both successful and failed
+   navigation responses without mutating the durable challenge outcome.
 
 ## Scope And Effect Boundary
 
@@ -136,6 +144,14 @@ live Turnstile or hCaptcha acceptance action.
 No subagent, browser worker, provider operator, benchmark checkout, or runtime
 operator is assigned.
 
+Plan version 3 is a material replan after the completion audit exposed one
+shared-dispatch ordering defect and its response-projection consequence. It does
+not reset cumulative effort, attempt, review, or discovery bounds. One bounded
+provider-free repair packet remains: outer-boundary navigation admission,
+failure projection, focused red-to-green coverage, then the already selected
+changed-surface gates. Another semantic defect ends this source packet for a
+successor decision rather than starting another repair loop.
+
 ## Implementation Checkpoint
 
 The pure challenge-control contract verifies terminal receipt consistency,
@@ -160,10 +176,12 @@ The parity pass found one packet-local omission in the MCP projection of
 gate passes on the repaired exact head. No browser, provider, credential,
 installed-runtime, or production effect occurred.
 
-Draft PR #157 carries the published branch. Applicable exact-head CI and the
-shared user-facing documentation surfaces remain before protected integration.
-P190 retains primary-writer custody of those documentation surfaces while the
-lanes overlap.
+Draft PR #157 carries the published branch. Exact-head CI for `38f7b1e2` may
+finish as retained evidence, but it cannot establish merge readiness because
+the navigation ordering defect changes executable source. The bounded repair,
+refreshed applicable validation, and shared user-facing documentation surfaces
+remain before protected integration. P190 retains primary-writer custody of
+those documentation surfaces while the lanes overlap.
 
 ## Validation And Exit
 
@@ -174,10 +192,14 @@ Exit requires current evidence that:
   preserving valid cooldown and prior-effect evidence;
 - exact replay returns the same decision without executing a consumer;
 - Authentication Run and navigation both call the same Service adapter;
+- challenge-aware navigation admission runs at the outer command boundary
+  before confirmation, runtime admission, browser recovery, browser launch, or
+  action dispatch;
 - principal, effective site policy, downstream intent, and exact current tab
   mismatches fail before consumer execution;
 - a later authentication or navigation failure remains a consumer failure and
-  does not rewrite challenge outcome or admission;
+  does not rewrite challenge outcome or admission, and the navigation failure
+  response retains the typed admission as a separate fact;
 - no provider name, desktop coordinate, selector, credential, or browser
   implementation leaks into the pure contract;
 - challenge-control tests, focused Service and navigation tests, contract
