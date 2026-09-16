@@ -771,7 +771,11 @@ function expectAnyIncludes(source, needles, message) {
 }
 
 function extractNativeServiceActions(source) {
-  const body = extractRustFunctionBody(source, 'pub(crate) async fn execute_command');
+  let body = extractRustFunctionBody(source, 'pub(crate) async fn execute_command');
+  const delegatedDispatcher = 'async fn execute_command_after_navigation_admission';
+  if (source.includes(delegatedDispatcher)) {
+    body += `\n${extractRustFunctionBody(source, delegatedDispatcher)}`;
+  }
   const actions = [];
   for (const arm of body.matchAll(
     /(?<patterns>"service_[a-z0-9_]+"(?:\s*\|\s*"service_[a-z0-9_]+")*)\s*=>/g,

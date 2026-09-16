@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -52,12 +52,14 @@ outer response wrapper retains the typed admission beside any later navigation
 success or failure, and the inner handler rejects a challenged call that tries
 to bypass the preflight.
 
-P190 remains active on `platform/p190-advisory-candidate-orchestrator`. Its
-current implementation owns candidate build and workstation coordination. P197
-owns the challenge-control contract plus the authentication and navigation
-adapters. P190 remains primary writer for candidate, installer, CLI-help,
-README, docs-command, and agent-skill surfaces while the lanes overlap. P197
-will not edit those shared presentation surfaces in this packet.
+P190 integrated through PR #152 as merge commit `38e4cb9d` and released its
+shared public-documentation custody. P197 merged the resulting `main` through
+checkpoint `b9b8afc4`; its challenge-control, authentication, navigation,
+schema, and generated-client changes remain intact. P202 is now the primary
+writer for `README.md`, `cli/src/output.rs`, `skills/agent-browser/SKILL.md`,
+and `docs/src/app/commands/page.mdx` through PR #168. P197 continues source and
+validation work independently, then will merge P202's integrated documentation
+baseline before adding the bounded challenge-consumer guidance.
 
 ## Contract
 
@@ -151,6 +153,18 @@ failure projection, focused red-to-green coverage, then the already selected
 changed-surface gates. Another semantic defect ends this source packet for a
 successor decision rather than starting another repair loop.
 
+Plan version 4 records dependency progress rather than changing scope. P190 is
+integrated, P197 is refreshed onto that source, and P202 temporarily owns the
+four shared public-documentation files. The critical path is now refreshed
+exact-head validation, P202 integration, the bounded P197 documentation delta,
+and protected P197 integration. The refreshed `b9b8afc4` workflow passed every
+fast gate, including comprehensive Rust. Provider-free local revalidation then
+exposed one parity-harness assumption: the checker inspected only the public
+`execute_command` wrapper after P197 moved dispatch arms behind navigation
+admission. The checker now includes that explicit delegated dispatcher, and the
+real parity command proves all 101 native and 118 service-request actions remain
+covered.
+
 ## Implementation Checkpoint
 
 The pure challenge-control contract verifies terminal receipt consistency,
@@ -183,9 +197,15 @@ later failure responses. The outer-denial, inner-bypass, failure-projection,
 existing admission, route-confusion, and CDP stream derivation tests pass, as do
 format and strict workspace Clippy. The selector-recommended live CDP streaming
 smoke is excluded because it launches a browser outside this plan's explicit
-provider-free boundary. Refreshed exact-head CI and the shared user-facing
-documentation surfaces remain before protected integration. P190 retains
-primary-writer custody of those documentation surfaces while the lanes overlap.
+provider-free boundary. P197 merged current `main` through published checkpoint
+`b9b8afc4`. Its exact-head workflow passed Version Sync, Rust Quality,
+Dashboard, Service Client, Workstation Fixtures, and comprehensive Rust. The
+post-merge challenge-control crate, service parity, generated-client contract
+and type checks, no-launch collection smoke, and route-confusion gates also
+pass. P202 retains primary-writer custody of the four shared user-facing
+documentation surfaces through PR #168. After P202 integrates, P197 will merge
+that baseline, add only its bounded challenge-consumer guidance, and complete
+the final changed-surface and protected integration gates.
 
 ## Validation And Exit
 
