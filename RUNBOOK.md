@@ -1,50 +1,29 @@
 # Runbook
 
-Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md) preserves checkpoints through Turn 312; [Turn 313](RUNBOOK-history-2026-09-13-turn313.md) and [superseded P186 checkpoints through Turn 328](RUNBOOK-history-2026-09-14-p186-through-turn328.md) are separate.
-[Turns 314 through 320](RUNBOOK-history-2026-09-14-turn314-through-turn320.md) and [P169 history through its Turn 319](RUNBOOK-history-2026-09-14-p169-through-turn319.md) remain preserved separately.
-Keep this file at or below 200 lines under policy 0043.
-
+Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md) preserves checkpoints through Turn 312; [Turn 313](RUNBOOK-history-2026-09-13-turn313.md), [Turns 314 through 320](RUNBOOK-history-2026-09-14-turn314-through-turn320.md), [P169 history through Turn 319](RUNBOOK-history-2026-09-14-p169-through-turn319.md), [superseded P186 checkpoints through Turn 328](RUNBOOK-history-2026-09-14-p186-through-turn328.md), and [P194 through P196 checkpoints from Turns 340 through 343](RUNBOOK-history-2026-09-15-p194-through-turn343.md) remain separately preserved.
 ## Active Plan Locator Index
 
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), and [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md)
 - [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md), [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), and [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md)
 - [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
-- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)
+- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
-## Turn 343 | 2026-09-15
+## Turn 344 | 2026-09-15
 
-P196 source checkpoint `73001841` proves #76 already repairs #87's foreground
-projection race. The legacy oracle takes two independent writer processes and
-returns the historical stale-revision error; current replay completes two
-sequential foreground projections after one writer each, preserves all updates,
-records no duplicate, and clears exact residue. All 43 store tests, owned-launch
-cleanup, format, and strict Clippy pass. Protected integration is next; no
-browser, profile, provider, production runtime, or installation effect occurred.
-
-## Turn 342 | 2026-09-15
-
-P196 and issue #87 are active on `fix/issue-87-foreground-launch-cas` from
-current merged-main checkpoint `6e052f14`. The first packet will drive the real
-foreground browser-projection persistence seam through independent adjacent
-writers, two sequential launch projections, and exact residue checks. Current
-source will be changed only if that missing acceptance remains red. Protected
-integration precedes one production build and transactional install; no browser,
-profile, provider, credential, tenant, Service State, or runtime effect has yet
-occurred.
-
-## Turn 341 | 2026-09-15
-
-[Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md) and issue #131 are closed after PR #147 merged exact source head `ada1c62e` as `172ccdd2`; CI run 35013644563 passes every ordinary required gate.
-Earlier run 35009619406 retains one unrelated Lease Authority process-observation flake; the exact test and all 108 crate tests passed locally before the clean run. No browser, install, profile, provider, production, or release effect occurred.
-
-## Turn 340 | 2026-09-15
-
-P194 and issue #76 are closed after PR #146 merged source head `510bf266` as
-`f1435195`. The revision-only freshness probe and bounded parser stack pass the
-9.64 MB regression, all 41 `service_store` tests, issue #87's pure adjacent-
-revision case, format, strict Clippy, and canonical CI run 35007032152. No
-production install, monitor retry, browser, profile, provider, or Service State
-effect occurred; those live gates remain separate.
+[Plan 0196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)
+is CLOSED. PRs #150, #153, and #154 merged the #87 race proof and exact
+installed-acceptance repairs into `main@279b2228`. Final generation
+`0.28.0-15f0f3576657-30788a166073`, SHA-256
+`15f0f3576657da6cfc9a59bdb23b0b3d94fb37d73a4c11d3c1e08a6d4fcf8634`,
+is accepted under transaction `upgrade-d0e7c98f-d6b7-4e48-bc60-aa570e5dc329`
+revision 13. Installed doctor passes with one runtime host, one dashboard,
+healthy monitor, and exact supervisor identity. A fresh explicit filesystem profile
+opened `about:blank`, returned the same URL, closed, moved its profile to trash,
+and left zero exact process holders. A targeted Guacamole web recreate
+loaded the sealed extension at `0555` and `0444`, returned HTTP 200, and left
+PostgreSQL and guacd unchanged. Issues #87, #131, and #151 are closed; #143
+remains open for the broader retained-owner inventory defect. The dashboard
+operator-journey warning remains nonblocking and no tenant workflow was run.
 
 ## Turn 339 | 2026-09-15
 

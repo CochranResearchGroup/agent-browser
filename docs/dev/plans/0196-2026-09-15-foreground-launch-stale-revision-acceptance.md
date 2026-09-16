@@ -2,7 +2,7 @@
 
 Date: 2026-09-15
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -19,7 +19,8 @@ Branch: `fix/issue-131-explicit-custom-runtime-profile`
 
 Target: `main`
 
-Integration: pending protected pull request
+Integration: complete through PRs #150, #153, and #154; final merge commit
+`279b2228dd2c1834e42bd062224b8ed465247fb6`
 
 ## Objective
 
@@ -193,7 +194,21 @@ against the frozen published diff and has no runtime authority.
   identity, and Guacamole extension modes passed and entered `main` through PR
   #153. Installed acceptance exposed the parallel `runtimeProfile` decoder
   path. The strengthened full launch-hint regression and both decoder-focused
-  tests now pass; integration and final installed acceptance remain pending.
+  tests pass and entered `main` through PR #154.
+- Final generation `0.28.0-15f0f3576657-30788a166073`, binary SHA-256
+  `15f0f3576657da6cfc9a59bdb23b0b3d94fb37d73a4c11d3c1e08a6d4fcf8634`,
+  is accepted under transaction
+  `upgrade-d0e7c98f-d6b7-4e48-bc60-aa570e5dc329` revision 13.
+- Installed doctor passes with one runtime host, one dashboard process, a
+  healthy monitor, and an exact supervisor executable match. The remaining
+  dashboard operator-journey warning is nonblocking and outside this plan.
+- Fresh custom-profile acceptance opened `about:blank`, read back the same URL,
+  closed successfully, moved the disposable profile to trash, and found zero
+  exact process holders. The Guacamole extension loaded after a targeted web
+  container recreation while PostgreSQL and guacd identities remained stable.
+- Issues #87, #131, and #151 are closed with installed receipts. Issue #143
+  remains open because its broader retained-owner inventory defect is outside
+  this plan's narrow prestart-attribution repair.
 
 ## Stop Condition
 
