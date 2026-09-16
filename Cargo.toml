@@ -2,6 +2,7 @@
 members = [
     "cli",
     "crates/agent-browser-cdp",
+    "crates/agent-browser-candidate",
     "crates/agent-browser-challenge-control",
     "crates/agent-browser-desktop-services",
     "crates/agent-browser-lease-authority",

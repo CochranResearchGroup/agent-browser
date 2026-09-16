@@ -2,9 +2,9 @@
 
 Date: 2026-09-14
 
-Plan version: 2
+Plan version: 3
 
-State: PLANNED
+State: OPEN
 
 Lane: P190
 
@@ -25,6 +25,8 @@ Work item: [issue #136](https://github.com/CochranResearchGroup/agent-browser/is
 Source baseline: `d101eb1516a26a8ae40821c7da69bba77e43f78d`
 
 Version 2 baseline: `4e047fb4b51f605094b3557eb0cb0de1a2643a1e`
+
+Implementation baseline: `552f692502ec63032b0a936029993510f3299fb7`
 
 Consolidation: required
 
@@ -60,11 +62,76 @@ Cargo profile differs from production.
 The Plan 0186 installer collision showed that a process lock can serialize two
 commands while still leaving their intent and candidate ownership ambiguous.
 Policies 0051 and 0052 now treat coordination records as integrity mechanisms,
-not agent-role permissions. Issue #136 tracks implementation. This planning
-slice changes no executable, creates no implementation worktree, and performs
-no build, install, supervisor, browser, profile, provider, or tenant effect.
-Implementation admission waits for the current worktree and active-lane drift
-to be reconciled.
+not agent-role permissions. Issue #136 tracks implementation. Implementation
+is admitted from canonical `main` checkpoint `552f6925` on
+`platform/p190-advisory-candidate-orchestrator`. The first packet inventories
+the executable-input closure and develops the pure candidate manifest and
+advice interface without a candidate build or any install, supervisor,
+browser, profile, provider, or tenant effect. Shared adapters and costly build
+qualification wait for the announced incoming bugfix integration and a fresh
+canonical-main readback.
+
+## Implementation Progress
+
+The first source-only checkpoint is `e10869f4`. It adds the pure
+`agent-browser-candidate` crate, a durable executable-input inventory, stable
+input and manifest digests, artifact-reuse equivalence independent of merge
+provenance, typed advisory results, and revision and fencing-aware idempotent
+transitions. Production-shaped manifests fail closed when dashboard output or
+embedded support assets are absent.
+
+The focused candidate tests, candidate architecture guard, existing extracted
+crate architecture guards and tests, workspace format, and strict workspace
+Clippy pass at this checkpoint. The ordinary Rust runner now exposes the
+`candidate` compartment. No CLI adapter, candidate build, installed runtime,
+browser, profile, provider, Service State, or production effect was introduced.
+The next packet remains behind the announced bugfix integration readback
+because it begins the shared build and workstation adapter surfaces.
+
+The second pure-kernel checkpoint is `6e37707b`. Equivalent build identities
+now join an active operation or reuse an exactly verified sealed artifact;
+different identities receive deterministic disjoint output directories; failed
+operations are not reused; and a changed sealed digest fails closed. Promotion
+advice verifies the production artifact class, full release profile, clean and
+integrated source provenance, current executable-input equivalence, binary and
+support-manifest digests, exact scoped receipts, development doctor, and task
+residue. It returns explicit rebuild reasons separately from integrity
+precondition failures. Focused tests and strict workspace Clippy pass. This
+checkpoint still performs no build, repository collection, runtime action, or
+shared CLI adaptation.
+
+The third pure-kernel checkpoint is `32f4f212`. It deterministically allocates
+stable lane namespaces with disjoint install, home, runtime, socket, profile,
+browser-state, output, provider, and port identities. Test-run identity binds
+the candidate, binary, suite revision and selection, fixture, target, runtime
+capability, environment, and resource class. Exact active runs join; only exact
+hermetic successful receipts with proven terminal cleanup are reusable;
+shared-resource conflicts wait; isolated provider-free work remains eligible
+to overlap. Focused tests, the candidate architecture guard, and strict
+workspace Clippy pass without creating any namespace or test process.
+
+The fourth pure-kernel checkpoint is `d2f7f032`. The coordination ledger now
+records idempotent request receipts, joins same-candidate requests, queues
+competing candidates in FIFO order, and supports exact cancel, discard,
+activate, supersede, and completion transitions. Active and queued artifacts
+remain pinned until disposition. Ownership-changing transitions advance a
+fencing generation; stale writers and exhausted counters fail without partial
+mutation. Liveness renewal requires new durable phase or process evidence and
+reports bounded recovery choices after a deadline. Lock traces enforce the
+coordination, install, runtime, Service State acquisition order, reverse
+release order, and a caller-selected maximum physical hold duration. Candidate
+tests and strict workspace Clippy pass; the checkpoint remains pure and causes
+no build or runtime effect.
+
+Checkpoint `95c92430` freezes checked-in versioned fixtures for the candidate
+manifest and competing-candidate advisory result. Deserialized input closures
+must be canonical, and candidate manifests now validate their source,
+candidate ID, content and artifact digests, build profile, features, embedded
+assets, timestamp, and receipt locators before adapter use. The promotion
+decision rejects internally inconsistent manifests as integrity failures while
+preserving executable-input drift as a distinct rebuild reason. Fixture tests,
+all focused candidate tests, the architecture guard, and strict workspace
+Clippy pass without performing a candidate build.
 
 ## Frozen Decisions
 

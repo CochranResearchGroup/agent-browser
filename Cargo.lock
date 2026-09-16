@@ -81,6 +81,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-browser-candidate"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "agent-browser-cdp"
 version = "0.1.0"
 dependencies = [
