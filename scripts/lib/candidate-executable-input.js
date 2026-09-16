@@ -99,20 +99,20 @@ function repositoryPath(repoRoot, path, sourceControlRoots = {}) {
   }
 
   // Linked worktrees keep the branch ref and packed refs in the shared Git
-  // directory. Cargo records those exact files when build metadata reads the
-  // source revision, so retain their bytes under stable virtual paths rather
-  // than either rejecting them or leaking machine-specific absolute paths.
-  for (const [name, configuredRoot] of [
-    ['worktree', sourceControlRoots.worktree],
-    ['common', sourceControlRoots.common],
+  // directory. Cargo records those files because build.rs embeds source
+  // provenance. Provenance is already sealed independently by the source
+  // commit, tree state, and binary digest, so it must not turn a docs-only
+  // merge into an executable-input change.
+  for (const configuredRoot of [
+    sourceControlRoots.worktree,
+    sourceControlRoots.common,
   ]) {
     if (!configuredRoot) continue;
     const sourceControlRoot = realpathSync(configuredRoot);
     if (pathWithin(sourceControlRoot, absolute)) {
-      const suffix = relative(sourceControlRoot, absolute).split(sep).join('/');
       return {
         absolute,
-        relative: `.source-control/${name}/${suffix}`,
+        relative: null,
       };
     }
   }
@@ -121,7 +121,6 @@ function repositoryPath(repoRoot, path, sourceControlRoots = {}) {
 }
 
 function category(path) {
-  if (path.startsWith('.source-control/')) return 'source_control_metadata';
   if (path.endsWith('.rs') && path.split('/').at(-1) === 'build.rs') return 'build_script';
   if (path.endsWith('.rs')) return 'rust_source';
   if (path.endsWith('Cargo.toml')) return 'cargo_manifest';

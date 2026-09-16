@@ -93,8 +93,6 @@ try {
   assert.deepEqual(
     closure.inputs.map((input) => input.path),
     [
-      '.source-control/common/packed-refs',
-      '.source-control/worktree/HEAD',
       'Cargo.lock',
       'Cargo.toml',
       'cli/build.rs',
@@ -114,15 +112,27 @@ try {
     closure.inputs.find((input) => input.path === 'packages/dashboard/out/index.html').category,
     'embedded_dashboard',
   );
-  assert.ok(
-    closure.inputs
-      .filter((input) => input.path.startsWith('.source-control/'))
-      .every((input) => input.category === 'source_control_metadata'),
-  );
+  assert.ok(closure.inputs.every((input) => !input.path.startsWith('.source-control/')));
   assert.ok(closure.inputs.every((input) => /^[a-f0-9]{64}$/u.test(input.sha256)));
   assert.ok(closure.inputs.every((input, index) => (
     index === 0 || closure.inputs[index - 1].path < input.path
   )));
+
+  writeFileSync(packedRefs, '# changed merge provenance only\n');
+  writeFileSync(worktreeHead, 'ref: refs/heads/merged-example\n');
+  const closureAfterProvenanceChange = collectExecutableInputClosure({
+    repoRoot: root,
+    depInfoPaths: [cliDep, crateDep],
+    requiredPaths: ['Cargo.toml', 'Cargo.lock', 'cli/build.rs', 'package.json'],
+    recursiveRoots: ['packages/dashboard/out'],
+    context: context(),
+    productionShaped: true,
+    sourceControlRoots: { common: commonGit, worktree: worktreeGit },
+  });
+  assert.equal(
+    digestExecutableInputClosure(closureAfterProvenanceChange),
+    digestExecutableInputClosure(closure),
+  );
 
   const rustFixtureClosure = {
     schemaVersion: 'agent-browser.executable-input-closure.v1',
