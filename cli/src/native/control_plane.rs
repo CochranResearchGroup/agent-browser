@@ -16,7 +16,7 @@ use super::cancellation::CancellationToken as RunningJobCancel;
 use super::desktop_evidence_action::redact_desktop_evidence_stream_result;
 use super::desktop_interaction::redact_desktop_interaction_stream_result;
 use super::desktop_prompt_perception::redact_desktop_prompt_stream_result;
-use super::service_failure::attach_service_failure_recourse;
+use super::service_failure::attach_service_failure_recourse_for_action;
 use super::service_failure_journal::{
     append_service_failure_best_effort, opaque_identifier_hash, ServiceFailureCategory,
     ServiceFailureRecord, ServiceFailureReferences,
@@ -1287,7 +1287,7 @@ fn finalize_service_request(
     } else {
         state
     };
-    attach_service_failure_recourse(&mut response);
+    attach_service_failure_recourse_for_action(&mut response, &request.action);
     let existing_job = load_service_job(&service_job_id(request));
     if let Some(existing) = existing_job
         .as_ref()
@@ -5019,6 +5019,59 @@ mod tests {
         assert_eq!(
             job.failure.as_ref().unwrap().recommended_action,
             "inspect_profile_recovery_plan"
+        );
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn read_only_browser_inventory_failure_is_terminal_no_effect() {
+        let home = temp_home("control-plane-read-only-browser-inventory-failure");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let request = control_request_for_mode_test(json!({
+            "id": "browser-inventory-failure",
+            "action": "service_browsers",
+            "serviceName": "RetainedProfileFixture",
+            "agentName": "fixture-agent",
+            "taskName": "inspectRetainedOwner"
+        }));
+        persist_service_job_queued(&request);
+
+        let response = finalize_service_request(
+            &request,
+            json!({
+                "id": request.id,
+                "success": false,
+                "error": "protected_browser_owner_observation_invalid"
+            }),
+            ServiceTerminalState::Failed,
+            ServiceTerminalPhase::Finalize,
+        );
+
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["code"],
+            "protected_browser_owner_observation_invalid"
+        );
+        assert_eq!(
+            response["failure"]["recommendedAction"],
+            "inspect_service_inventory_state"
+        );
+        assert_eq!(
+            response["terminalOutcome"]["failure"]["effectState"],
+            "no_effect"
+        );
+        let persisted = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+            .load()
+            .unwrap();
+        assert_eq!(
+            persisted.jobs["mode-test"]
+                .failure
+                .as_ref()
+                .unwrap()
+                .effect_state,
+            crate::native::service_failure::ServiceEffectState::NoEffect
         );
 
         let _ = std::fs::remove_dir_all(&home);

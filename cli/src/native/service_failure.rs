@@ -915,10 +915,14 @@ pub fn attach_service_failure_recourse(response: &mut Value) {
     {
         return;
     }
-    let Some(error) = response.get("error").and_then(Value::as_str) else {
+    let Some(error) = response
+        .get("error")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
         return;
     };
-    let mut recourse = classify_service_failure(error);
+    let mut recourse = classify_service_failure(&error);
     recourse.job_id = response
         .get("id")
         .and_then(Value::as_str)
@@ -928,10 +932,69 @@ pub fn attach_service_failure_recourse(response: &mut Value) {
     }
 }
 
+pub fn attach_service_failure_recourse_for_action(response: &mut Value, action: &str) {
+    attach_service_failure_recourse(response);
+    if !matches!(
+        action,
+        "service_profiles" | "service_sessions" | "service_browsers"
+    ) {
+        return;
+    }
+    let Some(error) = response
+        .get("error")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
+        return;
+    };
+    let Some(failure) = response.get_mut("failure") else {
+        return;
+    };
+    let Ok(mut recourse) = serde_json::from_value::<ServiceFailureRecourse>(failure.clone()) else {
+        return;
+    };
+    recourse.code = error.split(':').next().unwrap_or(&error).to_string();
+    recourse.axis = ServiceFailureAxis::ServiceState;
+    recourse.phase = ServiceFailurePhase::Finalize;
+    recourse.effect_state = ServiceEffectState::NoEffect;
+    recourse.retry_disposition = ServiceRetryDisposition::InspectBeforeRetry;
+    recourse.recommended_action = "inspect_service_inventory_state".to_string();
+    recourse.reuse_allowed = false;
+    recourse.safe_next_actions = vec![
+        "inspect_service_status".to_string(),
+        "inspect_service_inventory_state".to_string(),
+    ];
+    recourse.hard_stops = Vec::new();
+    if let Ok(value) = serde_json::to_value(recourse) {
+        *failure = value;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn read_only_inventory_failure_reports_no_effect() {
+        for action in ["service_profiles", "service_sessions", "service_browsers"] {
+            let mut response = json!({
+                "success": false,
+                "id": format!("request-{action}"),
+                "error": "protected_browser_owner_observation_invalid"
+            });
+            attach_service_failure_recourse_for_action(&mut response, action);
+            assert_eq!(response["failure"]["effectState"], "no_effect");
+            assert_eq!(
+                response["failure"]["code"],
+                "protected_browser_owner_observation_invalid"
+            );
+            assert_eq!(
+                response["failure"]["recommendedAction"],
+                "inspect_service_inventory_state"
+            );
+        }
+    }
 
     #[test]
     fn desktop_interaction_authority_rejection_reports_proven_no_effect() {

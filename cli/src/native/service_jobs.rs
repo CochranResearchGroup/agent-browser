@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use super::service_failure::attach_service_failure_recourse;
+use super::service_failure::attach_service_failure_recourse_for_action;
 use super::service_model::{JobState, ServiceEvent, ServiceEventKind, ServiceJob, ServiceState};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_terminal_outcome::{
@@ -206,7 +206,7 @@ fn terminal_outcome_for_job(
         "success": false,
         "error": error,
     });
-    attach_service_failure_recourse(&mut response);
+    attach_service_failure_recourse_for_action(&mut response, &job.action);
     ServiceTerminalOutcome::from_response(
         &job.provenance,
         &response,

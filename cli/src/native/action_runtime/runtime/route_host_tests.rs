@@ -1226,6 +1226,84 @@ fn explicit_browser_session_precedes_shared_runtime_host_transport() {
 }
 
 #[test]
+fn retained_dead_browser_without_current_owner_returns_typed_recovery_conflict() {
+    let session_id = "retained-default";
+    let browser_id = "session:retained-default";
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            "Default".to_string(),
+            BrowserProfile {
+                id: "Default".to_string(),
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([
+            (
+                session_id.to_string(),
+                BrowserSession {
+                    id: session_id.to_string(),
+                    profile_id: Some("Default".to_string()),
+                    browser_ids: vec![browser_id.to_string()],
+                    ..BrowserSession::default()
+                },
+            ),
+            (
+                "unrelated-active".to_string(),
+                BrowserSession {
+                    id: "unrelated-active".to_string(),
+                    service_name: Some("UnrelatedFixture".to_string()),
+                    ..BrowserSession::default()
+                },
+            ),
+        ]),
+        browsers: BTreeMap::from([(
+            browser_id.to_string(),
+            BrowserProcess {
+                id: browser_id.to_string(),
+                profile_id: Some("Default".to_string()),
+                health: ServiceBrowserHealth::ProcessExited,
+                pid: None,
+                active_session_ids: Vec::new(),
+                ..BrowserProcess::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    let before = state.clone();
+    let mut options = LaunchOptions::default();
+    let error = apply_existing_session_profile_selection(
+        &mut options,
+        &json!({
+            "action": "launch",
+            "serviceName": "RetainedProfileFixture",
+            "runtimeProfile": "Default"
+        }),
+        Some(session_id),
+        &state,
+    )
+    .unwrap_err();
+
+    assert_eq!(error, "existing_session_profile_identity_unproven");
+    let recourse = crate::native::service_failure::classify_service_failure(&error);
+    assert_eq!(
+        recourse.effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+    assert_eq!(recourse.recommended_action, "inspect_profile_recovery_plan");
+    assert_eq!(
+        recourse
+            .executable_next_action
+            .as_ref()
+            .and_then(|value| value.get("action"))
+            .and_then(Value::as_str),
+        Some("service_profile_recovery_plan")
+    );
+    assert_eq!(state, before);
+    assert!(state.sessions.contains_key("unrelated-active"));
+}
+
+#[test]
 fn authenticated_principal_recovers_exact_released_terminal_projection() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("authenticated-terminal-owner-recourse-home");
