@@ -1045,15 +1045,14 @@ mod tests {
     #[test]
     #[ignore = "spawned only by the deep-output-root cache propagation regression"]
     fn cache_opt_out_reaches_real_rust_child_probe() {
-        assert_eq!(
-            std::env::var("AGENT_BROWSER_CARGO_CACHE").as_deref(),
-            Ok(CANDIDATE_CARGO_CACHE_MODE)
-        );
+        let observed = std::env::var("AGENT_BROWSER_CARGO_CACHE")
+            .expect("real Rust child must receive the Cargo cache policy");
+        assert_eq!(observed, "off");
         fs::write(
             std::env::current_dir()
                 .unwrap()
                 .join("cache-opt-out.marker"),
-            "off\n",
+            format!("{observed}\n"),
         )
         .unwrap();
     }
@@ -1075,10 +1074,7 @@ mod tests {
 
         assert_eq!(
             candidate_test_environment_input_sha256().unwrap(),
-            digest_json(&json!({
-                "AGENT_BROWSER_CARGO_CACHE": CANDIDATE_CARGO_CACHE_MODE
-            }))
-            .unwrap()
+            digest_json(&json!({"AGENT_BROWSER_CARGO_CACHE": "off"})).unwrap()
         );
 
         let command = TestCommand {
@@ -1261,7 +1257,7 @@ mod tests {
         assert_eq!(report["outcome"], "test_recommended");
         assert_eq!(
             report["identity"]["environmentInputSha256"],
-            candidate_test_environment_input_sha256().unwrap()
+            digest_json(&json!({"AGENT_BROWSER_CARGO_CACHE": "off"})).unwrap()
         );
         assert!(!root.join("cli/target/candidate-test-state").exists());
         fs::remove_dir_all(root).unwrap();
