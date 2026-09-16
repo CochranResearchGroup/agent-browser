@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -193,7 +193,7 @@ Exit requires current evidence that:
 | Sealed activity-aware plan/apply | Nine focused transaction tests cover reserve, revalidation, drift, repository CAS revisions, normalization, and terminal finalize | provider-free green |
 | Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof | provider-free green; real-browser replay pending |
 | Provider-free and real-browser acceptance | Focused suites pass. Three bounded disposable fixture cycles reached classification and apply; the final live observation exposed persistence normalization drift, which is repaired and covered by a real JSON repository regression. The plan attempt budget is exhausted, so no fourth browser replay was taken. | provider-free green; real-browser gate unverified |
-| Integration | Implementation checkpoint `60c71f68` and strict-lint follow-up `d544ed2e` are published while P190 retains shared documentation ownership | draft PR pending |
+| Integration | Draft PR #168 is open from validated head `e7ae2a9a`; P190 retains shared documentation ownership | draft; blocked on documentation and renewed live acceptance |
 
 ## Implementation Checkpoint 1
 
@@ -264,6 +264,16 @@ Exit requires current evidence that:
 - Provider-free validation is complete. Shared user-facing documentation, one
   renewed bounded real-browser acceptance, exact-head CI, review, integration,
   and issue closeout remain.
+
+## Integration Checkpoint 4
+
+- Draft PR #168 is open against `main`:
+  `https://github.com/CochranResearchGroup/agent-browser/pull/168`.
+- Issue #103 remains open and records the provider-free evidence and remaining
+  gates. No completion label or closure was applied.
+- The first PR status readback shows Version Sync Check passed while Rust
+  Quality, Dashboard, Service Client, and Workstation Fixtures are in progress.
+  Per normal implementation closeout, P202 does not actively monitor them.
 
 ## Stop Condition
 

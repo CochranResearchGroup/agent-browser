@@ -19,6 +19,10 @@ three tests with the documented cache opt-out. Fresh branch, remote, process,
 and temporary-directory readback agree and show no P202 residue. Shared
 user-facing documentation remains with P190, and P202 still requires one
 renewed bounded real-browser acceptance before integration.
+Draft PR #168 is open against `main`; issue #103 remains open with the exact
+evidence and remaining gates. The initial PR readback has Version Sync Check
+green and the other fast checks in progress. P202 is not actively monitoring
+those checks during normal implementation closeout.
 
 ## Turn 357 | 2026-09-16
 

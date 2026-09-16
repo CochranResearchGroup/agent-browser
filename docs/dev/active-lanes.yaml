@@ -52,12 +52,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: d544ed2ecf2d00ba0f7ce659e4670e3facd96f78
+    checkpoint: e7ae2a9ab7fa8ea891b0089b5bf75409450404ad
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
     validation_status: provider-free changed-surface and comprehensive Rust gates pass, including cache-disabled recovery of the infrastructure-only transport failure; real-browser replay remains
-    validation_ref: null
+    validation_ref: e7ae2a9ab7fa8ea891b0089b5bf75409450404ad
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
