@@ -20,7 +20,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const SERVICE_CHALLENGE_TASK_SCHEMA_VERSION: &str =
     "agent-browser.service-challenge-task.v1";
+/// Registered downstream intent used when Authentication Run consumes a task.
 pub(crate) const AUTHENTICATION_CHALLENGE_INTENT_ID: &str = "authentication-run-start";
+/// Registered downstream intent used when navigation consumes a task.
 pub(crate) const NAVIGATION_CHALLENGE_INTENT_ID: &str = "navigation-dispatch";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,6 +352,7 @@ fn require_current_record_handle(
     }
 }
 
+/// Hash the current canonical site policy for a challenge consumer binding.
 pub(crate) fn effective_site_policy_digest(
     state: &ServiceState,
     site_policy_id: &str,
@@ -365,6 +368,11 @@ pub(crate) fn effective_site_policy_digest(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Admit one downstream consumer only after the durable task, principal,
+/// current tab, effective policy, and registered intent all still agree.
+///
+/// This adapter is read-only. It returns a typed admission receipt but does
+/// not execute authentication, navigation, browser input, or provider work.
 pub(crate) fn admit_challenge_consumer(
     state: &ServiceState,
     challenge_task_id: &str,
