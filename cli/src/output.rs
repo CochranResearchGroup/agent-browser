@@ -7839,6 +7839,13 @@ Environment:
   AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET Browser recovery attempts before faulting (default: 3)
   AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS Browser recovery backoff base delay in ms (default: 1000)
   AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS Browser recovery backoff ceiling in ms (default: 30000)
+  AGENT_BROWSER_RESOURCE_INACTIVITY_MIN_SECONDS Minimum inactivity for abandoned-lane retirement eligibility (default: 300; range: 60-86400)
+  AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_RSS_BYTES Per-browser RSS warning threshold in bytes (default: 4294967296; range: 67108864-68719476736)
+  AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_DESCENDANTS Per-browser descendant warning threshold (default: 64; range: 1-4096)
+  AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_TABS Per-browser tab warning threshold (default: 128; range: 1-16384)
+  AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_LANES Workstation browser-lane warning threshold (default: 16; range: 1-4096)
+  AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_PROCESSES Workstation process warning threshold (default: 256; range: 1-65536)
+  AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_RSS_BYTES Workstation RSS warning threshold in bytes (default: 68719476736; range: 67108864-1099511627776)
   AGENT_BROWSER_IOS_DEVICE       Default iOS device name
   AGENT_BROWSER_IOS_UDID         Default iOS device UDID
   AGENT_BROWSER_RUNTIME_PROFILE  Managed runtime profile name

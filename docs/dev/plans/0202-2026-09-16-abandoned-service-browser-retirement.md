@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 22
+Plan version: 24
 
 State: OPEN
 
@@ -719,6 +719,43 @@ Packet 12 result:
   completion gate is reconciliation of the four P190-owned user-facing
   documentation files after P190 actually integrates or explicitly hands off
   writer custody.
+
+## P190 Documentation Reconciliation Packet 13
+
+P190 PR #152 merged as `38e4cb9dd1f7aa9fcde8e70760ed93ea342dbcc2`
+and current `origin/main` advanced to
+`dd34977efb256c256ffd96bd2401d225b10c2f62`. P202 merged that canonical
+readback without conflicts at `12b9ce202d873ab6b8de2a11276a797ca8c4da6b`.
+
+- P190 already supplied the `service resources` and `service gc` workflow in
+  README, CLI help, and the agent skill. The docs site still lacked those
+  commands and their safety contract.
+- Reconciliation adds the docs-site commands and exact retirement boundary,
+  plus all seven bounded resource-policy environment variables to CLI help,
+  README, the agent skill, and the docs site.
+- Only `AGENT_BROWSER_RESOURCE_INACTIVITY_MIN_SECONDS` affects abandoned-lane
+  eligibility. The per-browser and workstation thresholds produce warnings and
+  never establish effect authority.
+- Validate Rust formatting and strict Clippy because CLI output changed, then
+  run the docs build and focused documentation/API parity checks selected for
+  the four user-facing surfaces. No further browser effect is authorized or
+  required.
+
+Packet 13 result:
+
+- P190 integration merged cleanly with no P202 conflict. All four required
+  user-facing surfaces now document the resource inventory, reviewed GC flow,
+  exact-tree safety boundary, and bounded environment inputs.
+- Workspace format and strict workspace Clippy passed through the WSL Cargo
+  admission wrapper.
+- The Next.js docs production build passed. Service API/MCP parity passed for
+  66 browser controls, 26 service tools, 19 service resources, 101 native
+  service actions, and 118 service-request actions.
+- Remote-view handoff documentation checks, the focused terminal retirement
+  contract, and diff hygiene passed.
+- P202's implementation, isolated real-browser acceptance, changed-surface
+  validation, and P190 documentation reconciliation are complete. Exact-head
+  forge CI and final published-diff self-check remain before draft removal.
 
 ## Stop Condition
 
