@@ -32,8 +32,9 @@ or retained browser processes.
 ## Current State
 
 Issue #102 is closed after source checkpoint `2978594e` merged through PR #163
-as `c98da4cc`. The clean P200 worktree and merged local and remote branches are
-removed. The repair gives each
+as `c98da4cc`. Exact-head CI run `35098782749` and merge-commit CI run
+`35099042490` pass. The clean P200 source worktree and merged local and remote
+branches are removed. The repair gives each
 admitted invocation an exact scope identity, retains a dead-wrapper claim while
 that scope remains active or cannot be observed safely, and stops only that
 scope before releasing the claim. Success and nonzero Cargo exits use the same
@@ -136,7 +137,7 @@ Exit requires current evidence that:
 | Success and failure teardown converge | Exit 0 and exit 23 fixtures stop the exact generated unit and leave zero profile-path processes | focused pass |
 | Foreign and retained processes remain ineligible | The unrelated control process remains alive across both teardown paths; no retained or installed profile is used | focused pass |
 | Real scope becomes inactive | `AGENT_BROWSER_CARGO_REAL_SCOPE_TEST=1 node scripts/test-cargo-safe-capacity.js` passes success and exit-23 cases; fresh unit/process readback is empty | focused pass |
-| Required batch validation and integration | At `2978594e`, Shellcheck, Node syntax, deterministic fixtures, real-scope fixtures, planning audit, diff hygiene, and the changed-surface selector pass. PR #163 merged as `c98da4cc`; exact-head CI run `35098782749` passed every selected gate | passed and integrated |
+| Required batch validation and integration | At `2978594e`, Shellcheck, Node syntax, deterministic fixtures, real-scope fixtures, planning audit, diff hygiene, and the changed-surface selector pass. PR #163 merged as `c98da4cc`; exact-head CI run `35098782749` and merge-commit CI run `35099042490` pass | passed and integrated |
 
 The aggregate `pnpm test:wsl-cargo-safety` command reaches a pre-existing
 static-entrypoint failure at
@@ -144,6 +145,16 @@ static-entrypoint failure at
 The same command fails identically on canonical `main@3863106e`; that control
 failure is not counted as P200 validation. The P200 capacity suite itself
 passes independently.
+
+## Closure Receipt
+
+PR #163 merged exact source head `2978594e` into `main` as `c98da4cc`.
+Source-head CI run `35098782749` and merge-commit CI run `35099042490` pass,
+including Rust, Rust Quality, Workstation Fixtures, Service Client, Dashboard,
+and Version Sync Check. Issue #102 is closed, the active-lane entry is removed,
+and fresh readback finds no P200 scope or process residue. The repair performed
+no installed-runtime, browser, provider, Service State, retained-profile,
+production, release, or foreign-process effect.
 
 ## Stop Condition
 
