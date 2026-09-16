@@ -295,6 +295,24 @@ later decomposition packet. No installed runtime, browser, profile, provider,
 or Service State was touched; all mutation evidence came from disposable
 fixture roots.
 
+Checkpoint `5e56fe99` fences durable resume into runtime transfer and the
+cooperative handoff evidence commit. An `AdmissionDraining` transaction now
+reuses the same custody-locked transition as first activation. Before a
+cooperative handoff begins, the adapter revalidates exact install custody; the
+effect then accumulates migration and handoff results outside the durable
+transaction. Candidate-host identity, owner-transfer receipts, ingress staging,
+and the transaction rewrite commit together only after custody is revalidated
+under the short coordination lock. A superseded writer leaves the persisted
+transaction unchanged. The branch also merges current `origin/main` at
+`c2ade1d1`, preserving P198's retained-owner repair and the P197 overlap while
+retaining P190's newer checkpoint. The new resume and supersession regressions,
+existing cooperative forward-only and durable-resume cases, all five
+coordination-adapter tests, strict workspace Clippy, format, the candidate
+architecture guard, and patch hygiene pass. Full-shutdown replacement still
+persists checkpoints and performs process effects through its older unfenced
+adapter, so it remains the next runtime-transfer packet. No installed runtime,
+browser, profile, provider, or Service State was touched.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,

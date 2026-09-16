@@ -31,17 +31,18 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 81560f5951e71e0165ea7390ad44b71dde2e4bb0
+    checkpoint: 5e56fe99dc2974c74dac5e0ac96a983f9637c802
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
     validation_status: passed
-    validation_ref: 81560f5951e71e0165ea7390ad44b71dde2e4bb0
+    validation_ref: 5e56fe99dc2974c74dac5e0ac96a983f9637c802
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
     overlaps: [P169, P197]
     reconciled_overlaps: [P169, P197]
-    blocker: candidate install apply remains unavailable; runtime-transfer effects, dashboard promotion, acceptance, coordination completion, public transition and recovery adapters, and production-shaped qualification remain; qualification retains its later gate
+    blocker: candidate install apply remains unavailable; full-shutdown runtime replacement fencing, dashboard promotion, acceptance, coordination completion, public transition and recovery adapters, and production-shaped qualification remain; qualification retains its later gate
+    updated_at: 2026-09-16
   - id: P197
     product_lane: PL-CHALLENGE
     objective: Integrate authentication and navigation through one provider-neutral challenge consumer-admission contract
