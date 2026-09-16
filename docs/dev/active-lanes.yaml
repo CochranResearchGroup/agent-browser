@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: faee8887fb420e8e46bd5a165ce6c44fa10059d2
-    remote_ref: null
+    checkpoint: df1a06adbdada85dc4557887a906b82a4ec13831
+    remote_ref: refs/remotes/origin/fix/p199-compatible-access-planning
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
-    validation_status: pending
-    validation_ref: null
+    validation_status: passed
+    validation_ref: df1a06adbdada85dc4557887a906b82a4ec13831
     work_items: [CochranResearchGroup/agent-browser#67]
     dependencies: []
     overlaps: [P198]
     reconciled_overlaps: [P198]
-    blocker: provider-free source repair and validation remain; P198 source is integrated and its branch-local closeout projection remains untouched
+    blocker: protected integration and exact-head CI remain; P198 source is integrated and its separate branch-local closeout worktree remains untouched
     updated_at: 2026-09-16
   - id: P190
     product_lane: PL-PLATFORM

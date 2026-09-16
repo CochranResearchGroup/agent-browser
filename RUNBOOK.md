@@ -8,6 +8,22 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 - [P199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
 
+## Turn 347 | 2026-09-16
+
+[Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
+is source-complete at checkpoint `df1a06ad` through draft PR #160. The original
+provider-free fixture selected `a-incompatible-retained` ahead of a compatible
+candidate. The repair joins exact browser capability compatibility before the
+access plan emits an executable request, deterministically prefers a compatible
+candidate, and returns typed no-effect recourse for an explicitly requested
+incompatible retained profile. All 47 focused access-plan tests, formatting,
+strict workspace Clippy, API/MCP parity, generated-client checks, the complete
+service-client suite, the docs build, and handoff-doc checks pass. The legacy
+no-launch shell fixture has the same pre-existing Google readiness mismatch
+against canonical `main` and the P199 binary before reaching this contract. No
+browser, provider, profile, Service State, installation, or runtime effect
+occurred. Protected integration and exact-head CI remain.
+
 ## Turn 346 | 2026-09-16
 
 [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)

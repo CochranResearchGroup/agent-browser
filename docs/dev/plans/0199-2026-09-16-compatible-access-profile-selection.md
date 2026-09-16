@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -18,10 +18,9 @@ Branch: `fix/p199-compatible-access-planning`
 
 Target: `main`
 
-Integration: merge through the protected `main` workflow after provider-free
-regression and changed-surface validation
+Integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
 
-Source baseline: `faee8887fb420e8e46bd5a165ce6c44fa10059d2`
+Source baseline: `c2ade1d14a8d5f6cee40791c7d507c74ecb4b44f`
 
 ## Objective
 
@@ -33,20 +32,17 @@ request.
 
 ## Current State
 
-Issue #67 is claimed and marked in progress. The preserved Plan 0176 field note
-shows an unrelated retained task profile winning a public, unauthenticated
-request before capability posture was reconciled. Current source confirms that
-catalog profile ranking runs before browser capability evidence is joined. The
-later launch preflight has an exact `profile_compatibility_missing_or_blocked`
-gate, but the access plan can already have selected and recommended the
-incompatible profile.
+Issue #67 is source-complete at checkpoint `df1a06ad` through draft PR #160.
+The provider-free reproducer proved that catalog rank could select an
+incompatible retained profile before browser capability evidence was joined.
+The repaired access-plan seam now prefers a positively compatible candidate,
+preserves legacy ranking when no exact declaration exists, and returns typed
+`profile_compatibility_missing_or_blocked` recourse for an explicitly requested
+incompatible profile without producing an executable request.
 
-P198 owns retained owner and inventory projection under issue #143. Its code
-surface is disjoint, but it has an unpublished transition in the shared plan
-catalog, ROADMAP, and RUNBOOK files. P198 remains primary writer for that
-transition. P199 records the overlap and must reconcile the published catalog
-before integration. P199 will not edit P198 lifecycle-owner code or its dirty
-worktree.
+P198's disjoint retained-owner source is integrated through PR #158 at
+`main@c2ade1d1`. Its separate branch-local closeout worktree remains untouched.
+P199 is rebased on that integration and does not edit P198 lifecycle-owner code.
 
 ## Consolidated Batch
 
@@ -117,6 +113,17 @@ Exit requires current evidence that:
 - the shared catalog is reconciled with P198 before the published source
   checkpoint enters `main` through the linked pull request with applicable CI
   green.
+
+Checkpoint `df1a06ad` satisfies the provider-free source and changed-surface
+validation requirements. The original reproducer failed by choosing
+`a-incompatible-retained`; the repaired 47-test `service_access_plan` group is
+green. Formatting, strict workspace Clippy, API/MCP parity, the generated
+client contract and type suites, the complete service-client suite, the docs
+production build, and remote-view documentation checks pass. The legacy
+`test:service-access-plan-no-launch` fixture fails identically against the
+canonical `main` debug binary because its Google readiness expectation has
+drifted; that control failure occurs before the P199-specific contract and is
+not accepted as P199 validation evidence. No live effect occurred.
 
 ## Stop Condition
 

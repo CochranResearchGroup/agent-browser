@@ -29,15 +29,16 @@ field evidence and acceptance records into the same model.
 
 State: OPEN
 
-Current state: [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
-and [issue #67](https://github.com/CochranResearchGroup/agent-browser/issues/67)
-own the bounded `PL-BUGFIX` repair. The provider-free packet will prove that
-access planning currently ranks a retained profile before enforcing browser
-capability compatibility, then move the existing compatibility decision ahead
-of executable profile selection. An incompatible explicit profile must produce
-a typed no-effect rejection. P198 source is integrated; its branch-local
-closeout projection remains untouched and will be reconciled before P199
-integration.
+Current state: [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md),
+[issue #67](https://github.com/CochranResearchGroup/agent-browser/issues/67),
+and draft [PR #160](https://github.com/CochranResearchGroup/agent-browser/pull/160)
+own the bounded `PL-BUGFIX` repair. Source checkpoint `df1a06ad` makes profile
+selection capability-aware before an executable request is produced, prefers a
+positively compatible candidate, preserves selection when no exact capability
+declaration exists, and rejects an explicitly requested incompatible profile
+with typed no-effect recourse. Focused tests and complete changed-surface
+validation pass. P198 source is integrated; its separate branch-local closeout
+worktree remains untouched. Protected integration and exact-head CI remain.
 
 ## P198 | Retained Owner Inventory Coherence
 
