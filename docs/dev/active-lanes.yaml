@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 1aa11f1bd70043a7eebec732bb9a9c05e77b3398
+    checkpoint: ef8fbbe317ca666f49ddbe333eccab156ec43924
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
     validation_status: passed
-    validation_ref: 1aa11f1bd70043a7eebec732bb9a9c05e77b3398
+    validation_ref: ef8fbbe317ca666f49ddbe333eccab156ec43924
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
     overlaps: [P169, P196]
     reconciled_overlaps: [P169, P196]
-    blocker: effect-capable adapters and production-shaped build qualification remain unstarted and require their later plan gates
+    blocker: public effect commands and workstation transaction coupling remain unstarted; production-shaped build qualification retains its later gate
     updated_at: 2026-09-15
 
   - id: P196

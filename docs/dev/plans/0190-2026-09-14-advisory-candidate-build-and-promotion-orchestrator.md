@@ -145,6 +145,20 @@ connecting to a daemon. Five focused CLI tests, all 29 candidate-kernel tests,
 the architecture and documentation contract, version sync, workspace format,
 strict workspace Clippy, the docs production build, and patch hygiene pass.
 
+Checkpoint `ef8fbbe3` adds the durable coordination adapter without exposing an
+effect command. Deserialized ledgers now validate their schema, environment,
+revision and receipt sequence, request linkage, operation identity, and active
+fencing generation before use. The CLI adapter holds a coordination-only lock
+for read, compare, and commit; writes a private same-directory temporary file;
+syncs it; atomically replaces the ledger on Unix and Windows; and releases the
+lock before any future installer work. Exact request replay performs no rewrite.
+Read-only `candidate status` projects an absent ledger without creating state.
+Three atomic-store tests, five advisory CLI tests, all 30 candidate-kernel tests,
+a broader 87-test provider-free candidate-name selection, workspace format,
+strict workspace Clippy, the architecture and documentation contract, the docs
+production build, and patch hygiene pass. The production coordination path was
+confirmed absent after validation; no runtime or installer effect occurred.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
