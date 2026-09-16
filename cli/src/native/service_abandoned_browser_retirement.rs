@@ -104,6 +104,13 @@ pub(crate) struct RetirementExitEvidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RetirementExitFailure {
+    pub(crate) failed_conditions: Vec<String>,
+    pub(crate) evidence: RetirementExitEvidence,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "code", content = "detail", rename_all = "snake_case")]
 pub(crate) enum RetirementRecourse {
     InvalidPlan,
@@ -119,7 +126,7 @@ pub(crate) enum RetirementRecourse {
     Ineligible(String),
     ReservationMissing,
     RecoveryRequired,
-    ExitUnproven,
+    ExitUnproven(Box<RetirementExitFailure>),
     TerminalCompareAndSwapFailed,
     ObservationFailed(String),
 }
@@ -678,17 +685,44 @@ pub(crate) fn finalize_abandoned_browser_retirement(
     if digest(&state.browsers[&plan.browser_id])? != transaction.reserved_browser_digest {
         return Err(RetirementRecourse::TerminalCompareAndSwapFailed);
     }
-    if evidence.plan_id != plan.plan_id
-        || evidence.reserved_revision != transaction.reserved_revision
-        || evidence.process_group_id != plan.process_group_id
-        || !evidence.root_exited
-        || !evidence.descendants_exited
-        || !evidence.process_group_empty
-        || !evidence.profile_lock_released
-        || timestamp(&evidence.observed_at)? < timestamp(&plan.created_at)?
-        || timestamp(&evidence.observed_at)? > timestamp(now)?
-    {
-        return Err(RetirementRecourse::ExitUnproven);
+    let observed_at = timestamp(&evidence.observed_at)?;
+    let created_at = timestamp(&plan.created_at)?;
+    let completed_at = timestamp(now)?;
+    let mut failed_conditions = Vec::new();
+    if evidence.plan_id != plan.plan_id {
+        failed_conditions.push("plan_id".to_string());
+    }
+    if evidence.reserved_revision != transaction.reserved_revision {
+        failed_conditions.push("reserved_revision".to_string());
+    }
+    if evidence.process_group_id != plan.process_group_id {
+        failed_conditions.push("process_group_id".to_string());
+    }
+    if !evidence.root_exited {
+        failed_conditions.push("root_exited".to_string());
+    }
+    if !evidence.descendants_exited {
+        failed_conditions.push("descendants_exited".to_string());
+    }
+    if !evidence.process_group_empty {
+        failed_conditions.push("process_group_empty".to_string());
+    }
+    if !evidence.profile_lock_released {
+        failed_conditions.push("profile_lock_released".to_string());
+    }
+    if observed_at < created_at {
+        failed_conditions.push("observed_at_before_plan".to_string());
+    }
+    if observed_at > completed_at {
+        failed_conditions.push("observed_at_after_completion".to_string());
+    }
+    if !failed_conditions.is_empty() {
+        return Err(RetirementRecourse::ExitUnproven(Box::new(
+            RetirementExitFailure {
+                failed_conditions,
+                evidence: evidence.clone(),
+            },
+        )));
     }
     if state
         .presentation_capacity
@@ -1328,6 +1362,82 @@ mod tests {
                 finalize_abandoned_browser_retirement(&mut state, &plan, &evidence, NOW).is_err()
             );
             assert_eq!(state, before);
+        }
+    }
+
+    #[test]
+    fn retirement_exit_recourse_names_every_failed_condition() {
+        let (mut baseline, observed) = fixture();
+        let plan = plan(&baseline, &observed);
+        reserve(&mut baseline, &plan, &observed);
+        baseline.state_revision += 1;
+
+        for case in 0..10 {
+            let mut state = baseline.clone();
+            let mut evidence = exit(&plan);
+            let expected = match case {
+                0 => {
+                    evidence.plan_id = "different-plan".to_string();
+                    vec!["plan_id"]
+                }
+                1 => {
+                    evidence.reserved_revision += 1;
+                    vec!["reserved_revision"]
+                }
+                2 => {
+                    evidence.process_group_id += 1;
+                    vec!["process_group_id"]
+                }
+                3 => {
+                    evidence.root_exited = false;
+                    vec!["root_exited"]
+                }
+                4 => {
+                    evidence.descendants_exited = false;
+                    vec!["descendants_exited"]
+                }
+                5 => {
+                    evidence.process_group_empty = false;
+                    vec!["process_group_empty"]
+                }
+                6 => {
+                    evidence.profile_lock_released = false;
+                    vec!["profile_lock_released"]
+                }
+                7 => {
+                    evidence.observed_at = "2026-09-16T11:59:59Z".to_string();
+                    vec!["observed_at_before_plan"]
+                }
+                8 => {
+                    evidence.observed_at = "2026-09-16T12:00:01Z".to_string();
+                    vec!["observed_at_after_completion"]
+                }
+                _ => {
+                    evidence.root_exited = false;
+                    evidence.process_group_empty = false;
+                    vec!["root_exited", "process_group_empty"]
+                }
+            };
+            let before = state.clone();
+            let error = finalize_abandoned_browser_retirement(&mut state, &plan, &evidence, NOW)
+                .expect_err("incomplete exit evidence must fail closed");
+            let RetirementRecourse::ExitUnproven(failure) = &error else {
+                panic!("unexpected recourse for case {case}: {error}");
+            };
+            assert_eq!(
+                failure.failed_conditions,
+                expected.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "case {case}"
+            );
+            assert_eq!(failure.evidence, evidence, "case {case}");
+            assert_eq!(state, before, "case {case}");
+            assert_eq!(
+                state.runtime_owner_registry.lifecycle_records[BROWSER].cleanup_obligation_state,
+                CleanupObligationState::Owned,
+                "case {case}"
+            );
+            let serialized = serde_json::to_value(&error).unwrap();
+            assert_eq!(serialized["code"], "exit_unproven", "case {case}");
         }
     }
 

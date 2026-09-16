@@ -2506,6 +2506,10 @@ impl crate::native::runtime_reconciliation::ReviewedProcessTreeRuntime
 fn sealed_process_instance_exited(
     identity: &crate::process_identity::RecordedProcessIdentity,
 ) -> bool {
+    #[cfg(target_os = "linux")]
+    if linux_process_state_and_group(identity.pid).is_some_and(|(state, _)| state == 'Z') {
+        return true;
+    }
     live_process_sample(identity.pid)
         .is_none_or(|sample| sample.start_token.as_deref() != Some(identity.start_token.as_str()))
 }
@@ -2663,8 +2667,44 @@ fn service_gc_apply_abandoned_response(
     })))
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn process_group_is_running(process_group_id: u32) -> bool {
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return raw_process_group_is_running(process_group_id);
+    };
+    let mut incomplete = false;
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => {
+                incomplete = true;
+                continue;
+            }
+        };
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|value| value.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        match linux_process_state_and_group(pid) {
+            Some((state, group)) if group == process_group_id && state != 'Z' => return true,
+            Some(_) => {}
+            None if entry.path().exists() => incomplete = true,
+            None => {}
+        }
+    }
+    incomplete && raw_process_group_is_running(process_group_id)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn process_group_is_running(process_group_id: u32) -> bool {
+    raw_process_group_is_running(process_group_id)
+}
+
+#[cfg(unix)]
+fn raw_process_group_is_running(process_group_id: u32) -> bool {
     let result = unsafe { libc::kill(-(process_group_id as i32), 0) };
     result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
@@ -2941,6 +2981,19 @@ fn linux_process_sample(
 }
 
 #[cfg(target_os = "linux")]
+fn linux_process_state_and_group(pid: u32) -> Option<(char, u32)> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let fields = stat
+        .rsplit_once(") ")?
+        .1
+        .split_whitespace()
+        .collect::<Vec<_>>();
+    let state = fields.first()?.chars().next()?;
+    let process_group_id = fields.get(2)?.parse::<u32>().ok()?;
+    Some((state, process_group_id))
+}
+
+#[cfg(target_os = "linux")]
 fn linux_boot_id() -> Option<String> {
     fs::read_to_string("/proc/sys/kernel/random/boot_id")
         .ok()
@@ -2999,6 +3052,57 @@ mod tests {
             rss_bytes: Some(10),
             ..ProcessSample::default()
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn retirement_exit_observation_treats_zombie_only_group_as_exited() {
+        let child = unsafe { libc::fork() };
+        assert!(
+            child >= 0,
+            "fork failed: {}",
+            std::io::Error::last_os_error()
+        );
+        if child == 0 {
+            unsafe {
+                libc::setpgid(0, 0);
+                libc::_exit(0);
+            }
+        }
+
+        let pid = child as u32;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let sample = loop {
+            let stat = fs::read_to_string(format!("/proc/{pid}/stat")).expect("child stat");
+            let state = stat
+                .rsplit_once(") ")
+                .and_then(|(_, tail)| tail.split_whitespace().next())
+                .expect("child process state");
+            if state == "Z" {
+                break live_process_sample(pid).expect("zombie process sample");
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "child did not become a zombie"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        let identity = crate::process_identity::RecordedProcessIdentity {
+            pid,
+            start_token: sample.start_token.expect("zombie start token"),
+            executable_path: sample.executable,
+            browser_family: Some("chromium".to_string()),
+        };
+        let root_exited = sealed_process_instance_exited(&identity);
+        let process_group_empty = !process_group_is_running(pid);
+
+        let mut status = 0;
+        assert_eq!(unsafe { libc::waitpid(child, &mut status, 0) }, child);
+        assert_eq!(
+            (root_exited, process_group_empty),
+            (true, true),
+            "a zombie is neither a live sealed process instance nor a live process-group member"
+        );
     }
 
     #[test]
