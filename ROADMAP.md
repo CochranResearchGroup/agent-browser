@@ -27,19 +27,19 @@ field evidence and acceptance records into the same model.
 
 ## P199 | Compatible Access Profile Selection
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md),
 [issue #67](https://github.com/CochranResearchGroup/agent-browser/issues/67),
-and draft [PR #160](https://github.com/CochranResearchGroup/agent-browser/pull/160)
-own the bounded `PL-BUGFIX` repair. Source checkpoint `15dd3b58` makes profile
+and merged [PR #160](https://github.com/CochranResearchGroup/agent-browser/pull/160)
+close the bounded `PL-BUGFIX` repair. Source checkpoint `15dd3b58` makes profile
 selection capability-aware before an executable request is produced, prefers a
 positively compatible candidate, preserves selection when no exact capability
 declaration exists, and rejects an explicitly requested incompatible profile
 with typed no-effect recourse. Focused tests and complete changed-surface
-validation pass. P198 source and closeout are integrated through PRs #158 and
-#161 at `main@7db8310f`. Protected integration and refreshed exact-head CI
-remain.
+validation pass. Exact rebased branch head `01c05d0d` merged as `e2e81e38`;
+source-head CI run `35092326047` and merge-commit CI run `35092355450` pass.
+Issue #67 is closed, and no live or installed-runtime effect occurred.
 
 ## P198 | Retained Owner Inventory Coherence
 
