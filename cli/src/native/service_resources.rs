@@ -1059,6 +1059,90 @@ fn resource_lane_activity_at(
         "browser:{browser_id}:display={}",
         browser.display_allocation_id.as_deref().unwrap_or("none")
     )];
+    if let Some(profile_id) = browser.profile_id.as_deref() {
+        let resource = agent_browser_lease_authority::LeaseResourceKey::profile(profile_id);
+        if let Some(claim) = state.lease_authority.current_claim(&resource, now) {
+            reasons.insert(format!("active_profile_claim:{}", claim.claim_id()));
+            digest_facts.push(format!(
+                "profileClaim:{}:revision={}:expires={}",
+                claim.claim_id(),
+                claim.revision(),
+                claim.expires_at()
+            ));
+        }
+    }
+    if let Some(capacity) = state.presentation_capacity.as_ref() {
+        for slot in capacity
+            .slots
+            .iter()
+            .filter(|slot| slot.browser_id.as_deref() == Some(browser_id))
+        {
+            digest_facts.push(format!(
+                "presentationSlot:{}:lease={}",
+                slot.id,
+                slot.lease_request_id.as_deref().unwrap_or("none")
+            ));
+            if slot.lease_request_id.is_some() {
+                reasons.insert(format!("active_presentation_slot_lease:{}", slot.id));
+            }
+        }
+    }
+    let route_ids = state
+        .remote_view_routes
+        .values()
+        .filter(|route| route.browser_id.as_deref() == Some(browser_id))
+        .map(|route| route.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let referenced_viewer_lease_ids = state
+        .remote_view_routes
+        .values()
+        .filter(|route| route_ids.contains(route.id.as_str()))
+        .flat_map(|route| {
+            route
+                .viewer_lease_ids
+                .iter()
+                .map(String::as_str)
+                .chain(route.controller_lease_id.as_deref())
+        })
+        .collect::<BTreeSet<_>>();
+    for lease in state.viewer_leases.values().filter(|lease| {
+        lease.browser_id.as_deref() == Some(browser_id)
+            || lease
+                .route_id
+                .as_deref()
+                .is_some_and(|route_id| route_ids.contains(route_id))
+    }) {
+        digest_facts.push(format!(
+            "viewerLease:{}:state={}:role={}",
+            lease.id, lease.state, lease.viewer_role
+        ));
+        if !matches!(
+            lease.state.as_str(),
+            "disconnected" | "expired" | "failed" | "released"
+        ) {
+            reasons.insert(format!("active_viewer_lease:{}", lease.id));
+        }
+    }
+    for lease_id in referenced_viewer_lease_ids {
+        if !state.viewer_leases.contains_key(lease_id) {
+            reasons.insert(format!("unresolved_viewer_lease:{lease_id}"));
+        }
+    }
+    for lease in state
+        .remote_view_acquisition_leases
+        .values()
+        .filter(|lease| {
+            lease.browser_id == browser_id || route_ids.contains(lease.route_id.as_str())
+        })
+    {
+        digest_facts.push(format!(
+            "remoteViewAcquisition:{}:state={}:phase={}",
+            lease.id, lease.state, lease.phase
+        ));
+        if !matches!(lease.state.as_str(), "completed" | "failed" | "released") {
+            reasons.insert(format!("active_remote_view_acquisition:{}", lease.id));
+        }
+    }
     for session_id in &session_ids {
         let Some(session) = state.sessions.get(session_id) else {
             reasons.insert(format!("session_missing:{session_id}"));
@@ -2632,6 +2716,9 @@ fn service_gc_apply_abandoned_response(
                 warnings.join("|")
             ));
         }
+        if !reviewed_abandoned_candidate_matches_fresh_snapshot(candidate, &state, &processes) {
+            return Err("review_token_candidate_mismatch".to_string());
+        }
         let observation = super::service_abandoned_browser_retirement::RetirementObservation {
             processes,
             profile_identity_digest,
@@ -2712,6 +2799,38 @@ fn service_gc_apply_abandoned_response(
         "abandonedBrowserRetirementReceipts": receipts,
         "warnings": warnings,
     })))
+}
+
+fn reviewed_abandoned_candidate_matches_fresh_snapshot(
+    reviewed_candidate: &Value,
+    state: &ServiceState,
+    processes: &[ProcessSample],
+) -> bool {
+    let Some(browser_id) = reviewed_candidate
+        .get("correlation")
+        .and_then(|correlation| correlation.get("browserId"))
+        .and_then(Value::as_str)
+    else {
+        return false;
+    };
+    let Some(reviewed_identity) = reviewed_candidate.get("candidateIdentity") else {
+        return false;
+    };
+    let Some(reviewed_action) = reviewed_candidate.get("gcAction").and_then(Value::as_str) else {
+        return false;
+    };
+    let fresh = service_resources_response_from_samples(state, processes.to_vec(), Vec::new());
+    candidates_from_response(&fresh)
+        .into_iter()
+        .any(|candidate| {
+            candidate.get("gcAction").and_then(Value::as_str) == Some(reviewed_action)
+                && candidate
+                    .get("correlation")
+                    .and_then(|correlation| correlation.get("browserId"))
+                    .and_then(Value::as_str)
+                    == Some(browser_id)
+                && candidate.get("candidateIdentity") == Some(reviewed_identity)
+        })
 }
 
 #[cfg(target_os = "linux")]
@@ -3564,6 +3683,95 @@ mod tests {
         assert!(matches!(
             decision(&missing_observation, &root),
             AbandonedBrowserLaneDecision::Protected { .. }
+        ));
+    }
+
+    #[test]
+    fn reviewed_abandoned_candidate_cannot_be_replaced_before_reservation() {
+        let pid = 4_123;
+        let profile_root = "/tmp/agent-browser-reviewed-candidate-binding";
+        let browser_id = format!("browser-{pid}");
+        let session_id = "session-reviewed-candidate".to_string();
+        let (mut reviewed_state, reviewed_root) = owned_closing_candidate(pid, profile_root);
+        reviewed_state
+            .browsers
+            .get_mut(&browser_id)
+            .unwrap()
+            .active_session_ids = vec![session_id.clone()];
+        reviewed_state.sessions.insert(
+            session_id.clone(),
+            BrowserSession {
+                id: session_id,
+                browser_ids: vec![browser_id.clone()],
+                lease: LeaseState::Expired,
+                cleanup: super::super::service_model::SessionCleanupPolicy::CloseBrowser,
+                last_lease_observed_at: Some("2026-09-16T10:00:00Z".to_string()),
+                ..BrowserSession::default()
+            },
+        );
+        let reviewed_response = service_resources_response_from_samples(
+            &reviewed_state,
+            vec![reviewed_root.clone()],
+            Vec::new(),
+        );
+        let reviewed_candidate = candidates_from_response(&reviewed_response)
+            .into_iter()
+            .find(|candidate| {
+                candidate["correlation"]["browserId"] == browser_id
+                    && candidate["gcAction"] == "retire_abandoned_browser_lane"
+            })
+            .expect("reviewed candidate");
+        assert!(reviewed_abandoned_candidate_matches_fresh_snapshot(
+            &reviewed_candidate,
+            &reviewed_state,
+            std::slice::from_ref(&reviewed_root),
+        ));
+
+        let mut replacement_state = reviewed_state;
+        let mut replacement_root = reviewed_root;
+        replacement_root.start_token = Some("linux:fixture:replacement".to_string());
+        let profile_identity_digest = replacement_state.runtime_owner_registry.lifecycle_records
+            [&browser_id]
+            .profile_identity_digest
+            .clone();
+        let recorded = replacement_state
+            .browser_process_identities
+            .get_mut(&browser_id)
+            .unwrap();
+        recorded.process_identity.start_token = "linux:fixture:replacement".to_string();
+        let process_instance_digest =
+            crate::native::runtime_lifecycle::digest_json(&recorded.process_identity).unwrap();
+        let owner = replacement_state
+            .runtime_owner_registry
+            .owners
+            .get_mut(&profile_identity_digest)
+            .unwrap();
+        owner.process_instance_digest = process_instance_digest;
+        let package_launch_identity_digest =
+            crate::native::runtime_lifecycle::package_launch_identity_digest(owner, Some(pid))
+                .unwrap();
+        replacement_state
+            .runtime_owner_registry
+            .lifecycle_records
+            .get_mut(&browser_id)
+            .unwrap()
+            .package_launch_identity_digest = Some(package_launch_identity_digest);
+        let replacement_response = service_resources_response_from_samples(
+            &replacement_state,
+            vec![replacement_root.clone()],
+            Vec::new(),
+        );
+        assert!(candidates_from_response(&replacement_response)
+            .iter()
+            .any(
+                |candidate| candidate["correlation"]["browserId"] == browser_id
+                    && candidate["gcAction"] == "retire_abandoned_browser_lane"
+            ));
+
+        assert!(!reviewed_abandoned_candidate_matches_fresh_snapshot(
+            &reviewed_candidate,
+            &replacement_state,
+            std::slice::from_ref(&replacement_root),
         ));
     }
 

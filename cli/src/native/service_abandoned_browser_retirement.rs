@@ -1212,6 +1212,123 @@ mod tests {
     }
 
     #[test]
+    fn retirement_planning_rejects_authoritative_occupancy_before_effect() {
+        use agent_browser_lease_authority::{
+            AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey,
+        };
+
+        let (state, observed) = fixture();
+
+        let mut claimed_profile = state.clone();
+        claimed_profile
+            .acquire_lease_claim(AcquireLeaseClaimRequest {
+                resource: LeaseResourceKey::profile("fixture-profile"),
+                parent_claim_id: None,
+                principal_id: "principal-active-work".into(),
+                capability_id: "capability-active-work".into(),
+                capability_revision: 1,
+                mode: LeaseClaimMode::Ephemeral,
+                expected_claim_revision: 0,
+                idempotency_key: "active-work-before-retirement".into(),
+                now: NOW.into(),
+                expires_at: EXPIRES.into(),
+                transition_deadline: None,
+                recovery_controller_id: None,
+                boot_epoch: None,
+                owner_generation: Some(4),
+            })
+            .unwrap();
+        assert!(matches!(
+            plan_abandoned_browser_retirement(
+                &claimed_profile,
+                BROWSER,
+                &observed,
+                &ResourceRetirementPolicy::default(),
+                NOW,
+                EXPIRES,
+            ),
+            Err(RetirementRecourse::Ineligible(reason))
+                if reason.contains("active_profile_claim")
+        ));
+
+        let mut occupied_slot = state;
+        occupied_slot.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
+            Some("active-presentation-request".into());
+        assert!(matches!(
+            plan_abandoned_browser_retirement(
+                &occupied_slot,
+                BROWSER,
+                &observed,
+                &ResourceRetirementPolicy::default(),
+                NOW,
+                EXPIRES,
+            ),
+            Err(RetirementRecourse::Ineligible(reason))
+                if reason.contains("active_presentation_slot_lease")
+        ));
+
+        let (mut active_viewer, observed) = fixture();
+        active_viewer
+            .viewer_leases
+            .get_mut("fixture-viewer")
+            .unwrap()
+            .state = "active".into();
+        active_viewer
+            .remote_view_routes
+            .get_mut("fixture-route")
+            .unwrap()
+            .controller_lease_id = Some("fixture-viewer".into());
+        assert!(matches!(
+            plan_abandoned_browser_retirement(
+                &active_viewer,
+                BROWSER,
+                &observed,
+                &ResourceRetirementPolicy::default(),
+                NOW,
+                EXPIRES,
+            ),
+            Err(RetirementRecourse::Ineligible(reason))
+                if reason.contains("active_viewer_lease")
+        ));
+
+        let (mut pending_acquisition, observed) = fixture();
+        let acquisition = pending_acquisition
+            .remote_view_acquisition_leases
+            .get_mut("fixture-acquisition")
+            .unwrap();
+        acquisition.state = "pending".into();
+        acquisition.phase = "reserved".into();
+        assert!(matches!(
+            plan_abandoned_browser_retirement(
+                &pending_acquisition,
+                BROWSER,
+                &observed,
+                &ResourceRetirementPolicy::default(),
+                NOW,
+                EXPIRES,
+            ),
+            Err(RetirementRecourse::Ineligible(reason))
+                if reason.contains("active_remote_view_acquisition")
+        ));
+    }
+
+    #[test]
+    fn retirement_reservation_rejects_new_authoritative_occupancy_without_mutation() {
+        let (mut state, observed) = fixture();
+        let plan = plan(&state, &observed);
+        state.state_revision += 1;
+        state.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
+            Some("late-presentation-request".into());
+        let before = state.clone();
+        assert!(matches!(
+            reserve_abandoned_browser_retirement(&mut state, &plan, &observed, NOW),
+            Err(RetirementRecourse::Ineligible(reason))
+                if reason.contains("active_presentation_slot_lease")
+        ));
+        assert_eq!(state, before);
+    }
+
+    #[test]
     fn retirement_rejects_active_explicit_retention_and_incomplete_identity() {
         for case in 0..5 {
             let (mut state, mut observed) = fixture();
@@ -1567,6 +1684,25 @@ mod tests {
         runtime.state.state_revision -= 1;
         effect_abandoned_browser_retirement(&plan, &mut runtime).unwrap();
         assert_eq!(runtime.signals, 1);
+    }
+
+    #[test]
+    fn retirement_effect_never_signals_after_authoritative_occupancy_appears() {
+        let (mut state, observed) = fixture();
+        let plan = plan(&state, &observed);
+        reserve(&mut state, &plan, &observed);
+        state.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
+            Some("late-presentation-request".into());
+        let mut runtime = FakeRuntime {
+            state,
+            observed,
+            signals: 0,
+        };
+        assert_eq!(
+            effect_abandoned_browser_retirement(&plan, &mut runtime),
+            Err(RetirementRecourse::ActivityChanged)
+        );
+        assert_eq!(runtime.signals, 0);
     }
 
     #[test]
