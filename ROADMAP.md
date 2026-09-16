@@ -25,6 +25,20 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P199 | Compatible Access Profile Selection
+
+State: OPEN
+
+Current state: [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
+and [issue #67](https://github.com/CochranResearchGroup/agent-browser/issues/67)
+own the bounded `PL-BUGFIX` repair. The provider-free packet will prove that
+access planning currently ranks a retained profile before enforcing browser
+capability compatibility, then move the existing compatibility decision ahead
+of executable profile selection. An incompatible explicit profile must produce
+a typed no-effect rejection. P198 source is integrated; its branch-local
+closeout projection remains untouched and will be reconciled before P199
+integration.
+
 ## P198 | Retained Owner Inventory Coherence
 
 State: CLOSED
