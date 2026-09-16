@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 8
+Plan version: 9
 
 State: OPEN
 
@@ -71,18 +71,22 @@ transaction. Earlier exact-head CI and selected production-shaped candidate
 receipts remain valid for the exact commits and suites they bind, and the exact
 candidate was installed and smoke-tested only in the development namespace.
 
-Source qualification is reopened after exact-head review identified three
-unclosed gates: schema-v1 readers must accept legacy
-`source_control_metadata` without new writers emitting it;
-`--recover-active-run` must terminate after durable recovery without invoking
-the suite runner; and a deterministic deep-output-root regression must prove
-`AGENT_BROWSER_CARGO_CACHE=off` is identity-bound and reaches the real Rust
-child. No further build, install, doctor, browser, provider, retained-profile,
-or shared-runtime effect is admitted while these source repairs remain open.
-The critical path is the three bounded source repairs and changed-surface
-validation, followed by one production-shaped rebuild only after executable
-source is frozen, then protected integration and post-merge executable-input
-equivalence readback.
+Exact-head review reopened three source gates. Checkpoint
+`a5649c656b3e22d907522debc644c22133a0e68d` now preserves schema-v1 reads of
+legacy `source_control_metadata` while rejecting it from new closures, makes
+`--recover-active-run` return after durable recovery without invoking the suite
+runner, and proves under a deterministic deep output root that the
+identity-bound `AGENT_BROWSER_CARGO_CACHE=off` value reaches a real spawned
+Rust child. The exact regressions, complete candidate crate, complete
+candidate-test module, workspace format, and strict workspace Clippy pass
+locally. Exact-head CI and review remain pending, so source qualification is
+not yet final.
+
+No further build, install, doctor, browser, provider, retained-profile, or
+shared-runtime effect was performed in this repair batch. The critical path is
+exact-head CI and review, followed by one production-shaped rebuild only after
+executable source is frozen, then protected integration and post-merge
+executable-input equivalence readback.
 
 ## Implementation Progress
 
@@ -662,6 +666,18 @@ recorded above and authorizes no further runtime action. The current bounded
 implementation batch contains only the three source repairs named in Current
 State. P197 and its four deferred public documentation surfaces remain
 untouched until P190 integrates.
+
+Source checkpoint `a5649c656b3e22d907522debc644c22133a0e68d` closes those
+three review findings locally. The compatibility regression reads and
+validates an older schema-v1 closure while the new constructor rejects legacy
+source-control input emission. The recovery regression archives the exact dead
+claim, returns `active_run_recovered`, proves no output root was created, and
+uses a runner that panics if called. The deep-root regression exceeds the Unix
+socket path limit and spawns the real Rust test executable, which observes the
+same cache-off value bound into the reported test identity. Candidate-crate and
+candidate-test focused suites, format, strict workspace Clippy, and patch
+hygiene passed. No production-shaped build or runtime effect followed this
+source checkpoint.
 
 ## Frozen Decisions
 

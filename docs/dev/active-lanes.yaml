@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 7af6e06ca907747fe569b20bb6da5dc289939ef4
+    checkpoint: a5649c656b3e22d907522debc644c22133a0e68d
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
-    validation_status: pending
-    validation_ref: null
+    validation_status: local_pass
+    validation_ref: a5649c656b3e22d907522debc644c22133a0e68d
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
     overlaps: [P197]
     reconciled_overlaps: [P197]
-    blocker: exact-head review reopened three source gates for legacy v1 metadata deserialization, terminal active-run recovery, and real-child cache-off propagation under a deep output root; preserve prior receipts and development acceptance, perform no further runtime effect, and rebuild only after executable source is complete
+    blocker: the three reopened source gates pass locally at a5649c65; exact-head CI and review, one final production-shaped rebuild after source freeze, protected integration, and post-merge equivalence remain; perform no further runtime effect
     updated_at: 2026-09-16
   - id: P197
     product_lane: PL-CHALLENGE
