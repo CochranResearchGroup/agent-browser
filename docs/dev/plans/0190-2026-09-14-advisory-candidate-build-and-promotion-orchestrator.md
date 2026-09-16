@@ -456,6 +456,21 @@ patch hygiene. A real rebuilt CLI dry-run returned the current dirty source
 identity and performed no build. Public test execution, explicit failed or
 abandoned build recovery, and production-shaped qualification remain.
 
+Checkpoint `45b93fee` makes failed build recovery an explicit exact-operation
+transition. `--retry-failed-operation <id> --apply` accepts only the currently
+failed claim for the same build request, takes a short exclusive recovery
+guard, archives the failed claim and any partial sealed directory, then
+publishes a replacement claim atomically. Active, different, or concurrently
+recovering operations fail closed. The failed receipt and partial evidence are
+preserved rather than deleted, and an interrupted recovery leaves its guard for
+inspection instead of admitting an ambiguous writer. Focused retry, mismatch,
+failure, and reuse fixtures, the candidate architecture guard, docs production
+build, remote-view documentation contract, and patch hygiene pass. The branch
+also integrated canonical `origin/main` through `3863106e`, including the
+completed compatible-access-profile repair, before this checkpoint. Public
+test execution and production-shaped qualification remain; neither runtime was
+mutated.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
