@@ -32,11 +32,15 @@ State: OPEN
 Current state: [Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
 owns the bounded no-live repair for
 [issue #159](https://github.com/CochranResearchGroup/agent-browser/issues/159).
-The first evidence checkpoint will replace pathname-existence assumptions with
-provider-free ordinary-file, stale-socket-inode, and live-listener fixtures.
+Draft [PR #166](https://github.com/CochranResearchGroup/agent-browser/pull/166)
+is source-complete at `42beec54`. Live occupancy now comes from exact
+filesystem or abstract `/proc/net/unix` evidence or a matching X process;
+ordinary files and inactive socket inodes are exact reclaimable residue. All
+11 focused regressions, formatting, strict Clippy, planning audit, and selected
+no-launch gates pass. Exact-head CI, review, integration, and closeout remain.
 P201 owns `cli/src/native/cdp/chrome.rs`; P190 and P197 remain disjoint. No
 browser, X server, installed-runtime, provider, Service State, or retained
-profile effect is authorized.
+profile effect occurred.
 
 ## P200 | Cargo Scope Descendant Lifetime
 

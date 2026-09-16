@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -31,13 +31,20 @@ configured range is exhausted.
 
 ## Current State
 
-Issue #159 is open and claimed by P201. The classifier currently treats any
-pathname at `/tmp/.X11-unix/XN` as an active socket through `Path::exists()`.
-An existing test encodes that behavior by writing a regular file and expecting
-the display to remain reserved. The first implementation checkpoint will
-replace that assumption with red-capable ordinary-file and stale-socket-inode
-fixtures while preserving live filesystem listeners, abstract listeners, live
-matching lock PIDs, and unknown observations as unavailable.
+Issue #159 is open and source-complete through draft PR #166 at checkpoint
+`42beec54`. The pre-repair focused run failed because both an ordinary file and
+a dropped listener's stale socket inode were classified `ActiveSocket`; the
+live filesystem listener control passed. The repair now derives socket
+occupancy from exact filesystem or abstract addresses in `/proc/net/unix`,
+classifies path residue separately, and revalidates the live-listener census
+before removing only the exact display socket and lock paths.
+
+All 11 focused X-display tests pass, including ordinary-file residue, stale
+socket inode, live filesystem and abstract listeners, reused live non-X PID,
+unknown socket observation, and bounded classification diagnostics. Formatting,
+strict workspace Clippy, patch hygiene, the planning audit, and the
+selector-required no-launch route-confusion gates pass. Exact-head CI,
+integration, and closeout remain.
 
 P190 and P197 are adjacent active lanes but neither owns or edits
 `cli/src/native/cdp/chrome.rs`. P201 is the sole writer for that source file and
@@ -114,12 +121,13 @@ Exit requires current evidence that:
 
 | Requirement | Current evidence | State |
 | --- | --- | --- |
-| Original pathname conflation is red-capable | Test update not yet run | pending |
-| Live listeners remain reserved | Existing abstract-listener fixture; filesystem listener control pending | partial |
-| Exact stale residue is reclaimable | Fixtures and repair pending | pending |
-| Unknown observations fail closed | Existing classifier behavior; regression coverage to retain | partial |
-| Bounded exhaustion summary | Repair and test pending | pending |
-| Required validation and integration | Not yet run | pending |
+| Original pathname conflation is red-capable | Pre-repair focused run: ordinary-file and stale-socket-inode fixtures failed as `ActiveSocket`; 4 controls passed | proven |
+| Live listeners remain reserved | Live filesystem and abstract listener fixtures pass | focused pass |
+| Exact stale residue is reclaimable | Ordinary file and dropped-listener socket inode are removed with their exact stale locks and become allocatable | focused pass |
+| Unknown observations fail closed | Injected permission-denied socket census remains `Unknown` and preserves both paths | focused pass |
+| Reused live non-X PID is not active X evidence | Live shell PID fixture classifies `StaleLockReusedPid` and preserves the foreign process | focused pass |
+| Bounded exhaustion summary | Diagnostic fixture reports exact per-display names and stays below 1 KiB | focused pass |
+| Required validation and integration | 11 focused tests, format, strict Clippy, patch hygiene, planning audit, and no-launch route-confusion gates pass at `42beec54`; exact-head CI and integration remain | local validation passed |
 
 ## Stop Condition
 

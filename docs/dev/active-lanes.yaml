@@ -52,15 +52,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: b11a7227cdbe73f5f06e2a12907e1148383f35d3
-    remote_ref: null
+    checkpoint: 42beec54
+    remote_ref: refs/remotes/origin/platform/p201-x-display-live-occupancy
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
-    validation_status: pending
-    validation_ref: null
+    validation_status: local_pass
+    validation_ref: 42beec54
     work_items: [CochranResearchGroup/agent-browser#159]
     dependencies: []
     overlaps: []
     reconciled_overlaps: []
-    blocker: provider-free red fixtures, classifier repair, bounded diagnostics, and changed-surface validation remain
+    blocker: exact-head CI, review, integration, and closeout remain
     updated_at: 2026-09-16
