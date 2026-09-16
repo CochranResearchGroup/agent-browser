@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 const TEST_RESULT_SCHEMA_VERSION: &str = "agent-browser.candidate-test-result.v1";
 const CANDIDATE_BINARY_PROGRAM: &str = "@candidate-binary";
+const CANDIDATE_CARGO_CACHE_MODE: &str = "off";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TestMode {
@@ -44,6 +45,8 @@ struct TestArguments {
 struct TestCommand {
     program: String,
     args: Vec<String>,
+    #[serde(skip)]
+    rust_lane: bool,
 }
 
 pub(crate) fn run_candidate_test(args: &[String], json_output: bool) -> ! {
@@ -192,6 +195,10 @@ fn commands_for_selection(selection: &str) -> Result<Vec<TestCommand>, String> {
     let command = |program: &str, args: &[&str]| TestCommand {
         program: program.to_string(),
         args: args.iter().map(|value| (*value).to_string()).collect(),
+        rust_lane: matches!(
+            program,
+            "scripts/ci/cargo-safe.sh" | "scripts/ci/rust-tests.sh"
+        ),
     };
     match selection {
         "candidate-kernel" => Ok(vec![command(
@@ -267,6 +274,7 @@ fn execute_candidate_test(args: TestArguments) -> Result<Value, String> {
     let mut commands = vec![TestCommand {
         program: CANDIDATE_BINARY_PROGRAM.to_string(),
         args: vec!["candidate".to_string(), "--help".to_string()],
+        rust_lane: false,
     }];
     commands.extend(
         args.selections
@@ -284,8 +292,7 @@ fn execute_candidate_test(args: TestArguments) -> Result<Value, String> {
         std::env::consts::ARCH,
         &commands,
     ))?;
-    let environment_inputs = json!({"AGENT_BROWSER_CARGO_CACHE": "off"});
-    let environment_input_sha256 = digest_json(&environment_inputs)?;
+    let environment_input_sha256 = candidate_test_environment_input_sha256()?;
     let identity = TestRunIdentity::new(
         manifest_sha256,
         binary_sha256,
@@ -299,15 +306,14 @@ fn execute_candidate_test(args: TestArguments) -> Result<Value, String> {
     )
     .map_err(|error| error.to_string())?;
     let store = CandidateTestStore::new(&repo_root);
-    if let Some(run_id) = args.recover_active_run.as_deref() {
-        recover_active_test_run(&store, &identity, run_id, process_is_alive)?;
-    }
-    coordinate_and_execute(
+    recover_or_execute_candidate_test(
         &store,
         identity,
         binary_path,
         commands,
         args.mode,
+        args.recover_active_run.as_deref(),
+        process_is_alive,
         run_test_commands,
     )
 }
@@ -336,6 +342,12 @@ fn digest_json(value: &impl Serialize) -> Result<String, String> {
     serde_json::to_vec(value)
         .map(|bytes| sha256(&bytes))
         .map_err(|error| format!("candidate_test_identity_serialize_failed:{error}"))
+}
+
+fn candidate_test_environment_input_sha256() -> Result<String, String> {
+    digest_json(&json!({
+        "AGENT_BROWSER_CARGO_CACHE": CANDIDATE_CARGO_CACHE_MODE
+    }))
 }
 
 #[derive(Debug)]
@@ -374,6 +386,41 @@ impl CandidateTestStore {
 }
 
 type TestRunner = fn(&Path, &Path, &Path, &[TestCommand]) -> Result<(), String>;
+type ProcessLiveness = fn(u32) -> bool;
+
+#[allow(clippy::too_many_arguments)]
+fn recover_or_execute_candidate_test(
+    store: &CandidateTestStore,
+    identity: TestRunIdentity,
+    candidate_binary: PathBuf,
+    commands: Vec<TestCommand>,
+    mode: TestMode,
+    recover_active_run: Option<&str>,
+    process_alive: ProcessLiveness,
+    runner: TestRunner,
+) -> Result<Value, String> {
+    if let Some(run_id) = recover_active_run {
+        let receipt_path = recover_active_test_run(store, &identity, run_id, process_alive)?;
+        return Ok(json!({
+            "schemaVersion": TEST_RESULT_SCHEMA_VERSION,
+            "success": true,
+            "outcome": "active_run_recovered",
+            "runId": run_id,
+            "identity": identity,
+            "decision": {
+                "action": "recover_active_run",
+                "runId": run_id,
+            },
+            "receiptLocator": receipt_path.display().to_string(),
+            "consequences": [
+                "provider_free_test_state_recovery_only",
+                "no_suite_run_performed",
+                "no_runtime_effect_performed"
+            ],
+        }));
+    }
+    coordinate_and_execute(store, identity, candidate_binary, commands, mode, runner)
+}
 
 fn coordinate_and_execute(
     store: &CandidateTestStore,
@@ -574,12 +621,12 @@ fn run_test_commands(
         {
             process.env("XDG_RUNTIME_DIR", output_root.join("runtime"));
         }
-        if command.program == "scripts/ci/rust-tests.sh" {
+        if command.rust_lane {
             // The fully isolated test root is intentionally descriptive and
             // can exceed Unix-domain socket limits used by sccache. Candidate
             // qualification uses its own Cargo target, so disable the shared
             // compiler cache instead of borrowing a shorter global socket.
-            process.env("AGENT_BROWSER_CARGO_CACHE", "off");
+            process.env("AGENT_BROWSER_CARGO_CACHE", CANDIDATE_CARGO_CACHE_MODE);
         }
         let status = process.status().map_err(|error| {
             format!(
@@ -702,8 +749,8 @@ fn recover_active_test_run(
     store: &CandidateTestStore,
     identity: &TestRunIdentity,
     expected_run_id: &str,
-    process_alive: fn(u32) -> bool,
-) -> Result<(), String> {
+    process_alive: ProcessLiveness,
+) -> Result<PathBuf, String> {
     let digest = identity.digest();
     let path = store.active_path(&digest);
     let claim = read_active_claim(&path)?
@@ -736,7 +783,8 @@ fn recover_active_test_run(
             "candidate_test_active_run_changed:{expected_run_id}"
         ));
     }
-    remove_claim(&path)
+    remove_claim(&path)?;
+    Ok(archive)
 }
 
 fn process_is_alive(pid: u32) -> bool {
@@ -829,6 +877,15 @@ mod tests {
     ) -> Result<(), String> {
         fs::create_dir_all(root).map_err(|error| error.to_string())?;
         Err("fixture test failure".to_string())
+    }
+
+    fn runner_must_not_run(
+        _root: &Path,
+        _state: &Path,
+        _binary: &Path,
+        _commands: &[TestCommand],
+    ) -> Result<(), String> {
+        panic!("suite runner must not be invoked after active-run recovery")
     }
 
     fn never_alive(_pid: u32) -> bool {
@@ -945,6 +1002,108 @@ mod tests {
         .unwrap();
         assert_eq!(retry["outcome"], "test_passed");
         assert_eq!(fs::read_dir(store.root.join("failed")).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn active_run_recovery_is_terminal_without_invoking_suite_runner() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-candidate-test-terminal-recovery-{}-{}",
+            std::process::id(),
+            Uuid::new_v4()
+        ));
+        let store = CandidateTestStore {
+            root: root.join("state"),
+            output_root: root.join("outputs"),
+        };
+        let requested = identity(&["candidate-kernel"]);
+        let digest = requested.digest();
+        let active = TestRunRecord::active("abandoned-fixture", requested.clone());
+        assert!(write_new_active_claim(&store.active_path(&digest), &active, 424242).unwrap());
+
+        let report = recover_or_execute_candidate_test(
+            &store,
+            requested,
+            PathBuf::from("/fixture/candidate"),
+            commands_for_selection("candidate-kernel").unwrap(),
+            TestMode::Apply,
+            Some("abandoned-fixture"),
+            never_alive,
+            runner_must_not_run,
+        )
+        .unwrap();
+
+        assert_eq!(report["outcome"], "active_run_recovered");
+        assert_eq!(report["runId"], "abandoned-fixture");
+        assert_eq!(report["consequences"][1], "no_suite_run_performed");
+        assert!(!store.active_path(&digest).exists());
+        assert!(store.root.join("abandoned/abandoned-fixture.json").exists());
+        assert!(!store.output_root.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "spawned only by the deep-output-root cache propagation regression"]
+    fn cache_opt_out_reaches_real_rust_child_probe() {
+        assert_eq!(
+            std::env::var("AGENT_BROWSER_CARGO_CACHE").as_deref(),
+            Ok(CANDIDATE_CARGO_CACHE_MODE)
+        );
+        fs::write(
+            std::env::current_dir()
+                .unwrap()
+                .join("cache-opt-out.marker"),
+            "off\n",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn deep_output_root_binds_cache_opt_out_and_propagates_it_to_real_rust_child() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-candidate-test-cache-propagation-{}-{}",
+            std::process::id(),
+            Uuid::new_v4()
+        ));
+        let repo_root = root.join("repo");
+        let state_root = repo_root.join("cli/target/candidate-test-state");
+        fs::create_dir_all(&state_root).unwrap();
+        let output_root = repo_root
+            .join("cli/target/candidate-tests")
+            .join("deep-output-root-segment".repeat(6));
+        assert!(output_root.join("cache/sccache").as_os_str().len() > 108);
+
+        assert_eq!(
+            candidate_test_environment_input_sha256().unwrap(),
+            digest_json(&json!({
+                "AGENT_BROWSER_CARGO_CACHE": CANDIDATE_CARGO_CACHE_MODE
+            }))
+            .unwrap()
+        );
+
+        let command = TestCommand {
+            program: std::env::current_exe()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            args: vec![
+                "candidate_test::tests::cache_opt_out_reaches_real_rust_child_probe".to_string(),
+                "--exact".to_string(),
+                "--ignored".to_string(),
+            ],
+            rust_lane: true,
+        };
+        run_test_commands(
+            &output_root,
+            &state_root,
+            Path::new("/unused/candidate"),
+            &[command],
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(repo_root.join("cache-opt-out.marker")).unwrap(),
+            "off\n"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1100,6 +1259,10 @@ mod tests {
         };
         let report = execute_candidate_test(parsed).unwrap();
         assert_eq!(report["outcome"], "test_recommended");
+        assert_eq!(
+            report["identity"]["environmentInputSha256"],
+            candidate_test_environment_input_sha256().unwrap()
+        );
         assert!(!root.join("cli/target/candidate-test-state").exists());
         fs::remove_dir_all(root).unwrap();
     }

@@ -86,6 +86,48 @@ fn canonical_input_identity_ignores_order_but_detects_build_changes() {
 }
 
 #[test]
+fn schema_v1_reads_legacy_source_control_metadata_without_new_emission() {
+    let current = ExecutableInputClosure::new(context(), inputs()).expect("current closure");
+    let current_json = serde_json::to_string(&current).expect("serialize current closure");
+    assert!(!current_json.contains("source_control_metadata"));
+
+    let new_legacy = ExecutableInputClosure::new(
+        context(),
+        vec![ExecutableInput {
+            path: ".git/HEAD".to_string(),
+            sha256: digest('9'),
+            category: InputCategory::SourceControlMetadata,
+        }],
+    )
+    .expect_err("new closures must not emit legacy source-control metadata");
+    assert_eq!(
+        new_legacy.code(),
+        "legacy_source_control_metadata_not_emittable"
+    );
+
+    let mut legacy_json = serde_json::to_value(&current).expect("serialize legacy fixture");
+    let legacy_inputs = legacy_json["inputs"].as_array_mut().expect("input array");
+    legacy_inputs.push(serde_json::json!({
+            "path": ".git/HEAD",
+            "sha256": digest('9'),
+            "category": "source_control_metadata"
+    }));
+    legacy_inputs.sort_by(|left, right| {
+        left["path"]
+            .as_str()
+            .expect("left input path")
+            .cmp(right["path"].as_str().expect("right input path"))
+    });
+    let legacy: ExecutableInputClosure =
+        serde_json::from_value(legacy_json).expect("legacy v1 closure must deserialize");
+    assert!(legacy
+        .inputs
+        .iter()
+        .any(|input| input.category == InputCategory::SourceControlMetadata));
+    legacy.validate().expect("legacy v1 closure remains valid");
+}
+
+#[test]
 fn merge_provenance_can_change_without_forcing_an_equivalent_rebuild() {
     let closure = ExecutableInputClosure::new(context(), inputs()).expect("closure");
     let before_merge = manifest(&commit('4'), &closure);

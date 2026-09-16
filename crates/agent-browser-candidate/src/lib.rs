@@ -68,6 +68,9 @@ pub enum InputCategory {
     EmbeddedAsset,
     PackageVersion,
     ToolchainConfiguration,
+    /// Reader compatibility for executable-input-closure v1 artifacts.
+    /// Current collectors omit source-control provenance from executable input.
+    SourceControlMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,8 +104,16 @@ pub struct ExecutableInputClosure {
 
 impl ExecutableInputClosure {
     pub fn new(
+        context: ExecutableInputContext,
+        inputs: Vec<ExecutableInput>,
+    ) -> Result<Self, CandidateError> {
+        Self::canonicalize(context, inputs, false)
+    }
+
+    fn canonicalize(
         mut context: ExecutableInputContext,
         mut inputs: Vec<ExecutableInput>,
+        allow_legacy_source_control_metadata: bool,
     ) -> Result<Self, CandidateError> {
         validate_nonempty("target", &context.target)?;
         validate_nonempty("toolchain", &context.toolchain)?;
@@ -129,6 +140,14 @@ impl ExecutableInputClosure {
         inputs.sort_by(|left, right| left.path.cmp(&right.path));
         let mut paths = BTreeSet::new();
         for input in &inputs {
+            if input.category == InputCategory::SourceControlMetadata
+                && !allow_legacy_source_control_metadata
+            {
+                return Err(CandidateError::new(
+                    "legacy_source_control_metadata_not_emittable",
+                    "new executable-input closures must keep source-control provenance outside the functional input list",
+                ));
+            }
             validate_input_path(&input.path)?;
             validate_sha256("input_sha256", &input.sha256)?;
             if !paths.insert(&input.path) {
@@ -163,7 +182,7 @@ impl ExecutableInputClosure {
                 "executable-input closure schema is not supported",
             ));
         }
-        let canonical = Self::new(self.context.clone(), self.inputs.clone())?;
+        let canonical = Self::canonicalize(self.context.clone(), self.inputs.clone(), true)?;
         if canonical != *self {
             return Err(CandidateError::new(
                 "noncanonical_input_closure",
