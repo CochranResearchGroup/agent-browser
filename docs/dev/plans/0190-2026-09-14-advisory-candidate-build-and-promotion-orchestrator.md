@@ -367,6 +367,22 @@ candidate architecture guard, and patch hygiene pass. Acceptance, terminal
 coordination, and the public effect and recovery commands remain. No installed
 runtime, browser, profile, provider, or Service State was touched.
 
+Checkpoint `1b3a538e` fences the post-commit validation and acceptance
+publications. The `GenerationCommitted` to `PostCommitValidating` transition
+and its admission-drain refresh now commit under exact candidate custody.
+Runtime handoff finalization and supervisor transition remain outside the
+coordination lock because they may wait on processes; custody is checked
+immediately before those effects and revalidated before acceptance evidence,
+the `Accepted` transition, or drain removal is persisted. Supervisor failure
+recovery transitions use the same bounded fence. Two stale-writer regressions
+prove that a superseded candidate can neither begin post-commit validation nor
+accept the transaction, and that the existing transaction and drain bytes stay
+unchanged. The existing accepted-candidate validation, strict workspace
+Clippy, format, candidate architecture guard, source-free workstation installer
+fixture, and patch hygiene pass. Terminal coordination, public effect and
+recovery commands, and production-shaped qualification remain. No installed
+runtime, browser, profile, provider, or Service State was touched.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
