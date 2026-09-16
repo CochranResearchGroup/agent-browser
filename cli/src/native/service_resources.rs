@@ -1155,7 +1155,7 @@ fn resource_lane_activity_at(
             reasons.insert(format!("active_job:{}", job.id));
         }
     }
-    observations.sort_by(|left, right| left.0.cmp(&right.0));
+    observations.sort_by_key(|observation| observation.0);
     let last_lease_observed_at = observations.last().map(|(_, value)| value.clone());
     let inactivity_seconds = match (
         observations.last().map(|(value, _)| *value),
