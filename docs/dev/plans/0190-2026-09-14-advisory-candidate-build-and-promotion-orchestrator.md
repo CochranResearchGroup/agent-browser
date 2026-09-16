@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -63,14 +63,15 @@ The Plan 0186 installer collision showed that a process lock can serialize two
 commands while still leaving their intent and candidate ownership ambiguous.
 Policies 0051 and 0052 now treat coordination records as integrity mechanisms,
 not agent-role permissions. Issue #136 tracks implementation. Implementation
-is admitted from canonical `main` checkpoint `552f6925` on
-`platform/p190-advisory-candidate-orchestrator`. The first packet inventories
-the executable-input closure and develops the pure candidate manifest and
-advice interface without a candidate build or any install, supervisor,
-browser, profile, provider, or tenant effect. The incoming bugfix was integrated
-through `origin/main` at `7b5a88dc`, then merged into this implementation branch
-before the first shared read-only adapter. Costly build qualification and all
-effect-capable adapters remain deferred.
+was admitted from canonical `main` checkpoint `552f6925` on
+`platform/p190-advisory-candidate-orchestrator`. The complete source batch now
+implements the candidate identity, advisory state machine, build and test
+coordination, and operator-selected transition adapters through the existing
+workstation transaction. Exact-head provider-free qualification and protected
+CI pass at source checkpoint `7af6e06c`. No candidate has been installed. The
+remaining critical path is separately admitted isolated-development
+publication and acceptance, protected integration, and post-merge
+executable-input equivalence readback.
 
 ## Implementation Progress
 
@@ -570,6 +571,46 @@ No browser, profile, provider, production runtime, or development runtime was
 read or mutated. Development publication and acceptance remain a separately
 admitted operational gate, followed by protected integration and post-merge
 executable-input equivalence readback.
+
+Checkpoint `7af6e06ca907747fe569b20bb6da5dc289939ef4` repairs the final
+source-ordering regression exposed by the comprehensive CI lane after the
+candidate compartment rebalance. The focused regression, workspace format,
+and strict workspace Clippy passed before push. Exact-head CI run
+`35125137064` then passed Version Sync Check, Dashboard, Service Client, Rust
+Quality, Workstation Fixtures, the comprehensive provider-free Rust suite, and
+all no-launch service smokes. Its Rust job completed in 32 minutes 42 seconds;
+the bounded Rust-test step passed before its 30-minute limit. Path-filtered
+Lease Authority run `35125137722` passed on Linux, Windows, macOS ARM, and
+macOS x86.
+
+Because the Rust repair changed the executable-input closure, the preceding
+candidate was retained as historical evidence and one replacement
+production-shaped build was required. Under transient host task pressure, the
+first exact build failed before publication and preserved operation
+`candidate-build-7f4b6154-bbee-446c-92cc-9ba2a068708b`. Exact recovery with
+four Cargo jobs and cache disabled produced sealed candidate
+`candidate-b11dca314f116c95-3b19e68308589d07`, executable-input SHA-256
+`b11dca314f116c950429bafd83a7d0d2bd1feb5b2cbced6ed6b8297fa6085cb4`,
+binary SHA-256
+`3b19e68308589d07d7d3268cda978b4ea63d7b7f3d2376b1d8921814178d6f2f`,
+candidate-manifest SHA-256
+`ac956c1ea404cd25d8240fbc49085cf154b36c290d940ef2f1283a3617f7ecb2`,
+artifact-seal SHA-256
+`f094643c4b56fd3d9f4e4fccb8b1347914320097939dacff571ae40351ae97ed`,
+and build-support-manifest SHA-256
+`3a2744cc423b9ba89eeb43701ff768d4af34028f170b11ecf7e2725565acf649`.
+Build operation `candidate-build-4a01c070-221c-4007-a8a0-46fd0f49d9b7`
+completed successfully. Exact self-inspection and install dry-run passed with
+`no_effect_performed`.
+
+The named `candidate-kernel`, `candidate-build-adapter`, and `candidate-cli`
+selections passed as hermetic provider-free run
+`candidate-test-22d4831c-98da-402c-88bb-59ace19740b9`; its reusable receipt is
+`cli/target/candidate-test-state/completed/afcce16eb797d80bcaaa09d9c2d4c5377cdf1d860bbd39b58230bddf1241577b.json`.
+Terminal cleanup was proven and no P190 candidate build or test Cargo process
+remained. No browser, profile, provider, production runtime, development
+runtime, supervisor, or Service State was mutated. Shared isolated-development
+runtime custody remains the next operational gate.
 
 ## Frozen Decisions
 
