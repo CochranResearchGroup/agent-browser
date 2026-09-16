@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 16
+Plan version: 17
 
 State: OPEN
 
@@ -599,7 +599,8 @@ Packet 10 source result at checkpoint
 - Green focused evidence: the exact descendant regression, all 21
   retirement-focused tests, four review-token tests, workspace format, strict
   workspace Clippy, selector output, and diff hygiene. Comprehensive Rust
-  requalification remains pending for this executable-input change.
+  requalification passed at the exact source checkpoint with `nativeLane=0`,
+  `supportLane=0`, and `elapsedSeconds=715`.
 - The final review ledger retains two disclosed completion gates: successful
   exact-artifact real-browser acceptance is still unproven after the prior
   profile-lock failure, and all four required user-facing documentation files

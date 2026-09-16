@@ -56,11 +56,11 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: Packet 10 descendant regression, retirement and review-token focused tests, format, strict Clippy, selector, and diff hygiene pass; comprehensive Rust requalification pending
+    validation_status: Packet 10 descendant regression, retirement and review-token focused tests, format, strict Clippy, selector, diff hygiene, and comprehensive Rust requalification pass at source checkpoint
     validation_ref: e727162e156b161cb2fff51dbcadcffeedb0d3fa
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: comprehensive provider-free Rust requalification, exact-artifact real-browser acceptance, and P190 shared-documentation reconciliation remain; no further live replay is authorized
+    blocker: exact-artifact real-browser acceptance and P190 shared-documentation reconciliation remain; no further live replay is authorized
     updated_at: 2026-09-16
