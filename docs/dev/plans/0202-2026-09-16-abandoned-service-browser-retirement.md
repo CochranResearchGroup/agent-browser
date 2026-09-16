@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 10
+Plan version: 11
 
 State: OPEN
 
@@ -390,6 +390,44 @@ attempt history.
   independent residue census is empty.
 - Bound: one run and no retry. Any failure records the new typed failed
   conditions and ends live execution for P202.
+
+## Final Acceptance Result 7
+
+- The single terminal run reached finalization and returned one exact failed
+  condition: `profile_lock_released`.
+- The same receipt proves `root_exited=true`, `descendants_exited=true`, and
+  `process_group_empty=true`; the zombie-only repair therefore reached its
+  intended real-browser boundary.
+- No retry was taken. Independent post-run readback found no fixture process or
+  `ab-managed-resource-gc-*` temporary directory. That readback follows harness
+  teardown and is residue evidence, not proof that product retirement released
+  the lock before teardown.
+- Progress classification: outcome progress. The generic exit blocker is now a
+  single lock-convergence defect with preserved typed evidence.
+
+## Profile-Lock Convergence Packet 8
+
+This provider-free packet owns the last observed product defect and authorizes
+no additional browser replay.
+
+- Milestone: after exact root, descendants, and process-group exit are proven,
+  retirement releases only the exact planned profile's stale `SingletonLock`
+  and then observes it absent; any live, mismatched, protected, or unproven
+  process remains fail-closed before lock mutation.
+- W9 `/root/p202_exit_cause`: strongest-tier read-only review of lock ordering,
+  exact-profile authority, and terminal receipt semantics.
+- W10 `/root/p202_resource_implementation`: normal-tier read-only inventory of
+  existing stale-lock cleanup primitives and the smallest deterministic
+  filesystem fixture.
+- Primary writer: P202 lane owner, limited to the exact shutdown adapter and
+  focused provider-free tests.
+- Feedback loop: an isolated temporary profile with a dangling Chromium-shaped
+  `SingletonLock` must be red on the current P202 adapter and green only when
+  the lock is removed after exact process exit. A live-process control must
+  retain the lock and avoid cleanup.
+- Bound: one implementation attempt, one focused validation cycle, and 30
+  active minutes. Stop with no further live execution if exact ordering cannot
+  be proven at the existing reviewed-shutdown seam.
 
 ## Stop Condition
 

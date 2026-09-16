@@ -56,11 +56,11 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: repaired candidate passes focused, formatting, strict Clippy, and comprehensive Rust requalification with nativeLane=0 and supportLane=0; one terminal live acceptance remains
+    validation_status: repaired candidate passes focused, strict Clippy, and comprehensive Rust requalification; terminal live receipt proves all process exit predicates and isolates profile_lock_released=false
     validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: Final Acceptance Packet 7 has one non-retryable disposable live run; shared documentation remains owned by open P190
+    blocker: provider-free Profile-Lock Convergence Packet 8 is active with no further live replay authorized; shared documentation remains owned by open P190
     updated_at: 2026-09-16
