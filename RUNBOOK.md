@@ -5,7 +5,31 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
-- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
+- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
+
+## Turn 354 | 2026-09-16
+
+[Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
+is source-complete at `42beec54` through draft PR #166. The original focused
+run failed because an ordinary file and a stale socket inode were both treated
+as `ActiveSocket`. The repair uses exact filesystem and abstract addresses in
+`/proc/net/unix`, keeps matching X processes and unknown observation reserved,
+revalidates before removing exact stale paths, and reports bounded per-display
+classifications on exhaustion. All 11 focused regressions, formatting, strict
+workspace Clippy, patch hygiene, planning audit, and selector-required
+no-launch route-confusion gates pass. Exact-head CI, review, integration, and
+closeout remain. No live or installed-runtime effect occurred.
+
+## Turn 353 | 2026-09-16
+
+[Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
+is admitted from `main@b11a7227` for issue #159. The no-live packet will first
+prove ordinary files and stale filesystem socket inodes are not live X display
+evidence while live filesystem and abstract listeners remain reserved. It will
+then add exact stale-residue reclamation and a bounded exhaustion summary.
+P201 solely owns `cli/src/native/cdp/chrome.rs`; P190 and P197 are disjoint. No
+browser, X server, installed-runtime, provider, Service State, retained-profile,
+production, or release effect is authorized.
 
 ## Turn 352 | 2026-09-16
 
