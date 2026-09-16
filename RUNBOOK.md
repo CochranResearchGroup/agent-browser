@@ -5,32 +5,32 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
-- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P198](docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md)
+- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
 
-## Turn 346 | 2026-09-16
+## Turn 347 | 2026-09-16
 
 [Plan 0197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
 integrates Authentication Run and navigation through one provider-neutral
-challenge admission contract. Source checkpoint `0059d261` binds a completed
+challenge admission contract. Source checkpoint `2dc5fd60` binds a completed
 receipt to the effective site-policy digest, downstream intent, principal, and
 exact current tab before either consumer executes. Focused provider-free
-validation, strict Clippy, contract parity, generated-client checks, and all
-completed exact-head CI gates pass; the Rust job remains in progress. Draft PR
-#157 still requires the shared documentation surfaces retained under P190
-primary-writer custody. No browser, CAPTCHA, credential, provider,
-installed-runtime, production, or release effect occurred.
+validation, strict Clippy, contract parity, generated-client checks, and exact
+source-head CI run `35087666347` pass. Draft PR #157 still requires the shared
+documentation surfaces retained under P190 primary-writer custody. No browser,
+CAPTCHA, credential, provider, installed-runtime, production, or release effect
+occurred.
 
-## Turn 345 | 2026-09-16
+## Turn 346 | 2026-09-16
 
 [Plan 0198](docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md)
-is source-complete at published checkpoint `21ec94f3` through draft PR #158.
+is CLOSED. PR #158 merged exact branch head `38344ecf` into `main` as `c2ade1d1`; CI run `35086940883` passes and issue #143 closed.
 The root defect was browser inventory applying current-PID authority validation
 to structurally valid owner history retained after a terminal browser cleared
 its PID. The repair preserves that history as observational, keeps nonterminal
 PID mismatches fail-closed, retains typed launch-recovery recourse, and marks
 read-only collection failures `no_effect`. The red-to-green fixture, focused
 owner and recourse tests, 99 service-health tests, formatting, and strict Clippy
-pass. No live effect occurred. Protected integration and exact-head CI remain.
+pass. No live or installed-runtime effect occurred.
 
 ## Turn 344 | 2026-09-15
 

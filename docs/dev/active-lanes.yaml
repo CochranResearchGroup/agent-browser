@@ -1,27 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P198
-    product_lane: PL-BUGFIX
-    objective: Make retained managed-profile launch and read-only inventories agree on lifecycle owner identity
-    plan: docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md
-    plan_ref: refs/heads/fix/p198-retained-owner-coherence
-    branch: fix/p198-retained-owner-coherence
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 21ec94f3bfc8f2db86d4b275691cf5fb15fd67d0
-    remote_ref: refs/remotes/origin/fix/p198-retained-owner-coherence
-    integration_receipt: null
-    integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
-    validation_status: passed
-    validation_ref: 21ec94f3bfc8f2db86d4b275691cf5fb15fd67d0
-    work_items: [CochranResearchGroup/agent-browser#143]
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
-    blocker: protected integration and exact-head CI remain; no live effect is required
-    updated_at: 2026-09-16
   - id: P190
     product_lane: PL-PLATFORM
     objective: Build the deterministic candidate identity, build coordination, and promotion advisory surface
