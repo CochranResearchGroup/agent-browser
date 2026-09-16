@@ -197,6 +197,19 @@ executor and collector tests, candidate architecture guard, release-asset
 fixture, validation selector, and patch hygiene pass. This checkpoint did not
 invoke Cargo, perform a candidate build, or mutate an installed runtime.
 
+Checkpoint `008944c6` deepens the existing workstation installer instead of
+adding a candidate-specific installer. Transaction preparation now accepts one
+payload-source seam used by both the current executable and later sealed
+candidate bytes. A reviewed source binds an expected binary digest before the
+upgrade transaction is created, the staged copy is hashed again, and any
+source change during staging fails before generation commit. The existing
+`UpgradeTransaction`, install-specific support manifest, immutable generation,
+runtime census, migration, and activation flow remain the sole production
+path. Strict workspace Clippy, all 166 workstation-install Rust tests, the six
+selected workstation fixture suites, the candidate architecture guard, format,
+and patch hygiene pass. Only disposable fixture workstations were exercised;
+neither installed runtime was mutated.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
