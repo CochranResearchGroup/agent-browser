@@ -197,8 +197,9 @@ against the frozen published diff and has no runtime authority.
   tests pass and entered `main` through PR #154.
 - Final generation `0.28.0-15f0f3576657-30788a166073`, binary SHA-256
   `15f0f3576657da6cfc9a59bdb23b0b3d94fb37d73a4c11d3c1e08a6d4fcf8634`,
-  is accepted under transaction
-  `upgrade-d0e7c98f-d6b7-4e48-bc60-aa570e5dc329` revision 13.
+  was accepted and then finalized under transaction
+  `upgrade-d0e7c98f-d6b7-4e48-bc60-aa570e5dc329` revision 14. The terminal
+  state is `old_generation_retirable` with zero outstanding owner obligations.
 - Installed doctor passes with one runtime host, one dashboard process, a
   healthy monitor, and an exact supervisor executable match. The remaining
   dashboard operator-journey warning is nonblocking and outside this plan.
