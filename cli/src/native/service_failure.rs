@@ -953,7 +953,14 @@ pub fn attach_service_failure_recourse_for_action(response: &mut Value, action: 
     let Ok(mut recourse) = serde_json::from_value::<ServiceFailureRecourse>(failure.clone()) else {
         return;
     };
-    recourse.code = error.split(':').next().unwrap_or(&error).to_string();
+    if let Some(code) = error.split(':').next().filter(|code| {
+        !code.is_empty()
+            && code
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    }) {
+        recourse.code = code.to_string();
+    }
     recourse.axis = ServiceFailureAxis::ServiceState;
     recourse.phase = ServiceFailurePhase::Finalize;
     recourse.effect_state = ServiceEffectState::NoEffect;
@@ -994,6 +1001,14 @@ mod tests {
                 "inspect_service_inventory_state"
             );
         }
+
+        let mut malformed = json!({
+            "success": false,
+            "error": "Invalid serviceState: missing profiles"
+        });
+        attach_service_failure_recourse_for_action(&mut malformed, "service_profiles");
+        assert_eq!(malformed["failure"]["code"], "service_operation_failed");
+        assert_eq!(malformed["failure"]["effectState"], "no_effect");
     }
 
     #[test]
