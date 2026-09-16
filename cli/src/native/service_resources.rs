@@ -236,6 +236,16 @@ struct GcCandidateIdentity {
     profile_id: Option<String>,
     display_allocation_id: Option<String>,
     profile_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    descendants: Vec<GcCandidateProcessIdentity>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct GcCandidateProcessIdentity {
+    pid: u32,
+    start_token: Option<String>,
+    executable_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -1329,6 +1339,23 @@ fn apply_abandoned_lane_candidates(
         else {
             continue;
         };
+        let Some(descendants) = observation
+            .descendant_pids
+            .iter()
+            .map(|pid| {
+                processes
+                    .iter()
+                    .find(|process| process.pid == *pid)
+                    .map(|process| GcCandidateProcessIdentity {
+                        pid: process.pid,
+                        start_token: process.start_token.clone(),
+                        executable_path: process.executable.clone(),
+                    })
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
         record.disposition = ResourceDisposition::Candidate;
         record.reasons = vec![
             "exact_owned_inactive_browser_lane".to_string(),
@@ -1350,6 +1377,7 @@ fn apply_abandoned_lane_candidates(
             profile_id: record.correlation.profile_id.clone(),
             display_allocation_id: record.correlation.display_allocation_id.clone(),
             profile_path: record.correlation.profile_path.clone(),
+            descendants,
         });
     }
 }
@@ -1605,6 +1633,7 @@ fn classify_process(
         profile_id: correlation.profile_id.clone(),
         display_allocation_id: correlation.display_allocation_id.clone(),
         profile_path: correlation.profile_path.clone(),
+        descendants: Vec::new(),
     });
 
     Some(ResourceRecord {
@@ -3687,7 +3716,7 @@ mod tests {
     }
 
     #[test]
-    fn reviewed_abandoned_candidate_cannot_be_replaced_before_reservation() {
+    fn reviewed_abandoned_candidate_cannot_replace_root_or_descendants_before_reservation() {
         let pid = 4_123;
         let profile_root = "/tmp/agent-browser-reviewed-candidate-binding";
         let browser_id = format!("browser-{pid}");
@@ -3709,9 +3738,13 @@ mod tests {
                 ..BrowserSession::default()
             },
         );
+        let mut reviewed_child = reviewed_root.clone();
+        reviewed_child.pid = pid + 1;
+        reviewed_child.ppid = Some(pid);
+        reviewed_child.start_token = Some("linux:fixture:reviewed-child".to_string());
         let reviewed_response = service_resources_response_from_samples(
             &reviewed_state,
-            vec![reviewed_root.clone()],
+            vec![reviewed_root.clone(), reviewed_child.clone()],
             Vec::new(),
         );
         let reviewed_candidate = candidates_from_response(&reviewed_response)
@@ -3721,10 +3754,37 @@ mod tests {
                     && candidate["gcAction"] == "retire_abandoned_browser_lane"
             })
             .expect("reviewed candidate");
+        assert_eq!(
+            reviewed_candidate["candidateIdentity"]["descendants"],
+            json!([{
+                "pid": pid + 1,
+                "startToken": "linux:fixture:reviewed-child",
+                "executablePath": "/opt/agent-browser/chromium",
+            }])
+        );
         assert!(reviewed_abandoned_candidate_matches_fresh_snapshot(
             &reviewed_candidate,
             &reviewed_state,
-            std::slice::from_ref(&reviewed_root),
+            &[reviewed_root.clone(), reviewed_child.clone()],
+        ));
+
+        let mut replacement_child = reviewed_child.clone();
+        replacement_child.start_token = Some("linux:fixture:replacement-child".to_string());
+        let replacement_descendant_response = service_resources_response_from_samples(
+            &reviewed_state,
+            vec![reviewed_root.clone(), replacement_child.clone()],
+            Vec::new(),
+        );
+        assert!(candidates_from_response(&replacement_descendant_response)
+            .iter()
+            .any(
+                |candidate| candidate["correlation"]["browserId"] == browser_id
+                    && candidate["gcAction"] == "retire_abandoned_browser_lane"
+            ));
+        assert!(!reviewed_abandoned_candidate_matches_fresh_snapshot(
+            &reviewed_candidate,
+            &reviewed_state,
+            &[reviewed_root.clone(), replacement_child],
         ));
 
         let mut replacement_state = reviewed_state;
@@ -3758,7 +3818,7 @@ mod tests {
             .package_launch_identity_digest = Some(package_launch_identity_digest);
         let replacement_response = service_resources_response_from_samples(
             &replacement_state,
-            vec![replacement_root.clone()],
+            vec![replacement_root.clone(), reviewed_child.clone()],
             Vec::new(),
         );
         assert!(candidates_from_response(&replacement_response)
@@ -3771,7 +3831,7 @@ mod tests {
         assert!(!reviewed_abandoned_candidate_matches_fresh_snapshot(
             &reviewed_candidate,
             &replacement_state,
-            std::slice::from_ref(&replacement_root),
+            &[replacement_root, reviewed_child],
         ));
     }
 
