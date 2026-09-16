@@ -161,6 +161,16 @@ export function createCandidateBuildFilesystemAdapter({
   operationIdFactory = () => `candidate-build-${randomUUID()}`,
   sourceReader = null,
   retryFailedOperationId = null,
+  recoverActiveOperationId = null,
+  ownerPid = process.pid,
+  processAlive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      return error?.code === 'EPERM';
+    }
+  },
 } = {}) {
   const root = resolve(repoRoot);
   const state = resolve(stateRoot);
@@ -180,6 +190,7 @@ export function createCandidateBuildFilesystemAdapter({
       operationId,
       state: 'building',
       createdAt: clock(),
+      ownerPid,
       outputDirectory: plan.outputDirectory,
     };
   }
@@ -322,6 +333,72 @@ export function createCandidateBuildFilesystemAdapter({
             const archivedArtifacts = join(
               state,
               'failed',
+              'artifacts',
+              confirmed.operationId,
+            );
+            mkdirSync(dirname(archivedArtifacts), { recursive: true });
+            renameSync(partialArtifacts, archivedArtifacts);
+            syncDirectory(dirname(partialArtifacts));
+            syncDirectory(dirname(archivedArtifacts));
+          }
+          atomicWrite(path, encodeJson(claimDocument(plan, operationId)));
+          unlinkSync(recoveryGuard);
+          syncDirectory(dirname(recoveryGuard));
+          return {
+            acquired: true,
+            operationId,
+            claimPath: path,
+            recoveredOperationId: confirmed.operationId,
+            archivedClaim,
+          };
+        }
+        if (existing.state === 'building' && recoverActiveOperationId === existing.operationId) {
+          if (!Number.isInteger(existing.ownerPid) || existing.ownerPid < 1) {
+            fail('candidate_build_active_owner_invalid', existing.operationId);
+          }
+          if (processAlive(existing.ownerPid)) {
+            fail('candidate_build_active_owner_alive', `${existing.operationId}:${existing.ownerPid}`);
+          }
+          const guardDescriptor = openSync(
+            recoveryGuard,
+            constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+            0o600,
+          );
+          try {
+            writeFileSync(guardDescriptor, encodeJson({
+              schemaVersion: 'agent-browser.candidate-build-recovery.v1',
+              requestDigest: plan.requestDigest,
+              abandonedOperationId: existing.operationId,
+              abandonedOwnerPid: existing.ownerPid,
+              replacementOperationId: operationId,
+              startedAt: clock(),
+            }));
+            fsyncSync(guardDescriptor);
+          } finally {
+            closeSync(guardDescriptor);
+          }
+          syncDirectory(dirname(recoveryGuard));
+          const confirmed = readJson(path);
+          if (
+            confirmed.state !== 'building'
+            || confirmed.operationId !== recoverActiveOperationId
+            || confirmed.ownerPid !== existing.ownerPid
+            || processAlive(confirmed.ownerPid)
+          ) {
+            fail('candidate_build_active_claim_changed', path);
+          }
+          const archivedClaim = join(
+            state,
+            'abandoned',
+            'claims',
+            `${confirmed.operationId}.json`,
+          );
+          atomicCopy(path, archivedClaim);
+          const partialArtifacts = artifactPaths(plan).artifactDirectory;
+          if (existsSync(partialArtifacts)) {
+            const archivedArtifacts = join(
+              state,
+              'abandoned',
               'artifacts',
               confirmed.operationId,
             );

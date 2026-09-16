@@ -8,7 +8,7 @@ use agent_browser_candidate::{
     coordinate_test_run, CandidateManifest, ExecutableInputClosure, SealedArtifact,
     TestResourceClass, TestRunDecision, TestRunIdentity, TestRunRecord, TestRunState,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
@@ -35,6 +35,7 @@ struct TestArguments {
     sealed_artifact: PathBuf,
     suite_revision: String,
     selections: Vec<String>,
+    recover_active_run: Option<String>,
     mode: TestMode,
 }
 
@@ -93,6 +94,7 @@ fn parse_test_arguments(args: &[String]) -> Result<TestArguments, String> {
     let mut sealed_artifact = None;
     let mut suite_revision = None;
     let mut selections = Vec::new();
+    let mut recover_active_run = None;
     let mut mode = None;
     let mut index = 2;
     while index < args.len() {
@@ -114,6 +116,7 @@ fn parse_test_arguments(args: &[String]) -> Result<TestArguments, String> {
                 );
                 None
             }
+            "--recover-active-run" => Some((&mut recover_active_run, "--recover-active-run")),
             "--dry-run" => {
                 set_test_mode(&mut mode, TestMode::DryRun)?;
                 None
@@ -143,6 +146,9 @@ fn parse_test_arguments(args: &[String]) -> Result<TestArguments, String> {
     if selections.is_empty() {
         return Err("candidate test requires at least one --selection <suite>".to_string());
     }
+    if recover_active_run.is_some() && mode != Some(TestMode::Apply) {
+        return Err("candidate test active-run recovery requires --apply".to_string());
+    }
     for selection in &selections {
         commands_for_selection(selection)?;
     }
@@ -167,6 +173,7 @@ fn parse_test_arguments(args: &[String]) -> Result<TestArguments, String> {
         suite_revision: suite_revision
             .ok_or_else(|| "candidate test requires --suite-revision <commit>".to_string())?,
         selections,
+        recover_active_run,
         mode: mode.ok_or_else(|| {
             "candidate test requires exactly one of --dry-run or --apply".to_string()
         })?,
@@ -291,6 +298,9 @@ fn execute_candidate_test(args: TestArguments) -> Result<Value, String> {
     )
     .map_err(|error| error.to_string())?;
     let store = CandidateTestStore::new(&repo_root);
+    if let Some(run_id) = args.recover_active_run.as_deref() {
+        recover_active_test_run(&store, &identity, run_id, process_is_alive)?;
+    }
     coordinate_and_execute(
         &store,
         identity,
@@ -333,6 +343,14 @@ struct CandidateTestStore {
     output_root: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ActiveTestRunClaim {
+    schema_version: String,
+    record: TestRunRecord,
+    owner_pid: u32,
+}
+
 impl CandidateTestStore {
     fn new(repo_root: &Path) -> Self {
         Self {
@@ -369,7 +387,8 @@ fn coordinate_and_execute(
         .into_iter()
         .collect::<Vec<_>>();
     let active = if completed.is_empty() {
-        read_record(&store.active_path(&digest))?
+        read_active_claim(&store.active_path(&digest))?
+            .map(|claim| claim.record)
             .into_iter()
             .collect::<Vec<_>>()
     } else {
@@ -416,16 +435,17 @@ fn coordinate_and_execute(
             let run_id = format!("candidate-test-{}", Uuid::new_v4());
             let active_path = store.active_path(&digest);
             let active_record = TestRunRecord::active(&run_id, identity.clone());
-            if !write_new_record(&active_path, &active_record)? {
-                let joined = read_record(&active_path)?
+            if !write_new_active_claim(&active_path, &active_record, std::process::id())? {
+                let joined = read_active_claim(&active_path)?
                     .ok_or_else(|| "candidate_test_active_claim_disappeared".to_string())?;
-                if joined.state == TestRunState::Active && joined.identity == identity {
+                if joined.record.state == TestRunState::Active && joined.record.identity == identity
+                {
                     return Ok(test_report(
                         "joined_existing",
-                        Some(&joined.run_id),
+                        Some(&joined.record.run_id),
                         &identity,
                         &TestRunDecision::JoinActive {
-                            run_id: joined.run_id.clone(),
+                            run_id: joined.record.run_id.clone(),
                         },
                         None,
                     ));
@@ -591,7 +611,57 @@ fn read_record(path: &Path) -> Result<Option<TestRunRecord>, String> {
     }
 }
 
+fn read_active_claim(path: &Path) -> Result<Option<ActiveTestRunClaim>, String> {
+    match fs::read(path) {
+        Ok(bytes) => {
+            let claim: ActiveTestRunClaim = serde_json::from_slice(&bytes).map_err(|error| {
+                format!(
+                    "candidate_test_active_claim_invalid:{}:{error}",
+                    path.display()
+                )
+            })?;
+            if claim.schema_version != "agent-browser.candidate-test-active-claim.v1"
+                || claim.owner_pid == 0
+            {
+                return Err(format!(
+                    "candidate_test_active_claim_invalid:{}",
+                    path.display()
+                ));
+            }
+            claim.record.validate().map_err(|error| {
+                format!(
+                    "candidate_test_active_claim_invalid:{}:{error}",
+                    path.display()
+                )
+            })?;
+            Ok(Some(claim))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "candidate_test_active_claim_read_failed:{}:{error}",
+            path.display()
+        )),
+    }
+}
+
+fn write_new_active_claim(
+    path: &Path,
+    record: &TestRunRecord,
+    owner_pid: u32,
+) -> Result<bool, String> {
+    let claim = ActiveTestRunClaim {
+        schema_version: "agent-browser.candidate-test-active-claim.v1".to_string(),
+        record: record.clone(),
+        owner_pid,
+    };
+    write_new_json(path, &claim)
+}
+
 fn write_new_record(path: &Path, record: &TestRunRecord) -> Result<bool, String> {
+    write_new_json(path, record)
+}
+
+fn write_new_json(path: &Path, value: &impl Serialize) -> Result<bool, String> {
     let parent = path
         .parent()
         .ok_or_else(|| "candidate_test_record_parent_missing".to_string())?;
@@ -609,7 +679,7 @@ fn write_new_record(path: &Path, record: &TestRunRecord) -> Result<bool, String>
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
         Err(error) => return Err(format!("candidate_test_record_create_failed:{error}")),
     };
-    let mut bytes = serde_json::to_vec_pretty(record)
+    let mut bytes = serde_json::to_vec_pretty(value)
         .map_err(|error| format!("candidate_test_record_serialize_failed:{error}"))?;
     bytes.push(b'\n');
     file.write_all(&bytes)
@@ -618,6 +688,58 @@ fn write_new_record(path: &Path, record: &TestRunRecord) -> Result<bool, String>
         .map_err(|error| format!("candidate_test_record_sync_failed:{error}"))?;
     sync_directory(parent)?;
     Ok(true)
+}
+
+fn recover_active_test_run(
+    store: &CandidateTestStore,
+    identity: &TestRunIdentity,
+    expected_run_id: &str,
+    process_alive: fn(u32) -> bool,
+) -> Result<(), String> {
+    let digest = identity.digest();
+    let path = store.active_path(&digest);
+    let claim = read_active_claim(&path)?
+        .ok_or_else(|| format!("candidate_test_active_run_missing:{expected_run_id}"))?;
+    if claim.record.run_id != expected_run_id || claim.record.identity != *identity {
+        return Err(format!(
+            "candidate_test_active_run_changed:{expected_run_id}:{}",
+            claim.record.run_id
+        ));
+    }
+    if process_alive(claim.owner_pid) {
+        return Err(format!(
+            "candidate_test_active_owner_alive:{expected_run_id}:{}",
+            claim.owner_pid
+        ));
+    }
+    let archive = store
+        .root
+        .join("abandoned")
+        .join(format!("{expected_run_id}.json"));
+    if !write_new_json(&archive, &claim)? {
+        return Err(format!(
+            "candidate_test_abandoned_receipt_exists:{expected_run_id}"
+        ));
+    }
+    let confirmed = read_active_claim(&path)?
+        .ok_or_else(|| format!("candidate_test_active_run_disappeared:{expected_run_id}"))?;
+    if confirmed != claim || process_alive(confirmed.owner_pid) {
+        return Err(format!(
+            "candidate_test_active_run_changed:{expected_run_id}"
+        ));
+    }
+    remove_claim(&path)
+}
+
+fn process_is_alive(pid: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    return Path::new("/proc").join(pid.to_string()).exists();
+
+    #[cfg(not(target_os = "linux"))]
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn remove_claim(path: &Path) -> Result<(), String> {
@@ -701,6 +823,14 @@ mod tests {
         Err("fixture test failure".to_string())
     }
 
+    fn never_alive(_pid: u32) -> bool {
+        false
+    }
+
+    fn always_alive(_pid: u32) -> bool {
+        true
+    }
+
     #[test]
     fn dry_run_is_zero_effect_and_apply_reuses_exact_receipt() {
         let root = std::env::temp_dir().join(format!(
@@ -763,7 +893,7 @@ mod tests {
         let requested = identity(&["candidate-build-adapter"]);
         let digest = requested.digest();
         let active = TestRunRecord::active("active-fixture", requested.clone());
-        assert!(write_new_record(&store.active_path(&digest), &active).unwrap());
+        assert!(write_new_active_claim(&store.active_path(&digest), &active, 424242).unwrap());
         let joined = coordinate_and_execute(
             &store,
             requested.clone(),
@@ -774,7 +904,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(joined["outcome"], "joined_existing");
-        remove_claim(&store.active_path(&digest)).unwrap();
+        assert!(
+            recover_active_test_run(&store, &requested, "active-fixture", always_alive)
+                .unwrap_err()
+                .contains("candidate_test_active_owner_alive")
+        );
+        recover_active_test_run(&store, &requested, "active-fixture", never_alive).unwrap();
+        assert!(store.root.join("abandoned/active-fixture.json").exists());
 
         let failed = coordinate_and_execute(
             &store,
@@ -939,6 +1075,7 @@ mod tests {
             sealed_artifact: sealed_path,
             suite_revision: revision,
             selections: vec!["candidate-kernel".to_string()],
+            recover_active_run: None,
             mode: TestMode::DryRun,
         };
         let report = execute_candidate_test(parsed).unwrap();

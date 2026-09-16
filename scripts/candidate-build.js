@@ -50,6 +50,7 @@ export function parseCandidateBuildArguments(argv) {
   let mode = null;
   let json = false;
   let retryFailedOperationId = null;
+  let recoverActiveOperationId = null;
   const features = [];
   const reviewedEnvironmentInputs = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -83,6 +84,10 @@ export function parseCandidateBuildArguments(argv) {
         if (retryFailedOperationId) fail('candidate_build_recovery_duplicate', argument);
         retryFailedOperationId = take(argument);
         break;
+      case '--recover-active-operation':
+        if (recoverActiveOperationId) fail('candidate_build_recovery_duplicate', argument);
+        recoverActiveOperationId = take(argument);
+        break;
       case '--dry-run':
       case '--apply':
         if (mode) fail('candidate_build_mode_duplicate', `${mode},${argument}`);
@@ -100,6 +105,12 @@ export function parseCandidateBuildArguments(argv) {
   if (retryFailedOperationId && mode !== '--apply') {
     fail('candidate_build_recovery_requires_apply', retryFailedOperationId);
   }
+  if (recoverActiveOperationId && mode !== '--apply') {
+    fail('candidate_build_recovery_requires_apply', recoverActiveOperationId);
+  }
+  if (retryFailedOperationId && recoverActiveOperationId) {
+    fail('candidate_build_recovery_conflict', `${retryFailedOperationId},${recoverActiveOperationId}`);
+  }
   return {
     repoRoot: realpathSync(resolve(repoRoot)),
     artifactClass,
@@ -109,6 +120,7 @@ export function parseCandidateBuildArguments(argv) {
     apply: mode === '--apply',
     json,
     retryFailedOperationId,
+    recoverActiveOperationId,
   };
 }
 
@@ -144,6 +156,7 @@ export async function runCandidateBuild(argv, dependencies = {}) {
     repoRoot: parsed.repoRoot,
     sourceReader: readSource,
     retryFailedOperationId: parsed.retryFailedOperationId,
+    recoverActiveOperationId: parsed.recoverActiveOperationId,
   });
   return {
     schemaVersion: 'agent-browser.candidate-build-result.v1',

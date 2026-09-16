@@ -302,6 +302,9 @@ value, pass only `--reviewed-environment-input <name=sha256>`; the command fails
 if the current raw value does not match that digest. Retry a failed claim only
 with `--retry-failed-operation <exact-operation-id>`; the failed claim and any
 partial sealed directory are archived rather than deleted.
+Use `--recover-active-operation <exact-operation-id> --apply` only after the
+recorded owner PID is no longer live. Recovery archives the abandoned claim and
+partial sealed directory before a replacement claim is created.
 Use `agent-browser candidate test --repo-root <source-checkout> --binary <path>
 --manifest <path> --input-closure <path> --sealed-artifact <path>
 --suite-revision <commit> --selection <suite> --dry-run --json` to validate the
@@ -312,6 +315,9 @@ starts. Supported suites are `candidate-kernel`, `candidate-build-adapter`, and
 runtime, temporary, Cargo, log, and receipt paths below `cli/target`; it never
 launches a browser or touches either installed runtime. Reuse requires an exact
 successful hermetic receipt with terminal cleanup proof.
+Use `--recover-active-run <exact-run-id> --apply` only after its recorded owner
+PID is no longer live. The abandoned active claim is archived before the
+replacement run starts.
 Use `agent-browser candidate install --binary <path> --manifest
 <path> --input-closure <path> --sealed-artifact <path> --dry-run --json` to
 also verify the exact candidate binary and sealed build artifact without an

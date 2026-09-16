@@ -152,6 +152,57 @@ try {
     'utf8',
   ));
   assert.equal(archivedClaim.state, 'failed');
+
+  const abandonedPlan = createCandidateBuildPlan({
+    repoRoot: root,
+    artifactClass: 'fast_iteration',
+    source: { commit: 'e'.repeat(40), tree: 'f'.repeat(64), state: 'dirty' },
+    target: 'x86_64-unknown-linux-gnu',
+    toolchain: 'rustc 1.90.0',
+    features: [],
+    reviewedEnvironmentInputs: {},
+    apply: true,
+  });
+  const abandonedOwner = createCandidateBuildFilesystemAdapter({
+    repoRoot: root,
+    ownerPid: 424242,
+    operationIdFactory: () => 'build-operation-abandoned',
+  });
+  const claim = await abandonedOwner.acquireClaim(abandonedPlan);
+  assert.equal(claim.acquired, true);
+  const refusedActive = createCandidateBuildFilesystemAdapter({
+    repoRoot: root,
+    recoverActiveOperationId: 'build-operation-abandoned',
+    processAlive: () => true,
+  });
+  await assert.rejects(
+    executeCandidateBuildPlan(abandonedPlan, refusedActive),
+    /candidate_build_active_owner_alive/u,
+  );
+  const recoveredActive = createCandidateBuildFilesystemAdapter({
+    repoRoot: root,
+    ownerPid: 434343,
+    recoverActiveOperationId: 'build-operation-abandoned',
+    processAlive: () => false,
+    operationIdFactory: () => 'build-operation-after-abandonment',
+    commandRunner: async (command) => {
+      if (command.program !== 'scripts/ci/cargo-safe.sh') return;
+      const paths = candidateBuildArtifactPaths(abandonedPlan);
+      mkdirSync(dirname(paths.binary), { recursive: true });
+      writeFileSync(paths.binary, 'abandoned-recovery-binary');
+      writeFileSync(
+        paths.depInfo,
+        `${paths.binary}: cli/src/main.rs Cargo.toml Cargo.lock cli/Cargo.toml package.json packages/dashboard/package.json\n`,
+      );
+    },
+  });
+  const activeRecovery = await executeCandidateBuildPlan(abandonedPlan, recoveredActive);
+  assert.equal(activeRecovery.outcome, 'artifact_sealed');
+  const archivedActive = JSON.parse(readFileSync(
+    join(root, 'cli/target/candidate-build-state/abandoned/claims/build-operation-abandoned.json'),
+    'utf8',
+  ));
+  assert.equal(archivedActive.ownerPid, 424242);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

@@ -868,6 +868,9 @@ features. Supply reviewed build-affecting environment values as
 the digest and is not recorded. A failed claim is retried only with
 `--retry-failed-operation <exact-operation-id>`; its claim and any partial
 sealed directory are archived first.
+Use `--recover-active-operation <exact-operation-id> --apply` only when the
+claim's recorded owner PID is no longer live. The abandoned claim and partial
+sealed directory are archived before a replacement build starts.
 
 `candidate test` validates the exact sealed artifact and requires the suite
 revision to match the source checkout. Repeat `--selection` to choose from
@@ -877,6 +880,9 @@ runs only those provider-free suites with isolated HOME, runtime, temporary,
 Cargo, log, and receipt paths below `cli/target`. Exact active runs join, and
 only a successful hermetic receipt with terminal cleanup proof is reused. The
 command does not launch a browser or touch either installed runtime.
+An abandoned run is recoverable with `--recover-active-run <exact-run-id>
+--apply` only after its recorded owner PID is no longer live; recovery archives
+the active claim before a replacement run starts.
 
 Repeating `stream enable` with no port, port zero, or the current port returns the existing stream status without replacing its listener. A different explicit port fails; disable streaming before changing ports.
 

@@ -5664,8 +5664,8 @@ agent-browser candidate - Build, test, inspect, or explicitly install a sealed c
 
 Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
-       agent-browser candidate build --repo-root <source-checkout> --artifact-class <fast_iteration|production_shaped> [--target <triple>] [--feature <name>] [--reviewed-environment-input <name=sha256>] [--retry-failed-operation <id>] <--dry-run|--apply> [--json]
-       agent-browser candidate test --repo-root <source-checkout> --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> --suite-revision <commit> --selection <candidate-kernel|candidate-build-adapter|candidate-cli> <--dry-run|--apply> [--json]
+       agent-browser candidate build --repo-root <source-checkout> --artifact-class <fast_iteration|production_shaped> [--target <triple>] [--feature <name>] [--reviewed-environment-input <name=sha256>] [--retry-failed-operation <id>|--recover-active-operation <id>] <--dry-run|--apply> [--json]
+       agent-browser candidate test --repo-root <source-checkout> --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> --suite-revision <commit> --selection <candidate-kernel|candidate-build-adapter|candidate-cli> [--recover-active-run <id>] <--dry-run|--apply> [--json]
        agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json]
        agent-browser candidate recover <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
        agent-browser candidate coordinate <queue|cancel-active|discard-queued|supersede|activate-queued> --request-id <id> --candidate-id <id> --artifact-id <id> [--operation-id <id>] --expected-revision <revision> --expected-fencing-generation <generation> [--json]
@@ -5680,13 +5680,18 @@ and immutable manifests to produce a sealed artifact below `cli/target` without
 touching an installed runtime. Production-shaped builds require clean source.
 Retry a failed claim only by passing its exact operation ID with
 `--retry-failed-operation`; the failed claim and any partial sealed directory
-are archived before the replacement claim is created.
+are archived before the replacement claim is created. Recover an abandoned
+building claim with `--recover-active-operation <id>` only after its recorded
+owner PID is no longer live; the claim and partial artifacts are archived.
 Test dry-run validates the exact sealed artifact and source revision, then
 reports whether the identity would join, reuse, or start. Test apply accepts
 only the named provider-free suites, isolates HOME, runtime, temporary, Cargo,
 log, and receipt paths below `cli/target`, and never launches a browser or
 touches an installed runtime. Exact active runs join. Only successful hermetic
 receipts with terminal cleanup proof are reused.
+Recover an abandoned run with `--recover-active-run <id>` only after its exact
+recorded owner PID is no longer live; its active claim is archived before a new
+run may start.
 Install dry-run additionally
 validates the exact binary and sealed build artifact while creating no
 transaction or runtime state. Install apply is an explicit production effect:

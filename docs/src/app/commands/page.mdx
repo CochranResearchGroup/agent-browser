@@ -125,13 +125,19 @@ digest, and its current raw value must match without being recorded. `candidate
 build --retry-failed-operation <exact-operation-id> --apply` archives the
 failed claim and any partial sealed directory before acquiring a replacement
 claim. It cannot target an active or different failed operation. `candidate
-test --dry-run` verifies the exact sealed artifact and suite revision, then
+build --recover-active-operation <exact-operation-id> --apply` verifies that
+the claim's recorded owner PID is no longer live, then archives the abandoned
+claim and partial sealed directory before creating a replacement claim.
+`candidate test --dry-run` verifies the exact sealed artifact and suite revision, then
 reports whether the identity would join, reuse, or start. Test apply accepts
 only `candidate-kernel`, `candidate-build-adapter`, and `candidate-cli`, with
 repeated `--selection` values combining suites. It isolates HOME, runtime,
 temporary, Cargo, log, and receipt paths below `cli/target`; it does not launch
 a browser or touch either installed runtime. Exact active runs join, and reuse
 requires a successful hermetic receipt with terminal cleanup proof. `candidate
+test --recover-active-run <exact-run-id> --apply` verifies that its recorded
+owner PID is no longer live and archives the abandoned active claim before a
+replacement run starts. `candidate
 install --dry-run` additionally verifies the exact binary and sealed build
 artifact without creating state. `candidate install --apply` is an explicit
 production effect. It binds the sealed artifact and candidate coordination

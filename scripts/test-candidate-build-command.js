@@ -72,6 +72,15 @@ try {
     ]),
     /candidate_build_recovery_requires_apply/u,
   );
+  assert.throws(
+    () => parseCandidateBuildArguments([
+      '--repo-root', root,
+      '--artifact-class', 'fast_iteration',
+      '--recover-active-operation', 'build-active-1',
+      '--dry-run',
+    ]),
+    /candidate_build_recovery_requires_apply/u,
+  );
   await assert.rejects(
     runCandidateBuild([
       '--repo-root', root,
