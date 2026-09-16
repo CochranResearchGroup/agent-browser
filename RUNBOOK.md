@@ -7,6 +7,16 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 360 | 2026-09-16
+
+The one renewed P202 acceptance replay reached the exact-tree effect and then
+stopped with `abandoned_browser_retirement:ExitUnproven`. No retry was taken.
+The harness used exact task-owned cleanup, and independent readback found no
+fixture process or temporary-directory residue. Provider-free validation
+remains green. The next packet must make the exit proof discriminating and
+cover the observed condition without a browser before any newly bounded live
+replay. P190 still owns the shared user-facing documentation surface.
+
 ## Turn 359 | 2026-09-16
 
 P202 opens one renewed, terminal disposable acceptance packet after the third
@@ -17,16 +27,6 @@ a fresh debug binary and isolated temporary namespace, preserve the protected
 and foreign controls, and stop after one outcome with an exact residue census.
 No installed runtime, shared provider, protected profile, retained browser, or
 foreign process is in scope.
-
-## Turn 360 | 2026-09-16
-
-The one renewed P202 acceptance replay reached the exact-tree effect and then
-stopped with `abandoned_browser_retirement:ExitUnproven`. No retry was taken.
-The harness used exact task-owned cleanup, and independent readback found no
-fixture process or temporary-directory residue. Provider-free validation
-remains green. The next packet must make the exit proof discriminating and
-cover the observed condition without a browser before any newly bounded live
-replay. P190 still owns the shared user-facing documentation surface.
 
 ## Turn 358 | 2026-09-16
 
