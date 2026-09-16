@@ -29,19 +29,21 @@ field evidence and acceptance records into the same model.
 
 State: OPEN
 
-Current state: [Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
-and [issue #102](https://github.com/CochranResearchGroup/agent-browser/issues/102)
-own the bounded `PL-PLATFORM` repair. Source checkpoint `ac862e80` gives each
+Current state: [Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md),
+[issue #102](https://github.com/CochranResearchGroup/agent-browser/issues/102),
+and draft [PR #163](https://github.com/CochranResearchGroup/agent-browser/pull/163)
+own the bounded `PL-PLATFORM` repair. Source checkpoint `fc2a3359` gives each
 admitted Cargo invocation an exact scope identity, retains dead-wrapper claims
 while their scope remains active or unobservable, and stops only that scope
 before releasing admission. The provider-free success, exit-23 failure,
-orphan-scope accounting, unavailable-systemd, profile-residue, and foreign
-process fixtures pass, as does one disposable real user-systemd scope. P200 owns
+orphan-scope accounting, unavailable-systemd, profile-residue, and
+foreign-process fixtures pass, as do disposable real-scope success and exit-23
+cases. P200 owns
 `scripts/ci/cargo-safe.sh` and the new exact-scope fixture; P190 remains the
 writer for its candidate-orchestration and current test-runner changes. No
 installed runtime, browser, provider, Service State, or foreign-process effect
-is authorized. Complete changed-surface validation and protected integration
-remain.
+is authorized. Complete local changed-surface validation passes. Protected
+exact-head CI and integration remain.
 
 ## P199 | Compatible Access Profile Selection
 

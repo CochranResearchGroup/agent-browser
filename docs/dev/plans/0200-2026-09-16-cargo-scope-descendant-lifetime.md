@@ -31,7 +31,7 @@ or retained browser processes.
 
 ## Current State
 
-Issue #102 is claimed and in progress. Source checkpoint `ac862e80` gives each
+Issue #102 is claimed and in progress. Source checkpoint `fc2a3359` gives each
 admitted invocation an exact scope identity, retains a dead-wrapper claim while
 that scope remains active or cannot be observed safely, and stops only that
 scope before releasing the claim. Success and nonzero Cargo exits use the same
@@ -41,8 +41,8 @@ The original provider-free fixture failed in 2.6 seconds because the success
 path returned while its browser-like descendant remained alive. The repaired
 fixture passes success, exit-23 failure, active orphan-scope accounting,
 unavailable-systemd, temporary-profile residue, and foreign-process controls.
-An opt-in run against a real disposable user-systemd scope also passes and
-leaves no P200 unit or process residue.
+Opt-in success and exit-23 runs against disposable real user-systemd scopes
+also pass and leave no P200 unit or process residue.
 
 P190 is an adjacent active `PL-PLATFORM` lane. P200 is the primary writer for
 `scripts/ci/cargo-safe.sh` and new descendant-lifetime fixtures. P190 owns its
@@ -129,8 +129,15 @@ Exit requires current evidence that:
 | Claim covers scope descendants | The deterministic stop adapter observes exactly one claim during exact-unit stop; a dead-owner active-scope claim blocks a new one-slot admission with `reason=concurrency_limit` | focused pass |
 | Success and failure teardown converge | Exit 0 and exit 23 fixtures stop the exact generated unit and leave zero profile-path processes | focused pass |
 | Foreign and retained processes remain ineligible | The unrelated control process remains alive across both teardown paths; no retained or installed profile is used | focused pass |
-| Real scope becomes inactive | `AGENT_BROWSER_CARGO_REAL_SCOPE_TEST=1 node scripts/test-cargo-safe-capacity.js` passes and fresh unit/process readback is empty | focused pass |
-| Required batch validation and integration | Shellcheck passes; complete changed-surface selection, protected CI, merge, and closeout remain | pending |
+| Real scope becomes inactive | `AGENT_BROWSER_CARGO_REAL_SCOPE_TEST=1 node scripts/test-cargo-safe-capacity.js` passes success and exit-23 cases; fresh unit/process readback is empty | focused pass |
+| Required batch validation and integration | At `fc2a3359`, Shellcheck, Node syntax, deterministic fixtures, real-scope fixtures, planning audit, diff hygiene, and the changed-surface selector pass. Protected exact-head CI, merge, and closeout remain | local pass |
+
+The aggregate `pnpm test:wsl-cargo-safety` command reaches a pre-existing
+static-entrypoint failure at
+`scripts/test-lease-authority-crate-architecture.js:46:raw_compiling_cargo`.
+The same command fails identically on canonical `main@3863106e`; that control
+failure is not counted as P200 validation. The P200 capacity suite itself
+passes independently.
 
 ## Stop Condition
 
