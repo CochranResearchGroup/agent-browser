@@ -3061,6 +3061,17 @@ fn scan_x_display_range(tmp_root: &Path, range: std::ops::Range<u16>) -> Vec<XDi
 #[cfg(target_os = "linux")]
 fn classify_x_display(tmp_root: &Path, display: u16) -> XDisplayState {
     let socket_path = tmp_root.join(".X11-unix").join(format!("X{}", display));
+    let live_socket_exists = x_socket_present(&socket_path);
+    classify_x_display_with_socket_observation(tmp_root, display, live_socket_exists)
+}
+
+#[cfg(target_os = "linux")]
+fn classify_x_display_with_socket_observation(
+    tmp_root: &Path,
+    display: u16,
+    live_socket_exists: std::io::Result<bool>,
+) -> XDisplayState {
+    let socket_path = tmp_root.join(".X11-unix").join(format!("X{}", display));
     let lock_path = tmp_root.join(format!(".X{}-lock", display));
     let socket_path_exists = fs::symlink_metadata(&socket_path).is_ok();
     let lock_pid = read_x_lock_pid(&lock_path);
@@ -3069,7 +3080,6 @@ fn classify_x_display(tmp_root: &Path, display: u16) -> XDisplayState {
     // PrivateTmp can hide the pathname socket while the same network namespace
     // still contains the live abstract X11 socket. Never reclaim that display's
     // visible lock based solely on the caller's filesystem view.
-    let live_socket_exists = x_socket_present(&socket_path);
     let status = if matches!(live_socket_exists, Ok(true)) {
         XDisplayStatus::ActiveSocket
     } else if live_socket_exists.is_err() {
@@ -3370,6 +3380,54 @@ mod tests {
         assert_eq!(state.lock_pid, None);
         assert_eq!(available_x_display_in(&dir, 90..91), Some(90));
         assert!(!lock_path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_x_display_classifier_treats_reused_live_pid_as_stale() {
+        let dir = TempDir::new("x-display-reused-pid");
+        std::fs::create_dir_all(dir.join(".X11-unix")).unwrap();
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let lock_path = dir.join(".X90-lock");
+        std::fs::write(&lock_path, format!("{}\n", child.id())).unwrap();
+
+        let state = classify_x_display(&dir, 90);
+
+        assert_eq!(state.status, XDisplayStatus::StaleLockReusedPid);
+        assert_eq!(available_x_display_in(&dir, 90..91), Some(90));
+        assert!(!lock_path.exists());
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_x_display_classifier_preserves_unknown_socket_observation() {
+        let dir = TempDir::new("x-display-unknown-socket-census");
+        std::fs::create_dir_all(dir.join(".X11-unix")).unwrap();
+        let socket_path = dir.join(".X11-unix").join("X90");
+        std::fs::write(&socket_path, "unclassified residue").unwrap();
+        let lock_path = dir.join(".X90-lock");
+        std::fs::write(&lock_path, "999999\n").unwrap();
+
+        let state = classify_x_display_with_socket_observation(
+            &dir,
+            90,
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "fixture denied",
+            )),
+        );
+
+        assert_eq!(state.status, XDisplayStatus::Unknown);
+        assert!(socket_path.exists());
+        assert!(lock_path.exists());
     }
 
     #[cfg(target_os = "linux")]
