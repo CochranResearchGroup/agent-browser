@@ -27,17 +27,18 @@ field evidence and acceptance records into the same model.
 
 ## P198 | Retained Owner Inventory Coherence
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0198](docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md),
 [issue #143](https://github.com/CochranResearchGroup/agent-browser/issues/143),
-and draft [PR #158](https://github.com/CochranResearchGroup/agent-browser/pull/158)
-own the bounded `PL-BUGFIX` repair. Source checkpoint `21ec94f3` separates
+and merged [PR #158](https://github.com/CochranResearchGroup/agent-browser/pull/158)
+close the bounded `PL-BUGFIX` repair. Source checkpoint `21ec94f3` separates
 structurally valid terminal owner history from current process authority, keeps
 live PID mismatches fail-closed, preserves typed recovery recourse, and marks
 read-only inventory failures `no_effect`. Focused validation, formatting, and
-strict Clippy pass. Protected integration and exact-head CI remain; no live or
-installed-runtime effect is part of this lane.
+strict Clippy pass. Exact branch head `38344ecf` entered `main` through merge
+receipt `c2ade1d1`, and exact-head CI run `35086940883` passes; no live or
+installed-runtime effect was part of this lane.
 
 ## P196 | Foreground Launch Stale Revision Acceptance
 

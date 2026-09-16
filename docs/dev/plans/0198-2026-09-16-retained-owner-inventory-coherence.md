@@ -4,7 +4,7 @@ Date: 2026-09-16
 
 Plan version: 1
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -48,9 +48,12 @@ are action-contextually classified as `no_effect`.
 The red-capable cross-collection fixture, typed launch-conflict fixture,
 read-only terminal-outcome fixture, existing forged-observation guard, and the
 99-test `service_health` selection pass. Workspace formatting and strict Clippy
-pass. No browser, profile, provider, installation, Service State, shared
-runtime, production, or tenant effect occurred. Protected integration and CI
-remain.
+pass. PR #158 merged the exact published branch head
+`38344ecf9cffdb864bd85b16e5f4f2a83a961eb3` into `main` as
+`c2ade1d14a8d5f6cee40791c7d507c74ecb4b44f`. Exact-head CI run
+`35086940883` passes every applicable fast gate, and issue #143 is closed. No
+browser, profile, provider, installation, Service State, shared runtime,
+production, or tenant effect occurred. Plan 0198 is complete.
 
 P190 owns candidate and workstation promotion surfaces. P197 owns challenge
 consumer admission. P198 owns retained managed-profile lifecycle classification
