@@ -331,6 +331,25 @@ Post-shutdown Service State restaging and candidate-host evidence publication
 still need their own bounded custody seams. No live process or runtime was
 mutated by these provider-free fixtures.
 
+Checkpoint `c2f5a13c` closes the remaining post-shutdown transfer writes.
+Service State restaging is now a prepare-then-commit operation: authoritative
+state parsing and migration serialization happen without a coordination lock,
+then exact custody is revalidated while the prepared snapshot, staged bytes,
+transaction metadata, and drain revision commit. Candidate-host startup gets a
+fresh preflight without retaining the lock across process startup or identity
+capture. The candidate host identity, retired-migration dispositions, ingress
+candidate, and transaction evidence then commit together under the bounded
+fence. The shared supersession fixture proves that neither cooperative nor
+full-shutdown host evidence can be attached by a stale writer; a separate
+fixture proves post-shutdown restaging cannot begin after custody loss. The
+existing post-shutdown migration-baseline case, strict workspace Clippy,
+format, the candidate architecture guard, and patch hygiene pass. Runtime
+transfer now has fenced activation, effect preflights, checkpoint persistence,
+and final evidence commits without a physical lock spanning a process wait.
+Dashboard promotion, acceptance, terminal coordination, and the public effect
+and recovery commands remain. No installed runtime, browser, profile, provider,
+or Service State was touched.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
