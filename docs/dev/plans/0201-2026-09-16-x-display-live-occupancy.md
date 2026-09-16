@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -31,25 +31,23 @@ configured range is exhausted.
 
 ## Current State
 
-Issue #159 is open and source-complete through draft PR #166 at checkpoint
-`42beec54`. The pre-repair focused run failed because both an ordinary file and
-a dropped listener's stale socket inode were classified `ActiveSocket`; the
-live filesystem listener control passed. The repair now derives socket
-occupancy from exact filesystem or abstract addresses in `/proc/net/unix`,
-classifies path residue separately, and revalidates the live-listener census
-before removing only the exact display socket and lock paths.
+Plan 0201 is closed. [PR #166](https://github.com/CochranResearchGroup/agent-browser/pull/166)
+merged source head `72c7a859c6fc793acd9f8683450592e839d41e19` into `main`
+as `a23764a1650ef20c193721a2a8544ea480011451`; issue #159 closed with
+the merge. Exact-head CI run
+[`35110970667`](https://github.com/CochranResearchGroup/agent-browser/actions/runs/35110970667)
+passed every selected fast gate, including the complete Rust suite, no-launch
+service smokes, strict Clippy, formatting, workstation fixtures, service client,
+dashboard, and version sync.
 
-All 11 focused X-display tests pass, including ordinary-file residue, stale
-socket inode, live filesystem and abstract listeners, reused live non-X PID,
-unknown socket observation, and bounded classification diagnostics. Formatting,
-strict workspace Clippy, patch hygiene, the planning audit, and the
-selector-required no-launch route-confusion gates pass. Exact-head CI,
-integration, and closeout remain.
-
-P190 and P197 are adjacent active lanes but neither owns or edits
-`cli/src/native/cdp/chrome.rs`. P201 is the sole writer for that source file and
-its focused tests. The shared roadmap, runbook, and active-lane catalog are
-coordination projections only.
+The repaired classifier derives socket occupancy from exact filesystem or
+abstract addresses in `/proc/net/unix`, classifies path residue separately,
+and revalidates live-listener absence before removing only the exact display
+socket and lock paths. All 11 focused X-display tests pass, including
+ordinary-file residue, stale socket inode, live filesystem and abstract
+listeners, reused live non-X PID, unknown socket observation, and bounded
+classification diagnostics. No browser, X server, installed-runtime, provider,
+Service State, retained-profile, production, or release effect occurred.
 
 ## Consolidated Batch
 
@@ -127,7 +125,7 @@ Exit requires current evidence that:
 | Unknown observations fail closed | Injected permission-denied socket census remains `Unknown` and preserves both paths | focused pass |
 | Reused live non-X PID is not active X evidence | Live shell PID fixture classifies `StaleLockReusedPid` and preserves the foreign process | focused pass |
 | Bounded exhaustion summary | Diagnostic fixture reports exact per-display names and stays below 1 KiB | focused pass |
-| Required validation and integration | 11 focused tests, format, strict Clippy, patch hygiene, planning audit, and no-launch route-confusion gates pass at `42beec54`; exact-head CI and integration remain | local validation passed |
+| Required validation and integration | 11 focused tests, format, strict Clippy, patch hygiene, planning audit, and no-launch route-confusion gates pass; exact-head CI run `35110970667` passed and source head `72c7a859` entered `main` as `a23764a1` through PR #166 | proven and integrated |
 
 ## Stop Condition
 
