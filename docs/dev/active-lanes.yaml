@@ -52,15 +52,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 2243de8c5c1329762104614c1392461e34b66fb9
+    checkpoint: 979b5cb8854b0a49980f2dff7fa7523ebc999544
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: repaired candidate passes focused, strict Clippy, and comprehensive Rust requalification; terminal live receipt proves all process exit predicates and isolates profile_lock_released=false
+    validation_status: Packet 8 exact stale-lock repair passes 18 focused retirement tests, 11 transaction tests, format, strict Clippy, and diff hygiene; full changed-surface requalification remains pending
     validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: provider-free Profile-Lock Convergence Packet 8 is active with no further live replay authorized; shared documentation remains owned by open P190
+    blocker: full changed-surface requalification and P190 shared-documentation reconciliation remain; no further live replay is authorized
     updated_at: 2026-09-16

@@ -429,6 +429,32 @@ no additional browser replay.
   active minutes. Stop with no further live execution if exact ordering cannot
   be proven at the existing reviewed-shutdown seam.
 
+Packet 8 result at source checkpoint `979b5cb8854b0a49980f2dff7fa7523ebc999544`:
+
+- W9 confirmed that the reviewed shutdown invokes profile-lock handling only
+  after exact root, descendant, and process-group exit. It rejected both the
+  generic GC unlink and Chrome's multi-artifact cleanup as broader than P202's
+  authority.
+- W10 independently found the same boundary and specified the dangling-link
+  regression plus retained-lock controls. Neither worker edited files or
+  performed runtime effects.
+- The isolated dangling `SingletonLock` regression failed red with
+  `assertion failed: released`. The implementation then added a post-exit
+  reservation recheck that does not reuse the vanished pre-signal census.
+- Cleanup now requires the exact planned profile path and canonical identity,
+  the unchanged pending reservation and CAS revision, the unchanged browser
+  and owner identity, `Closing` plus `Owned` custody, a fresh exact-exit check,
+  and a symlink target PID equal to the sealed root PID. It removes only
+  `SingletonLock` and proves absence afterward.
+- Missing locks succeed idempotently. Unauthorized cleanup, a foreign PID, or
+  a non-symlink lock remains preserved and yields no release proof.
+- Green evidence: 18 focused retirement tests, including the zombie-only
+  process-group case and new lock controls; 11 transaction tests; workspace
+  format; strict workspace Clippy; and diff hygiene all pass.
+- No browser replay, installed-runtime mutation, provider effect, or shared
+  P190/P197 documentation edit occurred. Complete changed-surface validation
+  and shared-documentation reconciliation remain the next gates.
+
 ## Stop Condition
 
 Stop before any installed, retained, protected, foreign, production, staging,
