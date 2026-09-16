@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 7
+Plan version: 8
 
 State: OPEN
 
@@ -64,14 +64,25 @@ commands while still leaving their intent and candidate ownership ambiguous.
 Policies 0051 and 0052 now treat coordination records as integrity mechanisms,
 not agent-role permissions. Issue #136 tracks implementation. Implementation
 was admitted from canonical `main` checkpoint `552f6925` on
-`platform/p190-advisory-candidate-orchestrator`. The complete source batch now
-implements the candidate identity, advisory state machine, build and test
-coordination, and operator-selected transition adapters through the existing
-workstation transaction. Exact-head provider-free qualification and protected
-CI pass at source checkpoint `7af6e06c`. No candidate has been installed. The
-remaining critical path is separately admitted isolated-development
-publication and acceptance, protected integration, and post-merge
-executable-input equivalence readback.
+`platform/p190-advisory-candidate-orchestrator`. The branch implements the
+candidate identity, advisory state machine, build and test coordination, and
+operator-selected transition adapters through the existing workstation
+transaction. Earlier exact-head CI and selected production-shaped candidate
+receipts remain valid for the exact commits and suites they bind, and the exact
+candidate was installed and smoke-tested only in the development namespace.
+
+Source qualification is reopened after exact-head review identified three
+unclosed gates: schema-v1 readers must accept legacy
+`source_control_metadata` without new writers emitting it;
+`--recover-active-run` must terminate after durable recovery without invoking
+the suite runner; and a deterministic deep-output-root regression must prove
+`AGENT_BROWSER_CARGO_CACHE=off` is identity-bound and reaches the real Rust
+child. No further build, install, doctor, browser, provider, retained-profile,
+or shared-runtime effect is admitted while these source repairs remain open.
+The critical path is the three bounded source repairs and changed-surface
+validation, followed by one production-shaped rebuild only after executable
+source is frozen, then protected integration and post-merge executable-input
+equivalence readback.
 
 ## Implementation Progress
 
@@ -515,11 +526,12 @@ contract, and patch hygiene. The branch also integrated canonical main through
 the P200 Cargo-scope descendant-lifetime repair. No installed runtime was
 mutated. Production-shaped qualification is now the remaining planned gate.
 
-Checkpoint `a65f9e12` completes source qualification and the production-shaped
-artifact gate without installing into either runtime. Real release-profile
-builds exposed and preserved six bounded failures: linked-worktree Git inputs
-outside the checkout, directory entries in Cargo dep-info, JavaScript locale
-ordering that disagreed with Rust canonical ordering, an interactive Corepack
+Checkpoint `a65f9e12` completed the then-selected source checks and
+production-shaped artifact gate without installing into either runtime. Real
+release-profile builds exposed and preserved six bounded failures:
+linked-worktree Git inputs outside the checkout, directory entries in Cargo
+dep-info, JavaScript locale ordering that disagreed with Rust canonical
+ordering, an interactive Corepack
 download caused by isolated `HOME`, and an sccache Unix-socket path longer than
 the platform limit. The first main-refresh equivalence readback also proved
 that hashing Git provenance would incorrectly require a rebuild after a
@@ -608,7 +620,7 @@ selections passed as hermetic provider-free run
 `candidate-test-22d4831c-98da-402c-88bb-59ace19740b9`; its reusable receipt is
 `cli/target/candidate-test-state/completed/afcce16eb797d80bcaaa09d9c2d4c5377cdf1d860bbd39b58230bddf1241577b.json`.
 Terminal cleanup was proven and no P190 candidate build or test Cargo process
-remained. At that source-qualification checkpoint, no browser, profile,
+remained. At that selected-qualification checkpoint, no browser, profile,
 provider, production runtime, development runtime, supervisor, or Service
 State had been mutated.
 
@@ -639,6 +651,17 @@ were absent, so no provider repair was attempted. The remaining operational
 gate is an explicitly admitted provider repair followed by a clean doctor
 readback. Protected integration and post-merge executable-input equivalence
 readback remain subsequent gates.
+
+Exact-head review of docs-only checkpoint `3493c203`, reconciled after current
+checkpoint `e669d220`, established that the selected receipts did not exercise
+three required source contracts. The prior source-complete and merge-ready
+characterizations are withdrawn; the artifact, test, development-install, and
+production-unchanged receipts remain preserved at their exact evidence
+boundaries. This correction does not undo the development effect already
+recorded above and authorizes no further runtime action. The current bounded
+implementation batch contains only the three source repairs named in Current
+State. P197 and its four deferred public documentation surfaces remain
+untouched until P190 integrates.
 
 ## Frozen Decisions
 

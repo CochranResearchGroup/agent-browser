@@ -14,13 +14,13 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
-    validation_status: passed
-    validation_ref: 7af6e06ca907747fe569b20bb6da5dc289939ef4
+    validation_status: pending
+    validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
     overlaps: [P197]
     reconciled_overlaps: [P197]
-    blocker: development publication and the three-cycle browser smoke passed with production unchanged; development doctor remains nonzero only on the presentation-provider axis, whose explicit binding inputs and mutation authority are absent; protected integration and post-merge equivalence readback remain
+    blocker: exact-head review reopened three source gates for legacy v1 metadata deserialization, terminal active-run recovery, and real-child cache-off propagation under a deep output root; preserve prior receipts and development acceptance, perform no further runtime effect, and rebuild only after executable source is complete
     updated_at: 2026-09-16
   - id: P197
     product_lane: PL-CHALLENGE
