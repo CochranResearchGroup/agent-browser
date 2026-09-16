@@ -7,6 +7,20 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
 
+## Turn 350 | 2026-09-16
+
+[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+has source checkpoint `ac862e80`. The red provider-free fixture proved the
+wrapper returned while its browser-like descendant remained alive. The repair
+assigns an exact scope identity, retains a dead-wrapper claim while its scope
+is active or unobservable, and stops only that scope before releasing the
+claim. Success, exit-23 failure, lingering-scope accounting,
+unavailable-systemd, profile-residue, and foreign-process controls pass. One
+disposable real user-systemd scope also passes with no P200 unit or process
+residue. Shellcheck passes; complete changed-surface validation and protected
+integration remain. The unrelated live P190 Cargo claim and dirty worktree are
+unchanged.
+
 ## Turn 349 | 2026-09-16
 
 [Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)

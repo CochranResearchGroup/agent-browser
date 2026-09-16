@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -31,11 +31,18 @@ or retained browser processes.
 
 ## Current State
 
-Issue #102 is claimed and in progress. Current evidence shows that the Cargo
-admission claim ends with the wrapper or Cargo parent even though detached
-browser descendants can remain in the admitted user-systemd scope. Those
-descendants then consume host capacity without participating in later
-admission decisions. No P200 source change or runtime effect exists yet.
+Issue #102 is claimed and in progress. Source checkpoint `ac862e80` gives each
+admitted invocation an exact scope identity, retains a dead-wrapper claim while
+that scope remains active or cannot be observed safely, and stops only that
+scope before releasing the claim. Success and nonzero Cargo exits use the same
+bounded cleanup path.
+
+The original provider-free fixture failed in 2.6 seconds because the success
+path returned while its browser-like descendant remained alive. The repaired
+fixture passes success, exit-23 failure, active orphan-scope accounting,
+unavailable-systemd, temporary-profile residue, and foreign-process controls.
+An opt-in run against a real disposable user-systemd scope also passes and
+leaves no P200 unit or process residue.
 
 P190 is an adjacent active `PL-PLATFORM` lane. P200 is the primary writer for
 `scripts/ci/cargo-safe.sh` and new descendant-lifetime fixtures. P190 owns its
@@ -115,6 +122,15 @@ Exit requires current evidence that:
   surface pass; and
 - the published checkpoint enters `main` through the linked pull request with
   applicable exact-head CI green.
+
+| Requirement | Current evidence | State |
+| --- | --- | --- |
+| Original descendant leak is red-capable | Pre-repair `node scripts/test-cargo-safe-capacity.js` failed with `success path left its browser-like descendant alive` | proven |
+| Claim covers scope descendants | The deterministic stop adapter observes exactly one claim during exact-unit stop; a dead-owner active-scope claim blocks a new one-slot admission with `reason=concurrency_limit` | focused pass |
+| Success and failure teardown converge | Exit 0 and exit 23 fixtures stop the exact generated unit and leave zero profile-path processes | focused pass |
+| Foreign and retained processes remain ineligible | The unrelated control process remains alive across both teardown paths; no retained or installed profile is used | focused pass |
+| Real scope becomes inactive | `AGENT_BROWSER_CARGO_REAL_SCOPE_TEST=1 node scripts/test-cargo-safe-capacity.js` passes and fresh unit/process readback is empty | focused pass |
+| Required batch validation and integration | Shellcheck passes; complete changed-surface selection, protected CI, merge, and closeout remain | pending |
 
 ## Stop Condition
 

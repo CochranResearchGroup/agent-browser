@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 3863106e7ad482b318b8406e4a9f12dbc1c97aff
+    checkpoint: ac862e80
     remote_ref: refs/remotes/origin/platform/p200-cargo-scope-descendant-lifetime
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
-    validation_status: pending
-    validation_ref: null
+    validation_status: focused_passed
+    validation_ref: ac862e80
     work_items: [CochranResearchGroup/agent-browser#102]
     dependencies: []
     overlaps: [P190]
     reconciled_overlaps: [P190]
-    blocker: deterministic red-capable descendant-lifetime fixture and source repair remain
+    blocker: complete changed-surface validation and protected integration remain
     updated_at: 2026-09-16
   - id: P190
     product_lane: PL-PLATFORM

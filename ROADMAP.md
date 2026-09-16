@@ -31,13 +31,17 @@ State: OPEN
 
 Current state: [Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
 and [issue #102](https://github.com/CochranResearchGroup/agent-browser/issues/102)
-own the bounded `PL-PLATFORM` repair. The first milestone is a deterministic
-provider-free fixture proving that a browser-like descendant can survive its
-Cargo parent while the admission claim disappears. P200 owns
+own the bounded `PL-PLATFORM` repair. Source checkpoint `ac862e80` gives each
+admitted Cargo invocation an exact scope identity, retains dead-wrapper claims
+while their scope remains active or unobservable, and stops only that scope
+before releasing admission. The provider-free success, exit-23 failure,
+orphan-scope accounting, unavailable-systemd, profile-residue, and foreign
+process fixtures pass, as does one disposable real user-systemd scope. P200 owns
 `scripts/ci/cargo-safe.sh` and the new exact-scope fixture; P190 remains the
 writer for its candidate-orchestration and current test-runner changes. No
 installed runtime, browser, provider, Service State, or foreign-process effect
-is authorized.
+is authorized. Complete changed-surface validation and protected integration
+remain.
 
 ## P199 | Compatible Access Profile Selection
 
