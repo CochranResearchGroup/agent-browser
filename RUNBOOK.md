@@ -7,6 +7,64 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
 
+## Turn 352 | 2026-09-16
+
+[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+is closed. PR #163 merged source head
+`2978594e` into `main` as `c98da4cc`; issue #102 closed and its stale
+`state/in-progress` label was removed. The clean P200 worktree and merged local
+and remote branches were removed. Exact-head CI run `35098782749` and
+merge-commit CI run `35099042490` pass every selected gate, including Rust,
+no-launch service smokes, and workstation fixtures. No installed
+runtime, browser, provider, Service State, retained-profile, production, or
+foreign-process effect occurred. Live GitHub readback found no branch protection
+or repository ruleset enforcing the documented gate; issue #164 tracks that
+separate governance defect without opening another implementation lane. The
+stale integrated P169 custody record is removed from the active-lane catalog;
+its merged history remains in Plan 0187 and `main`, while P197 owns the active
+consumer-integration work and issue #66 retains its separate live gate. P200 is
+also removed from the active-lane catalog after closure.
+
+## Turn 351 | 2026-09-16
+
+[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+is locally source-complete at `fc2a3359` through draft PR #163. Shellcheck,
+Node syntax, deterministic success and exit-23 cleanup, dead-wrapper
+active-scope accounting, unavailable-systemd behavior, profile-residue and
+foreign-process controls, real user-systemd success and exit-23 cleanup,
+planning audit, diff hygiene, and changed-surface selection pass. Fresh
+readback finds no P200 unit or process residue. The aggregate WSL-entrypoint
+command has the same pre-existing
+`scripts/test-lease-authority-crate-architecture.js:46:raw_compiling_cargo`
+failure on canonical `main@3863106e`; it is not counted as P200 evidence.
+Protected exact-head CI, integration, and closeout remain.
+
+## Turn 350 | 2026-09-16
+
+[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+has source checkpoint `ac862e80`. The red provider-free fixture proved the
+wrapper returned while its browser-like descendant remained alive. The repair
+assigns an exact scope identity, retains a dead-wrapper claim while its scope
+is active or unobservable, and stops only that scope before releasing the
+claim. Success, exit-23 failure, lingering-scope accounting,
+unavailable-systemd, profile-residue, and foreign-process controls pass. One
+disposable real user-systemd scope also passes with no P200 unit or process
+residue. Shellcheck passes; complete changed-surface validation and protected
+integration remain. The unrelated live P190 Cargo claim and dirty worktree are
+unchanged.
+
+## Turn 349 | 2026-09-16
+
+[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+is admitted from `main@3863106e` for issue #102. The provider-free packet will
+first prove that an exact user-systemd scope can retain a browser-like
+descendant after its Cargo parent exits while its admission claim disappears,
+then bind accountability and bounded teardown to scope emptiness. P200 owns
+`scripts/ci/cargo-safe.sh` and its new fixture. P190 remains the writer for its
+candidate orchestration and current test-runner changes. No installed runtime,
+browser, provider, Service State, production, or foreign-process effect is
+authorized.
+
 ## Turn 348 | 2026-09-16
 
 [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)

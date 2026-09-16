@@ -25,6 +25,28 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P200 | Cargo Scope Descendant Lifetime
+
+State: CLOSED
+
+Current state: [Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md),
+[issue #102](https://github.com/CochranResearchGroup/agent-browser/issues/102),
+and merged [PR #163](https://github.com/CochranResearchGroup/agent-browser/pull/163)
+close the bounded `PL-PLATFORM` repair. Source checkpoint `2978594e` gives each
+admitted Cargo invocation an exact scope identity, retains dead-wrapper claims
+while their scope remains active or unobservable, and stops only that scope
+before releasing admission. The provider-free success, exit-23 failure,
+orphan-scope accounting, unavailable-systemd, profile-residue, and
+foreign-process fixtures pass, as do disposable real-scope success and exit-23
+cases. P200 owns
+`scripts/ci/cargo-safe.sh` and the new exact-scope fixture; P190 remains the
+writer for its candidate-orchestration and current test-runner changes. No
+installed runtime, browser, provider, Service State, or foreign-process effect
+occurred. Complete local changed-surface validation passes. The source entered
+`main` as `c98da4cc`; exact-head CI run `35098782749` and merge-commit CI run
+`35099042490` pass, including Rust, no-launch service smokes, and workstation
+fixtures. Plan 0200 is closed.
+
 ## P199 | Compatible Access Profile Selection
 
 State: CLOSED

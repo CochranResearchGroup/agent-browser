@@ -18,49 +18,28 @@ lanes:
     validation_ref: 3430925f0cd20fef0df871a45299d981a9dc2d85
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
-    overlaps: [P169, P197]
-    reconciled_overlaps: [P169, P197]
+    overlaps: [P197]
+    reconciled_overlaps: [P197]
     blocker: PR #152 remains draft while candidate build and workstation coordination continue; production-shaped qualification retains its later gate
-    updated_at: 2026-09-16
-  - id: P169
-    product_lane: PL-CHALLENGE
-    objective: Deliver a provider-neutral challenge countermeasure control plane and bounded challenge-family adapters
-    plan: docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md
-    plan_ref: refs/remotes/origin/main
-    branch: challenge/p169-control-plane
-    target: main
-    plan_state: OPEN
-    custody_state: INTEGRATED
-    checkpoint: d7c59be27003189dc20fa21d79dbceed0d50a0c5
-    remote_ref: refs/remotes/origin/challenge/p169-control-plane
-    integration_receipt: 81de07cfb5790685ff506bdabff3609e92fd5eeb
-    integration: merge through the protected `main` workflow after custody normalization
-    validation_status: passed
-    validation_ref: 81de07cfb5790685ff506bdabff3609e92fd5eeb
-    work_items: [CochranResearchGroup/agent-browser#127, CochranResearchGroup/agent-browser#66]
-    dependencies: []
-    overlaps: [P190, P197]
-    reconciled_overlaps: [P190, P197]
-    blocker: W6 is admitted as Plan 0197; issue #66 retains the separately live-gated challenge acceptance leaf
     updated_at: 2026-09-16
   - id: P197
     product_lane: PL-CHALLENGE
     objective: Integrate authentication and navigation through one provider-neutral challenge consumer-admission contract
     plan: docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md
-    plan_ref: refs/heads/challenge/p197-consumer-integration
+    plan_ref: refs/remotes/origin/challenge/p197-consumer-integration
     branch: challenge/p197-consumer-integration
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 3158503b16bef22fa955077cc9de1dbbc4315849
+    checkpoint: 3f195331054cfded82f81ba22fe9f6ef80a09b75
     remote_ref: refs/remotes/origin/challenge/p197-consumer-integration
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free W6 validation
-    validation_status: passed
-    validation_ref: 3158503b16bef22fa955077cc9de1dbbc4315849
+    validation_status: pending
+    validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: [P169]
     overlaps: [P190]
     reconciled_overlaps: [P190]
-    blocker: exact-head CI and shared user-facing documentation remain before integration; P190 retains primary-writer custody of those shared surfaces, and every live challenge effect stays with issue #66
+    blocker: refreshed exact-head Rust validation and shared user-facing documentation remain before integration; P190 retains primary-writer custody of those shared surfaces, and every live challenge effect stays with issue #66
     updated_at: 2026-09-16

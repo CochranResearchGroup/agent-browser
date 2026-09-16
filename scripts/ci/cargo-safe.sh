@@ -140,15 +140,21 @@ claim_is_live() {
   local claim_path_candidate="$1"
   local claim_pid=""
   local claim_start=""
+  local claim_scope=""
   while IFS='=' read -r key value; do
     case "$key" in
       pid) claim_pid="$value" ;;
       start) claim_start="$value" ;;
+      scope) claim_scope="$value" ;;
     esac
   done < "$claim_path_candidate"
-  [[ "$claim_pid" =~ ^[0-9]+$ ]] || return 1
-  [[ -n "$claim_start" ]] || return 1
-  [[ "$(process_start_token "$claim_pid")" == "$claim_start" ]]
+  if [[ "$claim_pid" =~ ^[0-9]+$ && -n "$claim_start" && "$(process_start_token "$claim_pid")" == "$claim_start" ]]; then
+    return 0
+  fi
+  if [[ -n "$claim_scope" ]] && scope_is_live_or_unknown "$claim_scope"; then
+    return 0
+  fi
+  return 1
 }
 
 reconcile_claims() {
@@ -195,12 +201,81 @@ cpu_count() {
 }
 
 claim_path=""
-release_claim() {
-  if [[ -n "$claim_path" ]]; then
-    rm -f "$claim_path"
-  fi
+scope_unit=""
+scope_started=0
+scope_cleanup_complete=0
+
+scope_state() {
+  local unit="$1"
+  local state=""
+  state="$(systemctl --user is-active "$unit" 2>/dev/null || true)"
+  case "$state" in
+    active|activating|reloading|deactivating|inactive|failed|unknown)
+      printf '%s\n' "$state"
+      ;;
+    *)
+      printf 'unavailable\n'
+      ;;
+  esac
 }
-trap release_claim EXIT INT TERM
+
+scope_is_live_or_unknown() {
+  local state
+  state="$(scope_state "$1")"
+  case "$state" in
+    inactive|failed|unknown) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+cleanup_scope() {
+  if [[ -z "$scope_unit" || "$scope_started" == "0" || "$scope_cleanup_complete" == "1" ]]; then
+    scope_cleanup_complete=1
+    return 0
+  fi
+
+  local state
+  state="$(scope_state "$scope_unit")"
+  case "$state" in
+    inactive|failed|unknown)
+      scope_cleanup_complete=1
+      return 0
+      ;;
+    unavailable)
+      return 1
+      ;;
+  esac
+
+  systemctl --user stop "$scope_unit" >/dev/null 2>&1 || true
+  for _ in {1..100}; do
+    state="$(scope_state "$scope_unit")"
+    case "$state" in
+      inactive|failed|unknown)
+        scope_cleanup_complete=1
+        return 0
+        ;;
+      unavailable)
+        return 1
+        ;;
+    esac
+    sleep 0.05
+  done
+  return 1
+}
+
+release_claim() {
+  if [[ -z "$claim_path" ]]; then
+    return
+  fi
+  if ! cleanup_scope; then
+    echo "Retaining Cargo admission claim because its exact scope is not proven inactive: unit=$scope_unit claim=$claim_path" >&2
+    return
+  fi
+  rm -f "$claim_path"
+}
+trap release_claim EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 last_reason=""
 while [[ -z "$claim_path" ]]; do
@@ -241,8 +316,11 @@ while [[ -z "$claim_path" ]]; do
       exit 78
     fi
     claim_path="${claims_dir}/$$-${start_token}.claim"
+    if [[ "$is_wsl" == "1" && "$probe_only" != "1" ]]; then
+      scope_unit="agent-browser-cargo-${UID}-$$-${start_token}.scope"
+    fi
     umask 077
-    printf 'pid=%s\nstart=%s\njobs=%s\nmemory_claim_kib=%s\n' "$$" "$start_token" "$build_jobs" "$memory_claim_kib" > "$claim_path"
+    printf 'pid=%s\nstart=%s\nscope=%s\njobs=%s\nmemory_claim_kib=%s\n' "$$" "$start_token" "$scope_unit" "$build_jobs" "$memory_claim_kib" > "$claim_path"
   fi
 
   flock -u "$admission_fd"
@@ -291,18 +369,27 @@ if [[ "$is_wsl" == "1" ]]; then
 
   systemctl --user set-property --runtime "$cargo_slice" "MemoryHigh=$aggregate_memory_high" "MemoryMax=$aggregate_memory_max" "MemorySwapMax=$aggregate_swap_max" "TasksMax=$aggregate_tasks_max" >/dev/null
 
-  echo "Running admitted Cargo in a WSL cgroup: jobs=$build_jobs active_capacity=$max_concurrent MemoryHigh=$memory_high MemoryMax=$memory_max aggregate_slice=$cargo_slice cache=$cargo_cache linker=$fast_linker" >&2
+  echo "Running admitted Cargo in a WSL cgroup: jobs=$build_jobs active_capacity=$max_concurrent MemoryHigh=$memory_high MemoryMax=$memory_max aggregate_slice=$cargo_slice unit=$scope_unit cache=$cargo_cache linker=$fast_linker" >&2
+  scope_started=1
+  set +e
   systemd-run \
     --user \
     --scope \
     --quiet \
+    --unit="$scope_unit" \
     --slice="$cargo_slice" \
     --property="MemoryHigh=$memory_high" \
     --property="MemoryMax=$memory_max" \
     --property="MemorySwapMax=$swap_max" \
     --property="TasksMax=$tasks_max" \
     "${cargo_environment[@]}" cargo "$@"
-  exit $?
+  cargo_status=$?
+  set -e
+  if ! cleanup_scope; then
+    echo "Agent Browser Cargo scope cleanup incomplete: reason=scope_not_inactive unit=$scope_unit claim=$claim_path" >&2
+    exit 78
+  fi
+  exit "$cargo_status"
 fi
 
 echo "Running admitted Cargo: jobs=$build_jobs active_capacity=$max_concurrent cache=$cargo_cache linker=$fast_linker" >&2
