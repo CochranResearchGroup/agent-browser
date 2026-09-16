@@ -1307,6 +1307,16 @@ fn format_service_access_plan_text(data: &serde_json::Value) -> Option<String> {
         value_bool_label(decision, "manualActionRequired"),
         value_bool_label(decision, "manualSeedingRequired")
     )];
+    if let Some(profile_selection) = data.get("profileSelection") {
+        lines.push(format!(
+            "  profile_selection status={} reason={} effect={} rejected_profile={} compatibility_ids={}",
+            value_str(profile_selection, "status", "unknown"),
+            value_str(profile_selection, "reason", "none"),
+            value_str(profile_selection, "effect", "unknown"),
+            value_str(profile_selection, "rejectedProfileId", "none"),
+            json_string_array(profile_selection, "compatibilityIds")
+        ));
+    }
     lines.push(format!(
         "  browser_build={} source={} evidence={} override={} profile_compatibility={} validation={} preference_binding={}",
         value_str(summary, "browserBuild", "unknown"),
@@ -6772,6 +6782,7 @@ Notes:
   - service prune-retained --display-allocations classifies retained display allocation records and removes only apply-safe orphan, stale-route, or historical-placeholder allocations.
   - service repair-retained defaults to dry-run and stamps current observation time onto legacy shared or exclusive inert session placeholders only when --apply is present; repaired sessions become too fresh for abandoned-session pruning until the minimum age guard elapses.
   - service access-plan prints the service-owned profile, browser-build, browser-host, view-stream, control-input, and display-isolation recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
+  - Access-plan profileSelection is a typed no-effect result. Compatible registry evidence wins over an equally ranked incompatible retained profile; an incompatible explicit runtimeProfile returns reason=profile_compatibility_missing_or_blocked and no executable service request.
   - Access-plan permission and occupancy denials take priority over freshness or seeding advice. Follow decision.recommendedAction and the exact profileAccess.decision.nextAction to inspect the blocker.
   - service access-plan reports decision.oneTimeProfileRecommendation for RDP/manual/remote-headed one-time handoffs, planning managed_one_time when no durable profile is selected and warning on unknown operator_supplied runtimeProfile.
   - Text access-plan output includes compact browser_build_summary and profile_reuse fields for routing audit logs and minimal-profile handoffs.
@@ -8643,6 +8654,14 @@ mod tests {
             "selectedProfile": {
                 "id": "canva-default"
             },
+            "profileSelection": {
+                "status": "selected",
+                "reason": "target_match",
+                "effect": "no_effect",
+                "selectedProfileId": "canva-default",
+                "rejectedProfileId": null,
+                "compatibilityIds": ["canva-profile-compatible"]
+            },
             "decision": {
                 "recommendedAction": "use_selected_profile",
                 "manualActionRequired": false,
@@ -8685,6 +8704,8 @@ mod tests {
 
         assert!(rendered.contains("Access plan: action=use_selected_profile profile=canva-default"));
         assert!(rendered.contains("browser_build=stealthcdp_chromium"));
+        assert!(rendered
+            .contains("profile_selection status=selected reason=target_match effect=no_effect"));
         assert!(rendered.contains("preference_binding=canva-stealth-preference"));
         assert!(rendered.contains("browser_build_summary=build=stealthcdp_chromium"));
         assert!(

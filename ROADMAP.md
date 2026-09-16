@@ -25,19 +25,36 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P199 | Compatible Access Profile Selection
+
+State: CLOSED
+
+Current state: [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md),
+[issue #67](https://github.com/CochranResearchGroup/agent-browser/issues/67),
+and merged [PR #160](https://github.com/CochranResearchGroup/agent-browser/pull/160)
+close the bounded `PL-BUGFIX` repair. Source checkpoint `15dd3b58` makes profile
+selection capability-aware before an executable request is produced, prefers a
+positively compatible candidate, preserves selection when no exact capability
+declaration exists, and rejects an explicitly requested incompatible profile
+with typed no-effect recourse. Focused tests and complete changed-surface
+validation pass. Exact rebased branch head `01c05d0d` merged as `e2e81e38`;
+source-head CI run `35092326047` and merge-commit CI run `35092355450` pass.
+Issue #67 is closed, and no live or installed-runtime effect occurred.
+
 ## P198 | Retained Owner Inventory Coherence
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0198](docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md),
 [issue #143](https://github.com/CochranResearchGroup/agent-browser/issues/143),
-and draft [PR #158](https://github.com/CochranResearchGroup/agent-browser/pull/158)
-own the bounded `PL-BUGFIX` repair. Source checkpoint `21ec94f3` separates
+and merged [PR #158](https://github.com/CochranResearchGroup/agent-browser/pull/158)
+close the bounded `PL-BUGFIX` repair. Source checkpoint `21ec94f3` separates
 structurally valid terminal owner history from current process authority, keeps
 live PID mismatches fail-closed, preserves typed recovery recourse, and marks
 read-only inventory failures `no_effect`. Focused validation, formatting, and
-strict Clippy pass. Protected integration and exact-head CI remain; no live or
-installed-runtime effect is part of this lane.
+strict Clippy pass. Exact branch head `38344ecf` entered `main` through merge
+receipt `c2ade1d1`, and exact-head CI run `35086940883` passes; no live or
+installed-runtime effect was part of this lane.
 
 ## P196 | Foreground Launch Stale Revision Acceptance
 
