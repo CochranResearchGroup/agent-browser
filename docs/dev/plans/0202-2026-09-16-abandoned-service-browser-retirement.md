@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 12
+Plan version: 13
 
 State: OPEN
 
@@ -57,12 +57,14 @@ joined lane, classifies only complete service-owned evidence, and uses a sealed
 reserve, effect, and finalize transaction without changing the core store CAS
 algorithm.
 
-Final published-diff review reopened the source before merge readiness. Two
-provider-free P1 counterexamples remain: authoritative occupancy can be
-invisible until finalization after the process effect, and apply can replace a
-reviewed candidate with a newly observed process tree for the same browser ID.
-Packet 9 owns both defects as one pre-effect authority batch. No additional
-browser replay is authorized.
+Final published-diff review reopened the source before merge readiness. Packet
+9 now repairs both provider-free P1 counterexamples: authoritative occupancy
+was invisible until finalization after the process effect, and apply could
+replace a reviewed candidate with a newly observed process tree for the same
+browser ID. Focused validation is green at source checkpoint
+`844eba2671681cd3e0c884a9cae5c9f839d6d565`; full
+provider-free requalification remains pending. No additional browser replay is
+authorized.
 
 P190 and P197 remain active. P190 has no expected P202 source overlap but is
 the current writer for shared CLI help, README, agent skill, and command docs.
@@ -507,6 +509,40 @@ readiness.
   runtime, provider, protected-profile, foreign-process, or shared-doc effect.
   Stop if the repair requires the core `service_store.rs` lock/CAS algorithm or
   a Lease Authority mutation outside the existing read-only projection.
+
+Packet 9 result at source checkpoint
+`844eba2671681cd3e0c884a9cae5c9f839d6d565`:
+
+- W11 confirmed that the exact profile claim, presentation-slot lease, active
+  viewer or controller lease, and nonterminal remote-view acquisition are
+  authoritative occupancy surfaces omitted from the prior classifier. W12
+  confirmed that apply reloaded a fresh snapshot and process census but bound
+  only the logical browser ID, permitting an independently eligible
+  replacement identity to reach reservation. Both workers remained read-only.
+- The authoritative-occupancy fixture failed red because an active exact
+  profile claim still produced a retirement plan. It now covers all four
+  occupancy classes and passes. The reservation control proves late occupancy
+  leaves state unchanged, while the effect control proves late occupancy
+  returns before the first process signal.
+- The two-snapshot identity fixture failed red because a coherent replacement
+  root with the same browser ID remained admissible. Apply now reconstructs an
+  eligible candidate from the same fresh snapshot and process census and
+  requires exact equality with the originally reviewed `candidateIdentity`
+  before entering the repository mutation. The check is unconditional, so
+  `--force-without-review` bypasses human review only, not identity consistency.
+- Current profile claims are read from canonical Lease Authority state without
+  mutation. Presentation occupancy, active or unresolved viewer and controller
+  custody, and nonterminal acquisition custody feed the deterministic lane
+  activity reasons and digest already rechecked by planning, reservation, and
+  pre-signal validation. Existing released and completed fixture records remain
+  eligible.
+- Green evidence: all 21 retirement-focused tests, both targeted authority
+  regressions, workspace formatting, strict workspace Clippy, selector output,
+  and diff hygiene pass. The selector requires no additional contract or
+  documentation gate for the two changed Rust files.
+- No browser replay, installed-runtime mutation, provider effect, core store
+  CAS edit, or P190/P197 shared-documentation edit occurred. Comprehensive Rust
+  requalification and P190 shared-documentation reconciliation remain.
 
 ## Stop Condition
 
