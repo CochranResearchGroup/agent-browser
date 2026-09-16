@@ -35,11 +35,11 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: provider-free, selected changed-surface checks, Packet 12 isolated exact-artifact real-browser acceptance, and Packet 13 P190 documentation reconciliation green; exact-head CI pending publication
+    validation_status: provider-free, selected changed-surface checks, Packet 12 isolated exact-artifact real-browser acceptance, Packet 13 P190 documentation reconciliation, and published-diff self-check green; exact-head CI pending
     validation_ref: d8f8f1447532632fab7d067f62599d08effeb849
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: exact-head forge CI and final published-diff self-check remain before draft removal
+    blocker: exact-head forge CI remains before draft removal
     updated_at: 2026-09-16
