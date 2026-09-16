@@ -66,6 +66,12 @@ requireCondition(
     && existsSync(join(repoRoot, 'scripts/test-candidate-build-executor.js')),
   'candidate build executor and focused test must exist',
 );
+requireCondition(
+  existsSync(join(repoRoot, 'scripts/lib/candidate-build-filesystem-adapter.js'))
+    && existsSync(join(repoRoot, 'scripts/test-candidate-build-filesystem-adapter.js'))
+    && existsSync(join(repoRoot, 'scripts/candidate-build.js')),
+  'candidate build execution adapter, command, and focused test must exist',
+);
 
 const inputCollector = read('scripts/lib/candidate-executable-input.js');
 for (const requiredBoundary of [
@@ -121,6 +127,36 @@ requireCondition(
   read('cli/src/main.rs').includes('candidate::run_candidate_command(&clean, flags.json)'),
   'CLI must dispatch candidate inspection before daemon-backed commands',
 );
+requireCondition(
+  read('cli/src/candidate.rs').includes('candidate_build::run_candidate_build'),
+  'candidate CLI must route build execution through the repository adapter',
+);
+
+const buildAdapter = read('scripts/lib/candidate-build-filesystem-adapter.js');
+for (const requiredBoundary of [
+  'O_EXCL',
+  'candidate-build-state',
+  'scripts/ci/cargo-safe.sh',
+  'candidate_build_source_changed',
+  'executable-input-closure.json',
+  'sealed-artifact.json',
+]) {
+  requireCondition(
+    buildAdapter.includes(requiredBoundary) || buildExecutor.includes(requiredBoundary),
+    `candidate build execution adapter must retain boundary: ${requiredBoundary}`,
+  );
+}
+for (const forbiddenEffect of [
+  '.agent-browser',
+  'development-runtime',
+  'workstation_install',
+  'systemctl',
+]) {
+  requireCondition(
+    !buildAdapter.includes(forbiddenEffect),
+    `candidate build adapter must not touch installed runtime state: ${forbiddenEffect}`,
+  );
+}
 
 const candidateAdapter = read('cli/src/candidate.rs');
 const candidateAdapterProduction = candidateAdapter.split('#[cfg(test)]', 1)[0];

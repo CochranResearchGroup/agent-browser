@@ -107,3 +107,52 @@ fn terminal_failed_build_is_not_joinable() {
         BuildDecision::StartIsolated { .. }
     ));
 }
+
+#[test]
+fn sealed_artifact_digest_matches_the_javascript_adapter_contract() {
+    let fixture_closure = ExecutableInputClosure::new(
+        ExecutableInputContext {
+            target: "x86_64-unknown-linux-gnu".to_string(),
+            toolchain: "rustc 1.90.0".to_string(),
+            cargo_profile: "release".to_string(),
+            resolved_build_profile: BuildProfileConfiguration::production_release(),
+            features: vec!["service".to_string()],
+            reviewed_environment_inputs: BTreeMap::new(),
+        },
+        vec![
+            ExecutableInput {
+                path: "cli/src/main.rs".to_string(),
+                sha256: digest('a'),
+                category: InputCategory::RustSource,
+            },
+            ExecutableInput {
+                path: "packages/dashboard/out/index.html".to_string(),
+                sha256: digest('d'),
+                category: InputCategory::EmbeddedDashboard,
+            },
+            ExecutableInput {
+                path: "scripts/install-agent-browser-privileges.sh".to_string(),
+                sha256: digest('e'),
+                category: InputCategory::EmbeddedAsset,
+            },
+        ],
+    )
+    .expect("fixture closure");
+    let identity = BuildIdentity::new(&fixture_closure, ArtifactClass::ProductionShaped);
+    assert_eq!(
+        identity.executable_input_sha256,
+        "b41538c474b3542e6fed08b3402398743b930eeaab46a54eb08383626ef1c3ba"
+    );
+    let sealed = SealedArtifact::new(
+        "build-fixture",
+        identity,
+        digest('f'),
+        digest('1'),
+        digest('2'),
+    )
+    .expect("sealed fixture");
+    assert_eq!(
+        sealed.seal_sha256,
+        "17c877dfd8c3019ba91a8ac14b78be97d0ba2e9f1ca6de62d2581b78f0c23c79"
+    );
+}

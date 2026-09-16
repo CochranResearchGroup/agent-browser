@@ -5650,10 +5650,11 @@ Examples:
         // === Candidate orchestration ===
         "candidate" => {
             r##"
-agent-browser candidate - Inspect or explicitly install a sealed candidate
+agent-browser candidate - Build, inspect, or explicitly install a sealed candidate
 
 Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
+       agent-browser candidate build --repo-root <source-checkout> --artifact-class <fast_iteration|production_shaped> [--target <triple>] [--feature <name>] [--reviewed-environment-input <name=sha256>] <--dry-run|--apply> [--json]
        agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json]
        agent-browser candidate recover <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
        agent-browser candidate coordinate <queue|cancel-active|discard-queued|supersede|activate-queued> --request-id <id> --candidate-id <id> --artifact-id <id> [--operation-id <id>] --expected-revision <revision> --expected-fencing-generation <generation> [--json]
@@ -5661,12 +5662,17 @@ Usage: agent-browser candidate status [--json]
 Status projects the current workstation install transaction and durable
 coordination ledger into advisory candidate state. JSON output exposes that
 ledger as `coordinationLedger`. Inspect validates an explicit candidate
-manifest against its executable-input closure. Install dry-run additionally
+manifest against its executable-input closure. Build dry-run reports the exact
+isolated command plan without writing state or compiling. Build apply uses an
+exclusive request claim, the repository Cargo safety wrapper, compiler dep-info,
+and immutable manifests to produce a sealed artifact below `cli/target` without
+touching an installed runtime. Production-shaped builds require clean source.
+Install dry-run additionally
 validates the exact binary and sealed build artifact while creating no
 transaction or runtime state. Install apply is an explicit production effect:
 it binds the sealed artifact and coordination custody into the existing
 workstation transaction. An identical concurrent request joins and performs no
-second install. Candidate commands never build an artifact.
+second install.
 Recover delegates the exact transaction guard to the existing workstation
 resume, rollback, or zero-effect close action. It never selects the latest
 transaction implicitly.
@@ -5677,6 +5683,8 @@ require it. These choices do not mutate a runtime.
 Examples:
   agent-browser candidate status --json
   agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json
+  agent-browser candidate build --repo-root . --artifact-class fast_iteration --dry-run --json
+  agent-browser candidate build --repo-root . --artifact-class production_shaped --apply --json
   agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json
   agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json
   agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json
@@ -7531,6 +7539,7 @@ Dashboard:
 Setup:
   candidate status            Inspect advisory candidate and workstation state
   candidate inspect           Validate a manifest against an executable-input closure
+  candidate build             Plan or explicitly build one isolated sealed artifact
   candidate install           Validate or explicitly install an exact sealed binary
   candidate recover           Resume, roll back, or close one exact install transaction
   candidate coordinate        Apply an exact queued, cancellation, discard, supersede, or activation choice

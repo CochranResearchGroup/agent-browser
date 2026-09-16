@@ -790,6 +790,8 @@ agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --op
 agent-browser service state validate --path /tmp/candidate-state.json --json # Validate exact state bytes with this installed executable
 agent-browser candidate status --json # Inspect advisory candidate, coordinationLedger, and workstation state without effects
 agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json # Validate explicit candidate inputs
+agent-browser candidate build --repo-root . --artifact-class fast_iteration --dry-run --json # Preview an isolated candidate build without compiling
+agent-browser candidate build --repo-root . --artifact-class production_shaped --apply --json # Build and seal one clean-source release-profile artifact without installing it
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json # Validate exact sealed bytes without creating a transaction
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json # Explicitly install the sealed bytes through the production workstation transaction
 agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json # Resume one exact retained workstation transaction
@@ -853,6 +855,16 @@ agent-browser close --all             # Close all active sessions
 agent-browser chat "<instruction>"    # AI chat: natural language browser control (single-shot)
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
+
+`candidate build --dry-run` reports the exact isolated build plan without
+writing state or compiling. Build apply requires explicit `--apply`, claims one
+exact request, invokes Cargo through `scripts/ci/cargo-safe.sh`, derives the
+executable-input closure from compiler dep-info, and seals immutable artifacts
+below `cli/target`. It does not install or mutate either runtime. A
+`production_shaped` build requires clean source. Repeat `--feature` for selected
+features. Supply reviewed build-affecting environment values as
+`--reviewed-environment-input <name=sha256>`; the current raw value must match
+the digest and is not recorded.
 
 Repeating `stream enable` with no port, port zero, or the current port returns the existing stream status without replacing its listener. A different explicit port fails; disable streaming before changing ports.
 

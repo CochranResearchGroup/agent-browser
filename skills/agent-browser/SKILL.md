@@ -290,7 +290,17 @@ executable's build provenance. An absent coordination file projects an empty
 ledger without creating runtime state.
 Use `agent-browser candidate inspect --manifest <path> --input-closure <path>
 --json` to validate an explicit candidate manifest against its executable-input
-closure. Use `agent-browser candidate install --binary <path> --manifest
+closure. Use `agent-browser candidate build --repo-root <source-checkout>
+--artifact-class <fast_iteration|production_shaped> --dry-run --json` to inspect
+the exact isolated build plan. Replace `--dry-run` with `--apply` only when the
+operator explicitly requests a build. Apply claims the exact request, executes
+through `scripts/ci/cargo-safe.sh`, derives the executable closure from compiler
+dep-info, and seals immutable artifacts below `cli/target`; it does not install
+or mutate either runtime. A production-shaped build requires clean source. Pass
+each feature with `--feature <name>`. For a reviewed build-affecting environment
+value, pass only `--reviewed-environment-input <name=sha256>`; the command fails
+if the current raw value does not match that digest.
+Use `agent-browser candidate install --binary <path> --manifest
 <path> --input-closure <path> --sealed-artifact <path> --dry-run --json` to
 also verify the exact candidate binary and sealed build artifact without an
 effect. Replace `--dry-run` with `--apply` only when the operator explicitly

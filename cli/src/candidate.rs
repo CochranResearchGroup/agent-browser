@@ -80,6 +80,7 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
                 .map_err(|error| format!("failed to read executable-input closure: {error}"))?;
             inspect_candidate_documents(&manifest, &closure)
         }),
+        "build" => crate::candidate_build::run_candidate_build(args, json_output),
         "install" => parse_install_arguments(args).and_then(|parsed| {
             let manifest = fs::read(&parsed.manifest)
                 .map_err(|error| format!("failed to read candidate manifest: {error}"))?;
