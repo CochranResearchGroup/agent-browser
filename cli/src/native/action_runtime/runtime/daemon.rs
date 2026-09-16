@@ -321,8 +321,12 @@ pub(crate) fn runtime_profile_from_sources(
 ) -> Option<String> {
     cmd.get("runtimeProfile")
         .and_then(|v| v.as_str())
-        .or_else(|| cmd.get("profileId").and_then(|v| v.as_str()))
         .map(str::to_string)
+        .or_else(|| {
+            cmd.get("profileId")
+                .and_then(|v| v.as_str())
+                .and_then(runtime_profile_name_for_service_profile_id)
+        })
         .or_else(|| {
             (include_env_profile && !shared_runtime_host_process())
                 .then(runtime_profile_from_env)

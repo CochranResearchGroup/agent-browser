@@ -2606,6 +2606,25 @@ fn custom_profile_path_does_not_become_a_managed_runtime_profile() {
 }
 
 #[test]
+fn custom_service_profile_id_does_not_become_a_runtime_profile_source() {
+    let command = json!({
+        "action": "launch",
+        "profileId": "custom:14805924951506933012",
+        "profile": "/tmp/custom-profile",
+    });
+
+    assert_eq!(runtime_profile_from_sources(&command, false), None);
+    assert_eq!(
+        runtime_profile_from_sources(
+            &json!({"runtimeProfile": "managed-profile", "profileId": "custom:fixture"}),
+            false,
+        )
+        .as_deref(),
+        Some("managed-profile")
+    );
+}
+
+#[test]
 fn test_apply_auto_launch_command_hints_uses_effective_service_default() {
     let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);
     guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
