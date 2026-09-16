@@ -7565,10 +7565,28 @@ fn complete_runtime_transfer_phase(
             {
                 return Ok(());
             }
-            crate::runtime_replacement::execute_full_shutdown(
+            let mut fence = |transaction_path: &Path,
+                             transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+                             receipt: Option<
+                &crate::runtime_replacement::RuntimeReplacementEffectReceipt,
+            >| {
+                with_transaction_candidate_install_custody(paths, transaction, |transaction| {
+                    if let Some(receipt) = receipt {
+                        crate::runtime_replacement::persist_full_shutdown_checkpoint(
+                            transaction_path,
+                            transaction,
+                            receipt,
+                        )
+                    } else {
+                        Ok(())
+                    }
+                })
+            };
+            crate::runtime_replacement::execute_full_shutdown_fenced(
                 &prepared.transaction_path,
                 &mut prepared.transaction,
                 &plan,
+                &mut fence,
             )?;
             refresh_service_state_migration_after_full_shutdown(
                 &prepared.transaction_path,
@@ -10405,6 +10423,27 @@ fn with_candidate_install_custody<T>(
                 .map_err(|error| format!("candidate_install_custody_serialize_failed:{error}"))?,
         );
         mutation(prepared)
+    })
+}
+
+fn with_transaction_candidate_install_custody<T>(
+    paths: &InstallPaths,
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    mutation: impl FnOnce(&mut crate::runtime_adoption::UpgradeTransaction) -> Result<T, String>,
+) -> Result<T, String> {
+    let custody = candidate_install_custody_from_transaction(transaction)?;
+    let Some(custody) = custody else {
+        return mutation(transaction);
+    };
+    let coordination =
+        crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
+    coordination.with_active_install(&custody, |proof| {
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(proof)
+                .map_err(|error| format!("candidate_install_custody_serialize_failed:{error}"))?,
+        );
+        mutation(transaction)
     })
 }
 
@@ -15889,6 +15928,76 @@ mod tests {
 
         assert!(error.contains("candidate_install_custody_lost"));
         assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_persist_full_shutdown_checkpoint() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-full-shutdown-checkpoint-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("full-shutdown", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let receipt = crate::runtime_replacement::RuntimeReplacementEffectReceipt {
+            schema_version: "agent-browser.runtime-replacement-effect-receipt.v1".to_string(),
+            state: crate::runtime_replacement::RuntimeReplacementEffectState::Planned,
+            plan_digest: "c".repeat(64),
+            closed_sessions: Vec::new(),
+            forced_browser_ids: Vec::new(),
+            final_census_digest: None,
+            source_exit_proven: false,
+            profiles_preserved: true,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "full-shutdown-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error =
+            with_transaction_candidate_install_custody(&paths, &mut transaction, |transaction| {
+                crate::runtime_replacement::persist_full_shutdown_checkpoint(
+                    &transaction_path,
+                    transaction,
+                    &receipt,
+                )
+            })
+            .unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert!(
+            crate::runtime_replacement::effect_receipt_from_upgrade_transaction(&transaction)
+                .unwrap()
+                .is_none()
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
