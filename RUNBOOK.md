@@ -18,6 +18,16 @@ and foreign controls, and stop after one outcome with an exact residue census.
 No installed runtime, shared provider, protected profile, retained browser, or
 foreign process is in scope.
 
+## Turn 360 | 2026-09-16
+
+The one renewed P202 acceptance replay reached the exact-tree effect and then
+stopped with `abandoned_browser_retirement:ExitUnproven`. No retry was taken.
+The harness used exact task-owned cleanup, and independent readback found no
+fixture process or temporary-directory residue. Provider-free validation
+remains green. The next packet must make the exit proof discriminating and
+cover the observed condition without a browser before any newly bounded live
+replay. P190 still owns the shared user-facing documentation surface.
+
 ## Turn 358 | 2026-09-16
 
 P202 provider-free validation is complete at published head `d544ed2e`.

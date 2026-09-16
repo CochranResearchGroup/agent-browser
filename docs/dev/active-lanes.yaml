@@ -56,11 +56,11 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: provider-free changed-surface and comprehensive Rust gates pass, including cache-disabled recovery of the infrastructure-only transport failure; real-browser replay remains
+    validation_status: provider-free changed-surface and comprehensive Rust gates pass; terminal disposable replay returned ExitUnproven with zero exact fixture residue
     validation_ref: e7ae2a9ab7fa8ea891b0089b5bf75409450404ad
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: one renewed exact disposable acceptance replay remains after the persistence-normalization repair; shared documentation remains owned by open P190
+    blocker: real-browser finalize returned ExitUnproven and needs discriminating provider-free exit evidence before any newly bounded replay; shared documentation remains owned by open P190
     updated_at: 2026-09-16

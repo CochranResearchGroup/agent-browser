@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 6
+Plan version: 7
 
 State: OPEN
 
@@ -194,7 +194,7 @@ Exit requires current evidence that:
 | Per-lane resource and activity projection | Status joins browser root, descendants, tabs, RSS, lease activity, policy thresholds, and cleanup disposition | implemented; broader validation pending |
 | Sealed activity-aware plan/apply | Nine focused transaction tests cover reserve, revalidation, drift, repository CAS revisions, normalization, and terminal finalize | provider-free green |
 | Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof | provider-free green; real-browser replay pending |
-| Provider-free and real-browser acceptance | Focused suites pass. Three bounded disposable fixture cycles reached classification and apply; the final live observation exposed persistence normalization drift, which is repaired and covered by a real JSON repository regression. The plan attempt budget is exhausted, so no fourth browser replay was taken. | provider-free green; real-browser gate unverified |
+| Provider-free and real-browser acceptance | Provider-free suites pass. The cumulative fourth and terminal disposable replay reached the exact-tree effect but finalize returned `abandoned_browser_retirement:ExitUnproven`. Independent readback found no fixture process or temporary-directory residue. | provider-free green; real-browser gate blocked on exit proof |
 | Integration | Draft PR #168 is open from validated head `e7ae2a9a`; P190 retains shared documentation ownership | draft; blocked on documentation and renewed live acceptance |
 
 ## Implementation Checkpoint 1
@@ -295,6 +295,20 @@ one disposable namespace, and one terminal run.
   process-group exit, profile-lock release, and zero exact fixture residue.
 - Stop rule: any failure is terminal for this plan version. Preserve its exact
   typed result and residue census; do not retry or broaden cleanup.
+
+## Acceptance Result 5
+
+- Fresh debug build and all preconditions passed at branch head `43ba2a86`.
+- The single terminal replay classified the inactive managed lane and reached
+  the exact-tree effect. Finalize returned
+  `abandoned_browser_retirement:ExitUnproven`.
+- The harness performed only its exact task-owned cleanup. Independent
+  post-run readback found no `ab-managed-resource-gc-*` temporary directory and
+  no Chrome, Node, or agent-browser process carrying the fixture identity.
+- No retry was taken. The next implementation packet must first make exit
+  evidence discriminating enough to identify which sealed condition remained
+  false, cover that condition provider-free, and preserve fail-closed terminal
+  behavior. A later live replay requires a newly bounded plan revision.
 
 ## Stop Condition
 
