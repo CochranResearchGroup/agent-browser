@@ -450,12 +450,20 @@ fn select_compatible_service_profile_for_access_plan(
             }
             AccessProfileCapabilityCompatibility::Compatible(compatibility_ids) => {
                 AccessProfileSelection {
+                    selection: Some(ProfileSelection {
+                        profile_id: profile.id.clone(),
+                        reason: ProfileSelectionReason::ExplicitProfile,
+                    }),
                     selected_profile_id: Some(profile.id.clone()),
                     compatibility_ids,
                     ..AccessProfileSelection::default()
                 }
             }
             AccessProfileCapabilityCompatibility::NotDeclared => AccessProfileSelection {
+                selection: Some(ProfileSelection {
+                    profile_id: profile.id.clone(),
+                    reason: ProfileSelectionReason::ExplicitProfile,
+                }),
                 selected_profile_id: Some(profile.id.clone()),
                 ..AccessProfileSelection::default()
             },
@@ -3760,6 +3768,7 @@ mod tests {
 
         assert_eq!(plan["query"]["runtimeProfile"], "known-temp");
         assert_eq!(plan["selectedProfile"]["id"], "known-temp");
+        assert_eq!(plan["selectedProfileMatch"]["reason"], "explicit_profile");
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["runtimeProfile"],
             "known-temp"
