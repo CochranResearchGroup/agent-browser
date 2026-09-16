@@ -284,7 +284,8 @@ fn execute_candidate_test(args: TestArguments) -> Result<Value, String> {
         std::env::consts::ARCH,
         &commands,
     ))?;
-    let environment_input_sha256 = digest_json(&serde_json::Map::<String, Value>::new())?;
+    let environment_inputs = json!({"AGENT_BROWSER_CARGO_CACHE": "off"});
+    let environment_input_sha256 = digest_json(&environment_inputs)?;
     let identity = TestRunIdentity::new(
         manifest_sha256,
         binary_sha256,
@@ -572,6 +573,13 @@ fn run_test_commands(
             && command.program != "scripts/ci/rust-tests.sh"
         {
             process.env("XDG_RUNTIME_DIR", output_root.join("runtime"));
+        }
+        if command.program == "scripts/ci/rust-tests.sh" {
+            // The fully isolated test root is intentionally descriptive and
+            // can exceed Unix-domain socket limits used by sccache. Candidate
+            // qualification uses its own Cargo target, so disable the shared
+            // compiler cache instead of borrowing a shorter global socket.
+            process.env("AGENT_BROWSER_CARGO_CACHE", "off");
         }
         let status = process.status().map_err(|error| {
             format!(
