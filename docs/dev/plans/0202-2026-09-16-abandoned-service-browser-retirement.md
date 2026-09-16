@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 27
+Plan version: 28
 
 State: OPEN
 
@@ -208,7 +208,7 @@ Exit requires current evidence that:
 | Sealed activity-aware plan/apply | Twenty-one retirement-focused tests cover reservation, revalidation, exact descendant identity, authoritative occupancy, drift, repository CAS revisions, normalization, exit recourse, lock release, and terminal finalize | provider-free and comprehensive Rust green |
 | Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof; Packet 12 proved the accepted terminal projection with one lifecycle record and retirement receipt | provider-free and isolated real-browser acceptance green |
 | Provider-free and real-browser acceptance | Provider-free suites pass. Packet 12's sole renewed exact-artifact disposable replay passed, and fresh readback found no matching fixture process or temporary-directory residue. | complete |
-| Integration | Draft PR #168 is open at published review head `ce008eb2`; P190 is integrated and closed, Packet 13 documentation reconciliation is complete, and P197 is the only active overlap | exact-head CI and final integration pending |
+| Integration | Draft PR #168 is open from authority-reconciliation checkpoint `3de2a6c0`; P190 is integrated and closed, Packet 13 documentation reconciliation is complete, and P197 is the only active overlap | exact-head CI and final integration pending |
 
 ## Implementation Checkpoint 1
 
@@ -762,6 +762,28 @@ Packet 13 result:
   a clean worktree, exact remote custody, and a mergeable PR against current
   `origin/main`. This receipt-only plan update does not change executable or
   user-facing inputs. Exact-head forge CI is the only remaining draft gate.
+
+## Closeout Authority Reconciliation Packet 14
+
+The operator transferred top-level bug-fix custody, including P202 source,
+review, CI, merge, and runtime-effect coordination. Fresh Git, forge, plan, and
+lane-catalog readback found the published implementation and acceptance intact,
+but four current projections still treated completed P190 as active.
+
+- Authority-reconciliation checkpoint: `3de2a6c0`.
+- Current plan state and worker assignments now record P190 integrated and
+  closed, Packet 13 documentation reconciliation complete, and P197 as the only
+  active overlap.
+- The consolidated evidence table now reflects Packet 12's successful isolated
+  exact-artifact browser acceptance and the final provider-free qualification.
+- The active-lane checkpoint and validation reference now point to the
+  reconciliation checkpoint, and both overlap lists contain only P197.
+- `pnpm test:policy-wiring`, `pnpm validation:select -- --base HEAD`, and
+  `git diff --check` pass. The selector requires no application test for this
+  plan-and-catalog-only correction.
+- This receipt changes no executable or user-facing product input and performs
+  no browser, installed-runtime, provider, profile, or shared-runtime effect.
+  Exact-head forge CI and integration remain the only completion gates.
 
 ## Stop Condition
 
