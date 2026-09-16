@@ -5650,25 +5650,32 @@ Examples:
         // === Candidate orchestration ===
         "candidate" => {
             r##"
-agent-browser candidate - Inspect candidate and workstation state without effects
+agent-browser candidate - Inspect or explicitly install a sealed candidate
 
 Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
-       agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> --dry-run [--json]
+       agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json]
+       agent-browser candidate recover <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
 
 Status projects the current workstation install transaction and durable
 coordination ledger into advisory candidate state. JSON output exposes that
 ledger as `coordinationLedger`. Inspect validates an explicit candidate
 manifest against its executable-input closure. Install dry-run additionally
 validates the exact binary and sealed build artifact while creating no
-transaction or runtime state. These operations do not build, install, recover,
-launch a browser, or connect to a daemon. Candidate install apply remains
-unavailable until its effect transition adapter is complete.
+transaction or runtime state. Install apply is an explicit production effect:
+it binds the sealed artifact and coordination custody into the existing
+workstation transaction. An identical concurrent request joins and performs no
+second install. Candidate commands never build an artifact.
+Recover delegates the exact transaction guard to the existing workstation
+resume, rollback, or zero-effect close action. It never selects the latest
+transaction implicitly.
 
 Examples:
   agent-browser candidate status --json
   agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json
   agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json
+  agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json
+  agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json
 "##
         }
 
@@ -7519,7 +7526,8 @@ Dashboard:
 Setup:
   candidate status            Inspect advisory candidate and workstation state
   candidate inspect           Validate a manifest against an executable-input closure
-  candidate install           Validate an exact sealed binary with --dry-run
+  candidate install           Validate or explicitly install an exact sealed binary
+  candidate recover           Resume, roll back, or close one exact install transaction
   install                    Install browser binaries
   install workstation        Install and reconcile the source-free Linux workstation
   install transactions       Inspect, resume, rollback, or close exact install transactions; zero-effect close uses an old-reader-safe terminal state

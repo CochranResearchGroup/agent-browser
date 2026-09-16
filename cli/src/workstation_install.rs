@@ -3051,6 +3051,43 @@ fn converge_prior_install_before_new_apply(
 }
 
 fn run_workstation_install(args: &[String]) {
+    run_workstation_install_with_candidate(args, None);
+}
+
+pub(crate) fn run_reviewed_candidate_install(
+    binary_path: &Path,
+    manifest_bytes: &[u8],
+    closure_bytes: &[u8],
+    sealed_artifact_bytes: &[u8],
+    json: bool,
+) -> ! {
+    let candidate = ReviewedCandidatePayload::from_documents(
+        binary_path.to_path_buf(),
+        manifest_bytes,
+        closure_bytes,
+        sealed_artifact_bytes,
+    )
+    .unwrap_or_else(|error| fail(&error, json));
+    candidate
+        .source
+        .verify()
+        .unwrap_or_else(|error| fail(&error, json));
+    let mut args = vec![
+        "install".to_string(),
+        "workstation".to_string(),
+        "--apply".to_string(),
+    ];
+    if json {
+        args.push("--json".to_string());
+    }
+    run_workstation_install_with_candidate(&args, Some(candidate));
+    std::process::exit(0);
+}
+
+fn run_workstation_install_with_candidate(
+    args: &[String],
+    reviewed_candidate: Option<ReviewedCandidatePayload>,
+) {
     let parsed = match parse_workstation_install_args(args) {
         Ok(parsed) => parsed,
         Err(error) => fail(&error, args.iter().any(|arg| arg == "--json")),
@@ -3211,13 +3248,24 @@ fn run_workstation_install(args: &[String]) {
         phases.push("prior-install-transaction-converged");
     }
     let mut prepared_payload = if parsed.mode == InstallMode::Apply {
-        let prepared = match prepare_payload_transaction_with_replacement(
-            &root,
-            &paths,
-            &parsed,
-            isolated_root,
-            runtime_replacement_plan.as_ref(),
-        ) {
+        let preparation = match reviewed_candidate.as_ref() {
+            Some(candidate) => prepare_coordinated_reviewed_candidate_payload_transaction(
+                &root,
+                &paths,
+                &parsed,
+                isolated_root,
+                runtime_replacement_plan.as_ref(),
+                candidate,
+            ),
+            None => prepare_payload_transaction_with_replacement(
+                &root,
+                &paths,
+                &parsed,
+                isolated_root,
+                runtime_replacement_plan.as_ref(),
+            ),
+        };
+        let prepared = match preparation {
             Ok(prepared) => prepared,
             Err(error) => fail(&error, parsed.json),
         };
@@ -3228,6 +3276,9 @@ fn run_workstation_install(args: &[String]) {
             "candidate-preflight-ready",
             "runtime-census-stable",
         ]);
+        if reviewed_candidate.is_some() {
+            phases.push("sealed-candidate-bound");
+        }
         Some(prepared)
     } else {
         None
@@ -7252,6 +7303,38 @@ fn prepare_payload_transaction_from_source(
 struct ReviewedCandidateTransactionBindings<'a> {
     artifact: &'a CandidateArtifactTransactionBinding,
     custody: &'a crate::candidate_coordination::CandidateInstallCustody,
+}
+
+fn prepare_coordinated_reviewed_candidate_payload_transaction(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
+    candidate: &ReviewedCandidatePayload,
+) -> Result<PreparedPayloadTransaction, String> {
+    let coordination = crate::candidate_coordination::CandidateCoordinationStore::production(root);
+    let request_id = format!("candidate-install-{}", uuid::Uuid::new_v4());
+    let custody = coordination.start_or_join_install(
+        &request_id,
+        &candidate.binding.candidate_id,
+        &candidate.binding.artifact_seal_sha256,
+    )?;
+    if custody.acquisition_outcome == agent_browser_candidate::CoordinationOutcome::JoinedExisting {
+        return Err(format!(
+            "candidate_install_joined_existing:{}",
+            custody.operation_id
+        ));
+    }
+    prepare_reviewed_candidate_payload_transaction(
+        root,
+        paths,
+        args,
+        isolated_root,
+        runtime_replacement_plan,
+        candidate,
+        &custody,
+    )
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -15655,6 +15738,18 @@ mod tests {
                 "acquisitionOutcome": "started"
             })
         );
+        let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+        let transaction_count = fs::read_dir(&transaction_dir).unwrap().count();
+        let joined = prepare_coordinated_reviewed_candidate_payload_transaction(
+            &root, &paths, &args, true, None, &reviewed,
+        )
+        .unwrap_err();
+        assert!(joined.contains("candidate_install_joined_existing"));
+        assert_eq!(
+            fs::read_dir(&transaction_dir).unwrap().count(),
+            transaction_count,
+            "a joined install must not create a competing workstation transaction"
+        );
 
         activate_prepared_payload_transaction(&mut prepared, &paths, true).unwrap();
         let current = coordination.read().unwrap();
@@ -15675,7 +15770,6 @@ mod tests {
         assert!(error.contains("candidate_install_custody_lost"));
         assert_eq!(fs::read_link(&paths.current_selector).ok(), selector_before);
 
-        let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
         let transaction_count = fs::read_dir(&transaction_dir).unwrap().count();
         let mut changed_manifest_bytes = manifest_bytes;
         changed_manifest_bytes.push(b'\n');
@@ -15691,6 +15785,130 @@ mod tests {
             fs::read_dir(transaction_dir).unwrap().count(),
             transaction_count,
             "manifest drift must fail before another transaction is recorded"
+        );
+
+        remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn reviewed_candidate_apply_reaches_isolated_acceptance() {
+        use agent_browser_candidate::{
+            ArtifactClass, BuildIdentity, BuildProfileConfiguration, CandidateManifest,
+            ExecutableInput, ExecutableInputClosure, ExecutableInputContext, InputCategory,
+            SealedArtifact, SourceProvenance, SourceTreeState,
+        };
+        use std::collections::BTreeMap;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-reviewed-candidate-apply-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let env_guard = EnvGuard::new(&["AGENT_BROWSER_WORKSTATION_ROOT"]);
+        env_guard.set("AGENT_BROWSER_WORKSTATION_ROOT", root.to_str().unwrap());
+        let source_path = root.join("candidate/agent-browser");
+        fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        fs::write(&source_path, b"sealed production candidate bytes").unwrap();
+        let binary_sha256 = workstation_file_sha256(&source_path).unwrap();
+        let closure = ExecutableInputClosure::new(
+            ExecutableInputContext {
+                target: "x86_64-unknown-linux-gnu".to_string(),
+                toolchain: "rustc 1.90.0".to_string(),
+                cargo_profile: "release".to_string(),
+                resolved_build_profile: BuildProfileConfiguration::production_release(),
+                features: vec!["service".to_string()],
+                reviewed_environment_inputs: BTreeMap::new(),
+            },
+            vec![
+                ExecutableInput {
+                    path: "cli/src/main.rs".to_string(),
+                    sha256: "a".repeat(64),
+                    category: InputCategory::RustSource,
+                },
+                ExecutableInput {
+                    path: "packages/dashboard/out/index.html".to_string(),
+                    sha256: "b".repeat(64),
+                    category: InputCategory::EmbeddedDashboard,
+                },
+                ExecutableInput {
+                    path: "scripts/install-agent-browser-privileges.sh".to_string(),
+                    sha256: "c".repeat(64),
+                    category: InputCategory::EmbeddedAsset,
+                },
+            ],
+        )
+        .unwrap();
+        let mut manifest = CandidateManifest::new(
+            SourceProvenance {
+                commit: "d".repeat(40),
+                tree: "e".repeat(64),
+                state: SourceTreeState::Clean,
+            },
+            &closure,
+            ArtifactClass::ProductionShaped,
+            binary_sha256.clone(),
+            "f".repeat(64),
+            "2026-09-16T12:00:00Z".to_string(),
+        )
+        .unwrap();
+        manifest.validation_receipts = vec!["receipt://provider-free/exact-head".to_string()];
+        let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
+        let sealed = SealedArtifact::new(
+            "build-operation-apply",
+            BuildIdentity::new(&closure, ArtifactClass::ProductionShaped),
+            binary_sha256,
+            manifest.support_manifest_sha256.clone(),
+            workstation_bytes_sha256(&manifest_bytes),
+        )
+        .unwrap();
+        let reviewed = ReviewedCandidatePayload::from_documents(
+            source_path,
+            &manifest_bytes,
+            &serde_json::to_vec(&closure).unwrap(),
+            &serde_json::to_vec(&sealed).unwrap(),
+        )
+        .unwrap();
+
+        run_workstation_install_with_candidate(
+            &[
+                "install".to_string(),
+                "workstation".to_string(),
+                "--apply".to_string(),
+                "--json".to_string(),
+            ],
+            Some(reviewed),
+        );
+
+        let transaction =
+            latest_upgrade_transaction(&root.join(".agent-browser/runtime-adoption/transactions"))
+                .unwrap()
+                .unwrap();
+        assert_eq!(
+            transaction.state,
+            crate::runtime_adoption::UpgradeTransactionState::Accepted
+        );
+        assert_eq!(
+            transaction.successor_fields["candidateArtifact"]["candidateId"],
+            manifest.candidate_id
+        );
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root)
+                .read()
+                .unwrap();
+        assert!(coordination.active().is_none());
+        assert_eq!(
+            coordination
+                .receipts()
+                .last()
+                .map(|receipt| receipt.outcome),
+            Some(agent_browser_candidate::CoordinationOutcome::Completed)
+        );
+        let selected = install_paths(&root)
+            .generations_dir
+            .join(transaction.candidate_generation_id)
+            .join("bin/agent-browser");
+        assert_eq!(
+            fs::read(selected).unwrap(),
+            b"sealed production candidate bytes"
         );
 
         remove_generation_tree(&root).unwrap();

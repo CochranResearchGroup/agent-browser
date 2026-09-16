@@ -1,8 +1,9 @@
-//! Read-only CLI adapters for candidate orchestration status and manifest inspection.
+//! CLI adapters for candidate orchestration status, manifest inspection,
+//! explicit workstation installation, and exact transaction recovery.
 //!
-//! This module may inspect installed workstation records and caller-supplied
-//! documents. It must not build, install, recover, or otherwise mutate either
-//! runtime namespace.
+//! Status, inspect, and install dry-run are read-only. Install apply delegates
+//! exact sealed bytes to the existing workstation transaction and candidate
+//! coordination fence; this module does not implement another installer.
 
 use agent_browser_candidate::{CandidateManifest, CoordinationLedger, ExecutableInputClosure};
 use serde_json::{json, Value};
@@ -23,6 +24,13 @@ struct InstallArguments {
     manifest: String,
     input_closure: String,
     sealed_artifact: String,
+    mode: CandidateInstallMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CandidateInstallMode {
+    DryRun,
+    Apply,
 }
 
 /// Run a candidate command without starting or connecting to a browser daemon.
@@ -55,13 +63,25 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
                 .map_err(|error| format!("failed to read executable-input closure: {error}"))?;
             let sealed_artifact = fs::read(&parsed.sealed_artifact)
                 .map_err(|error| format!("failed to read sealed artifact: {error}"))?;
-            install_candidate_documents(
-                Path::new(&parsed.binary),
-                &manifest,
-                &closure,
-                &sealed_artifact,
-            )
+            match parsed.mode {
+                CandidateInstallMode::DryRun => install_candidate_documents(
+                    Path::new(&parsed.binary),
+                    &manifest,
+                    &closure,
+                    &sealed_artifact,
+                ),
+                CandidateInstallMode::Apply => {
+                    crate::workstation_install::run_reviewed_candidate_install(
+                        Path::new(&parsed.binary),
+                        &manifest,
+                        &closure,
+                        &sealed_artifact,
+                        json_output,
+                    )
+                }
+            }
         }),
+        "recover" => run_candidate_recovery(args, json_output),
         unknown => Err(format!("Unknown candidate operation: {unknown}")),
     };
 
@@ -86,6 +106,46 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
             std::process::exit(1);
         }
     }
+}
+
+fn run_candidate_recovery(args: &[String], json_output: bool) -> ! {
+    let forwarded = candidate_recovery_args(args, json_output).unwrap_or_else(|error| {
+        if json_output {
+            println!(
+                "{}",
+                serde_json::to_string(&json!({"success": false, "error": error})).unwrap_or_else(
+                    |_| r#"{"success":false,"error":"serialization failed"}"#.into()
+                )
+            );
+        } else {
+            eprintln!("Candidate recovery failed: {error}");
+        }
+        std::process::exit(1);
+    });
+    crate::workstation_install::run_install_transactions_command(&forwarded);
+    std::process::exit(0);
+}
+
+fn candidate_recovery_args(args: &[String], json_output: bool) -> Result<Vec<String>, String> {
+    let action = args
+        .get(2)
+        .map(String::as_str)
+        .ok_or_else(|| "candidate recover requires resume, rollback, or close".to_string())?;
+    if !matches!(action, "resume" | "rollback" | "close") {
+        return Err(format!(
+            "Unknown candidate recovery action: {action}; expected resume, rollback, or close"
+        ));
+    }
+    let mut forwarded = vec![
+        "install".to_string(),
+        "transactions".to_string(),
+        action.to_string(),
+    ];
+    forwarded.extend(args.iter().skip(3).cloned());
+    if json_output && !forwarded.iter().any(|argument| argument == "--json") {
+        forwarded.push("--json".to_string());
+    }
+    Ok(forwarded)
 }
 
 fn print_human_report(report: &Value) {
@@ -152,7 +212,7 @@ fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> 
     let mut manifest = None;
     let mut input_closure = None;
     let mut sealed_artifact = None;
-    let mut dry_run = false;
+    let mut mode = None;
     let mut index = 0;
     while index < args.len() {
         let argument = args[index].as_str();
@@ -163,17 +223,12 @@ fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> 
             "--input-closure" => Some((&mut input_closure, "--input-closure")),
             "--sealed-artifact" => Some((&mut sealed_artifact, "--sealed-artifact")),
             "--dry-run" => {
-                if dry_run {
-                    return Err("--dry-run may be specified only once".to_string());
-                }
-                dry_run = true;
+                set_install_mode(&mut mode, CandidateInstallMode::DryRun)?;
                 None
             }
             "--apply" => {
-                return Err(
-                    "candidate install --apply is unavailable until the effect transition adapter is complete"
-                        .to_string(),
-                )
+                set_install_mode(&mut mode, CandidateInstallMode::Apply)?;
+                None
             }
             unknown => return Err(format!("Unknown candidate install argument: {unknown}")),
         };
@@ -191,9 +246,9 @@ fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> 
         }
         index += 1;
     }
-    if !dry_run {
-        return Err("candidate install requires --dry-run".to_string());
-    }
+    let mode = mode.ok_or_else(|| {
+        "candidate install requires exactly one of --dry-run or --apply".to_string()
+    })?;
     Ok(InstallArguments {
         binary: binary.ok_or_else(|| "candidate install requires --binary <path>".to_string())?,
         manifest: manifest
@@ -202,7 +257,24 @@ fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> 
             .ok_or_else(|| "candidate install requires --input-closure <path>".to_string())?,
         sealed_artifact: sealed_artifact
             .ok_or_else(|| "candidate install requires --sealed-artifact <path>".to_string())?,
+        mode,
     })
+}
+
+fn set_install_mode(
+    mode: &mut Option<CandidateInstallMode>,
+    requested: CandidateInstallMode,
+) -> Result<(), String> {
+    if let Some(current) = mode {
+        if *current != requested {
+            return Err(
+                "candidate install --dry-run and --apply are mutually exclusive".to_string(),
+            );
+        }
+        return Err("candidate install mode may be specified only once".to_string());
+    }
+    *mode = Some(requested);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -581,7 +653,7 @@ mod tests {
     }
 
     #[test]
-    fn install_command_accepts_only_an_explicit_dry_run() {
+    fn install_command_requires_one_explicit_mode() {
         let parsed = parse_install_arguments(&args(&[
             "candidate",
             "install",
@@ -601,7 +673,9 @@ mod tests {
         assert_eq!(parsed.manifest, "/tmp/manifest.json");
         assert_eq!(parsed.input_closure, "/tmp/closure.json");
         assert_eq!(parsed.sealed_artifact, "/tmp/sealed.json");
-        assert!(parse_install_arguments(&args(&[
+        assert_eq!(parsed.mode, CandidateInstallMode::DryRun);
+
+        let apply = parse_install_arguments(&args(&[
             "candidate",
             "install",
             "--binary",
@@ -614,8 +688,75 @@ mod tests {
             "/tmp/sealed.json",
             "--apply",
         ]))
+        .unwrap();
+        assert_eq!(apply.mode, CandidateInstallMode::Apply);
+        assert!(parse_install_arguments(&args(&[
+            "candidate",
+            "install",
+            "--binary",
+            "/tmp/agent-browser",
+            "--manifest",
+            "/tmp/manifest.json",
+            "--input-closure",
+            "/tmp/closure.json",
+            "--sealed-artifact",
+            "/tmp/sealed.json",
+            "--dry-run",
+            "--apply",
+        ]))
         .unwrap_err()
-        .contains("effect transition adapter is complete"));
+        .contains("mutually exclusive"));
+    }
+
+    #[test]
+    fn recovery_routes_only_exact_existing_transaction_actions() {
+        let forwarded = candidate_recovery_args(
+            &args(&[
+                "candidate",
+                "recover",
+                "resume",
+                "--transaction-id",
+                "upgrade-1",
+                "--expected-revision",
+                "7",
+                "--candidate-generation",
+                "generation-a",
+                "--census-digest",
+                "none",
+            ]),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(
+            forwarded,
+            args(&[
+                "install",
+                "transactions",
+                "resume",
+                "--transaction-id",
+                "upgrade-1",
+                "--expected-revision",
+                "7",
+                "--candidate-generation",
+                "generation-a",
+                "--census-digest",
+                "none",
+                "--json",
+            ])
+        );
+        assert!(candidate_recovery_args(
+            &args(&[
+                "candidate",
+                "recover",
+                "retry",
+                "--transaction-id",
+                "upgrade-1"
+            ]),
+            false,
+        )
+        .unwrap_err()
+        .contains("expected resume, rollback, or close"));
     }
 
     fn sha256_file(path: &Path) -> String {
