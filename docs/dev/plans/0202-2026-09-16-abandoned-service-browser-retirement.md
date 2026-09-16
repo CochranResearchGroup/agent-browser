@@ -451,9 +451,12 @@ Packet 8 result at source checkpoint `979b5cb8854b0a49980f2dff7fa7523ebc999544`:
 - Green evidence: 18 focused retirement tests, including the zombie-only
   process-group case and new lock controls; 11 transaction tests; workspace
   format; strict workspace Clippy; and diff hygiene all pass.
+- Comprehensive provider-free Rust requalification passed at the same source
+  checkpoint with `nativeLane=0`, `supportLane=0`, and
+  `elapsedSeconds=656`.
 - No browser replay, installed-runtime mutation, provider effect, or shared
-  P190/P197 documentation edit occurred. Complete changed-surface validation
-  and shared-documentation reconciliation remain the next gates.
+  P190/P197 documentation edit occurred. Changed-surface validation is
+  complete; shared-documentation reconciliation remains the next gate.
 
 ## Stop Condition
 
