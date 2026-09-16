@@ -981,7 +981,7 @@ pub(crate) fn classify_abandoned_browser_lane_with_profile_identity_at(
 
     let activity = resource_lane_activity_at(state, browser_id, now);
     if activity.active {
-        return lane_protected(&format!(
+        return lane_protected(format!(
             "current_lane_activity:{}",
             activity.reasons.join(",")
         ));

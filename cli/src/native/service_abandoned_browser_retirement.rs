@@ -136,7 +136,7 @@ type RetirementResult<T> = Result<T, RetirementRecourse>;
 pub(crate) enum RetirementReservation {
     Reserved { revision: u64 },
     AlreadyReserved,
-    Completed(AbandonedBrowserRetirementReceipt),
+    Completed(Box<AbandonedBrowserRetirementReceipt>),
 }
 
 fn digest(value: &impl Serialize) -> RetirementResult<String> {
@@ -448,7 +448,7 @@ pub(crate) fn reserve_abandoned_browser_retirement(
             return Err(RetirementRecourse::InvalidPlan);
         }
         return Ok(match &transaction.receipt {
-            Some(receipt) => RetirementReservation::Completed(receipt.clone()),
+            Some(receipt) => RetirementReservation::Completed(Box::new(receipt.clone())),
             None => RetirementReservation::AlreadyReserved,
         });
     }
@@ -1132,7 +1132,7 @@ mod tests {
         );
         assert_eq!(
             reserve_abandoned_browser_retirement(&mut state, &plan, &observed, NOW).unwrap(),
-            RetirementReservation::Completed(receipt)
+            RetirementReservation::Completed(Box::new(receipt))
         );
     }
 
