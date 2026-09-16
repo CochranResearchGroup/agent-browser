@@ -2188,6 +2188,11 @@ Pre-dispatch denials have no job; join their request ID to the failure journal.
 Access-plan permission and occupancy denials take priority over freshness or
 seeding advice. Follow the blocking policy or occupancy inspection action in
 `decision.recommendedAction` and the exact `profileAccess.decision.nextAction`.
+Read `profileSelection` before browser work. Its `selected`, `rejected`, or
+`not_found` status is always `no_effect`. A rejection with
+`profile_compatibility_missing_or_blocked` means the explicit retained profile
+must not be retried or substituted silently; select a compatible profile or
+request a throwaway browser.
 
 Authenticated service requests record the validated principal and its assurance
 in job and terminal provenance, including profile policy mutations. Service,

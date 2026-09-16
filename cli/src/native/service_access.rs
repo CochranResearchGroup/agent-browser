@@ -12,7 +12,9 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::service_lease_mode::{profile_lease_mode_from_env, ProfileLeaseMode};
-use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
+use super::service_lifecycle::{
+    rank_service_profiles_for_request, ProfileSelection, ProfileSelectionRequest,
+};
 use super::service_model::{
     browser_profile_compatibility_matches, builtin_site_policy, service_profile_seeding_handoff,
     service_site_policy_id_for_url, BrowserBuild, BrowserHost, BrowserProfile, Challenge,
@@ -221,33 +223,21 @@ fn service_access_plan_artifact_for_state_with_principal(
     let profile_request = request.profile_selection_request();
     // Automatic catalog ranking must never substitute a different profile for
     // an explicit named-profile intent, including a name not yet in the catalog.
-    let selection =
-        select_service_profile_for_request(service_state, &profile_request).filter(|selection| {
-            request
-                .runtime_profile
-                .as_deref()
-                .is_none_or(|requested| selection.profile_id == requested)
-        });
-    let selected_profile = request
-        .runtime_profile
+    let profile_selection = select_compatible_service_profile_for_access_plan(
+        service_state,
+        &request,
+        &profile_request,
+    );
+    let selection = profile_selection.selection.as_ref();
+    let selected_profile = profile_selection
+        .selected_profile_id
         .as_deref()
         .and_then(|profile_id| service_state.profiles.get(profile_id))
-        .cloned()
-        .or_else(|| {
-            selection
-                .as_ref()
-                .and_then(|selection| service_state.profiles.get(&selection.profile_id))
-                .cloned()
-        });
+        .cloned();
     let readiness_id = request
         .readiness_profile_id
         .clone()
-        .or_else(|| request.runtime_profile.clone())
-        .or_else(|| {
-            selection
-                .as_ref()
-                .map(|selection| selection.profile_id.clone())
-        });
+        .or_else(|| selected_profile.as_ref().map(|profile| profile.id.clone()));
     let readiness_profile = readiness_id
         .as_deref()
         .and_then(|profile_id| service_state.profiles.get(profile_id));
@@ -306,6 +296,7 @@ fn service_access_plan_artifact_for_state_with_principal(
         monitor_findings: &monitor_findings,
         naming_warnings: &naming_warnings,
         browser_capability_evidence: &browser_capability_evidence,
+        profile_selection: &profile_selection,
         authenticated_principal,
     });
 
@@ -333,10 +324,11 @@ fn service_access_plan_artifact_for_state_with_principal(
             "hasNamingWarning": has_naming_warning,
         },
         "selectedProfile": selected_profile.clone(),
+        "profileSelection": profile_selection.public_value(),
         "selectedProfileSource": selected_profile.as_ref().map(|profile| {
             profile_source_value(service_state, &profile.id)
         }),
-        "selectedProfileMatch": selection.as_ref().map(|selection| {
+        "selectedProfileMatch": selection.map(|selection| {
             let (matched_field, matched_identity) = selected_profile
                 .as_ref()
                 .map(|profile| service_profile_match_details(profile, &profile_request, selection.reason))
@@ -365,6 +357,224 @@ fn service_access_plan_artifact_for_state_with_principal(
     ServiceAccessPlanArtifact {
         public_plan,
         acquisition,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AccessProfileCapabilityCompatibility {
+    Compatible(Vec<String>),
+    NotDeclared,
+    Blocked(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AccessProfileSelectionRejection {
+    profile_id: String,
+    compatibility_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct AccessProfileSelection {
+    selection: Option<ProfileSelection>,
+    selected_profile_id: Option<String>,
+    compatibility_ids: Vec<String>,
+    rejection: Option<AccessProfileSelectionRejection>,
+}
+
+impl AccessProfileSelection {
+    fn blocker(&self) -> Option<&'static str> {
+        (self.selected_profile_id.is_none() && self.rejection.is_some())
+            .then_some("profile_compatibility_missing_or_blocked")
+    }
+
+    fn public_value(&self) -> Value {
+        let status = if self.selected_profile_id.is_some() {
+            "selected"
+        } else if self.rejection.is_some() {
+            "rejected"
+        } else {
+            "not_found"
+        };
+        let rejection = self
+            .selected_profile_id
+            .is_none()
+            .then_some(self.rejection.as_ref())
+            .flatten();
+        let compatibility_ids = rejection
+            .map(|rejection| rejection.compatibility_ids.clone())
+            .unwrap_or_else(|| self.compatibility_ids.clone());
+        json!({
+            "status": status,
+            "reason": self.blocker().or_else(|| {
+                self.selection
+                    .as_ref()
+                    .map(|selection| match selection.reason {
+                        ProfileSelectionReason::ExplicitProfile => "explicit_profile",
+                        ProfileSelectionReason::ExistingOwner => "existing_owner",
+                        ProfileSelectionReason::AuthenticatedTarget => "authenticated_target",
+                        ProfileSelectionReason::AccountMatch => "account_match",
+                        ProfileSelectionReason::TargetMatch => "target_match",
+                        ProfileSelectionReason::ServiceAllowList => "service_allow_list",
+                        ProfileSelectionReason::BrowserBuildDefault => "browser_build_default",
+                    })
+                    .or_else(|| self.selected_profile_id.as_ref().map(|_| "explicit_profile"))
+            }),
+            "effect": "no_effect",
+            "selectedProfileId": self.selected_profile_id,
+            "rejectedProfileId": rejection.map(|rejection| &rejection.profile_id),
+            "compatibilityIds": compatibility_ids,
+        })
+    }
+}
+
+/// Select the highest-ranked profile with positive capability evidence, while
+/// preserving legacy selection when the registry has no exact declaration.
+fn select_compatible_service_profile_for_access_plan(
+    service_state: &ServiceState,
+    request: &ServiceAccessPlanRequest,
+    profile_request: &ProfileSelectionRequest,
+) -> AccessProfileSelection {
+    if let Some(profile_id) = request.runtime_profile.as_deref() {
+        let Some(profile) = service_state.profiles.get(profile_id) else {
+            return AccessProfileSelection::default();
+        };
+        return match access_profile_capability_compatibility(service_state, request, profile) {
+            AccessProfileCapabilityCompatibility::Blocked(compatibility_ids) => {
+                AccessProfileSelection {
+                    rejection: Some(AccessProfileSelectionRejection {
+                        profile_id: profile.id.clone(),
+                        compatibility_ids,
+                    }),
+                    ..AccessProfileSelection::default()
+                }
+            }
+            AccessProfileCapabilityCompatibility::Compatible(compatibility_ids) => {
+                AccessProfileSelection {
+                    selection: Some(ProfileSelection {
+                        profile_id: profile.id.clone(),
+                        reason: ProfileSelectionReason::ExplicitProfile,
+                    }),
+                    selected_profile_id: Some(profile.id.clone()),
+                    compatibility_ids,
+                    ..AccessProfileSelection::default()
+                }
+            }
+            AccessProfileCapabilityCompatibility::NotDeclared => AccessProfileSelection {
+                selection: Some(ProfileSelection {
+                    profile_id: profile.id.clone(),
+                    reason: ProfileSelectionReason::ExplicitProfile,
+                }),
+                selected_profile_id: Some(profile.id.clone()),
+                ..AccessProfileSelection::default()
+            },
+        };
+    }
+
+    let candidates = rank_service_profiles_for_request(service_state, profile_request, true);
+    let mut first_not_declared = None;
+    let mut first_rejection = None;
+
+    for candidate in candidates {
+        let Some(profile) = service_state.profiles.get(&candidate.profile_id) else {
+            continue;
+        };
+        let selection = ProfileSelection {
+            profile_id: candidate.profile_id,
+            reason: candidate.reason,
+        };
+        match access_profile_capability_compatibility(service_state, request, profile) {
+            AccessProfileCapabilityCompatibility::Compatible(compatibility_ids) => {
+                return AccessProfileSelection {
+                    selected_profile_id: Some(selection.profile_id.clone()),
+                    selection: Some(selection),
+                    compatibility_ids,
+                    rejection: first_rejection,
+                };
+            }
+            AccessProfileCapabilityCompatibility::NotDeclared => {
+                first_not_declared.get_or_insert(selection);
+            }
+            AccessProfileCapabilityCompatibility::Blocked(compatibility_ids) => {
+                first_rejection.get_or_insert(AccessProfileSelectionRejection {
+                    profile_id: selection.profile_id,
+                    compatibility_ids,
+                });
+            }
+        }
+    }
+
+    if let Some(selection) = first_not_declared {
+        AccessProfileSelection {
+            selected_profile_id: Some(selection.profile_id.clone()),
+            selection: Some(selection),
+            rejection: first_rejection,
+            ..AccessProfileSelection::default()
+        }
+    } else {
+        AccessProfileSelection {
+            rejection: first_rejection,
+            ..AccessProfileSelection::default()
+        }
+    }
+}
+
+/// Evaluate one profile against the exact preference binding selected for this
+/// no-launch request. This is read-only and never invokes a provider or browser.
+fn access_profile_capability_compatibility(
+    service_state: &ServiceState,
+    request: &ServiceAccessPlanRequest,
+    profile: &BrowserProfile,
+) -> AccessProfileCapabilityCompatibility {
+    let registry = &service_state.browser_capability_registry;
+    let browser_build_label = request.browser_build.map(browser_build_label);
+    let Some(binding) =
+        preferred_registry_binding_for_access_request(registry, request, browser_build_label)
+    else {
+        return AccessProfileCapabilityCompatibility::NotDeclared;
+    };
+    let Some(executable_id) = string_field(&binding, "preferredExecutableId") else {
+        return AccessProfileCapabilityCompatibility::NotDeclared;
+    };
+    let host_id = string_field(&binding, "preferredHostId").or_else(|| {
+        registry.browser_executables.iter().find_map(|executable| {
+            (string_field(executable, "id").as_deref() == Some(executable_id.as_str()))
+                .then(|| string_field(executable, "hostId"))
+                .flatten()
+        })
+    });
+    let Some(host_id) = host_id else {
+        return AccessProfileCapabilityCompatibility::NotDeclared;
+    };
+    let matching_rows = registry
+        .profile_compatibility
+        .iter()
+        .filter(|compatibility| {
+            browser_profile_compatibility_matches(
+                compatibility,
+                &profile.id,
+                &host_id,
+                &executable_id,
+            )
+        })
+        .collect::<Vec<_>>();
+    if matching_rows.is_empty() {
+        return AccessProfileCapabilityCompatibility::NotDeclared;
+    }
+    let blocked = matching_rows.iter().any(|compatibility| {
+        compatibility.get("compatible").and_then(Value::as_bool) != Some(true)
+            || compatibility
+                .get("requiresOperatorOverride")
+                .and_then(Value::as_bool)
+                == Some(true)
+    });
+    let compatibility_ids = matching_rows
+        .iter()
+        .filter_map(|compatibility| string_field(compatibility, "id"))
+        .collect();
+    if blocked {
+        AccessProfileCapabilityCompatibility::Blocked(compatibility_ids)
+    } else {
+        AccessProfileCapabilityCompatibility::Compatible(compatibility_ids)
     }
 }
 
@@ -872,6 +1082,7 @@ fn binding_optional_filter_matches(value: &Value, field: &str, expected: Option<
 struct AccessPlanDecisionInput<'a> {
     request: &'a ServiceAccessPlanRequest,
     selected_profile: Option<&'a BrowserProfile>,
+    profile_selection: &'a AccessProfileSelection,
     service_state: &'a ServiceState,
     site_policy: Option<&'a SitePolicy>,
     challenges: &'a [Challenge],
@@ -893,6 +1104,7 @@ struct AccessPlanDecisionArtifact {
 fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisionArtifact {
     let request = input.request;
     let selected_profile = input.selected_profile;
+    let profile_selection = input.profile_selection;
     let service_state = input.service_state;
     let site_policy = input.site_policy;
     let challenges = input.challenges;
@@ -950,6 +1162,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisio
         selected_profile,
         service_state,
         denied: policy_denies || denied_challenge,
+        preselection_blocker: profile_selection.blocker(),
         manual_seeding_required,
         manual_action_required,
         launch_posture: &launch_posture.value,
@@ -1006,6 +1219,9 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisio
     {
         reasons.push("operator_supplied_one_time_profile_warning");
     }
+    if profile_selection.blocker().is_some() {
+        reasons.push("profile_compatibility_missing_or_blocked");
+    }
     if let Some(site_policy) = site_policy {
         reasons.push("site_policy_selected");
         if site_policy.manual_login_preferred {
@@ -1035,6 +1251,8 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisio
 
     let recommended_action = if policy_denies || denied_challenge {
         "deny_request_by_site_policy"
+    } else if profile_selection.blocker().is_some() {
+        "select_compatible_profile_or_request_throwaway_browser"
     } else if !acquisition.access_decision().allowed {
         // An ACL or occupancy denial must direct the client to its actual blocker
         // before freshness advice can suggest probing or seeding this Profile.
@@ -1578,6 +1796,14 @@ fn attention_decision(recommended_action: &str) -> Value {
             "No matching profile selected",
             "No matching managed profile was found; the caller should register one or explicitly request throwaway browser behavior.",
             vec!["register_managed_profile", "request_throwaway_browser"],
+        ),
+        "select_compatible_profile_or_request_throwaway_browser" => (
+            true,
+            "client",
+            "blocking",
+            "Retained profile is incompatible",
+            "The requested retained profile is incompatible with the selected browser capability and cannot be used by this plan.",
+            vec!["select_compatible_profile", "request_throwaway_browser"],
         ),
         "probe_target_auth_or_reseed_if_needed" | "verify_or_seed_profile_before_authenticated_work" => (
             true,
@@ -3542,6 +3768,7 @@ mod tests {
 
         assert_eq!(plan["query"]["runtimeProfile"], "known-temp");
         assert_eq!(plan["selectedProfile"]["id"], "known-temp");
+        assert_eq!(plan["selectedProfileMatch"]["reason"], "explicit_profile");
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["runtimeProfile"],
             "known-temp"
@@ -6327,6 +6554,193 @@ mod tests {
                 ["status"],
             "not_declared"
         );
+    }
+
+    #[test]
+    fn service_access_plan_selects_compatible_profile_before_incompatible_retained_profile() {
+        let profiles = ["a-incompatible-retained", "z-compatible-retained"]
+            .into_iter()
+            .map(|profile_id| {
+                (
+                    profile_id.to_string(),
+                    BrowserProfile {
+                        id: profile_id.to_string(),
+                        name: profile_id.to_string(),
+                        target_service_ids: vec!["public-registry".to_string()],
+                        browser_build: Some(BrowserBuild::StockChrome),
+                        persistent: true,
+                        ..BrowserProfile::default()
+                    },
+                )
+            })
+            .collect();
+        let state = ServiceState {
+            profiles,
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_hosts: vec![json!({
+                    "id": "local-desktop",
+                    "hostKind": "local",
+                    "reachable": true,
+                    "lifecycleOwner": "agent_browser"
+                })],
+                browser_executables: vec![json!({
+                    "id": "stock-current",
+                    "hostId": "local-desktop",
+                    "buildLabel": "stock_chrome"
+                })],
+                browser_capabilities: vec![json!({
+                    "id": "stock-headed",
+                    "hostId": "local-desktop",
+                    "executableId": "stock-current",
+                    "headedSupported": true,
+                    "cdpSupported": true
+                })],
+                profile_compatibility: vec![
+                    json!({
+                        "id": "incompatible-retained-stock",
+                        "profileId": "a-incompatible-retained",
+                        "hostId": "local-desktop",
+                        "executableId": "stock-current",
+                        "compatible": false
+                    }),
+                    json!({
+                        "id": "compatible-retained-stock",
+                        "profileId": "z-compatible-retained",
+                        "hostId": "local-desktop",
+                        "executableId": "stock-current",
+                        "compatible": true
+                    }),
+                ],
+                browser_preference_bindings: vec![json!({
+                    "id": "public-registry-stock",
+                    "scope": "site",
+                    "targetServiceIds": ["public-registry"],
+                    "preferredHostId": "local-desktop",
+                    "preferredExecutableId": "stock-current",
+                    "preferredCapabilityId": "stock-headed",
+                    "browserBuild": "stock_chrome",
+                    "priority": 100
+                })],
+                ..BrowserCapabilityRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["public-registry".to_string()],
+                browser_build: Some(BrowserBuild::StockChrome),
+                browser_build_explicit: true,
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["selectedProfile"]["id"], "z-compatible-retained");
+        assert_eq!(plan["profileSelection"]["status"], "selected");
+        assert_eq!(
+            plan["profileSelection"]["compatibilityIds"],
+            json!(["compatible-retained-stock"])
+        );
+        assert_eq!(plan["selectedProfileMatch"]["reason"], "target_match");
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["profileCompatibility"]
+                ["status"],
+            "compatible"
+        );
+    }
+
+    #[test]
+    fn service_access_plan_rejects_explicit_incompatible_retained_profile_without_effect() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "retained-incompatible".to_string(),
+                BrowserProfile {
+                    id: "retained-incompatible".to_string(),
+                    name: "Retained incompatible".to_string(),
+                    target_service_ids: vec!["public-registry".to_string()],
+                    browser_build: Some(BrowserBuild::StockChrome),
+                    persistent: true,
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_hosts: vec![json!({"id": "local-desktop"})],
+                browser_executables: vec![json!({
+                    "id": "stock-current",
+                    "hostId": "local-desktop",
+                    "buildLabel": "stock_chrome"
+                })],
+                profile_compatibility: vec![json!({
+                    "id": "retained-incompatible-stock",
+                    "profileId": "retained-incompatible",
+                    "hostId": "local-desktop",
+                    "executableId": "stock-current",
+                    "compatible": false
+                })],
+                browser_preference_bindings: vec![json!({
+                    "id": "public-registry-stock",
+                    "scope": "site",
+                    "targetServiceIds": ["public-registry"],
+                    "preferredHostId": "local-desktop",
+                    "preferredExecutableId": "stock-current",
+                    "browserBuild": "stock_chrome",
+                    "priority": 100
+                })],
+                ..BrowserCapabilityRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+        let state_before = serde_json::to_value(&state).unwrap();
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["public-registry".to_string()],
+                runtime_profile: Some("retained-incompatible".to_string()),
+                browser_build: Some(BrowserBuild::StockChrome),
+                browser_build_explicit: true,
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert!(plan["selectedProfile"].is_null());
+        assert_eq!(plan["profileSelection"]["status"], "rejected");
+        assert_eq!(
+            plan["profileSelection"]["reason"],
+            "profile_compatibility_missing_or_blocked"
+        );
+        assert_eq!(plan["profileSelection"]["effect"], "no_effect");
+        assert_eq!(
+            plan["profileSelection"]["rejectedProfileId"],
+            "retained-incompatible"
+        );
+        assert_eq!(
+            plan["profileSelection"]["compatibilityIds"],
+            json!(["retained-incompatible-stock"])
+        );
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            "select_compatible_profile_or_request_throwaway_browser"
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+        assert!(plan["decision"]["serviceRequest"]["request"].is_null());
+        let mut command = json!({
+            "action": "tab_new",
+            "runtimeProfile": "retained-incompatible",
+            "browserBuild": "stock_chrome",
+            "targetServiceIds": ["public-registry"]
+        });
+        assert_eq!(
+            apply_shared_profile_route_hints_for_service_request_with_principal(
+                &state,
+                &mut command,
+                None,
+            )
+            .unwrap_err(),
+            "service_access_plan_request_unavailable:profile_compatibility_missing_or_blocked"
+        );
+        assert_eq!(serde_json::to_value(&state).unwrap(), state_before);
     }
 
     #[test]
