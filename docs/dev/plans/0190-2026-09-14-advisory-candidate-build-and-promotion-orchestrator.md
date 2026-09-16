@@ -225,6 +225,20 @@ candidate architecture guard, format, and patch hygiene pass. The seam is not
 reachable from a public command, and no build or installed-runtime effect was
 performed.
 
+Checkpoint `3fbb7e13` exposes the first public promotion preflight without
+opening an effect path. `candidate install --dry-run` accepts an explicit
+binary, candidate manifest, executable-input closure, and sealed-artifact
+document; it reuses the same workstation review seam, verifies exact binary
+bytes, and returns the common advisory schema without creating a coordination
+ledger, workstation transaction, or runtime state. `--apply` fails explicitly
+until the effect transition adapter is complete. All seven candidate CLI tests,
+strict workspace Clippy, format, the candidate architecture contract, rendered
+candidate help, docs production build, remote-view documentation contract, and
+patch hygiene pass. README, CLI help, repository skill, docs site, and inline
+documentation describe the same temporary read-only contract. The shared
+user-scoped skill was inspected but intentionally not overwritten from an
+experimental branch.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
