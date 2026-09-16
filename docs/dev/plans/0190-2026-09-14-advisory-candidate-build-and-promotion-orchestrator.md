@@ -123,6 +123,16 @@ release order, and a caller-selected maximum physical hold duration. Candidate
 tests and strict workspace Clippy pass; the checkpoint remains pure and causes
 no build or runtime effect.
 
+Checkpoint `95c92430` freezes checked-in versioned fixtures for the candidate
+manifest and competing-candidate advisory result. Deserialized input closures
+must be canonical, and candidate manifests now validate their source,
+candidate ID, content and artifact digests, build profile, features, embedded
+assets, timestamp, and receipt locators before adapter use. The promotion
+decision rejects internally inconsistent manifests as integrity failures while
+preserving executable-input drift as a distinct rebuild reason. Fixture tests,
+all focused candidate tests, the architecture guard, and strict workspace
+Clippy pass without performing a candidate build.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
