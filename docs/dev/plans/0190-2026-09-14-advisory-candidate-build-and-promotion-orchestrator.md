@@ -383,6 +383,23 @@ fixture, and patch hygiene pass. Terminal coordination, public effect and
 recovery commands, and production-shaped qualification remain. No installed
 runtime, browser, profile, provider, or Service State was touched.
 
+Checkpoint `c93acb5e` terminates candidate coordination with accepted
+workstation state. The adapter holds exact install custody across the bounded
+`Accepted` transaction write, commits `CompleteActive` and advances the fence
+before releasing the coordination lock, then removes the admission drain.
+Runtime handoff and supervisor process waits remain outside the lock. If a
+crash lands after workstation acceptance but before coordination completion,
+the accepted-transaction recovery path can finish the exact operation and
+idempotently reuse its durable completion receipt before clearing the drain.
+A competing supersede cannot enter during the terminal commit, and an already
+completed operation is not rewritten on recovery replay. The seven focused
+coordination adapter tests, terminal acceptance fixture, stale-writer
+acceptance regression, existing accepted-candidate validation, source-free
+workstation installer fixture, strict workspace Clippy, format, candidate
+architecture guard, and patch hygiene pass. Public effect and recovery
+commands and production-shaped qualification remain. No installed runtime,
+browser, profile, provider, or Service State was touched.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
