@@ -388,18 +388,40 @@ impl RuntimeHostIngressRepository {
             || registry.candidate_backend.is_some()
             || selected.topology != RuntimeHostTopology::SingleHost
             || selected.binary_sha256 != binary_sha256
-            || selected.pid == std::process::id()
         {
             return Ok(None);
         }
-        registry.require_current_boot_epoch()?;
-        match crate::process_identity::observe_process(selected.pid) {
-            crate::process_identity::ProcessObservation::Missing => {}
-            crate::process_identity::ProcessObservation::Observed(_) => return Ok(None),
-            crate::process_identity::ProcessObservation::Failed { reason } => {
-                return Err(format!(
-                    "runtime_host_ingress_selected_process_observation_failed: {reason}"
-                ))
+
+        match registry.boot_epoch_status() {
+            crate::process_identity::BootEpochStatus::Current => {
+                if selected.pid == std::process::id() {
+                    return Ok(None);
+                }
+                match crate::process_identity::observe_process(selected.pid) {
+                    crate::process_identity::ProcessObservation::Missing => {}
+                    crate::process_identity::ProcessObservation::Observed(_) => return Ok(None),
+                    crate::process_identity::ProcessObservation::Failed { reason } => {
+                        return Err(format!(
+                            "runtime_host_ingress_selected_process_observation_failed: {reason}"
+                        ))
+                    }
+                }
+            }
+            // A PID from a prior boot has no current process authority, even if
+            // the numeric PID has been reused. This method is called by the
+            // replacement host itself only after its control socket and stream
+            // surface are ready, and the scope fences above still require the
+            // selected single-host generation and exact binary digest.
+            crate::process_identity::BootEpochStatus::Prior => {}
+            crate::process_identity::BootEpochStatus::Missing => {
+                return Err(
+                    "runtime_host_boot_epoch_missing:rediscover_current_evidence".to_string(),
+                )
+            }
+            crate::process_identity::BootEpochStatus::Unavailable => {
+                return Err(
+                    "runtime_host_boot_epoch_unavailable:rediscover_current_evidence".to_string(),
+                )
             }
         }
         let replacement = RuntimeHostBackend {
@@ -841,6 +863,110 @@ mod tests {
                 .map(RuntimeHostIngressRegistry::selected_backend),
             Some(&replacement)
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn prior_boot_selected_backend_adopts_current_same_generation_supervised_host() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-prior-boot-supervisor-restart-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let state_path = root.join("ingress.json");
+        let repository = RuntimeHostIngressRepository::new(&state_path);
+        let env_guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE"]);
+        env_guard.set(
+            "AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE",
+            state_path.to_str().unwrap(),
+        );
+        // Numeric PIDs can be reused across boots. The prior epoch, rather than
+        // the number alone, proves this retained owner has no current authority.
+        let selected = backend(&root, "selected", std::process::id());
+        let mut initial = repository.initialize(selected.clone()).unwrap();
+        initial.boot_epoch = Some("boot:synthetic-previous".to_string());
+        write_registry_atomic(&state_path, &initial).unwrap();
+        let replacement_socket_dir = root.join("replacement");
+
+        let adopted = repository
+            .adopt_current_process_replacement(
+                replacement_socket_dir.clone(),
+                selected.binary_sha256.clone(),
+                "host-selected-restarted".to_string(),
+                "socket-selected-restarted".to_string(),
+            )
+            .unwrap()
+            .expect("a prior-boot owner cannot still hold current process authority");
+
+        assert_eq!(
+            adopted.boot_epoch_status(),
+            crate::process_identity::BootEpochStatus::Current
+        );
+        assert_eq!(adopted.selected_backend().pid, std::process::id());
+        assert_eq!(
+            adopted.selected_backend().generation_id,
+            selected.generation_id
+        );
+        assert_eq!(
+            adopted.selected_backend().socket_dir,
+            replacement_socket_dir
+        );
+        assert_eq!(selected_socket_dir(), Some(replacement_socket_dir));
+        assert!(adopted.fallback_backend().is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn supervised_replacement_adoption_rejects_missing_boot_epoch() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-missing-boot-supervisor-restart-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let state_path = root.join("ingress.json");
+        let repository = RuntimeHostIngressRepository::new(&state_path);
+        let selected = backend(&root, "selected", u32::MAX);
+        let mut initial = repository.initialize(selected.clone()).unwrap();
+        initial.boot_epoch = None;
+        write_registry_atomic(&state_path, &initial).unwrap();
+
+        let error = repository
+            .adopt_current_process_replacement(
+                root.join("replacement"),
+                selected.binary_sha256,
+                "host-selected-restarted".to_string(),
+                "socket-selected-restarted".to_string(),
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            "runtime_host_boot_epoch_missing:rediscover_current_evidence"
+        );
+        assert_eq!(repository.load().unwrap(), initial);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn current_selected_process_does_not_readopt_itself() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-current-host-noop-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let repository = RuntimeHostIngressRepository::new(root.join("ingress.json"));
+        let selected = backend(&root, "selected", std::process::id());
+        let initial = repository.initialize(selected.clone()).unwrap();
+
+        let adopted = repository
+            .adopt_current_process_replacement(
+                root.join("replacement"),
+                selected.binary_sha256,
+                "host-selected-restarted".to_string(),
+                "socket-selected-restarted".to_string(),
+            )
+            .unwrap();
+
+        assert!(adopted.is_none());
+        assert_eq!(repository.load().unwrap(), initial);
         let _ = fs::remove_dir_all(root);
     }
 
