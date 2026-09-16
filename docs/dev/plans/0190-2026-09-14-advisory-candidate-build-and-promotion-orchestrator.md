@@ -350,6 +350,23 @@ Dashboard promotion, acceptance, terminal coordination, and the public effect
 and recovery commands remain. No installed runtime, browser, profile, provider,
 or Service State was touched.
 
+Checkpoint `1bd3994d` fences the dashboard shadow and managed-ingress
+transitions and tightens the post-shutdown restaging lock duration. Candidate
+custody is checked before the shadow dashboard process starts, and its observed
+sealed backend is staged into ingress only under the short coordination lock.
+Managed-backend readiness polling remains lock-free; the exact ingress
+selection commits under custody, then the shadow process receives a fresh
+preflight and stops outside the lock. A superseded candidate cannot start a
+shadow backend or alter the ingress registry. Post-shutdown Service State
+restaging now performs state reads, migration planning, and serialization
+outside the lock, then revalidates custody for the prepared snapshot, staged
+bytes, transaction, and drain commit. The two stale-dashboard regressions, the
+existing exact already-selected promotion and forward-restage cases, the
+post-shutdown refresh regressions, strict workspace Clippy, format, the
+candidate architecture guard, and patch hygiene pass. Acceptance, terminal
+coordination, and the public effect and recovery commands remain. No installed
+runtime, browser, profile, provider, or Service State was touched.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
