@@ -18,8 +18,7 @@ Branch: `fix/p198-retained-owner-coherence`
 
 Target: `main`
 
-Integration: merge through the protected `main` workflow after provider-free
-regression and changed-surface validation
+Integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
 
 Source baseline: `faee8887fb420e8e46bd5a165ce6c44fa10059d2`
 
@@ -34,13 +33,24 @@ effect.
 
 ## Current State
 
-Installed acceptance for Plan 0196 closed the independent custom filesystem
-profile defect, but retained managed-profile acceptance exposed a second
-failure. The Default profile reported no live browser, launch planning returned
-`existing_session_profile_identity_unproven`, and the browser inventory read
-returned `protected_browser_owner_observation_invalid` with an uncertain-effect
-classification even though the operation was read-only. Issue #143 preserves
-that bounded defect and is READY with no live effect required.
+Source checkpoint `21ec94f3bfc8f2db86d4b275691cf5fb15fd67d0` repairs the
+provider-free defect. The minimized fixture proved that profiles and sessions
+were readable while browser inventory applied a current-process PID validator
+to structurally valid historical owner evidence for a terminal browser. The
+repair separates record validity from current process authority: terminal
+history remains visible, while live or nonterminal rows still require the exact
+PID binding. Launch planning remains fail-closed with
+`existing_session_profile_identity_unproven`, `no_effect`, and executable
+`service_profile_recovery_plan` recourse when current owner identity is absent.
+Read-only profile, session, and browser failures now retain their exact code but
+are action-contextually classified as `no_effect`.
+
+The red-capable cross-collection fixture, typed launch-conflict fixture,
+read-only terminal-outcome fixture, existing forged-observation guard, and the
+99-test `service_health` selection pass. Workspace formatting and strict Clippy
+pass. No browser, profile, provider, installation, Service State, shared
+runtime, production, or tenant effect occurred. Protected integration and CI
+remain.
 
 P190 owns candidate and workstation promotion surfaces. P197 owns challenge
 consumer admission. P198 owns retained managed-profile lifecycle classification

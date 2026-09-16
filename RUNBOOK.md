@@ -3,27 +3,27 @@
 Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md) preserves checkpoints through Turn 312; [Turn 313](RUNBOOK-history-2026-09-13-turn313.md), [Turns 314 through 320](RUNBOOK-history-2026-09-14-turn314-through-turn320.md), [P169 history through Turn 319](RUNBOOK-history-2026-09-14-p169-through-turn319.md), [superseded P186 checkpoints through Turn 328](RUNBOOK-history-2026-09-14-p186-through-turn328.md), and [P194 through P196 checkpoints from Turns 340 through 343](RUNBOOK-history-2026-09-15-p194-through-turn343.md) remain separately preserved.
 ## Active Plan Locator Index
 
-- [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), and [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md)
-- [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md), [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), and [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md)
-- [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
-- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
+- [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
+- [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
+- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P198](docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md)
+
+## Turn 345 | 2026-09-16
+
+[Plan 0198](docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md)
+is source-complete at published checkpoint `21ec94f3` through draft PR #158.
+The root defect was browser inventory applying current-PID authority validation
+to structurally valid owner history retained after a terminal browser cleared
+its PID. The repair preserves that history as observational, keeps nonterminal
+PID mismatches fail-closed, retains typed launch-recovery recourse, and marks
+read-only collection failures `no_effect`. The red-to-green fixture, focused
+owner and recourse tests, 99 service-health tests, formatting, and strict Clippy
+pass. No live effect occurred. Protected integration and exact-head CI remain.
 
 ## Turn 344 | 2026-09-15
 
-[Plan 0196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)
-is CLOSED. PRs #150, #153, and #154 merged the #87 race proof and exact
-installed-acceptance repairs into `main@279b2228`. Final generation
+[Plan 0196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md) is CLOSED. PRs #150, #153, and #154 merged the #87 race proof and exact installed-acceptance repairs into `main@279b2228`. Final generation
 `0.28.0-15f0f3576657-30788a166073`, SHA-256
-`15f0f3576657da6cfc9a59bdb23b0b3d94fb37d73a4c11d3c1e08a6d4fcf8634`,
-is accepted under transaction `upgrade-d0e7c98f-d6b7-4e48-bc60-aa570e5dc329`
-revision 13. Installed doctor passes with one runtime host, one dashboard,
-healthy monitor, and exact supervisor identity. A fresh explicit filesystem profile
-opened `about:blank`, returned the same URL, closed, moved its profile to trash,
-and left zero exact process holders. A targeted Guacamole web recreate
-loaded the sealed extension at `0555` and `0444`, returned HTTP 200, and left
-PostgreSQL and guacd unchanged. Issues #87, #131, and #151 are closed; #143
-remains open for the broader retained-owner inventory defect. The dashboard
-operator-journey warning remains nonblocking and no tenant workflow was run.
+`15f0f3576657da6cfc9a59bdb23b0b3d94fb37d73a4c11d3c1e08a6d4fcf8634`, is accepted under transaction `upgrade-d0e7c98f-d6b7-4e48-bc60-aa570e5dc329` revision 13. Installed doctor passes with one runtime host, one dashboard, healthy monitor, and exact supervisor identity. A fresh explicit filesystem profile opened `about:blank`, returned the same URL, closed, moved its profile to trash, and left zero exact process holders. A targeted Guacamole web recreate loaded the sealed extension at `0555` and `0444`, returned HTTP 200, and left PostgreSQL and guacd unchanged. Issues #87, #131, and #151 are closed; #143 remains open for the broader retained-owner inventory defect. The dashboard operator-journey warning remains nonblocking and no tenant workflow was run.
 
 ## Turn 339 | 2026-09-15
 
