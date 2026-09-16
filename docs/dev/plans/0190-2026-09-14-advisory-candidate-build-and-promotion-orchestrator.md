@@ -543,6 +543,9 @@ passed as isolated provider-free run
 `candidate-test-1457c7ad-acf7-4441-a709-66b691fe2b96`; its reusable hermetic
 receipt is
 `cli/target/candidate-test-state/completed/9bdec654dd302a18f9ca981653fbd746a00bedc669b16030bdc00d962ff73510.json`.
+After the artifact was sealed, docs-only checkpoint `09122f3a` reproduced the
+same executable-input digest exactly without a rebuild, proving the corrected
+source-provenance boundary across the refreshed-main history.
 No browser, profile, provider, production runtime, or development runtime was
 read or mutated. Development publication and acceptance remain a separately
 admitted operational gate, followed by protected integration and post-merge
