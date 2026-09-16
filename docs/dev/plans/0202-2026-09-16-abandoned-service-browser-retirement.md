@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 14
+Plan version: 15
 
 State: OPEN
 
@@ -63,7 +63,10 @@ was invisible until finalization after the process effect, and apply could
 replace a reviewed candidate with a newly observed process tree for the same
 browser ID. Focused validation and comprehensive provider-free requalification
 are green at source checkpoint
-`844eba2671681cd3e0c884a9cae5c9f839d6d565`. No additional browser replay is
+`844eba2671681cd3e0c884a9cae5c9f839d6d565`. The final two-axis published-diff
+review then found that the reviewed identity still omitted descendants, so a
+same-root replacement child set could become the freshly sealed plan. Packet
+10 owns that one provider-free binding repair. No additional browser replay is
 authorized.
 
 P190 and P197 remain active. P190 has no expected P202 source overlap but is
@@ -547,6 +550,36 @@ Packet 9 result at source checkpoint
   CAS edit, or P190/P197 shared-documentation edit occurred. Comprehensive Rust
   requalification is complete; P190 shared-documentation reconciliation
   remains.
+
+## Published-Diff Descendant Binding Packet 10
+
+The final review accepts one additional P1 spec finding and keeps the Standards
+and Spec axes separate.
+
+- Spec finding: Packet 9 compares the exact 14-field `candidateIdentity`, but
+  that identity does not contain the reviewed descendant set. A fresh process
+  census can therefore replace or add descendants beneath the same unchanged
+  root, after which apply seals the replacement into a new retirement plan.
+- Standards finding: the required user-facing environment and action
+  documentation remains incomplete on four P190-owned files. That is the known
+  shared-documentation gate, not authority for P202 to edit them concurrently.
+  The repeated action string is accepted as nonblocking cleanup backlog.
+- Primary writer: P202 lane owner, limited to candidate identity construction,
+  the exact fresh-snapshot comparison, and one deterministic provider-free
+  regression. W13 `/root/p202_exit_cause` supplied the read-only Spec review;
+  W14 `/root/p202_resource_implementation` supplied the independent read-only
+  Standards review.
+- Feedback loop: a reviewed eligible root with one exact child must fail red
+  when a fresh independently eligible snapshot keeps the root but adds or
+  replaces a child. The unchanged root and child set remains admissible. The
+  reviewed candidate output must identify the expected descendant identities.
+- Validation impact: run the targeted red/green regression, all retirement
+  tests, format, strict Clippy, selector, and one fresh comprehensive Rust
+  requalification because executable candidate identity and review-token input
+  change. Prior live acceptance remains diagnostic history and is not rerun.
+- Bound: one implementation attempt and one provider-free validation cycle.
+  No core store change, browser replay, installed-runtime mutation, provider
+  effect, or P190/P197 shared-documentation edit is authorized.
 
 ## Stop Condition
 
