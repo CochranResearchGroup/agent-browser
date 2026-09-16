@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 13
+Plan version: 14
 
 State: OPEN
 
@@ -61,9 +61,9 @@ Final published-diff review reopened the source before merge readiness. Packet
 9 now repairs both provider-free P1 counterexamples: authoritative occupancy
 was invisible until finalization after the process effect, and apply could
 replace a reviewed candidate with a newly observed process tree for the same
-browser ID. Focused validation is green at source checkpoint
-`844eba2671681cd3e0c884a9cae5c9f839d6d565`; full
-provider-free requalification remains pending. No additional browser replay is
+browser ID. Focused validation and comprehensive provider-free requalification
+are green at source checkpoint
+`844eba2671681cd3e0c884a9cae5c9f839d6d565`. No additional browser replay is
 authorized.
 
 P190 and P197 remain active. P190 has no expected P202 source overlap but is
@@ -540,9 +540,13 @@ Packet 9 result at source checkpoint
   regressions, workspace formatting, strict workspace Clippy, selector output,
   and diff hygiene pass. The selector requires no additional contract or
   documentation gate for the two changed Rust files.
+- Comprehensive provider-free Rust requalification passed at the exact source
+  checkpoint with `nativeLane=0`, `supportLane=0`, and
+  `elapsedSeconds=687`.
 - No browser replay, installed-runtime mutation, provider effect, core store
   CAS edit, or P190/P197 shared-documentation edit occurred. Comprehensive Rust
-  requalification and P190 shared-documentation reconciliation remain.
+  requalification is complete; P190 shared-documentation reconciliation
+  remains.
 
 ## Stop Condition
 
