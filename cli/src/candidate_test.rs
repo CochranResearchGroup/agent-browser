@@ -201,27 +201,16 @@ fn commands_for_selection(selection: &str) -> Result<Vec<TestCommand>, String> {
         .into_iter()
         .map(|script| command("pnpm", &[script]))
         .collect()),
-        "candidate-cli" => Ok(vec![command(
-            "scripts/ci/cargo-safe.sh",
-            &[
-                "test",
-                "--manifest-path",
-                "cli/Cargo.toml",
-                "candidate::tests",
-                "--",
-                "--test-threads=1",
-            ],
-        ), command(
-            "scripts/ci/cargo-safe.sh",
-            &[
-                "test",
-                "--manifest-path",
-                "cli/Cargo.toml",
-                "candidate_build::tests",
-                "--",
-                "--test-threads=1",
-            ],
-        )]),
+        "candidate-cli" => Ok(vec![
+            command(
+                "scripts/ci/rust-tests.sh",
+                &["--focused", "candidate::tests"],
+            ),
+            command(
+                "scripts/ci/rust-tests.sh",
+                &["--focused", "candidate_build::tests"],
+            ),
+        ]),
         _ => Err(format!(
             "candidate_test_selection_unsupported:{selection}; expected candidate-kernel, candidate-build-adapter, or candidate-cli"
         )),
