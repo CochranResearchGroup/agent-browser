@@ -18,31 +18,9 @@ lanes:
     validation_ref: 07aaf9e93f56344bda2043c93679cf78a05f0cae
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
-    overlaps: [P169, P196]
-    reconciled_overlaps: [P169, P196]
+    overlaps: [P169]
+    reconciled_overlaps: [P169]
     blocker: the build orchestrator, public effect commands, and workstation transaction coupling remain unstarted; production-shaped qualification retains its later gate
-    updated_at: 2026-09-15
-
-  - id: P196
-    product_lane: PL-BUGFIX
-    objective: Complete foreground projection and deployment-discovered custom-profile, retained-session, and sealed Guacamole acceptance repairs
-    plan: docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md
-    plan_ref: refs/heads/fix/post-install-acceptance-repairs
-    branch: fix/post-install-acceptance-repairs
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE
-    checkpoint: 73001841df308e63cccad2b64365d4109e57d0b3
-    remote_ref: refs/remotes/origin/fix/issue-87-foreground-launch-cas
-    integration_receipt: 552f692502ec63032b0a936029993510f3299fb7
-    integration: issue 87 is integrated; merge the bounded post-install acceptance repairs through the protected `main` workflow before one replacement production build
-    validation_status: in_progress
-    validation_ref: null
-    work_items: [CochranResearchGroup/agent-browser#87, CochranResearchGroup/agent-browser#131, CochranResearchGroup/agent-browser#143, CochranResearchGroup/agent-browser#151]
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
-    blocker: null
     updated_at: 2026-09-15
   - id: P169
     product_lane: PL-CHALLENGE
