@@ -11898,6 +11898,26 @@ impl ReviewedCandidatePayload {
     }
 }
 
+/// Validate an immutable candidate document set and its exact binary without
+/// creating workstation state. Effect-capable callers reuse the same private
+/// payload type when they later enter transaction preparation.
+pub(crate) fn review_candidate_payload_documents(
+    binary_path: &Path,
+    manifest_bytes: &[u8],
+    closure_bytes: &[u8],
+    sealed_artifact_bytes: &[u8],
+) -> Result<Value, String> {
+    let candidate = ReviewedCandidatePayload::from_documents(
+        binary_path.to_path_buf(),
+        manifest_bytes,
+        closure_bytes,
+        sealed_artifact_bytes,
+    )?;
+    candidate.source.verify()?;
+    serde_json::to_value(&candidate.binding)
+        .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))
+}
+
 #[derive(Debug)]
 struct StagedWorkstationGeneration {
     generation_id: String,

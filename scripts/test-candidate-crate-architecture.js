@@ -123,6 +123,7 @@ requireCondition(
 );
 
 const candidateAdapter = read('cli/src/candidate.rs');
+const candidateAdapterProduction = candidateAdapter.split('#[cfg(test)]', 1)[0];
 for (const forbiddenEffect of [
   'ensure_daemon',
   'send_command',
@@ -132,7 +133,7 @@ for (const forbiddenEffect of [
   'run_workstation_upgrade_recover',
 ]) {
   requireCondition(
-    !candidateAdapter.includes(forbiddenEffect),
+    !candidateAdapterProduction.includes(forbiddenEffect),
     `candidate CLI adapter must remain read-only: ${forbiddenEffect}`,
   );
 }
@@ -188,7 +189,9 @@ for (const documentationPath of [
   requireCondition(
     documentation.includes('candidate status')
       && documentation.includes('candidate inspect')
+      && documentation.includes('candidate install')
       && documentation.includes('--input-closure')
+      && documentation.includes('--sealed-artifact')
       && documentation.includes('coordinationLedger'),
     `candidate command contract must be documented in ${documentationPath}`,
   );

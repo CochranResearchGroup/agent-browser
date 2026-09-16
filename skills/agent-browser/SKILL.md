@@ -290,9 +290,12 @@ executable's build provenance. An absent coordination file projects an empty
 ledger without creating runtime state.
 Use `agent-browser candidate inspect --manifest <path> --input-closure <path>
 --json` to validate an explicit candidate manifest against its executable-input
-closure. Neither command builds, installs, recovers, launches a browser, or
-connects to a daemon. An `install` recommendation still requires a separately
-reviewed effect-capable command.
+closure. Use `agent-browser candidate install --binary <path> --manifest
+<path> --input-closure <path> --sealed-artifact <path> --dry-run --json` to
+also verify the exact candidate binary and sealed build artifact. These
+commands create no workstation transaction and perform no runtime effect.
+Candidate install apply remains unavailable until its effect transition adapter
+is complete.
 
 During Service State migration, a missing profile row is materialized as a
 persistent placeholder only when every referencing legacy session is unbound:

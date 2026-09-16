@@ -790,6 +790,7 @@ agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --op
 agent-browser service state validate --path /tmp/candidate-state.json --json # Validate exact state bytes with this installed executable
 agent-browser candidate status --json # Inspect advisory candidate, coordinationLedger, and workstation state without effects
 agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json # Validate explicit candidate inputs
+agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json # Validate exact sealed bytes without creating a transaction
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions

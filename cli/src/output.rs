@@ -5654,16 +5654,21 @@ agent-browser candidate - Inspect candidate and workstation state without effect
 
 Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
+       agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> --dry-run [--json]
 
 Status projects the current workstation install transaction and durable
 coordination ledger into advisory candidate state. JSON output exposes that
 ledger as `coordinationLedger`. Inspect validates an explicit candidate
-manifest against its executable-input closure. Both operations are read-only:
-they do not build, install, recover, launch a browser, or connect to a daemon.
+manifest against its executable-input closure. Install dry-run additionally
+validates the exact binary and sealed build artifact while creating no
+transaction or runtime state. These operations do not build, install, recover,
+launch a browser, or connect to a daemon. Candidate install apply remains
+unavailable until its effect transition adapter is complete.
 
 Examples:
   agent-browser candidate status --json
   agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json
+  agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json
 "##
         }
 
@@ -7514,6 +7519,7 @@ Dashboard:
 Setup:
   candidate status            Inspect advisory candidate and workstation state
   candidate inspect           Validate a manifest against an executable-input closure
+  candidate install           Validate an exact sealed binary with --dry-run
   install                    Install browser binaries
   install workstation        Install and reconcile the source-free Linux workstation
   install transactions       Inspect, resume, rollback, or close exact install transactions; zero-effect close uses an old-reader-safe terminal state

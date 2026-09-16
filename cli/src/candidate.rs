@@ -7,6 +7,7 @@
 use agent_browser_candidate::{CandidateManifest, CoordinationLedger, ExecutableInputClosure};
 use serde_json::{json, Value};
 use std::fs;
+use std::path::Path;
 
 const ADVISORY_SCHEMA_VERSION: &str = "agent-browser.candidate-advisory.v1";
 
@@ -14,6 +15,14 @@ const ADVISORY_SCHEMA_VERSION: &str = "agent-browser.candidate-advisory.v1";
 struct InspectArguments {
     manifest: String,
     input_closure: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InstallArguments {
+    binary: String,
+    manifest: String,
+    input_closure: String,
+    sealed_artifact: String,
 }
 
 /// Run a candidate command without starting or connecting to a browser daemon.
@@ -38,6 +47,20 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
             let closure = fs::read(&parsed.input_closure)
                 .map_err(|error| format!("failed to read executable-input closure: {error}"))?;
             inspect_candidate_documents(&manifest, &closure)
+        }),
+        "install" => parse_install_arguments(args).and_then(|parsed| {
+            let manifest = fs::read(&parsed.manifest)
+                .map_err(|error| format!("failed to read candidate manifest: {error}"))?;
+            let closure = fs::read(&parsed.input_closure)
+                .map_err(|error| format!("failed to read executable-input closure: {error}"))?;
+            let sealed_artifact = fs::read(&parsed.sealed_artifact)
+                .map_err(|error| format!("failed to read sealed artifact: {error}"))?;
+            install_candidate_documents(
+                Path::new(&parsed.binary),
+                &manifest,
+                &closure,
+                &sealed_artifact,
+            )
         }),
         unknown => Err(format!("Unknown candidate operation: {unknown}")),
     };
@@ -121,6 +144,64 @@ fn parse_inspect_arguments(args: &[String]) -> Result<InspectArguments, String> 
             .ok_or_else(|| "candidate inspect requires --manifest <path>".to_string())?,
         input_closure: input_closure
             .ok_or_else(|| "candidate inspect requires --input-closure <path>".to_string())?,
+    })
+}
+
+fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> {
+    let mut binary = None;
+    let mut manifest = None;
+    let mut input_closure = None;
+    let mut sealed_artifact = None;
+    let mut dry_run = false;
+    let mut index = 0;
+    while index < args.len() {
+        let argument = args[index].as_str();
+        let slot = match argument {
+            "candidate" | "install" => None,
+            "--binary" => Some((&mut binary, "--binary")),
+            "--manifest" => Some((&mut manifest, "--manifest")),
+            "--input-closure" => Some((&mut input_closure, "--input-closure")),
+            "--sealed-artifact" => Some((&mut sealed_artifact, "--sealed-artifact")),
+            "--dry-run" => {
+                if dry_run {
+                    return Err("--dry-run may be specified only once".to_string());
+                }
+                dry_run = true;
+                None
+            }
+            "--apply" => {
+                return Err(
+                    "candidate install --apply is unavailable until the effect transition adapter is complete"
+                        .to_string(),
+                )
+            }
+            unknown => return Err(format!("Unknown candidate install argument: {unknown}")),
+        };
+        if let Some((slot, name)) = slot {
+            if slot.is_some() {
+                return Err(format!("{name} may be specified only once"));
+            }
+            index += 1;
+            *slot = Some(
+                args.get(index)
+                    .filter(|value| !value.trim().is_empty())
+                    .cloned()
+                    .ok_or_else(|| format!("candidate install requires {name} <path>"))?,
+            );
+        }
+        index += 1;
+    }
+    if !dry_run {
+        return Err("candidate install requires --dry-run".to_string());
+    }
+    Ok(InstallArguments {
+        binary: binary.ok_or_else(|| "candidate install requires --binary <path>".to_string())?,
+        manifest: manifest
+            .ok_or_else(|| "candidate install requires --manifest <path>".to_string())?,
+        input_closure: input_closure
+            .ok_or_else(|| "candidate install requires --input-closure <path>".to_string())?,
+        sealed_artifact: sealed_artifact
+            .ok_or_else(|| "candidate install requires --sealed-artifact <path>".to_string())?,
     })
 }
 
@@ -234,6 +315,48 @@ fn inspect_candidate_documents(manifest: &[u8], closure: &[u8]) -> Result<Value,
     }))
 }
 
+fn install_candidate_documents(
+    binary_path: &std::path::Path,
+    manifest: &[u8],
+    closure: &[u8],
+    sealed_artifact: &[u8],
+) -> Result<Value, String> {
+    let candidate = crate::workstation_install::review_candidate_payload_documents(
+        binary_path,
+        manifest,
+        closure,
+        sealed_artifact,
+    )?;
+    let receipt_locators = candidate
+        .get("validationReceipts")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+
+    Ok(json!({
+        "schemaVersion": ADVISORY_SCHEMA_VERSION,
+        "success": true,
+        "observedState": "artifact_sealed",
+        "recommendation": "install",
+        "alternatives": ["inspect", "discard"],
+        "consequences": [
+            "candidate_install_requires_explicit_apply",
+            "no_effect_performed"
+        ],
+        "integrityPreconditions": [],
+        "reasonCodes": ["sealed_candidate_payload_valid"],
+        "activeOperation": Value::Null,
+        "artifactReuseEligibility": {
+            "eligible": true,
+            "executableInputSha256": candidate.get("executableInputSha256").cloned().unwrap_or(Value::Null),
+            "artifactClass": candidate.get("artifactClass").cloned().unwrap_or(Value::Null),
+        },
+        "rebuildReasons": [],
+        "receiptLocators": receipt_locators,
+        "buildProvenance": build_provenance(),
+        "candidate": candidate,
+    }))
+}
+
 fn build_provenance() -> Value {
     json!({
         "version": env!("CARGO_PKG_VERSION"),
@@ -246,11 +369,13 @@ fn build_provenance() -> Value {
 mod tests {
     use super::*;
     use agent_browser_candidate::{
-        BuildProfileConfiguration, ExecutableInput, ExecutableInputClosure, ExecutableInputContext,
-        InputCategory,
+        ArtifactClass, BuildIdentity, BuildProfileConfiguration, CandidateManifest,
+        ExecutableInput, ExecutableInputClosure, ExecutableInputContext, InputCategory,
+        SealedArtifact, SourceProvenance, SourceTreeState,
     };
     use serde_json::json;
     use std::collections::BTreeMap;
+    use std::path::Path;
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_string()).collect()
@@ -383,5 +508,123 @@ mod tests {
         let error = inspect_candidate_documents(&manifest, &closure).unwrap_err();
 
         assert!(error.contains("candidate_id_mismatch"));
+    }
+
+    #[test]
+    fn install_dry_run_validates_exact_sealed_binary_without_effects() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-candidate-install-dry-run-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let binary_path = root.join("agent-browser");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&binary_path, b"production candidate bytes").unwrap();
+        let binary_sha256 = sha256_file(&binary_path);
+        let closure: ExecutableInputClosure = serde_json::from_slice(&fixture_closure()).unwrap();
+        let build_support_manifest_sha256 = digest('f');
+        let mut manifest = CandidateManifest::new(
+            SourceProvenance {
+                commit: "1".repeat(40),
+                tree: digest('2'),
+                state: SourceTreeState::Clean,
+            },
+            &closure,
+            ArtifactClass::ProductionShaped,
+            binary_sha256.clone(),
+            build_support_manifest_sha256.clone(),
+            "2026-09-16T02:00:00Z".to_string(),
+        )
+        .unwrap();
+        manifest.validation_receipts = vec!["receipt://qualification/provider-free".to_string()];
+        let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
+        let sealed = SealedArtifact::new(
+            "build-operation-install-1",
+            BuildIdentity::new(&closure, ArtifactClass::ProductionShaped),
+            binary_sha256.clone(),
+            build_support_manifest_sha256,
+            sha256_bytes(&manifest_bytes),
+        )
+        .unwrap();
+
+        let report = install_candidate_documents(
+            &binary_path,
+            &manifest_bytes,
+            &serde_json::to_vec(&closure).unwrap(),
+            &serde_json::to_vec(&sealed).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(report["observedState"], "artifact_sealed");
+        assert_eq!(report["recommendation"], "install");
+        assert_eq!(report["candidate"]["candidateId"], manifest.candidate_id);
+        assert_eq!(report["candidate"]["binarySha256"], binary_sha256);
+        assert_eq!(
+            report["consequences"],
+            json!([
+                "candidate_install_requires_explicit_apply",
+                "no_effect_performed"
+            ])
+        );
+        assert!(!root.join(".agent-browser").exists());
+
+        fs::write(&binary_path, b"changed bytes").unwrap();
+        let error = install_candidate_documents(
+            &binary_path,
+            &manifest_bytes,
+            &serde_json::to_vec(&closure).unwrap(),
+            &serde_json::to_vec(&sealed).unwrap(),
+        )
+        .unwrap_err();
+        assert!(error.contains("workstation_payload_source_digest_mismatch"));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn install_command_accepts_only_an_explicit_dry_run() {
+        let parsed = parse_install_arguments(&args(&[
+            "candidate",
+            "install",
+            "--sealed-artifact",
+            "/tmp/sealed.json",
+            "--binary",
+            "/tmp/agent-browser",
+            "--input-closure",
+            "/tmp/closure.json",
+            "--manifest",
+            "/tmp/manifest.json",
+            "--dry-run",
+        ]))
+        .unwrap();
+
+        assert_eq!(parsed.binary, "/tmp/agent-browser");
+        assert_eq!(parsed.manifest, "/tmp/manifest.json");
+        assert_eq!(parsed.input_closure, "/tmp/closure.json");
+        assert_eq!(parsed.sealed_artifact, "/tmp/sealed.json");
+        assert!(parse_install_arguments(&args(&[
+            "candidate",
+            "install",
+            "--binary",
+            "/tmp/agent-browser",
+            "--manifest",
+            "/tmp/manifest.json",
+            "--input-closure",
+            "/tmp/closure.json",
+            "--sealed-artifact",
+            "/tmp/sealed.json",
+            "--apply",
+        ]))
+        .unwrap_err()
+        .contains("effect transition adapter is complete"));
+    }
+
+    fn sha256_file(path: &Path) -> String {
+        sha256_bytes(&fs::read(path).unwrap())
+    }
+
+    fn sha256_bytes(bytes: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+
+        hex::encode(Sha256::digest(bytes))
     }
 }
