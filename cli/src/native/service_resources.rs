@@ -2489,18 +2489,36 @@ impl crate::native::runtime_reconciliation::ReviewedProcessTreeRuntime
     }
 
     fn process_exited(&mut self, _root_pid: u32) -> Result<bool, String> {
-        Ok(sealed_process_instance_exited(&self.plan.root)
-            && self
-                .plan
-                .descendants
-                .iter()
-                .all(sealed_process_instance_exited)
-            && !process_group_is_running(self.plan.process_group_id))
+        Ok(exact_retirement_processes_exited(self.plan))
     }
 
     fn profile_lock_released(&mut self, profile_root: &Path) -> Result<bool, String> {
-        profile_lock_is_absent(profile_root)
+        if profile_root != Path::new(&self.plan.profile_path) {
+            return Ok(false);
+        }
+        let profile_identity_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(profile_root)
+                .map_err(|error| format!("profile_identity_observation_failed:{error}"))?;
+        if profile_identity_digest != self.plan.profile_identity_digest {
+            return Ok(false);
+        }
+        let state = self.repository.load_snapshot()?;
+        super::service_abandoned_browser_retirement::revalidate_abandoned_browser_retirement_reservation(
+            &state,
+            self.plan,
+        )
+        .map_err(|error| error.to_string())?;
+        let cleanup_authorized = exact_retirement_processes_exited(self.plan);
+        release_exact_retirement_profile_lock(profile_root, self.plan.root.pid, cleanup_authorized)
     }
+}
+
+fn exact_retirement_processes_exited(
+    plan: &super::service_abandoned_browser_retirement::AbandonedBrowserRetirementPlan,
+) -> bool {
+    sealed_process_instance_exited(&plan.root)
+        && plan.descendants.iter().all(sealed_process_instance_exited)
+        && !process_group_is_running(plan.process_group_id)
 }
 
 fn sealed_process_instance_exited(
@@ -2520,6 +2538,35 @@ fn profile_lock_is_absent(profile_root: &Path) -> Result<bool, String> {
         Ok(_) => Ok(false),
         Err(error) => Err(format!("profile_lock_observation_failed:{error}")),
     }
+}
+
+fn release_exact_retirement_profile_lock(
+    profile_root: &Path,
+    expected_root_pid: u32,
+    cleanup_authorized: bool,
+) -> Result<bool, String> {
+    let lock_path = profile_root.join("SingletonLock");
+    let metadata = match fs::symlink_metadata(&lock_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+        Ok(metadata) => metadata,
+        Err(error) => return Err(format!("profile_lock_observation_failed:{error}")),
+    };
+    if !cleanup_authorized || !metadata.file_type().is_symlink() {
+        return Ok(false);
+    }
+    let target = fs::read_link(&lock_path)
+        .map_err(|error| format!("profile_lock_target_observation_failed:{error}"))?;
+    let lock_pid = target
+        .to_string_lossy()
+        .rsplit('-')
+        .next()
+        .and_then(|value| value.parse::<u32>().ok());
+    if lock_pid != Some(expected_root_pid) {
+        return Ok(false);
+    }
+    fs::remove_file(&lock_path)
+        .map_err(|error| format!("stale_profile_lock_cleanup_failed:{error}"))?;
+    profile_lock_is_absent(profile_root)
 }
 
 fn service_gc_apply_abandoned_response(
@@ -3052,6 +3099,62 @@ mod tests {
             rss_bytes: Some(10),
             ..ProcessSample::default()
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exact_retirement_releases_only_its_dangling_singleton_lock() {
+        let profile = std::env::temp_dir().join(format!(
+            "agent-browser-retirement-lock-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&profile).unwrap();
+        let lock_path = profile.join("SingletonLock");
+        let sentinel_path = profile.join("SingletonCookie");
+        std::os::unix::fs::symlink("chromium-host-4100", &lock_path).unwrap();
+        fs::write(&sentinel_path, "preserve").unwrap();
+
+        let released = release_exact_retirement_profile_lock(&profile, 4_100, true).unwrap();
+
+        assert!(released);
+        assert!(fs::symlink_metadata(lock_path).is_err());
+        assert_eq!(fs::read_to_string(sentinel_path).unwrap(), "preserve");
+        fs::remove_dir_all(profile).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exact_retirement_preserves_unproven_or_foreign_profile_locks() {
+        let profile = std::env::temp_dir().join(format!(
+            "agent-browser-retirement-lock-controls-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&profile).unwrap();
+        let lock_path = profile.join("SingletonLock");
+
+        std::os::unix::fs::symlink("chromium-host-4100", &lock_path).unwrap();
+        assert!(!release_exact_retirement_profile_lock(&profile, 4_100, false).unwrap());
+        assert!(fs::symlink_metadata(&lock_path).is_ok());
+
+        assert!(!release_exact_retirement_profile_lock(&profile, 4_101, true).unwrap());
+        assert!(fs::symlink_metadata(&lock_path).is_ok());
+
+        fs::remove_file(&lock_path).unwrap();
+        fs::write(&lock_path, "not-a-symlink").unwrap();
+        assert!(!release_exact_retirement_profile_lock(&profile, 4_100, true).unwrap());
+        assert!(fs::symlink_metadata(&lock_path).is_ok());
+
+        fs::remove_file(&lock_path).unwrap();
+        assert!(release_exact_retirement_profile_lock(&profile, 4_100, true).unwrap());
+        fs::remove_dir_all(profile).unwrap();
     }
 
     #[cfg(target_os = "linux")]

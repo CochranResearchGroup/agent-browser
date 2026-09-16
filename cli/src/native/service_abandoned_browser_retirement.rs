@@ -606,29 +606,7 @@ pub(crate) fn revalidate_abandoned_browser_retirement(
     now: &str,
 ) -> RetirementResult<()> {
     validate_plan(plan, now)?;
-    let transaction = state
-        .abandoned_browser_retirements
-        .get(&plan.plan_id)
-        .ok_or(RetirementRecourse::ReservationMissing)?;
-    if transaction.receipt.is_some() {
-        return Err(RetirementRecourse::RecoveryRequired);
-    }
-    if transaction.plan != *plan {
-        return Err(RetirementRecourse::InvalidPlan);
-    }
-    if state.state_revision != transaction.reserved_revision {
-        return Err(RetirementRecourse::StateRevisionChanged);
-    }
-    recheck_identity(state, plan)?;
-    if digest(&state.browsers[&plan.browser_id])? != transaction.reserved_browser_digest {
-        return Err(RetirementRecourse::BrowserRecordChanged);
-    }
-    let lifecycle = &state.runtime_owner_registry.lifecycle_records[&plan.browser_id];
-    if lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Closing
-        || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
-    {
-        return Err(RetirementRecourse::OwnerChanged);
-    }
+    revalidate_abandoned_browser_retirement_reservation(state, plan)?;
     recheck_processes(plan, &observed.processes)?;
     if observed.profile_identity_digest != plan.profile_identity_digest {
         return Err(RetirementRecourse::ProfileChanged);
@@ -652,6 +630,41 @@ pub(crate) fn revalidate_abandoned_browser_retirement(
         other => other,
     })?;
     compare_observation(plan, &fresh)
+}
+
+/// Recheck the sealed reservation and state-owned lane without requiring the
+/// pre-signal process census to remain present after exact process exit.
+pub(crate) fn revalidate_abandoned_browser_retirement_reservation(
+    state: &ServiceState,
+    plan: &AbandonedBrowserRetirementPlan,
+) -> RetirementResult<()> {
+    if plan.schema_version != PLAN_SCHEMA || seal(plan)? != plan.plan_id {
+        return Err(RetirementRecourse::InvalidPlan);
+    }
+    let transaction = state
+        .abandoned_browser_retirements
+        .get(&plan.plan_id)
+        .ok_or(RetirementRecourse::ReservationMissing)?;
+    if transaction.receipt.is_some() {
+        return Err(RetirementRecourse::RecoveryRequired);
+    }
+    if transaction.plan != *plan {
+        return Err(RetirementRecourse::InvalidPlan);
+    }
+    if state.state_revision != transaction.reserved_revision {
+        return Err(RetirementRecourse::StateRevisionChanged);
+    }
+    recheck_identity(state, plan)?;
+    if digest(&state.browsers[&plan.browser_id])? != transaction.reserved_browser_digest {
+        return Err(RetirementRecourse::BrowserRecordChanged);
+    }
+    let lifecycle = &state.runtime_owner_registry.lifecycle_records[&plan.browser_id];
+    if lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Closing
+        || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
+    {
+        return Err(RetirementRecourse::OwnerChanged);
+    }
+    Ok(())
 }
 
 /// Pure terminal mutation; an external proof never overrides a stale CAS.
@@ -1167,6 +1180,34 @@ mod tests {
         assert_eq!(
             reserve_abandoned_browser_retirement(&mut state, &plan, &observed, NOW).unwrap(),
             RetirementReservation::Completed(Box::new(receipt))
+        );
+    }
+
+    #[test]
+    fn post_exit_reservation_recheck_preserves_exact_cas_and_owner_fence() {
+        let (mut state, observed) = fixture();
+        let plan = plan(&state, &observed);
+        reserve(&mut state, &plan, &observed);
+
+        revalidate_abandoned_browser_retirement_reservation(&state, &plan).unwrap();
+
+        let mut changed_revision = state.clone();
+        changed_revision.state_revision += 1;
+        assert_eq!(
+            revalidate_abandoned_browser_retirement_reservation(&changed_revision, &plan),
+            Err(RetirementRecourse::StateRevisionChanged)
+        );
+
+        let mut changed_owner = state;
+        changed_owner
+            .runtime_owner_registry
+            .lifecycle_records
+            .get_mut(BROWSER)
+            .unwrap()
+            .cleanup_obligation_state = CleanupObligationState::Reclaimable;
+        assert_eq!(
+            revalidate_abandoned_browser_retirement_reservation(&changed_owner, &plan),
+            Err(RetirementRecourse::OwnerChanged)
         );
     }
 
