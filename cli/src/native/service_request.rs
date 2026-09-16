@@ -2967,7 +2967,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 101);
+        assert_eq!(canonical_names.len(), 102);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -4237,7 +4237,12 @@ mod tests {
             if spec.name == "params" {
                 continue;
             }
-            request.insert(spec.name.to_string(), sample_value(spec));
+            let value = if spec.name == "serviceTabHandle" {
+                test_tab_handle(true)
+            } else {
+                sample_value(spec)
+            };
+            request.insert(spec.name.to_string(), value);
         }
         request.insert("action".to_string(), json!("navigate"));
         request.insert("monitorRunDueSummary".to_string(), json!({"matched": 1}));
