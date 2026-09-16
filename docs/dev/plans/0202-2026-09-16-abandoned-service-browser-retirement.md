@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -128,7 +128,9 @@ then must prove no residue.
   high effort without shared resource-module writes.
 - Intended active concurrency: one primary plus three shallow workers; no
   nested subagents. Workers return evidence and stop before edits or effects.
-- Maximum work-unit attempts: 3.
+- Original maximum work-unit attempts: 3. Renewed Acceptance Packet 5 extends
+  the cumulative maximum to 4 for one exact discriminating replay without
+  resetting prior attempt history.
 - Maximum review and rework cycles: 1.
 - Maximum consecutive hardening checkpoints: 2.
 - Reassess after two checkpoints or 30 active minutes without outcome progress.
@@ -274,6 +276,25 @@ Exit requires current evidence that:
 - The first PR status readback shows Version Sync Check passed while Rust
   Quality, Dashboard, Service Client, and Workstation Fixtures are in progress.
   Per normal implementation closeout, P202 does not actively monitor them.
+
+## Renewed Acceptance Packet 5
+
+The three-attempt implementation budget is not reset. One cumulative fourth
+attempt is added for a single discriminating acceptance replay because the
+third attempt exposed an exact persistence-normalization cause and the real
+JSON repository regression now proves that repair. This packet has one owner,
+one disposable namespace, and one terminal run.
+
+- Candidate: current P202 source with a freshly built debug binary.
+- Effect scope: only the harness-created temporary home, managed one-time
+  profile, exact process groups, and foreign-process control.
+- Preconditions: clean branch, exact local/remote identity, Chrome present,
+  no prior P202 fixture process or temporary-directory residue.
+- Required evidence: one eligible inactive managed lane, active/protected and
+  foreign controls preserved, apply success, terminal Service State cleanup,
+  process-group exit, profile-lock release, and zero exact fixture residue.
+- Stop rule: any failure is terminal for this plan version. Preserve its exact
+  typed result and residue census; do not retry or broaden cleanup.
 
 ## Stop Condition
 

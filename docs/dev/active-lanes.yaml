@@ -62,5 +62,5 @@ lanes:
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: implementation is provider-free green; bounded live attempt budget is exhausted after persistence normalization drift, and shared documentation remains owned by open P190
+    blocker: one renewed exact disposable acceptance replay remains after the persistence-normalization repair; shared documentation remains owned by open P190
     updated_at: 2026-09-16
