@@ -52,7 +52,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: f99cd8a6225dee2b85a73ec55aee6a67a2042ee7
+    checkpoint: 60c71f6879aea60a3e0509f6781c7442252398d7
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation

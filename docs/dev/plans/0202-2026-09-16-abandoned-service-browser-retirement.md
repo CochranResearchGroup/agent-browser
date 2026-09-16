@@ -193,7 +193,7 @@ Exit requires current evidence that:
 | Sealed activity-aware plan/apply | Nine focused transaction tests cover reserve, revalidation, drift, repository CAS revisions, normalization, and terminal finalize | provider-free green |
 | Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof | provider-free green; real-browser replay pending |
 | Provider-free and real-browser acceptance | Focused suites pass. Three bounded disposable fixture cycles reached classification and apply; the final live observation exposed persistence normalization drift, which is repaired and covered by a real JSON repository regression. The plan attempt budget is exhausted, so no fourth browser replay was taken. | provider-free green; real-browser gate unverified |
-| Integration | Plan checkpoint `f99cd8a6` is published; implementation checkpoint is being prepared while P190 retains shared documentation ownership | pending |
+| Integration | Implementation checkpoint `60c71f68` is committed while P190 retains shared documentation ownership | checkpoint committed; publication pending |
 
 ## Implementation Checkpoint 1
 
@@ -214,6 +214,7 @@ Exit requires current evidence that:
 
 ## Implementation Checkpoint 2
 
+- Source checkpoint: `60c71f68`.
 - Added bounded per-lane and workstation resource projections plus configurable
   inactivity and resource thresholds.
 - Added an activity-aware decision matrix that keeps active work, explicit
