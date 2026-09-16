@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 17
+Plan version: 18
 
 State: OPEN
 
@@ -607,10 +607,45 @@ Packet 10 source result at checkpoint
   remain under P190 writer custody. No additional live replay is authorized in
   this packet.
 
+## User-Authorized Final Acceptance Packet 11
+
+On 2026-09-16 the operator explicitly authorized the real-browser acceptance.
+This renews only the isolated disposable acceptance effect; it does not
+authorize installed-runtime, production, staging, provider, protected-profile,
+foreign-process, or broad cleanup effects.
+
+- Candidate source: `e727162e156b161cb2fff51dbcadcffeedb0d3fa`.
+  Subsequent branch commits through `fee7c0c0bc0ec0365509fd9ab57da6215f611d5d`
+  change only the P202 plan and lane receipt. Exact-head fast CI and Rust are
+  green, and comprehensive provider-free Rust passed at the source checkpoint.
+- Fixture: the existing `scripts/smoke-service-resource-gc-live.js` harness in
+  its generated `ab-managed-resource-gc-*` home, socket, profile, session, and
+  process namespaces. It may terminate only process groups derived from that
+  exact generated home and its recorded disposable fixture identities.
+- Preconditions: build the normal debug binary from the frozen source; prove
+  Chrome exists; prove no prior matching fixture process, directory, or active
+  harness exists; preserve unrelated production and lane runtimes; and record a
+  fresh process census before effect.
+- Acceptance: one reviewed abandoned candidate; exact retirement receipt;
+  root, descendants, and process group exit; `SingletonLock` absence before
+  harness teardown; coherent terminal Service State; protected profile-holder
+  and unrelated Chrome survive until their exact fixture teardown; and fresh
+  post-run census finds no fixture process or temporary-directory residue.
+- Bound: one run and no retry. Any failure preserves the exact typed evidence,
+  performs only the harness's exact task-owned cleanup, records fresh residue,
+  and ends Packet 11.
+- Critical-path owner: the P202 lane owner performs preflight, the single live
+  effect, and terminal readback. Subagents may review frozen evidence but may
+  not hold runtime custody or execute the effect.
+- Dependency readback: despite the operator's report that P190 landed, current
+  GitHub and Git evidence still shows PR #152 open at `ce19901f` and
+  `origin/main` at `151ebccd`. Shared documentation remains separately blocked
+  and is not touched by this acceptance packet.
+
 ## Stop Condition
 
 Stop before any installed, retained, protected, foreign, production, staging,
-or provider effect. Stop if exact ownership, process-group identity, profile
+or provider effect outside the single Packet 11 disposable acceptance. Stop if exact ownership, process-group identity, profile
 identity, descendant closure, current inactivity, or effect authority cannot be
 proven. Stop and join the persistence owner if the repair requires the core
 `service_store.rs` lock/CAS algorithm. Stop and reconcile writer ownership
