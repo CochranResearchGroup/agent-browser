@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -58,8 +58,9 @@ checkpoint `b9b8afc4`; its challenge-control, authentication, navigation,
 schema, and generated-client changes remain intact. P202 is now the primary
 writer for `README.md`, `cli/src/output.rs`, `skills/agent-browser/SKILL.md`,
 and `docs/src/app/commands/page.mdx` through PR #168. P197 continues source and
-validation work independently, then will merge P202's integrated documentation
-baseline before adding the bounded challenge-consumer guidance.
+validation work independently. At operator direction, P197 has now staged its
+bounded challenge-consumer guidance on those four surfaces and will reconcile
+the files after P202 integrates rather than leaving the product lane idle.
 
 ## Contract
 
@@ -102,8 +103,8 @@ effective site policy requires challenge admission.
    decision.
 6. Align only the request schema, Service contract metadata, field-role ledger,
    generated client, and focused provider-free documentation needed for this
-   contract. Shared README, global CLI help, command docs, and agent-skill edits
-   remain deferred while P190 owns those surfaces.
+   contract. Reconcile the bounded README, global CLI help, command-doc, and
+   agent-skill guidance after the overlapping P202 baseline integrates.
 7. Hoist challenge-aware navigation admission to the outer command boundary so
    it runs before confirmation, runtime admission, browser recovery, launch, or
    dispatch. Carry the same typed admission through both successful and failed
@@ -175,6 +176,12 @@ malformed shape, the later-authentication-failure projection remains green, and
 all challenge-control tests pass. This is a contract-hardening correction
 inside the existing W6 boundary, with no browser or external effect.
 
+Plan version 6 records the operator-directed integration posture for shared
+documentation. P197 proceeds with its bounded four-file consumer guidance while
+P202 resolves its own current-main coordination conflict, then reconciles the
+two branches after P202 integrates. This changes sequencing only. It does not
+transfer P202 source custody, broaden W6, or authorize runtime effects.
+
 ## Implementation Checkpoint
 
 The pure challenge-control contract verifies terminal receipt consistency,
@@ -218,9 +225,9 @@ the untyped field and green on `ChallengeConsumerAdmissionReceipt`; all nine
 Authentication Run tests, four Service challenge-task tests, the navigation
 bypass test, and the correctly stack-sized dispatch fixture pass. P202 retains
 primary-writer custody of the four shared user-facing documentation surfaces
-through PR #168. After P202 integrates, P197 will merge that baseline, add only
-its bounded challenge-consumer guidance, and complete the final changed-surface
-and protected integration gates.
+through PR #168. P197 has staged only its bounded challenge-consumer guidance on
+those files and will merge P202's integrated baseline, reconcile the overlap,
+then complete the final changed-surface and protected integration gates.
 
 ## Validation And Exit
 

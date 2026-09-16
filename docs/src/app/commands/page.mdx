@@ -221,6 +221,18 @@ with a leased service tab. The request accepts the previous
 `serviceTabHandle`, marks only that retained tab closed in service state, and
 preserves the shared browser process plus session route for other clients.
 
+Challenge-aware Authentication Run start accepts `challengeTaskId` and
+`sitePolicyId` only together. Challenge-aware service request
+`action: "navigate"` additionally requires the authenticated
+`clientSubjectId`, or `callerId` on the direct native path, a unique
+`operationId`, and the exact current `serviceTabHandle`. The Service resolves
+and hashes the effective site policy, then verifies the principal, downstream
+intent, and tab before confirmation, recovery, browser launch, or dispatch.
+Successful admission and any later consumer failure expose the typed
+`challengeConsumerAdmission` receipt; a later failure does not rewrite the
+retained challenge outcome or admission decision. This gate grants no CAPTCHA,
+provider, credential, retry, or production authority.
+
 Use service request `action: "ui_action"` when a client needs a bounded
 provider-neutral UI recipe against a valid `serviceTabHandle`. Supported step
 types include `find`, `focus`, `fill`, `type`, `select`, `menu_select`,
