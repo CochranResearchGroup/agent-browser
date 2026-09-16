@@ -122,12 +122,15 @@ run 34993316164 and merge-commit CI run 34997057075 pass. W5 adds exact
 principal and retained-tab custody, digest-only replay, one composite terminal
 receipt, and bounded status and resource summaries.
 [Plan 0197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
-admits W6 on `challenge/p197-consumer-integration` from `main@faee8887`.
-Authentication and navigation will consume one provider-neutral admission
-contract through effective-site-policy and exact-tab adapters. Issue #66
-retains the separately live-gated challenge acceptance leaf. This registration authorizes no challenge
-attempt, retry, browser effect, provider effect, credential use, runtime
-mutation, installation, or release.
+implements W6 at source checkpoint `3158503b` on
+`challenge/p197-consumer-integration`. Authentication and navigation consume
+one provider-neutral admission contract through effective-site-policy and
+exact-tab adapters. Selected provider-free validation passes. Exact-head CI
+and the shared user-facing documentation surfaces remain before integration;
+P190 retains primary-writer custody of those shared surfaces. Issue #66 retains
+the separately live-gated challenge acceptance leaf. This registration
+authorizes no challenge attempt, retry, browser effect, provider effect,
+credential use, runtime mutation, installation, or release.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

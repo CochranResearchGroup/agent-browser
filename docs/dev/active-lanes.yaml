@@ -52,15 +52,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: faee8887fb420e8e46bd5a165ce6c44fa10059d2
-    remote_ref: null
+    checkpoint: 3158503b16bef22fa955077cc9de1dbbc4315849
+    remote_ref: refs/remotes/origin/challenge/p197-consumer-integration
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free W6 validation
-    validation_status: pending
-    validation_ref: null
+    validation_status: passed
+    validation_ref: 3158503b16bef22fa955077cc9de1dbbc4315849
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: [P169]
     overlaps: [P190]
     reconciled_overlaps: [P190]
-    blocker: provider-free consumer admission contract and two consumer integrations remain unimplemented; every live challenge effect stays with issue #66
+    blocker: exact-head CI and shared user-facing documentation remain before integration; P190 retains primary-writer custody of those shared surfaces, and every live challenge effect stays with issue #66
     updated_at: 2026-09-16

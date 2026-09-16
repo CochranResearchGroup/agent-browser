@@ -21,6 +21,15 @@ command-docs, and agent-skill surfaces. P197 performs provider-free source and
 contract validation only; no browser, CAPTCHA, credential, provider,
 installed-runtime, production, or release effect is authorized.
 
+P197 source checkpoint `3158503b` now implements the shared pure admission
+contract and the Authentication Run and navigation consumers. Selected
+provider-free validation passes, including strict Clippy, focused Rust,
+route-confusion, API and MCP parity, generated-client, and Service collection
+gates. The parity run found and repaired one omitted MCP `sitePolicyId`
+projection before this checkpoint. Draft PR #157 now awaits exact-head CI and
+the shared documentation surfaces that remain under P190 primary-writer
+custody. No live or installed-runtime effect occurred.
+
 ## Turn 344 | 2026-09-15
 
 [Plan 0196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)

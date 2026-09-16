@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -43,10 +43,11 @@ verification, cooldown, intervention, and downstream admission. The task is
 principal-owned, exact-handle-bound, idempotent, deadline-bounded, and exercised
 through provider-free fixtures.
 
-Authentication Run and navigation do not yet consume that receipt. Their
-existing success or failure therefore cannot show whether challenge admission
-was checked, whether the checked site policy was current, or whether a later
-consumer failure happened after a successfully completed challenge.
+Source checkpoint `3158503b16bef22fa955077cc9de1dbbc4315849`
+implements one pure consumer-admission contract plus one shared Service adapter.
+Authentication Run and navigation now call that adapter before consumer
+execution. Their durable responses retain challenge outcome, consumer
+admission, and later consumer failure as separate facts.
 
 P190 remains active on `platform/p190-advisory-candidate-orchestrator`. Its
 current implementation owns candidate build and workstation coordination. P197
@@ -134,6 +135,35 @@ live Turnstile or hCaptcha acceptance action.
 
 No subagent, browser worker, provider operator, benchmark checkout, or runtime
 operator is assigned.
+
+## Implementation Checkpoint
+
+The pure challenge-control contract verifies terminal receipt consistency,
+effective site-policy digest, registered downstream intent, and admitted
+outcome semantics. The Service adapter additionally verifies the current
+principal and exact Service tab. Authentication stores the typed admission on
+its durable run record. Challenge-aware navigation requires the site policy,
+operation identity, and exact Service tab handle before dispatch.
+
+Provider-free validation at source checkpoint `3158503b` passes:
+
+- all 16 challenge-control crate tests, including six consumer-admission cases;
+- focused Service adapter, Authentication Run, navigation, and request-shape
+  tests;
+- challenge-control architecture and route-confusion gates;
+- Service API and MCP parity, generated-client contract and type checks, and
+  Service collection no-launch parity;
+- formatting, strict workspace Clippy, and validation-selector readback.
+
+The parity pass found one packet-local omission in the MCP projection of
+`sitePolicyId`. Checkpoint `3158503b` corrects that projection, and the failed
+gate passes on the repaired exact head. No browser, provider, credential,
+installed-runtime, or production effect occurred.
+
+Draft PR #157 carries the published branch. Applicable exact-head CI and the
+shared user-facing documentation surfaces remain before protected integration.
+P190 retains primary-writer custody of those documentation surfaces while the
+lanes overlap.
 
 ## Validation And Exit
 
