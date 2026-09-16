@@ -7516,7 +7516,7 @@ fn activate_prepared_payload_transaction(
     }
     complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
     persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
-    complete_presentation_rebind_phase(prepared)
+    complete_presentation_rebind_phase(paths, prepared)
 }
 
 fn complete_runtime_transfer_phase(
@@ -7651,6 +7651,15 @@ fn complete_runtime_transfer_phase(
 }
 
 fn complete_presentation_rebind_phase(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        complete_presentation_rebind_phase_unfenced(prepared)
+    })
+}
+
+fn complete_presentation_rebind_phase_unfenced(
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
     use crate::runtime_adoption::UpgradeTransactionState;
@@ -7738,7 +7747,7 @@ fn resume_activation_from_durable_phase(
         UpgradeTransactionState::RuntimesTransferring
             | UpgradeTransactionState::PresentationsRebinding
     ) {
-        complete_presentation_rebind_phase(prepared)?;
+        complete_presentation_rebind_phase(paths, prepared)?;
     }
     Ok(())
 }
@@ -10327,9 +10336,19 @@ fn commit_prepared_payload_transaction(
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        commit_prepared_payload_transaction_unfenced(paths, args, prepared)
+    })
+}
+
+fn with_candidate_install_custody<T>(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    mutation: impl FnOnce(&mut PreparedPayloadTransaction) -> Result<T, String>,
+) -> Result<T, String> {
     let custody = candidate_install_custody_from_transaction(&prepared.transaction)?;
     let Some(custody) = custody else {
-        return commit_prepared_payload_transaction_unfenced(paths, args, prepared);
+        return mutation(prepared);
     };
     let coordination =
         crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
@@ -10339,7 +10358,7 @@ fn commit_prepared_payload_transaction(
             serde_json::to_value(proof)
                 .map_err(|error| format!("candidate_install_custody_serialize_failed:{error}"))?,
         );
-        commit_prepared_payload_transaction_unfenced(paths, args, prepared)
+        mutation(prepared)
     })
 }
 
@@ -15462,6 +15481,80 @@ mod tests {
         );
 
         remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_publish_candidate_ready() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-candidate-ready-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("candidate-ready", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::RuntimesTransferring;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let drain_before = fs::read(&admission_drain_path).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "candidate-ready-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = complete_presentation_rebind_phase(&paths, &mut prepared).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::RuntimesTransferring
+        );
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert_eq!(fs::read(&admission_drain_path).unwrap(), drain_before);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
