@@ -178,12 +178,15 @@ export function collectExecutableInputClosure({
   const inputsByPath = new Map();
   for (const path of paths) {
     const repositoryInput = repositoryPath(root, path, sourceControlRoots);
-    if (!repositoryInput.relative) continue;
-    inputsByPath.set(repositoryInput.relative, {
-      path: repositoryInput.relative,
-      sha256: sha256File(repositoryInput.absolute),
-      category: category(repositoryInput.relative),
-    });
+    for (const inputPath of filesUnder(repositoryInput.absolute)) {
+      const input = repositoryPath(root, inputPath, sourceControlRoots);
+      if (!input.relative) continue;
+      inputsByPath.set(input.relative, {
+        path: input.relative,
+        sha256: sha256File(input.absolute),
+        category: category(input.relative),
+      });
+    }
   }
   const inputs = [...inputsByPath.values()]
     .sort((left, right) => left.path.localeCompare(right.path));

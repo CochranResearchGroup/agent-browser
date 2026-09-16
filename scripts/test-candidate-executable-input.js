@@ -71,7 +71,7 @@ try {
   writeFileSync(worktreeHead, 'ref: refs/heads/example\n');
   const cliDep = write(
     'target/release/deps/agent_browser.d',
-    `target/release/agent-browser: cli/src/main.rs cli/src/../src/main.rs scripts/embedded.sh ${packedRefs} ${worktreeHead}\n`,
+    `target/release/agent-browser: cli/src cli/src/main.rs cli/src/../src/main.rs scripts/embedded.sh ${packedRefs} ${worktreeHead}\n`,
   );
   const crateDep = write(
     'target/release/deps/agent_browser_example.d',
