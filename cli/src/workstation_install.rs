@@ -1283,7 +1283,7 @@ fn resume_prepared_payload_transaction(
     }
     paths = install_paths(root);
     if prepared.transaction.state == UpgradeTransactionState::GenerationCommitted {
-        if let Err(error) = begin_post_commit_validation(prepared) {
+        if let Err(error) = begin_post_commit_validation(&paths, prepared) {
             return Err(rollback_resumed_transaction(
                 &paths,
                 prepared,
@@ -1397,6 +1397,7 @@ fn resume_prepared_payload_transaction(
         }
     };
     if let Err(error) = accept_prepared_payload_transaction(
+        &paths,
         prepared,
         validation,
         (!isolated_root).then_some(paths.binary.as_path()),
@@ -3366,7 +3367,7 @@ fn run_workstation_install(args: &[String]) {
         }
         phases.push("payload-committed");
         paths = install_paths(&root);
-        if let Err(error) = begin_post_commit_validation(prepared) {
+        if let Err(error) = begin_post_commit_validation(&paths, prepared) {
             let rollback = rollback_prepared_payload_transaction(
                 &paths,
                 prepared,
@@ -3492,6 +3493,7 @@ fn run_workstation_install(args: &[String]) {
                 .unwrap_or_else(|error| fail(&error, parsed.json))
         };
         if let Err(error) = accept_prepared_payload_transaction(
+            &paths,
             prepared,
             validation,
             (!isolated_root).then_some(paths.binary.as_path()),
@@ -10637,14 +10639,19 @@ fn rollback_runtime_host_ingress(
     Ok(())
 }
 
-fn begin_post_commit_validation(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
-    persist_upgrade_transition(
-        &prepared.transaction_path,
-        &mut prepared.transaction,
-        crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating,
-        "post_commit_validating",
-    )?;
-    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+fn begin_post_commit_validation(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating,
+            "post_commit_validating",
+        )?;
+        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+    })
 }
 
 /// Starts and stages the generation-specific shadow dashboard before payload
@@ -11040,6 +11047,7 @@ fn validate_post_commit_transaction(
 }
 
 fn accept_prepared_payload_transaction(
+    paths: &InstallPaths,
     prepared: &mut PreparedPayloadTransaction,
     validation: PostCommitValidationReceipt,
     supervisor_executable: Option<&Path>,
@@ -11049,54 +11057,62 @@ fn accept_prepared_payload_transaction(
     if prepared.transaction.state != UpgradeTransactionState::PostCommitValidating {
         return Err("transaction_acceptance_without_post_commit_validation".to_string());
     }
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
     finalize_runtime_handoffs(prepared)?;
     prepared.transaction.runtime_handoffs = prepared.runtime_handoffs.clone();
     if let Some(executable) = supervisor_executable {
+        with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
         let transaction_id = prepared.transaction.transaction_id.clone();
         if let Err(error) =
             complete_accepted_upgrade_supervisor_transition(executable, &transaction_id)
         {
-            prepared.transaction.stop_reason =
-                Some("accepted_supervisor_transition_failed".to_string());
-            persist_upgrade_transition(
-                &prepared.transaction_path,
-                &mut prepared.transaction,
-                UpgradeTransactionState::RollbackAfterCommit,
-                "accepted_supervisor_transition_failed",
-            )?;
-            persist_upgrade_transition(
-                &prepared.transaction_path,
-                &mut prepared.transaction,
-                UpgradeTransactionState::OperatorRecoveryRequired,
-                "accepted_supervisor_transition_recovery_required",
-            )?;
+            with_candidate_install_custody(paths, prepared, |prepared| {
+                prepared.transaction.stop_reason =
+                    Some("accepted_supervisor_transition_failed".to_string());
+                persist_upgrade_transition(
+                    &prepared.transaction_path,
+                    &mut prepared.transaction,
+                    UpgradeTransactionState::RollbackAfterCommit,
+                    "accepted_supervisor_transition_failed",
+                )?;
+                persist_upgrade_transition(
+                    &prepared.transaction_path,
+                    &mut prepared.transaction,
+                    UpgradeTransactionState::OperatorRecoveryRequired,
+                    "accepted_supervisor_transition_recovery_required",
+                )
+            })?;
             return Err(format!(
                 "workstation_upgrade_supervisor_transition_failed:{}:{error}",
                 prepared.transaction.transaction_id
             ));
         }
     }
-    prepared.transaction.dashboard_validation_summary = Some(validation.dashboard_summary);
-    prepared.transaction.presentation_validation_summary = Some(validation.presentation_summary);
-    prepared.transaction.terminal_result = Some("accepted".to_string());
-    write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
-    persist_upgrade_transition(
-        &prepared.transaction_path,
-        &mut prepared.transaction,
-        UpgradeTransactionState::Accepted,
-        "accepted",
-    )?;
-    if let Err(error) = clear_admission_drain(&prepared.admission_drain_path) {
-        prepared.transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        prepared.transaction.dashboard_validation_summary = Some(validation.dashboard_summary);
+        prepared.transaction.presentation_validation_summary =
+            Some(validation.presentation_summary);
+        prepared.transaction.terminal_result = Some("accepted".to_string());
+        write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
         persist_upgrade_transition(
             &prepared.transaction_path,
             &mut prepared.transaction,
-            UpgradeTransactionState::OperatorRecoveryRequired,
-            "operator_recovery_required",
+            UpgradeTransactionState::Accepted,
+            "accepted",
         )?;
-        return Err(error);
-    }
-    Ok(())
+        if let Err(error) = clear_admission_drain(&prepared.admission_drain_path) {
+            prepared.transaction.stop_reason =
+                Some("accepted_admission_drain_not_cleared".to_string());
+            persist_upgrade_transition(
+                &prepared.transaction_path,
+                &mut prepared.transaction,
+                UpgradeTransactionState::OperatorRecoveryRequired,
+                "operator_recovery_required",
+            )?;
+            return Err(error);
+        }
+        Ok(())
+    })
 }
 
 fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
@@ -15711,6 +15727,163 @@ mod tests {
     }
 
     #[test]
+    fn superseded_candidate_cannot_begin_post_commit_validation() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-post-commit-validation-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("post-commit-validation", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::GenerationCommitted;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let drain_before = fs::read(&admission_drain_path).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "post-commit-validation-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = begin_post_commit_validation(&paths, &mut prepared).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::GenerationCommitted
+        );
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert_eq!(fs::read(&admission_drain_path).unwrap(), drain_before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_accept_transaction() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-transaction-acceptance-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("transaction-acceptance", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::PostCommitValidating;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let drain_before = fs::read(&admission_drain_path).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "transaction-acceptance-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = accept_prepared_payload_transaction(
+            &paths,
+            &mut prepared,
+            PostCommitValidationReceipt {
+                dashboard_summary: "validated".to_string(),
+                presentation_summary: "validated".to_string(),
+            },
+            None,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::PostCommitValidating
+        );
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert_eq!(fs::read(&admission_drain_path).unwrap(), drain_before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn superseded_candidate_cannot_publish_runtime_transfer_start() {
         use crate::runtime_adoption::UpgradeTransactionState;
 
@@ -17401,7 +17574,7 @@ mod tests {
             validation.presentation_summary,
             "operator_journey_deferred_nonblocking"
         );
-        accept_prepared_payload_transaction(&mut prepared, validation, None).unwrap();
+        accept_prepared_payload_transaction(&paths, &mut prepared, validation, None).unwrap();
         let finalized = finalize_accepted_upgrade_for_root(&root).unwrap();
         assert_eq!(finalized["changed"], true);
         assert_eq!(finalized["state"], "old_generation_retirable");
