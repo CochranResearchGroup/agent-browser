@@ -114,7 +114,7 @@ Its W0 through W4 source later integrated into `main` as `e2bd73ff`.
 
 ## P190 | Advisory Candidate Build And Promotion Orchestrator
 
-State: OPEN
+State: PLANNED
 
 Current state: [Plan 0190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 and [issue #136](https://github.com/CochranResearchGroup/agent-browser/issues/136)
@@ -126,11 +126,9 @@ one production-shaped release artifact, test those exact bytes in an isolated
 development namespace, and promote them after merge when executable inputs are
 equivalent. Test runs also receive deterministic identity, deduplication,
 receipt-reuse, isolation, and cleanup rules. Policies 0051 and 0052 reject
-permanent coordinator or permission-service semantics. P190 is active on
-`platform/p190-advisory-candidate-orchestrator` at published checkpoint
-`bd82e3df` with draft PR #152. Its candidate build and workstation coordination
-remain in progress, while production-shaped qualification retains its later
-gate.
+permanent coordinator or permission-service semantics. P190 is not admitted
+for implementation and has no active-lane entry or worktree. P191 clears the
+prior checkout drift but does not itself activate P190.
 
 ## P169 | Challenge Countermeasure Control Plane
 

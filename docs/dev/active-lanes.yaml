@@ -31,12 +31,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: bd82e3df820cde35709defa160467c52bf4c04b6
+    checkpoint: 3430925f0cd20fef0df871a45299d981a9dc2d85
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
     validation_status: pending
-    validation_ref: bd82e3df820cde35709defa160467c52bf4c04b6
+    validation_ref: 3430925f0cd20fef0df871a45299d981a9dc2d85
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
     overlaps: [P169, P197]
