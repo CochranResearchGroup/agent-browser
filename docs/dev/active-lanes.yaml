@@ -52,15 +52,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 979b5cb8854b0a49980f2dff7fa7523ebc999544
+    checkpoint: 646bb8639ee0e6ab345c09b9b520e310b9a5f05c
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: Packet 8 exact stale-lock repair passes focused tests, format, strict Clippy, diff hygiene, and comprehensive Rust with nativeLane=0 supportLane=0 elapsedSeconds=656
-    validation_ref: 979b5cb8854b0a49980f2dff7fa7523ebc999544
+    validation_status: Packet 8 source passes focused tests, format, local strict Clippy, diff hygiene, and comprehensive Rust at 979b5cb8; 646bb863 repairs the Rust 1.98 CI lint and awaits fresh CI
+    validation_ref: 646bb8639ee0e6ab345c09b9b520e310b9a5f05c
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: P190 shared-documentation reconciliation remains; no further live replay is authorized
+    blocker: fresh CI and P190 shared-documentation reconciliation remain; no further live replay is authorized
     updated_at: 2026-09-16

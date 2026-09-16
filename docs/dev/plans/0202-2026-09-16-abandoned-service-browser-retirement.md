@@ -454,6 +454,14 @@ Packet 8 result at source checkpoint `979b5cb8854b0a49980f2dff7fa7523ebc999544`:
 - Comprehensive provider-free Rust requalification passed at the same source
   checkpoint with `nativeLane=0`, `supportLane=0`, and
   `elapsedSeconds=656`.
+- The first published Packet 8 CI run then exposed one Rust 1.98-only quality
+  diagnostic: `unnecessary_sort_by` at the lane-activity observation ordering
+  seam. Local Clippy 1.94.1 had accepted the exact code. Checkpoint
+  `646bb8639ee0e6ab345c09b9b520e310b9a5f05c` adopts the equivalent
+  `sort_by_key` form. Strict local Clippy, the focused abandoned-lane decision
+  matrix, format, selector output, and diff hygiene pass. The prior
+  comprehensive result remains applicable because ordering semantics and its
+  exercised behavior are unchanged; a fresh CI run must prove the 1.98 lint.
 - No browser replay, installed-runtime mutation, provider effect, or shared
   P190/P197 documentation edit occurred. Changed-surface validation is
   complete; shared-documentation reconciliation remains the next gate.
