@@ -120,6 +120,9 @@ try {
       .every((input) => input.category === 'source_control_metadata'),
   );
   assert.ok(closure.inputs.every((input) => /^[a-f0-9]{64}$/u.test(input.sha256)));
+  assert.ok(closure.inputs.every((input, index) => (
+    index === 0 || closure.inputs[index - 1].path < input.path
+  )));
 
   const rustFixtureClosure = {
     schemaVersion: 'agent-browser.executable-input-closure.v1',

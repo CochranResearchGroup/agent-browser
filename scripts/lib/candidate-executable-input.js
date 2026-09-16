@@ -37,6 +37,12 @@ function digestJson(value) {
   return sha256Bytes(JSON.stringify(value));
 }
 
+function compareCanonical(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 function splitMakeWords(value) {
   const words = [];
   let current = '';
@@ -74,7 +80,7 @@ function filesUnder(path) {
   const stat = lstatSync(path);
   if (!stat.isDirectory()) return [path];
   return readdirSync(path, { withFileTypes: true })
-    .sort((left, right) => left.name.localeCompare(right.name))
+    .sort((left, right) => compareCanonical(left.name, right.name))
     .flatMap((entry) => filesUnder(resolve(path, entry.name)));
 }
 
@@ -189,7 +195,7 @@ export function collectExecutableInputClosure({
     }
   }
   const inputs = [...inputsByPath.values()]
-    .sort((left, right) => left.path.localeCompare(right.path));
+    .sort((left, right) => compareCanonical(left.path, right.path));
   if (inputs.length === 0) fail('candidate_input_closure_empty', root);
 
   if (productionShaped) {
@@ -215,7 +221,7 @@ export function collectExecutableInputClosure({
       features: [...new Set(context.features ?? [])].sort(),
       reviewedEnvironmentInputs: Object.fromEntries(
         Object.entries(context.reviewedEnvironmentInputs ?? {}).sort(([left], [right]) =>
-          left.localeCompare(right)),
+          compareCanonical(left, right)),
       ),
     },
     inputs,
