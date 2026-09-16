@@ -43,15 +43,14 @@ verification, cooldown, intervention, and downstream admission. The task is
 principal-owned, exact-handle-bound, idempotent, deadline-bounded, and exercised
 through provider-free fixtures.
 
-Published checkpoint `38f7b1e2a51a25e6e9748130ea09b7015af38e67`
-implements one pure consumer-admission contract plus one shared Service adapter.
-Authentication Run calls that adapter before its first effect and durably
-retains the admission beside later authentication failure. Navigation calls the
-adapter inside its action handler, but a completion audit found that the shared
-dispatcher may perform confirmation, runtime-admission, recovery, or auto-launch
-work before it reaches that handler. A later navigation error also drops the
-computed admission from the response. Those two related findings reopen the
-navigation integration and supersede the prior docs-only remaining-state claim.
+Source checkpoint `210e28af` implements one pure consumer-admission contract
+plus one shared Service adapter. Authentication Run calls that adapter before
+its first effect and durably retains the admission beside later authentication
+failure. Navigation admission now wraps the outer command boundary before
+confirmation, runtime admission, recovery, auto-launch, or action dispatch. The
+outer response wrapper retains the typed admission beside any later navigation
+success or failure, and the inner handler rejects a challenged call that tries
+to bypass the preflight.
 
 P190 remains active on `platform/p190-advisory-candidate-orchestrator`. Its
 current implementation owns candidate build and workstation coordination. P197
@@ -178,10 +177,15 @@ installed-runtime, or production effect occurred.
 
 Draft PR #157 carries the published branch. Exact-head CI for `38f7b1e2` may
 finish as retained evidence, but it cannot establish merge readiness because
-the navigation ordering defect changes executable source. The bounded repair,
-refreshed applicable validation, and shared user-facing documentation surfaces
-remain before protected integration. P190 retains primary-writer custody of
-those documentation surfaces while the lanes overlap.
+the navigation ordering defect changed executable source afterward. Checkpoint
+`210e28af` hoists admission around the shared dispatcher and retains it on
+later failure responses. The outer-denial, inner-bypass, failure-projection,
+existing admission, route-confusion, and CDP stream derivation tests pass, as do
+format and strict workspace Clippy. The selector-recommended live CDP streaming
+smoke is excluded because it launches a browser outside this plan's explicit
+provider-free boundary. Refreshed exact-head CI and the shared user-facing
+documentation surfaces remain before protected integration. P190 retains
+primary-writer custody of those documentation surfaces while the lanes overlap.
 
 ## Validation And Exit
 
