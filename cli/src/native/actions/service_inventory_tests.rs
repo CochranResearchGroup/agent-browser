@@ -339,6 +339,124 @@ async fn test_service_browsers_via_actions_returns_last_health_observation() {
     assert!(state.browser.is_none());
 }
 #[tokio::test]
+async fn retained_dead_browser_owner_evidence_remains_readable_across_collections() {
+    let mut state = DaemonState::new();
+    let retained_state = json!({
+        "profiles": {
+            "Default": {
+                "id": "Default",
+                "name": "Default",
+                "profileOrigin": "agent_browser_owned",
+                "allocation": "shared_service",
+                "keyring": "basic_password_store",
+                "persistent": true
+            }
+        },
+        "sessions": {
+            "retained-default": {
+                "id": "retained-default",
+                "serviceName": "RetainedProfileFixture",
+                "agentName": "fixture-agent",
+                "taskName": "inspectRetainedOwner",
+                "profileId": "Default",
+                "browserIds": ["session:retained-default"]
+            },
+            "unrelated-active": {
+                "id": "unrelated-active",
+                "serviceName": "UnrelatedFixture",
+                "agentName": "other-agent",
+                "taskName": "preserveUnrelatedSession",
+                "profileId": "unrelated"
+            }
+        },
+        "browsers": {
+            "session:retained-default": {
+                "id": "session:retained-default",
+                "profileId": "Default",
+                "health": "process_exited",
+                "pid": null,
+                "activeSessionIds": []
+            }
+        },
+        "protectedBrowserOwnerObservations": {
+            "session:retained-default": {
+                "schemaVersion": "agent-browser.protected-browser-owner-observation.v1",
+                "source": "protected_lease_authority_receipt",
+                "operationalAuthority": false,
+                "authorityReceiptId": "effect-receipt:retained-default",
+                "ownerId": "owner:retained-default",
+                "ownerGeneration": 62,
+                "logicalBrowserId": "session:retained-default",
+                "daemonSessionRoute": "retained-default",
+                "processInstanceDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+                "processPid": 43210,
+                "ownerRevision": 9,
+                "observedAt": "2026-09-15T12:00:00Z",
+                "freshnessExpiresAt": "2026-09-15T12:00:30Z"
+            }
+        }
+    });
+
+    for (action, collection) in [
+        ("service_profiles", "profiles"),
+        ("service_sessions", "sessions"),
+        ("service_browsers", "browsers"),
+    ] {
+        let result = execute_command(
+            &json!({
+                "action": action,
+                "id": format!("retained-owner-{action}"),
+                "serviceState": retained_state.clone()
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(
+            result["success"], true,
+            "read-only {action} rejected retained dead-browser evidence: {result}"
+        );
+        assert_service_collection_response_contract(
+            &result["data"],
+            collection,
+            &format!("{action} response"),
+        );
+        if action == "service_sessions" {
+            assert_eq!(result["data"]["count"], 2);
+            assert!(result["data"]["sessions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|session| session["id"] == "unrelated-active"));
+        }
+        if action == "service_browsers" {
+            assert_eq!(
+                result["data"]["protectedBrowserOwnerObservations"]["session:retained-default"]
+                    ["ownerGeneration"],
+                62
+            );
+        }
+    }
+
+    let mut inconsistent_live_state = retained_state;
+    inconsistent_live_state["browsers"]["session:retained-default"]["health"] = json!("ready");
+    let rejected = execute_command(
+        &json!({
+            "action": "service_browsers",
+            "id": "retained-owner-inconsistent-live",
+            "serviceState": inconsistent_live_state
+        }),
+        &mut state,
+    )
+    .await;
+    assert_eq!(rejected["success"], false);
+    assert_eq!(
+        rejected["error"],
+        "protected_browser_owner_observation_invalid"
+    );
+
+    assert!(state.browser.is_none());
+}
+#[tokio::test]
 async fn test_service_profiles_via_actions_returns_profile_collection() {
     let mut state = DaemonState::new();
     let cmd = json!(

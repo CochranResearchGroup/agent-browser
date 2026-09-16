@@ -1043,6 +1043,18 @@ pub(crate) fn validate_protected_browser_owner_observation(
     session_id: &str,
     pid: Option<u32>,
 ) -> Result<(), String> {
+    validate_protected_browser_owner_observation_record(observation, browser_id, session_id)?;
+    if Some(observation.process_pid) != pid {
+        return Err("protected_browser_owner_observation_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn validate_protected_browser_owner_observation_record(
+    observation: &crate::native::service_model::ProtectedBrowserOwnerObservation,
+    browser_id: &str,
+    session_id: &str,
+) -> Result<(), String> {
     let observed_at = chrono::DateTime::parse_from_rfc3339(&observation.observed_at)
         .map_err(|_| "protected_browser_owner_observation_invalid".to_string())?;
     let freshness_expires_at =
@@ -1067,7 +1079,6 @@ pub(crate) fn validate_protected_browser_owner_observation(
         || observation.daemon_session_route != session_id
         || !valid_digest(&observation.process_instance_digest)
         || observation.process_pid <= 1
-        || Some(observation.process_pid) != pid
         || observation.owner_revision == 0
         || freshness_expires_at <= observed_at
         || freshness_expires_at - observed_at > chrono::Duration::seconds(60)
@@ -1075,6 +1086,34 @@ pub(crate) fn validate_protected_browser_owner_observation(
         return Err("protected_browser_owner_observation_invalid".to_string());
     }
     Ok(())
+}
+
+pub(crate) fn validate_protected_browser_owner_observation_for_inventory(
+    observation: &crate::native::service_model::ProtectedBrowserOwnerObservation,
+    browser: &BrowserProcess,
+) -> Result<(), String> {
+    // Inventory is an observational surface. A terminal browser may retain the
+    // last structurally valid owner receipt after its process PID is cleared.
+    // Accept that history without treating it as current process authority;
+    // live and nonterminal rows still require an exact PID binding.
+    validate_protected_browser_owner_observation_record(
+        observation,
+        &browser.id,
+        &observation.daemon_session_route,
+    )?;
+    if browser.pid == Some(observation.process_pid)
+        || (browser.pid.is_none()
+            && matches!(
+                browser.health,
+                BrowserHealth::NotStarted
+                    | BrowserHealth::ProcessExited
+                    | BrowserHealth::Closing
+                    | BrowserHealth::Faulted
+            ))
+    {
+        return Ok(());
+    }
+    Err("protected_browser_owner_observation_invalid".to_string())
 }
 
 pub(crate) fn remove_browser_operational_record(
