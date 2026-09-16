@@ -1,0 +1,162 @@
+# Plan 0197 | Challenge Consumer Integration
+
+Date: 2026-09-16
+
+Plan version: 1
+
+State: OPEN
+
+Consolidation: required
+
+Product lane: PL-CHALLENGE
+
+Lane: P197
+
+Parent plan: Plan 0187 W6
+
+Work item: `CochranResearchGroup/agent-browser#127`; issue #66 remains the
+separately live-gated challenge acceptance leaf
+
+Branch: `challenge/p197-consumer-integration`
+
+Target: `main`
+
+Integration: merge through the protected `main` workflow after provider-free
+W6 validation
+
+Source baseline: `faee8887fb420e8e46bd5a165ce6c44fa10059d2`
+
+## Objective
+
+Integrate authentication and navigation as the first two consumers of the
+provider-neutral challenge task. Both consumers must use one typed admission
+contract that verifies the completed challenge receipt, effective site policy,
+downstream intent, principal, and exact current tab before either consumer may
+continue. Preserve challenge outcome, admission outcome, and later consumer
+failure as separate facts.
+
+## Current State
+
+Plan 0187 W0 through W5 are integrated. Plan 0193 added the durable challenge
+task and one composite receipt for observation, decision, bounded resolution,
+verification, cooldown, intervention, and downstream admission. The task is
+principal-owned, exact-handle-bound, idempotent, deadline-bounded, and exercised
+through provider-free fixtures.
+
+Authentication Run and navigation do not yet consume that receipt. Their
+existing success or failure therefore cannot show whether challenge admission
+was checked, whether the checked site policy was current, or whether a later
+consumer failure happened after a successfully completed challenge.
+
+P190 remains active on `platform/p190-advisory-candidate-orchestrator`. Its
+current implementation owns candidate build and workstation coordination. P197
+owns the challenge-control contract plus the authentication and navigation
+adapters. P190 remains primary writer for candidate, installer, CLI-help,
+README, docs-command, and agent-skill surfaces while the lanes overlap. P197
+will not edit those shared presentation surfaces in this packet.
+
+## Contract
+
+The pure challenge-control crate will expose one consumer-admission decision
+over a completed `ChallengeTaskReceipt`. The request identifies:
+
+- a registered consumer kind, initially authentication or navigation;
+- the expected downstream intent;
+- the SHA-256 digest of the effective site policy; and
+- an attributable consumer operation identity.
+
+The pure decision validates that the receipt is terminal, admitted, effect-safe,
+bound to the same policy digest and downstream intent, and not in cooldown or
+intervention. It returns a typed receipt that keeps the challenge decision and
+consumer admission separate. It does not execute the consumer or reinterpret a
+later consumer failure as challenge failure.
+
+The Service adapter resolves the effective `SitePolicy`, hashes its canonical
+serialized value, verifies principal ownership and the exact current
+`ServiceTabHandle`, then invokes the pure contract. Authentication start and
+navigation call that same adapter before their first consumer effect. Requests
+without an explicit challenge task retain their current behavior unless the
+effective site policy requires challenge admission.
+
+## Consolidated Batch
+
+1. Freeze the pure consumer-admission request, decision, receipt, and failure
+   taxonomy with table-driven challenge-control tests.
+2. Add one Service adapter that resolves and hashes the effective site policy,
+   reloads the durable challenge receipt, and verifies principal, downstream
+   intent, and exact current tab binding.
+3. Integrate Authentication Run start through the adapter without adding
+   credentials, provider behavior, or a second challenge state machine.
+4. Integrate navigation through the same pre-effect adapter and prove denied or
+   stale admission prevents navigation dispatch.
+5. Prove that an admitted challenge followed by authentication or navigation
+   failure reports consumer failure while retaining the successful challenge
+   decision.
+6. Align only the request schema, Service contract metadata, field-role ledger,
+   generated client, and focused provider-free documentation needed for this
+   contract. Shared README, global CLI help, command docs, and agent-skill edits
+   remain deferred while P190 owns those surfaces.
+
+## Scope And Effect Boundary
+
+Authorized scope:
+
+- `crates/agent-browser-challenge-control/` consumer admission contract and
+  provider-free tests;
+- `cli/src/native/service_challenge_task.rs` or one narrow adjacent Service
+  adapter;
+- `cli/src/native/service_authentication_run.rs` and the navigation pre-effect
+  seam;
+- exact Service request schema, contract metadata, field-role ledger, generated
+  client, and focused provider-free fixtures;
+- this plan, active-lane projection, issue, pull-request, and integration
+  receipts.
+
+This plan does not authorize a browser launch, navigation against a browser,
+desktop input, CAPTCHA attempt, credential use, challenge retry, provider
+mutation, installation, shared-runtime mutation, production effect, or release.
+All validation is repository-owned and provider-free. Issue #66 retains every
+live Turnstile or hCaptcha acceptance action.
+
+## Delivery Sequence And Budget
+
+- Attempt 1: pure consumer contract and red-capable table tests.
+- Attempt 2: one shared Service admission adapter plus authentication and
+  navigation integration tests.
+- Attempt 3: contract parity, generated client, selected validation, and one
+  bounded correction pass if a defect was introduced by this packet.
+- Maximum work-unit attempts: 3.
+- Maximum review and rework cycles: 1.
+- Reassess after two checkpoints or 30 active minutes without outcome progress.
+- Overall effort ceiling: 300 active minutes through protected integration.
+
+No subagent, browser worker, provider operator, benchmark checkout, or runtime
+operator is assigned.
+
+## Validation And Exit
+
+Exit requires current evidence that:
+
+- the pure admission contract rejects nonterminal, withheld, mismatched-policy,
+  mismatched-intent, cooldown, intervention, and effectful receipts;
+- exact replay returns the same decision without executing a consumer;
+- Authentication Run and navigation both call the same Service adapter;
+- principal, effective site policy, downstream intent, and exact current tab
+  mismatches fail before consumer execution;
+- a later authentication or navigation failure remains a consumer failure and
+  does not rewrite challenge outcome or admission;
+- no provider name, desktop coordinate, selector, credential, or browser
+  implementation leaks into the pure contract;
+- challenge-control tests, focused Service and navigation tests, contract
+  parity, generated-client checks, format, strict workspace Clippy, and the
+  validation selector pass; and
+- the published exact source checkpoint enters `main` through a linked pull
+  request with applicable CI green.
+
+## Stop Condition
+
+Stop before any live or installed-runtime action. Replan if either consumer
+requires provider-specific logic, a second challenge lifecycle, a shared
+contract owned by P190, or a public surface beyond the bounded Service contract
+parity named above. A second semantic defect or any inability to prove
+pre-effect denial ends the implementation attempt without weakening the gate.

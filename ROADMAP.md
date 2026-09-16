@@ -83,7 +83,7 @@ Its W0 through W4 source later integrated into `main` as `e2bd73ff`.
 
 ## P190 | Advisory Candidate Build And Promotion Orchestrator
 
-State: PLANNED
+State: OPEN
 
 Current state: [Plan 0190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 and [issue #136](https://github.com/CochranResearchGroup/agent-browser/issues/136)
@@ -95,9 +95,11 @@ one production-shaped release artifact, test those exact bytes in an isolated
 development namespace, and promote them after merge when executable inputs are
 equivalent. Test runs also receive deterministic identity, deduplication,
 receipt-reuse, isolation, and cleanup rules. Policies 0051 and 0052 reject
-permanent coordinator or permission-service semantics. P190 is not admitted
-for implementation and has no active-lane entry or worktree. P191 clears the
-prior checkout drift but does not itself activate P190.
+permanent coordinator or permission-service semantics. P190 is active on
+`platform/p190-advisory-candidate-orchestrator` at published checkpoint
+`bd82e3df` with draft PR #152. Its candidate build and workstation coordination
+remain in progress, while production-shaped qualification retains its later
+gate.
 
 ## P169 | Challenge Countermeasure Control Plane
 
@@ -118,9 +120,12 @@ provider-free Service slice. [Plan 0193](docs/dev/plans/0193-2026-09-15-challeng
 is CLOSED after W5 source head `709641e9` merged as `81de07cf`. Source-head CI
 run 34993316164 and merge-commit CI run 34997057075 pass. W5 adds exact
 principal and retained-tab custody, digest-only replay, one composite terminal
-receipt, and bounded status and resource summaries. W6 consumer integration is
-next but remains unstarted and not admitted. Issue #66 retains the separately
-live-gated challenge acceptance leaf. This registration authorizes no challenge
+receipt, and bounded status and resource summaries.
+[Plan 0197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
+admits W6 on `challenge/p197-consumer-integration` from `main@faee8887`.
+Authentication and navigation will consume one provider-neutral admission
+contract through effective-site-policy and exact-tab adapters. Issue #66
+retains the separately live-gated challenge acceptance leaf. This registration authorizes no challenge
 attempt, retry, browser effect, provider effect, credential use, runtime
 mutation, installation, or release.
 
