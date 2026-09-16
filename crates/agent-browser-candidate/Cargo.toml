@@ -1,0 +1,14 @@
+[package]
+name = "agent-browser-candidate"
+version = "0.1.0"
+edition = "2021"
+description = "Pure candidate identity and advisory kernel for Agent Browser"
+license = "Apache-2.0"
+repository = "https://github.com/vercel-labs/agent-browser"
+publish = false
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+

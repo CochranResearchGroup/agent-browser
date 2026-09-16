@@ -1,27 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P190
-    product_lane: PL-PLATFORM
-    objective: Build the deterministic candidate identity, build coordination, and promotion advisory surface
-    plan: docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md
-    plan_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
-    branch: platform/p190-advisory-candidate-orchestrator
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 3430925f0cd20fef0df871a45299d981a9dc2d85
-    remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
-    integration_receipt: null
-    integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
-    validation_status: pending
-    validation_ref: 3430925f0cd20fef0df871a45299d981a9dc2d85
-    work_items: [CochranResearchGroup/agent-browser#136]
-    dependencies: []
-    overlaps: [P197]
-    reconciled_overlaps: [P197]
-    blocker: PR #152 remains draft while candidate build and workstation coordination continue; production-shaped qualification retains its later gate
-    updated_at: 2026-09-16
   - id: P197
     product_lane: PL-CHALLENGE
     objective: Integrate authentication and navigation through one provider-neutral challenge consumer-admission contract
@@ -31,15 +10,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 3f195331054cfded82f81ba22fe9f6ef80a09b75
+    checkpoint: 80efb9511f0c89ee637a61b1e4637393c77be1a4
     remote_ref: refs/remotes/origin/challenge/p197-consumer-integration
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free W6 validation
     validation_status: pending
     validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#127]
-    dependencies: [P169]
-    overlaps: [P190]
-    reconciled_overlaps: [P190]
-    blocker: refreshed exact-head Rust validation and shared user-facing documentation remain before integration; P190 retains primary-writer custody of those shared surfaces, and every live challenge effect stays with issue #66
+    dependencies: []
+    overlaps: [P202]
+    reconciled_overlaps: [P202]
+    blocker: refreshed exact-head validation and shared user-facing documentation remain before integration; P202 is the current primary writer for those shared surfaces, and every live challenge effect stays with issue #66
     updated_at: 2026-09-16

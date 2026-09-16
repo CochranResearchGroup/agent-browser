@@ -231,7 +231,7 @@ result.
 
 Use `scripts/ci/rust-tests.sh --focused <filter>` during implementation or to
 re-run one failed invariant. Use `--compartment <name>` for `lease-authority`,
-`transport`, `cli-native`, one of the narrower `cli-native-*` groups, `cli-workstation`,
+`candidate`, `transport`, `cli-native`, one of the narrower `cli-native-*` groups, `cli-workstation`,
 `cli-core`, or `cli-integration`, and `--list-compartments` for machine-readable
 discovery. The runner defaults
 `RUST_MIN_STACK` to 16 MiB so state-heavy async fixtures do not require

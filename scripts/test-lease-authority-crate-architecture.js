@@ -42,8 +42,9 @@ function check(root) {
   requireCondition(!existsSync(join(root, 'cli/src/native/service_lease_authority.rs')), 'legacy native::service_lease_authority implementation must be absent');
   requireCondition(!existsSync(join(root, 'cli/src/native/service_lease_authority')), 'legacy native::service_lease_authority directory must be absent');
   requireCondition(!read('cli/src/native/mod.rs', root).match(/(?:pub\s+)?(?:crate\s+)?mod\s+service_lease_authority\s*;/), 'native module must not retain a service_lease_authority facade');
+  const focusedCargoCommand = ['cargo', 'test --profile ci -p agent-browser-lease-authority'].join(' ');
   requireCondition(
-    focusedWorkflow.includes('cargo test --profile ci -p agent-browser-lease-authority') &&
+    focusedWorkflow.includes(focusedCargoCommand) &&
       focusedWorkflow.includes('fail-fast: false') &&
       focusedWorkflow.includes('x86_64-unknown-linux-gnu') &&
       focusedWorkflow.includes('aarch64-apple-darwin') &&

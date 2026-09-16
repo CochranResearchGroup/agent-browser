@@ -5053,10 +5053,10 @@ mod tests {
                 "activate_prepared_payload_transaction(prepared, &paths, isolated_root)",
                 "quiesce_existing_user_units(&paths)",
                 "commit_prepared_payload_transaction(&paths, &parsed, prepared)",
-                "begin_post_commit_validation(prepared)",
+                "begin_post_commit_validation(&paths, prepared)",
                 "reconcile_workstation_locked_for_upgrade(",
                 "validate_post_commit_transaction(&root, &paths, prepared)",
-                "if let Err(error) = accept_prepared_payload_transaction(\n            prepared,\n            validation,",
+                "if let Err(error) = accept_prepared_payload_transaction(\n            &paths,\n            prepared,\n            validation,",
             ],
         );
 

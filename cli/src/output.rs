@@ -5657,6 +5657,67 @@ Examples:
 "##
         }
 
+        // === Candidate orchestration ===
+        "candidate" => {
+            r##"
+agent-browser candidate - Build, test, inspect, or explicitly install a sealed candidate
+
+Usage: agent-browser candidate status [--json]
+       agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
+       agent-browser candidate build --repo-root <source-checkout> --artifact-class <fast_iteration|production_shaped> [--target <triple>] [--feature <name>] [--reviewed-environment-input <name=sha256>] [--retry-failed-operation <id>|--recover-active-operation <id>] <--dry-run|--apply> [--json]
+       agent-browser candidate test --repo-root <source-checkout> --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> --suite-revision <commit> --selection <candidate-kernel|candidate-build-adapter|candidate-cli> [--recover-active-run <id>] <--dry-run|--apply> [--json]
+       agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json]
+       agent-browser candidate recover <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
+       agent-browser candidate coordinate <queue|cancel-active|discard-queued|supersede|activate-queued> --request-id <id> --candidate-id <id> --artifact-id <id> [--operation-id <id>] --expected-revision <revision> --expected-fencing-generation <generation> [--json]
+
+Status projects the current workstation install transaction and durable
+coordination ledger into advisory candidate state. JSON output exposes that
+ledger as `coordinationLedger`. Inspect validates an explicit candidate
+manifest against its executable-input closure. Build dry-run reports the exact
+isolated command plan without writing state or compiling. Build apply uses an
+exclusive request claim, the repository Cargo safety wrapper, compiler dep-info,
+and immutable manifests to produce a sealed artifact below `cli/target` without
+touching an installed runtime. Production-shaped builds require clean source.
+Retry a failed claim only by passing its exact operation ID with
+`--retry-failed-operation`; the failed claim and any partial sealed directory
+are archived before the replacement claim is created. Recover an abandoned
+building claim with `--recover-active-operation <id>` only after its recorded
+owner PID is no longer live; the claim and partial artifacts are archived.
+Test dry-run validates the exact sealed artifact and source revision, then
+reports whether the identity would join, reuse, or start. Test apply accepts
+only the named provider-free suites, isolates HOME, runtime, temporary, Cargo,
+log, and receipt paths below `cli/target`, and never launches a browser or
+touches an installed runtime. Exact active runs join. Only successful hermetic
+receipts with terminal cleanup proof are reused.
+Recover an abandoned run with `--recover-active-run <id>` only after its exact
+recorded owner PID is no longer live; its active claim is archived before a new
+run may start.
+Install dry-run additionally
+validates the exact binary and sealed build artifact while creating no
+transaction or runtime state. Install apply is an explicit production effect:
+it binds the sealed artifact and coordination custody into the existing
+workstation transaction. An identical concurrent request joins and performs no
+second install.
+Recover delegates the exact transaction guard to the existing workstation
+resume, rollback, or zero-effect close action. It never selects the latest
+transaction implicitly.
+Coordinate applies one exact compare-and-swap ledger choice. Queue omits
+`--operation-id`; cancel-active, discard-queued, supersede, and activate-queued
+require it. These choices do not mutate a runtime.
+
+Examples:
+  agent-browser candidate status --json
+  agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json
+  agent-browser candidate build --repo-root . --artifact-class fast_iteration --dry-run --json
+  agent-browser candidate build --repo-root . --artifact-class production_shaped --apply --json
+  agent-browser candidate test --repo-root . --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --suite-revision <commit> --selection candidate-kernel --dry-run --json
+  agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json
+  agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json
+  agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json
+  agent-browser candidate coordinate queue --request-id queue-123 --candidate-id candidate-123 --artifact-id seal-123 --expected-revision 4 --expected-fencing-generation 2 --json
+"##
+        }
+
         // === Install ===
         "install" => {
             r##"
@@ -7503,6 +7564,13 @@ Dashboard:
   Guacamole PostgreSQL backup timer.
 
 Setup:
+  candidate status            Inspect advisory candidate and workstation state
+  candidate inspect           Validate a manifest against an executable-input closure
+  candidate build             Plan or explicitly build one isolated sealed artifact
+  candidate test              Plan or explicitly run named provider-free candidate suites
+  candidate install           Validate or explicitly install an exact sealed binary
+  candidate recover           Resume, roll back, or close one exact install transaction
+  candidate coordinate        Apply an exact queued, cancellation, discard, supersede, or activation choice
   install                    Install browser binaries
   install workstation        Install and reconcile the source-free Linux workstation
   install transactions       Inspect, resume, rollback, or close exact install transactions; zero-effect close uses an old-reader-safe terminal state

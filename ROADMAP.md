@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-15
+Updated: 2026-09-16
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -24,6 +24,22 @@ checkpoints. They do not define permanent product ownership. New substantive
 plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
+
+## P201 | X Display Live Occupancy
+
+State: CLOSED
+
+Current state: [Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
+and closed [issue #159](https://github.com/CochranResearchGroup/agent-browser/issues/159)
+record the bounded no-live repair. Merged
+[PR #166](https://github.com/CochranResearchGroup/agent-browser/pull/166)
+landed source head `72c7a859` in `main` as `a23764a1`. Live occupancy now comes
+from exact filesystem or abstract `/proc/net/unix` evidence or a matching X
+process; ordinary files and inactive socket inodes are exact reclaimable
+residue. All 11 focused regressions and complete changed-surface validation
+pass. Exact-head CI run `35110970667` passed every selected fast gate. No
+browser, X server, installed-runtime, provider, Service State, or retained
+profile effect occurred. Plan 0201 is closed.
 
 ## P200 | Cargo Scope Descendant Lifetime
 

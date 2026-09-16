@@ -293,6 +293,7 @@ pub(crate) struct RuntimeReplacementEffectReceipt {
 }
 
 trait RuntimeReplacementEffects {
+    fn preflight(&mut self) -> Result<(), String>;
     fn checkpoint(&mut self, receipt: &RuntimeReplacementEffectReceipt) -> Result<(), String>;
     fn close_session(&mut self, session_name: &str) -> Result<(), String>;
     fn browser_is_running(&mut self, identity: &RecordedProcessIdentity) -> Result<bool, String>;
@@ -307,23 +308,29 @@ const CLOSE_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const SOURCE_EXIT_TIMEOUT: Duration = Duration::from_secs(5);
 const SOURCE_EXIT_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
+type RuntimeReplacementFence<'a> = dyn FnMut(
+        &Path,
+        &mut crate::runtime_adoption::UpgradeTransaction,
+        Option<&RuntimeReplacementEffectReceipt>,
+    ) -> Result<(), String>
+    + 'a;
+
 struct LiveRuntimeReplacementEffects<'a> {
     transaction_path: &'a Path,
     transaction: &'a mut crate::runtime_adoption::UpgradeTransaction,
     source_binary: PathBuf,
     source_socket_dir: PathBuf,
     source_process: Option<VerifiedProcessTermination>,
+    fence: &'a mut RuntimeReplacementFence<'a>,
 }
 
 impl RuntimeReplacementEffects for LiveRuntimeReplacementEffects<'_> {
+    fn preflight(&mut self) -> Result<(), String> {
+        (self.fence)(self.transaction_path, self.transaction, None)
+    }
+
     fn checkpoint(&mut self, receipt: &RuntimeReplacementEffectReceipt) -> Result<(), String> {
-        self.transaction.successor_fields.insert(
-            UPGRADE_SUCCESSOR_EFFECT_RECEIPT_KEY.to_string(),
-            serde_json::to_value(receipt).map_err(|error| {
-                format!("runtime_replacement_effect_receipt_serialize_failed:{error}")
-            })?,
-        );
-        write_private_json_atomic(self.transaction_path, self.transaction)
+        (self.fence)(self.transaction_path, self.transaction, Some(receipt))
     }
 
     fn close_session(&mut self, session_name: &str) -> Result<(), String> {
@@ -448,14 +455,18 @@ impl RuntimeReplacementEffects for LiveRuntimeReplacementEffects<'_> {
     }
 }
 
-/// Execute the exact reviewed full-shutdown effects inside an already drained
-/// workstation upgrade transaction. Every checkpoint is persisted in that
-/// transaction before the next irreversible edge.
-pub(crate) fn execute_full_shutdown(
+/// Execute reviewed full-shutdown effects under a caller-supplied fence.
+///
+/// The fence performs a short preflight immediately before each process
+/// mutation and owns every durable receipt checkpoint. It must not retain its
+/// physical lock across the process convergence waits in this function.
+pub(crate) fn execute_full_shutdown_fenced(
     transaction_path: &Path,
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
     plan: &RuntimeReplacementPlan,
+    fence: &mut RuntimeReplacementFence<'_>,
 ) -> Result<RuntimeReplacementEffectReceipt, String> {
+    fence(transaction_path, transaction, None)?;
     bind_upgrade_transaction(transaction, plan)?;
     let authorization = authorization_from_upgrade_transaction(transaction)?;
     validate_full_shutdown_authorization(plan, &authorization)?;
@@ -477,8 +488,23 @@ pub(crate) fn execute_full_shutdown(
         source_binary,
         source_socket_dir: plan.selected_backend.socket_dir.clone(),
         source_process,
+        fence,
     };
     execute_full_shutdown_with(plan, &authorization, existing, &mut effects)
+}
+
+pub(crate) fn persist_full_shutdown_checkpoint(
+    transaction_path: &Path,
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    receipt: &RuntimeReplacementEffectReceipt,
+) -> Result<(), String> {
+    transaction.successor_fields.insert(
+        UPGRADE_SUCCESSOR_EFFECT_RECEIPT_KEY.to_string(),
+        serde_json::to_value(receipt).map_err(|error| {
+            format!("runtime_replacement_effect_receipt_serialize_failed:{error}")
+        })?,
+    );
+    write_private_json_atomic(transaction_path, transaction)
 }
 
 fn wait_for_source_exit(process: &VerifiedProcessTermination) -> Result<bool, String> {
@@ -613,14 +639,23 @@ fn execute_full_shutdown_with(
                 browser.logical_browser_id
             )
         })?;
-        let cooperative_close = browser.classification
-            == RuntimeClassification::CooperativeLiveOwner
-            && browser
+        let mut cooperative_close =
+            browser.classification == RuntimeClassification::CooperativeLiveOwner;
+        if cooperative_close {
+            for session in browser
                 .session_names
                 .iter()
                 .filter(|session| !receipt.closed_sessions.contains(session))
-                .all(|session| effects.close_session(session).is_ok());
+            {
+                effects.preflight()?;
+                if effects.close_session(session).is_err() {
+                    cooperative_close = false;
+                    break;
+                }
+            }
+        }
         if !cooperative_close || effects.browser_is_running(identity)? {
+            effects.preflight()?;
             effects.force_close_browser(identity)?;
             if !receipt
                 .forced_browser_ids
@@ -658,6 +693,7 @@ fn execute_full_shutdown_with(
     if effects.source_is_running()? {
         receipt.state = RuntimeReplacementEffectState::SourceRetiring;
         effects.checkpoint(&receipt)?;
+        effects.preflight()?;
         effects.retire_source()?;
     }
     if effects.source_is_running()? {
@@ -1147,9 +1183,15 @@ mod tests {
             census: StableRuntimeCensus,
             source_running: bool,
             browser_running: bool,
+            preflight_error: Option<String>,
         }
 
         impl RuntimeReplacementEffects for FakeEffects {
+            fn preflight(&mut self) -> Result<(), String> {
+                self.calls.push("preflight".to_string());
+                self.preflight_error.clone().map_or(Ok(()), Err)
+            }
+
             fn checkpoint(
                 &mut self,
                 receipt: &RuntimeReplacementEffectReceipt,
@@ -1219,6 +1261,7 @@ mod tests {
             census: final_census,
             source_running: true,
             browser_running: true,
+            preflight_error: None,
         };
 
         let authorization = authorization(&plan);
@@ -1234,7 +1277,9 @@ mod tests {
             vec![
                 "checkpoint:Planned",
                 "checkpoint:BrowsersClosing",
+                "preflight",
                 "close:research",
+                "preflight",
                 "force-browser:84",
                 "browser-running:84",
                 "checkpoint:BrowsersClosing",
@@ -1242,6 +1287,7 @@ mod tests {
                 "checkpoint:BrowsersClosed",
                 "source-running",
                 "checkpoint:SourceRetiring",
+                "preflight",
                 "retire-source",
                 "source-running",
                 "census",
@@ -1255,5 +1301,30 @@ mod tests {
                 .expect("source-absent replay should remain idempotent");
         assert_eq!(replayed, receipt);
         assert_eq!(effects.calls, vec!["source-running", "census"]);
+
+        let mut fenced = FakeEffects {
+            calls: Vec::new(),
+            census: StableRuntimeCensus {
+                schema_version: RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+                digest: "e".repeat(64),
+                registry_revision: 13,
+                activation_allowed: true,
+                records: Vec::new(),
+            },
+            source_running: true,
+            browser_running: true,
+            preflight_error: Some("candidate_install_custody_lost:operation-a".to_string()),
+        };
+        let error = execute_full_shutdown_with(&plan, &authorization, None, &mut fenced)
+            .expect_err("lost custody must stop before the first process mutation");
+        assert_eq!(error, "candidate_install_custody_lost:operation-a");
+        assert_eq!(
+            fenced.calls,
+            vec![
+                "checkpoint:Planned",
+                "checkpoint:BrowsersClosing",
+                "preflight"
+            ]
+        );
     }
 }

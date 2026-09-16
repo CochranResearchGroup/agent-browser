@@ -1,6 +1,10 @@
 #![recursion_limit = "512"]
 
 mod agent_env;
+mod candidate;
+mod candidate_build;
+mod candidate_coordination;
+mod candidate_test;
 mod chat;
 mod color;
 mod commands;
@@ -2027,6 +2031,12 @@ fn main() {
 
     if clean.is_empty() {
         print_help();
+        return;
+    }
+
+    // Candidate inspection is read-only and must never launch a browser daemon.
+    if clean.first().map(|s| s.as_str()) == Some("candidate") {
+        candidate::run_candidate_command(&clean, flags.json);
         return;
     }
 
