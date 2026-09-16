@@ -1372,7 +1372,7 @@ fn resume_prepared_payload_transaction(
                 error,
             ));
         }
-        if let Err(error) = promote_dashboard_candidate_to_managed_backend(args, prepared) {
+        if let Err(error) = promote_dashboard_candidate_to_managed_backend(&paths, args, prepared) {
             return Err(rollback_resumed_transaction(
                 &paths,
                 prepared,
@@ -3447,7 +3447,7 @@ fn run_workstation_install(args: &[String]) {
                     })
             } else {
                 if let Err(error) =
-                    promote_dashboard_candidate_to_managed_backend(&parsed, prepared)
+                    promote_dashboard_candidate_to_managed_backend(&paths, &parsed, prepared)
                 {
                     let rollback = rollback_prepared_payload_transaction(
                         &paths,
@@ -10654,6 +10654,8 @@ fn prepare_dashboard_candidate_for_transaction(
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
+    let paths = install_paths(root);
+    with_candidate_install_custody(&paths, prepared, |_| Ok(()))?;
     let shadow_port = args
         .dashboard_port
         .checked_add(2)
@@ -10704,23 +10706,25 @@ fn prepare_dashboard_candidate_for_transaction(
         .as_mut()
         .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
         .backend = backend.clone();
-    let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
-    let registry = if ingress_path.is_file() {
-        repository.load()?
-    } else {
-        repository.initialize(crate::dashboard_ingress::DashboardBackend::new(
-            "bootstrap-unselected",
-            args.dashboard_port.saturating_add(1),
-            "unselected",
-        ))?
-    };
-    let staged = repository.stage_candidate(registry.revision, backend)?;
-    prepared
-        .dashboard_candidate
-        .as_mut()
-        .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
-        .staged_revision = staged.revision;
-    Ok(())
+    with_candidate_install_custody(&paths, prepared, |prepared| {
+        let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
+        let registry = if ingress_path.is_file() {
+            repository.load()?
+        } else {
+            repository.initialize(crate::dashboard_ingress::DashboardBackend::new(
+                "bootstrap-unselected",
+                args.dashboard_port.saturating_add(1),
+                "unselected",
+            ))?
+        };
+        let staged = repository.stage_candidate(registry.revision, backend)?;
+        prepared
+            .dashboard_candidate
+            .as_mut()
+            .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
+            .staged_revision = staged.revision;
+        Ok(())
+    })
 }
 
 fn wait_for_dashboard_candidate_identity(
@@ -10878,9 +10882,11 @@ fn wait_for_dashboard_candidate_commit(
 /// after the latter serves the identical runtime manifest. A presentation
 /// receipt is preserved when available, but is not an installation commit gate.
 fn promote_dashboard_candidate_to_managed_backend(
+    paths: &InstallPaths,
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
     let managed_port = args
         .dashboard_port
         .checked_add(1)
@@ -10900,40 +10906,44 @@ fn promote_dashboard_candidate_to_managed_backend(
         DASHBOARD_CANDIDATE_START_TIMEOUT,
     )?;
 
-    let candidate = prepared
-        .dashboard_candidate
-        .as_mut()
-        .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?;
-    let repository =
-        crate::dashboard_ingress::DashboardIngressRepository::new(&candidate.ingress_path);
-    let registry = repository.load()?;
-    if registry.selected_backend() == &managed_backend {
-        if let Some(staged) = registry.candidate_backend() {
-            return Err(format!(
-                "dashboard managed backend is already selected while conflicting candidate generation {} remains staged",
-                staged.generation_id
-            ));
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        let candidate = prepared
+            .dashboard_candidate
+            .as_mut()
+            .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?;
+        let repository =
+            crate::dashboard_ingress::DashboardIngressRepository::new(&candidate.ingress_path);
+        let registry = repository.load()?;
+        if registry.selected_backend() == &managed_backend {
+            if let Some(staged) = registry.candidate_backend() {
+                return Err(format!(
+                    "dashboard managed backend is already selected while conflicting candidate generation {} remains staged",
+                    staged.generation_id
+                ));
+            }
+            return Ok(());
         }
-        return stop_prepared_dashboard_candidate(prepared);
-    }
-    let receipt = registry
-        .last_presentation_receipt()
-        .filter(|receipt| {
-            receipt.dashboard_deployment_generation == candidate.backend.generation_id
-                && receipt.state == crate::runtime_adoption::PresentationState::Ready
-        })
-        .cloned();
-    let staged = repository.stage_candidate(registry.revision, managed_backend)?;
-    if let Some(receipt) = receipt {
-        repository.commit_candidate(
-            staged.revision,
-            crate::dashboard_ingress::CandidateOperatorJourney::ready(
-                crate::dashboard_ingress::PresentationEvidence::from_ready_receipt(&receipt)?,
-            ),
-        )?;
-    } else {
-        repository.commit_candidate_deployment(staged.revision)?;
-    }
+        let receipt = registry
+            .last_presentation_receipt()
+            .filter(|receipt| {
+                receipt.dashboard_deployment_generation == candidate.backend.generation_id
+                    && receipt.state == crate::runtime_adoption::PresentationState::Ready
+            })
+            .cloned();
+        let staged = repository.stage_candidate(registry.revision, managed_backend)?;
+        if let Some(receipt) = receipt {
+            repository.commit_candidate(
+                staged.revision,
+                crate::dashboard_ingress::CandidateOperatorJourney::ready(
+                    crate::dashboard_ingress::PresentationEvidence::from_ready_receipt(&receipt)?,
+                ),
+            )?;
+        } else {
+            repository.commit_candidate_deployment(staged.revision)?;
+        }
+        Ok(())
+    })?;
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
     stop_prepared_dashboard_candidate(prepared)
 }
 
@@ -17595,7 +17605,7 @@ mod tests {
             guacamole_port: 8092,
         };
 
-        promote_dashboard_candidate_to_managed_backend(&args, &mut prepared).unwrap();
+        promote_dashboard_candidate_to_managed_backend(&paths, &args, &mut prepared).unwrap();
         server.join().unwrap();
         let registry = repository.load().unwrap();
         assert_eq!(registry.selected_backend(), &managed_backend);
@@ -17603,6 +17613,167 @@ mod tests {
         assert_eq!(registry.revision, 1);
 
         fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_promote_dashboard_ingress() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-managed-dashboard-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let ingress_path = root.join(".agent-browser/dashboard-ingress.json");
+        let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
+        let initial = repository
+            .initialize(crate::dashboard_ingress::DashboardBackend::new(
+                "generation-old",
+                4849,
+                "old-manifest",
+            ))
+            .unwrap();
+        let candidate_backend = crate::dashboard_ingress::DashboardBackend::new(
+            "candidate-a",
+            4850,
+            "candidate-manifest",
+        );
+        let staged = repository
+            .stage_candidate(initial.revision, candidate_backend.clone())
+            .unwrap();
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("dashboard-promotion", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path(&root, &transaction.transaction_id),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: root.join("admission-drain.json"),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: Some(PreparedDashboardCandidate {
+                child: None,
+                backend: candidate_backend,
+                ingress_path: ingress_path.clone(),
+                staged_revision: staged.revision,
+            }),
+        };
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4850,
+            guacamole_port: 8092,
+        };
+        let ingress_before = fs::read(&ingress_path).unwrap();
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "dashboard-promotion-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = promote_dashboard_candidate_to_managed_backend(&paths, &args, &mut prepared)
+            .unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&ingress_path).unwrap(), ingress_before);
+        fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_start_dashboard_shadow() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-dashboard-shadow-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("dashboard-shadow", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path(&root, &transaction.transaction_id),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: root.join("admission-drain.json"),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4850,
+            guacamole_port: 8092,
+        };
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "dashboard-shadow-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error =
+            prepare_dashboard_candidate_for_transaction(&root, &args, &mut prepared).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert!(prepared.dashboard_candidate.is_none());
+        assert!(!root.join(".agent-browser/dashboard-ingress.json").exists());
         fs::remove_dir_all(root).unwrap();
     }
 
