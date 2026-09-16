@@ -68,6 +68,7 @@ pub enum InputCategory {
     EmbeddedAsset,
     PackageVersion,
     ToolchainConfiguration,
+    SourceControlMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

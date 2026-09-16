@@ -43,6 +43,17 @@ function toolchainAndHost(repoRoot) {
   return { toolchain, host };
 }
 
+function sourceControlRoots(repoRoot) {
+  const resolveGitPath = (argument) => {
+    const value = command('git', ['rev-parse', argument], repoRoot).trim();
+    return realpathSync(resolve(repoRoot, value));
+  };
+  return {
+    common: resolveGitPath('--git-common-dir'),
+    worktree: resolveGitPath('--git-dir'),
+  };
+}
+
 export function parseCandidateBuildArguments(argv) {
   let repoRoot = null;
   let artifactClass = null;
@@ -155,6 +166,8 @@ export async function runCandidateBuild(argv, dependencies = {}) {
   const adapter = dependencies.adapter ?? createCandidateBuildFilesystemAdapter({
     repoRoot: parsed.repoRoot,
     sourceReader: readSource,
+    sourceControlRoots: dependencies.sourceControlRoots
+      ?? sourceControlRoots(parsed.repoRoot),
     retryFailedOperationId: parsed.retryFailedOperationId,
     recoverActiveOperationId: parsed.recoverActiveOperationId,
   });

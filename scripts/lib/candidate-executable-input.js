@@ -78,19 +78,44 @@ function filesUnder(path) {
     .flatMap((entry) => filesUnder(resolve(path, entry.name)));
 }
 
-function repositoryPath(repoRoot, path) {
+function pathWithin(root, path) {
+  return path === root || path.startsWith(`${root}${sep}`);
+}
+
+function repositoryPath(repoRoot, path, sourceControlRoots = {}) {
   const absolute = realpathSync(isAbsolute(path) ? path : resolve(repoRoot, path));
-  const normalizedRoot = `${realpathSync(repoRoot)}${sep}`;
-  if (absolute !== realpathSync(repoRoot) && !absolute.startsWith(normalizedRoot)) {
-    fail('candidate_input_outside_repository', absolute);
+  const repositoryRoot = realpathSync(repoRoot);
+  if (pathWithin(repositoryRoot, absolute)) {
+    return {
+      absolute,
+      relative: relative(repositoryRoot, absolute).split(sep).join('/'),
+    };
   }
-  return {
-    absolute,
-    relative: relative(realpathSync(repoRoot), absolute).split(sep).join('/'),
-  };
+
+  // Linked worktrees keep the branch ref and packed refs in the shared Git
+  // directory. Cargo records those exact files when build metadata reads the
+  // source revision, so retain their bytes under stable virtual paths rather
+  // than either rejecting them or leaking machine-specific absolute paths.
+  for (const [name, configuredRoot] of [
+    ['worktree', sourceControlRoots.worktree],
+    ['common', sourceControlRoots.common],
+  ]) {
+    if (!configuredRoot) continue;
+    const sourceControlRoot = realpathSync(configuredRoot);
+    if (pathWithin(sourceControlRoot, absolute)) {
+      const suffix = relative(sourceControlRoot, absolute).split(sep).join('/');
+      return {
+        absolute,
+        relative: `.source-control/${name}/${suffix}`,
+      };
+    }
+  }
+
+  fail('candidate_input_outside_repository', absolute);
 }
 
 function category(path) {
+  if (path.startsWith('.source-control/')) return 'source_control_metadata';
   if (path.endsWith('.rs') && path.split('/').at(-1) === 'build.rs') return 'build_script';
   if (path.endsWith('.rs')) return 'rust_source';
   if (path.endsWith('Cargo.toml')) return 'cargo_manifest';
@@ -134,24 +159,25 @@ export function collectExecutableInputClosure({
   recursiveRoots = [],
   context,
   productionShaped = false,
+  sourceControlRoots = {},
 }) {
   assertContext(context);
   const root = realpathSync(repoRoot);
   const paths = new Set(requiredPaths);
   for (const depInfoPath of depInfoPaths) {
-    const depInfo = repositoryPath(root, depInfoPath);
+    const depInfo = repositoryPath(root, depInfoPath, sourceControlRoots);
     for (const path of parseCargoDepInfo(readFileSync(depInfo.absolute, 'utf8'))) {
       paths.add(path);
     }
   }
   for (const recursiveRoot of recursiveRoots) {
-    const directory = repositoryPath(root, recursiveRoot);
+    const directory = repositoryPath(root, recursiveRoot, sourceControlRoots);
     for (const path of filesUnder(directory.absolute)) paths.add(path);
   }
 
   const inputsByPath = new Map();
   for (const path of paths) {
-    const repositoryInput = repositoryPath(root, path);
+    const repositoryInput = repositoryPath(root, path, sourceControlRoots);
     if (!repositoryInput.relative) continue;
     inputsByPath.set(repositoryInput.relative, {
       path: repositoryInput.relative,

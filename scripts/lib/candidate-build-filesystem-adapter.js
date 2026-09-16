@@ -160,6 +160,7 @@ export function createCandidateBuildFilesystemAdapter({
   commandRunner = defaultCommandRunner,
   operationIdFactory = () => `candidate-build-${randomUUID()}`,
   sourceReader = null,
+  sourceControlRoots = {},
   retryFailedOperationId = null,
   recoverActiveOperationId = null,
   ownerPid = process.pid,
@@ -467,6 +468,7 @@ export function createCandidateBuildFilesystemAdapter({
           reviewedEnvironmentInputs: plan.reviewedEnvironmentInputs,
         },
         productionShaped: plan.artifactClass === 'production_shaped',
+        sourceControlRoots,
       });
       const support = createBuildSupportManifest(closure);
       const supportBytes = encodeBuildSupportManifest(support);
