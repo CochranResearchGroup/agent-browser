@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 19
+Plan version: 21
 
 State: OPEN
 
@@ -66,9 +66,10 @@ are green at source checkpoint
 `844eba2671681cd3e0c884a9cae5c9f839d6d565`. The final two-axis published-diff
 review then found that the reviewed identity still omitted descendants, so a
 same-root replacement child set could become the freshly sealed plan. Packet
-10 owns that one provider-free binding repair. Packet 11 consumed the one
-operator-authorized real-browser replay and failed at the terminal status
-harness assertion. No additional browser replay is authorized.
+10 owns that one provider-free binding repair. Packet 11 exposed a terminal
+status harness-contract mismatch. Packet 12 corrected that mismatch
+provider-free and the one renewed real-browser acceptance passed. No additional
+browser replay is authorized.
 
 P190 and P197 remain active. P190 has no expected P202 source overlap but is
 the current writer for shared CLI help, README, agent skill, and command docs.
@@ -671,6 +672,51 @@ Packet 11 result:
   complete. A provider-free harness correction may align terminal coherence
   with the existing status projection, but another real-browser run requires
   renewed operator authority.
+
+## Corrected Acceptance Packet 12
+
+On 2026-09-16 the operator authorized correction of the diagnosed harness
+contract and one additional isolated real-browser attempt.
+
+- The provider-free correction requires the reconciled terminal status to omit
+  the browser operational row and process identity while retaining exactly one
+  `terminal/satisfied` runtime lifecycle record and one retirement receipt.
+- A focused Node contract test covers the accepted terminal projection plus
+  controls for a lingering operational row, missing lifecycle evidence, and a
+  missing receipt. It failed red before the extracted contract helper existed.
+- The live harness consumes the same helper. No Rust source, retirement
+  transaction, process signaling, cleanup scope, installed runtime, provider,
+  production state, protected profile, or foreign process behavior changes.
+- Validate the focused contract, Node syntax, diff hygiene, and repository
+  validation selection before effect. Reuse the already built exact Rust
+  binary because no executable Rust input changed.
+- Run the isolated `pnpm test:service-resource-gc-live` harness exactly once.
+  Preserve any failure without retry and always take a fresh process and
+  temporary-directory residue census.
+
+Packet 12 result:
+
+- The focused contract failed red before the extracted helper existed, then
+  passed with controls for a lingering browser row, missing terminal lifecycle,
+  and missing retirement receipt. All three Node files parse and diff hygiene
+  passes.
+- The changed-surface selector required the release-asset fixture and complete
+  service-client lane because the package script and smoke files changed. Both
+  passed before the browser effect.
+- The sole renewed `pnpm test:service-resource-gc-live` invocation passed:
+  `service-resource-gc-live: ok managed_pid=1969 helpers=13
+  unrelated_protected=true terminal_receipt=true`.
+- The run reused binary SHA-256
+  `cca0c54b94ecf07329c9c405e78350038833b15759ac7a64e6b4559b2556bc29`;
+  no Rust source or executable input changed after its build.
+- Fresh post-run evidence at `2026-09-16T17:11:08-05:00` found no matching
+  fixture process and no `ab-managed-resource-gc-*` temporary directory.
+  Aggregate host counts were 49 Chrome processes and 8 agent-browser processes;
+  none matched the generated fixture namespace.
+- Isolated exact-artifact real-browser acceptance is complete. The remaining
+  completion gate is reconciliation of the four P190-owned user-facing
+  documentation files after P190 actually integrates or explicitly hands off
+  writer custody.
 
 ## Stop Condition
 

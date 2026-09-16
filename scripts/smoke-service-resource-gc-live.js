@@ -11,6 +11,7 @@ import {
   parseJsonOutput,
   runCli,
 } from './smoke-utils.js';
+import { assertTerminalRetirementState } from './service-resource-gc-live-contract.js';
 
 const BIN = new URL('../cli/target/debug/agent-browser', import.meta.url).pathname;
 const CHROME = existsSync('/opt/google/chrome/chrome')
@@ -341,21 +342,7 @@ async function main() {
     throw new Error('Managed Chrome profile lock survived GC');
   }
   const terminalState = await readAuthoritativeState('terminal authoritative Service State');
-  if (
-    terminalState.browsers?.[browserId]?.health !== 'process_exited' ||
-    terminalState.browsers?.[browserId]?.pid != null ||
-    terminalState.browserProcessIdentities?.[browserId] ||
-    terminalState.runtimeOwnerRegistry?.lifecycleRecords?.[browserId]?.lifecycleState !== 'terminal' ||
-    terminalState.runtimeOwnerRegistry?.lifecycleRecords?.[browserId]?.cleanupObligationState !== 'satisfied'
-  ) {
-    throw new Error(`Terminal Service State is incoherent: ${JSON.stringify(terminalState.browsers?.[browserId])}`);
-  }
-  const receipts = Object.values(terminalState.abandonedBrowserRetirements ?? {}).filter(
-    (transaction) => transaction.plan?.browserId === browserId && transaction.receipt,
-  );
-  if (receipts.length !== 1) {
-    throw new Error(`Expected one terminal retirement receipt: ${JSON.stringify(receipts)}`);
-  }
+  assertTerminalRetirementState(terminalState, browserId);
   if (!pidRunning(unrelated.pid)) throw new Error('GC terminated unrelated Chrome');
   if (!groupRunning(protectedGroup)) throw new Error('GC terminated the protected profile-holder');
 

@@ -56,11 +56,11 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: provider-free and exact-head CI green; Packet 11 single real-browser attempt failed at a terminal status harness-contract mismatch with no fixture residue
+    validation_status: provider-free, selected changed-surface checks, and Packet 12 isolated exact-artifact real-browser acceptance green; exact-head CI pending publication
     validation_ref: e727162e156b161cb2fff51dbcadcffeedb0d3fa
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: real-browser acceptance remains failed after the sole authorized attempt; another run requires renewed operator authority, and P190 shared-documentation reconciliation remains
+    blocker: P190 shared-documentation reconciliation remains; PR #152 is not yet integrated and has not handed off its four shared files
     updated_at: 2026-09-16
