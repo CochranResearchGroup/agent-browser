@@ -18,6 +18,9 @@ cli/*.o
 *.log
 npm-debug.log*
 
+# Local Codex operational receipts
+.codex/wake/
+
 # IDE
 .idea/
 .vscode/
