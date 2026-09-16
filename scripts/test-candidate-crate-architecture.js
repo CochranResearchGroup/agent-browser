@@ -49,6 +49,35 @@ requireCondition(
   'normal Rust test entrypoint must run candidate crate tests',
 );
 requireCondition(
+  read('package.json').includes('"test:candidate-executable-input"'),
+  'package scripts must expose the provider-free candidate input collector test',
+);
+requireCondition(
+  existsSync(join(repoRoot, 'scripts/lib/candidate-executable-input.js'))
+    && existsSync(join(repoRoot, 'scripts/test-candidate-executable-input.js')),
+  'candidate executable-input collector and focused test must exist',
+);
+
+const inputCollector = read('scripts/lib/candidate-executable-input.js');
+for (const requiredBoundary of [
+  'parseCargoDepInfo',
+  'realpathSync',
+  'candidate_input_outside_repository',
+  'candidate_dashboard_placeholder',
+  'reviewedEnvironmentInputs',
+]) {
+  requireCondition(
+    inputCollector.includes(requiredBoundary),
+    `candidate input collector must retain boundary: ${requiredBoundary}`,
+  );
+}
+for (const forbiddenEffect of ['node:child_process', 'execFile', 'spawn(', 'process.env']) {
+  requireCondition(
+    !inputCollector.includes(forbiddenEffect),
+    `candidate input collector must remain provider-free and non-executing: ${forbiddenEffect}`,
+  );
+}
+requireCondition(
   read('cli/Cargo.toml').includes('agent-browser-candidate = { path = "../crates/agent-browser-candidate" }'),
   'CLI adapter must depend directly on the candidate kernel',
 );
