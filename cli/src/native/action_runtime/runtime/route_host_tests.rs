@@ -2579,6 +2579,7 @@ fn custom_profile_path_does_not_become_a_managed_runtime_profile() {
         "executablePath": "/bin/false",
         "profile": user_data_dir.display().to_string(),
         "profileId": profile_id,
+        "runtimeProfile": profile_id,
     });
     let mut options = LaunchOptions::default();
 
@@ -2616,12 +2617,37 @@ fn custom_service_profile_id_does_not_become_a_runtime_profile_source() {
     assert_eq!(runtime_profile_from_sources(&command, false), None);
     assert_eq!(
         runtime_profile_from_sources(
+            &json!({
+                "runtimeProfile": "custom:14805924951506933012",
+                "profile": "/tmp/custom-profile",
+            }),
+            false,
+        ),
+        None
+    );
+    assert_eq!(
+        runtime_profile_from_sources(
             &json!({"runtimeProfile": "managed-profile", "profileId": "custom:fixture"}),
             false,
         )
         .as_deref(),
         Some("managed-profile")
     );
+}
+
+#[test]
+fn explicit_custom_runtime_profile_keeps_only_the_filesystem_profile_identity() {
+    let mut options = LaunchOptions::default();
+    apply_explicit_launch_identity_from_command(
+        &mut options,
+        &json!({
+            "runtimeProfile": "custom:14805924951506933012",
+            "profile": "/tmp/custom-profile",
+        }),
+    );
+
+    assert_eq!(options.profile.as_deref(), Some("/tmp/custom-profile"));
+    assert_eq!(options.runtime_profile, None);
 }
 
 #[test]

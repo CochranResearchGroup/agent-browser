@@ -15,7 +15,7 @@ Work items: `CochranResearchGroup/agent-browser#87`, reopened
 repairs `CochranResearchGroup/agent-browser#143` and
 `CochranResearchGroup/agent-browser#151`
 
-Branch: `fix/post-install-acceptance-repairs`
+Branch: `fix/issue-131-explicit-custom-runtime-profile`
 
 Target: `main`
 
@@ -58,11 +58,19 @@ The production transaction reached accepted revision 25 and finalized after
 bounded repair of two newly exposed installer defects. The sealed Guacamole
 extension tree inherited owner-only modes and the native prestart path ran
 retained-session selection before deriving its stable self-declared subject.
-The installed runtime is coherent and doctor passes from the installed binary,
-but disposable acceptance reproduced #131's original `custom:<id>` validation
-failure before effect. Issue #131 is reopened. This plan now owns one
-consolidated follow-up source batch for those three acceptance defects before a
-replacement candidate is built.
+The first follow-up batch entered `main` through PR #153 at merge commit
+`7b5a88dc9de10f6a7508aed746ecb5b87830c256`. Replacement generation
+`0.28.0-a4d5d9fcbee4-1cb94cb6d3ae`, binary SHA-256
+`a4d5d9fcbee41ff08e982ecc13eb052091bc7672b576eaf595f003e925267115`,
+installed cleanly and doctor passed. A targeted Guacamole web-container recreate
+proved the sealed extension readable with directory mode `0555`, file mode
+`0444`, HTTP 200, and PostgreSQL and guacd identities unchanged.
+
+Disposable acceptance still failed before effect because the access-plan shape
+could carry the opaque `custom:<id>` in `runtimeProfile`, while the first patch
+sanitized only `profileId`. The task-owned session and profile were closed and
+cleaned. This plan owns one final narrow decoder correction before another
+candidate is considered.
 
 ## Consolidated Batch
 
@@ -89,6 +97,10 @@ replacement candidate is built.
 7. Requalify the changed Rust surfaces, integrate once, then perform one
    replacement production build and transaction because executable inputs
    changed after the first candidate's failed acceptance.
+8. Sanitize opaque service profile IDs at both `runtimeProfile` and `profileId`
+   decoding boundaries, prove the full explicit launch-hint shape retains only
+   its filesystem path identity, then integrate and install at most one further
+   candidate if those executable inputs pass qualification.
 
 ## Scope
 
@@ -107,8 +119,9 @@ replacement candidate is built.
 - Do not widen into issue #143 retained-profile inventory projection.
 - Do not perform authenticated site work, tenant mutation, challenge solving,
   profile reset, credential use, or formal release publication.
-- Do not build more than the one replacement production candidate now required
-  by changed executable inputs and the failed #131 acceptance criterion.
+- Do not rebuild without changed executable inputs and a named failed acceptance
+  criterion. After the installed `runtimeProfile` decoder failure, permit at
+  most one further production candidate for the final narrow correction.
 
 ## Delivery Sequence And Budget
 
@@ -119,8 +132,8 @@ replacement candidate is built.
 - Qualification and protected integration: focused checks, selected gates,
   format, strict Clippy, and one pull request, target 120 active minutes.
 - Production build, install, reconciliation, and bounded acceptance: the
-  completed initial candidate plus one replacement candidate and transaction,
-  target 180 active minutes total.
+  completed initial candidate, failed replacement acceptance, and at most one
+  final corrective candidate, target 240 active minutes total.
 - Overall effort ceiling: 360 active minutes. Reassess after two checkpoints or
   30 active minutes without outcome progress. Maximum work-unit attempts: 3.
   Maximum review and rework cycles: 1.
@@ -176,9 +189,11 @@ against the frozen published diff and has no runtime authority.
   generation, healthy monitor, and three route displays are complete.
 - The disposable custom-profile launch failed before effect with
   `invalid_runtime_profile`, reopened #131, and was fully cleaned up. The
-  replacement source tests for custom-ID decoding, native prestart identity,
-  and Guacamole extension modes pass; broader qualification, integration, and
-  replacement installed acceptance remain pending.
+  first replacement source tests for `profileId` decoding, native prestart
+  identity, and Guacamole extension modes passed and entered `main` through PR
+  #153. Installed acceptance exposed the parallel `runtimeProfile` decoder
+  path. The strengthened full launch-hint regression and both decoder-focused
+  tests now pass; integration and final installed acceptance remain pending.
 
 ## Stop Condition
 

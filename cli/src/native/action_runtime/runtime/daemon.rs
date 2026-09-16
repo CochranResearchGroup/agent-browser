@@ -321,7 +321,7 @@ pub(crate) fn runtime_profile_from_sources(
 ) -> Option<String> {
     cmd.get("runtimeProfile")
         .and_then(|v| v.as_str())
-        .map(str::to_string)
+        .and_then(runtime_profile_name_for_service_profile_id)
         .or_else(|| {
             cmd.get("profileId")
                 .and_then(|v| v.as_str())

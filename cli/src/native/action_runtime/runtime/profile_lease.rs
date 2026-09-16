@@ -365,7 +365,10 @@ pub(crate) fn apply_explicit_launch_identity_from_command(
         options.profile = Some(profile);
     }
     if let Some(runtime_profile) = optional_command_string(command, "runtimeProfile") {
-        options.runtime_profile = Some(runtime_profile);
+        options.runtime_profile =
+            crate::native::service_lifecycle::runtime_profile_name_for_service_profile_id(
+                &runtime_profile,
+            );
     } else if let Some(profile_id) = optional_command_string(command, "profileId") {
         options.runtime_profile =
             crate::native::service_lifecycle::runtime_profile_name_for_service_profile_id(

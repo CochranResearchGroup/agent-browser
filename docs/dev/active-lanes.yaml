@@ -5,15 +5,15 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Complete foreground projection and deployment-discovered custom-profile, retained-session, and sealed Guacamole acceptance repairs
     plan: docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md
-    plan_ref: refs/heads/fix/post-install-acceptance-repairs
-    branch: fix/post-install-acceptance-repairs
+    plan_ref: refs/heads/fix/issue-131-explicit-custom-runtime-profile
+    branch: fix/issue-131-explicit-custom-runtime-profile
     target: main
     plan_state: OPEN
     custody_state: ACTIVE
     checkpoint: 73001841df308e63cccad2b64365d4109e57d0b3
-    remote_ref: refs/remotes/origin/fix/issue-87-foreground-launch-cas
-    integration_receipt: 552f692502ec63032b0a936029993510f3299fb7
-    integration: issue 87 is integrated; merge the bounded post-install acceptance repairs through the protected `main` workflow before one replacement production build
+    remote_ref: null
+    integration_receipt: 7b5a88dc9de10f6a7508aed746ecb5b87830c256
+    integration: issue 87 and the first post-install repair batch are integrated; merge the final explicit custom-runtime decoder correction before another production build
     validation_status: in_progress
     validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#87, CochranResearchGroup/agent-browser#131, CochranResearchGroup/agent-browser#143, CochranResearchGroup/agent-browser#151]
