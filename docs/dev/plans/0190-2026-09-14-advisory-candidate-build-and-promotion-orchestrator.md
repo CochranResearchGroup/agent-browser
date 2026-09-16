@@ -400,6 +400,25 @@ architecture guard, and patch hygiene pass. Public effect and recovery
 commands and production-shaped qualification remain. No installed runtime,
 browser, profile, provider, or Service State was touched.
 
+Checkpoint `886cf660` exposes the sealed candidate effect and recovery seams
+without introducing another installer. `candidate install` now requires
+exactly one of `--dry-run` or `--apply`; apply revalidates the production-shaped
+manifest, executable-input closure, artifact seal, and binary bytes, then
+binds them and newly started coordination custody into the existing workstation
+transaction. An identical concurrent request joins the active operation and
+stops before creating a second transaction. `candidate recover
+<resume|rollback|close>` forwards the exact transaction ID, revision,
+generation, and census digest to the existing guarded transaction actions and
+never selects the latest record implicitly. An isolated end-to-end fixture
+proves the reviewed bytes reach `Accepted`, become the selected generation,
+complete coordination, and leave no active operation. The candidate CLI tests,
+sealed-binding and join regression, source-free workstation installer fixture,
+strict workspace Clippy, format, debug CLI help readback, candidate architecture
+guard, remote-view documentation contract, docs production build, and patch
+hygiene pass. Public queue, cancel, discard, and supersede choice adapters and
+production-shaped qualification remain. Neither installed runtime was
+mutated.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,

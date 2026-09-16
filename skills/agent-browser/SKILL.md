@@ -292,10 +292,18 @@ Use `agent-browser candidate inspect --manifest <path> --input-closure <path>
 --json` to validate an explicit candidate manifest against its executable-input
 closure. Use `agent-browser candidate install --binary <path> --manifest
 <path> --input-closure <path> --sealed-artifact <path> --dry-run --json` to
-also verify the exact candidate binary and sealed build artifact. These
-commands create no workstation transaction and perform no runtime effect.
-Candidate install apply remains unavailable until its effect transition adapter
-is complete.
+also verify the exact candidate binary and sealed build artifact without an
+effect. Replace `--dry-run` with `--apply` only when the operator explicitly
+requests a production install. Apply reuses the workstation transaction, binds
+candidate coordination custody, and may replace production runtime processes.
+An identical concurrent request joins the active operation and does not start a
+second transaction. Use `candidate status` and the exact `install transactions`
+actions for recovery; never infer apply or recovery authority from readiness.
+`agent-browser candidate recover <resume|rollback|close> --transaction-id <id>
+--expected-revision <revision> --candidate-generation <generation>
+--census-digest <sha256|none> --json` is an exact alias for those existing
+transaction actions. Copy every guard field from transaction inspection; it
+never targets the latest transaction implicitly.
 
 During Service State migration, a missing profile row is materialized as a
 persistent placeholder only when every referencing legacy session is unbound:

@@ -51,6 +51,8 @@ agent-browser service state validate --path /tmp/candidate-state.json --json # V
 agent-browser candidate status --json # Inspect advisory candidate, coordination ledger, and workstation state without effects
 agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json # Validate explicit candidate inputs
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json # Validate exact sealed bytes without creating a transaction
+agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json # Explicitly install sealed bytes through the workstation transaction
+agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json # Resume one exact retained transaction
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -109,9 +111,15 @@ executable's build provenance. An absent coordination file is reported as an
 empty ledger without creating state. `candidate inspect` validates
 caller-supplied manifest and executable-input closure files. `candidate
 install --dry-run` additionally verifies the exact binary and sealed build
-artifact. These commands never build, install, recover, launch a browser,
-connect to a daemon, or create a workstation transaction. Candidate install
-apply remains unavailable until its effect transition adapter is complete.
+artifact without creating state. `candidate install --apply` is an explicit
+production effect. It binds the sealed artifact and candidate coordination
+custody into the existing workstation transaction; an identical concurrent
+request joins without creating a second install transaction. Candidate
+commands never build an artifact. Use `candidate status` and the exact
+`install transactions` actions to inspect or recover a retained transaction.
+`candidate recover <resume|rollback|close>` is an exact alias for those actions
+and requires the transaction ID, revision, candidate generation, and census
+digest. It never selects the latest transaction implicitly.
 
 `close --all` is a global operation and rejects an explicit `--session` before
 runtime inspection. Use `agent-browser --session <name> close` for one session.
