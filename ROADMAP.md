@@ -35,8 +35,11 @@ define a bounded provider-free repair. A fresh CLI or MCP client must adopt the
 transactionally selected singleton runtime host without falling into retired
 legacy per-session daemon admission. Diagnosis found a prior-boot selected
 identity that the supervised same-generation host's existing self-adoption path
-cannot refresh. P203 owns `cli/src/runtime_host_ingress.rs`; P202 and P197
-remain source-disjoint. No browser, provider, credential,
+could not refresh. Source checkpoint `08bebd29` repairs that exact reboot seam
+without weakening current-owner, transaction, binary, generation, or missing-
+epoch fences. Focused tests, formatting, strict Clippy, planning audit, and a
+disposable no-launch supervisor smoke pass. P203 owns
+`cli/src/runtime_host_ingress.rs`; P202 and P197 remain source-disjoint. No browser, provider, credential,
 installed-runtime, Service State, retained-profile, production, or release
 effect is authorized.
 

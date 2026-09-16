@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -34,14 +34,16 @@ of all new legacy per-session daemon creation.
 Issue #169 is accepted and P203 is active. Current production evidence is only
 a defect locator: a valid access plan can select a durable profile while the
 next no-launch CLI or MCP command reports `runtime_host_admission_required`.
-Fresh runtime readback identified the exact split-brain: the selected ingress
+P203 is source-complete at `08bebd29`. Fresh runtime readback identified the exact split-brain: the selected ingress
 registry retains a prior-boot epoch and dead PID while the supervised
 same-generation singleton host is reachable at the selected socket under a new
 PID. The host's existing CAS-fenced self-adoption path rejects the prior epoch
 before it can replace that necessarily stale identity, so ordinary clients
-correctly refuse the registry and fall through to retired legacy admission.
-Provider-free red evidence and the smallest safe reconciliation repair remain
-pending.
+correctly refuse the registry and fall through to retired legacy admission. The
+repair now treats a PID from a proven prior boot as non-authoritative only in
+the already-scoped supervised self-adoption path. Current-boot owner, missing-
+epoch, binary, generation, topology, and transaction fences remain fail-closed.
+Protected exact-head CI, review, integration, and closeout remain.
 
 ## Consolidated Batch
 
@@ -114,12 +116,12 @@ Exit requires current evidence that:
 
 | Requirement | Current evidence | State |
 | --- | --- | --- |
-| Prior-boot supervised replacement refreshes selection | Current self-adoption path rejects the prior epoch before replacing stale PID identity | pending red fixture |
-| Fresh client adopts selected ingress | Current live registry remains prior-boot, so selection fails closed and client reaches legacy rejection | pending after reconciliation repair |
-| MCP and CLI share connection routing | Both paths reach `ensure_daemon` and `send_command`; exact regression pending | pending |
-| Candidate override remains isolated | Explicit `AGENT_BROWSER_SOCKET_DIR` has first priority | existing control; revalidation pending |
-| Missing selection fails closed | Legacy launch admission rejection exists | existing control; revalidation pending |
-| Required validation and integration | Not run | pending |
+| Prior-boot supervised replacement refreshes selection | Red fixture failed with `runtime_host_boot_epoch_prior`; it now passes while exercising numeric PID reuse | focused pass |
+| Fresh client adopts selected ingress | Repaired fixture refreshes epoch/PID/socket identity atomically and `selected_socket_dir()` returns the replacement route | focused pass |
+| MCP and CLI share connection routing | No client bypass was added; both continue through the existing selected-ingress connection boundary | source verified |
+| Candidate override remains isolated | Explicit socket override behavior is unchanged; existing ingress transaction suite passes | focused pass |
+| Missing selection fails closed | Missing-epoch fixture returns `runtime_host_boot_epoch_missing`; legacy launch rejection remains unchanged | focused pass |
+| Required validation and integration | 13 focused ingress tests, repository format, strict workspace Clippy, diff hygiene, planning audit, and disposable supervisor no-launch smoke pass at `08bebd29` | local pass; protected integration pending |
 
 ## Stop Condition
 
