@@ -199,14 +199,14 @@ fn commands_for_selection(selection: &str) -> Result<Vec<TestCommand>, String> {
             &["--compartment", "candidate"],
         )]),
         "candidate-build-adapter" => Ok([
-            "test:candidate-executable-input",
-            "test:candidate-build-executor",
-            "test:candidate-build-filesystem-adapter",
-            "test:candidate-build-command",
-            "test:candidate-crate-architecture",
+            "scripts/test-candidate-executable-input.js",
+            "scripts/test-candidate-build-executor.js",
+            "scripts/test-candidate-build-filesystem-adapter.js",
+            "scripts/test-candidate-build-command.js",
+            "scripts/test-candidate-crate-architecture.js",
         ]
         .into_iter()
-        .map(|script| command("pnpm", &[script]))
+        .map(|script| command("node", &[script]))
         .collect()),
         "candidate-cli" => Ok(vec![
             command(
@@ -972,6 +972,18 @@ mod tests {
             ]
         );
         assert_eq!(parsed.mode, TestMode::DryRun);
+    }
+
+    #[test]
+    fn build_adapter_suite_uses_direct_provider_free_node_commands() {
+        let commands = commands_for_selection("candidate-build-adapter").unwrap();
+        assert_eq!(commands.len(), 5);
+        assert!(commands.iter().all(|command| command.program == "node"));
+        assert!(commands.iter().all(|command| {
+            command.args.len() == 1
+                && command.args[0].starts_with("scripts/test-candidate-")
+                && command.args[0].ends_with(".js")
+        }));
     }
 
     #[test]
