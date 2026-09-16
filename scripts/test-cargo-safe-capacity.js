@@ -275,12 +275,13 @@ esac
   }
 }
 
-async function runRealScopeDescendantFixture() {
-  const root = join(fixtureRoot, 'real-scope');
+async function runRealScopeDescendantFixture(exitStatus) {
+  const label = exitStatus === 0 ? 'success' : 'failure';
+  const root = join(fixtureRoot, `real-scope-${label}`);
   const bin = join(root, 'bin');
   const profile = join(root, 'profile');
   const browserPidFile = join(root, 'browser.pid');
-  const slice = `agent-browser-cargo-p200_${process.pid}.slice`;
+  const slice = `agent-browser-cargo-p200_${process.pid}_${label}.slice`;
   mkdirSync(bin, { recursive: true });
   mkdirSync(profile, { recursive: true });
   const cargoPath = join(bin, 'cargo');
@@ -288,6 +289,7 @@ async function runRealScopeDescendantFixture() {
 set -euo pipefail
 node -e 'setInterval(() => {}, 1000)' -- "--user-data-dir=\${P200_PROFILE_PATH}" </dev/null >/dev/null 2>&1 &
 printf '%s\n' "$!" > "\${P200_BROWSER_PID_FILE}"
+exit "\${P200_CARGO_EXIT_STATUS}"
 `);
   chmodSync(cargoPath, 0o755);
 
@@ -303,12 +305,13 @@ printf '%s\n' "$!" > "\${P200_BROWSER_PID_FILE}"
         AGENT_BROWSER_CARGO_SLICE: slice,
         P200_BROWSER_PID_FILE: browserPidFile,
         P200_PROFILE_PATH: profile,
+        P200_CARGO_EXIT_STATUS: String(exitStatus),
       },
     });
     browserPid = Number(readFileSync(browserPidFile, 'utf8').trim());
     const scopeMatch = result.stderr.match(/unit=(agent-browser-cargo-[a-zA-Z0-9_.-]+\.scope)/);
     scopeUnit = scopeMatch?.[1] ?? null;
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, exitStatus, result.stderr);
     assert.ok(scopeUnit, `real scope identity missing from wrapper diagnostics: ${result.stderr}`);
     assert.equal(processIsAlive(browserPid), false, 'real scope left its browser-like descendant alive');
     assert.deepEqual(processesUsingPath(profile), [], 'real scope retained a process using its profile');
@@ -458,7 +461,8 @@ try {
   await runLingeringScopeAccountingFixture();
   await runUnavailableSystemdFixture();
   if (process.env.AGENT_BROWSER_CARGO_REAL_SCOPE_TEST === '1') {
-    await runRealScopeDescendantFixture();
+    await runRealScopeDescendantFixture(0);
+    await runRealScopeDescendantFixture(23);
   }
 
   console.log('Cargo capacity admission tests passed');
