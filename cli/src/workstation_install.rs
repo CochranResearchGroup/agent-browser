@@ -7214,6 +7214,11 @@ fn prepare_payload_transaction_from_source(
     )
 }
 
+struct ReviewedCandidateTransactionBindings<'a> {
+    artifact: &'a CandidateArtifactTransactionBinding,
+    custody: &'a crate::candidate_coordination::CandidateInstallCustody,
+}
+
 #[cfg_attr(not(test), allow(dead_code))]
 fn prepare_reviewed_candidate_payload_transaction(
     root: &Path,
@@ -7222,7 +7227,13 @@ fn prepare_reviewed_candidate_payload_transaction(
     isolated_root: bool,
     runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
     candidate: &ReviewedCandidatePayload,
+    custody: &crate::candidate_coordination::CandidateInstallCustody,
 ) -> Result<PreparedPayloadTransaction, String> {
+    if custody.candidate_id != candidate.binding.candidate_id
+        || custody.artifact_id != candidate.binding.artifact_seal_sha256
+    {
+        return Err("candidate_install_custody_artifact_mismatch".to_string());
+    }
     prepare_payload_transaction_from_source_with_candidate_binding(
         root,
         paths,
@@ -7230,7 +7241,10 @@ fn prepare_reviewed_candidate_payload_transaction(
         isolated_root,
         runtime_replacement_plan,
         &candidate.source,
-        Some(&candidate.binding),
+        Some(ReviewedCandidateTransactionBindings {
+            artifact: &candidate.binding,
+            custody,
+        }),
     )
 }
 
@@ -7241,7 +7255,7 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
     isolated_root: bool,
     runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
     source: &WorkstationPayloadSource,
-    candidate_binding: Option<&CandidateArtifactTransactionBinding>,
+    candidate_bindings: Option<ReviewedCandidateTransactionBindings<'_>>,
 ) -> Result<PreparedPayloadTransaction, String> {
     use crate::runtime_adoption::{persist_runtime_census, UpgradeTransactionState};
 
@@ -7249,11 +7263,16 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
         candidate_generation_identity_from_source(paths, args, source)?;
     let mut transaction =
         new_upgrade_transaction(paths, generation_id, binary_sha256, support_manifest_sha256);
-    if let Some(binding) = candidate_binding {
+    if let Some(bindings) = candidate_bindings {
         transaction.successor_fields.insert(
             "candidateArtifact".to_string(),
-            serde_json::to_value(binding)
+            serde_json::to_value(bindings.artifact)
                 .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))?,
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(bindings.custody)
+                .map_err(|error| format!("candidate_install_custody_serialize_failed:{error}"))?,
         );
     }
     match (args.runtime_replacement_policy, runtime_replacement_plan) {
@@ -10304,6 +10323,42 @@ fn owner_transfer_receipt(
 }
 
 fn commit_prepared_payload_transaction(
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    let custody = candidate_install_custody_from_transaction(&prepared.transaction)?;
+    let Some(custody) = custody else {
+        return commit_prepared_payload_transaction_unfenced(paths, args, prepared);
+    };
+    let coordination =
+        crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
+    coordination.with_active_install(&custody, |proof| {
+        prepared.transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(proof)
+                .map_err(|error| format!("candidate_install_custody_serialize_failed:{error}"))?,
+        );
+        commit_prepared_payload_transaction_unfenced(paths, args, prepared)
+    })
+}
+
+fn candidate_install_custody_from_transaction(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<Option<crate::candidate_coordination::CandidateInstallCustody>, String> {
+    let Some(value) = transaction.successor_fields.get("candidateInstallCustody") else {
+        return Ok(None);
+    };
+    let custody: crate::candidate_coordination::CandidateInstallCustody =
+        serde_json::from_value(value.clone())
+            .map_err(|error| format!("candidate_install_custody_invalid:{error}"))?;
+    if custody.schema_version != "agent-browser.candidate-install-custody.v1" {
+        return Err("candidate_install_custody_schema_unsupported".to_string());
+    }
+    Ok(Some(custody))
+}
+
+fn commit_prepared_payload_transaction_unfenced(
     paths: &InstallPaths,
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
@@ -15226,7 +15281,7 @@ mod tests {
     }
 
     #[test]
-    fn reviewed_candidate_artifact_binds_exact_seal_into_upgrade_transaction() {
+    fn reviewed_candidate_artifact_binds_exact_seal_and_install_custody() {
         use agent_browser_candidate::{
             ArtifactClass, BuildIdentity, BuildProfileConfiguration, CandidateManifest,
             ExecutableInput, ExecutableInputClosure, ExecutableInputContext, InputCategory,
@@ -15296,6 +15351,15 @@ mod tests {
             manifest_sha256.clone(),
         )
         .unwrap();
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install(
+                "install-request-1",
+                &manifest.candidate_id,
+                &sealed.seal_sha256,
+            )
+            .unwrap();
         let closure_bytes = serde_json::to_vec(&closure).unwrap();
         let sealed_bytes = serde_json::to_vec(&sealed).unwrap();
         let reviewed = ReviewedCandidatePayload::from_documents(
@@ -15315,8 +15379,8 @@ mod tests {
             guacamole_port: 8092,
         };
 
-        let prepared = prepare_reviewed_candidate_payload_transaction(
-            &root, &paths, &args, true, None, &reviewed,
+        let mut prepared = prepare_reviewed_candidate_payload_transaction(
+            &root, &paths, &args, true, None, &reviewed, &custody,
         )
         .unwrap();
         let binding = &prepared.transaction.successor_fields["candidateArtifact"];
@@ -15346,6 +15410,38 @@ mod tests {
             binding["buildSupportManifestSha256"],
             "build support identity must remain distinct from install-specific support"
         );
+        assert_eq!(
+            prepared.transaction.successor_fields["candidateInstallCustody"],
+            serde_json::json!({
+                "schemaVersion": "agent-browser.candidate-install-custody.v1",
+                "environmentId": "production",
+                "operationId": "operation-install-request-1",
+                "candidateId": manifest.candidate_id,
+                "artifactId": sealed.seal_sha256,
+                "revision": 1,
+                "fencingGeneration": 1,
+                "acquisitionOutcome": "started"
+            })
+        );
+
+        activate_prepared_payload_transaction(&mut prepared, &paths, true).unwrap();
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "supersede-install-request-1".to_string(),
+                candidate_id: "replacement-candidate".to_string(),
+                artifact_id: "replacement-artifact".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id.clone(),
+                },
+            })
+            .unwrap();
+        let selector_before = fs::read_link(&paths.current_selector).ok();
+        let error = commit_prepared_payload_transaction(&paths, &args, &mut prepared).unwrap_err();
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read_link(&paths.current_selector).ok(), selector_before);
 
         let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
         let transaction_count = fs::read_dir(&transaction_dir).unwrap().count();

@@ -3,13 +3,37 @@
 //! Physical locks cover only read, compare, and atomic commit. They never span
 //! builds, installer effects, process convergence, or browser work.
 
-use agent_browser_candidate::{CoordinationLedger, CoordinationReceipt, CoordinationRequest};
+use agent_browser_candidate::{
+    CoordinationAction, CoordinationLedger, CoordinationOutcome, CoordinationReceipt,
+    CoordinationRequest,
+};
+use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 const PRODUCTION_ENVIRONMENT_ID: &str = "production";
+#[cfg_attr(not(test), allow(dead_code))]
+const INSTALL_CUSTODY_SCHEMA_VERSION: &str = "agent-browser.candidate-install-custody.v1";
+
+/// Exact logical custody submitted to one bounded workstation mutation.
+///
+/// The revision is refreshed after harmless joins. The operation identity and
+/// fencing generation never change while the same writer retains custody.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) struct CandidateInstallCustody {
+    pub(crate) schema_version: String,
+    pub(crate) environment_id: String,
+    pub(crate) operation_id: String,
+    pub(crate) candidate_id: String,
+    pub(crate) artifact_id: String,
+    pub(crate) revision: u64,
+    pub(crate) fencing_generation: u64,
+    pub(crate) acquisition_outcome: CoordinationOutcome,
+}
 
 #[derive(Debug)]
 pub(crate) struct CandidateCoordinationStore {
@@ -43,14 +67,119 @@ impl CandidateCoordinationStore {
         request: CoordinationRequest,
     ) -> Result<CoordinationReceipt, String> {
         let _lock = CandidateCoordinationLock::acquire(&self.lock_path)?;
-        let mut ledger = self.read()?;
+        let ledger = self.read()?;
+        self.commit_request(ledger, request)
+            .map(|(receipt, _)| receipt)
+    }
+
+    fn commit_request(
+        &self,
+        mut ledger: CoordinationLedger,
+        request: CoordinationRequest,
+    ) -> Result<(CoordinationReceipt, CoordinationLedger), String> {
         let before = ledger.clone();
         let receipt = ledger.apply(request).map_err(|error| error.to_string())?;
         ledger.validate().map_err(|error| error.to_string())?;
         if ledger != before {
             persist_ledger(&self.ledger_path, &ledger)?;
         }
-        Ok(receipt)
+        Ok((receipt, ledger))
+    }
+
+    /// Starts or joins the exact candidate artifact that may drive an install.
+    /// A same-candidate request with a different sealed artifact is not treated
+    /// as the same writer.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn start_or_join_install(
+        &self,
+        request_id: &str,
+        candidate_id: &str,
+        artifact_id: &str,
+    ) -> Result<CandidateInstallCustody, String> {
+        let _lock = CandidateCoordinationLock::acquire(&self.lock_path)?;
+        let ledger = self.read()?;
+        if let Some(active) = ledger.active() {
+            if active.candidate_id == candidate_id && active.artifact_id != artifact_id {
+                return Err(format!(
+                    "candidate_install_artifact_contended:{}",
+                    active.operation_id
+                ));
+            }
+        }
+        let (receipt, current) = self.commit_request(
+            ledger.clone(),
+            CoordinationRequest {
+                request_id: request_id.to_string(),
+                candidate_id: candidate_id.to_string(),
+                artifact_id: artifact_id.to_string(),
+                expected_revision: ledger.revision,
+                expected_fencing_generation: ledger.fencing_generation,
+                action: CoordinationAction::StartOrJoin,
+            },
+        )?;
+        if !matches!(
+            receipt.outcome,
+            CoordinationOutcome::Started | CoordinationOutcome::JoinedExisting
+        ) {
+            return Err(format!(
+                "candidate_install_contended:{}",
+                receipt.active_operation_id.as_deref().unwrap_or("unknown")
+            ));
+        }
+        let active = current
+            .active()
+            .ok_or_else(|| "candidate_install_active_operation_missing".to_string())?;
+        if active.operation_id != receipt.operation_id.as_deref().unwrap_or_default()
+            || active.candidate_id != candidate_id
+            || active.artifact_id != artifact_id
+            || active.fencing_generation != receipt.fencing_generation
+        {
+            return Err("candidate_install_active_operation_changed".to_string());
+        }
+        Ok(CandidateInstallCustody {
+            schema_version: INSTALL_CUSTODY_SCHEMA_VERSION.to_string(),
+            environment_id: current.environment_id.clone(),
+            operation_id: active.operation_id.clone(),
+            candidate_id: active.candidate_id.clone(),
+            artifact_id: active.artifact_id.clone(),
+            revision: current.revision,
+            fencing_generation: active.fencing_generation,
+            acquisition_outcome: receipt.outcome,
+        })
+    }
+
+    /// Runs one bounded mutation while the coordination lock protects the
+    /// exact operation and fence from cancellation or supersession.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn with_active_install<T>(
+        &self,
+        custody: &CandidateInstallCustody,
+        mutation: impl FnOnce(&CandidateInstallCustody) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let _lock = CandidateCoordinationLock::acquire(&self.lock_path)?;
+        let ledger = self.read()?;
+        let active = ledger.active().filter(|active| {
+            active.operation_id == custody.operation_id
+                && active.candidate_id == custody.candidate_id
+                && active.artifact_id == custody.artifact_id
+                && active.fencing_generation == custody.fencing_generation
+        });
+        let active = active
+            .ok_or_else(|| format!("candidate_install_custody_lost:{}", custody.operation_id))?;
+        if ledger.environment_id != custody.environment_id {
+            return Err("candidate_install_environment_changed".to_string());
+        }
+        let proof = CandidateInstallCustody {
+            schema_version: INSTALL_CUSTODY_SCHEMA_VERSION.to_string(),
+            environment_id: ledger.environment_id.clone(),
+            operation_id: active.operation_id.clone(),
+            candidate_id: active.candidate_id.clone(),
+            artifact_id: active.artifact_id.clone(),
+            revision: ledger.revision,
+            fencing_generation: active.fencing_generation,
+            acquisition_outcome: custody.acquisition_outcome,
+        };
+        mutation(&proof)
     }
 }
 
@@ -236,7 +365,6 @@ fn format_io(action: &str, path: &Path, error: io::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_browser_candidate::{CoordinationAction, CoordinationOutcome};
 
     struct Fixture {
         root: PathBuf,
@@ -339,5 +467,84 @@ mod tests {
         let request = start_request(&store.read().unwrap());
         assert!(store.apply(request).unwrap_err().contains("lock_contended"));
         assert!(!store.ledger_path.exists());
+    }
+
+    #[test]
+    fn bounded_install_mutation_holds_exact_custody_and_fences_superseded_writer() {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        let custody = store
+            .start_or_join_install("install-request-a", "candidate-a", "artifact-a")
+            .unwrap();
+
+        let joined = fixture
+            .store()
+            .start_or_join_install("install-request-a-join", "candidate-a", "artifact-a")
+            .unwrap();
+        assert_eq!(joined.operation_id, custody.operation_id);
+        assert_eq!(joined.fencing_generation, custody.fencing_generation);
+        assert!(joined.revision > custody.revision);
+
+        let observed = store
+            .with_active_install(&custody, |proof| {
+                assert_eq!(proof.operation_id, custody.operation_id);
+                assert_eq!(proof.revision, joined.revision);
+                assert_eq!(proof.fencing_generation, custody.fencing_generation);
+
+                let current = fixture.store().read().unwrap();
+                let error = fixture
+                    .store()
+                    .apply(CoordinationRequest {
+                        request_id: "supersede-while-mutating".to_string(),
+                        candidate_id: "candidate-b".to_string(),
+                        artifact_id: "artifact-b".to_string(),
+                        expected_revision: current.revision,
+                        expected_fencing_generation: current.fencing_generation,
+                        action: CoordinationAction::Supersede {
+                            operation_id: custody.operation_id.clone(),
+                        },
+                    })
+                    .unwrap_err();
+                assert!(error.contains("lock_contended"));
+                Ok(proof.clone())
+            })
+            .unwrap();
+        assert_eq!(observed.revision, joined.revision);
+
+        let current = store.read().unwrap();
+        store
+            .apply(CoordinationRequest {
+                request_id: "supersede-after-mutation".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: CoordinationAction::Supersede {
+                    operation_id: custody.operation_id.clone(),
+                },
+            })
+            .unwrap();
+
+        assert!(store
+            .with_active_install(&custody, |_| Ok(()))
+            .unwrap_err()
+            .contains("candidate_install_custody_lost"));
+    }
+
+    #[test]
+    fn same_candidate_with_different_seal_cannot_join_install_custody() {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        store
+            .start_or_join_install("install-a", "candidate-a", "artifact-a")
+            .unwrap();
+        let before = fs::read(&store.ledger_path).unwrap();
+
+        let error = store
+            .start_or_join_install("install-b", "candidate-a", "artifact-b")
+            .unwrap_err();
+
+        assert!(error.contains("candidate_install_artifact_contended"));
+        assert_eq!(fs::read(&store.ledger_path).unwrap(), before);
     }
 }
