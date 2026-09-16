@@ -62,5 +62,5 @@ lanes:
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: real-browser finalize returned ExitUnproven and needs discriminating provider-free exit evidence before any newly bounded replay; shared documentation remains owned by open P190
+    blocker: provider-free Exit-Proof Diagnostic Packet 6 is active after real-browser finalize returned ExitUnproven; shared documentation remains owned by open P190
     updated_at: 2026-09-16

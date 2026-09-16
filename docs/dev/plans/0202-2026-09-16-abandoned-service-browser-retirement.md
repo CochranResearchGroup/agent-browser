@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 7
+Plan version: 8
 
 State: OPEN
 
@@ -309,6 +309,29 @@ one disposable namespace, and one terminal run.
   evidence discriminating enough to identify which sealed condition remained
   false, cover that condition provider-free, and preserve fail-closed terminal
   behavior. A later live replay requires a newly bounded plan revision.
+
+## Exit-Proof Diagnostic Packet 6
+
+This provider-free packet changes tactic from browser replay to a tight
+deterministic exit-proof oracle. It does not reset the four consumed live
+attempts and authorizes no browser or runtime effect.
+
+- Milestone: terminal recourse names every failed sealed exit predicate so the
+  observed `ExitUnproven` can be attributed before another browser run.
+- Primary writer: P202 lane owner, limited to the retirement owner, its Linux
+  exit-observation adapter, focused tests, and current plan/runbook projection.
+- W7 `/root/p202_exit_cause`: strongest-tier, high-effort, read-only causal
+  analysis of the finalize and exact-tree shutdown path.
+- W8 `/root/p202_resource_implementation`: normal-tier, read-only Linux process
+  semantics and provider-free fixture design, reusing prior lane context.
+- Routing goal: balanced wall-clock and allocation. Deterministic tools remain
+  primary; workers return evidence only and own no Git or runtime custody.
+- Feedback loop: one focused test must fail on the current generic
+  `ExitUnproven` result and pass only when root, descendant, process-group,
+  profile-lock, identity, revision, and time failures are distinguishable.
+- Bound: one implementation attempt, one focused validation cycle, and 30
+  active minutes. Stop without a live replay if the failure cannot be captured
+  at the stable finalize seam.
 
 ## Stop Condition
 
