@@ -7,6 +7,18 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 359 | 2026-09-16
+
+[Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
+is closed. [PR #172](https://github.com/CochranResearchGroup/agent-browser/pull/172)
+merged source head `28380966` into `main` as `136a1928`; issue #169 closed and
+its stale `state/in-progress` label was removed. Exact-head CI run `35160652859`
+passed the complete Rust suite, no-launch service smokes, strict Clippy,
+formatting, workstation fixtures, service client, dashboard, and version sync.
+The active-lane projection no longer includes P203. No browser, provider,
+credential, installed-runtime, Service State, retained-profile, production, or
+release effect occurred.
+
 ## Turn 358 | 2026-09-16
 
 [Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)

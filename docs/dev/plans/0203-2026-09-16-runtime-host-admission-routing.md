@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 3
+Plan version: 4
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -31,19 +31,23 @@ of all new legacy per-session daemon creation.
 
 ## Current State
 
-Issue #169 is accepted and P203 is active. Current production evidence is only
-a defect locator: a valid access plan can select a durable profile while the
-next no-launch CLI or MCP command reports `runtime_host_admission_required`.
-P203 is source-complete at `08bebd29`. Fresh runtime readback identified the exact split-brain: the selected ingress
-registry retains a prior-boot epoch and dead PID while the supervised
-same-generation singleton host is reachable at the selected socket under a new
-PID. The host's existing CAS-fenced self-adoption path rejects the prior epoch
-before it can replace that necessarily stale identity, so ordinary clients
-correctly refuse the registry and fall through to retired legacy admission. The
-repair now treats a PID from a proven prior boot as non-authoritative only in
-the already-scoped supervised self-adoption path. Current-boot owner, missing-
-epoch, binary, generation, topology, and transaction fences remain fail-closed.
-Protected exact-head CI, review, integration, and closeout remain.
+Plan 0203 is closed. [PR #172](https://github.com/CochranResearchGroup/agent-browser/pull/172)
+merged source head `283809661d789ccea932fdbfa3d3f83b45937de4` into `main`
+as `136a1928af5368ea88342ae33e9a9b671dc12802`; issue #169 closed with
+the merge. Exact-head CI run
+[`35160652859`](https://github.com/CochranResearchGroup/agent-browser/actions/runs/35160652859)
+passed every selected gate, including the complete Rust suite, no-launch
+service smokes, strict Clippy, formatting, workstation fixtures, service client,
+dashboard, and version sync.
+
+The repair lets the supervised same-generation singleton host replace a
+selected identity whose boot epoch is proven prior only after socket and stream
+readiness and all existing transaction, binary, generation, and topology
+fences pass. Current-boot ownership and missing or unavailable boot-epoch
+evidence remain fail-closed. Thirteen focused ingress tests and a disposable
+no-launch supervisor smoke pass. No browser, provider, credential,
+installed-runtime, Service State, retained-profile, production, or release
+effect occurred.
 
 ## Consolidated Batch
 
@@ -121,7 +125,7 @@ Exit requires current evidence that:
 | MCP and CLI share connection routing | No client bypass was added; both continue through the existing selected-ingress connection boundary | source verified |
 | Candidate override remains isolated | Explicit socket override behavior is unchanged; existing ingress transaction suite passes | focused pass |
 | Missing selection fails closed | Missing-epoch fixture returns `runtime_host_boot_epoch_missing`; legacy launch rejection remains unchanged | focused pass |
-| Required validation and integration | 13 focused ingress tests, repository format, strict workspace Clippy, diff hygiene, planning audit, and disposable supervisor no-launch smoke pass at `08bebd29` | local pass; protected integration pending |
+| Required validation and integration | 13 focused ingress tests, repository format, strict workspace Clippy, diff hygiene, planning audit, and disposable supervisor no-launch smoke pass; exact-head CI run `35160652859` passed and source head `28380966` entered `main` as `136a1928` through PR #172 | proven and integrated |
 
 ## Stop Condition
 
