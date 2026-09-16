@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 21
+Plan version: 22
 
 State: OPEN
 
@@ -696,6 +696,8 @@ contract and one additional isolated real-browser attempt.
 
 Packet 12 result:
 
+- Corrected harness and provider-free contract checkpoint:
+  `e6bf565872e691f26bddd2cecb0dea17d9150c1f`.
 - The focused contract failed red before the extracted helper existed, then
   passed with controls for a lingering browser row, missing terminal lifecycle,
   and missing retirement receipt. All three Node files parse and diff hygiene
