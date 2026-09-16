@@ -127,11 +127,20 @@ fn wrong_release_profile_is_not_promotable() {
         strip: true,
     };
     let thin_closure = closure('a', thin_profile);
-    let mut thin_manifest = manifest(ArtifactClass::ProductionShaped);
-    thin_manifest.executable_input_sha256 = thin_closure.digest();
-    thin_manifest.resolved_build_profile = thin_closure.context.resolved_build_profile.clone();
-    thin_manifest.resolved_build_profile_sha256 =
-        thin_closure.context.resolved_build_profile.digest();
+    let mut thin_manifest = CandidateManifest::new(
+        SourceProvenance {
+            commit: commit('b'),
+            tree: digest('c'),
+            state: SourceTreeState::Clean,
+        },
+        &thin_closure,
+        ArtifactClass::ProductionShaped,
+        digest('f'),
+        digest('1'),
+        "2026-09-15T12:00:00Z".to_string(),
+    )
+    .expect("thin manifest");
+    thin_manifest.validation_receipts = vec!["receipt://provider-free".to_string()];
 
     let decision = evaluate_promotion(&thin_manifest, &thin_closure, &evidence());
     assert_eq!(decision.outcome, PromotionOutcome::RebuildRequired);
@@ -160,4 +169,15 @@ fn tampered_artifact_or_missing_evidence_fails_integrity() {
         .reasons
         .contains(&PromotionReason::RequiredReceiptMissing));
     assert_eq!(decision.reusable_binary_sha256, None);
+
+    let mut tampered_manifest = manifest;
+    tampered_manifest.candidate_id = "candidate-tampered".to_string();
+    let decision = evaluate_promotion(&tampered_manifest, &current, &evidence());
+    assert_eq!(
+        decision.outcome,
+        PromotionOutcome::IntegrityPreconditionFailed
+    );
+    assert!(decision
+        .reasons
+        .contains(&PromotionReason::CandidateManifestInconsistent));
 }

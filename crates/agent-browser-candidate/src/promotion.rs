@@ -84,8 +84,8 @@ pub fn evaluate_promotion(
         rebuild.push(PromotionReason::ExecutableInputChanged);
     }
 
-    if manifest.schema_version != CANDIDATE_MANIFEST_SCHEMA_VERSION
-        || manifest.resolved_build_profile_sha256 != manifest.resolved_build_profile.digest()
+    if manifest.validate_internal().is_err()
+        || manifest.schema_version != CANDIDATE_MANIFEST_SCHEMA_VERSION
     {
         integrity.push(PromotionReason::CandidateManifestInconsistent);
     }

@@ -156,6 +156,23 @@ impl ExecutableInputClosure {
         digest_serializable(self)
     }
 
+    pub fn validate(&self) -> Result<(), CandidateError> {
+        if self.schema_version != EXECUTABLE_INPUT_CLOSURE_SCHEMA_VERSION {
+            return Err(CandidateError::new(
+                "unsupported_input_closure_schema",
+                "executable-input closure schema is not supported",
+            ));
+        }
+        let canonical = Self::new(self.context.clone(), self.inputs.clone())?;
+        if canonical != *self {
+            return Err(CandidateError::new(
+                "noncanonical_input_closure",
+                "features and executable inputs must use canonical order without duplicates",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn is_equivalent_to(&self, other: &Self) -> bool {
         self.digest() == other.digest()
     }
@@ -319,6 +336,117 @@ impl CandidateManifest {
             && self.features == other.features
             && self.reviewed_environment_input_sha256 == other.reviewed_environment_input_sha256
             && self.artifact_class == other.artifact_class
+    }
+
+    pub fn validate_against_closure(
+        &self,
+        closure: &ExecutableInputClosure,
+    ) -> Result<(), CandidateError> {
+        self.validate_internal()?;
+        closure.validate()?;
+        let mut canonical = Self::new(
+            self.source.clone(),
+            closure,
+            self.artifact_class,
+            self.binary_sha256.clone(),
+            self.support_manifest_sha256.clone(),
+            self.created_at.clone(),
+        )?;
+        canonical.validation_receipts = self.validation_receipts.clone();
+        if canonical != *self {
+            return Err(CandidateError::new(
+                "candidate_manifest_inconsistent",
+                "candidate manifest does not match its executable-input closure",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn validate_internal(&self) -> Result<(), CandidateError> {
+        if self.schema_version != CANDIDATE_MANIFEST_SCHEMA_VERSION {
+            return Err(CandidateError::new(
+                "unsupported_candidate_manifest_schema",
+                "candidate manifest schema is not supported",
+            ));
+        }
+        validate_git_commit(&self.source.commit)?;
+        validate_sha256("source_tree", &self.source.tree)?;
+        validate_sha256("executable_input_sha256", &self.executable_input_sha256)?;
+        validate_sha256(
+            "reviewed_environment_input_sha256",
+            &self.reviewed_environment_input_sha256,
+        )?;
+        validate_sha256("embedded_dashboard_sha256", &self.embedded_dashboard_sha256)?;
+        validate_sha256("binary_sha256", &self.binary_sha256)?;
+        validate_sha256("support_manifest_sha256", &self.support_manifest_sha256)?;
+        validate_sha256(
+            "resolved_build_profile_sha256",
+            &self.resolved_build_profile_sha256,
+        )?;
+        validate_nonempty("target", &self.target)?;
+        validate_nonempty("toolchain", &self.toolchain)?;
+        validate_nonempty("cargo_profile", &self.cargo_profile)?;
+        self.resolved_build_profile.validate()?;
+        if self.resolved_build_profile.digest() != self.resolved_build_profile_sha256 {
+            return Err(CandidateError::new(
+                "build_profile_digest_mismatch",
+                "resolved build-profile fields do not match their digest",
+            ));
+        }
+        let expected_candidate_id = format!(
+            "candidate-{}-{}",
+            &self.executable_input_sha256[..16],
+            &self.binary_sha256[..16]
+        );
+        if self.candidate_id != expected_candidate_id {
+            return Err(CandidateError::new(
+                "candidate_id_mismatch",
+                "candidate ID does not match executable-input and binary digests",
+            ));
+        }
+        if self.features.windows(2).any(|pair| pair[0] >= pair[1])
+            || self
+                .features
+                .iter()
+                .any(|feature| feature.trim().is_empty())
+        {
+            return Err(CandidateError::new(
+                "noncanonical_features",
+                "features must be nonempty, sorted, and unique",
+            ));
+        }
+        for (path, digest) in &self.embedded_asset_digests {
+            validate_input_path(path)?;
+            validate_sha256("embedded_asset_sha256", digest)?;
+        }
+        if self.artifact_class == ArtifactClass::ProductionShaped
+            && self.embedded_asset_digests.is_empty()
+        {
+            return Err(CandidateError::new(
+                "production_embedded_output_incomplete",
+                "production-shaped candidates must bind embedded support assets",
+            ));
+        }
+        if !self.created_at.contains('T') || !self.created_at.ends_with('Z') {
+            return Err(CandidateError::new(
+                "invalid_creation_time",
+                "creation time must be an RFC3339 UTC value",
+            ));
+        }
+        let mut canonical_receipts = self.validation_receipts.clone();
+        canonical_receipts.sort();
+        canonical_receipts.dedup();
+        if canonical_receipts != self.validation_receipts
+            || canonical_receipts
+                .iter()
+                .any(|locator| locator.trim().is_empty())
+        {
+            return Err(CandidateError::new(
+                "noncanonical_validation_receipts",
+                "validation receipt locators must be nonempty, sorted, and unique",
+            ));
+        }
+        Ok(())
     }
 }
 
