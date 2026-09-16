@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -513,6 +513,36 @@ safety and capacity tests, docs production build, remote-view documentation
 contract, and patch hygiene. The branch also integrated canonical main through
 the P200 Cargo-scope descendant-lifetime repair. No installed runtime was
 mutated. Production-shaped qualification is now the remaining planned gate.
+
+Checkpoint `5f1bdc05` completes source qualification and the production-shaped
+artifact gate without installing into either runtime. Real release-profile
+builds exposed and preserved five bounded failures: linked-worktree Git inputs
+outside the checkout, directory entries in Cargo dep-info, JavaScript locale
+ordering that disagreed with Rust canonical ordering, an interactive Corepack
+download caused by isolated `HOME`, and an sccache Unix-socket path longer than
+the platform limit. The collector now hashes linked-worktree Git inputs under
+stable `.source-control/` paths, recursively expands recorded directories,
+uses cross-language lexical ordering, runs the five build-adapter fixtures
+directly with Node, and binds an explicit no-sccache policy into isolated Rust
+test identity. Each changed-input or verification failure retained its typed
+claim or receipt before the next build.
+
+The final clean source `5f1bdc059c80c6df346a8aa822fde9d54d07fad8`
+produced production-shaped candidate
+`candidate-1b69db93f039bddb-657fb949b6cbbf29`, executable-input digest
+`1b69db93f039bddbef41fefecc4eed1f7b1f8cd74cf8cedd0d14f7d051e81c42`,
+and binary SHA-256
+`657fb949b6cbbf292ed14e5cc36d28362e6167f610119b7b90a3b5a87166d4ab`.
+Exact self-inspection and install dry-run passed with no effect. The named
+`candidate-kernel`, `candidate-build-adapter`, and `candidate-cli` suites then
+passed as isolated provider-free run
+`candidate-test-a28d8ea2-f12f-4202-81fc-9c709431caca`; its reusable hermetic
+receipt is
+`cli/target/candidate-test-state/completed/fae3a8375a580caa9962fc9a92bcaeb325662f7c4928aa3f3726583d2f09b25a.json`.
+No browser, profile, provider, production runtime, or development runtime was
+read or mutated. Development publication and acceptance remain a separately
+admitted operational gate, followed by protected integration and post-merge
+executable-input equivalence readback.
 
 ## Frozen Decisions
 
