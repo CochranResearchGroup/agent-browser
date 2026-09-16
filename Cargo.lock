@@ -48,6 +48,7 @@ name = "agent-browser"
 version = "0.28.0"
 dependencies = [
  "aes-gcm",
+ "agent-browser-candidate",
  "agent-browser-cdp",
  "agent-browser-challenge-control",
  "agent-browser-desktop-services",

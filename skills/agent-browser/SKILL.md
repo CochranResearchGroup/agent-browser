@@ -284,6 +284,14 @@ never inferred from the latest record. Copy the exact revision, candidate
 generation, and `runtimeCensusDigest` from inspect into `resume`, `rollback`,
 or `close`. Pass `none` when `runtimeCensusDigest` is null:
 
+Use `agent-browser candidate status --json` for a read-only advisory projection
+of the workstation transaction plus the running executable's build provenance.
+Use `agent-browser candidate inspect --manifest <path> --input-closure <path>
+--json` to validate an explicit candidate manifest against its executable-input
+closure. Neither command builds, installs, recovers, launches a browser, or
+connects to a daemon. An `install` recommendation still requires a separately
+reviewed effect-capable command.
+
 During Service State migration, a missing profile row is materialized as a
 persistent placeholder only when every referencing legacy session is unbound:
 no principal, work capability, browser, or tab. This restores referential

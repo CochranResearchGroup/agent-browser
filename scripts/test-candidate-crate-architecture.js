@@ -48,6 +48,43 @@ requireCondition(
   read('scripts/ci/rust-tests.sh').includes('test -p agent-browser-candidate'),
   'normal Rust test entrypoint must run candidate crate tests',
 );
+requireCondition(
+  read('cli/Cargo.toml').includes('agent-browser-candidate = { path = "../crates/agent-browser-candidate" }'),
+  'CLI adapter must depend directly on the candidate kernel',
+);
+requireCondition(
+  read('cli/src/main.rs').includes('candidate::run_candidate_command(&clean, flags.json)'),
+  'CLI must dispatch candidate inspection before daemon-backed commands',
+);
+
+const candidateAdapter = read('cli/src/candidate.rs');
+for (const forbiddenEffect of [
+  'ensure_daemon',
+  'send_command',
+  'std::process::Command',
+  'fs::write',
+  'fs::create_dir',
+  'run_workstation_upgrade_recover',
+]) {
+  requireCondition(
+    !candidateAdapter.includes(forbiddenEffect),
+    `candidate CLI adapter must remain read-only: ${forbiddenEffect}`,
+  );
+}
+for (const documentationPath of [
+  'cli/src/output.rs',
+  'README.md',
+  'skills/agent-browser/SKILL.md',
+  'docs/src/app/commands/page.mdx',
+]) {
+  const documentation = read(documentationPath);
+  requireCondition(
+    documentation.includes('candidate status')
+      && documentation.includes('candidate inspect')
+      && documentation.includes('--input-closure'),
+    `candidate command contract must be documented in ${documentationPath}`,
+  );
+}
 
 const forbiddenDependencies = [
   'agent-browser',

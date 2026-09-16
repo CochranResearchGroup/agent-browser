@@ -5647,6 +5647,25 @@ Examples:
 "##
         }
 
+        // === Candidate orchestration ===
+        "candidate" => {
+            r##"
+agent-browser candidate - Inspect candidate and workstation state without effects
+
+Usage: agent-browser candidate status [--json]
+       agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
+
+Status projects the current workstation install transaction into advisory
+candidate state. Inspect validates an explicit candidate manifest against its
+executable-input closure. Both operations are read-only: they do not build,
+install, recover, launch a browser, or connect to a daemon.
+
+Examples:
+  agent-browser candidate status --json
+  agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json
+"##
+        }
+
         // === Install ===
         "install" => {
             r##"
@@ -7492,6 +7511,8 @@ Dashboard:
   Guacamole PostgreSQL backup timer.
 
 Setup:
+  candidate status            Inspect advisory candidate and workstation state
+  candidate inspect           Validate a manifest against an executable-input closure
   install                    Install browser binaries
   install workstation        Install and reconcile the source-free Linux workstation
   install transactions       Inspect, resume, rollback, or close exact install transactions; zero-effect close uses an old-reader-safe terminal state

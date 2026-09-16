@@ -11,6 +11,7 @@ keywords = ["browser", "automation", "ai", "cdp", "chrome"]
 categories = ["command-line-utilities", "web-programming"]
 
 [dependencies]
+agent-browser-candidate = { path = "../crates/agent-browser-candidate" }
 agent-browser-cdp = { path = "../crates/agent-browser-cdp" }
 agent-browser-challenge-control = { path = "../crates/agent-browser-challenge-control" }
 agent-browser-desktop-services = { path = "../crates/agent-browser-desktop-services" }
