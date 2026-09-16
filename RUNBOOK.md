@@ -6,7 +6,17 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
-- [P199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
+
+## Turn 348 | 2026-09-16
+
+[Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
+is CLOSED. PR #160 merged exact rebased branch head `01c05d0d` into `main` as
+`e2e81e38`; source-head CI run `35092326047` and merge-commit CI run
+`35092355450` pass. Issue #67 is closed. Access planning now prefers a
+positively compatible retained profile before browser work and returns typed
+no-effect recourse for an explicitly requested incompatible profile without
+producing an executable request. No browser, provider, profile, Service State,
+installation, shared-runtime, production, or release effect occurred.
 
 ## Turn 347 | 2026-09-16
 
