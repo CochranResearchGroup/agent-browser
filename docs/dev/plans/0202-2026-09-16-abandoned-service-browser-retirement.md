@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 9
+Plan version: 10
 
 State: OPEN
 
@@ -362,6 +362,34 @@ attempts and authorizes no browser or runtime effect.
   a deterministic reproducer and repair, but this packet authorizes no browser
   replay. Complete changed-surface requalification remains before any decision
   about another bounded acceptance run.
+
+## Final Acceptance Packet 7
+
+Complete provider-free requalification passed at branch head `ba18521c` with
+source checkpoint `2243de8c`: the comprehensive runner reports
+`nativeLane=0`, `supportLane=0` after 736 seconds with Cargo caching disabled.
+This preserves all focused, formatting, strict Clippy, and comprehensive
+evidence on the repaired executable input.
+
+One cumulative fifth live attempt is justified because the preceding live
+failure now has a direct 0.01-second red/green Linux reproducer for both false
+exit predicates, the terminal error surface is discriminating, and the exact
+changed source passed comprehensive requalification. This is not a reset of
+attempt history.
+
+- Candidate: current P202 executable inputs at source checkpoint `2243de8c`,
+  built fresh into `cli/target/debug/agent-browser`.
+- Fixture: unchanged isolated `smoke-service-resource-gc-live.js` namespace and
+  exact task-owned cleanup.
+- Preconditions: local and remote branch agree, worktree clean, Chrome exists,
+  no prior fixture process or temporary directory, and no other browser
+  acceptance run is active.
+- Acceptance: exact managed lane retires with a terminal receipt; protected and
+  foreign controls survive until fixture teardown; root, descendants, and
+  process group exit; profile lock releases; terminal Service State converges;
+  independent residue census is empty.
+- Bound: one run and no retry. Any failure records the new typed failed
+  conditions and ends live execution for P202.
 
 ## Stop Condition
 

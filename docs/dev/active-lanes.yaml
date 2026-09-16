@@ -56,11 +56,11 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: exit-proof diagnostics, ten retirement tests, zombie-only group regression, decision matrix, formatting, and strict Clippy pass; complete changed-surface requalification remains
+    validation_status: repaired candidate passes focused, formatting, strict Clippy, and comprehensive Rust requalification with nativeLane=0 and supportLane=0; one terminal live acceptance remains
     validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: deterministic zombie-only exit-proof repair is focused-green and awaits complete changed-surface requalification; shared documentation remains owned by open P190
+    blocker: Final Acceptance Packet 7 has one non-retryable disposable live run; shared documentation remains owned by open P190
     updated_at: 2026-09-16

@@ -7,6 +7,18 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 363 | 2026-09-16
+
+P202 repaired-source comprehensive requalification passes at branch head
+`ba18521c`: `nativeLane=0`, `supportLane=0`, 736 seconds, with Cargo caching
+disabled to avoid the earlier sccache infrastructure failure. Final Acceptance
+Packet 7 freezes source checkpoint `2243de8c` for one cumulative fifth,
+non-retryable disposable run. The prior live failure now has a direct
+0.01-second red/green reproducer for both false exit predicates and typed
+terminal diagnostics. Preconditions require a clean exact branch, fresh debug
+build, Chrome, and zero prior fixture residue. Any outcome is terminal for live
+execution in P202.
+
 ## Turn 362 | 2026-09-16
 
 P202 Exit-Proof Diagnostic Packet 6 is focused-green at source checkpoint
