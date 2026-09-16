@@ -277,6 +277,24 @@ recovery adapters still require bounded custody integration. No installed
 runtime, browser, profile, provider, or Service State was touched; all mutation
 evidence came from disposable fixture roots.
 
+Checkpoint `81560f59` fences the bounded activation publication that precedes
+runtime transfer. Optional legacy-runtime quiescence remains outside the
+coordination lock because it may inspect and close processes; an exact custody
+preflight runs before that effect. The subsequent `AdmissionDraining` and
+`RuntimesTransferring` transitions and admission-drain writes now commit under
+one exact custody lock. Post-transfer drain evidence moved into the already
+fenced candidate-readiness publication. A superseded writer cannot publish the
+transfer start, transaction revisions, or drain claim, while an active writer
+publishes transaction and drain revisions from the same guarded mutation. Both
+new activation regressions, the three existing pre-drain quiescence cases, the
+candidate-readiness fence, durable resume to isolated acceptance, strict
+workspace Clippy, format, the candidate architecture guard, and patch hygiene
+pass. Runtime transfer itself still contains process operations and waits, so
+it is intentionally not wrapped in a long-held coordination lock and remains a
+later decomposition packet. No installed runtime, browser, profile, provider,
+or Service State was touched; all mutation evidence came from disposable
+fixture roots.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
