@@ -4694,6 +4694,12 @@ stale or unseeded login on the same profile does not block the requested site.
 The decision also includes access-plan `decision.attention`, a UI-neutral
 intervention summary with `required`, `owner`, `severity`, `reason`, `message`,
 and `suggestedActions`.
+The top-level `profileSelection` object reports `selected`, `rejected`, or
+`not_found` with `effect: "no_effect"`. Positive browser-registry compatibility
+outranks an equally suitable incompatible retained profile. An incompatible
+explicit `runtimeProfile` is not substituted or copied into an executable
+request; it reports `profile_compatibility_missing_or_blocked` and recommends a
+compatible profile or throwaway browser.
 Clients can use it for logs, prompts, dashboard chips, or popups, but
 agent-browser does not prescribe the presentation.
 Access-plan `decision.launchPosture.browserBuildSelection` explains why

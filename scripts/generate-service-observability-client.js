@@ -3325,11 +3325,23 @@ export interface ServiceAccessPlanBrowserCapabilityEvidence {
   [key: string]: unknown;
 }
 
+export interface ServiceAccessPlanProfileSelection {
+  status: 'selected' | 'rejected' | 'not_found';
+  reason: string | null;
+  effect: 'no_effect';
+  selectedProfileId: string | null;
+  rejectedProfileId: string | null;
+  compatibilityIds: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanResponse {
   /** Normalized access-plan query after login, site, and target aliases have been folded together. */
   query: ServiceAccessPlanQuery;
   /** Server-selected profile, or null when agent-browser has no suitable managed profile. */
   selectedProfile: ServiceProfileRecord | null;
+  /** Typed no-effect result for capability-aware retained-profile selection. */
+  profileSelection: ServiceAccessPlanProfileSelection;
   /** Provenance for the selected profile after config, runtime observation, and persisted state are layered. */
   selectedProfileSource: ServiceProfileSourceRecord | null;
   /** Match metadata explaining the selected profile and selector reason. */
