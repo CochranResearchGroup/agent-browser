@@ -183,6 +183,20 @@ collector test, architecture guard, and patch hygiene pass. Canonical main was
 also refreshed through `9a46d73b`, retaining P190 while accepting the completed
 P196 lane removal and its source fixes. No build or runtime effect occurred.
 
+Checkpoint `495fc8dc` adds the provider-free candidate build executor seam.
+It derives deterministic fast-iteration and production-shaped build plans,
+uses disjoint Cargo target directories, keeps dry runs strictly zero-effect,
+rejects production builds from non-clean source, detects plan tampering before
+adapter observation, reuses an exact sealed artifact, joins an active build,
+and records acquired-build failure before propagating it. The complete effect
+adapter is validated before claim acquisition, so missing seal or completion
+support cannot leave a newly claimed partial build. Fast-iteration support
+manifests may omit production-only dashboard and embedded assets, while
+production-shaped manifests continue to fail closed without both. The focused
+executor and collector tests, candidate architecture guard, release-asset
+fixture, validation selector, and patch hygiene pass. This checkpoint did not
+invoke Cargo, perform a candidate build, or mutate an installed runtime.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
