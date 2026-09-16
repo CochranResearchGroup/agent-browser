@@ -67,9 +67,10 @@ is admitted from canonical `main` checkpoint `552f6925` on
 `platform/p190-advisory-candidate-orchestrator`. The first packet inventories
 the executable-input closure and develops the pure candidate manifest and
 advice interface without a candidate build or any install, supervisor,
-browser, profile, provider, or tenant effect. Shared adapters and costly build
-qualification wait for the announced incoming bugfix integration and a fresh
-canonical-main readback.
+browser, profile, provider, or tenant effect. The incoming bugfix was integrated
+through `origin/main` at `7b5a88dc`, then merged into this implementation branch
+before the first shared read-only adapter. Costly build qualification and all
+effect-capable adapters remain deferred.
 
 ## Implementation Progress
 
@@ -132,6 +133,17 @@ decision rejects internally inconsistent manifests as integrity failures while
 preserving executable-input drift as a distinct rebuild reason. Fixture tests,
 all focused candidate tests, the architecture guard, and strict workspace
 Clippy pass without performing a candidate build.
+
+Checkpoint `1aa11f1b` adds the first shared CLI adapter. `candidate status`
+projects the existing read-only workstation transaction status into the common
+advisory contract, while `candidate inspect` validates an explicitly supplied
+manifest against its executable-input closure. Both commands dispatch before
+daemon-backed commands and expose build provenance, alternatives, consequences,
+integrity preconditions, reuse eligibility, rebuild reasons, and receipt
+locators without building, installing, recovering, launching a browser, or
+connecting to a daemon. Five focused CLI tests, all 29 candidate-kernel tests,
+the architecture and documentation contract, version sync, workspace format,
+strict workspace Clippy, the docs production build, and patch hygiene pass.
 
 ## Frozen Decisions
 
