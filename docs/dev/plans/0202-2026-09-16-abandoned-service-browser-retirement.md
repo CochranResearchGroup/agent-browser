@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -193,7 +193,7 @@ Exit requires current evidence that:
 | Sealed activity-aware plan/apply | Nine focused transaction tests cover reserve, revalidation, drift, repository CAS revisions, normalization, and terminal finalize | provider-free green |
 | Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof | provider-free green; real-browser replay pending |
 | Provider-free and real-browser acceptance | Focused suites pass. Three bounded disposable fixture cycles reached classification and apply; the final live observation exposed persistence normalization drift, which is repaired and covered by a real JSON repository regression. The plan attempt budget is exhausted, so no fourth browser replay was taken. | provider-free green; real-browser gate unverified |
-| Integration | Implementation checkpoint `60c71f68` is committed while P190 retains shared documentation ownership | checkpoint committed; publication pending |
+| Integration | Implementation checkpoint `60c71f68` and strict-lint follow-up `d544ed2e` are published while P190 retains shared documentation ownership | draft PR pending |
 
 ## Implementation Checkpoint 1
 
@@ -243,6 +243,27 @@ Exit requires current evidence that:
 - Fresh process and temporary-directory readback found no disposable P202
   browser, host, profile, or fixture residue. No installed runtime, provider,
   protected profile, retained browser, or foreign process was changed.
+
+## Validation Checkpoint 3
+
+- Published head: `d544ed2e`.
+- Strict workspace Clippy, formatting, patch hygiene, Node syntax, service
+  API/MCP parity, generated service-client contract and type checks,
+  lease-authority architecture, all 108 lease-authority tests, all 39 focused
+  service-model tests, the decision matrix, and all nine retirement transaction
+  tests pass.
+- The comprehensive Rust runner completed every native compartment and every
+  support compartment except `transport`. That compartment did not reach its
+  tests because the sccache wrapper failed while spawning `rustc`.
+- The documented deterministic cache opt-out was applied only to the failed
+  compartment:
+  `AGENT_BROWSER_CARGO_CACHE=off scripts/ci/rust-tests.sh --compartment transport`.
+  All three transport tests and its doc tests then passed.
+- Fresh branch and remote readback agree at `d544ed2e`. Fresh process and
+  temporary-directory readback again found no disposable P202 residue.
+- Provider-free validation is complete. Shared user-facing documentation, one
+  renewed bounded real-browser acceptance, exact-head CI, review, integration,
+  and issue closeout remain.
 
 ## Stop Condition
 
