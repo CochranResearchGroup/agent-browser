@@ -2,9 +2,9 @@
 
 Date: 2026-09-14
 
-Plan version: 12
+Plan version: 13
 
-State: OPEN
+State: COMPLETE
 
 Lane: P190
 
@@ -15,6 +15,10 @@ Planning branch: `platform/p190-advisory-candidate-orchestrator-plan`
 Amendment branch: `platform/p190-dev-build-test-promotion-amendment`
 
 Implementation branch: `platform/p190-advisory-candidate-orchestrator`
+
+Integration PR: [#152](https://github.com/CochranResearchGroup/agent-browser/pull/152)
+
+Integration commit: `38e4cb9dd1f7aa9fcde8e70760ed93ea342dbcc2`
 
 Target: `main`
 
@@ -90,10 +94,39 @@ checkpoint `4993b978991b77c6d78b3540d0a5974e332a98ba` corrected the expanded
 source-checkpoint locator without changing executable inputs.
 
 The one final production-shaped build and all three selected provider-free
-suites now pass at that clean checkpoint. No install, doctor, browser,
+suites pass at that clean checkpoint. PR #152 merged the complete source batch
+to protected `main` as `38e4cb9dd1f7aa9fcde8e70760ed93ea342dbcc2`
+after every required fast CI and Lease Authority check passed. Post-merge
+readback proved the qualified source commit is an ancestor of current
+`origin/main`, the only intervening paths are this plan and the active-lane
+catalog, neither path intersects the 422-input executable closure, and every
+tracked or sealed generated input retains its recorded digest. The closure
+remains
+`2fc3ae22f342c0504b2f6b89fb1c10a1ba3a288bcd2c6d2931e171a37344e73a`
+and the binary remains
+`106614c72ec087e3058788ac4c8d33f9cff9146f8dcdc6638f08b1154a43159e`.
+Plan 0190 is implementation-complete. No production install, doctor, browser,
 provider, retained-profile, development-runtime, production-runtime, or shared
-runtime effect was performed. The remaining critical path is protected
-integration followed by post-merge executable-input equivalence readback.
+runtime effect was performed; any later installation remains a separately
+authorized transaction.
+
+## Closeout Receipt
+
+- Protected integration: PR #152, merge commit
+  `38e4cb9dd1f7aa9fcde8e70760ed93ea342dbcc2`.
+- Qualified source: `4993b978991b77c6d78b3540d0a5974e332a98ba`,
+  preserved as an ancestor of merged `origin/main`.
+- Sealed candidate:
+  `candidate-2fc3ae22f342c050-106614c72ec087e3`.
+- Executable-input equivalence: all 422 inputs matched; the two post-build
+  source changes were documentation-only and intersected no closure path.
+- Provider-free qualification:
+  `candidate-test-7152d57d-c834-42fe-9a7c-faa7b8bfd0e5`, with receipt
+  `cli/target/candidate-test-state/completed/c8597fb88a7c2bdf9aa739925603aae14308b0539eb8100717dae6f997a0c854.json`.
+- CI: run `35152450941` passed every required fast gate; run `35152450945`
+  passed the four-platform Lease Authority matrix.
+- Runtime effect: none. Candidate self-inspection and installation dry-run
+  reported `no_effect_performed`.
 
 ## Implementation Progress
 
