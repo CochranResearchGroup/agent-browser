@@ -25,6 +25,20 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P200 | Cargo Scope Descendant Lifetime
+
+State: OPEN
+
+Current state: [Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+and [issue #102](https://github.com/CochranResearchGroup/agent-browser/issues/102)
+own the bounded `PL-PLATFORM` repair. The first milestone is a deterministic
+provider-free fixture proving that a browser-like descendant can survive its
+Cargo parent while the admission claim disappears. P200 owns
+`scripts/ci/cargo-safe.sh` and the new exact-scope fixture; P190 remains the
+writer for its candidate-orchestration and current test-runner changes. No
+installed runtime, browser, provider, Service State, or foreign-process effect
+is authorized.
+
 ## P199 | Compatible Access Profile Selection
 
 State: CLOSED
