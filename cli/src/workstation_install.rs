@@ -6844,9 +6844,16 @@ fn candidate_generation_identity(
     paths: &InstallPaths,
     args: &WorkstationInstallArgs,
 ) -> Result<(String, String, String), String> {
-    let current_exe = env::current_exe()
-        .map_err(|error| format!("Unable to resolve candidate executable: {error}"))?;
-    let binary_sha256 = workstation_file_sha256(&current_exe)?;
+    let source = WorkstationPayloadSource::current()?;
+    candidate_generation_identity_from_source(paths, args, &source)
+}
+
+fn candidate_generation_identity_from_source(
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    source: &WorkstationPayloadSource,
+) -> Result<(String, String, String), String> {
+    let binary_sha256 = source.verify()?;
     let rendered_units = render_units(
         &paths.binary.display().to_string(),
         &paths.current_selector.join("support"),
@@ -7177,10 +7184,29 @@ fn prepare_payload_transaction_with_replacement(
     isolated_root: bool,
     runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
 ) -> Result<PreparedPayloadTransaction, String> {
+    let source = WorkstationPayloadSource::current()?;
+    prepare_payload_transaction_from_source(
+        root,
+        paths,
+        args,
+        isolated_root,
+        runtime_replacement_plan,
+        &source,
+    )
+}
+
+fn prepare_payload_transaction_from_source(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
+    source: &WorkstationPayloadSource,
+) -> Result<PreparedPayloadTransaction, String> {
     use crate::runtime_adoption::{persist_runtime_census, UpgradeTransactionState};
 
     let (generation_id, binary_sha256, support_manifest_sha256) =
-        candidate_generation_identity(paths, args)?;
+        candidate_generation_identity_from_source(paths, args, source)?;
     let mut transaction =
         new_upgrade_transaction(paths, generation_id, binary_sha256, support_manifest_sha256);
     match (args.runtime_replacement_policy, runtime_replacement_plan) {
@@ -7233,7 +7259,7 @@ fn prepare_payload_transaction_with_replacement(
         ));
     }
 
-    let staged = match stage_payload_generation(paths, args) {
+    let staged = match stage_payload_generation_from_source(paths, args, source) {
         Ok(staged) => staged,
         Err(error) => {
             transaction.stop_reason = Some("candidate_staging_failed".to_string());
@@ -11706,6 +11732,53 @@ struct InstallPaths {
     guacamole_secret_file: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkstationPayloadSource {
+    binary_path: PathBuf,
+    expected_binary_sha256: Option<String>,
+}
+
+impl WorkstationPayloadSource {
+    fn current() -> Result<Self, String> {
+        Ok(Self {
+            binary_path: env::current_exe()
+                .map_err(|error| format!("Unable to resolve candidate executable: {error}"))?,
+            expected_binary_sha256: None,
+        })
+    }
+
+    /// Bind candidate bytes that were sealed before workstation staging.
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn reviewed(binary_path: PathBuf, expected_binary_sha256: String) -> Result<Self, String> {
+        if expected_binary_sha256.len() != 64
+            || !expected_binary_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err("workstation_payload_source_digest_invalid".to_string());
+        }
+        Ok(Self {
+            binary_path,
+            expected_binary_sha256: Some(expected_binary_sha256),
+        })
+    }
+
+    fn verify(&self) -> Result<String, String> {
+        let observed = workstation_file_sha256(&self.binary_path)?;
+        if self
+            .expected_binary_sha256
+            .as_ref()
+            .is_some_and(|expected| expected != &observed)
+        {
+            return Err(format!(
+                "workstation_payload_source_digest_mismatch:{}",
+                self.binary_path.display()
+            ));
+        }
+        Ok(observed)
+    }
+}
+
 #[derive(Debug)]
 struct StagedWorkstationGeneration {
     generation_id: String,
@@ -11825,11 +11898,13 @@ fn install_paths(root: &Path) -> InstallPaths {
     }
 }
 
-fn stage_payload_generation(
+fn stage_payload_generation_from_source(
     paths: &InstallPaths,
     args: &WorkstationInstallArgs,
+    source: &WorkstationPayloadSource,
 ) -> Result<StagedWorkstationGeneration, String> {
     validate_generation_install_preconditions(paths)?;
+    let source_binary_sha256 = source.verify()?;
     let staging = paths
         .root
         .join(".agent-browser/install-staging")
@@ -11854,9 +11929,7 @@ fn stage_payload_generation(
             fs::create_dir_all(parent).map_err(display_io("create binary staging", parent))?;
         }
 
-        let current_exe = env::current_exe()
-            .map_err(|error| format!("Unable to resolve current executable: {error}"))?;
-        fs::copy(&current_exe, &staged_binary)
+        fs::copy(&source.binary_path, &staged_binary)
             .map_err(display_io("stage agent-browser executable", &staged_binary))?;
         set_executable(&staged_binary)?;
         inject_failure("binary-staged")?;
@@ -11870,6 +11943,9 @@ fn stage_payload_generation(
             args.dashboard_port,
         );
         let binary_sha256 = workstation_file_sha256(&staged_binary)?;
+        if binary_sha256 != source_binary_sha256 {
+            return Err("workstation_payload_source_changed_during_staging".to_string());
+        }
         let manifest = render_manifest(args, &binary_sha256, &rendered_units);
         fs::write(staged_support.join("manifest.json"), manifest)
             .map_err(display_io("stage workstation manifest", &staged_support))?;
@@ -14951,6 +15027,63 @@ mod tests {
         assert!(manifest.contains(r#""controllerAssets""#));
         assert!(manifest.contains(r#""guacamoleBundleManifestSha256""#));
         assert!(manifest.contains(r#""agent-browser-runtime-interlock.timer""#));
+    }
+
+    #[test]
+    fn reviewed_payload_source_stages_exact_binary_bytes_and_rejects_drift() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-reviewed-payload-source-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let source_path = root.join("candidate/agent-browser");
+        fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        fs::write(&source_path, b"reviewed candidate bytes").unwrap();
+        let expected_sha256 = workstation_file_sha256(&source_path).unwrap();
+        let source =
+            WorkstationPayloadSource::reviewed(source_path.clone(), expected_sha256.clone())
+                .unwrap();
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+
+        let prepared =
+            prepare_payload_transaction_from_source(&root, &paths, &args, true, None, &source)
+                .unwrap();
+        assert_eq!(
+            prepared.transaction.candidate_generation_id,
+            prepared.staged.generation_id
+        );
+        assert_eq!(
+            prepared.transaction.candidate_binary_sha256,
+            expected_sha256
+        );
+        assert_eq!(prepared.staged.binary_sha256, expected_sha256);
+        assert_eq!(
+            fs::read(prepared.staged.generation_path.join("bin/agent-browser")).unwrap(),
+            b"reviewed candidate bytes"
+        );
+
+        fs::write(&source_path, b"changed candidate bytes").unwrap();
+        let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+        let transaction_count = fs::read_dir(&transaction_dir).unwrap().count();
+        let error =
+            prepare_payload_transaction_from_source(&root, &paths, &args, true, None, &source)
+                .unwrap_err();
+        assert!(error.contains("workstation_payload_source_digest_mismatch"));
+        assert_eq!(
+            fs::read_dir(transaction_dir).unwrap().count(),
+            transaction_count,
+            "digest drift must fail before a second transaction is recorded"
+        );
+
+        remove_generation_tree(&root).unwrap();
     }
 
     #[test]

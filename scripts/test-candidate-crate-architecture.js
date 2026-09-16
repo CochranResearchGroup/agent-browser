@@ -159,6 +159,18 @@ for (const forbiddenEffect of [
     `candidate coordination adapter must not perform runtime or installer effects: ${forbiddenEffect}`,
   );
 }
+const workstationInstaller = read('cli/src/workstation_install.rs');
+for (const requiredBoundary of [
+  'WorkstationPayloadSource',
+  'prepare_payload_transaction_from_source',
+  'workstation_payload_source_digest_mismatch',
+  'workstation_payload_source_changed_during_staging',
+]) {
+  requireCondition(
+    workstationInstaller.includes(requiredBoundary),
+    `candidate promotion must retain the existing workstation staging seam: ${requiredBoundary}`,
+  );
+}
 for (const documentationPath of [
   'cli/src/output.rs',
   'README.md',
