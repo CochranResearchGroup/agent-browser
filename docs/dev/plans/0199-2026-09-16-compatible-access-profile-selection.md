@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -20,7 +20,7 @@ Target: `main`
 
 Integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
 
-Source baseline: `c2ade1d14a8d5f6cee40791c7d507c74ecb4b44f`
+Source baseline: `7db8310f0027a81410c746eaafdd569fffecb9de`
 
 ## Objective
 
@@ -32,7 +32,7 @@ request.
 
 ## Current State
 
-Issue #67 is source-complete at checkpoint `df1a06ad` through draft PR #160.
+Issue #67 is source-complete at checkpoint `15dd3b58` through PR #160.
 The provider-free reproducer proved that catalog rank could select an
 incompatible retained profile before browser capability evidence was joined.
 The repaired access-plan seam now prefers a positively compatible candidate,
@@ -40,9 +40,9 @@ preserves legacy ranking when no exact declaration exists, and returns typed
 `profile_compatibility_missing_or_blocked` recourse for an explicitly requested
 incompatible profile without producing an executable request.
 
-P198's disjoint retained-owner source is integrated through PR #158 at
-`main@c2ade1d1`. Its separate branch-local closeout worktree remains untouched.
-P199 is rebased on that integration and does not edit P198 lifecycle-owner code.
+P198's disjoint retained-owner repair and closeout are integrated through PRs
+#158 and #161 at `main@7db8310f`. P199 is rebased on that closed lane and does
+not edit P198 lifecycle-owner code.
 
 ## Consolidated Batch
 
@@ -91,9 +91,8 @@ worktree, or provider operator is assigned.
 ## Worker Assignments
 
 The P199 lane owner holds the critical path, plan, branch, fixture, source
-repair, validation, integration, and closeout. P198 remains primary writer for
-its pending shared-authority transition. No parallel writer is assigned within
-P199.
+repair, validation, integration, and closeout. P198 is closed. No parallel
+writer is assigned within P199.
 
 ## Evidence And Exit
 
@@ -114,7 +113,7 @@ Exit requires current evidence that:
   checkpoint enters `main` through the linked pull request with applicable CI
   green.
 
-Checkpoint `df1a06ad` satisfies the provider-free source and changed-surface
+Checkpoint `15dd3b58` satisfies the provider-free source and changed-surface
 validation requirements. The original reproducer failed by choosing
 `a-incompatible-retained`; the repaired 47-test `service_access_plan` group is
 green. Formatting, strict workspace Clippy, API/MCP parity, the generated

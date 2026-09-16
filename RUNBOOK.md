@@ -11,7 +11,7 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 ## Turn 347 | 2026-09-16
 
 [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
-is source-complete at checkpoint `df1a06ad` through draft PR #160. The original
+is source-complete at checkpoint `15dd3b58` through PR #160. The original
 provider-free fixture selected `a-incompatible-retained` ahead of a compatible
 candidate. The repair joins exact browser capability compatibility before the
 access plan emits an executable request, deterministically prefers a compatible
@@ -22,20 +22,9 @@ service-client suite, the docs build, and handoff-doc checks pass. The legacy
 no-launch shell fixture has the same pre-existing Google readiness mismatch
 against canonical `main` and the P199 binary before reaching this contract. No
 browser, provider, profile, Service State, installation, or runtime effect
-occurred. Protected integration and exact-head CI remain.
-
-## Turn 346 | 2026-09-16
-
-[Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
-is admitted in `PL-BUGFIX` for issue #67 from clean baseline `faee8887` on
-`fix/p199-compatible-access-planning`. The no-launch access-plan seam currently
-ranks retained profiles before joining browser capability compatibility, while
-the downstream launch gate already rejects the same mismatch. The bounded
-packet will first prove that disagreement with a provider-free fixture, then
-make compatible selection deterministic and an incompatible explicit profile a
-typed no-effect rejection. P198 source is integrated, and its branch-local
-closeout projection remains untouched pending reconciliation. No browser,
-provider, profile, Service State, installation, or runtime effect is authorized.
+occurred. P198 source and closeout are integrated at `main@7db8310f` without
+P199 editing its lifecycle-owner surface. Protected integration and refreshed
+exact-head CI remain.
 
 ## Turn 346 | 2026-09-16
 

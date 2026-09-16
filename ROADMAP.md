@@ -32,13 +32,14 @@ State: OPEN
 Current state: [Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md),
 [issue #67](https://github.com/CochranResearchGroup/agent-browser/issues/67),
 and draft [PR #160](https://github.com/CochranResearchGroup/agent-browser/pull/160)
-own the bounded `PL-BUGFIX` repair. Source checkpoint `df1a06ad` makes profile
+own the bounded `PL-BUGFIX` repair. Source checkpoint `15dd3b58` makes profile
 selection capability-aware before an executable request is produced, prefers a
 positively compatible candidate, preserves selection when no exact capability
 declaration exists, and rejects an explicitly requested incompatible profile
 with typed no-effect recourse. Focused tests and complete changed-surface
-validation pass. P198 source is integrated; its separate branch-local closeout
-worktree remains untouched. Protected integration and exact-head CI remain.
+validation pass. P198 source and closeout are integrated through PRs #158 and
+#161 at `main@7db8310f`. Protected integration and refreshed exact-head CI
+remain.
 
 ## P198 | Retained Owner Inventory Coherence
 
