@@ -25,7 +25,7 @@ use super::site_login_recipe::{
     PasswordValueSource, SiteLoginRecipe, SitePageEvidence,
 };
 use super::{auth, interaction};
-use agent_browser_challenge_control::ChallengeConsumerKind;
+use agent_browser_challenge_control::{ChallengeConsumerAdmissionReceipt, ChallengeConsumerKind};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -48,7 +48,7 @@ pub(crate) struct ServiceAuthenticationRunRecord {
     pub(crate) deadline_at: String,
     pub(crate) service_tab_handle: ServiceTabHandle,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) challenge_consumer_admission: Option<Value>,
+    pub(crate) challenge_consumer_admission: Option<ChallengeConsumerAdmissionReceipt>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pending_effect: Option<PendingAuthenticationEffect>,
     pub(crate) run: AuthenticationRun,
@@ -339,19 +339,16 @@ fn start_run_in_state(
         intent.challenge_task_id.as_deref(),
         intent.site_policy_id.as_deref(),
     ) {
-        (Some(challenge_task_id), Some(site_policy_id)) => Some(
-            serde_json::to_value(admit_challenge_consumer(
-                state,
-                challenge_task_id,
-                &intent.principal_id,
-                &current,
-                site_policy_id,
-                AUTHENTICATION_CHALLENGE_INTENT_ID,
-                &idempotency_key_sha256,
-                ChallengeConsumerKind::Authentication,
-            )?)
-            .map_err(|error| format!("authentication_run_challenge_admission_invalid:{error}"))?,
-        ),
+        (Some(challenge_task_id), Some(site_policy_id)) => Some(admit_challenge_consumer(
+            state,
+            challenge_task_id,
+            &intent.principal_id,
+            &current,
+            site_policy_id,
+            AUTHENTICATION_CHALLENGE_INTENT_ID,
+            &idempotency_key_sha256,
+            ChallengeConsumerKind::Authentication,
+        )?),
         (None, None) => None,
         _ => return Err("authentication_run_challenge_admission_incomplete".to_string()),
     };
@@ -1683,8 +1680,12 @@ mod tests {
         .unwrap();
         assert!(!replayed);
         assert_eq!(
-            record.challenge_consumer_admission.as_ref().unwrap()["consumerAdmission"],
-            "admitted"
+            record
+                .challenge_consumer_admission
+                .as_ref()
+                .unwrap()
+                .consumer_admission,
+            agent_browser_challenge_control::ChallengeConsumerAdmission::Admitted
         );
 
         record.run.state = AuthenticationRunState::Failed;
@@ -1698,6 +1699,38 @@ mod tests {
             projection["challengeConsumerAdmission"]["challengeOutcome"],
             "passed"
         );
+    }
+
+    #[test]
+    fn persisted_challenge_admission_rejects_an_untyped_shape() {
+        let mut state = service_state();
+        let challenge_task_id =
+            crate::native::service_challenge_task::complete_provider_free_test_task(
+                &mut state,
+                "books-receipts",
+                "closeout-worker",
+                "bill-auth",
+                "principal-1",
+                "bill",
+                "authentication-run-start",
+                "challenge_not_present",
+            )
+            .unwrap();
+        let mut command = start_command(&state);
+        command["challengeTaskId"] = json!(challenge_task_id);
+        command["sitePolicyId"] = json!("bill");
+        let (record, _) = start_run_in_state(
+            &mut state,
+            parse_start_intent(&command).unwrap(),
+            "2026-09-16T00:02:00Z",
+        )
+        .unwrap();
+        let mut persisted = serde_json::to_value(record).unwrap();
+        persisted["challengeConsumerAdmission"] = json!({
+            "consumerAdmission": "admitted"
+        });
+
+        assert!(serde_json::from_value::<ServiceAuthenticationRunRecord>(persisted).is_err());
     }
 
     #[test]

@@ -171,10 +171,10 @@ pub enum ChallengeConsumerAdmission {
     Admitted,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChallengeConsumerAdmissionReceipt {
-    pub schema_version: &'static str,
+    pub schema_version: String,
     pub challenge_task_id: String,
     pub consumer: ChallengeConsumerKind,
     pub consumer_operation_id: String,
@@ -267,7 +267,7 @@ pub fn admit_challenge_consumer(
         return Err(ChallengeConsumerAdmissionError::InvalidReceipt);
     }
     Ok(ChallengeConsumerAdmissionReceipt {
-        schema_version: "challenge-consumer-admission-receipt.v1",
+        schema_version: "challenge-consumer-admission-receipt.v1".to_string(),
         challenge_task_id: evidence.task_id.clone(),
         consumer: request.consumer,
         consumer_operation_id: request.consumer_operation_id,

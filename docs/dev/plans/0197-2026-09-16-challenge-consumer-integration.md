@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -165,6 +165,16 @@ admission. The checker now includes that explicit delegated dispatcher, and the
 real parity command proves all 101 native and 118 service-request actions remain
 covered.
 
+Plan version 5 records the single planned self-review and rework cycle. The
+spec-axis review found that Authentication Run serialized the typed admission
+into an untyped `Value` before durable storage, contrary to this plan's typed
+record requirement. A focused persistence test proved that malformed nested
+admission JSON was accepted. The durable record now stores
+`ChallengeConsumerAdmissionReceipt` directly; the same test rejects the
+malformed shape, the later-authentication-failure projection remains green, and
+all challenge-control tests pass. This is a contract-hardening correction
+inside the existing W6 boundary, with no browser or external effect.
+
 ## Implementation Checkpoint
 
 The pure challenge-control contract verifies terminal receipt consistency,
@@ -202,10 +212,15 @@ provider-free boundary. P197 merged current `main` through published checkpoint
 Dashboard, Service Client, Workstation Fixtures, and comprehensive Rust. The
 post-merge challenge-control crate, service parity, generated-client contract
 and type checks, no-launch collection smoke, and route-confusion gates also
-pass. P202 retains primary-writer custody of the four shared user-facing
-documentation surfaces through PR #168. After P202 integrates, P197 will merge
-that baseline, add only its bounded challenge-consumer guidance, and complete
-the final changed-surface and protected integration gates.
+pass. The planned self-check additionally proved and repaired typed durable
+Authentication Run admission storage: the focused persistence test is red on
+the untyped field and green on `ChallengeConsumerAdmissionReceipt`; all nine
+Authentication Run tests, four Service challenge-task tests, the navigation
+bypass test, and the correctly stack-sized dispatch fixture pass. P202 retains
+primary-writer custody of the four shared user-facing documentation surfaces
+through PR #168. After P202 integrates, P197 will merge that baseline, add only
+its bounded challenge-consumer guidance, and complete the final changed-surface
+and protected integration gates.
 
 ## Validation And Exit
 
