@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 3
+Plan version: 4
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -32,7 +32,9 @@ request.
 
 ## Current State
 
-Issue #67 is source-complete at checkpoint `15dd3b58` through PR #160.
+Issue #67 is closed. PR #160 merged exact rebased branch head `01c05d0d` into
+`main` as `e2e81e38`. Exact-head CI run `35092326047` and merge-commit CI run
+`35092355450` pass.
 The provider-free reproducer proved that catalog rank could select an
 incompatible retained profile before browser capability evidence was joined.
 The repaired access-plan seam now prefers a positively compatible candidate,
@@ -123,6 +125,14 @@ production build, and remote-view documentation checks pass. The legacy
 canonical `main` debug binary because its Google readiness expectation has
 drifted; that control failure occurs before the P199-specific contract and is
 not accepted as P199 validation evidence. No live effect occurred.
+
+## Closure Receipt
+
+PR #160 merged source checkpoint `15dd3b58` and exact branch head `01c05d0d`
+into `main` at `e2e81e38`. Issue #67 is closed, the active-lane entry is
+removed, and both source-head and merge-commit CI are green. The repair
+performed no browser, provider, profile, Service State, installation, shared
+runtime, production, or release effect.
 
 ## Stop Condition
 
