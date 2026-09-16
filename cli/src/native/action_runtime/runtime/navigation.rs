@@ -120,7 +120,7 @@ fn navigation_challenge_admission_in_state(
     .map_err(|error| format!("navigation_challenge_admission_invalid:{error}"))
 }
 
-fn navigation_challenge_admission(command: &Value) -> Result<Option<Value>, String> {
+pub(crate) fn navigation_challenge_admission(command: &Value) -> Result<Option<Value>, String> {
     if command.get("challengeTaskId").is_none()
         && command
             .get("params")
@@ -133,12 +133,6 @@ fn navigation_challenge_admission(command: &Value) -> Result<Option<Value>, Stri
     navigation_challenge_admission_in_state(command, &repository.load_snapshot()?)
 }
 
-fn attach_navigation_challenge_admission(data: &mut Value, admission: &Option<Value>) {
-    if let (Some(object), Some(admission)) = (data.as_object_mut(), admission.as_ref()) {
-        object.insert("challengeConsumerAdmission".to_string(), admission.clone());
-    }
-}
-
 /// Upgrade handoffs share the durable service-state lock with active runtimes.
 /// Their owner transfer is bounded by the outer transaction, so tolerate a
 /// short writer burst instead of failing at the ordinary interactive budget.
@@ -148,13 +142,24 @@ fn runtime_handoff_service_repository(
     Ok(LockedServiceStateRepository::default_json()?
         .with_lock_timeout(RUNTIME_HANDOFF_SERVICE_STATE_LOCK_TIMEOUT))
 }
-pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+pub(crate) async fn handle_navigate(
+    cmd: &Value,
+    state: &mut DaemonState,
+    challenge_admission: Option<Value>,
+) -> Result<Value, String> {
     let cancellation = state.current_cancellation.clone();
     let url = cmd
         .get("url")
         .and_then(|v| v.as_str())
         .ok_or("Missing 'url' parameter")?;
-    let challenge_admission = navigation_challenge_admission(cmd)?;
+    let challenge_requested = cmd.get("challengeTaskId").is_some()
+        || cmd
+            .get("params")
+            .and_then(|params| params.get("challengeTaskId"))
+            .is_some();
+    if challenge_requested && challenge_admission.is_none() {
+        return Err("navigation_challenge_admission_missing".to_string());
+    }
     {
         let df = state.domain_filter.read().await;
         if let Some(ref filter) = *df {
@@ -172,7 +177,6 @@ pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Res
                 .await
                 .unwrap_or_default();
             let mut data = json!({ "url" : new_url, "title" : title });
-            attach_navigation_challenge_admission(&mut data, &challenge_admission);
             add_manual_login_hint_warning(cmd, &mut data);
             return Ok(data);
         }
@@ -255,7 +259,6 @@ pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Res
     ) {
         object.insert("sharedAcquisition".to_string(), shared_acquisition.clone());
     }
-    attach_navigation_challenge_admission(&mut data, &challenge_admission);
     add_manual_login_hint_warning(cmd, &mut data);
     persist_service_owned_navigate_tab(
         cmd,
@@ -2759,6 +2762,24 @@ mod tests {
             .unwrap_err(),
             "challenge_consumer_admission_withheld"
         );
+    }
+
+    #[tokio::test]
+    async fn challenge_navigation_handler_rejects_preflight_bypass() {
+        let mut state = DaemonState::new();
+        let command = json!({
+            "action": "navigate",
+            "url": "https://example.test/after-challenge",
+            "challengeTaskId": "challenge-task-1",
+        });
+
+        assert_eq!(
+            handle_navigate(&command, &mut state, None)
+                .await
+                .unwrap_err(),
+            "navigation_challenge_admission_missing"
+        );
+        assert!(state.browser.is_none());
     }
 
     #[test]

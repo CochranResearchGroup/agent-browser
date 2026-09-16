@@ -37,7 +37,7 @@ use super::action_runtime::runtime::{
     handle_cdp_detach, handle_cdp_free_launch, handle_close, handle_external_byop_adopt,
     handle_launch, handle_navigate, handle_recovery_close, handle_runtime_handoff_abort,
     handle_runtime_handoff_finalize, handle_runtime_handoff_prepare, handle_runtime_handoff_resume,
-    handle_runtime_handoff_rollback, handle_snapshot,
+    handle_runtime_handoff_rollback, handle_snapshot, navigation_challenge_admission,
     persist_browser_recovery_started_from_persisted_state, persist_current_browser_stale_health,
     BackendType, CloseBehavior, DaemonState, PendingConfirmation,
 };
@@ -510,11 +510,45 @@ pub(crate) async fn handle_dependent_batch(cmd: &Value, state: &mut DaemonState)
     ))
 }
 
+/// Resolve challenge-aware navigation before the shared dispatcher can confirm,
+/// recover, launch, or otherwise mutate browser/runtime state. The outer wrapper
+/// also retains that admission beside any later success or failure response.
 pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
     let _service_state_lock_timeout_override =
         crate::native::service_store::service_state_lock_timeout_override(
             cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64),
         );
+    let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
+    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    let navigation_admission = if action == "navigate" {
+        match navigation_challenge_admission(cmd) {
+            Ok(admission) => admission,
+            Err(error) => return error_response(id, &error),
+        }
+    } else {
+        None
+    };
+    let mut response =
+        execute_command_after_navigation_admission(cmd, state, navigation_admission.clone()).await;
+    attach_navigation_challenge_admission(&mut response, navigation_admission.as_ref());
+    response
+}
+
+fn attach_navigation_challenge_admission(response: &mut Value, admission: Option<&Value>) {
+    let (Some(response), Some(admission)) = (response.as_object_mut(), admission) else {
+        return;
+    };
+    let data = response.entry("data").or_insert_with(|| json!({}));
+    if let Some(data) = data.as_object_mut() {
+        data.insert("challengeConsumerAdmission".to_string(), admission.clone());
+    }
+}
+
+async fn execute_command_after_navigation_admission(
+    cmd: &Value,
+    state: &mut DaemonState,
+    navigation_admission: Option<Value>,
+) -> Value {
     let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
     let id = cmd
         .get("id")
@@ -844,7 +878,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "ui_action" => handle_service_ui_action(cmd, state).await,
             "network_capture" => handle_service_network_capture(cmd, state).await,
             "file_transfer" => handle_service_file_transfer(cmd, state).await,
-            "navigate" => handle_navigate(cmd, state).await,
+            "navigate" => handle_navigate(cmd, state, navigation_admission.clone()).await,
             "url" => handle_url(state).await,
             "browser_pid" => handle_browser_pid(state),
             "cdp_url" => handle_cdp_url(state),
