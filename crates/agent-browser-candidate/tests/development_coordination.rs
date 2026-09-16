@@ -138,3 +138,32 @@ fn shared_resource_conflict_waits_but_isolated_work_can_overlap() {
         TestRunDecision::StartIsolated { .. }
     ));
 }
+
+#[test]
+fn deserialized_test_identity_and_active_record_must_remain_canonical() {
+    let requested = identity(
+        &["candidate::digest", "candidate::promotion"],
+        TestResourceClass::IsolatedProviderFree,
+    );
+    requested.validate().expect("canonical identity");
+
+    let mut malformed = requested.clone();
+    malformed.selection.reverse();
+    assert_eq!(
+        malformed.validate().unwrap_err().code(),
+        "noncanonical_test_run_identity"
+    );
+    assert_eq!(
+        coordinate_test_run(&malformed, &[], &[])
+            .unwrap_err()
+            .code(),
+        "noncanonical_test_run_identity"
+    );
+
+    let mut active = TestRunRecord::active("run-1", requested);
+    active.terminal_cleanup_proven = true;
+    assert_eq!(
+        active.validate().unwrap_err().code(),
+        "active_test_run_has_terminal_evidence"
+    );
+}

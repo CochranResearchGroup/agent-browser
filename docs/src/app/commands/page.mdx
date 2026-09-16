@@ -52,6 +52,7 @@ agent-browser candidate status --json # Inspect advisory candidate, coordination
 agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json # Validate explicit candidate inputs
 agent-browser candidate build --repo-root . --artifact-class fast_iteration --dry-run --json # Preview one isolated build without compiling
 agent-browser candidate build --repo-root . --artifact-class production_shaped --apply --json # Build and seal a clean-source release-profile artifact without installing it
+agent-browser candidate test --repo-root . --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --suite-revision <commit> --selection candidate-kernel --dry-run --json # Preview exact provider-free testing
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json # Validate exact sealed bytes without creating a transaction
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json # Explicitly install sealed bytes through the workstation transaction
 agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json # Resume one exact retained transaction
@@ -124,6 +125,13 @@ digest, and its current raw value must match without being recorded. `candidate
 build --retry-failed-operation <exact-operation-id> --apply` archives the
 failed claim and any partial sealed directory before acquiring a replacement
 claim. It cannot target an active or different failed operation. `candidate
+test --dry-run` verifies the exact sealed artifact and suite revision, then
+reports whether the identity would join, reuse, or start. Test apply accepts
+only `candidate-kernel`, `candidate-build-adapter`, and `candidate-cli`, with
+repeated `--selection` values combining suites. It isolates HOME, runtime,
+temporary, Cargo, log, and receipt paths below `cli/target`; it does not launch
+a browser or touch either installed runtime. Exact active runs join, and reuse
+requires a successful hermetic receipt with terminal cleanup proof. `candidate
 install --dry-run` additionally verifies the exact binary and sealed build
 artifact without creating state. `candidate install --apply` is an explicit
 production effect. It binds the sealed artifact and candidate coordination

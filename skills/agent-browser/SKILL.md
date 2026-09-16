@@ -302,6 +302,16 @@ value, pass only `--reviewed-environment-input <name=sha256>`; the command fails
 if the current raw value does not match that digest. Retry a failed claim only
 with `--retry-failed-operation <exact-operation-id>`; the failed claim and any
 partial sealed directory are archived rather than deleted.
+Use `agent-browser candidate test --repo-root <source-checkout> --binary <path>
+--manifest <path> --input-closure <path> --sealed-artifact <path>
+--suite-revision <commit> --selection <suite> --dry-run --json` to validate the
+exact artifact and preview whether a provider-free run joins, reuses, or
+starts. Supported suites are `candidate-kernel`, `candidate-build-adapter`, and
+`candidate-cli`; repeat `--selection` to combine them. Replace `--dry-run` with
+`--apply` only when the operator requests test execution. Apply isolates HOME,
+runtime, temporary, Cargo, log, and receipt paths below `cli/target`; it never
+launches a browser or touches either installed runtime. Reuse requires an exact
+successful hermetic receipt with terminal cleanup proof.
 Use `agent-browser candidate install --binary <path> --manifest
 <path> --input-closure <path> --sealed-artifact <path> --dry-run --json` to
 also verify the exact candidate binary and sealed build artifact without an

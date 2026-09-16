@@ -792,6 +792,7 @@ agent-browser candidate status --json # Inspect advisory candidate, coordination
 agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json # Validate explicit candidate inputs
 agent-browser candidate build --repo-root . --artifact-class fast_iteration --dry-run --json # Preview an isolated candidate build without compiling
 agent-browser candidate build --repo-root . --artifact-class production_shaped --apply --json # Build and seal one clean-source release-profile artifact without installing it
+agent-browser candidate test --repo-root . --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --suite-revision <commit> --selection candidate-kernel --dry-run --json # Preview exact provider-free candidate testing
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json # Validate exact sealed bytes without creating a transaction
 agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json # Explicitly install the sealed bytes through the production workstation transaction
 agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json # Resume one exact retained workstation transaction
@@ -867,6 +868,15 @@ features. Supply reviewed build-affecting environment values as
 the digest and is not recorded. A failed claim is retried only with
 `--retry-failed-operation <exact-operation-id>`; its claim and any partial
 sealed directory are archived first.
+
+`candidate test` validates the exact sealed artifact and requires the suite
+revision to match the source checkout. Repeat `--selection` to choose from
+`candidate-kernel`, `candidate-build-adapter`, and `candidate-cli`. Dry-run
+returns join, reuse, or start advice without creating state. Explicit apply
+runs only those provider-free suites with isolated HOME, runtime, temporary,
+Cargo, log, and receipt paths below `cli/target`. Exact active runs join, and
+only a successful hermetic receipt with terminal cleanup proof is reused. The
+command does not launch a browser or touch either installed runtime.
 
 Repeating `stream enable` with no port, port zero, or the current port returns the existing stream status without replacing its listener. A different explicit port fails; disable streaming before changing ports.
 

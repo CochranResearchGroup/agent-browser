@@ -4,6 +4,7 @@ mod agent_env;
 mod candidate;
 mod candidate_build;
 mod candidate_coordination;
+mod candidate_test;
 mod chat;
 mod color;
 mod commands;

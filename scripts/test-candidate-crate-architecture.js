@@ -131,6 +131,37 @@ requireCondition(
   read('cli/src/candidate.rs').includes('candidate_build::run_candidate_build'),
   'candidate CLI must route build execution through the repository adapter',
 );
+requireCondition(
+  read('cli/src/candidate.rs').includes('candidate_test::run_candidate_test'),
+  'candidate CLI must route provider-free test execution through the test adapter',
+);
+
+const testAdapter = read('cli/src/candidate_test.rs');
+for (const requiredBoundary of [
+  'coordinate_test_run',
+  'IsolatedProviderFree',
+  'create_new(true)',
+  'terminal_cleanup_proven',
+  'CARGO_TARGET_DIR',
+  'no_runtime_effect_performed',
+]) {
+  requireCondition(
+    testAdapter.includes(requiredBoundary),
+    `candidate test adapter must retain boundary: ${requiredBoundary}`,
+  );
+}
+for (const forbiddenEffect of [
+  '.agent-browser',
+  'development-runtime',
+  'workstation_install',
+  'systemctl',
+  'browser launch',
+]) {
+  requireCondition(
+    !testAdapter.includes(forbiddenEffect),
+    `candidate test adapter must remain provider-free: ${forbiddenEffect}`,
+  );
+}
 
 const buildAdapter = read('scripts/lib/candidate-build-filesystem-adapter.js');
 for (const requiredBoundary of [

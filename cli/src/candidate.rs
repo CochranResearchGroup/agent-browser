@@ -81,6 +81,7 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
             inspect_candidate_documents(&manifest, &closure)
         }),
         "build" => crate::candidate_build::run_candidate_build(args, json_output),
+        "test" => crate::candidate_test::run_candidate_test(args, json_output),
         "install" => parse_install_arguments(args).and_then(|parsed| {
             let manifest = fs::read(&parsed.manifest)
                 .map_err(|error| format!("failed to read candidate manifest: {error}"))?;

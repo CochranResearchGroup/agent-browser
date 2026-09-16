@@ -186,6 +186,33 @@ impl TestRunIdentity {
     pub fn digest(&self) -> String {
         digest_serializable(self)
     }
+
+    pub fn validate(&self) -> Result<(), CandidateError> {
+        if self.schema_version != TEST_RUN_IDENTITY_SCHEMA_VERSION {
+            return Err(CandidateError::new(
+                "unsupported_test_run_identity_schema",
+                "test-run identity schema is not supported",
+            ));
+        }
+        let canonical = Self::new(
+            self.candidate_manifest_sha256.clone(),
+            self.binary_sha256.clone(),
+            self.test_suite_revision.clone(),
+            self.selection.clone(),
+            self.fixture_sha256.clone(),
+            self.target.clone(),
+            self.runtime_capability_sha256.clone(),
+            self.environment_input_sha256.clone(),
+            self.resource_class.clone(),
+        )?;
+        if canonical != *self {
+            return Err(CandidateError::new(
+                "noncanonical_test_run_identity",
+                "test-run identity must use canonical selection and resource values",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -221,6 +248,30 @@ impl TestRunRecord {
             receipt_locator: None,
         }
     }
+
+    pub fn validate(&self) -> Result<(), CandidateError> {
+        validate_nonempty("test_run_id", &self.run_id)?;
+        self.identity.validate()?;
+        if self.state == TestRunState::Active
+            && (self.hermetic || self.terminal_cleanup_proven || self.receipt_locator.is_some())
+        {
+            return Err(CandidateError::new(
+                "active_test_run_has_terminal_evidence",
+                "an active test run cannot claim terminal receipt or cleanup evidence",
+            ));
+        }
+        if self
+            .receipt_locator
+            .as_ref()
+            .is_some_and(|locator| locator.trim().is_empty())
+        {
+            return Err(CandidateError::new(
+                "invalid_test_receipt_locator",
+                "test receipt locator must be nonempty when present",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -247,6 +298,10 @@ pub fn coordinate_test_run(
     active: &[TestRunRecord],
     completed: &[TestRunRecord],
 ) -> Result<TestRunDecision, CandidateError> {
+    requested.validate()?;
+    for run in active.iter().chain(completed) {
+        run.validate()?;
+    }
     if let Some(run) = active
         .iter()
         .find(|run| run.state == TestRunState::Active && run.identity == *requested)

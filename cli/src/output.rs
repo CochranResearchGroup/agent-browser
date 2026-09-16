@@ -5660,11 +5660,12 @@ Examples:
         // === Candidate orchestration ===
         "candidate" => {
             r##"
-agent-browser candidate - Build, inspect, or explicitly install a sealed candidate
+agent-browser candidate - Build, test, inspect, or explicitly install a sealed candidate
 
 Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
        agent-browser candidate build --repo-root <source-checkout> --artifact-class <fast_iteration|production_shaped> [--target <triple>] [--feature <name>] [--reviewed-environment-input <name=sha256>] [--retry-failed-operation <id>] <--dry-run|--apply> [--json]
+       agent-browser candidate test --repo-root <source-checkout> --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> --suite-revision <commit> --selection <candidate-kernel|candidate-build-adapter|candidate-cli> <--dry-run|--apply> [--json]
        agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json]
        agent-browser candidate recover <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
        agent-browser candidate coordinate <queue|cancel-active|discard-queued|supersede|activate-queued> --request-id <id> --candidate-id <id> --artifact-id <id> [--operation-id <id>] --expected-revision <revision> --expected-fencing-generation <generation> [--json]
@@ -5680,6 +5681,12 @@ touching an installed runtime. Production-shaped builds require clean source.
 Retry a failed claim only by passing its exact operation ID with
 `--retry-failed-operation`; the failed claim and any partial sealed directory
 are archived before the replacement claim is created.
+Test dry-run validates the exact sealed artifact and source revision, then
+reports whether the identity would join, reuse, or start. Test apply accepts
+only the named provider-free suites, isolates HOME, runtime, temporary, Cargo,
+log, and receipt paths below `cli/target`, and never launches a browser or
+touches an installed runtime. Exact active runs join. Only successful hermetic
+receipts with terminal cleanup proof are reused.
 Install dry-run additionally
 validates the exact binary and sealed build artifact while creating no
 transaction or runtime state. Install apply is an explicit production effect:
@@ -5698,6 +5705,7 @@ Examples:
   agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json
   agent-browser candidate build --repo-root . --artifact-class fast_iteration --dry-run --json
   agent-browser candidate build --repo-root . --artifact-class production_shaped --apply --json
+  agent-browser candidate test --repo-root . --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --suite-revision <commit> --selection candidate-kernel --dry-run --json
   agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json
   agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json
   agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json
@@ -7554,6 +7562,7 @@ Setup:
   candidate status            Inspect advisory candidate and workstation state
   candidate inspect           Validate a manifest against an executable-input closure
   candidate build             Plan or explicitly build one isolated sealed artifact
+  candidate test              Plan or explicitly run named provider-free candidate suites
   candidate install           Validate or explicitly install an exact sealed binary
   candidate recover           Resume, roll back, or close one exact install transaction
   candidate coordinate        Apply an exact queued, cancellation, discard, supersede, or activation choice
