@@ -5656,6 +5656,7 @@ Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
        agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json]
        agent-browser candidate recover <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
+       agent-browser candidate coordinate <queue|cancel-active|discard-queued|supersede|activate-queued> --request-id <id> --candidate-id <id> --artifact-id <id> [--operation-id <id>] --expected-revision <revision> --expected-fencing-generation <generation> [--json]
 
 Status projects the current workstation install transaction and durable
 coordination ledger into advisory candidate state. JSON output exposes that
@@ -5669,6 +5670,9 @@ second install. Candidate commands never build an artifact.
 Recover delegates the exact transaction guard to the existing workstation
 resume, rollback, or zero-effect close action. It never selects the latest
 transaction implicitly.
+Coordinate applies one exact compare-and-swap ledger choice. Queue omits
+`--operation-id`; cancel-active, discard-queued, supersede, and activate-queued
+require it. These choices do not mutate a runtime.
 
 Examples:
   agent-browser candidate status --json
@@ -5676,6 +5680,7 @@ Examples:
   agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json
   agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json
   agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json
+  agent-browser candidate coordinate queue --request-id queue-123 --candidate-id candidate-123 --artifact-id seal-123 --expected-revision 4 --expected-fencing-generation 2 --json
 "##
         }
 
@@ -7528,6 +7533,7 @@ Setup:
   candidate inspect           Validate a manifest against an executable-input closure
   candidate install           Validate or explicitly install an exact sealed binary
   candidate recover           Resume, roll back, or close one exact install transaction
+  candidate coordinate        Apply an exact queued, cancellation, discard, supersede, or activation choice
   install                    Install browser binaries
   install workstation        Install and reconcile the source-free Linux workstation
   install transactions       Inspect, resume, rollback, or close exact install transactions; zero-effect close uses an old-reader-safe terminal state

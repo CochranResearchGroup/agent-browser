@@ -4,8 +4,12 @@
 //! Status, inspect, and install dry-run are read-only. Install apply delegates
 //! exact sealed bytes to the existing workstation transaction and candidate
 //! coordination fence; this module does not implement another installer.
+//! Coordinate mutates only the compare-and-swap candidate ledger.
 
-use agent_browser_candidate::{CandidateManifest, CoordinationLedger, ExecutableInputClosure};
+use agent_browser_candidate::{
+    CandidateManifest, CoordinationAction, CoordinationLedger, CoordinationRequest,
+    ExecutableInputClosure,
+};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
@@ -31,6 +35,26 @@ struct InstallArguments {
 enum CandidateInstallMode {
     DryRun,
     Apply,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CandidateCoordinationAction {
+    Queue,
+    CancelActive,
+    DiscardQueued,
+    Supersede,
+    ActivateQueued,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CoordinationArguments {
+    action: CandidateCoordinationAction,
+    request_id: String,
+    candidate_id: String,
+    artifact_id: String,
+    operation_id: Option<String>,
+    expected_revision: u64,
+    expected_fencing_generation: u64,
 }
 
 /// Run a candidate command without starting or connecting to a browser daemon.
@@ -82,6 +106,10 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
             }
         }),
         "recover" => run_candidate_recovery(args, json_output),
+        "coordinate" => parse_coordination_arguments(args).and_then(|parsed| {
+            let root = crate::workstation_install::workstation_root()?;
+            apply_coordination_transition(&root, parsed)
+        }),
         unknown => Err(format!("Unknown candidate operation: {unknown}")),
     };
 
@@ -106,6 +134,123 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
             std::process::exit(1);
         }
     }
+}
+
+fn parse_coordination_arguments(args: &[String]) -> Result<CoordinationArguments, String> {
+    let action = match args.get(2).map(String::as_str) {
+        Some("queue") => CandidateCoordinationAction::Queue,
+        Some("cancel-active") => CandidateCoordinationAction::CancelActive,
+        Some("discard-queued") => CandidateCoordinationAction::DiscardQueued,
+        Some("supersede") => CandidateCoordinationAction::Supersede,
+        Some("activate-queued") => CandidateCoordinationAction::ActivateQueued,
+        Some(action) => return Err(format!("Unknown candidate coordination action: {action}")),
+        None => return Err("candidate coordinate requires an action".to_string()),
+    };
+    let mut request_id = None;
+    let mut candidate_id = None;
+    let mut artifact_id = None;
+    let mut operation_id = None;
+    let mut expected_revision = None;
+    let mut expected_fencing_generation = None;
+    let mut index = 3;
+    while index < args.len() {
+        let (slot, name) = match args[index].as_str() {
+            "--request-id" => (&mut request_id, "--request-id"),
+            "--candidate-id" => (&mut candidate_id, "--candidate-id"),
+            "--artifact-id" => (&mut artifact_id, "--artifact-id"),
+            "--operation-id" => (&mut operation_id, "--operation-id"),
+            "--expected-revision" => (&mut expected_revision, "--expected-revision"),
+            "--expected-fencing-generation" => (
+                &mut expected_fencing_generation,
+                "--expected-fencing-generation",
+            ),
+            unknown => return Err(format!("Unknown candidate coordinate argument: {unknown}")),
+        };
+        if slot.is_some() {
+            return Err(format!("{name} may be specified only once"));
+        }
+        index += 1;
+        *slot = Some(
+            args.get(index)
+                .filter(|value| !value.trim().is_empty())
+                .cloned()
+                .ok_or_else(|| format!("candidate coordinate requires {name} <value>"))?,
+        );
+        index += 1;
+    }
+    let parse_counter = |value: Option<String>, name: &str| -> Result<u64, String> {
+        value
+            .ok_or_else(|| format!("candidate coordinate requires {name} <integer>"))?
+            .parse::<u64>()
+            .map_err(|_| format!("{name} must be a nonnegative integer"))
+    };
+    let operation_required = action != CandidateCoordinationAction::Queue;
+    if operation_required && operation_id.is_none() {
+        return Err("candidate coordinate action requires --operation-id <id>".to_string());
+    }
+    if !operation_required && operation_id.is_some() {
+        return Err("candidate coordinate queue does not accept --operation-id".to_string());
+    }
+    Ok(CoordinationArguments {
+        action,
+        request_id: request_id
+            .ok_or_else(|| "candidate coordinate requires --request-id <id>".to_string())?,
+        candidate_id: candidate_id
+            .ok_or_else(|| "candidate coordinate requires --candidate-id <id>".to_string())?,
+        artifact_id: artifact_id
+            .ok_or_else(|| "candidate coordinate requires --artifact-id <id>".to_string())?,
+        operation_id,
+        expected_revision: parse_counter(expected_revision, "--expected-revision")?,
+        expected_fencing_generation: parse_counter(
+            expected_fencing_generation,
+            "--expected-fencing-generation",
+        )?,
+    })
+}
+
+fn apply_coordination_transition(
+    root: &Path,
+    parsed: CoordinationArguments,
+) -> Result<Value, String> {
+    let action = match parsed.action {
+        CandidateCoordinationAction::Queue => CoordinationAction::Queue,
+        CandidateCoordinationAction::CancelActive => CoordinationAction::CancelActive {
+            operation_id: parsed.operation_id.clone().expect("validated operation ID"),
+        },
+        CandidateCoordinationAction::DiscardQueued => CoordinationAction::DiscardQueued {
+            operation_id: parsed.operation_id.clone().expect("validated operation ID"),
+        },
+        CandidateCoordinationAction::Supersede => CoordinationAction::Supersede {
+            operation_id: parsed.operation_id.clone().expect("validated operation ID"),
+        },
+        CandidateCoordinationAction::ActivateQueued => CoordinationAction::ActivateQueued {
+            operation_id: parsed.operation_id.clone().expect("validated operation ID"),
+        },
+    };
+    let store = crate::candidate_coordination::CandidateCoordinationStore::production(root);
+    let receipt = store.apply(CoordinationRequest {
+        request_id: parsed.request_id,
+        candidate_id: parsed.candidate_id,
+        artifact_id: parsed.artifact_id,
+        expected_revision: parsed.expected_revision,
+        expected_fencing_generation: parsed.expected_fencing_generation,
+        action,
+    })?;
+    let ledger = store.read()?;
+    Ok(json!({
+        "schemaVersion": ADVISORY_SCHEMA_VERSION,
+        "success": true,
+        "observedState": "coordination_updated",
+        "recommendation": "inspect",
+        "alternatives": ["status"],
+        "consequences": ["coordination_state_mutated", "no_runtime_effect_performed"],
+        "integrityPreconditions": ["exact_revision", "exact_fencing_generation"],
+        "reasonCodes": ["candidate_coordination_transition_committed"],
+        "activeOperation": ledger.active(),
+        "coordinationReceipt": receipt,
+        "coordinationLedger": ledger,
+        "buildProvenance": build_provenance(),
+    }))
 }
 
 fn run_candidate_recovery(args: &[String], json_output: bool) -> ! {
@@ -757,6 +902,127 @@ mod tests {
         )
         .unwrap_err()
         .contains("expected resume, rollback, or close"));
+    }
+
+    #[test]
+    fn coordination_choices_commit_through_exact_compare_and_swap() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-candidate-coordinate-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let store = crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let active = store
+            .start_or_join_install("install-a", "candidate-a", "artifact-a")
+            .unwrap();
+        let current = store.read().unwrap();
+        let queued = parse_coordination_arguments(&args(&[
+            "candidate",
+            "coordinate",
+            "queue",
+            "--request-id",
+            "queue-b",
+            "--candidate-id",
+            "candidate-b",
+            "--artifact-id",
+            "artifact-b",
+            "--expected-revision",
+            &current.revision.to_string(),
+            "--expected-fencing-generation",
+            &current.fencing_generation.to_string(),
+        ]))
+        .unwrap();
+        let queued_report = apply_coordination_transition(&root, queued).unwrap();
+        assert_eq!(queued_report["coordinationReceipt"]["outcome"], "queued");
+        assert_eq!(
+            queued_report["consequences"][1],
+            "no_runtime_effect_performed"
+        );
+
+        let current = store.read().unwrap();
+        let cancelled = parse_coordination_arguments(&args(&[
+            "candidate",
+            "coordinate",
+            "cancel-active",
+            "--request-id",
+            "cancel-a",
+            "--candidate-id",
+            "candidate-a",
+            "--artifact-id",
+            "artifact-a",
+            "--operation-id",
+            &active.operation_id,
+            "--expected-revision",
+            &current.revision.to_string(),
+            "--expected-fencing-generation",
+            &current.fencing_generation.to_string(),
+        ]))
+        .unwrap();
+        let cancelled_report = apply_coordination_transition(&root, cancelled).unwrap();
+        assert_eq!(
+            cancelled_report["coordinationReceipt"]["outcome"],
+            "cancelled"
+        );
+        assert!(store.read().unwrap().active().is_none());
+
+        let current = store.read().unwrap();
+        let queued_operation = current.queue()[0].clone();
+        let activated = parse_coordination_arguments(&args(&[
+            "candidate",
+            "coordinate",
+            "activate-queued",
+            "--request-id",
+            "activate-b",
+            "--candidate-id",
+            "candidate-b",
+            "--artifact-id",
+            "artifact-b",
+            "--operation-id",
+            &queued_operation.operation_id,
+            "--expected-revision",
+            &current.revision.to_string(),
+            "--expected-fencing-generation",
+            &current.fencing_generation.to_string(),
+        ]))
+        .unwrap();
+        let activated_report = apply_coordination_transition(&root, activated).unwrap();
+        assert_eq!(
+            activated_report["coordinationReceipt"]["outcome"],
+            "activated_queued"
+        );
+        assert_eq!(
+            store.read().unwrap().active().unwrap().candidate_id,
+            "candidate-b"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn coordination_choice_parser_requires_operation_identity_by_action() {
+        let common = [
+            "candidate",
+            "coordinate",
+            "supersede",
+            "--request-id",
+            "supersede-a",
+            "--candidate-id",
+            "candidate-b",
+            "--artifact-id",
+            "artifact-b",
+            "--expected-revision",
+            "2",
+            "--expected-fencing-generation",
+            "1",
+        ];
+        assert!(parse_coordination_arguments(&args(&common))
+            .unwrap_err()
+            .contains("requires --operation-id"));
+        let mut queued = common.to_vec();
+        queued[2] = "queue";
+        queued.extend(["--operation-id", "operation-a"]);
+        assert!(parse_coordination_arguments(&args(&queued))
+            .unwrap_err()
+            .contains("does not accept --operation-id"));
     }
 
     fn sha256_file(path: &Path) -> String {
