@@ -209,9 +209,6 @@ export function createBuildSupportManifest(closure) {
       .filter((input) => input.category === 'embedded_asset')
       .map((input) => [input.path, input.sha256]),
   );
-  if (dashboardInputs.length === 0 || Object.keys(embeddedAssetDigests).length === 0) {
-    fail('candidate_build_support_incomplete', executableInputSha256);
-  }
   return {
     schemaVersion: BUILD_SUPPORT_MANIFEST_SCHEMA_VERSION,
     executableInputSha256,
@@ -261,6 +258,15 @@ export function createCandidateManifest({
   }
 
   const support = createBuildSupportManifest(closure);
+  if (
+    artifactClass === 'production_shaped'
+    && (
+      !closure.inputs.some((input) => input.category === 'embedded_dashboard')
+      || Object.keys(support.embeddedAssetDigests).length === 0
+    )
+  ) {
+    fail('candidate_build_support_incomplete', support.executableInputSha256);
+  }
   const candidateId = `candidate-${support.executableInputSha256.slice(0, 16)}-${binarySha256.slice(0, 16)}`;
   return {
     schemaVersion: CANDIDATE_MANIFEST_SCHEMA_VERSION,

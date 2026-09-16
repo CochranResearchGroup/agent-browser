@@ -163,6 +163,52 @@ try {
   assert.equal(candidate.embeddedDashboardSha256, support.embeddedDashboardSha256);
   assert.match(supportSha256, /^[a-f0-9]{64}$/u);
 
+  const fastClosure = {
+    ...rustFixtureClosure,
+    context: {
+      ...rustFixtureClosure.context,
+      cargoProfile: 'ci',
+      resolvedBuildProfile: {
+        optLevel: '3',
+        lto: 'thin',
+        codegenUnits: 16,
+        strip: true,
+      },
+    },
+    inputs: [rustFixtureClosure.inputs[0]],
+  };
+  const fastSupport = createBuildSupportManifest(fastClosure);
+  const fastCandidate = createCandidateManifest({
+    closure: fastClosure,
+    source: {
+      commit: 'b'.repeat(40),
+      tree: 'c'.repeat(64),
+      state: 'dirty',
+    },
+    artifactClass: 'fast_iteration',
+    binarySha256: 'f'.repeat(64),
+    supportManifestSha256: '1'.repeat(64),
+    createdAt: '2026-09-15T12:00:00Z',
+  });
+  assert.deepEqual(fastSupport.embeddedAssetDigests, {});
+  assert.deepEqual(fastCandidate.embeddedAssetDigests, {});
+
+  assert.throws(
+    () => createCandidateManifest({
+      closure: fastClosure,
+      source: {
+        commit: 'b'.repeat(40),
+        tree: 'c'.repeat(64),
+        state: 'clean',
+      },
+      artifactClass: 'production_shaped',
+      binarySha256: 'f'.repeat(64),
+      supportManifestSha256: '1'.repeat(64),
+      createdAt: '2026-09-15T12:00:00Z',
+    }),
+    /candidate_build_support_incomplete/u,
+  );
+
   write('packages/dashboard/out/index.html', 'Dashboard not built. Run: pnpm build\n');
   assert.throws(
     () => collectExecutableInputClosure({

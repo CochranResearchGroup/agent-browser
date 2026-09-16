@@ -57,6 +57,15 @@ requireCondition(
     && existsSync(join(repoRoot, 'scripts/test-candidate-executable-input.js')),
   'candidate executable-input collector and focused test must exist',
 );
+requireCondition(
+  read('package.json').includes('"test:candidate-build-executor"'),
+  'package scripts must expose the provider-free candidate build executor test',
+);
+requireCondition(
+  existsSync(join(repoRoot, 'scripts/lib/candidate-build-executor.js'))
+    && existsSync(join(repoRoot, 'scripts/test-candidate-build-executor.js')),
+  'candidate build executor and focused test must exist',
+);
 
 const inputCollector = read('scripts/lib/candidate-executable-input.js');
 for (const requiredBoundary of [
@@ -77,6 +86,31 @@ for (const forbiddenEffect of ['node:child_process', 'execFile', 'spawn(', 'proc
   requireCondition(
     !inputCollector.includes(forbiddenEffect),
     `candidate input collector must remain provider-free and non-executing: ${forbiddenEffect}`,
+  );
+}
+const buildExecutor = read('scripts/lib/candidate-build-executor.js');
+for (const requiredBoundary of [
+  'createCandidateBuildPlan',
+  'executeCandidateBuildPlan',
+  'candidate_build_plan_tampered',
+  'scripts/ci/cargo-safe.sh',
+  'no_effect_performed',
+]) {
+  requireCondition(
+    buildExecutor.includes(requiredBoundary),
+    `candidate build executor must retain boundary: ${requiredBoundary}`,
+  );
+}
+for (const forbiddenEffect of [
+  'node:child_process',
+  'node:fs',
+  'execFile',
+  'spawn(',
+  'process.env',
+]) {
+  requireCondition(
+    !buildExecutor.includes(forbiddenEffect),
+    `candidate build executor must remain provider-free and effect-injected: ${forbiddenEffect}`,
   );
 }
 requireCondition(
