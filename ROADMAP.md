@@ -25,6 +25,20 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P202 | Abandoned Service Browser Retirement
+
+State: OPEN
+
+Current state: [Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+owns the bounded no-live implementation for
+[issue #103](https://github.com/CochranResearchGroup/agent-browser/issues/103).
+P202 starts from `main@151ebccd` and will join existing exact process-tree
+shutdown and record-retirement primitives into owner-aware abandoned-lane
+classification, per-lane resource/status projection, and sealed activity-aware
+retirement. P190 and P197 retain their existing shared-surface ownership. No
+installed cleanup, browser shutdown, protected-profile effect, runtime restart,
+provider mutation, production effect, or release is authorized.
+
 ## P201 | X Display Live Occupancy
 
 State: CLOSED

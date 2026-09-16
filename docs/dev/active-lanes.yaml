@@ -43,3 +43,24 @@ lanes:
     reconciled_overlaps: [P190]
     blocker: provider-free consumer admission contract and two consumer integrations remain in progress; every live challenge effect stays with issue #66
     updated_at: 2026-09-16
+  - id: P202
+    product_lane: PL-PLATFORM
+    objective: Classify and safely retire exact abandoned service-owned browser process trees
+    plan: docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md
+    plan_ref: refs/heads/platform/p202-abandoned-browser-retirement
+    branch: platform/p202-abandoned-browser-retirement
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 151ebccd610869f457ea684b416e31408fee9fb3
+    remote_ref: null
+    integration_receipt: null
+    integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
+    validation_status: pending
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#103]
+    dependencies: []
+    overlaps: [P190, P197]
+    reconciled_overlaps: [P190, P197]
+    blocker: contract freeze and the first red-capable focused fixture remain
+    updated_at: 2026-09-16
