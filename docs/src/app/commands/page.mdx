@@ -48,6 +48,15 @@ agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate determ
 agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 # Observe the synthetic external-prompt fixture
 agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
 agent-browser service state validate --path /tmp/candidate-state.json --json # Validate exact state bytes with this installed executable
+agent-browser candidate status --json # Inspect advisory candidate, coordination ledger, and workstation state without effects
+agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json # Validate explicit candidate inputs
+agent-browser candidate build --repo-root . --artifact-class fast_iteration --dry-run --json # Preview one isolated build without compiling
+agent-browser candidate build --repo-root . --artifact-class production_shaped --apply --json # Build and seal a clean-source release-profile artifact without installing it
+agent-browser candidate test --repo-root . --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --suite-revision <commit> --selection candidate-kernel --dry-run --json # Preview exact provider-free testing
+agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --dry-run --json # Validate exact sealed bytes without creating a transaction
+agent-browser candidate install --binary ./agent-browser --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --sealed-artifact ./sealed-artifact.json --apply --json # Explicitly install sealed bytes through the workstation transaction
+agent-browser candidate recover resume --transaction-id upgrade-123 --expected-revision 7 --candidate-generation generation-123 --census-digest none --json # Resume one exact retained transaction
+agent-browser candidate coordinate queue --request-id queue-123 --candidate-id candidate-123 --artifact-id seal-123 --expected-revision 4 --expected-fencing-generation 2 --json # Queue a competing candidate without touching a runtime
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -99,6 +108,52 @@ agent-browser mcp read agent-browser://events
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 ```
+
+`candidate status` projects the durable `coordinationLedger` and current
+workstation transaction into advisory state, then includes the running
+executable's build provenance. An absent coordination file is reported as an
+empty ledger without creating state. `candidate inspect` validates
+caller-supplied manifest and executable-input closure files. `candidate build
+--dry-run` returns an exact isolated plan without writing state or compiling.
+Build apply requires explicit `--apply`, deduplicates with an exclusive request
+claim, runs Cargo through the repository safety wrapper, derives the executable
+closure from compiler dep-info, and seals immutable artifacts below
+`cli/target`. It never installs or mutates either runtime. Production-shaped
+builds require clean source. Repeated `--feature` values select features; each
+reviewed build-affecting environment value is supplied as a name and SHA-256
+digest, and its current raw value must match without being recorded. `candidate
+build --retry-failed-operation <exact-operation-id> --apply` archives the
+failed claim and any partial sealed directory before acquiring a replacement
+claim. It cannot target an active or different failed operation. `candidate
+build --recover-active-operation <exact-operation-id> --apply` verifies that
+the claim's recorded owner PID is no longer live, then archives the abandoned
+claim and partial sealed directory before creating a replacement claim.
+`candidate test --dry-run` verifies the exact sealed artifact and suite revision, then
+reports whether the identity would join, reuse, or start. Test apply accepts
+only `candidate-kernel`, `candidate-build-adapter`, and `candidate-cli`, with
+repeated `--selection` values combining suites. It isolates HOME, runtime,
+temporary, Cargo, log, and receipt paths below `cli/target`; it does not launch
+a browser or touch either installed runtime. Exact active runs join, and reuse
+requires a successful hermetic receipt with terminal cleanup proof. `candidate
+test --recover-active-run <exact-run-id> --apply` verifies that its recorded
+owner PID is no longer live and archives the abandoned active claim before a
+replacement run starts. `candidate
+install --dry-run` additionally verifies the exact binary and sealed build
+artifact without creating state. `candidate install --apply` is an explicit
+production effect. It binds the sealed artifact and candidate coordination
+custody into the existing workstation transaction; an identical concurrent
+request joins without creating a second install transaction. Use `candidate
+status` and the exact
+`install transactions` actions to inspect or recover a retained transaction.
+`candidate recover <resume|rollback|close>` is an exact alias for those actions
+and requires the transaction ID, revision, candidate generation, and census
+digest. It never selects the latest transaction implicitly.
+`candidate coordinate` accepts `queue`, `cancel-active`, `discard-queued`,
+`supersede`, or `activate-queued` and applies one explicit compare-and-swap
+ledger choice. Pass the current revision and fencing generation from
+`candidate status`; every action except queue also requires the exact operation
+ID. These choices do not mutate a runtime, but cancellation and supersession
+immediately fence stale writers.
 
 `close --all` is a global operation and rejects an explicit `--session` before
 runtime inspection. Use `agent-browser --session <name> close` for one session.

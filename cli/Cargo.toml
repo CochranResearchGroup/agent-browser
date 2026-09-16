@@ -11,6 +11,7 @@ keywords = ["browser", "automation", "ai", "cdp", "chrome"]
 categories = ["command-line-utilities", "web-programming"]
 
 [dependencies]
+agent-browser-candidate = { path = "../crates/agent-browser-candidate" }
 agent-browser-cdp = { path = "../crates/agent-browser-cdp" }
 agent-browser-challenge-control = { path = "../crates/agent-browser-challenge-control" }
 agent-browser-desktop-services = { path = "../crates/agent-browser-desktop-services" }
@@ -45,4 +46,4 @@ rust-embed = "8"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", features = ["Wdk_System_Threading", "Win32_System_Threading", "Win32_Foundation"] }
+windows-sys = { version = "0.52", features = ["Wdk_System_Threading", "Win32_System_Threading", "Win32_Foundation", "Win32_Storage_FileSystem"] }

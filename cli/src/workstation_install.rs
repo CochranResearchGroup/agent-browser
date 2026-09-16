@@ -1283,7 +1283,7 @@ fn resume_prepared_payload_transaction(
     }
     paths = install_paths(root);
     if prepared.transaction.state == UpgradeTransactionState::GenerationCommitted {
-        if let Err(error) = begin_post_commit_validation(prepared) {
+        if let Err(error) = begin_post_commit_validation(&paths, prepared) {
             return Err(rollback_resumed_transaction(
                 &paths,
                 prepared,
@@ -1372,7 +1372,7 @@ fn resume_prepared_payload_transaction(
                 error,
             ));
         }
-        if let Err(error) = promote_dashboard_candidate_to_managed_backend(args, prepared) {
+        if let Err(error) = promote_dashboard_candidate_to_managed_backend(&paths, args, prepared) {
             return Err(rollback_resumed_transaction(
                 &paths,
                 prepared,
@@ -1397,13 +1397,16 @@ fn resume_prepared_payload_transaction(
         }
     };
     if let Err(error) = accept_prepared_payload_transaction(
+        &paths,
         prepared,
         validation,
         (!isolated_root).then_some(paths.binary.as_path()),
     ) {
-        if prepared.transaction.state
-            == crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
-        {
+        if matches!(
+            prepared.transaction.state,
+            crate::runtime_adoption::UpgradeTransactionState::Accepted
+                | crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
+        ) {
             return Err(error);
         }
         return Err(rollback_resumed_transaction(
@@ -1843,6 +1846,7 @@ fn recover_operator_required_upgrade_for_root(
                 "accepted_after_supervisor_transition_recovery",
             )?;
         }
+        ensure_transaction_candidate_install_completed(&paths, &transaction)?;
         if let Err(error) = clear_admission_drain(&drain_path) {
             transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
             persist_upgrade_transition(
@@ -3047,6 +3051,43 @@ fn converge_prior_install_before_new_apply(
 }
 
 fn run_workstation_install(args: &[String]) {
+    run_workstation_install_with_candidate(args, None);
+}
+
+pub(crate) fn run_reviewed_candidate_install(
+    binary_path: &Path,
+    manifest_bytes: &[u8],
+    closure_bytes: &[u8],
+    sealed_artifact_bytes: &[u8],
+    json: bool,
+) -> ! {
+    let candidate = ReviewedCandidatePayload::from_documents(
+        binary_path.to_path_buf(),
+        manifest_bytes,
+        closure_bytes,
+        sealed_artifact_bytes,
+    )
+    .unwrap_or_else(|error| fail(&error, json));
+    candidate
+        .source
+        .verify()
+        .unwrap_or_else(|error| fail(&error, json));
+    let mut args = vec![
+        "install".to_string(),
+        "workstation".to_string(),
+        "--apply".to_string(),
+    ];
+    if json {
+        args.push("--json".to_string());
+    }
+    run_workstation_install_with_candidate(&args, Some(candidate));
+    std::process::exit(0);
+}
+
+fn run_workstation_install_with_candidate(
+    args: &[String],
+    reviewed_candidate: Option<ReviewedCandidatePayload>,
+) {
     let parsed = match parse_workstation_install_args(args) {
         Ok(parsed) => parsed,
         Err(error) => fail(&error, args.iter().any(|arg| arg == "--json")),
@@ -3207,13 +3248,24 @@ fn run_workstation_install(args: &[String]) {
         phases.push("prior-install-transaction-converged");
     }
     let mut prepared_payload = if parsed.mode == InstallMode::Apply {
-        let prepared = match prepare_payload_transaction_with_replacement(
-            &root,
-            &paths,
-            &parsed,
-            isolated_root,
-            runtime_replacement_plan.as_ref(),
-        ) {
+        let preparation = match reviewed_candidate.as_ref() {
+            Some(candidate) => prepare_coordinated_reviewed_candidate_payload_transaction(
+                &root,
+                &paths,
+                &parsed,
+                isolated_root,
+                runtime_replacement_plan.as_ref(),
+                candidate,
+            ),
+            None => prepare_payload_transaction_with_replacement(
+                &root,
+                &paths,
+                &parsed,
+                isolated_root,
+                runtime_replacement_plan.as_ref(),
+            ),
+        };
+        let prepared = match preparation {
             Ok(prepared) => prepared,
             Err(error) => fail(&error, parsed.json),
         };
@@ -3224,6 +3276,9 @@ fn run_workstation_install(args: &[String]) {
             "candidate-preflight-ready",
             "runtime-census-stable",
         ]);
+        if reviewed_candidate.is_some() {
+            phases.push("sealed-candidate-bound");
+        }
         Some(prepared)
     } else {
         None
@@ -3366,7 +3421,7 @@ fn run_workstation_install(args: &[String]) {
         }
         phases.push("payload-committed");
         paths = install_paths(&root);
-        if let Err(error) = begin_post_commit_validation(prepared) {
+        if let Err(error) = begin_post_commit_validation(&paths, prepared) {
             let rollback = rollback_prepared_payload_transaction(
                 &paths,
                 prepared,
@@ -3447,7 +3502,7 @@ fn run_workstation_install(args: &[String]) {
                     })
             } else {
                 if let Err(error) =
-                    promote_dashboard_candidate_to_managed_backend(&parsed, prepared)
+                    promote_dashboard_candidate_to_managed_backend(&paths, &parsed, prepared)
                 {
                     let rollback = rollback_prepared_payload_transaction(
                         &paths,
@@ -3492,13 +3547,16 @@ fn run_workstation_install(args: &[String]) {
                 .unwrap_or_else(|error| fail(&error, parsed.json))
         };
         if let Err(error) = accept_prepared_payload_transaction(
+            &paths,
             prepared,
             validation,
             (!isolated_root).then_some(paths.binary.as_path()),
         ) {
-            if prepared.transaction.state
-                == crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
-            {
+            if matches!(
+                prepared.transaction.state,
+                crate::runtime_adoption::UpgradeTransactionState::Accepted
+                    | crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
+            ) {
                 fail(&error, parsed.json);
             }
             let rollback = rollback_prepared_payload_transaction(
@@ -6619,15 +6677,28 @@ fn prepare_service_state_migration_transaction(
     Ok(())
 }
 
+#[cfg(test)]
 fn refresh_service_state_migration_after_full_shutdown(
     transaction_path: &Path,
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
+    let refresh = prepare_service_state_migration_after_full_shutdown(transaction)?;
+    commit_service_state_migration_after_full_shutdown(transaction_path, transaction, refresh)
+}
+
+struct PreparedFullShutdownServiceStateRefresh {
+    migration: crate::runtime_adoption::UpgradeServiceStateMigration,
+    writes: Vec<(PathBuf, Vec<u8>)>,
+}
+
+fn prepare_service_state_migration_after_full_shutdown(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<PreparedFullShutdownServiceStateRefresh, String> {
     use crate::native::service_state_migration::{
         stage_service_state_migration, ServiceStateMigrationStatus,
     };
 
-    let Some(migration) = transaction.service_state_migration.as_mut() else {
+    let Some(mut migration) = transaction.service_state_migration.clone() else {
         return Err("runtime_replacement_service_state_migration_missing".to_string());
     };
     if migration.status == "staged_validated_no_change" {
@@ -6635,8 +6706,10 @@ fn refresh_service_state_migration_after_full_shutdown(
             "runtimeReplacementBaseline".to_string(),
             Value::String("live_state_preserved_no_change".to_string()),
         );
-        write_private_json_atomic(transaction_path, transaction)?;
-        return Ok(());
+        return Ok(PreparedFullShutdownServiceStateRefresh {
+            migration,
+            writes: Vec::new(),
+        });
     }
     let state_path = PathBuf::from(&migration.authoritative_state_path);
     let current = match fs::read(&state_path) {
@@ -6671,15 +6744,16 @@ fn refresh_service_state_migration_after_full_shutdown(
             .ok_or_else(|| "runtime_replacement_service_state_stage_missing".to_string())?,
     );
     let pre_shutdown_snapshot = snapshot_path.with_extension("pre-full-shutdown.audit.json");
+    let mut writes = Vec::new();
     if !pre_shutdown_snapshot.exists() && snapshot_path.is_file() {
         let original = fs::read(&snapshot_path).map_err(display_io(
             "read pre-full-shutdown snapshot",
             &snapshot_path,
         ))?;
-        write_private_bytes_atomic(&pre_shutdown_snapshot, &original)?;
+        writes.push((pre_shutdown_snapshot.clone(), original));
     }
-    write_private_bytes_atomic(&snapshot_path, &current)?;
-    write_private_bytes_atomic(&staged_path, &staged.bytes)?;
+    writes.push((snapshot_path.clone(), current.clone()));
+    writes.push((staged_path.clone(), staged.bytes.clone()));
     migration.source_state_schema = staged.plan.source_state_schema;
     migration.target_state_schema = staged.plan.target_state_schema.to_string();
     migration.source_profile_lease_schema = staged.plan.source_profile_lease_schema;
@@ -6707,6 +6781,18 @@ fn refresh_service_state_migration_after_full_shutdown(
         "runtimeReplacementBaseline".to_string(),
         Value::String("post_full_shutdown".to_string()),
     );
+    Ok(PreparedFullShutdownServiceStateRefresh { migration, writes })
+}
+
+fn commit_service_state_migration_after_full_shutdown(
+    transaction_path: &Path,
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    refresh: PreparedFullShutdownServiceStateRefresh,
+) -> Result<(), String> {
+    for (path, bytes) in refresh.writes {
+        write_private_bytes_atomic(&path, &bytes)?;
+    }
+    transaction.service_state_migration = Some(refresh.migration);
     write_private_json_atomic(transaction_path, transaction)
 }
 
@@ -6844,9 +6930,16 @@ fn candidate_generation_identity(
     paths: &InstallPaths,
     args: &WorkstationInstallArgs,
 ) -> Result<(String, String, String), String> {
-    let current_exe = env::current_exe()
-        .map_err(|error| format!("Unable to resolve candidate executable: {error}"))?;
-    let binary_sha256 = workstation_file_sha256(&current_exe)?;
+    let source = WorkstationPayloadSource::current()?;
+    candidate_generation_identity_from_source(paths, args, &source)
+}
+
+fn candidate_generation_identity_from_source(
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    source: &WorkstationPayloadSource,
+) -> Result<(String, String, String), String> {
+    let binary_sha256 = source.verify()?;
     let rendered_units = render_units(
         &paths.binary.display().to_string(),
         &paths.current_selector.join("support"),
@@ -7177,12 +7270,129 @@ fn prepare_payload_transaction_with_replacement(
     isolated_root: bool,
     runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
 ) -> Result<PreparedPayloadTransaction, String> {
+    let source = WorkstationPayloadSource::current()?;
+    prepare_payload_transaction_from_source(
+        root,
+        paths,
+        args,
+        isolated_root,
+        runtime_replacement_plan,
+        &source,
+    )
+}
+
+fn prepare_payload_transaction_from_source(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
+    source: &WorkstationPayloadSource,
+) -> Result<PreparedPayloadTransaction, String> {
+    prepare_payload_transaction_from_source_with_candidate_binding(
+        root,
+        paths,
+        args,
+        isolated_root,
+        runtime_replacement_plan,
+        source,
+        None,
+    )
+}
+
+struct ReviewedCandidateTransactionBindings<'a> {
+    artifact: &'a CandidateArtifactTransactionBinding,
+    custody: &'a crate::candidate_coordination::CandidateInstallCustody,
+}
+
+fn prepare_coordinated_reviewed_candidate_payload_transaction(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
+    candidate: &ReviewedCandidatePayload,
+) -> Result<PreparedPayloadTransaction, String> {
+    let coordination = crate::candidate_coordination::CandidateCoordinationStore::production(root);
+    let request_id = format!("candidate-install-{}", uuid::Uuid::new_v4());
+    let custody = coordination.start_or_join_install(
+        &request_id,
+        &candidate.binding.candidate_id,
+        &candidate.binding.artifact_seal_sha256,
+    )?;
+    if custody.acquisition_outcome == agent_browser_candidate::CoordinationOutcome::JoinedExisting {
+        return Err(format!(
+            "candidate_install_joined_existing:{}",
+            custody.operation_id
+        ));
+    }
+    prepare_reviewed_candidate_payload_transaction(
+        root,
+        paths,
+        args,
+        isolated_root,
+        runtime_replacement_plan,
+        candidate,
+        &custody,
+    )
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn prepare_reviewed_candidate_payload_transaction(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
+    candidate: &ReviewedCandidatePayload,
+    custody: &crate::candidate_coordination::CandidateInstallCustody,
+) -> Result<PreparedPayloadTransaction, String> {
+    if custody.candidate_id != candidate.binding.candidate_id
+        || custody.artifact_id != candidate.binding.artifact_seal_sha256
+    {
+        return Err("candidate_install_custody_artifact_mismatch".to_string());
+    }
+    prepare_payload_transaction_from_source_with_candidate_binding(
+        root,
+        paths,
+        args,
+        isolated_root,
+        runtime_replacement_plan,
+        &candidate.source,
+        Some(ReviewedCandidateTransactionBindings {
+            artifact: &candidate.binding,
+            custody,
+        }),
+    )
+}
+
+fn prepare_payload_transaction_from_source_with_candidate_binding(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
+    source: &WorkstationPayloadSource,
+    candidate_bindings: Option<ReviewedCandidateTransactionBindings<'_>>,
+) -> Result<PreparedPayloadTransaction, String> {
     use crate::runtime_adoption::{persist_runtime_census, UpgradeTransactionState};
 
     let (generation_id, binary_sha256, support_manifest_sha256) =
-        candidate_generation_identity(paths, args)?;
+        candidate_generation_identity_from_source(paths, args, source)?;
     let mut transaction =
         new_upgrade_transaction(paths, generation_id, binary_sha256, support_manifest_sha256);
+    if let Some(bindings) = candidate_bindings {
+        transaction.successor_fields.insert(
+            "candidateArtifact".to_string(),
+            serde_json::to_value(bindings.artifact)
+                .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))?,
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(bindings.custody)
+                .map_err(|error| format!("candidate_install_custody_serialize_failed:{error}"))?,
+        );
+    }
     match (args.runtime_replacement_policy, runtime_replacement_plan) {
         (RuntimeReplacementPolicy::Preserve, None) => {}
         (RuntimeReplacementPolicy::FullShutdown, Some(plan)) => {
@@ -7233,7 +7443,7 @@ fn prepare_payload_transaction_with_replacement(
         ));
     }
 
-    let staged = match stage_payload_generation(paths, args) {
+    let staged = match stage_payload_generation_from_source(paths, args, source) {
         Ok(staged) => staged,
         Err(error) => {
             transaction.stop_reason = Some("candidate_staging_failed".to_string());
@@ -7390,41 +7600,67 @@ fn activate_prepared_payload_transaction(
     paths: &InstallPaths,
     isolated_root: bool,
 ) -> Result<(), String> {
-    use crate::runtime_adoption::UpgradeTransactionState;
-
     crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
     let full_shutdown =
         crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?.is_some();
     let pre_drain_quiescence_required =
         pre_drain_quiescence_required(&prepared.transaction, isolated_root, full_shutdown);
-    begin_admission_draining_after_quiescence_with(
-        &prepared.transaction_path,
-        &mut prepared.transaction,
-        &prepared.admission_drain_path,
-        full_shutdown,
-        pre_drain_quiescence_required,
-        |transaction, admission_drain_path| {
-            quiesce_browserless_shared_runtime_lanes_before_admission_drain(
-                transaction,
-                paths,
-                isolated_root,
-                admission_drain_path,
-            )
-            .map(|_| ())
-        },
-    )?;
-    persist_upgrade_transition(
-        &prepared.transaction_path,
-        &mut prepared.transaction,
-        UpgradeTransactionState::RuntimesTransferring,
-        "runtimes_transferring",
-    )?;
-    if !full_shutdown {
-        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+    if pre_drain_quiescence_required {
+        with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
+        quiesce_browserless_shared_runtime_lanes_before_admission_drain(
+            &prepared.transaction,
+            paths,
+            isolated_root,
+            &prepared.admission_drain_path,
+        )?;
     }
+    publish_runtime_transfer_start(paths, prepared, full_shutdown)?;
     complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
-    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
-    complete_presentation_rebind_phase(prepared)
+    complete_presentation_rebind_phase(paths, prepared)
+}
+
+fn publish_runtime_transfer_start(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    full_shutdown: bool,
+) -> Result<(), String> {
+    use crate::runtime_adoption::UpgradeTransactionState;
+
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        let resumed = match prepared.transaction.state {
+            UpgradeTransactionState::StateMigrationValidated => {
+                begin_admission_draining_after_quiescence_with(
+                    &prepared.transaction_path,
+                    &mut prepared.transaction,
+                    &prepared.admission_drain_path,
+                    full_shutdown,
+                    false,
+                    |_, _| Ok(()),
+                )?;
+                false
+            }
+            UpgradeTransactionState::AdmissionDraining => true,
+            ref state => {
+                return Err(format!(
+                    "install_transaction_runtime_transfer_start_invalid:{state:?}"
+                ));
+            }
+        };
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            UpgradeTransactionState::RuntimesTransferring,
+            if resumed {
+                "runtimes_transferring_on_resume"
+            } else {
+                "runtimes_transferring"
+            },
+        )?;
+        if !full_shutdown {
+            persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+        }
+        Ok(())
+    })
 }
 
 fn complete_runtime_transfer_phase(
@@ -7433,6 +7669,7 @@ fn complete_runtime_transfer_phase(
     isolated_root: bool,
 ) -> Result<(), String> {
     if candidate_runtime_host_stage_required(isolated_root, 0) {
+        with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
         capture_selected_runtime_host_before_transfer(&mut prepared.transaction)?;
         if let Some(plan) =
             crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?
@@ -7446,28 +7683,31 @@ fn complete_runtime_transfer_phase(
             {
                 return Ok(());
             }
-            crate::runtime_replacement::execute_full_shutdown(
+            let mut fence = |transaction_path: &Path,
+                             transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+                             receipt: Option<
+                &crate::runtime_replacement::RuntimeReplacementEffectReceipt,
+            >| {
+                with_transaction_candidate_install_custody(paths, transaction, |transaction| {
+                    if let Some(receipt) = receipt {
+                        crate::runtime_replacement::persist_full_shutdown_checkpoint(
+                            transaction_path,
+                            transaction,
+                            receipt,
+                        )
+                    } else {
+                        Ok(())
+                    }
+                })
+            };
+            crate::runtime_replacement::execute_full_shutdown_fenced(
                 &prepared.transaction_path,
                 &mut prepared.transaction,
                 &plan,
+                &mut fence,
             )?;
-            refresh_service_state_migration_after_full_shutdown(
-                &prepared.transaction_path,
-                &mut prepared.transaction,
-            )?;
-            persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
-            for migration in &mut prepared.transaction.runtime_migrations {
-                if migration.disposition
-                    == crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer
-                {
-                    migration.disposition =
-                        crate::runtime_adoption::RuntimeDisposition::RetiredIdle;
-                    let reason = "closed_by_reviewed_full_shutdown";
-                    if !migration.reason_codes.iter().any(|value| value == reason) {
-                        migration.reason_codes.push(reason.to_string());
-                    }
-                }
-            }
+            refresh_full_shutdown_service_state_with_custody(paths, prepared)?;
+            with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
             let candidate_socket_dir =
                 candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
             let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
@@ -7483,30 +7723,24 @@ fn complete_runtime_transfer_phase(
                 &prepared.transaction.candidate_binary_sha256,
                 true,
             )?;
-            crate::runtime_adoption::record_runtime_host_identity(
-                &mut prepared.transaction,
-                true,
-                host_identity,
-            )?;
-            stage_candidate_runtime_host_ingress(
+            commit_full_shutdown_runtime_transfer_evidence(
                 paths,
-                &mut prepared.transaction,
+                prepared,
+                host_identity,
                 candidate_backend,
             )?;
-            write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
             return Ok(());
         }
+        with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
+        let mut runtime_migrations = prepared.transaction.runtime_migrations.clone();
+        let mut runtime_handoffs = prepared.runtime_handoffs.clone();
         let transfer_outcome = transfer_discovered_runtimes(
             paths,
             &prepared.staged,
             &prepared.transaction.transaction_id,
             prepared.transaction.revision,
-            &mut prepared.transaction.runtime_migrations,
-            &mut prepared.runtime_handoffs,
-        )?;
-        retire_preserved_runtime_convergence_lanes(
-            prepared.transaction.runtime_host_convergence.as_mut(),
-            &transfer_outcome.preserved_lane_sessions,
+            &mut runtime_migrations,
+            &mut runtime_handoffs,
         )?;
         let candidate_socket_dir =
             candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
@@ -7515,6 +7749,85 @@ fn complete_runtime_transfer_phase(
             &prepared.transaction.candidate_generation_id,
             &prepared.transaction.candidate_binary_sha256,
             true,
+        )?;
+        commit_cooperative_runtime_transfer_evidence(
+            paths,
+            prepared,
+            runtime_migrations,
+            runtime_handoffs,
+            transfer_outcome,
+            host_identity,
+            candidate_backend,
+        )?;
+    }
+    Ok(())
+}
+
+fn refresh_full_shutdown_service_state_with_custody(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
+    let refresh = prepare_service_state_migration_after_full_shutdown(&prepared.transaction)?;
+    let transaction_path = prepared.transaction_path.clone();
+    let admission_drain_path = prepared.admission_drain_path.clone();
+    with_transaction_candidate_install_custody(
+        paths,
+        &mut prepared.transaction,
+        move |transaction| {
+            commit_service_state_migration_after_full_shutdown(
+                &transaction_path,
+                transaction,
+                refresh,
+            )?;
+            persist_admission_drain(&admission_drain_path, transaction)
+        },
+    )
+}
+
+fn commit_full_shutdown_runtime_transfer_evidence(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    host_identity: crate::runtime_adoption::RuntimeHostIdentityEvidence,
+    candidate_backend: crate::runtime_host_ingress::RuntimeHostBackend,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, move |prepared| {
+        for migration in &mut prepared.transaction.runtime_migrations {
+            if migration.disposition
+                == crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer
+            {
+                migration.disposition = crate::runtime_adoption::RuntimeDisposition::RetiredIdle;
+                let reason = "closed_by_reviewed_full_shutdown";
+                if !migration.reason_codes.iter().any(|value| value == reason) {
+                    migration.reason_codes.push(reason.to_string());
+                }
+            }
+        }
+        crate::runtime_adoption::record_runtime_host_identity(
+            &mut prepared.transaction,
+            true,
+            host_identity,
+        )?;
+        stage_candidate_runtime_host_ingress(paths, &mut prepared.transaction, candidate_backend)?;
+        write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)
+    })
+}
+
+fn commit_cooperative_runtime_transfer_evidence(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    runtime_migrations: Vec<crate::runtime_adoption::RuntimeMigrationRecord>,
+    runtime_handoffs: Vec<crate::runtime_adoption::UpgradeRuntimeHandoff>,
+    transfer_outcome: RuntimeTransferOutcome,
+    host_identity: crate::runtime_adoption::RuntimeHostIdentityEvidence,
+    candidate_backend: crate::runtime_host_ingress::RuntimeHostBackend,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, move |prepared| {
+        prepared.transaction.runtime_migrations = runtime_migrations;
+        prepared.runtime_handoffs = runtime_handoffs;
+        retire_preserved_runtime_convergence_lanes(
+            prepared.transaction.runtime_host_convergence.as_mut(),
+            &transfer_outcome.preserved_lane_sessions,
         )?;
         crate::runtime_adoption::record_runtime_host_identity(
             &mut prepared.transaction,
@@ -7553,17 +7866,26 @@ fn complete_runtime_transfer_phase(
         }
         stage_candidate_runtime_host_ingress(paths, &mut prepared.transaction, candidate_backend)?;
         prepared.transaction.runtime_handoffs = prepared.runtime_handoffs.clone();
-        write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
-    }
-    Ok(())
+        write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)
+    })
 }
 
 fn complete_presentation_rebind_phase(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        complete_presentation_rebind_phase_unfenced(prepared)
+    })
+}
+
+fn complete_presentation_rebind_phase_unfenced(
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
     use crate::runtime_adoption::UpgradeTransactionState;
 
     crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
+    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
     if prepared.transaction.state == UpgradeTransactionState::RuntimesTransferring {
         persist_upgrade_transition(
             &prepared.transaction_path,
@@ -7609,17 +7931,8 @@ fn resume_activation_from_durable_phase(
         let full_shutdown =
             crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?
                 .is_some();
-        persist_upgrade_transition(
-            &prepared.transaction_path,
-            &mut prepared.transaction,
-            UpgradeTransactionState::RuntimesTransferring,
-            "runtimes_transferring_on_resume",
-        )?;
-        if !full_shutdown {
-            persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
-        }
+        publish_runtime_transfer_start(paths, prepared, full_shutdown)?;
         complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
-        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
     } else if prepared.transaction.state == UpgradeTransactionState::RuntimesTransferring
         && !isolated_root
     {
@@ -7646,7 +7959,7 @@ fn resume_activation_from_durable_phase(
         UpgradeTransactionState::RuntimesTransferring
             | UpgradeTransactionState::PresentationsRebinding
     ) {
-        complete_presentation_rebind_phase(prepared)?;
+        complete_presentation_rebind_phase(paths, prepared)?;
     }
     Ok(())
 }
@@ -10235,6 +10548,113 @@ fn commit_prepared_payload_transaction(
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        commit_prepared_payload_transaction_unfenced(paths, args, prepared)
+    })
+}
+
+fn with_candidate_install_custody<T>(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    mutation: impl FnOnce(&mut PreparedPayloadTransaction) -> Result<T, String>,
+) -> Result<T, String> {
+    let custody = candidate_install_custody_from_transaction(&prepared.transaction)?;
+    let Some(custody) = custody else {
+        return mutation(prepared);
+    };
+    let coordination =
+        crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
+    coordination.with_active_install(&custody, |proof| {
+        prepared.transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(proof)
+                .map_err(|error| format!("candidate_install_custody_serialize_failed:{error}"))?,
+        );
+        mutation(prepared)
+    })
+}
+
+fn complete_candidate_install_custody<T>(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    mutation: impl FnOnce(&mut PreparedPayloadTransaction) -> Result<T, String>,
+) -> Result<T, String> {
+    let custody = candidate_install_custody_from_transaction(&prepared.transaction)?;
+    let Some(custody) = custody else {
+        return mutation(prepared);
+    };
+    let coordination =
+        crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
+    let request_id = format!("complete-{}", prepared.transaction.transaction_id);
+    coordination
+        .complete_active_install(&custody, &request_id, |proof| {
+            prepared.transaction.successor_fields.insert(
+                "candidateInstallCustody".to_string(),
+                serde_json::to_value(proof).map_err(|error| {
+                    format!("candidate_install_custody_serialize_failed:{error}")
+                })?,
+            );
+            mutation(prepared)
+        })
+        .map(|(result, _)| result)
+}
+
+fn ensure_transaction_candidate_install_completed(
+    paths: &InstallPaths,
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    let Some(custody) = candidate_install_custody_from_transaction(transaction)? else {
+        return Ok(());
+    };
+    let coordination =
+        crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
+    let request_id = format!("complete-{}", transaction.transaction_id);
+    coordination
+        .ensure_install_completed(&custody, &request_id)
+        .map(|_| ())
+}
+
+fn with_transaction_candidate_install_custody<T>(
+    paths: &InstallPaths,
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    mutation: impl FnOnce(&mut crate::runtime_adoption::UpgradeTransaction) -> Result<T, String>,
+) -> Result<T, String> {
+    let custody = candidate_install_custody_from_transaction(transaction)?;
+    let Some(custody) = custody else {
+        return mutation(transaction);
+    };
+    let coordination =
+        crate::candidate_coordination::CandidateCoordinationStore::production(&paths.root);
+    coordination.with_active_install(&custody, |proof| {
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(proof)
+                .map_err(|error| format!("candidate_install_custody_serialize_failed:{error}"))?,
+        );
+        mutation(transaction)
+    })
+}
+
+fn candidate_install_custody_from_transaction(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<Option<crate::candidate_coordination::CandidateInstallCustody>, String> {
+    let Some(value) = transaction.successor_fields.get("candidateInstallCustody") else {
+        return Ok(None);
+    };
+    let custody: crate::candidate_coordination::CandidateInstallCustody =
+        serde_json::from_value(value.clone())
+            .map_err(|error| format!("candidate_install_custody_invalid:{error}"))?;
+    if custody.schema_version != "agent-browser.candidate-install-custody.v1" {
+        return Err("candidate_install_custody_schema_unsupported".to_string());
+    }
+    Ok(Some(custody))
+}
+
+fn commit_prepared_payload_transaction_unfenced(
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
     crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
     commit_candidate_runtime_host_ingress(&prepared.transaction)?;
     if let Err(error) = commit_staged_payload_generation(paths, args, &prepared.staged) {
@@ -10347,14 +10767,19 @@ fn rollback_runtime_host_ingress(
     Ok(())
 }
 
-fn begin_post_commit_validation(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
-    persist_upgrade_transition(
-        &prepared.transaction_path,
-        &mut prepared.transaction,
-        crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating,
-        "post_commit_validating",
-    )?;
-    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+fn begin_post_commit_validation(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating,
+            "post_commit_validating",
+        )?;
+        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+    })
 }
 
 /// Starts and stages the generation-specific shadow dashboard before payload
@@ -10364,6 +10789,8 @@ fn prepare_dashboard_candidate_for_transaction(
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
+    let paths = install_paths(root);
+    with_candidate_install_custody(&paths, prepared, |_| Ok(()))?;
     let shadow_port = args
         .dashboard_port
         .checked_add(2)
@@ -10414,23 +10841,25 @@ fn prepare_dashboard_candidate_for_transaction(
         .as_mut()
         .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
         .backend = backend.clone();
-    let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
-    let registry = if ingress_path.is_file() {
-        repository.load()?
-    } else {
-        repository.initialize(crate::dashboard_ingress::DashboardBackend::new(
-            "bootstrap-unselected",
-            args.dashboard_port.saturating_add(1),
-            "unselected",
-        ))?
-    };
-    let staged = repository.stage_candidate(registry.revision, backend)?;
-    prepared
-        .dashboard_candidate
-        .as_mut()
-        .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
-        .staged_revision = staged.revision;
-    Ok(())
+    with_candidate_install_custody(&paths, prepared, |prepared| {
+        let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
+        let registry = if ingress_path.is_file() {
+            repository.load()?
+        } else {
+            repository.initialize(crate::dashboard_ingress::DashboardBackend::new(
+                "bootstrap-unselected",
+                args.dashboard_port.saturating_add(1),
+                "unselected",
+            ))?
+        };
+        let staged = repository.stage_candidate(registry.revision, backend)?;
+        prepared
+            .dashboard_candidate
+            .as_mut()
+            .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
+            .staged_revision = staged.revision;
+        Ok(())
+    })
 }
 
 fn wait_for_dashboard_candidate_identity(
@@ -10588,9 +11017,11 @@ fn wait_for_dashboard_candidate_commit(
 /// after the latter serves the identical runtime manifest. A presentation
 /// receipt is preserved when available, but is not an installation commit gate.
 fn promote_dashboard_candidate_to_managed_backend(
+    paths: &InstallPaths,
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
     let managed_port = args
         .dashboard_port
         .checked_add(1)
@@ -10610,40 +11041,44 @@ fn promote_dashboard_candidate_to_managed_backend(
         DASHBOARD_CANDIDATE_START_TIMEOUT,
     )?;
 
-    let candidate = prepared
-        .dashboard_candidate
-        .as_mut()
-        .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?;
-    let repository =
-        crate::dashboard_ingress::DashboardIngressRepository::new(&candidate.ingress_path);
-    let registry = repository.load()?;
-    if registry.selected_backend() == &managed_backend {
-        if let Some(staged) = registry.candidate_backend() {
-            return Err(format!(
-                "dashboard managed backend is already selected while conflicting candidate generation {} remains staged",
-                staged.generation_id
-            ));
+    with_candidate_install_custody(paths, prepared, |prepared| {
+        let candidate = prepared
+            .dashboard_candidate
+            .as_mut()
+            .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?;
+        let repository =
+            crate::dashboard_ingress::DashboardIngressRepository::new(&candidate.ingress_path);
+        let registry = repository.load()?;
+        if registry.selected_backend() == &managed_backend {
+            if let Some(staged) = registry.candidate_backend() {
+                return Err(format!(
+                    "dashboard managed backend is already selected while conflicting candidate generation {} remains staged",
+                    staged.generation_id
+                ));
+            }
+            return Ok(());
         }
-        return stop_prepared_dashboard_candidate(prepared);
-    }
-    let receipt = registry
-        .last_presentation_receipt()
-        .filter(|receipt| {
-            receipt.dashboard_deployment_generation == candidate.backend.generation_id
-                && receipt.state == crate::runtime_adoption::PresentationState::Ready
-        })
-        .cloned();
-    let staged = repository.stage_candidate(registry.revision, managed_backend)?;
-    if let Some(receipt) = receipt {
-        repository.commit_candidate(
-            staged.revision,
-            crate::dashboard_ingress::CandidateOperatorJourney::ready(
-                crate::dashboard_ingress::PresentationEvidence::from_ready_receipt(&receipt)?,
-            ),
-        )?;
-    } else {
-        repository.commit_candidate_deployment(staged.revision)?;
-    }
+        let receipt = registry
+            .last_presentation_receipt()
+            .filter(|receipt| {
+                receipt.dashboard_deployment_generation == candidate.backend.generation_id
+                    && receipt.state == crate::runtime_adoption::PresentationState::Ready
+            })
+            .cloned();
+        let staged = repository.stage_candidate(registry.revision, managed_backend)?;
+        if let Some(receipt) = receipt {
+            repository.commit_candidate(
+                staged.revision,
+                crate::dashboard_ingress::CandidateOperatorJourney::ready(
+                    crate::dashboard_ingress::PresentationEvidence::from_ready_receipt(&receipt)?,
+                ),
+            )?;
+        } else {
+            repository.commit_candidate_deployment(staged.revision)?;
+        }
+        Ok(())
+    })?;
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
     stop_prepared_dashboard_candidate(prepared)
 }
 
@@ -10740,6 +11175,7 @@ fn validate_post_commit_transaction(
 }
 
 fn accept_prepared_payload_transaction(
+    paths: &InstallPaths,
     prepared: &mut PreparedPayloadTransaction,
     validation: PostCommitValidationReceipt,
     supervisor_executable: Option<&Path>,
@@ -10749,43 +11185,50 @@ fn accept_prepared_payload_transaction(
     if prepared.transaction.state != UpgradeTransactionState::PostCommitValidating {
         return Err("transaction_acceptance_without_post_commit_validation".to_string());
     }
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
     finalize_runtime_handoffs(prepared)?;
     prepared.transaction.runtime_handoffs = prepared.runtime_handoffs.clone();
     if let Some(executable) = supervisor_executable {
+        with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
         let transaction_id = prepared.transaction.transaction_id.clone();
         if let Err(error) =
             complete_accepted_upgrade_supervisor_transition(executable, &transaction_id)
         {
-            prepared.transaction.stop_reason =
-                Some("accepted_supervisor_transition_failed".to_string());
-            persist_upgrade_transition(
-                &prepared.transaction_path,
-                &mut prepared.transaction,
-                UpgradeTransactionState::RollbackAfterCommit,
-                "accepted_supervisor_transition_failed",
-            )?;
-            persist_upgrade_transition(
-                &prepared.transaction_path,
-                &mut prepared.transaction,
-                UpgradeTransactionState::OperatorRecoveryRequired,
-                "accepted_supervisor_transition_recovery_required",
-            )?;
+            with_candidate_install_custody(paths, prepared, |prepared| {
+                prepared.transaction.stop_reason =
+                    Some("accepted_supervisor_transition_failed".to_string());
+                persist_upgrade_transition(
+                    &prepared.transaction_path,
+                    &mut prepared.transaction,
+                    UpgradeTransactionState::RollbackAfterCommit,
+                    "accepted_supervisor_transition_failed",
+                )?;
+                persist_upgrade_transition(
+                    &prepared.transaction_path,
+                    &mut prepared.transaction,
+                    UpgradeTransactionState::OperatorRecoveryRequired,
+                    "accepted_supervisor_transition_recovery_required",
+                )
+            })?;
             return Err(format!(
                 "workstation_upgrade_supervisor_transition_failed:{}:{error}",
                 prepared.transaction.transaction_id
             ));
         }
     }
-    prepared.transaction.dashboard_validation_summary = Some(validation.dashboard_summary);
-    prepared.transaction.presentation_validation_summary = Some(validation.presentation_summary);
-    prepared.transaction.terminal_result = Some("accepted".to_string());
-    write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
-    persist_upgrade_transition(
-        &prepared.transaction_path,
-        &mut prepared.transaction,
-        UpgradeTransactionState::Accepted,
-        "accepted",
-    )?;
+    complete_candidate_install_custody(paths, prepared, |prepared| {
+        prepared.transaction.dashboard_validation_summary = Some(validation.dashboard_summary);
+        prepared.transaction.presentation_validation_summary =
+            Some(validation.presentation_summary);
+        prepared.transaction.terminal_result = Some("accepted".to_string());
+        write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            UpgradeTransactionState::Accepted,
+            "accepted",
+        )
+    })?;
     if let Err(error) = clear_admission_drain(&prepared.admission_drain_path) {
         prepared.transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
         persist_upgrade_transition(
@@ -11706,6 +12149,145 @@ struct InstallPaths {
     guacamole_secret_file: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkstationPayloadSource {
+    binary_path: PathBuf,
+    expected_binary_sha256: Option<String>,
+}
+
+impl WorkstationPayloadSource {
+    fn current() -> Result<Self, String> {
+        Ok(Self {
+            binary_path: env::current_exe()
+                .map_err(|error| format!("Unable to resolve candidate executable: {error}"))?,
+            expected_binary_sha256: None,
+        })
+    }
+
+    /// Bind candidate bytes that were sealed before workstation staging.
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn reviewed(binary_path: PathBuf, expected_binary_sha256: String) -> Result<Self, String> {
+        if expected_binary_sha256.len() != 64
+            || !expected_binary_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err("workstation_payload_source_digest_invalid".to_string());
+        }
+        Ok(Self {
+            binary_path,
+            expected_binary_sha256: Some(expected_binary_sha256),
+        })
+    }
+
+    fn verify(&self) -> Result<String, String> {
+        let observed = workstation_file_sha256(&self.binary_path)?;
+        if self
+            .expected_binary_sha256
+            .as_ref()
+            .is_some_and(|expected| expected != &observed)
+        {
+            return Err(format!(
+                "workstation_payload_source_digest_mismatch:{}",
+                self.binary_path.display()
+            ));
+        }
+        Ok(observed)
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CandidateArtifactTransactionBinding {
+    schema_version: &'static str,
+    candidate_id: String,
+    artifact_class: agent_browser_candidate::ArtifactClass,
+    source_commit: String,
+    source_tree: String,
+    build_operation_id: String,
+    artifact_seal_sha256: String,
+    candidate_manifest_sha256: String,
+    executable_input_sha256: String,
+    binary_sha256: String,
+    build_support_manifest_sha256: String,
+    validation_receipts: Vec<String>,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug, Clone)]
+struct ReviewedCandidatePayload {
+    source: WorkstationPayloadSource,
+    binding: CandidateArtifactTransactionBinding,
+}
+
+impl ReviewedCandidatePayload {
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn from_documents(
+        binary_path: PathBuf,
+        manifest_bytes: &[u8],
+        closure_bytes: &[u8],
+        sealed_artifact_bytes: &[u8],
+    ) -> Result<Self, String> {
+        use agent_browser_candidate::{
+            ArtifactClass, CandidateManifest, ExecutableInputClosure, SealedArtifact,
+        };
+
+        let manifest: CandidateManifest = serde_json::from_slice(manifest_bytes)
+            .map_err(|error| format!("candidate_manifest_invalid_json:{error}"))?;
+        let closure: ExecutableInputClosure = serde_json::from_slice(closure_bytes)
+            .map_err(|error| format!("candidate_input_closure_invalid_json:{error}"))?;
+        let sealed: SealedArtifact = serde_json::from_slice(sealed_artifact_bytes)
+            .map_err(|error| format!("candidate_sealed_artifact_invalid_json:{error}"))?;
+        let candidate_manifest_sha256 = workstation_bytes_sha256(manifest_bytes);
+        sealed
+            .validate_candidate_manifest(&manifest, &closure, &candidate_manifest_sha256)
+            .map_err(|error| error.to_string())?;
+        if manifest.artifact_class != ArtifactClass::ProductionShaped {
+            return Err("workstation_candidate_not_production_shaped".to_string());
+        }
+
+        let source =
+            WorkstationPayloadSource::reviewed(binary_path, manifest.binary_sha256.clone())?;
+        Ok(Self {
+            source,
+            binding: CandidateArtifactTransactionBinding {
+                schema_version: "agent-browser.candidate-artifact-binding.v1",
+                candidate_id: manifest.candidate_id,
+                artifact_class: manifest.artifact_class,
+                source_commit: manifest.source.commit,
+                source_tree: manifest.source.tree,
+                build_operation_id: sealed.operation_id,
+                artifact_seal_sha256: sealed.seal_sha256,
+                candidate_manifest_sha256,
+                executable_input_sha256: manifest.executable_input_sha256,
+                binary_sha256: manifest.binary_sha256,
+                build_support_manifest_sha256: manifest.support_manifest_sha256,
+                validation_receipts: manifest.validation_receipts,
+            },
+        })
+    }
+}
+
+/// Validate an immutable candidate document set and its exact binary without
+/// creating workstation state. Effect-capable callers reuse the same private
+/// payload type when they later enter transaction preparation.
+pub(crate) fn review_candidate_payload_documents(
+    binary_path: &Path,
+    manifest_bytes: &[u8],
+    closure_bytes: &[u8],
+    sealed_artifact_bytes: &[u8],
+) -> Result<Value, String> {
+    let candidate = ReviewedCandidatePayload::from_documents(
+        binary_path.to_path_buf(),
+        manifest_bytes,
+        closure_bytes,
+        sealed_artifact_bytes,
+    )?;
+    candidate.source.verify()?;
+    serde_json::to_value(&candidate.binding)
+        .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))
+}
+
 #[derive(Debug)]
 struct StagedWorkstationGeneration {
     generation_id: String,
@@ -11791,7 +12373,7 @@ struct PostCommitValidationReceipt {
     presentation_summary: String,
 }
 
-fn workstation_root() -> Result<PathBuf, String> {
+pub(crate) fn workstation_root() -> Result<PathBuf, String> {
     if let Some(root) = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT") {
         let path = PathBuf::from(root);
         if !path.is_absolute() {
@@ -11825,11 +12407,13 @@ fn install_paths(root: &Path) -> InstallPaths {
     }
 }
 
-fn stage_payload_generation(
+fn stage_payload_generation_from_source(
     paths: &InstallPaths,
     args: &WorkstationInstallArgs,
+    source: &WorkstationPayloadSource,
 ) -> Result<StagedWorkstationGeneration, String> {
     validate_generation_install_preconditions(paths)?;
+    let source_binary_sha256 = source.verify()?;
     let staging = paths
         .root
         .join(".agent-browser/install-staging")
@@ -11854,9 +12438,7 @@ fn stage_payload_generation(
             fs::create_dir_all(parent).map_err(display_io("create binary staging", parent))?;
         }
 
-        let current_exe = env::current_exe()
-            .map_err(|error| format!("Unable to resolve current executable: {error}"))?;
-        fs::copy(&current_exe, &staged_binary)
+        fs::copy(&source.binary_path, &staged_binary)
             .map_err(display_io("stage agent-browser executable", &staged_binary))?;
         set_executable(&staged_binary)?;
         inject_failure("binary-staged")?;
@@ -11870,6 +12452,9 @@ fn stage_payload_generation(
             args.dashboard_port,
         );
         let binary_sha256 = workstation_file_sha256(&staged_binary)?;
+        if binary_sha256 != source_binary_sha256 {
+            return Err("workstation_payload_source_changed_during_staging".to_string());
+        }
         let manifest = render_manifest(args, &binary_sha256, &rendered_units);
         fs::write(staged_support.join("manifest.json"), manifest)
             .map_err(display_io("stage workstation manifest", &staged_support))?;
@@ -14954,6 +15539,1122 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_payload_source_stages_exact_binary_bytes_and_rejects_drift() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-reviewed-payload-source-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let source_path = root.join("candidate/agent-browser");
+        fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        fs::write(&source_path, b"reviewed candidate bytes").unwrap();
+        let expected_sha256 = workstation_file_sha256(&source_path).unwrap();
+        let source =
+            WorkstationPayloadSource::reviewed(source_path.clone(), expected_sha256.clone())
+                .unwrap();
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+
+        let prepared =
+            prepare_payload_transaction_from_source(&root, &paths, &args, true, None, &source)
+                .unwrap();
+        assert_eq!(
+            prepared.transaction.candidate_generation_id,
+            prepared.staged.generation_id
+        );
+        assert_eq!(
+            prepared.transaction.candidate_binary_sha256,
+            expected_sha256
+        );
+        assert_eq!(prepared.staged.binary_sha256, expected_sha256);
+        assert_eq!(
+            fs::read(prepared.staged.generation_path.join("bin/agent-browser")).unwrap(),
+            b"reviewed candidate bytes"
+        );
+
+        fs::write(&source_path, b"changed candidate bytes").unwrap();
+        let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+        let transaction_count = fs::read_dir(&transaction_dir).unwrap().count();
+        let error =
+            prepare_payload_transaction_from_source(&root, &paths, &args, true, None, &source)
+                .unwrap_err();
+        assert!(error.contains("workstation_payload_source_digest_mismatch"));
+        assert_eq!(
+            fs::read_dir(transaction_dir).unwrap().count(),
+            transaction_count,
+            "digest drift must fail before a second transaction is recorded"
+        );
+
+        remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn reviewed_candidate_artifact_binds_exact_seal_and_install_custody() {
+        use agent_browser_candidate::{
+            ArtifactClass, BuildIdentity, BuildProfileConfiguration, CandidateManifest,
+            ExecutableInput, ExecutableInputClosure, ExecutableInputContext, InputCategory,
+            SealedArtifact, SourceProvenance, SourceTreeState,
+        };
+        use std::collections::BTreeMap;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-reviewed-candidate-artifact-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let source_path = root.join("candidate/agent-browser");
+        fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        fs::write(&source_path, b"sealed production candidate bytes").unwrap();
+        let binary_sha256 = workstation_file_sha256(&source_path).unwrap();
+        let closure = ExecutableInputClosure::new(
+            ExecutableInputContext {
+                target: "x86_64-unknown-linux-gnu".to_string(),
+                toolchain: "rustc 1.90.0".to_string(),
+                cargo_profile: "release".to_string(),
+                resolved_build_profile: BuildProfileConfiguration::production_release(),
+                features: vec!["service".to_string()],
+                reviewed_environment_inputs: BTreeMap::new(),
+            },
+            vec![
+                ExecutableInput {
+                    path: "cli/src/main.rs".to_string(),
+                    sha256: "a".repeat(64),
+                    category: InputCategory::RustSource,
+                },
+                ExecutableInput {
+                    path: "packages/dashboard/out/index.html".to_string(),
+                    sha256: "b".repeat(64),
+                    category: InputCategory::EmbeddedDashboard,
+                },
+                ExecutableInput {
+                    path: "scripts/install-agent-browser-privileges.sh".to_string(),
+                    sha256: "c".repeat(64),
+                    category: InputCategory::EmbeddedAsset,
+                },
+            ],
+        )
+        .unwrap();
+        let build_support_manifest_sha256 = "d".repeat(64);
+        let mut manifest = CandidateManifest::new(
+            SourceProvenance {
+                commit: "e".repeat(40),
+                tree: "f".repeat(64),
+                state: SourceTreeState::Clean,
+            },
+            &closure,
+            ArtifactClass::ProductionShaped,
+            binary_sha256.clone(),
+            build_support_manifest_sha256.clone(),
+            "2026-09-16T01:00:00Z".to_string(),
+        )
+        .unwrap();
+        manifest.validation_receipts = vec!["receipt://provider-free/exact-head".to_string()];
+        let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
+        let manifest_sha256 = workstation_bytes_sha256(&manifest_bytes);
+        let sealed = SealedArtifact::new(
+            "build-operation-1",
+            BuildIdentity::new(&closure, ArtifactClass::ProductionShaped),
+            binary_sha256.clone(),
+            build_support_manifest_sha256.clone(),
+            manifest_sha256.clone(),
+        )
+        .unwrap();
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install(
+                "install-request-1",
+                &manifest.candidate_id,
+                &sealed.seal_sha256,
+            )
+            .unwrap();
+        let closure_bytes = serde_json::to_vec(&closure).unwrap();
+        let sealed_bytes = serde_json::to_vec(&sealed).unwrap();
+        let reviewed = ReviewedCandidatePayload::from_documents(
+            source_path,
+            &manifest_bytes,
+            &closure_bytes,
+            &sealed_bytes,
+        )
+        .unwrap();
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+
+        let mut prepared = prepare_reviewed_candidate_payload_transaction(
+            &root, &paths, &args, true, None, &reviewed, &custody,
+        )
+        .unwrap();
+        let binding = &prepared.transaction.successor_fields["candidateArtifact"];
+        assert_eq!(
+            binding["schemaVersion"],
+            "agent-browser.candidate-artifact-binding.v1"
+        );
+        assert_eq!(binding["candidateId"], manifest.candidate_id);
+        assert_eq!(binding["buildOperationId"], sealed.operation_id);
+        assert_eq!(binding["artifactSealSha256"], sealed.seal_sha256);
+        assert_eq!(binding["candidateManifestSha256"], manifest_sha256);
+        assert_eq!(
+            binding["buildSupportManifestSha256"],
+            build_support_manifest_sha256
+        );
+        assert_eq!(
+            binding["executableInputSha256"],
+            manifest.executable_input_sha256
+        );
+        assert_eq!(
+            binding["validationReceipts"],
+            serde_json::json!(manifest.validation_receipts)
+        );
+        assert_eq!(prepared.transaction.candidate_binary_sha256, binary_sha256);
+        assert_ne!(
+            prepared.transaction.candidate_support_manifest_sha256,
+            binding["buildSupportManifestSha256"],
+            "build support identity must remain distinct from install-specific support"
+        );
+        assert_eq!(
+            prepared.transaction.successor_fields["candidateInstallCustody"],
+            serde_json::json!({
+                "schemaVersion": "agent-browser.candidate-install-custody.v1",
+                "environmentId": "production",
+                "operationId": "operation-install-request-1",
+                "candidateId": manifest.candidate_id,
+                "artifactId": sealed.seal_sha256,
+                "revision": 1,
+                "fencingGeneration": 1,
+                "acquisitionOutcome": "started"
+            })
+        );
+        let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+        let transaction_count = fs::read_dir(&transaction_dir).unwrap().count();
+        let joined = prepare_coordinated_reviewed_candidate_payload_transaction(
+            &root, &paths, &args, true, None, &reviewed,
+        )
+        .unwrap_err();
+        assert!(joined.contains("candidate_install_joined_existing"));
+        assert_eq!(
+            fs::read_dir(&transaction_dir).unwrap().count(),
+            transaction_count,
+            "a joined install must not create a competing workstation transaction"
+        );
+
+        activate_prepared_payload_transaction(&mut prepared, &paths, true).unwrap();
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "supersede-install-request-1".to_string(),
+                candidate_id: "replacement-candidate".to_string(),
+                artifact_id: "replacement-artifact".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id.clone(),
+                },
+            })
+            .unwrap();
+        let selector_before = fs::read_link(&paths.current_selector).ok();
+        let error = commit_prepared_payload_transaction(&paths, &args, &mut prepared).unwrap_err();
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read_link(&paths.current_selector).ok(), selector_before);
+
+        let transaction_count = fs::read_dir(&transaction_dir).unwrap().count();
+        let mut changed_manifest_bytes = manifest_bytes;
+        changed_manifest_bytes.push(b'\n');
+        let error = ReviewedCandidatePayload::from_documents(
+            reviewed.source.binary_path.clone(),
+            &changed_manifest_bytes,
+            &closure_bytes,
+            &sealed_bytes,
+        )
+        .unwrap_err();
+        assert!(error.contains("candidate_manifest_digest_mismatch"));
+        assert_eq!(
+            fs::read_dir(transaction_dir).unwrap().count(),
+            transaction_count,
+            "manifest drift must fail before another transaction is recorded"
+        );
+
+        remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn reviewed_candidate_apply_reaches_isolated_acceptance() {
+        use agent_browser_candidate::{
+            ArtifactClass, BuildIdentity, BuildProfileConfiguration, CandidateManifest,
+            ExecutableInput, ExecutableInputClosure, ExecutableInputContext, InputCategory,
+            SealedArtifact, SourceProvenance, SourceTreeState,
+        };
+        use std::collections::BTreeMap;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-reviewed-candidate-apply-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let env_guard = EnvGuard::new(&["AGENT_BROWSER_WORKSTATION_ROOT"]);
+        env_guard.set("AGENT_BROWSER_WORKSTATION_ROOT", root.to_str().unwrap());
+        let source_path = root.join("candidate/agent-browser");
+        fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        fs::write(&source_path, b"sealed production candidate bytes").unwrap();
+        let binary_sha256 = workstation_file_sha256(&source_path).unwrap();
+        let closure = ExecutableInputClosure::new(
+            ExecutableInputContext {
+                target: "x86_64-unknown-linux-gnu".to_string(),
+                toolchain: "rustc 1.90.0".to_string(),
+                cargo_profile: "release".to_string(),
+                resolved_build_profile: BuildProfileConfiguration::production_release(),
+                features: vec!["service".to_string()],
+                reviewed_environment_inputs: BTreeMap::new(),
+            },
+            vec![
+                ExecutableInput {
+                    path: "cli/src/main.rs".to_string(),
+                    sha256: "a".repeat(64),
+                    category: InputCategory::RustSource,
+                },
+                ExecutableInput {
+                    path: "packages/dashboard/out/index.html".to_string(),
+                    sha256: "b".repeat(64),
+                    category: InputCategory::EmbeddedDashboard,
+                },
+                ExecutableInput {
+                    path: "scripts/install-agent-browser-privileges.sh".to_string(),
+                    sha256: "c".repeat(64),
+                    category: InputCategory::EmbeddedAsset,
+                },
+            ],
+        )
+        .unwrap();
+        let mut manifest = CandidateManifest::new(
+            SourceProvenance {
+                commit: "d".repeat(40),
+                tree: "e".repeat(64),
+                state: SourceTreeState::Clean,
+            },
+            &closure,
+            ArtifactClass::ProductionShaped,
+            binary_sha256.clone(),
+            "f".repeat(64),
+            "2026-09-16T12:00:00Z".to_string(),
+        )
+        .unwrap();
+        manifest.validation_receipts = vec!["receipt://provider-free/exact-head".to_string()];
+        let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
+        let sealed = SealedArtifact::new(
+            "build-operation-apply",
+            BuildIdentity::new(&closure, ArtifactClass::ProductionShaped),
+            binary_sha256,
+            manifest.support_manifest_sha256.clone(),
+            workstation_bytes_sha256(&manifest_bytes),
+        )
+        .unwrap();
+        let reviewed = ReviewedCandidatePayload::from_documents(
+            source_path,
+            &manifest_bytes,
+            &serde_json::to_vec(&closure).unwrap(),
+            &serde_json::to_vec(&sealed).unwrap(),
+        )
+        .unwrap();
+
+        run_workstation_install_with_candidate(
+            &[
+                "install".to_string(),
+                "workstation".to_string(),
+                "--apply".to_string(),
+                "--json".to_string(),
+            ],
+            Some(reviewed),
+        );
+
+        let transaction =
+            latest_upgrade_transaction(&root.join(".agent-browser/runtime-adoption/transactions"))
+                .unwrap()
+                .unwrap();
+        assert_eq!(
+            transaction.state,
+            crate::runtime_adoption::UpgradeTransactionState::Accepted
+        );
+        assert_eq!(
+            transaction.successor_fields["candidateArtifact"]["candidateId"],
+            manifest.candidate_id
+        );
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root)
+                .read()
+                .unwrap();
+        assert!(coordination.active().is_none());
+        assert_eq!(
+            coordination
+                .receipts()
+                .last()
+                .map(|receipt| receipt.outcome),
+            Some(agent_browser_candidate::CoordinationOutcome::Completed)
+        );
+        let selected = install_paths(&root)
+            .generations_dir
+            .join(transaction.candidate_generation_id)
+            .join("bin/agent-browser");
+        assert_eq!(
+            fs::read(selected).unwrap(),
+            b"sealed production candidate bytes"
+        );
+
+        remove_generation_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_publish_candidate_ready() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-candidate-ready-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("candidate-ready", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::RuntimesTransferring;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let drain_before = fs::read(&admission_drain_path).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "candidate-ready-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = complete_presentation_rebind_phase(&paths, &mut prepared).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::RuntimesTransferring
+        );
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert_eq!(fs::read(&admission_drain_path).unwrap(), drain_before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_begin_post_commit_validation() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-post-commit-validation-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("post-commit-validation", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::GenerationCommitted;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let drain_before = fs::read(&admission_drain_path).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "post-commit-validation-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = begin_post_commit_validation(&paths, &mut prepared).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::GenerationCommitted
+        );
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert_eq!(fs::read(&admission_drain_path).unwrap(), drain_before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_accept_transaction() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-transaction-acceptance-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("transaction-acceptance", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::PostCommitValidating;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let drain_before = fs::read(&admission_drain_path).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "transaction-acceptance-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = accept_prepared_payload_transaction(
+            &paths,
+            &mut prepared,
+            PostCommitValidationReceipt {
+                dashboard_summary: "validated".to_string(),
+                presentation_summary: "validated".to_string(),
+            },
+            None,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::PostCommitValidating
+        );
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert_eq!(fs::read(&admission_drain_path).unwrap(), drain_before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn accepted_candidate_completes_install_coordination() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-terminal-install-coordination-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("transaction-acceptance", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::PostCommitValidating;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        accept_prepared_payload_transaction(
+            &paths,
+            &mut prepared,
+            PostCommitValidationReceipt {
+                dashboard_summary: "validated".to_string(),
+                presentation_summary: "validated".to_string(),
+            },
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::Accepted
+        );
+        assert!(!admission_drain_path.exists());
+        let ledger = coordination.read().unwrap();
+        assert!(ledger.active().is_none());
+        assert_eq!(
+            ledger.receipts().last().map(|receipt| receipt.outcome),
+            Some(agent_browser_candidate::CoordinationOutcome::Completed)
+        );
+        let persisted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&transaction_path).unwrap()).unwrap();
+        assert_eq!(persisted.state, UpgradeTransactionState::Accepted);
+        assert_eq!(persisted.terminal_result.as_deref(), Some("accepted"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_publish_runtime_transfer_start() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-transfer-start-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("runtime-transfer-start", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::StateMigrationValidated;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "runtime-transfer-start-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = publish_runtime_transfer_start(&paths, &mut prepared, false).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::StateMigrationValidated
+        );
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert!(!admission_drain_path.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn active_candidate_publishes_runtime_transfer_start_under_custody() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-transfer-start-active-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("runtime-transfer-start", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::StateMigrationValidated;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        publish_runtime_transfer_start(&paths, &mut prepared, false).unwrap();
+
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::RuntimesTransferring
+        );
+        let persisted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&transaction_path).unwrap()).unwrap();
+        assert_eq!(persisted, prepared.transaction);
+        let drain: crate::runtime_adoption::RuntimeAdmissionDrain =
+            serde_json::from_slice(&fs::read(&admission_drain_path).unwrap()).unwrap();
+        assert_eq!(drain.transaction_id, prepared.transaction.transaction_id);
+        assert_eq!(drain.transaction_revision, prepared.transaction.revision);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn active_candidate_resumes_runtime_transfer_start_under_custody() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-transfer-resume-active-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("runtime-transfer-resume", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::AdmissionDraining;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        publish_runtime_transfer_start(&paths, &mut prepared, false).unwrap();
+
+        assert_eq!(
+            prepared.transaction.state,
+            UpgradeTransactionState::RuntimesTransferring
+        );
+        let persisted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&transaction_path).unwrap()).unwrap();
+        assert_eq!(persisted, prepared.transaction);
+        let drain: crate::runtime_adoption::RuntimeAdmissionDrain =
+            serde_json::from_slice(&fs::read(&admission_drain_path).unwrap()).unwrap();
+        assert_eq!(drain.transaction_revision, prepared.transaction.revision);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_commit_runtime_transfer_evidence() {
+        use crate::runtime_adoption::UpgradeTransactionState;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-transfer-evidence-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("runtime-transfer-evidence", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::RuntimesTransferring;
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: root.join(".agent-browser/runtime-adoption/admission-drain.json"),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+        let host_identity = crate::runtime_adoption::RuntimeHostIdentityEvidence {
+            endpoint_key: "candidate-endpoint".to_string(),
+            generation_id: "candidate-a".to_string(),
+            binary_sha256: "a".repeat(64),
+            pid: 1234,
+            process_start_token: "candidate-start".to_string(),
+            socket_identity: "candidate-socket".to_string(),
+            observation_only: true,
+        };
+        let candidate_backend = crate::runtime_host_ingress::RuntimeHostBackend {
+            topology: crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+            generation_id: "candidate-a".to_string(),
+            socket_dir: root.join("candidate-socket"),
+            binary_sha256: "a".repeat(64),
+            host_id: "candidate-host".to_string(),
+            pid: 1234,
+            socket_identity: "candidate-socket".to_string(),
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "runtime-transfer-evidence-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = commit_cooperative_runtime_transfer_evidence(
+            &paths,
+            &mut prepared,
+            Vec::new(),
+            Vec::new(),
+            RuntimeTransferOutcome {
+                evidence: Vec::new(),
+                preserved_lane_sessions: std::collections::BTreeSet::new(),
+            },
+            host_identity.clone(),
+            candidate_backend.clone(),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        let error = commit_full_shutdown_runtime_transfer_evidence(
+            &paths,
+            &mut prepared,
+            host_identity,
+            candidate_backend,
+        )
+        .unwrap_err();
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_persist_full_shutdown_checkpoint() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-full-shutdown-checkpoint-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("full-shutdown", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let receipt = crate::runtime_replacement::RuntimeReplacementEffectReceipt {
+            schema_version: "agent-browser.runtime-replacement-effect-receipt.v1".to_string(),
+            state: crate::runtime_replacement::RuntimeReplacementEffectState::Planned,
+            plan_digest: "c".repeat(64),
+            closed_sessions: Vec::new(),
+            forced_browser_ids: Vec::new(),
+            final_census_digest: None,
+            source_exit_proven: false,
+            profiles_preserved: true,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "full-shutdown-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error =
+            with_transaction_candidate_install_custody(&paths, &mut transaction, |transaction| {
+                crate::runtime_replacement::persist_full_shutdown_checkpoint(
+                    &transaction_path,
+                    transaction,
+                    &receipt,
+                )
+            })
+            .unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert!(
+            crate::runtime_replacement::effect_receipt_from_upgrade_transaction(&transaction)
+                .unwrap()
+                .is_none()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_refresh_full_shutdown_service_state() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-full-shutdown-refresh-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("full-shutdown-refresh", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let transaction_before = fs::read(&transaction_path).unwrap();
+        let admission_drain_path =
+            root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path.clone(),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: admission_drain_path.clone(),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "full-shutdown-refresh-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error =
+            refresh_full_shutdown_service_state_with_custody(&paths, &mut prepared).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&transaction_path).unwrap(), transaction_before);
+        assert!(!admission_drain_path.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn legacy_mutable_payload_migrates_to_a_sealed_rollback_generation() {
         let root = env::temp_dir().join(format!(
             "agent-browser-legacy-generation-migration-{}",
@@ -16210,7 +17911,7 @@ mod tests {
             validation.presentation_summary,
             "operator_journey_deferred_nonblocking"
         );
-        accept_prepared_payload_transaction(&mut prepared, validation, None).unwrap();
+        accept_prepared_payload_transaction(&paths, &mut prepared, validation, None).unwrap();
         let finalized = finalize_accepted_upgrade_for_root(&root).unwrap();
         assert_eq!(finalized["changed"], true);
         assert_eq!(finalized["state"], "old_generation_retirable");
@@ -16414,7 +18115,7 @@ mod tests {
             guacamole_port: 8092,
         };
 
-        promote_dashboard_candidate_to_managed_backend(&args, &mut prepared).unwrap();
+        promote_dashboard_candidate_to_managed_backend(&paths, &args, &mut prepared).unwrap();
         server.join().unwrap();
         let registry = repository.load().unwrap();
         assert_eq!(registry.selected_backend(), &managed_backend);
@@ -16422,6 +18123,167 @@ mod tests {
         assert_eq!(registry.revision, 1);
 
         fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_promote_dashboard_ingress() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-managed-dashboard-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let ingress_path = root.join(".agent-browser/dashboard-ingress.json");
+        let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
+        let initial = repository
+            .initialize(crate::dashboard_ingress::DashboardBackend::new(
+                "generation-old",
+                4849,
+                "old-manifest",
+            ))
+            .unwrap();
+        let candidate_backend = crate::dashboard_ingress::DashboardBackend::new(
+            "candidate-a",
+            4850,
+            "candidate-manifest",
+        );
+        let staged = repository
+            .stage_candidate(initial.revision, candidate_backend.clone())
+            .unwrap();
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("dashboard-promotion", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path(&root, &transaction.transaction_id),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: root.join("admission-drain.json"),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: Some(PreparedDashboardCandidate {
+                child: None,
+                backend: candidate_backend,
+                ingress_path: ingress_path.clone(),
+                staged_revision: staged.revision,
+            }),
+        };
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4850,
+            guacamole_port: 8092,
+        };
+        let ingress_before = fs::read(&ingress_path).unwrap();
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "dashboard-promotion-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error = promote_dashboard_candidate_to_managed_backend(&paths, &args, &mut prepared)
+            .unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert_eq!(fs::read(&ingress_path).unwrap(), ingress_before);
+        fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn superseded_candidate_cannot_start_dashboard_shadow() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-dashboard-shadow-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("dashboard-shadow", "candidate-a", "artifact-a")
+            .unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "candidate-a".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "candidateInstallCustody".to_string(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        let mut prepared = PreparedPayloadTransaction {
+            staged: StagedWorkstationGeneration {
+                generation_id: "candidate-a".to_string(),
+                generation_path: paths.generations_dir.join("candidate-a"),
+                binary_sha256: "a".repeat(64),
+                support_manifest_sha256: "b".repeat(64),
+                rendered_units: Vec::new(),
+            },
+            transaction_path: transaction_path(&root, &transaction.transaction_id),
+            transaction,
+            previous_selector: None,
+            admission_drain_path: root.join("admission-drain.json"),
+            runtime_handoffs: Vec::new(),
+            dashboard_candidate: None,
+        };
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: 4850,
+            guacamole_port: 8092,
+        };
+        let current = coordination.read().unwrap();
+        coordination
+            .apply(agent_browser_candidate::CoordinationRequest {
+                request_id: "dashboard-shadow-supersede".to_string(),
+                candidate_id: "candidate-b".to_string(),
+                artifact_id: "artifact-b".to_string(),
+                expected_revision: current.revision,
+                expected_fencing_generation: current.fencing_generation,
+                action: agent_browser_candidate::CoordinationAction::Supersede {
+                    operation_id: custody.operation_id,
+                },
+            })
+            .unwrap();
+
+        let error =
+            prepare_dashboard_candidate_for_transaction(&root, &args, &mut prepared).unwrap_err();
+
+        assert!(error.contains("candidate_install_custody_lost"));
+        assert!(prepared.dashboard_candidate.is_none());
+        assert!(!root.join(".agent-browser/dashboard-ingress.json").exists());
         fs::remove_dir_all(root).unwrap();
     }
 

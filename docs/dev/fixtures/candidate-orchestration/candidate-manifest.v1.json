@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "agent-browser.candidate-manifest.v1",
+  "candidateId": "candidate-b41538c474b3542e-ffffffffffffffff",
+  "source": {
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "tree": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "state": "clean"
+  },
+  "executableInputSha256": "b41538c474b3542e6fed08b3402398743b930eeaab46a54eb08383626ef1c3ba",
+  "target": "x86_64-unknown-linux-gnu",
+  "toolchain": "rustc 1.90.0",
+  "cargoProfile": "release",
+  "features": ["service"],
+  "reviewedEnvironmentInputSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "embeddedDashboardSha256": "314c0f0169e4fdc07f65a44c45f3f51a2c0d746e2afd1613968b7d37a91c24d3",
+  "embeddedAssetDigests": {
+    "scripts/install-agent-browser-privileges.sh": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "binarySha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "supportManifestSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "createdAt": "2026-09-15T12:00:00Z",
+  "artifactClass": "production_shaped",
+  "resolvedBuildProfile": {
+    "optLevel": "3",
+    "lto": "fat",
+    "codegenUnits": 1,
+    "strip": true
+  },
+  "resolvedBuildProfileSha256": "0df30df42e5b748d704c15a0d85d56107292e6f48e9d61f08c3509be872f2bfe",
+  "validationReceipts": ["receipt://provider-free"]
+}

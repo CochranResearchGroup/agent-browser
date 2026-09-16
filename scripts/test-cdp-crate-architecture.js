@@ -113,6 +113,16 @@ requireCondition(
     rustTests.includes('export CARGO_TARGET_DIR'),
   'parallel comprehensive Rust lanes must use distinct Cargo target directories',
 );
+const nativeLaneStart = rustTests.indexOf('export CARGO_TARGET_DIR="$native_target_dir"');
+const supportLaneStart = rustTests.indexOf('export CARGO_TARGET_DIR="$support_target_dir"');
+const laneJoinStart = rustTests.indexOf('wait "$native_pid"');
+const nativeLane = rustTests.slice(nativeLaneStart, supportLaneStart);
+const supportLane = rustTests.slice(supportLaneStart, laneJoinStart);
+requireCondition(
+  nativeLane.includes('run_and_record cli-core run_cli_core') &&
+    !supportLane.includes('run_and_record cli-core run_cli_core'),
+  'cli-core must remain in the native lane so the comprehensive runner preserves CI timeout headroom',
+);
 
 const workflow = read('.github/workflows/ci.yml');
 const workspaceClippyCommand = ['cargo', 'clippy --workspace --manifest-path Cargo.toml -- -D warnings'].join(' ');
