@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 11
+Plan version: 12
 
 State: OPEN
 
@@ -83,14 +83,17 @@ literal value, and records the value observed by the child for the parent to
 assert. Both affected focused tests, the complete candidate-test module,
 workspace format, and strict workspace Clippy pass locally. Canonical
 `origin/main` was then merged at `4f30e573` after its only intervening changes
-were P201 closeout documentation. Exact-head CI remains pending, so source
-qualification is not yet final.
+were P201 closeout documentation. Exact-head CI runs `35147847542` and
+`35147847562` passed the complete fast lane and the four-platform Lease
+Authority matrix. Review accepted all three repaired source gates. Documentation
+checkpoint `4993b978991b77c6d78b3540d0a5974e332a98ba` corrected the expanded
+source-checkpoint locator without changing executable inputs.
 
-No further build, install, doctor, browser, provider, retained-profile, or
-shared-runtime effect was performed in this repair batch. The critical path is
-exact-head CI and review, followed by one production-shaped rebuild only after
-executable source is frozen, then protected integration and post-merge
-executable-input equivalence readback.
+The one final production-shaped build and all three selected provider-free
+suites now pass at that clean checkpoint. No install, doctor, browser,
+provider, retained-profile, development-runtime, production-runtime, or shared
+runtime effect was performed. The remaining critical path is protected
+integration followed by post-merge executable-input equivalence readback.
 
 ## Implementation Progress
 
@@ -682,6 +685,30 @@ same cache-off value bound into the reported test identity. Candidate-crate and
 candidate-test focused suites, format, strict workspace Clippy, and patch
 hygiene passed. No production-shaped build or runtime effect followed this
 source checkpoint.
+
+Source checkpoint `0ed91a93a6c087e932cef0369e5311a990ed4d2e` then replaced the
+self-referential cache regression with independent literal `"off"` oracles in
+the identity assertion, spawned child, and observed-value marker. Exact-head CI
+runs `35147847542` and `35147847562` passed, and review accepted all reopened
+source gates. After documentation-only provenance correction `4993b978`, the
+single final production-shaped build sealed candidate
+`candidate-2fc3ae22f342c050-106614c72ec087e3` with executable-input SHA-256
+`2fc3ae22f342c0504b2f6b89fb1c10a1ba3a288bcd2c6d2931e171a37344e73a`
+and binary SHA-256
+`106614c72ec087e3058788ac4c8d33f9cff9146f8dcdc6638f08b1154a43159e`.
+Build operation `candidate-build-fc0fc729-5b13-4f3e-854c-d34a7e7cd470`, exact
+self-inspection, and install dry-run all passed; the dry-run reported
+`no_effect_performed`.
+
+The `candidate-kernel`, `candidate-build-adapter`, and `candidate-cli`
+selections passed in hermetic provider-free run
+`candidate-test-7152d57d-c834-42fe-9a7c-faa7b8bfd0e5`. Receipt
+`cli/target/candidate-test-state/completed/c8597fb88a7c2bdf9aa739925603aae14308b0539eb8100717dae6f997a0c854.json`
+binds the exact source, manifest, binary, fixtures, runtime capability, and
+cache-off environment input, and proves terminal cleanup. No matching Cargo,
+Rust, build, or test process remained. P197 and P202 shared public-documentation
+custody remains frozen only until protected P190 integration; no dependent edit
+was admitted in this qualification slice.
 
 ## Frozen Decisions
 
