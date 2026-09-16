@@ -202,6 +202,7 @@ run_comprehensive() {
     run_and_record cli-native-actions run_cli_native_actions "$log_root" || lane_status=1
     run_and_record cli-native-service run_cli_native_service_without_performance_oracle "$log_root" || lane_status=1
     run_and_record cli-native-other run_cli_native_other "$log_root" || lane_status=1
+    run_and_record cli-core run_cli_core "$log_root" || lane_status=1
     exit "$lane_status"
   ) &
   native_pid=$!
@@ -211,7 +212,6 @@ run_comprehensive() {
     run_and_record cli-workstation run_cli_workstation "$log_root" || lane_status=1
     run_and_record cli-native-browser run_cli_native_browser "$log_root" || lane_status=1
     run_and_record cli-native-stream run_cli_native_stream "$log_root" || lane_status=1
-    run_and_record cli-core run_cli_core "$log_root" || lane_status=1
     run_and_record candidate run_candidate "$log_root" || lane_status=1
     run_and_record desktop-services run_desktop_services "$log_root" || lane_status=1
     run_and_record lease-authority run_lease_authority "$log_root" || lane_status=1
