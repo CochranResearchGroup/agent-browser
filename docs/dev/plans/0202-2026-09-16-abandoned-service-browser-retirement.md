@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 18
+Plan version: 19
 
 State: OPEN
 
@@ -66,8 +66,9 @@ are green at source checkpoint
 `844eba2671681cd3e0c884a9cae5c9f839d6d565`. The final two-axis published-diff
 review then found that the reviewed identity still omitted descendants, so a
 same-root replacement child set could become the freshly sealed plan. Packet
-10 owns that one provider-free binding repair. No additional browser replay is
-authorized.
+10 owns that one provider-free binding repair. Packet 11 consumed the one
+operator-authorized real-browser replay and failed at the terminal status
+harness assertion. No additional browser replay is authorized.
 
 P190 and P197 remain active. P190 has no expected P202 source overlap but is
 the current writer for shared CLI help, README, agent skill, and command docs.
@@ -641,6 +642,35 @@ foreign-process, or broad cleanup effects.
   GitHub and Git evidence still shows PR #152 open at `ce19901f` and
   `origin/main` at `151ebccd`. Shared documentation remains separately blocked
   and is not touched by this acceptance packet.
+
+Packet 11 result:
+
+- The exact debug candidate built successfully through
+  `scripts/ci/cargo-safe.sh` from source checkpoint
+  `e727162e156b161cb2fff51dbcadcffeedb0d3fa`; later branch commits through
+  `60e17c1b9c64b16f6f6cbb51034bf13849dcb66c` were documentation-only. The
+  binary SHA-256 was
+  `cca0c54b94ecf07329c9c405e78350038833b15759ac7a64e6b4559b2556bc29`.
+- The sole authorized `pnpm test:service-resource-gc-live` invocation failed
+  with `Terminal Service State is incoherent: undefined`. It was not retried.
+  The immediately preceding harness checks had already proved the reviewed
+  retirement apply reported success, the exact managed process group exited,
+  and the managed profile `SingletonLock` was absent.
+- Source diagnosis localizes the failure to the acceptance harness contract.
+  `service status` reconciles a cloned authority snapshot and intentionally
+  removes a terminal `process_exited` browser operational row through
+  `remove_post_termination_browser_history`. The harness instead requires that
+  same browser row to remain present with `health=process_exited`, so it rejects
+  the intentional terminal projection before checking the separately retained
+  lifecycle record and retirement receipt.
+- Fresh post-run evidence at `2026-09-16T16:45:56-05:00` found no matching
+  `ab-managed-resource-gc-*` process, no matching temporary directory, and no
+  worktree mutation. Aggregate host counts were 49 Chrome processes and 14
+  agent-browser processes; none matched the generated fixture namespace.
+- Acceptance remains failed because the authorized end-to-end contract did not
+  complete. A provider-free harness correction may align terminal coherence
+  with the existing status projection, but another real-browser run requires
+  renewed operator authority.
 
 ## Stop Condition
 
