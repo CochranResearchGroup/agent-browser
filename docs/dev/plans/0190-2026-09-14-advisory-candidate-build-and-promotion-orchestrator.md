@@ -172,6 +172,17 @@ the validation-selector self-check pass. The collector cannot spawn Cargo or
 another process, and this checkpoint performed no candidate build or runtime
 effect.
 
+Checkpoint `641c2f17` separates immutable build support identity from the
+workstation's install-specific deployment manifest. The collector now derives
+the executable-input digest, embedded-dashboard digest, embedded-asset map,
+reviewed-environment digest, resolved-profile digest, encoded build-support
+manifest, and candidate manifest deterministically. Its fixture reproduces the
+Rust kernel's known closure digest and the complete checked-in Rust candidate
+manifest, preventing a parallel JavaScript identity contract. The focused
+collector test, architecture guard, and patch hygiene pass. Canonical main was
+also refreshed through `9a46d73b`, retaining P190 while accepting the completed
+P196 lane removal and its source fixes. No build or runtime effect occurred.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
