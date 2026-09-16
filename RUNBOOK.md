@@ -7,6 +7,22 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 357 | 2026-09-16
+
+[Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+is provider-free green for the per-lane resource projection, activity-aware
+candidate matrix, and sealed reserve/effect/finalize transaction. Nine focused
+transaction tests include a real JSON repository regression for pre-advanced
+CAS revisions and persistence normalization. Three bounded disposable
+real-browser fixture cycles were used; the final cycle reached apply and
+exposed `BrowserRecordChanged` from derived-view normalization. That cause is
+repaired and deterministically covered, but the plan attempt budget is
+exhausted, so a fourth live replay was not taken and real-browser acceptance
+remains unverified. Fresh readback found no disposable fixture residue. P190
+still owns the overlapping shared documentation while PR #152 remains open.
+No installed runtime, provider, protected profile, retained browser, or foreign
+process was changed.
+
 ## Turn 356 | 2026-09-16
 
 [Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
@@ -16,7 +32,14 @@ still-live inactive service-owned lane. Three shallow read-only workers will
 inspect disjoint resource/status, retirement/apply, and acceptance/overlap
 questions using economical task-matched models while P202 retains every write,
 contract decision, integration, and final acceptance. The critical path remains
-one red-capable focused fixture before repair. No installed cleanup, browser
+one red-capable focused fixture before repair. That fixture now fails exactly
+at the missing candidate classification: an exact-owned `Retained` lane with
+an expired `CloseBrowser` lease and retained display reports zero candidates.
+The read-only join found no need to change the core store CAS algorithm and
+split implementation into disjoint resource/status and sealed-transaction
+packets. The transaction must reserve and finalize through pure state changes,
+with fresh observation and exact-tree signaling outside replayable mutations.
+No installed cleanup, browser
 shutdown, runtime restart, provider mutation, production effect, or release is
 authorized.
 

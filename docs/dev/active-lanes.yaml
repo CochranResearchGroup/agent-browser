@@ -14,7 +14,7 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
-    validation_status: pending
+    validation_status: focused provider-free decision matrix and transaction suites pass; real-browser replay and complete changed-surface validation remain
     validation_ref: 3430925f0cd20fef0df871a45299d981a9dc2d85
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
@@ -52,8 +52,8 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 151ebccd610869f457ea684b416e31408fee9fb3
-    remote_ref: null
+    checkpoint: f99cd8a6225dee2b85a73ec55aee6a67a2042ee7
+    remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
     validation_status: pending
@@ -62,5 +62,5 @@ lanes:
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: contract freeze and the first red-capable focused fixture remain
+    blocker: implementation is provider-free green; bounded live attempt budget is exhausted after persistence normalization drift, and shared documentation remains owned by open P190
     updated_at: 2026-09-16

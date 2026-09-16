@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 3
 
 State: OPEN
 
@@ -45,6 +45,17 @@ Neither primitive classifies a still-live but inactive service-owned browser as
 an abandoned candidate or seals current lease/activity evidence into one
 retirement transaction. Current status and GC can therefore protect stale
 lanes indefinitely, including through retained display allocation.
+
+The first provider-free reproducer was red and is now green. The exact-owned fixture
+`resources_classify_inactive_owned_lane_despite_retained_display` models a
+`Retained/Owned` browser with complete root identity, an expired
+`CloseBrowser` session, and a retained display. The focused runner reports
+`candidateCount = 0` where the contract requires one retirement candidate.
+localized the defect to unconditional retained-browser/display protection
+before activity-aware ownership classification. The repair now projects the
+joined lane, classifies only complete service-owned evidence, and uses a sealed
+reserve, effect, and finalize transaction without changing the core store CAS
+algorithm.
 
 P190 and P197 remain active. P190 has no expected P202 source overlap but is
 the current writer for shared CLI help, README, agent skill, and command docs.
@@ -109,6 +120,12 @@ then must prove no residue.
   read-only, using `gpt-5.6-sol` at medium effort.
 - Parallel W3: fresh acceptance, overlap, and regression-risk review, read-only,
   using `gpt-5.6-terra` at medium effort.
+- Parallel W4: resource/status projection, policy, classification, and
+  provider-free decision matrix implementation, using `gpt-5.6-terra` at high
+  effort with sole write ownership of `service_resources.rs`.
+- Parallel W5: sealed reserve/effect/finalize retirement transaction and
+  provider-free drift fixtures in a new focused module, using `gpt-6-astra` at
+  high effort without shared resource-module writes.
 - Intended active concurrency: one primary plus three shallow workers; no
   nested subagents. Workers return evidence and stop before edits or effects.
 - Maximum work-unit attempts: 3.
@@ -127,8 +144,16 @@ acceptance. W1 reports existing resource/status seams and the smallest fixture
 that can prove the missing candidate. W2 reports the exact retirement/apply
 identity and activity gaps plus a provider-free process-tree test design. W3
 independently maps every issue criterion to current evidence or a missing proof,
-checks P190/P197 overlap, and may return no additional finding. Worker outputs
-are advisory evidence; the primary reconciles them before implementation.
+checks P190/P197 overlap, and may return no additional finding.
+
+W1, W2, and W3 completed read-only and agreed that the existing status lacks a
+joined per-lane projection, the retained browser/display guards are
+unconditional, and record-only retirement cannot seal live activity or process
+identity. W2 additionally found that generic GC performs external work inside
+a replayable repository mutation and can unlink `SingletonLock` while claiming
+release; P202 must not reuse either behavior. W4 and W5 own disjoint
+implementation packets. Worker outputs remain advisory until primary review,
+focused validation, and integration.
 
 P190 remains primary writer for its candidate-orchestration source and current
 shared command documentation. P197 remains primary writer for its challenge
@@ -163,12 +188,60 @@ Exit requires current evidence that:
 | --- | --- | --- |
 | Existing exact-tree effect primitive | `service_resources` rechecks reviewed process, process-group, profile, package-launch, and owner-generation identity before signaling and proves exit plus profile-lock release | reusable partial primitive |
 | Existing record-only retirement | `service_browser_retirement` seals an inert row digest and removes only an unreferenced browser row | reusable but insufficient |
-| Abandoned live-lane classification | Current issue evidence reports stale lease activity with GC candidate count zero and retained-display overprotection | defect reported; focused reproducer pending |
-| Per-lane resource and activity projection | Existing resource/status projections need requirement-level inspection | worker and primary inventory pending |
-| Sealed activity-aware plan/apply | No current joined transaction is proven | missing |
-| Terminal Service State convergence | Record-only retirement exists; live exact-tree lifecycle convergence is unproven | missing |
-| Provider-free and real-browser acceptance | Existing reviewed-tree tests may be reusable; exact #103 matrix and residue proof are unproven | pending |
-| Integration | Issue claimed at `main@151ebccd`; no P202 source checkpoint exists yet | pending |
+| Abandoned live-lane classification | Decision matrix now accepts complete inactive exact-owned lanes and rejects active work, explicit retention, protected profiles, foreign identity, and incomplete census | provider-free green |
+| Per-lane resource and activity projection | Status joins browser root, descendants, tabs, RSS, lease activity, policy thresholds, and cleanup disposition | implemented; broader validation pending |
+| Sealed activity-aware plan/apply | Nine focused transaction tests cover reserve, revalidation, drift, repository CAS revisions, normalization, and terminal finalize | provider-free green |
+| Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof | provider-free green; real-browser replay pending |
+| Provider-free and real-browser acceptance | Focused suites pass. Three bounded disposable fixture cycles reached classification and apply; the final live observation exposed persistence normalization drift, which is repaired and covered by a real JSON repository regression. The plan attempt budget is exhausted, so no fourth browser replay was taken. | provider-free green; real-browser gate unverified |
+| Integration | Plan checkpoint `f99cd8a6` is published; implementation checkpoint is being prepared while P190 retains shared documentation ownership | pending |
+
+## Implementation Checkpoint 1
+
+- Published plan checkpoint: `f99cd8a6` on
+  `origin/platform/p202-abandoned-browser-retirement`.
+- W1 `/root/p202_resource_status`: completed read-only resource/status seam and
+  red-fixture inventory.
+- W2 `/root/p202_retirement_apply`: completed read-only apply-path audit and
+  pure reserve/effect/finalize transaction design.
+- W3 `/root/p202_acceptance_audit`: completed acceptance matrix and P190/P197
+  overlap audit.
+- Red command:
+  `scripts/ci/rust-tests.sh --focused resources_classify_inactive_owned_lane_despite_retained_display`.
+- Red result: one selected test failed at the candidate-count assertion, with
+  `left: 0`, `right: 1`; 3,222 tests were filtered out.
+- No browser, service, installed runtime, provider, retained profile, or
+  foreign process was changed.
+
+## Implementation Checkpoint 2
+
+- Added bounded per-lane and workstation resource projections plus configurable
+  inactivity and resource thresholds.
+- Added an activity-aware decision matrix that keeps active work, explicit
+  retention, protected profiles, foreign or unproven identities, and incomplete
+  census evidence ineligible.
+- Added `retire_abandoned_browser_lane` with a sealed plan and pure
+  reserve/finalize mutations. The external exact-tree effect occurs outside the
+  replayable repository mutation.
+- Added coherent terminal cleanup for the exact browser lane and profile-claim
+  blocking while a retirement transaction is pending.
+- `scripts/ci/rust-tests.sh --focused abandoned_lane_decision_matrix` passes
+  its selected test.
+- `scripts/ci/rust-tests.sh --focused service_abandoned_browser_retirement`
+  passes all nine selected tests, including the real JSON repository CAS and
+  persistence-normalization regression.
+- `node --check scripts/smoke-service-resource-gc-live.js` and
+  `git diff --check` pass.
+- Three bounded disposable real-browser fixture cycles were used. The final
+  cycle reached apply and returned `BrowserRecordChanged`; the subsequent
+  deterministic repository regression proved that persistence normalization
+  changed derived tab handles before the reserved browser digest was checked.
+  The reserve path now normalizes derived views before sealing that digest, and
+  the regression passes. The live attempt budget is exhausted, so real-browser
+  acceptance remains explicitly unverified rather than inferred from the
+  deterministic repair.
+- Fresh process and temporary-directory readback found no disposable P202
+  browser, host, profile, or fixture residue. No installed runtime, provider,
+  protected profile, retained browser, or foreign process was changed.
 
 ## Stop Condition
 
