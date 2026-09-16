@@ -15,13 +15,15 @@ try {
     '--feature', 'service',
     '--feature', 'trace',
     '--reviewed-environment-input', `BUILD_MODE=${'a'.repeat(64)}`,
-    '--dry-run',
+    '--retry-failed-operation', 'build-failed-1',
+    '--apply',
     '--json',
   ]);
   assert.equal(parsed.repoRoot, root);
   assert.equal(parsed.artifactClass, 'production_shaped');
-  assert.equal(parsed.apply, false);
+  assert.equal(parsed.apply, true);
   assert.deepEqual(parsed.features, ['service', 'trace']);
+  assert.equal(parsed.retryFailedOperationId, 'build-failed-1');
 
   const report = await runCandidateBuild([
     '--repo-root', root,
@@ -60,6 +62,15 @@ try {
       '--dry-run',
     ]),
     /candidate_build_environment_digest_invalid/u,
+  );
+  assert.throws(
+    () => parseCandidateBuildArguments([
+      '--repo-root', root,
+      '--artifact-class', 'fast_iteration',
+      '--retry-failed-operation', 'build-failed-1',
+      '--dry-run',
+    ]),
+    /candidate_build_recovery_requires_apply/u,
   );
   await assert.rejects(
     runCandidateBuild([

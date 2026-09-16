@@ -5664,7 +5664,7 @@ agent-browser candidate - Build, inspect, or explicitly install a sealed candida
 
 Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
-       agent-browser candidate build --repo-root <source-checkout> --artifact-class <fast_iteration|production_shaped> [--target <triple>] [--feature <name>] [--reviewed-environment-input <name=sha256>] <--dry-run|--apply> [--json]
+       agent-browser candidate build --repo-root <source-checkout> --artifact-class <fast_iteration|production_shaped> [--target <triple>] [--feature <name>] [--reviewed-environment-input <name=sha256>] [--retry-failed-operation <id>] <--dry-run|--apply> [--json]
        agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json]
        agent-browser candidate recover <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
        agent-browser candidate coordinate <queue|cancel-active|discard-queued|supersede|activate-queued> --request-id <id> --candidate-id <id> --artifact-id <id> [--operation-id <id>] --expected-revision <revision> --expected-fencing-generation <generation> [--json]
@@ -5677,6 +5677,9 @@ isolated command plan without writing state or compiling. Build apply uses an
 exclusive request claim, the repository Cargo safety wrapper, compiler dep-info,
 and immutable manifests to produce a sealed artifact below `cli/target` without
 touching an installed runtime. Production-shaped builds require clean source.
+Retry a failed claim only by passing its exact operation ID with
+`--retry-failed-operation`; the failed claim and any partial sealed directory
+are archived before the replacement claim is created.
 Install dry-run additionally
 validates the exact binary and sealed build artifact while creating no
 transaction or runtime state. Install apply is an explicit production effect:

@@ -49,6 +49,7 @@ export function parseCandidateBuildArguments(argv) {
   let target = null;
   let mode = null;
   let json = false;
+  let retryFailedOperationId = null;
   const features = [];
   const reviewedEnvironmentInputs = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -78,6 +79,10 @@ export function parseCandidateBuildArguments(argv) {
         reviewedEnvironmentInputs[name] = digest;
         break;
       }
+      case '--retry-failed-operation':
+        if (retryFailedOperationId) fail('candidate_build_recovery_duplicate', argument);
+        retryFailedOperationId = take(argument);
+        break;
       case '--dry-run':
       case '--apply':
         if (mode) fail('candidate_build_mode_duplicate', `${mode},${argument}`);
@@ -92,6 +97,9 @@ export function parseCandidateBuildArguments(argv) {
     fail('candidate_build_artifact_class_invalid', artifactClass ?? 'missing');
   }
   if (!mode) fail('candidate_build_argument_missing', '--dry-run or --apply');
+  if (retryFailedOperationId && mode !== '--apply') {
+    fail('candidate_build_recovery_requires_apply', retryFailedOperationId);
+  }
   return {
     repoRoot: realpathSync(resolve(repoRoot)),
     artifactClass,
@@ -100,6 +108,7 @@ export function parseCandidateBuildArguments(argv) {
     reviewedEnvironmentInputs,
     apply: mode === '--apply',
     json,
+    retryFailedOperationId,
   };
 }
 
@@ -134,6 +143,7 @@ export async function runCandidateBuild(argv, dependencies = {}) {
   const adapter = dependencies.adapter ?? createCandidateBuildFilesystemAdapter({
     repoRoot: parsed.repoRoot,
     sourceReader: readSource,
+    retryFailedOperationId: parsed.retryFailedOperationId,
   });
   return {
     schemaVersion: 'agent-browser.candidate-build-result.v1',

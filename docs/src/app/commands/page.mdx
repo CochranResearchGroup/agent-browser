@@ -121,6 +121,9 @@ closure from compiler dep-info, and seals immutable artifacts below
 builds require clean source. Repeated `--feature` values select features; each
 reviewed build-affecting environment value is supplied as a name and SHA-256
 digest, and its current raw value must match without being recorded. `candidate
+build --retry-failed-operation <exact-operation-id> --apply` archives the
+failed claim and any partial sealed directory before acquiring a replacement
+claim. It cannot target an active or different failed operation. `candidate
 install --dry-run` additionally verifies the exact binary and sealed build
 artifact without creating state. `candidate install --apply` is an explicit
 production effect. It binds the sealed artifact and candidate coordination

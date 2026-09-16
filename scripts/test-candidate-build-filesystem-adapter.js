@@ -129,6 +129,29 @@ try {
     executeCandidateBuildPlan(failedPlan, failedAdapter),
     /candidate_build_failed_recovery_required/u,
   );
+  const recoveredAdapter = createCandidateBuildFilesystemAdapter({
+    repoRoot: root,
+    retryFailedOperationId: 'build-operation-failed',
+    operationIdFactory: () => 'build-operation-retry',
+    commandRunner: async (command) => {
+      if (command.program !== 'scripts/ci/cargo-safe.sh') return;
+      const paths = candidateBuildArtifactPaths(failedPlan);
+      mkdirSync(dirname(paths.binary), { recursive: true });
+      writeFileSync(paths.binary, 'recovered-candidate-binary');
+      writeFileSync(
+        paths.depInfo,
+        `${paths.binary}: cli/src/main.rs Cargo.toml Cargo.lock cli/Cargo.toml package.json packages/dashboard/package.json\n`,
+      );
+    },
+  });
+  const recovered = await executeCandidateBuildPlan(failedPlan, recoveredAdapter);
+  assert.equal(recovered.outcome, 'artifact_sealed');
+  assert.equal(recovered.operationId, 'build-operation-retry');
+  const archivedClaim = JSON.parse(readFileSync(
+    join(root, 'cli/target/candidate-build-state/failed/claims/build-operation-failed.json'),
+    'utf8',
+  ));
+  assert.equal(archivedClaim.state, 'failed');
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

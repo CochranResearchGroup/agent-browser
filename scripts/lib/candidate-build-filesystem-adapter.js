@@ -10,6 +10,7 @@ import {
   openSync,
   readFileSync,
   renameSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -159,6 +160,7 @@ export function createCandidateBuildFilesystemAdapter({
   commandRunner = defaultCommandRunner,
   operationIdFactory = () => `candidate-build-${randomUUID()}`,
   sourceReader = null,
+  retryFailedOperationId = null,
 } = {}) {
   const root = resolve(repoRoot);
   const state = resolve(stateRoot);
@@ -169,6 +171,32 @@ export function createCandidateBuildFilesystemAdapter({
 
   function completionPath(plan) {
     return join(state, 'completed', `${plan.requestDigest}.json`);
+  }
+
+  function claimDocument(plan, operationId) {
+    return {
+      schemaVersion: 'agent-browser.candidate-build-claim.v1',
+      requestDigest: plan.requestDigest,
+      operationId,
+      state: 'building',
+      createdAt: clock(),
+      outputDirectory: plan.outputDirectory,
+    };
+  }
+
+  function createClaim(path, plan, operationId) {
+    const descriptor = openSync(
+      path,
+      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+      0o600,
+    );
+    try {
+      writeFileSync(descriptor, encodeJson(claimDocument(plan, operationId)));
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
+    syncDirectory(dirname(path));
   }
 
   return {
@@ -233,28 +261,85 @@ export function createCandidateBuildFilesystemAdapter({
       const path = claimPath(plan);
       mkdirSync(dirname(path), { recursive: true });
       const operationId = operationIdFactory();
+      const recoveryGuard = `${path}.recovery`;
+      if (existsSync(recoveryGuard)) {
+        fail('candidate_build_recovery_in_progress', recoveryGuard);
+      }
       try {
-        const descriptor = openSync(path, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
-        try {
-          writeFileSync(descriptor, encodeJson({
-            schemaVersion: 'agent-browser.candidate-build-claim.v1',
-            requestDigest: plan.requestDigest,
-            operationId,
-            state: 'building',
-            createdAt: clock(),
-            outputDirectory: plan.outputDirectory,
-          }));
-          fsyncSync(descriptor);
-        } finally {
-          closeSync(descriptor);
-        }
-        syncDirectory(dirname(path));
+        createClaim(path, plan, operationId);
         return { acquired: true, operationId, claimPath: path };
       } catch (error) {
         if (error?.code !== 'EEXIST') throw error;
         const existing = readJson(path);
         if (existing.requestDigest !== plan.requestDigest || !existing.operationId) {
           fail('candidate_build_claim_invalid', path);
+        }
+        if (existing.state === 'failed' && retryFailedOperationId === existing.operationId) {
+          let guardDescriptor;
+          try {
+            guardDescriptor = openSync(
+              recoveryGuard,
+              constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+              0o600,
+            );
+          } catch (guardError) {
+            if (guardError?.code === 'EEXIST') {
+              fail('candidate_build_recovery_in_progress', recoveryGuard);
+            }
+            throw guardError;
+          }
+          try {
+            writeFileSync(guardDescriptor, encodeJson({
+              schemaVersion: 'agent-browser.candidate-build-recovery.v1',
+              requestDigest: plan.requestDigest,
+              failedOperationId: existing.operationId,
+              replacementOperationId: operationId,
+              startedAt: clock(),
+            }));
+            fsyncSync(guardDescriptor);
+          } finally {
+            closeSync(guardDescriptor);
+          }
+          syncDirectory(dirname(recoveryGuard));
+          const confirmed = readJson(path);
+          if (
+            confirmed.state !== 'failed'
+            || confirmed.operationId !== retryFailedOperationId
+            || confirmed.requestDigest !== plan.requestDigest
+          ) {
+            fail('candidate_build_failed_claim_changed', path);
+          }
+          const archivedClaim = join(
+            state,
+            'failed',
+            'claims',
+            `${confirmed.operationId}.json`,
+          );
+          mkdirSync(dirname(archivedClaim), { recursive: true });
+          atomicCopy(path, archivedClaim);
+          const partialArtifacts = artifactPaths(plan).artifactDirectory;
+          if (existsSync(partialArtifacts)) {
+            const archivedArtifacts = join(
+              state,
+              'failed',
+              'artifacts',
+              confirmed.operationId,
+            );
+            mkdirSync(dirname(archivedArtifacts), { recursive: true });
+            renameSync(partialArtifacts, archivedArtifacts);
+            syncDirectory(dirname(partialArtifacts));
+            syncDirectory(dirname(archivedArtifacts));
+          }
+          atomicWrite(path, encodeJson(claimDocument(plan, operationId)));
+          unlinkSync(recoveryGuard);
+          syncDirectory(dirname(recoveryGuard));
+          return {
+            acquired: true,
+            operationId,
+            claimPath: path,
+            recoveredOperationId: confirmed.operationId,
+            archivedClaim,
+          };
         }
         if (existing.state !== 'building') {
           fail(

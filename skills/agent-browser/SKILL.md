@@ -299,7 +299,9 @@ dep-info, and seals immutable artifacts below `cli/target`; it does not install
 or mutate either runtime. A production-shaped build requires clean source. Pass
 each feature with `--feature <name>`. For a reviewed build-affecting environment
 value, pass only `--reviewed-environment-input <name=sha256>`; the command fails
-if the current raw value does not match that digest.
+if the current raw value does not match that digest. Retry a failed claim only
+with `--retry-failed-operation <exact-operation-id>`; the failed claim and any
+partial sealed directory are archived rather than deleted.
 Use `agent-browser candidate install --binary <path> --manifest
 <path> --input-closure <path> --sealed-artifact <path> --dry-run --json` to
 also verify the exact candidate binary and sealed build artifact without an

@@ -864,7 +864,9 @@ below `cli/target`. It does not install or mutate either runtime. A
 `production_shaped` build requires clean source. Repeat `--feature` for selected
 features. Supply reviewed build-affecting environment values as
 `--reviewed-environment-input <name=sha256>`; the current raw value must match
-the digest and is not recorded.
+the digest and is not recorded. A failed claim is retried only with
+`--retry-failed-operation <exact-operation-id>`; its claim and any partial
+sealed directory are archived first.
 
 Repeating `stream enable` with no port, port zero, or the current port returns the existing stream status without replacing its listener. A different explicit port fails; disable streaming before changing ports.
 
