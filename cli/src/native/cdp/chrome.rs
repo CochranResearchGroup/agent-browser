@@ -2959,8 +2959,10 @@ fn available_x_display_in(tmp_root: &Path, range: std::ops::Range<u16>) -> Optio
     for state in scan_x_display_range(tmp_root, range) {
         match state.status {
             XDisplayStatus::Free => return Some(state.display),
-            XDisplayStatus::StaleLockNoSocket | XDisplayStatus::StaleLockReusedPid => {
-                if remove_stale_x_lock(tmp_root, state.display).is_ok() {
+            XDisplayStatus::StaleSocketNoListener
+            | XDisplayStatus::StaleLockNoSocket
+            | XDisplayStatus::StaleLockReusedPid => {
+                if remove_stale_x_residue(tmp_root, state.display).is_ok() {
                     return Some(state.display);
                 }
             }
@@ -2975,9 +2977,14 @@ fn available_x_display_in(tmp_root: &Path, range: std::ops::Range<u16>) -> Optio
 #[cfg(target_os = "linux")]
 fn remote_headed_display_exhausted_message() -> String {
     let states = scan_x_display_range(Path::new("/tmp"), 90..130);
+    remote_headed_display_exhausted_message_for(&states)
+}
+
+#[cfg(target_os = "linux")]
+fn remote_headed_display_exhausted_message_for(states: &[XDisplayState]) -> String {
     let stale_count = states
         .iter()
-        .filter(|state| state.status.is_stale_lock())
+        .filter(|state| state.status.is_stale())
         .count();
     let active_count = states
         .iter()
@@ -2987,9 +2994,14 @@ fn remote_headed_display_exhausted_message() -> String {
         .iter()
         .filter(|state| state.status == XDisplayStatus::Unknown)
         .count();
+    let classifications = states
+        .iter()
+        .map(|state| format!(":{}={}", state.display, state.status.diagnostic_name()))
+        .collect::<Vec<_>>()
+        .join(",");
     format!(
-        "No available X display number found for remote_headed launch in :90-:129; active_or_reserved={}, stale_lock_count={}, unknown_count={}. Run the RDP ready-to-go doctor or inspect allocator-range locks and both filesystem and abstract X11 sockets before cleanup. Do not remove a lock while either socket is active or observation is unknown.",
-        active_count, stale_count, unknown_count
+        "No available X display number found for remote_headed launch in :90-:129; active_or_reserved={}, stale_residue_count={}, unknown_count={}, classifications=[{}]. Run the RDP ready-to-go doctor or inspect allocator-range locks and both filesystem and abstract X11 sockets before cleanup. Do not remove residue while either socket is active or observation is unknown.",
+        active_count, stale_count, unknown_count, classifications
     )
 }
 
@@ -2999,6 +3011,7 @@ enum XDisplayStatus {
     Free,
     ActiveSocket,
     ActiveXProcess,
+    StaleSocketNoListener,
     StaleLockNoSocket,
     StaleLockReusedPid,
     Unknown,
@@ -3010,8 +3023,23 @@ impl XDisplayStatus {
         matches!(self, Self::ActiveSocket | Self::ActiveXProcess)
     }
 
-    fn is_stale_lock(self) -> bool {
-        matches!(self, Self::StaleLockNoSocket | Self::StaleLockReusedPid)
+    fn is_stale(self) -> bool {
+        matches!(
+            self,
+            Self::StaleSocketNoListener | Self::StaleLockNoSocket | Self::StaleLockReusedPid
+        )
+    }
+
+    fn diagnostic_name(self) -> &'static str {
+        match self {
+            Self::Free => "free",
+            Self::ActiveSocket => "active_socket",
+            Self::ActiveXProcess => "active_x_process",
+            Self::StaleSocketNoListener => "stale_socket_no_listener",
+            Self::StaleLockNoSocket => "stale_lock_no_socket",
+            Self::StaleLockReusedPid => "stale_lock_reused_pid",
+            Self::Unknown => "unknown",
+        }
     }
 }
 
@@ -3033,25 +3061,39 @@ fn scan_x_display_range(tmp_root: &Path, range: std::ops::Range<u16>) -> Vec<XDi
 #[cfg(target_os = "linux")]
 fn classify_x_display(tmp_root: &Path, display: u16) -> XDisplayState {
     let socket_path = tmp_root.join(".X11-unix").join(format!("X{}", display));
+    let live_socket_exists = x_socket_present(&socket_path);
+    classify_x_display_with_socket_observation(tmp_root, display, live_socket_exists)
+}
+
+#[cfg(target_os = "linux")]
+fn classify_x_display_with_socket_observation(
+    tmp_root: &Path,
+    display: u16,
+    live_socket_exists: std::io::Result<bool>,
+) -> XDisplayState {
+    let socket_path = tmp_root.join(".X11-unix").join(format!("X{}", display));
     let lock_path = tmp_root.join(format!(".X{}-lock", display));
-    let socket_exists = socket_path.exists();
+    let socket_path_exists = fs::symlink_metadata(&socket_path).is_ok();
     let lock_pid = read_x_lock_pid(&lock_path);
     let lock_exists = lock_path.exists();
 
     // PrivateTmp can hide the pathname socket while the same network namespace
     // still contains the live abstract X11 socket. Never reclaim that display's
     // visible lock based solely on the caller's filesystem view.
-    let abstract_socket_exists = abstract_x_socket_present(&socket_path);
-    let status = if socket_exists || matches!(abstract_socket_exists, Ok(true)) {
+    let status = if matches!(live_socket_exists, Ok(true)) {
         XDisplayStatus::ActiveSocket
-    } else if abstract_socket_exists.is_err() {
+    } else if live_socket_exists.is_err() {
         XDisplayStatus::Unknown
     } else if let Some(pid) = lock_pid {
         if x_display_lock_pid_matches_display(pid, display) {
             XDisplayStatus::ActiveXProcess
+        } else if socket_path_exists {
+            XDisplayStatus::StaleSocketNoListener
         } else {
             XDisplayStatus::StaleLockReusedPid
         }
+    } else if socket_path_exists {
+        XDisplayStatus::StaleSocketNoListener
     } else if lock_exists {
         XDisplayStatus::StaleLockNoSocket
     } else {
@@ -3065,16 +3107,18 @@ fn classify_x_display(tmp_root: &Path, display: u16) -> XDisplayState {
     }
 }
 
-/// Observe the current network namespace without connecting to or rebinding a
-/// display owned by another runtime. An unreadable census is unknown, not free.
+/// Observe filesystem and abstract X11 listeners in the current network
+/// namespace without connecting to or rebinding another runtime's display. An
+/// unreadable census is unknown, not free.
 #[cfg(target_os = "linux")]
-fn abstract_x_socket_present(socket_path: &Path) -> std::io::Result<bool> {
-    let expected = format!("@{}", socket_path.display());
+fn x_socket_present(socket_path: &Path) -> std::io::Result<bool> {
+    let filesystem_address = socket_path.to_string_lossy();
+    let abstract_address = format!("@{filesystem_address}");
     let sockets = fs::read_to_string("/proc/net/unix")?;
-    Ok(sockets
-        .lines()
-        .skip(1)
-        .any(|line| line.split_whitespace().nth(7) == Some(expected.as_str())))
+    Ok(sockets.lines().skip(1).any(|line| {
+        let address = line.split_whitespace().nth(7);
+        address == Some(filesystem_address.as_ref()) || address == Some(abstract_address.as_str())
+    }))
 }
 
 #[cfg(target_os = "linux")]
@@ -3084,30 +3128,50 @@ fn read_x_lock_pid(lock_path: &Path) -> Option<u32> {
 }
 
 #[cfg(target_os = "linux")]
-fn remove_stale_x_lock(tmp_root: &Path, display: u16) -> Result<(), String> {
+fn remove_stale_x_residue(tmp_root: &Path, display: u16) -> Result<(), String> {
     let state = classify_x_display(tmp_root, display);
-    if !state.status.is_stale_lock() {
+    if !state.status.is_stale() {
         return Err(format!(
-            "display :{} is not a stale lock ({:?})",
+            "display :{} does not have stale residue ({:?})",
             display, state.status
         ));
     }
     let socket_path = tmp_root.join(".X11-unix").join(format!("X{}", display));
-    if socket_path.exists() {
-        return Err(format!(
-            "display :{} has an active socket at {}",
-            display,
-            socket_path.display()
-        ));
+    if fs::symlink_metadata(&socket_path).is_ok() {
+        match x_socket_present(&socket_path) {
+            Ok(false) => fs::remove_file(&socket_path).map_err(|err| {
+                format!(
+                    "failed to remove stale X socket residue {}: {}",
+                    socket_path.display(),
+                    err
+                )
+            })?,
+            Ok(true) => {
+                return Err(format!(
+                    "display :{} has an active socket at {}",
+                    display,
+                    socket_path.display()
+                ));
+            }
+            Err(err) => {
+                return Err(format!(
+                    "display :{} socket observation failed before cleanup: {}",
+                    display, err
+                ));
+            }
+        }
     }
     let lock_path = tmp_root.join(format!(".X{}-lock", display));
-    fs::remove_file(&lock_path).map_err(|err| {
-        format!(
-            "failed to remove stale X lock {}: {}",
-            lock_path.display(),
-            err
-        )
-    })
+    if lock_path.exists() {
+        fs::remove_file(&lock_path).map_err(|err| {
+            format!(
+                "failed to remove stale X lock {}: {}",
+                lock_path.display(),
+                err
+            )
+        })?;
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -3320,16 +3384,111 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn test_x_display_classifier_treats_socket_as_active() {
-        let dir = TempDir::new("x-display-active-socket");
+    fn test_x_display_classifier_treats_reused_live_pid_as_stale() {
+        let dir = TempDir::new("x-display-reused-pid");
         std::fs::create_dir_all(dir.join(".X11-unix")).unwrap();
-        std::fs::write(dir.join(".X11-unix").join("X90"), "").unwrap();
-        std::fs::write(dir.join(".X90-lock"), "999999\n").unwrap();
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let lock_path = dir.join(".X90-lock");
+        std::fs::write(&lock_path, format!("{}\n", child.id())).unwrap();
 
         let state = classify_x_display(&dir, 90);
 
-        assert_eq!(state.status, XDisplayStatus::ActiveSocket);
+        assert_eq!(state.status, XDisplayStatus::StaleLockReusedPid);
+        assert_eq!(available_x_display_in(&dir, 90..91), Some(90));
+        assert!(!lock_path.exists());
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_x_display_classifier_preserves_unknown_socket_observation() {
+        let dir = TempDir::new("x-display-unknown-socket-census");
+        std::fs::create_dir_all(dir.join(".X11-unix")).unwrap();
+        let socket_path = dir.join(".X11-unix").join("X90");
+        std::fs::write(&socket_path, "unclassified residue").unwrap();
+        let lock_path = dir.join(".X90-lock");
+        std::fs::write(&lock_path, "999999\n").unwrap();
+
+        let state = classify_x_display_with_socket_observation(
+            &dir,
+            90,
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "fixture denied",
+            )),
+        );
+
+        assert_eq!(state.status, XDisplayStatus::Unknown);
+        assert!(socket_path.exists());
+        assert!(lock_path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_x_display_classifier_reclaims_ordinary_file_residue() {
+        let dir = TempDir::new("x-display-ordinary-file");
+        std::fs::create_dir_all(dir.join(".X11-unix")).unwrap();
+        let socket_path = dir.join(".X11-unix").join("X90");
+        std::fs::write(&socket_path, "not a socket").unwrap();
+        let lock_path = dir.join(".X90-lock");
+        std::fs::write(&lock_path, "999999\n").unwrap();
+
+        let state = classify_x_display(&dir, 90);
+
+        assert_ne!(state.status, XDisplayStatus::ActiveSocket);
+        assert_eq!(available_x_display_in(&dir, 90..91), Some(90));
+        assert!(!socket_path.exists());
+        assert!(!lock_path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_x_display_classifier_reclaims_stale_filesystem_socket_inode() {
+        use std::os::unix::net::UnixListener;
+
+        let dir = TempDir::new("x-display-stale-socket");
+        std::fs::create_dir_all(dir.join(".X11-unix")).unwrap();
+        let socket_path = dir.join(".X11-unix").join("X90");
+        let listener = UnixListener::bind(&socket_path).unwrap();
+        drop(listener);
+        let lock_path = dir.join(".X90-lock");
+        std::fs::write(&lock_path, "999999\n").unwrap();
+
+        let state = classify_x_display(&dir, 90);
+
+        assert_ne!(state.status, XDisplayStatus::ActiveSocket);
+        assert_eq!(available_x_display_in(&dir, 90..91), Some(90));
+        assert!(!socket_path.exists());
+        assert!(!lock_path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_x_display_classifier_preserves_live_filesystem_socket() {
+        use std::os::unix::net::UnixListener;
+
+        let dir = TempDir::new("x-display-live-socket");
+        std::fs::create_dir_all(dir.join(".X11-unix")).unwrap();
+        let socket_path = dir.join(".X11-unix").join("X90");
+        let listener = UnixListener::bind(&socket_path).unwrap();
+        let lock_path = dir.join(".X90-lock");
+        std::fs::write(&lock_path, "999999\n").unwrap();
+
+        assert_eq!(
+            classify_x_display(&dir, 90).status,
+            XDisplayStatus::ActiveSocket
+        );
         assert_eq!(available_x_display_in(&dir, 90..91), None);
+        assert!(socket_path.exists());
+        assert!(lock_path.exists());
+        drop(listener);
     }
 
     #[cfg(target_os = "linux")]
@@ -3352,11 +3511,41 @@ mod tests {
         let lock_path = dir.join(".X90-lock");
         fs::write(&lock_path, "999999\n").unwrap();
         assert_eq!(available_x_display_in(&dir, 90..91), None);
-        assert!(remove_stale_x_lock(&dir, 90).is_err());
+        assert!(remove_stale_x_residue(&dir, 90).is_err());
         assert_eq!(fs::read_to_string(&lock_path).unwrap(), "999999\n");
         drop(listener);
         assert_eq!(available_x_display_in(&dir, 90..91), Some(90));
         assert!(!lock_path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_x_display_exhaustion_message_lists_bounded_classifications() {
+        let states = vec![
+            XDisplayState {
+                display: 90,
+                status: XDisplayStatus::ActiveSocket,
+                lock_pid: None,
+            },
+            XDisplayState {
+                display: 91,
+                status: XDisplayStatus::ActiveXProcess,
+                lock_pid: Some(123),
+            },
+            XDisplayState {
+                display: 92,
+                status: XDisplayStatus::Unknown,
+                lock_pid: None,
+            },
+        ];
+
+        let message = remote_headed_display_exhausted_message_for(&states);
+
+        assert!(message.contains("active_or_reserved=2"));
+        assert!(message.contains("unknown_count=1"));
+        assert!(message
+            .contains("classifications=[:90=active_socket,:91=active_x_process,:92=unknown]"));
+        assert!(message.len() < 1024);
     }
 
     #[cfg(target_os = "linux")]
