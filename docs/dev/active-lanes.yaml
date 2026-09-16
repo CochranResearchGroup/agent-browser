@@ -1,6 +1,27 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P200
+    product_lane: PL-PLATFORM
+    objective: Keep Cargo admission accountable until exact test-scope descendants exit
+    plan: docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md
+    plan_ref: refs/remotes/origin/platform/p200-cargo-scope-descendant-lifetime
+    branch: platform/p200-cargo-scope-descendant-lifetime
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: fc2a3359
+    remote_ref: refs/remotes/origin/platform/p200-cargo-scope-descendant-lifetime
+    integration_receipt: null
+    integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
+    validation_status: local_passed
+    validation_ref: fc2a3359
+    work_items: [CochranResearchGroup/agent-browser#102]
+    dependencies: []
+    overlaps: [P190]
+    reconciled_overlaps: [P190]
+    blocker: protected exact-head CI and integration remain
+    updated_at: 2026-09-16
   - id: P190
     product_lane: PL-PLATFORM
     objective: Build the deterministic candidate identity, build coordination, and promotion advisory surface
