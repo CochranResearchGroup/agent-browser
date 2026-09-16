@@ -25,6 +25,19 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P201 | X Display Live Occupancy
+
+State: OPEN
+
+Current state: [Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
+owns the bounded no-live repair for
+[issue #159](https://github.com/CochranResearchGroup/agent-browser/issues/159).
+The first evidence checkpoint will replace pathname-existence assumptions with
+provider-free ordinary-file, stale-socket-inode, and live-listener fixtures.
+P201 owns `cli/src/native/cdp/chrome.rs`; P190 and P197 remain disjoint. No
+browser, X server, installed-runtime, provider, Service State, or retained
+profile effect is authorized.
+
 ## P200 | Cargo Scope Descendant Lifetime
 
 State: CLOSED

@@ -43,3 +43,24 @@ lanes:
     reconciled_overlaps: [P190]
     blocker: provider-free consumer admission contract and two consumer integrations remain in progress; every live challenge effect stays with issue #66
     updated_at: 2026-09-16
+  - id: P201
+    product_lane: PL-PLATFORM
+    objective: Classify X display occupancy from live socket and process evidence and reclaim exact stale residue
+    plan: docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md
+    plan_ref: refs/heads/platform/p201-x-display-live-occupancy
+    branch: platform/p201-x-display-live-occupancy
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: b11a7227cdbe73f5f06e2a12907e1148383f35d3
+    remote_ref: null
+    integration_receipt: null
+    integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
+    validation_status: pending
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#159]
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: []
+    blocker: provider-free red fixtures, classifier repair, bounded diagnostics, and changed-surface validation remain
+    updated_at: 2026-09-16
