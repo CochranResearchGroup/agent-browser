@@ -11791,7 +11791,7 @@ struct PostCommitValidationReceipt {
     presentation_summary: String,
 }
 
-fn workstation_root() -> Result<PathBuf, String> {
+pub(crate) fn workstation_root() -> Result<PathBuf, String> {
     if let Some(root) = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT") {
         let path = PathBuf::from(root);
         if !path.is_absolute() {

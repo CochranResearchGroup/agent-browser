@@ -2,6 +2,7 @@
 
 mod agent_env;
 mod candidate;
+mod candidate_coordination;
 mod chat;
 mod color;
 mod commands;

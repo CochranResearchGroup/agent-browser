@@ -4,7 +4,7 @@
 //! documents. It must not build, install, recover, or otherwise mutate either
 //! runtime namespace.
 
-use agent_browser_candidate::{CandidateManifest, ExecutableInputClosure};
+use agent_browser_candidate::{CandidateManifest, CoordinationLedger, ExecutableInputClosure};
 use serde_json::{json, Value};
 use std::fs;
 
@@ -20,10 +20,14 @@ struct InspectArguments {
 pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
     let operation = args.get(1).map(String::as_str).unwrap_or("status");
     let result = match operation {
-        "status" if args.len() <= 2 => {
+        "status" if args.len() <= 2 => (|| {
+            let root = crate::workstation_install::workstation_root()?;
+            let coordination =
+                crate::candidate_coordination::CandidateCoordinationStore::production(&root)
+                    .read()?;
             crate::workstation_install::workstation_upgrade_status_json()
-                .and_then(candidate_status_from_workstation)
-        }
+                .and_then(|workstation| candidate_status_from_sources(workstation, coordination))
+        })(),
         "status" => Err(format!(
             "Unknown candidate status argument: {}",
             args.get(2).map(String::as_str).unwrap_or("unknown")
@@ -120,7 +124,15 @@ fn parse_inspect_arguments(args: &[String]) -> Result<InspectArguments, String> 
     })
 }
 
+#[cfg(test)]
 fn candidate_status_from_workstation(workstation: Value) -> Result<Value, String> {
+    candidate_status_from_sources(workstation, CoordinationLedger::new("production"))
+}
+
+fn candidate_status_from_sources(
+    workstation: Value,
+    coordination: CoordinationLedger,
+) -> Result<Value, String> {
     if workstation.get("success").and_then(Value::as_bool) != Some(true) {
         return Err("workstation status did not return a successful projection".to_string());
     }
@@ -187,6 +199,7 @@ fn candidate_status_from_workstation(workstation: Value) -> Result<Value, String
         "receiptLocators": [],
         "buildProvenance": build_provenance(),
         "workstationUpgrade": workstation,
+        "coordinationLedger": coordination,
     }))
 }
 
@@ -338,6 +351,7 @@ mod tests {
         assert_eq!(report["activeOperation"]["operationId"], "upgrade-1");
         assert_eq!(report["activeOperation"]["revision"], 4);
         assert_eq!(report["consequences"][0], "no_effect_performed");
+        assert_eq!(report["coordinationLedger"]["environmentId"], "production");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{validate_nonempty, CandidateError};
 
@@ -134,6 +134,87 @@ impl CoordinationLedger {
             reasons.sort();
         }
         pins
+    }
+
+    /// Validate a deserialized ledger before an adapter trusts its fencing or
+    /// revision counters.
+    pub fn validate(&self) -> Result<(), CandidateError> {
+        if self.schema_version != COORDINATION_LEDGER_SCHEMA_VERSION {
+            return Err(CandidateError::new(
+                "unsupported_coordination_ledger_schema",
+                "coordination ledger schema is not supported",
+            ));
+        }
+        validate_nonempty("environment_id", &self.environment_id)?;
+        if self.revision != self.receipts.len() as u64
+            || self.applied_requests.len() != self.receipts.len()
+        {
+            return Err(CandidateError::new(
+                "coordination_revision_inconsistent",
+                "revision, applied request, and receipt counts must agree",
+            ));
+        }
+
+        let mut prior_fence = 0;
+        for (index, receipt) in self.receipts.iter().enumerate() {
+            if receipt.revision != index as u64 + 1
+                || receipt.fencing_generation < prior_fence
+                || receipt.fencing_generation > self.fencing_generation
+            {
+                return Err(CandidateError::new(
+                    "coordination_receipt_sequence_inconsistent",
+                    "receipt revisions and fencing generations must be monotonic",
+                ));
+            }
+            prior_fence = receipt.fencing_generation;
+            let applied = self
+                .applied_requests
+                .get(&receipt.request_id)
+                .filter(|applied| applied.receipt == *receipt)
+                .ok_or_else(|| {
+                    CandidateError::new(
+                        "coordination_receipt_request_mismatch",
+                        "every receipt must match its exact applied request",
+                    )
+                })?;
+            validate_request(&applied.request)?;
+            if applied.request.request_id != receipt.request_id {
+                return Err(CandidateError::new(
+                    "coordination_receipt_request_mismatch",
+                    "applied request key and receipt request ID must agree",
+                ));
+            }
+        }
+        if prior_fence != self.fencing_generation {
+            return Err(CandidateError::new(
+                "coordination_fence_inconsistent",
+                "latest receipt must bind the current fencing generation",
+            ));
+        }
+
+        let mut operation_ids = BTreeSet::new();
+        if let Some(active) = &self.active {
+            validate_operation(active)?;
+            if active.fencing_generation != self.fencing_generation {
+                return Err(CandidateError::new(
+                    "coordination_active_fence_inconsistent",
+                    "active operation must bind the current fencing generation",
+                ));
+            }
+            operation_ids.insert(active.operation_id.as_str());
+        }
+        for queued in &self.queue {
+            validate_operation(queued)?;
+            if queued.fencing_generation > self.fencing_generation
+                || !operation_ids.insert(queued.operation_id.as_str())
+            {
+                return Err(CandidateError::new(
+                    "coordination_queue_inconsistent",
+                    "queued operation IDs must be unique and cannot use a future fence",
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub fn apply(
@@ -420,4 +501,14 @@ fn validate_request(request: &CoordinationRequest) -> Result<(), CandidateError>
     validate_nonempty("candidate_id", &request.candidate_id)?;
     validate_nonempty("artifact_id", &request.artifact_id)?;
     Ok(())
+}
+
+fn validate_operation(operation: &CoordinatedOperation) -> Result<(), CandidateError> {
+    validate_nonempty("operation_id", &operation.operation_id)?;
+    validate_nonempty("candidate_id", &operation.candidate_id)?;
+    validate_nonempty("artifact_id", &operation.artifact_id)?;
+    validate_nonempty(
+        "submitted_by_request_id",
+        &operation.submitted_by_request_id,
+    )
 }

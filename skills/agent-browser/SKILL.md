@@ -285,7 +285,9 @@ generation, and `runtimeCensusDigest` from inspect into `resume`, `rollback`,
 or `close`. Pass `none` when `runtimeCensusDigest` is null:
 
 Use `agent-browser candidate status --json` for a read-only advisory projection
-of the workstation transaction plus the running executable's build provenance.
+of the durable `coordinationLedger`, workstation transaction, and running
+executable's build provenance. An absent coordination file projects an empty
+ledger without creating runtime state.
 Use `agent-browser candidate inspect --manifest <path> --input-closure <path>
 --json` to validate an explicit candidate manifest against its executable-input
 closure. Neither command builds, installs, recovers, launches a browser, or

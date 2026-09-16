@@ -5655,10 +5655,11 @@ agent-browser candidate - Inspect candidate and workstation state without effect
 Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
 
-Status projects the current workstation install transaction into advisory
-candidate state. Inspect validates an explicit candidate manifest against its
-executable-input closure. Both operations are read-only: they do not build,
-install, recover, launch a browser, or connect to a daemon.
+Status projects the current workstation install transaction and durable
+coordination ledger into advisory candidate state. JSON output exposes that
+ledger as `coordinationLedger`. Inspect validates an explicit candidate
+manifest against its executable-input closure. Both operations are read-only:
+they do not build, install, recover, launch a browser, or connect to a daemon.
 
 Examples:
   agent-browser candidate status --json

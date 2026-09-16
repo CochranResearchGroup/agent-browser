@@ -788,7 +788,7 @@ agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate determ
 agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 # Observe the synthetic external-prompt fixture
 agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
 agent-browser service state validate --path /tmp/candidate-state.json --json # Validate exact state bytes with this installed executable
-agent-browser candidate status --json # Inspect advisory candidate and workstation state without effects
+agent-browser candidate status --json # Inspect advisory candidate, coordinationLedger, and workstation state without effects
 agent-browser candidate inspect --manifest ./candidate-manifest.json --input-closure ./executable-input-closure.json --json # Validate explicit candidate inputs
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted

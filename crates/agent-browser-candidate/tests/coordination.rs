@@ -251,3 +251,33 @@ fn exhausted_counters_fail_without_partial_mutation() {
     assert_eq!(error.code(), "revision_exhausted");
     assert_eq!(ledger, before);
 }
+
+#[test]
+fn deserialized_ledger_rejects_corrupt_revision_and_active_fence() {
+    let mut ledger = CoordinationLedger::new("production");
+    ledger
+        .apply(request(
+            &ledger,
+            "request-a",
+            "candidate-a",
+            "artifact-a",
+            CoordinationAction::StartOrJoin,
+        ))
+        .expect("start a");
+
+    let mut corrupt_revision = serde_json::to_value(&ledger).unwrap();
+    corrupt_revision["revision"] = serde_json::json!(7);
+    let corrupt_revision: CoordinationLedger = serde_json::from_value(corrupt_revision).unwrap();
+    assert_eq!(
+        corrupt_revision.validate().unwrap_err().code(),
+        "coordination_revision_inconsistent"
+    );
+
+    let mut corrupt_fence = serde_json::to_value(&ledger).unwrap();
+    corrupt_fence["active"]["fencingGeneration"] = serde_json::json!(0);
+    let corrupt_fence: CoordinationLedger = serde_json::from_value(corrupt_fence).unwrap();
+    assert_eq!(
+        corrupt_fence.validate().unwrap_err().code(),
+        "coordination_active_fence_inconsistent"
+    );
+}

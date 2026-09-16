@@ -71,6 +71,29 @@ for (const forbiddenEffect of [
     `candidate CLI adapter must remain read-only: ${forbiddenEffect}`,
   );
 }
+const coordinationAdapter = read('cli/src/candidate_coordination.rs');
+for (const requiredBoundary of [
+  'CoordinationLedger',
+  'create_new(true)',
+  'fs::rename',
+  'sync_all',
+]) {
+  requireCondition(
+    coordinationAdapter.includes(requiredBoundary),
+    `candidate coordination adapter must retain durable boundary: ${requiredBoundary}`,
+  );
+}
+for (const forbiddenEffect of [
+  'std::process::Command',
+  'ensure_daemon',
+  'send_command',
+  'workstation_install',
+]) {
+  requireCondition(
+    !coordinationAdapter.includes(forbiddenEffect),
+    `candidate coordination adapter must not perform runtime or installer effects: ${forbiddenEffect}`,
+  );
+}
 for (const documentationPath of [
   'cli/src/output.rs',
   'README.md',
@@ -81,7 +104,8 @@ for (const documentationPath of [
   requireCondition(
     documentation.includes('candidate status')
       && documentation.includes('candidate inspect')
-      && documentation.includes('--input-closure'),
+      && documentation.includes('--input-closure')
+      && documentation.includes('coordinationLedger'),
     `candidate command contract must be documented in ${documentationPath}`,
   );
 }
