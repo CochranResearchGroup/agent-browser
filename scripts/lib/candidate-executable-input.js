@@ -13,6 +13,9 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
  */
 export const EXECUTABLE_INPUT_CLOSURE_SCHEMA_VERSION =
   'agent-browser.executable-input-closure.v1';
+export const CANDIDATE_MANIFEST_SCHEMA_VERSION = 'agent-browser.candidate-manifest.v1';
+export const BUILD_SUPPORT_MANIFEST_SCHEMA_VERSION =
+  'agent-browser.candidate-build-support.v1';
 
 const SHA256 = /^[a-f0-9]{64}$/u;
 
@@ -24,6 +27,14 @@ function fail(code, message) {
 
 function sha256File(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+function sha256Bytes(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function digestJson(value) {
+  return sha256Bytes(JSON.stringify(value));
 }
 
 function splitMakeWords(value) {
@@ -179,5 +190,96 @@ export function collectExecutableInputClosure({
       ),
     },
     inputs,
+  };
+}
+
+export function digestExecutableInputClosure(closure) {
+  if (closure?.schemaVersion !== EXECUTABLE_INPUT_CLOSURE_SCHEMA_VERSION) {
+    fail('candidate_input_closure_schema_invalid', closure?.schemaVersion ?? 'missing');
+  }
+  return digestJson(closure);
+}
+
+export function createBuildSupportManifest(closure) {
+  const executableInputSha256 = digestExecutableInputClosure(closure);
+  const dashboardInputs = closure.inputs
+    .filter((input) => input.category === 'embedded_dashboard');
+  const embeddedAssetDigests = Object.fromEntries(
+    closure.inputs
+      .filter((input) => input.category === 'embedded_asset')
+      .map((input) => [input.path, input.sha256]),
+  );
+  if (dashboardInputs.length === 0 || Object.keys(embeddedAssetDigests).length === 0) {
+    fail('candidate_build_support_incomplete', executableInputSha256);
+  }
+  return {
+    schemaVersion: BUILD_SUPPORT_MANIFEST_SCHEMA_VERSION,
+    executableInputSha256,
+    embeddedDashboardSha256: digestJson(dashboardInputs),
+    embeddedAssetDigests,
+    reviewedEnvironmentInputSha256: digestJson(
+      closure.context.reviewedEnvironmentInputs,
+    ),
+    resolvedBuildProfileSha256: digestJson(closure.context.resolvedBuildProfile),
+  };
+}
+
+export function encodeBuildSupportManifest(manifest) {
+  return Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+export function createCandidateManifest({
+  closure,
+  source,
+  artifactClass,
+  binarySha256,
+  supportManifestSha256,
+  createdAt,
+  validationReceipts = [],
+}) {
+  for (const [name, digest] of [
+    ['source.tree', source?.tree],
+    ['binarySha256', binarySha256],
+    ['supportManifestSha256', supportManifestSha256],
+  ]) {
+    if (!SHA256.test(digest ?? '')) fail('candidate_manifest_digest_invalid', name);
+  }
+  if (!/^[a-f0-9]{40}$/u.test(source?.commit ?? '')) {
+    fail('candidate_manifest_commit_invalid', source?.commit ?? 'missing');
+  }
+  if (!['clean', 'dirty', 'unknown'].includes(source?.state)) {
+    fail('candidate_manifest_tree_state_invalid', source?.state ?? 'missing');
+  }
+  if (!['fast_iteration', 'production_shaped'].includes(artifactClass)) {
+    fail('candidate_manifest_artifact_class_invalid', artifactClass ?? 'missing');
+  }
+  if (typeof createdAt !== 'string' || !createdAt.includes('T') || !createdAt.endsWith('Z')) {
+    fail('candidate_manifest_creation_time_invalid', createdAt ?? 'missing');
+  }
+  if (!validationReceipts.every((receipt) => typeof receipt === 'string' && receipt.trim())) {
+    fail('candidate_manifest_receipt_invalid', 'validationReceipts');
+  }
+
+  const support = createBuildSupportManifest(closure);
+  const candidateId = `candidate-${support.executableInputSha256.slice(0, 16)}-${binarySha256.slice(0, 16)}`;
+  return {
+    schemaVersion: CANDIDATE_MANIFEST_SCHEMA_VERSION,
+    candidateId,
+    source,
+    executableInputSha256: support.executableInputSha256,
+    target: closure.context.target,
+    toolchain: closure.context.toolchain,
+    cargoProfile: closure.context.cargoProfile,
+    features: closure.context.features,
+    reviewedEnvironmentInputSha256: support.reviewedEnvironmentInputSha256,
+    embeddedDashboardSha256: support.embeddedDashboardSha256,
+    embeddedAssetDigests: support.embeddedAssetDigests,
+    binarySha256,
+    supportManifestSha256,
+    createdAt,
+    artifactClass,
+    resolvedBuildProfile: closure.context.resolvedBuildProfile,
+    resolvedBuildProfileSha256: support.resolvedBuildProfileSha256,
+    validationReceipts,
   };
 }

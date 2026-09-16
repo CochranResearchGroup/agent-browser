@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   collectExecutableInputClosure,
+  createBuildSupportManifest,
+  createCandidateManifest,
+  digestExecutableInputClosure,
+  encodeBuildSupportManifest,
   parseCargoDepInfo,
 } from './lib/candidate-executable-input.js';
 
@@ -98,6 +103,65 @@ try {
     'embedded_dashboard',
   );
   assert.ok(closure.inputs.every((input) => /^[a-f0-9]{64}$/u.test(input.sha256)));
+
+  const rustFixtureClosure = {
+    schemaVersion: 'agent-browser.executable-input-closure.v1',
+    context: {
+      target: 'x86_64-unknown-linux-gnu',
+      toolchain: 'rustc 1.90.0',
+      cargoProfile: 'release',
+      resolvedBuildProfile: {
+        optLevel: '3',
+        lto: 'fat',
+        codegenUnits: 1,
+        strip: true,
+      },
+      features: ['service'],
+      reviewedEnvironmentInputs: {},
+    },
+    inputs: [
+      { path: 'cli/src/main.rs', sha256: 'a'.repeat(64), category: 'rust_source' },
+      {
+        path: 'packages/dashboard/out/index.html',
+        sha256: 'd'.repeat(64),
+        category: 'embedded_dashboard',
+      },
+      {
+        path: 'scripts/install-agent-browser-privileges.sh',
+        sha256: 'e'.repeat(64),
+        category: 'embedded_asset',
+      },
+    ],
+  };
+  assert.equal(
+    digestExecutableInputClosure(rustFixtureClosure),
+    'b41538c474b3542e6fed08b3402398743b930eeaab46a54eb08383626ef1c3ba',
+  );
+  const support = createBuildSupportManifest(rustFixtureClosure);
+  const supportSha256 = createHash('sha256')
+    .update(encodeBuildSupportManifest(support))
+    .digest('hex');
+  const candidate = createCandidateManifest({
+    closure: rustFixtureClosure,
+    source: {
+      commit: 'b'.repeat(40),
+      tree: 'c'.repeat(64),
+      state: 'clean',
+    },
+    artifactClass: 'production_shaped',
+    binarySha256: 'f'.repeat(64),
+    supportManifestSha256: '1'.repeat(64),
+    createdAt: '2026-09-15T12:00:00Z',
+    validationReceipts: ['receipt://provider-free'],
+  });
+  const rustCandidateFixture = JSON.parse(readFileSync(new URL(
+    '../docs/dev/fixtures/candidate-orchestration/candidate-manifest.v1.json',
+    import.meta.url,
+  ), 'utf8'));
+  assert.deepEqual(candidate, rustCandidateFixture);
+  assert.equal(candidate.candidateId, 'candidate-b41538c474b3542e-ffffffffffffffff');
+  assert.equal(candidate.embeddedDashboardSha256, support.embeddedDashboardSha256);
+  assert.match(supportSha256, /^[a-f0-9]{64}$/u);
 
   write('packages/dashboard/out/index.html', 'Dashboard not built. Run: pnpm build\n');
   assert.throws(

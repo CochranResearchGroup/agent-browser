@@ -65,6 +65,8 @@ for (const requiredBoundary of [
   'candidate_input_outside_repository',
   'candidate_dashboard_placeholder',
   'reviewedEnvironmentInputs',
+  'createBuildSupportManifest',
+  'createCandidateManifest',
 ]) {
   requireCondition(
     inputCollector.includes(requiredBoundary),
