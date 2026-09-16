@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 10
+Plan version: 11
 
 State: OPEN
 
@@ -77,7 +77,7 @@ legacy `source_control_metadata` while rejecting it from new closures and made
 `--recover-active-run` return after durable recovery without invoking the suite
 runner. Follow-up review correctly rejected the first cache regression's
 self-referential oracle. Source checkpoint
-`0ed91a93dd356cb678bf364e187360d5a4dfaa7d` now derives the expected identity
+`0ed91a93a6c087e932cef0369e5311a990ed4d2e` now derives the expected identity
 digest from literal `"off"`, makes the real spawned Rust child require that
 literal value, and records the value observed by the child for the parent to
 assert. Both affected focused tests, the complete candidate-test module,

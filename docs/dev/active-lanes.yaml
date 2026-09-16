@@ -10,7 +10,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 0ed91a93dd356cb678bf364e187360d5a4dfaa7d
+    checkpoint: 0ed91a93a6c087e932cef0369e5311a990ed4d2e
     remote_ref: refs/remotes/origin/platform/p190-advisory-candidate-orchestrator
     integration_receipt: null
     integration: merge through the protected `main` workflow after the complete source batch and exact-head qualification
