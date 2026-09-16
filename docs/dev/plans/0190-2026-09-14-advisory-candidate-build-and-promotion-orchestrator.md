@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -546,6 +546,26 @@ receipt is
 After the artifact was sealed, docs-only checkpoint `09122f3a` reproduced the
 same executable-input digest exactly without a rebuild, proving the corrected
 source-provenance boundary across the refreshed-main history.
+
+Canonical `origin/main` then advanced through merged P201 display-occupancy
+repair `a23764a1`. Merge checkpoint
+`8c10bd8b58b8e7653a53cc1c0191d17d64ae4870` integrated that Rust change. Its
+new executable-input digest `35d52ffa0f460d86bfbeb0819a5c5ac73324691e14cd8c7e470de1e61e9ce9fc`
+correctly required one replacement production-shaped build. The first attempt
+failed before artifact publication when `rustc` could not create a coordinator
+thread under transient host task pressure; failed operation
+`candidate-build-24f79fd8-94d4-42ba-b6d4-02155fe3ab9a` remains preserved. Exact
+recovery with four Cargo jobs produced candidate
+`candidate-35d52ffa0f460d86-f7dba9ea43d92ba3`, binary SHA-256
+`f7dba9ea43d92ba3751f3898815d7cfb07a062419ed8c5b9dcef0e46b88f5df7`,
+and request digest
+`1b5f591fe6cb0cce4fc3b3710ef0ad9225701422e5a74b831c65520765401325`.
+Exact self-inspection and install dry-run passed with no effect. All three
+provider-free selections passed in run
+`candidate-test-14576815-d082-4a4a-9d4a-9e7ef05b5c48`; reusable receipt
+`cli/target/candidate-test-state/completed/60196a2c768d59ced3b9e1ed22471ea7822854b2b7e8d0f122f8526ccfc476b2.json`
+binds the merge checkpoint and exact binary.
+
 No browser, profile, provider, production runtime, or development runtime was
 read or mutated. Development publication and acceptance remain a separately
 admitted operational gate, followed by protected integration and post-merge
