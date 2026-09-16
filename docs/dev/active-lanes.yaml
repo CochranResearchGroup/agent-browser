@@ -52,15 +52,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 844eba2671681cd3e0c884a9cae5c9f839d6d565
+    checkpoint: e727162e156b161cb2fff51dbcadcffeedb0d3fa
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: reopened by final two-axis review; Packet 10 must bind the reviewed descendant identity set before apply
-    validation_ref: 844eba2671681cd3e0c884a9cae5c9f839d6d565
+    validation_status: Packet 10 descendant regression, retirement and review-token focused tests, format, strict Clippy, selector, and diff hygiene pass; comprehensive Rust requalification pending
+    validation_ref: e727162e156b161cb2fff51dbcadcffeedb0d3fa
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: one provider-free descendant-binding repair, fresh changed-surface validation, and P190 shared-documentation reconciliation remain; no further live replay is authorized
+    blocker: comprehensive provider-free Rust requalification, exact-artifact real-browser acceptance, and P190 shared-documentation reconciliation remain; no further live replay is authorized
     updated_at: 2026-09-16

@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 15
+Plan version: 16
 
 State: OPEN
 
@@ -580,6 +580,31 @@ and Spec axes separate.
 - Bound: one implementation attempt and one provider-free validation cycle.
   No core store change, browser replay, installed-runtime mutation, provider
   effect, or P190/P197 shared-documentation edit is authorized.
+
+Packet 10 source result at checkpoint
+`e727162e156b161cb2fff51dbcadcffeedb0d3fa`:
+
+- The reviewed candidate now includes a sorted `descendants` array containing
+  each expected child's PID, start token, and executable path. The review token
+  digest and the per-candidate fresh-snapshot equality check therefore bind the
+  exact descendant physical identities as well as the root identity.
+- Candidate construction fails closed if an identity cannot be recovered for
+  any descendant PID produced by the same census. Generic non-P202 candidates
+  preserve their existing serialized identity because an empty descendant set
+  is omitted.
+- The same-root changed-child regression failed red at the fresh-snapshot
+  comparison and now passes. It also proves the reviewed output identifies the
+  expected child, the unchanged tree remains admissible, and the earlier
+  coherent root-replacement control still rejects.
+- Green focused evidence: the exact descendant regression, all 21
+  retirement-focused tests, four review-token tests, workspace format, strict
+  workspace Clippy, selector output, and diff hygiene. Comprehensive Rust
+  requalification remains pending for this executable-input change.
+- The final review ledger retains two disclosed completion gates: successful
+  exact-artifact real-browser acceptance is still unproven after the prior
+  profile-lock failure, and all four required user-facing documentation files
+  remain under P190 writer custody. No additional live replay is authorized in
+  this packet.
 
 ## Stop Condition
 
