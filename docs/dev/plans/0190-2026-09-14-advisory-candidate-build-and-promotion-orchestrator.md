@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Plan version: 9
+Plan version: 10
 
 State: OPEN
 
@@ -72,15 +72,19 @@ receipts remain valid for the exact commits and suites they bind, and the exact
 candidate was installed and smoke-tested only in the development namespace.
 
 Exact-head review reopened three source gates. Checkpoint
-`a5649c656b3e22d907522debc644c22133a0e68d` now preserves schema-v1 reads of
-legacy `source_control_metadata` while rejecting it from new closures, makes
+`a5649c656b3e22d907522debc644c22133a0e68d` preserved schema-v1 reads of
+legacy `source_control_metadata` while rejecting it from new closures and made
 `--recover-active-run` return after durable recovery without invoking the suite
-runner, and proves under a deterministic deep output root that the
-identity-bound `AGENT_BROWSER_CARGO_CACHE=off` value reaches a real spawned
-Rust child. The exact regressions, complete candidate crate, complete
-candidate-test module, workspace format, and strict workspace Clippy pass
-locally. Exact-head CI and review remain pending, so source qualification is
-not yet final.
+runner. Follow-up review correctly rejected the first cache regression's
+self-referential oracle. Source checkpoint
+`0ed91a93dd356cb678bf364e187360d5a4dfaa7d` now derives the expected identity
+digest from literal `"off"`, makes the real spawned Rust child require that
+literal value, and records the value observed by the child for the parent to
+assert. Both affected focused tests, the complete candidate-test module,
+workspace format, and strict workspace Clippy pass locally. Canonical
+`origin/main` was then merged at `4f30e573` after its only intervening changes
+were P201 closeout documentation. Exact-head CI remains pending, so source
+qualification is not yet final.
 
 No further build, install, doctor, browser, provider, retained-profile, or
 shared-runtime effect was performed in this repair batch. The critical path is
