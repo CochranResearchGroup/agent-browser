@@ -7,8 +7,10 @@
 use super::service_model::{LeaseState, ServiceState, ServiceTabHandle};
 use super::service_store::ServiceStateRepository;
 use agent_browser_challenge_control::{
-    challenge_profile, execute_provider_free_task, ChallengeTaskError, ChallengeTaskFixture,
-    ChallengeTaskRequest,
+    admit_challenge_consumer as decide_consumer_admission, challenge_profile,
+    execute_provider_free_task, ChallengeConsumerAdmissionError, ChallengeConsumerAdmissionReceipt,
+    ChallengeConsumerAdmissionRequest, ChallengeConsumerEvidence, ChallengeConsumerKind,
+    ChallengeTaskError, ChallengeTaskFixture, ChallengeTaskRequest,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -18,6 +20,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const SERVICE_CHALLENGE_TASK_SCHEMA_VERSION: &str =
     "agent-browser.service-challenge-task.v1";
+pub(crate) const AUTHENTICATION_CHALLENGE_INTENT_ID: &str = "authentication-run-start";
+pub(crate) const NAVIGATION_CHALLENGE_INTENT_ID: &str = "navigation-dispatch";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -346,6 +350,79 @@ fn require_current_record_handle(
     }
 }
 
+pub(crate) fn effective_site_policy_digest(
+    state: &ServiceState,
+    site_policy_id: &str,
+) -> Result<String, String> {
+    let policy = state
+        .site_policies
+        .get(site_policy_id)
+        .ok_or_else(|| "challenge_consumer_site_policy_missing".to_string())?;
+    if policy.id != site_policy_id {
+        return Err("challenge_consumer_site_policy_identity_mismatch".to_string());
+    }
+    canonical_sha256(policy)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn admit_challenge_consumer(
+    state: &ServiceState,
+    challenge_task_id: &str,
+    principal_id: &str,
+    supplied_handle: &ServiceTabHandle,
+    site_policy_id: &str,
+    downstream_intent_id: &str,
+    consumer_operation_id: &str,
+    consumer: ChallengeConsumerKind,
+) -> Result<ChallengeConsumerAdmissionReceipt, String> {
+    let record = state
+        .challenge_tasks
+        .get(challenge_task_id)
+        .ok_or_else(|| "challenge_consumer_task_not_found".to_string())?;
+    caller_owns_task(principal_id, record)?;
+    if record.state != ServiceChallengeTaskState::Completed {
+        return Err("challenge_consumer_task_not_completed".to_string());
+    }
+    require_current_record_handle(state, record)?;
+    if supplied_handle != &record.service_tab_handle {
+        return Err("challenge_consumer_service_tab_handle_mismatch".to_string());
+    }
+    let site_policy_digest = effective_site_policy_digest(state, site_policy_id)?;
+    let evidence: ChallengeConsumerEvidence = serde_json::from_value(
+        record
+            .receipt
+            .clone()
+            .ok_or_else(|| "challenge_consumer_receipt_missing".to_string())?,
+    )
+    .map_err(|error| format!("challenge_consumer_receipt_invalid:{error}"))?;
+    decide_consumer_admission(
+        &evidence,
+        ChallengeConsumerAdmissionRequest {
+            consumer,
+            consumer_operation_id: consumer_operation_id.to_string(),
+            expected_site_policy_digest: site_policy_digest,
+            expected_downstream_intent_id: downstream_intent_id.to_string(),
+        },
+    )
+    .map_err(|error| match error {
+        ChallengeConsumerAdmissionError::InvalidRequest => {
+            "challenge_consumer_request_invalid".to_string()
+        }
+        ChallengeConsumerAdmissionError::InvalidReceipt => {
+            "challenge_consumer_receipt_invalid".to_string()
+        }
+        ChallengeConsumerAdmissionError::SitePolicyMismatch => {
+            "challenge_consumer_site_policy_mismatch".to_string()
+        }
+        ChallengeConsumerAdmissionError::DownstreamIntentMismatch => {
+            "challenge_consumer_downstream_intent_mismatch".to_string()
+        }
+        ChallengeConsumerAdmissionError::ChallengeWithheld => {
+            "challenge_consumer_admission_withheld".to_string()
+        }
+    })
+}
+
 fn status_task_in_state(
     state: &ServiceState,
     task_id: &str,
@@ -569,6 +646,50 @@ pub(crate) fn challenge_task_summary(state: &ServiceState) -> ServiceChallengeTa
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn complete_provider_free_test_task(
+    state: &mut ServiceState,
+    service_name: &str,
+    agent_name: &str,
+    task_name: &str,
+    principal_id: &str,
+    site_policy_id: &str,
+    downstream_intent_id: &str,
+    fixture_scenario_id: &str,
+) -> Result<String, String> {
+    let supplied_handle = state
+        .tabs
+        .keys()
+        .find_map(|tab_id| state.service_tab_handle(tab_id))
+        .ok_or_else(|| "challenge_consumer_test_handle_missing".to_string())?;
+    let command = json!({
+        "action": "service_challenge_task_start",
+        "serviceName": service_name,
+        "agentName": agent_name,
+        "taskName": task_name,
+        "clientSubjectId": principal_id,
+        "challengeProfileId": "turnstile-checkbox-p169-v1",
+        "sitePolicyDigest": effective_site_policy_digest(state, site_policy_id)?,
+        "downstreamIntentId": downstream_intent_id,
+        "fixtureScenarioId": fixture_scenario_id,
+        "idempotencyKey": format!("test-{downstream_intent_id}"),
+        "deadlineMs": 120000,
+        "maxTransitions": 8,
+        "serviceTabHandle": supplied_handle,
+    });
+    let (record, _) =
+        start_task_in_state(state, parse_start_intent(&command)?, "2026-09-16T00:00:00Z")?;
+    let (completed, _) = resume_task_in_state(
+        state,
+        &record.task_id,
+        principal_id,
+        "complete-provider-free-test-task",
+        "2026-09-16T00:01:00Z",
+    )?;
+    Ok(completed.task_id)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::native::service_model::{
@@ -625,6 +746,15 @@ mod tests {
                 owner_session_id: Some("session-1".to_string()),
                 profile_access: Some(profile_access),
                 ..BrowserTab::default()
+            },
+        );
+        state.site_policies.insert(
+            "example".to_string(),
+            crate::native::service_model::SitePolicy {
+                id: "example".to_string(),
+                name: "Example".to_string(),
+                origin_pattern: "https://example.test".to_string(),
+                ..crate::native::service_model::SitePolicy::default()
             },
         );
         state
@@ -787,5 +917,134 @@ mod tests {
         )
         .unwrap();
         assert!(replayed);
+    }
+
+    fn completed_consumer_task(
+        state: &mut ServiceState,
+        fixture: &str,
+        downstream_intent_id: &str,
+    ) -> ServiceChallengeTaskRecord {
+        let mut command = start_command(state);
+        command["sitePolicyDigest"] =
+            json!(effective_site_policy_digest(state, "example").unwrap());
+        command["downstreamIntentId"] = json!(downstream_intent_id);
+        command["fixtureScenarioId"] = json!(fixture);
+        let (record, _) = start_task_in_state(
+            state,
+            parse_start_intent(&command).unwrap(),
+            "2026-09-15T12:00:00Z",
+        )
+        .unwrap();
+        resume_task_in_state(
+            state,
+            &record.task_id,
+            "principal-1",
+            "complete-consumer-task",
+            "2026-09-15T12:01:00Z",
+        )
+        .unwrap()
+        .0
+    }
+
+    #[test]
+    fn shared_consumer_adapter_binds_policy_principal_intent_and_current_tab() {
+        let mut state = service_state();
+        let completed = completed_consumer_task(
+            &mut state,
+            "pass_after_acknowledged_resolution",
+            "authentication-run-start",
+        );
+        let handle = state.service_tab_handle("tab-1").unwrap();
+
+        let authentication = admit_challenge_consumer(
+            &state,
+            &completed.task_id,
+            "principal-1",
+            &handle,
+            "example",
+            "authentication-run-start",
+            "auth-operation-1",
+            ChallengeConsumerKind::Authentication,
+        )
+        .unwrap();
+        assert_eq!(
+            authentication.consumer,
+            ChallengeConsumerKind::Authentication
+        );
+
+        assert_eq!(
+            admit_challenge_consumer(
+                &state,
+                &completed.task_id,
+                "principal-2",
+                &handle,
+                "example",
+                "authentication-run-start",
+                "auth-operation-2",
+                ChallengeConsumerKind::Authentication,
+            )
+            .unwrap_err(),
+            "challenge_task_principal_mismatch"
+        );
+
+        let mut stale_handle = handle.clone();
+        stale_handle.valid = false;
+        assert_eq!(
+            admit_challenge_consumer(
+                &state,
+                &completed.task_id,
+                "principal-1",
+                &stale_handle,
+                "example",
+                "authentication-run-start",
+                "auth-operation-3",
+                ChallengeConsumerKind::Authentication,
+            )
+            .unwrap_err(),
+            "challenge_consumer_service_tab_handle_mismatch"
+        );
+
+        let mut changed_policy = state.clone();
+        changed_policy
+            .site_policies
+            .get_mut("example")
+            .unwrap()
+            .name = "Changed Example".to_string();
+        assert_eq!(
+            admit_challenge_consumer(
+                &changed_policy,
+                &completed.task_id,
+                "principal-1",
+                &handle,
+                "example",
+                "authentication-run-start",
+                "auth-operation-4",
+                ChallengeConsumerKind::Authentication,
+            )
+            .unwrap_err(),
+            "challenge_consumer_site_policy_mismatch"
+        );
+    }
+
+    #[test]
+    fn shared_consumer_adapter_withholds_before_navigation_dispatch() {
+        let mut state = service_state();
+        let completed =
+            completed_consumer_task(&mut state, "rejected_resolution", "navigation-dispatch");
+        let handle = state.service_tab_handle("tab-1").unwrap();
+        assert_eq!(
+            admit_challenge_consumer(
+                &state,
+                &completed.task_id,
+                "principal-1",
+                &handle,
+                "example",
+                "navigation-dispatch",
+                "navigation-operation-1",
+                ChallengeConsumerKind::Navigation,
+            )
+            .unwrap_err(),
+            "challenge_consumer_admission_withheld"
+        );
     }
 }

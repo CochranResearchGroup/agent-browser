@@ -18,7 +18,7 @@
       "targetServiceId", "targetService", "targetServiceIds", "targetServices", "siteId",
       "siteIds", "loginId", "loginIds", "accountId", "accountIds", "url", "desiredUrl",
       "profile", "profileId", "runtimeProfile", "profileClass", "cdpUrl", "cdpPort",
-      "browserId", "sessionName", "format", "maxBytes", "locator", "evidenceSurface", "episodeId", "includeFrame", "includeVisualization", "promptProfileId", "challengeProfileId", "scenarioOutcome", "controllerLeaseId", "operationId", "authenticationRunId", "challengeTaskId", "sitePolicyDigest", "downstreamIntentId", "fixtureScenarioId", "accountRef", "organizationRef", "challengeProviderId", "challengeProviderTenantRef", "challengeProviderAccountRef", "siteRecipeId", "policyDigest", "idempotencyKey", "deadlineMs", "maxTransitions", "recipe", "allowDuplicateProfileLane", "manualLoginLaunch", "handoffId", "remoteViewHandoffId", "pid", "expiresAt", "plan"
+      "browserId", "sessionName", "format", "maxBytes", "locator", "evidenceSurface", "episodeId", "includeFrame", "includeVisualization", "promptProfileId", "challengeProfileId", "scenarioOutcome", "controllerLeaseId", "operationId", "authenticationRunId", "challengeTaskId", "sitePolicyId", "sitePolicyDigest", "downstreamIntentId", "fixtureScenarioId", "accountRef", "organizationRef", "challengeProviderId", "challengeProviderTenantRef", "challengeProviderAccountRef", "siteRecipeId", "policyDigest", "idempotencyKey", "deadlineMs", "maxTransitions", "recipe", "allowDuplicateProfileLane", "manualLoginLaunch", "handoffId", "remoteViewHandoffId", "pid", "expiresAt", "plan"
     ],
     "trace": [
       "jobTimeoutMs", "serviceStateLockTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs", "requiresCdpFree",
@@ -32,7 +32,7 @@
       "targetServiceId", "targetService", "targetServiceIds", "targetServices", "siteId",
       "siteIds", "loginId", "loginIds", "accountId", "accountIds", "url", "desiredUrl",
       "profile", "profileId", "runtimeProfile", "profileClass", "browserId", "sessionName",
-      "format", "maxBytes", "locator", "evidenceSurface", "episodeId", "includeFrame", "includeVisualization", "promptProfileId", "challengeProfileId", "scenarioOutcome", "controllerLeaseId", "operationId", "authenticationRunId", "challengeTaskId", "sitePolicyDigest", "downstreamIntentId", "fixtureScenarioId", "challengeProviderId", "siteRecipeId", "policyDigest", "deadlineMs", "maxTransitions", "recipe",
+      "format", "maxBytes", "locator", "evidenceSurface", "episodeId", "includeFrame", "includeVisualization", "promptProfileId", "challengeProfileId", "scenarioOutcome", "controllerLeaseId", "operationId", "authenticationRunId", "challengeTaskId", "sitePolicyId", "sitePolicyDigest", "downstreamIntentId", "fixtureScenarioId", "challengeProviderId", "siteRecipeId", "policyDigest", "deadlineMs", "maxTransitions", "recipe",
       "allowDuplicateProfileLane", "handoffId", "remoteViewHandoffId", "pid", "expiresAt", "plan"
     ],
     "routing": [

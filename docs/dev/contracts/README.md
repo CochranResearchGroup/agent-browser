@@ -113,6 +113,16 @@ persisted authorization and tab ID. Legacy profiles missing a policy are
 reported through `service-profile-policy-migration.v1.schema.json`; ambiguous
 identity maps to nonblocking shared-local access.
 
+Challenge-aware consumers use a completed `service_challenge_task` receipt
+without importing provider or desktop details. Authentication Run start accepts
+`challengeTaskId` and `sitePolicyId` together. Navigation additionally requires
+an opaque `operationId` and an exact `serviceTabHandle`. The Service resolves
+and hashes the effective site policy, verifies the retained principal and tab,
+and binds authentication to `authentication-run-start` or navigation to
+`navigation-dispatch` before consumer execution. Successful responses expose a
+`challengeConsumerAdmission` receipt. A later authentication or navigation
+failure does not rewrite the durable challenge outcome or admission.
+
 `service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
 wrapper for invoking `service_request` with the same intent object.
 

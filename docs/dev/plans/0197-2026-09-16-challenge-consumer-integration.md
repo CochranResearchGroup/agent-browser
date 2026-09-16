@@ -65,11 +65,13 @@ over a completed `ChallengeTaskReceipt`. The request identifies:
 - the SHA-256 digest of the effective site policy; and
 - an attributable consumer operation identity.
 
-The pure decision validates that the receipt is terminal, admitted, effect-safe,
-bound to the same policy digest and downstream intent, and not in cooldown or
-intervention. It returns a typed receipt that keeps the challenge decision and
-consumer admission separate. It does not execute the consumer or reinterpret a
-later consumer failure as challenge failure.
+The pure decision validates that the receipt is terminal, admitted, internally
+consistent, bound to the same policy digest and downstream intent, and not in
+intervention. It preserves cooldown and prior-effect evidence rather than
+misinterpreting either as a failed admission. It returns a typed receipt that
+keeps the challenge decision and consumer admission separate. It does not
+execute the consumer or reinterpret a later consumer failure as challenge
+failure.
 
 The Service adapter resolves the effective `SitePolicy`, hashes its canonical
 serialized value, verifies principal ownership and the exact current
@@ -138,7 +140,8 @@ operator is assigned.
 Exit requires current evidence that:
 
 - the pure admission contract rejects nonterminal, withheld, mismatched-policy,
-  mismatched-intent, cooldown, intervention, and effectful receipts;
+  mismatched-intent, intervention, and internally inconsistent receipts while
+  preserving valid cooldown and prior-effect evidence;
 - exact replay returns the same decision without executing a consumer;
 - Authentication Run and navigation both call the same Service adapter;
 - principal, effective site policy, downstream intent, and exact current tab

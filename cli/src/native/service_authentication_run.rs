@@ -14,6 +14,7 @@ use super::authentication_run::{
     SiteLoginActionReceipt, SiteLoginObservationReceipt, SiteLoginState,
 };
 use super::browser::WaitUntil;
+use super::service_challenge_task::{admit_challenge_consumer, AUTHENTICATION_CHALLENGE_INTENT_ID};
 use super::service_model::{LeaseState, ServiceState, ServiceTabHandle};
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
@@ -24,6 +25,7 @@ use super::site_login_recipe::{
     PasswordValueSource, SiteLoginRecipe, SitePageEvidence,
 };
 use super::{auth, interaction};
+use agent_browser_challenge_control::ChallengeConsumerKind;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -45,6 +47,8 @@ pub(crate) struct ServiceAuthenticationRunRecord {
     pub(crate) created_at: String,
     pub(crate) deadline_at: String,
     pub(crate) service_tab_handle: ServiceTabHandle,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) challenge_consumer_admission: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pending_effect: Option<PendingAuthenticationEffect>,
     pub(crate) run: AuthenticationRun,
@@ -77,6 +81,8 @@ struct AuthenticationRunStartIntent {
     site_recipe_id: String,
     policy_digest: String,
     idempotency_key: String,
+    challenge_task_id: Option<String>,
+    site_policy_id: Option<String>,
     deadline_ms: u64,
     max_transitions: u32,
     supplied_handle: ServiceTabHandle,
@@ -96,6 +102,19 @@ fn required_string(command: &Value, field: &str) -> Result<String, String> {
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| format!("authentication_run_{field}_required"))
+}
+
+fn optional_string(command: &Value, field: &str) -> Result<Option<String>, String> {
+    match command.get(field) {
+        None => Ok(None),
+        Some(value) => value
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .map(Some)
+            .ok_or_else(|| format!("authentication_run_{field}_invalid")),
+    }
 }
 
 fn caller_principal(command: &Value) -> Result<String, String> {
@@ -148,6 +167,14 @@ fn parse_start_intent(command: &Value) -> Result<AuthenticationRunStartIntent, S
             .ok_or_else(|| "authentication_run_service_tab_handle_required".to_string())?,
     )
     .map_err(|error| format!("authentication_run_service_tab_handle_invalid:{error}"))?;
+    let challenge_task_id = optional_string(command, "challengeTaskId")?;
+    let site_policy_id = optional_string(command, "sitePolicyId")?;
+    let challenge_fields = [challenge_task_id.is_some(), site_policy_id.is_some()];
+    if challenge_fields.iter().any(|present| *present)
+        && !challenge_fields.iter().all(|present| *present)
+    {
+        return Err("authentication_run_challenge_admission_incomplete".to_string());
+    }
     let intent = AuthenticationRunStartIntent {
         service_name: required_string(command, "serviceName")?,
         agent_name: required_string(command, "agentName")?,
@@ -165,6 +192,8 @@ fn parse_start_intent(command: &Value) -> Result<AuthenticationRunStartIntent, S
         site_recipe_id: required_string(command, "siteRecipeId")?,
         policy_digest: policy_digest.to_ascii_lowercase(),
         idempotency_key: required_string(command, "idempotencyKey")?,
+        challenge_task_id,
+        site_policy_id,
         deadline_ms,
         max_transitions,
         supplied_handle,
@@ -291,6 +320,8 @@ fn start_run_in_state(
     let request_sha256 = canonical_sha256(&(
         &binding,
         &idempotency_key_sha256,
+        &intent.challenge_task_id,
+        &intent.site_policy_id,
         intent.deadline_ms,
         intent.max_transitions,
     ))?;
@@ -304,6 +335,26 @@ fn start_run_in_state(
         }
         return Ok((existing.clone(), true));
     }
+    let challenge_consumer_admission = match (
+        intent.challenge_task_id.as_deref(),
+        intent.site_policy_id.as_deref(),
+    ) {
+        (Some(challenge_task_id), Some(site_policy_id)) => Some(
+            serde_json::to_value(admit_challenge_consumer(
+                state,
+                challenge_task_id,
+                &intent.principal_id,
+                &current,
+                site_policy_id,
+                AUTHENTICATION_CHALLENGE_INTENT_ID,
+                &idempotency_key_sha256,
+                ChallengeConsumerKind::Authentication,
+            )?)
+            .map_err(|error| format!("authentication_run_challenge_admission_invalid:{error}"))?,
+        ),
+        (None, None) => None,
+        _ => return Err("authentication_run_challenge_admission_incomplete".to_string()),
+    };
     let run_id = format!("authrun-{}", &request_sha256[..24]);
     let created = DateTime::parse_from_rfc3339(created_at)
         .map_err(|_| "authentication_run_created_at_invalid".to_string())?
@@ -318,6 +369,7 @@ fn start_run_in_state(
         created_at: created.to_rfc3339(),
         deadline_at,
         service_tab_handle: current,
+        challenge_consumer_admission,
         pending_effect: None,
         run: AuthenticationRun::new(run_id.clone(), binding, intent.max_transitions)
             .map_err(|error| format!("authentication_run_invalid:{error:?}"))?,
@@ -360,6 +412,7 @@ fn run_projection(record: &ServiceAuthenticationRunRecord, replayed: bool) -> Va
         "transitionCount": record.run.transition_count,
         "actionReceiptCount": record.run.action_receipts.len() + record.run.site_action_receipts.len(),
         "observationReceiptCount": record.run.site_observation_receipts.len(),
+        "challengeConsumerAdmission": record.challenge_consumer_admission,
         "effectPending": record.pending_effect.is_some(),
         "replayed": replayed,
     })
@@ -1542,6 +1595,15 @@ mod tests {
                 ..BrowserTab::default()
             },
         );
+        state.site_policies.insert(
+            "bill".to_string(),
+            crate::native::service_model::SitePolicy {
+                id: "bill".to_string(),
+                name: "Bill".to_string(),
+                origin_pattern: "https://bill.test".to_string(),
+                ..crate::native::service_model::SitePolicy::default()
+            },
+        );
         state
     }
 
@@ -1592,6 +1654,61 @@ mod tests {
         let encoded = serde_json::to_value(&state).unwrap();
         let decoded: ServiceState = serde_json::from_value(encoded).unwrap();
         assert_eq!(decoded.authentication_runs, state.authentication_runs);
+    }
+
+    #[test]
+    fn challenge_admission_is_retained_separately_from_authentication_failure() {
+        let mut state = service_state();
+        let challenge_task_id =
+            crate::native::service_challenge_task::complete_provider_free_test_task(
+                &mut state,
+                "books-receipts",
+                "closeout-worker",
+                "bill-auth",
+                "principal-1",
+                "bill",
+                "authentication-run-start",
+                "pass_after_acknowledged_resolution",
+            )
+            .unwrap();
+        let mut command = start_command(&state);
+        command["challengeTaskId"] = json!(challenge_task_id);
+        command["sitePolicyId"] = json!("bill");
+
+        let (mut record, replayed) = start_run_in_state(
+            &mut state,
+            parse_start_intent(&command).unwrap(),
+            "2026-09-16T00:02:00Z",
+        )
+        .unwrap();
+        assert!(!replayed);
+        assert_eq!(
+            record.challenge_consumer_admission.as_ref().unwrap()["consumerAdmission"],
+            "admitted"
+        );
+
+        record.run.state = AuthenticationRunState::Failed;
+        let projection = run_projection(&record, false);
+        assert_eq!(projection["state"], "failed");
+        assert_eq!(
+            projection["challengeConsumerAdmission"]["consumerAdmission"],
+            "admitted"
+        );
+        assert_eq!(
+            projection["challengeConsumerAdmission"]["challengeOutcome"],
+            "passed"
+        );
+    }
+
+    #[test]
+    fn partial_challenge_admission_binding_is_rejected() {
+        let state = service_state();
+        let mut command = start_command(&state);
+        command["challengeTaskId"] = json!("challenge-task-1");
+        assert_eq!(
+            parse_start_intent(&command).unwrap_err(),
+            "authentication_run_challenge_admission_incomplete"
+        );
     }
 
     #[test]

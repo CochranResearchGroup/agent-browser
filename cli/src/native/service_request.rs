@@ -396,6 +396,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("operationId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("authenticationRunId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("challengeTaskId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("sitePolicyId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("sitePolicyDigest", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("downstreamIntentId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field(
@@ -1006,6 +1007,7 @@ fn validate_safety_gates(
     reject_desktop_interact_request(action, request)?;
     reject_challenge_control_evaluate_request(action, request)?;
     reject_challenge_task_request(action, request)?;
+    reject_challenge_consumer_request(action, request)?;
     reject_authentication_run_request(action, request)?;
     reject_service_probe_request(action, request)?;
     reject_tab_handle_refresh_request(action, request)?;
@@ -1013,6 +1015,24 @@ fn validate_safety_gates(
     reject_service_network_capture_request(action, request)?;
     reject_service_file_transfer_request(action, request)?;
     reject_stale_monitor_service_request(request)
+}
+
+fn reject_challenge_consumer_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "navigate" || !request.contains_key("challengeTaskId") {
+        return Ok(());
+    }
+    for field in ["sitePolicyId", "operationId", "serviceTabHandle"] {
+        if request.get(field).is_none() {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("navigate with challengeTaskId requires {field}"),
+            ));
+        }
+    }
+    validate_service_tab_handle(request, action, true)
 }
 
 fn reject_challenge_task_request(
@@ -1238,6 +1258,8 @@ fn reject_authentication_run_request(
         "idempotencyKey",
         "deadlineMs",
         "maxTransitions",
+        "challengeTaskId",
+        "sitePolicyId",
     ];
     const EXISTING_FIELDS: &[&str] = &["authenticationRunId", "operationId"];
     if let Some(field) = request.keys().find(|field| {
@@ -1309,6 +1331,18 @@ fn reject_authentication_run_request(
             }
         }
         validate_service_tab_handle(request, action, true)?;
+        let challenge_admission_fields = [
+            request.contains_key("challengeTaskId"),
+            request.contains_key("sitePolicyId"),
+        ];
+        if challenge_admission_fields.iter().any(|present| *present)
+            && !challenge_admission_fields.iter().all(|present| *present)
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("{action} requires challengeTaskId and sitePolicyId together"),
+            ));
+        }
         let policy_digest = request["policyDigest"].as_str().unwrap_or_default();
         if policy_digest.len() != 64 || !policy_digest.bytes().all(|byte| byte.is_ascii_hexdigit())
         {
@@ -3845,6 +3879,20 @@ mod tests {
         assert_eq!(normalized.command["accountRef"], "opaque-account-1");
         assert_eq!(normalized.command["idempotencyKey"], "auth-idempotency-1");
 
+        let mut challenge_aware = start.clone();
+        challenge_aware["challengeTaskId"] = json!("challenge-task-1");
+        challenge_aware["sitePolicyId"] = json!("bill");
+        let normalized = normalize(challenge_aware).unwrap();
+        assert_eq!(normalized.command["challengeTaskId"], "challenge-task-1");
+        assert_eq!(normalized.command["sitePolicyId"], "bill");
+
+        let mut incomplete = start.clone();
+        incomplete["challengeTaskId"] = json!("challenge-task-1");
+        assert_eq!(
+            normalize(incomplete).unwrap_err().message(),
+            "service_authentication_run_start requires challengeTaskId and sitePolicyId together"
+        );
+
         for (field, value, expected) in [
             (
                 "username",
@@ -3895,6 +3943,44 @@ mod tests {
             normalize(resume).unwrap_err().message(),
             "service_authentication_run_resume requires operationId"
         );
+    }
+
+    #[test]
+    fn challenge_aware_navigation_requires_complete_pre_effect_binding() {
+        let handle = test_tab_handle(true);
+        let request = json!({
+            "action": "navigate",
+            "url": "https://example.test/after-challenge",
+            "serviceName": "navigation-service",
+            "agentName": "navigation-worker",
+            "taskName": "navigate-task",
+            "challengeTaskId": "challenge-task-1",
+            "sitePolicyId": "example",
+            "operationId": "navigation-operation-1",
+            "serviceTabHandle": handle,
+        });
+        let normalized = normalize(request.clone()).unwrap();
+        assert_eq!(normalized.command["challengeTaskId"], "challenge-task-1");
+        assert_eq!(normalized.command["sitePolicyId"], "example");
+
+        for (field, expected) in [
+            (
+                "sitePolicyId",
+                "navigate with challengeTaskId requires sitePolicyId",
+            ),
+            (
+                "operationId",
+                "navigate with challengeTaskId requires operationId",
+            ),
+            (
+                "serviceTabHandle",
+                "navigate with challengeTaskId requires serviceTabHandle",
+            ),
+        ] {
+            let mut incomplete = request.clone();
+            incomplete.as_object_mut().unwrap().remove(field);
+            assert_eq!(normalize(incomplete).unwrap_err().message(), expected);
+        }
     }
 
     #[test]
