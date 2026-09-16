@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -34,30 +34,35 @@ of all new legacy per-session daemon creation.
 Issue #169 is accepted and P203 is active. Current production evidence is only
 a defect locator: a valid access plan can select a durable profile while the
 next no-launch CLI or MCP command reports `runtime_host_admission_required`.
-Source inspection shows endpoint selection is split between the selected
-ingress registry and the explicit host-admission environment gate. Provider-free
-red evidence and the smallest safe routing repair remain pending.
+Fresh runtime readback identified the exact split-brain: the selected ingress
+registry retains a prior-boot epoch and dead PID while the supervised
+same-generation singleton host is reachable at the selected socket under a new
+PID. The host's existing CAS-fenced self-adoption path rejects the prior epoch
+before it can replace that necessarily stale identity, so ordinary clients
+correctly refuse the registry and fall through to retired legacy admission.
+Provider-free red evidence and the smallest safe reconciliation repair remain
+pending.
 
 ## Consolidated Batch
 
-1. Add a provider-free fixture for a fresh client with a current selected
-   singleton ingress, reachable authenticated endpoint, and no legacy session
-   daemon.
-2. Prove the current client path rejects or misses that selected endpoint.
-3. Route ordinary fresh clients through the selected singleton endpoint while
-   preserving explicit socket overrides used for candidate observation and
-   preserving fail-closed behavior when selection is absent or invalid.
-4. Cover the MCP/service-request command path at the connection boundary and
-   retain the no-legacy-launch interlock.
+1. Add a provider-free fixture for a supervised same-generation replacement
+   encountering a selected singleton registry from a prior boot.
+2. Prove the current adoption path rejects the stale epoch before refreshing
+   the selected PID, host, socket identity, and boot epoch.
+3. Permit that exact self-authenticating prior-boot replacement while retaining
+   binary, generation, topology, transaction, and atomic-write fences.
+4. Revalidate fresh-client connection routing, the MCP/service-request boundary,
+   and the no-legacy-launch interlock against the refreshed registry.
 5. Run focused regression, formatting, strict workspace Clippy, planning audit,
    and every additional gate selected from the changed surface.
 
 ## Scope And Effect Boundary
 
-Expected source writes are limited to `cli/src/connection.rs`, its inline
-tests, and, only if the endpoint contract cannot be expressed there,
-`cli/src/runtime_host.rs`. This plan and its branch-local roadmap, runbook, and
-active-lane projections are also in scope.
+Expected source writes are limited to `cli/src/runtime_host_ingress.rs` and its
+inline tests. `cli/src/connection.rs` tests may be updated only if a direct
+client-routing regression is required after the ingress repair. This plan and
+its branch-local roadmap, runbook, and active-lane projections are also in
+scope.
 
 This plan does not authorize browser launch, provider access, credential use,
 installed-runtime installation or restart, workstation repair, Service State
@@ -83,17 +88,19 @@ install, or shared-runtime mutation is assigned.
 
 The P203 lane owner holds the critical path, plan, branch, provider-free
 fixtures, source repair, validation, integration, and closeout. P203 is the
-sole writer for `cli/src/connection.rs` in this packet. P202 owns abandoned
-browser retirement and P197 owns challenge consumer integration; their source
-surfaces are disjoint. Shared planning projections will be reconciled before
-integration.
+sole writer for `cli/src/runtime_host_ingress.rs` in this packet. P202 owns
+abandoned browser retirement and P197 owns challenge consumer integration;
+their source surfaces are disjoint. Shared planning projections will be
+reconciled before integration.
 
 ## Evidence And Exit
 
 Exit requires current evidence that:
 
-- a fresh client with a current selected singleton ingress resolves the
-  runtime-host endpoint and attaches the requested logical lane;
+- a supervised same-generation singleton host can atomically refresh a
+  prior-boot selected identity after its own socket and stream are ready;
+- a fresh client then resolves the refreshed runtime-host endpoint and attaches
+  the requested logical lane;
 - the same routing boundary is used by MCP `service_request` and ordinary
   no-launch service commands;
 - an explicit candidate socket override remains isolated from the selected
@@ -107,7 +114,8 @@ Exit requires current evidence that:
 
 | Requirement | Current evidence | State |
 | --- | --- | --- |
-| Fresh client adopts selected ingress | Current source gates selected ingress behind explicit admission state | pending red fixture |
+| Prior-boot supervised replacement refreshes selection | Current self-adoption path rejects the prior epoch before replacing stale PID identity | pending red fixture |
+| Fresh client adopts selected ingress | Current live registry remains prior-boot, so selection fails closed and client reaches legacy rejection | pending after reconciliation repair |
 | MCP and CLI share connection routing | Both paths reach `ensure_daemon` and `send_command`; exact regression pending | pending |
 | Candidate override remains isolated | Explicit `AGENT_BROWSER_SOCKET_DIR` has first priority | existing control; revalidation pending |
 | Missing selection fails closed | Legacy launch admission rejection exists | existing control; revalidation pending |
@@ -117,5 +125,6 @@ Exit requires current evidence that:
 
 Stop before any installed-runtime, browser, provider, credential, retained
 profile, Service State, production, or release effect. Stop if the repair would
-permit a new legacy per-session daemon, bypass transactionally selected ingress
-state, or touch source owned by P197 or P202 without reconciling writer custody.
+permit a new legacy per-session daemon, accept a cross-generation or
+transaction-active replacement, bypass transactionally selected ingress state,
+or touch source owned by P197 or P202 without reconciling writer custody.

@@ -33,8 +33,10 @@ Current state: [Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission
 and [issue #169](https://github.com/CochranResearchGroup/agent-browser/issues/169)
 define a bounded provider-free repair. A fresh CLI or MCP client must adopt the
 transactionally selected singleton runtime host without falling into retired
-legacy per-session daemon admission. P203 owns `cli/src/connection.rs`; P202
-and P197 remain source-disjoint. No browser, provider, credential,
+legacy per-session daemon admission. Diagnosis found a prior-boot selected
+identity that the supervised same-generation host's existing self-adoption path
+cannot refresh. P203 owns `cli/src/runtime_host_ingress.rs`; P202 and P197
+remain source-disjoint. No browser, provider, credential,
 installed-runtime, Service State, retained-profile, production, or release
 effect is authorized.
 
