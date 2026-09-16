@@ -313,6 +313,24 @@ persists checkpoints and performs process effects through its older unfenced
 adapter, so it remains the next runtime-transfer packet. No installed runtime,
 browser, profile, provider, or Service State was touched.
 
+Checkpoint `f01ef5c3` adds candidate fencing inside the reviewed full-shutdown
+replacement engine. The engine now asks its caller-supplied fence for an exact
+custody preflight immediately before each cooperative close, forced browser
+termination, and source-runtime retirement. Every effect-receipt checkpoint is
+also delegated to that fence, so candidate custody is revalidated while the
+short coordination lock covers only the transaction write. No coordination
+lock remains held during process exit or census convergence waits. The legacy
+unfenced live entry point was removed; the workstation adapter supplies the
+candidate-aware fence, while transactions without candidate custody retain
+their existing behavior. A lost-custody fixture proves no full-shutdown receipt
+can be persisted, and the effect-order fixture proves loss before the first
+process mutation stops the engine. All four runtime-replacement tests, the
+full-shutdown forward-only and migration-refresh cases, strict workspace
+Clippy, format, the candidate architecture guard, and patch hygiene pass.
+Post-shutdown Service State restaging and candidate-host evidence publication
+still need their own bounded custody seams. No live process or runtime was
+mutated by these provider-free fixtures.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
