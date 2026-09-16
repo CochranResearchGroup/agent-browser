@@ -1,0 +1,16 @@
+{
+  "observedState": "install_active",
+  "outcome": "queued",
+  "recommendation": "wait",
+  "alternatives": ["queue", "cancel", "discard", "supersede"],
+  "consequences": ["active_candidate_preserved", "no_effect_performed"],
+  "integrityPreconditions": [],
+  "reasonCodes": ["competing_candidate_active"],
+  "activeOperation": {
+    "operationId": "operation-1",
+    "candidateId": "candidate-a",
+    "state": "installing",
+    "revision": 3,
+    "fencingGeneration": 7
+  }
+}

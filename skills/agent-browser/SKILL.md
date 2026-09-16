@@ -284,6 +284,63 @@ never inferred from the latest record. Copy the exact revision, candidate
 generation, and `runtimeCensusDigest` from inspect into `resume`, `rollback`,
 or `close`. Pass `none` when `runtimeCensusDigest` is null:
 
+Use `agent-browser candidate status --json` for a read-only advisory projection
+of the durable `coordinationLedger`, workstation transaction, and running
+executable's build provenance. An absent coordination file projects an empty
+ledger without creating runtime state.
+Use `agent-browser candidate inspect --manifest <path> --input-closure <path>
+--json` to validate an explicit candidate manifest against its executable-input
+closure. Use `agent-browser candidate build --repo-root <source-checkout>
+--artifact-class <fast_iteration|production_shaped> --dry-run --json` to inspect
+the exact isolated build plan. Replace `--dry-run` with `--apply` only when the
+operator explicitly requests a build. Apply claims the exact request, executes
+through `scripts/ci/cargo-safe.sh`, derives the executable closure from compiler
+dep-info, and seals immutable artifacts below `cli/target`; it does not install
+or mutate either runtime. A production-shaped build requires clean source. Pass
+each feature with `--feature <name>`. For a reviewed build-affecting environment
+value, pass only `--reviewed-environment-input <name=sha256>`; the command fails
+if the current raw value does not match that digest. Retry a failed claim only
+with `--retry-failed-operation <exact-operation-id>`; the failed claim and any
+partial sealed directory are archived rather than deleted.
+Use `--recover-active-operation <exact-operation-id> --apply` only after the
+recorded owner PID is no longer live. Recovery archives the abandoned claim and
+partial sealed directory before a replacement claim is created.
+Use `agent-browser candidate test --repo-root <source-checkout> --binary <path>
+--manifest <path> --input-closure <path> --sealed-artifact <path>
+--suite-revision <commit> --selection <suite> --dry-run --json` to validate the
+exact artifact and preview whether a provider-free run joins, reuses, or
+starts. Supported suites are `candidate-kernel`, `candidate-build-adapter`, and
+`candidate-cli`; repeat `--selection` to combine them. Replace `--dry-run` with
+`--apply` only when the operator requests test execution. Apply isolates HOME,
+runtime, temporary, Cargo, log, and receipt paths below `cli/target`; it never
+launches a browser or touches either installed runtime. Reuse requires an exact
+successful hermetic receipt with terminal cleanup proof.
+Use `--recover-active-run <exact-run-id> --apply` only after its recorded owner
+PID is no longer live. The abandoned active claim is archived before the
+replacement run starts.
+Use `agent-browser candidate install --binary <path> --manifest
+<path> --input-closure <path> --sealed-artifact <path> --dry-run --json` to
+also verify the exact candidate binary and sealed build artifact without an
+effect. Replace `--dry-run` with `--apply` only when the operator explicitly
+requests a production install. Apply reuses the workstation transaction, binds
+candidate coordination custody, and may replace production runtime processes.
+An identical concurrent request joins the active operation and does not start a
+second transaction. Use `candidate status` and the exact `install transactions`
+actions for recovery; never infer apply or recovery authority from readiness.
+`agent-browser candidate recover <resume|rollback|close> --transaction-id <id>
+--expected-revision <revision> --candidate-generation <generation>
+--census-digest <sha256|none> --json` is an exact alias for those existing
+transaction actions. Copy every guard field from transaction inspection; it
+never targets the latest transaction implicitly.
+Use `agent-browser candidate coordinate` with `queue`, `cancel-active`,
+`discard-queued`, `supersede`, or `activate-queued` only for an explicit
+operator choice. Pass a unique `--request-id`, exact candidate and artifact
+IDs, and the current `--expected-revision` and
+`--expected-fencing-generation` from `candidate status`. Every action except
+queue also requires the exact `--operation-id`. This command mutates only the
+candidate coordination ledger, but cancellation and supersession immediately
+fence stale writers.
+
 During Service State migration, a missing profile row is materialized as a
 persistent placeholder only when every referencing legacy session is unbound:
 no principal, work capability, browser, or tab. This restores referential
