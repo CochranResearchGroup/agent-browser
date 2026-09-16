@@ -7,6 +7,16 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 356 | 2026-09-16
+
+[Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
+is admitted from `main@dd34977e` for issue #169. The provider-free packet will
+first prove that a fresh CLI/MCP client misses a current selected singleton
+runtime host, then repair connection-bound routing without permitting any new
+legacy per-session daemon. P203 owns `cli/src/connection.rs`; P202 and P197 are
+source-disjoint. No browser, provider, credential, installed-runtime, Service
+State, retained-profile, production, or release effect is authorized.
+
 ## Turn 355 | 2026-09-16
 
 [Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
