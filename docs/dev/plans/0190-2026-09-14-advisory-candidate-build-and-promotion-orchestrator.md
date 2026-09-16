@@ -498,6 +498,22 @@ continuing to give every CLI test process its own disposable HOME and XDG
 trees. The four focused adapter fixtures, strict workspace Clippy, format,
 candidate architecture guard, and patch hygiene pass after this correction.
 
+Checkpoint `b7778835` closes abandoned build and test liveness recovery.
+Build claims now record their owner PID. Exact `--recover-active-operation`
+apply verifies that PID is no longer live, rechecks the unchanged claim under a
+short exclusive recovery guard, archives the claim and partial artifacts, and
+only then publishes a replacement operation. Candidate test active claims now
+wrap the canonical run record with the owner PID; exact
+`--recover-active-run` apply likewise refuses a live owner, archives the
+abandoned claim, and admits a replacement run. Mismatched IDs, changed claims,
+and concurrent recovery fail closed. Focused live-owner refusal, dead-owner
+recovery, archive preservation, failure-retry, join, and reuse tests pass with
+strict workspace Clippy, format, the candidate architecture guard, WSL Cargo
+safety and capacity tests, docs production build, remote-view documentation
+contract, and patch hygiene. The branch also integrated canonical main through
+the P200 Cargo-scope descendant-lifetime repair. No installed runtime was
+mutated. Production-shaped qualification is now the remaining planned gate.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
