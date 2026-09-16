@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 4
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -31,7 +31,9 @@ or retained browser processes.
 
 ## Current State
 
-Issue #102 is claimed and in progress. Source checkpoint `fc2a3359` gives each
+Issue #102 is closed after source checkpoint `2978594e` merged through PR #163
+as `c98da4cc`. The clean P200 worktree and merged local and remote branches are
+removed. The repair gives each
 admitted invocation an exact scope identity, retains a dead-wrapper claim while
 that scope remains active or cannot be observed safely, and stops only that
 scope before releasing the claim. Success and nonzero Cargo exits use the same
@@ -48,7 +50,11 @@ P190 is an adjacent active `PL-PLATFORM` lane. P200 is the primary writer for
 `scripts/ci/cargo-safe.sh` and new descendant-lifetime fixtures. P190 owns its
 candidate orchestration and current `scripts/ci/rust-tests.sh` changes. P200
 will not edit P190's dirty files and will publish a checkpoint before any
-dependent reconciliation.
+dependent reconciliation. Exact-head CI run `35098782749` passed every selected
+gate, including Rust, no-launch service smokes, and workstation fixtures. The
+plan is closed. The merge occurred before those declared gates terminated
+because `main` currently has no live branch protection or repository ruleset;
+issue #164 tracks that separate governance defect.
 
 ## Consolidated Batch
 
@@ -130,7 +136,7 @@ Exit requires current evidence that:
 | Success and failure teardown converge | Exit 0 and exit 23 fixtures stop the exact generated unit and leave zero profile-path processes | focused pass |
 | Foreign and retained processes remain ineligible | The unrelated control process remains alive across both teardown paths; no retained or installed profile is used | focused pass |
 | Real scope becomes inactive | `AGENT_BROWSER_CARGO_REAL_SCOPE_TEST=1 node scripts/test-cargo-safe-capacity.js` passes success and exit-23 cases; fresh unit/process readback is empty | focused pass |
-| Required batch validation and integration | At `fc2a3359`, Shellcheck, Node syntax, deterministic fixtures, real-scope fixtures, planning audit, diff hygiene, and the changed-surface selector pass. Protected exact-head CI, merge, and closeout remain | local pass |
+| Required batch validation and integration | At `2978594e`, Shellcheck, Node syntax, deterministic fixtures, real-scope fixtures, planning audit, diff hygiene, and the changed-surface selector pass. PR #163 merged as `c98da4cc`; exact-head CI run `35098782749` passed every selected gate | passed and integrated |
 
 The aggregate `pnpm test:wsl-cargo-safety` command reaches a pre-existing
 static-entrypoint failure at

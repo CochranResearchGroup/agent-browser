@@ -7,6 +7,24 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
 
+## Turn 352 | 2026-09-16
+
+[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+is closed. PR #163 merged source head
+`2978594e` into `main` as `c98da4cc`; issue #102 closed and its stale
+`state/in-progress` label was removed. The clean P200 worktree and merged local
+and remote branches were removed. Exact-head CI run `35098782749` passed every
+selected gate, including Rust, no-launch service smokes, and workstation
+fixtures. No installed
+runtime, browser, provider, Service State, retained-profile, production, or
+foreign-process effect occurred. Live GitHub readback found no branch protection
+or repository ruleset enforcing the documented gate; issue #164 tracks that
+separate governance defect without opening another implementation lane. The
+stale integrated P169 custody record is removed from the active-lane catalog;
+its merged history remains in Plan 0187 and `main`, while P197 owns the active
+consumer-integration work and issue #66 retains its separate live gate. P200 is
+also removed from the active-lane catalog after closure.
+
 ## Turn 351 | 2026-09-16
 
 [Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
