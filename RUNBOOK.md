@@ -7,6 +7,19 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
+## Turn 362 | 2026-09-16
+
+P202 Exit-Proof Diagnostic Packet 6 is focused-green at source checkpoint
+`2243de8c`. The Linux zombie-only fixture was red twice with both sealed root
+and process-group exit false; both are now true only when no matching
+non-zombie group member exists. Terminal recourse now returns all failed exit
+predicates with the exact observed evidence while preserving the stable
+`exit_unproven` code, state immutability, cleanup ownership, and every original
+fail-closed predicate. All ten retirement tests, the zombie regression,
+decision matrix, formatting, strict Clippy, patch hygiene, and smoke syntax
+pass. Read-only W7 and W8 evidence was reconciled; no worker edited source or
+held Git/runtime custody. This is blocker reduction, not live acceptance.
+
 ## Turn 361 | 2026-09-16
 
 P202 changes tactic from browser replay to provider-free Exit-Proof Diagnostic

@@ -52,15 +52,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: e7ae2a9ab7fa8ea891b0089b5bf75409450404ad
+    checkpoint: 2243de8c5c1329762104614c1392461e34b66fb9
     remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: provider-free changed-surface and comprehensive Rust gates pass; terminal disposable replay returned ExitUnproven with zero exact fixture residue
-    validation_ref: e7ae2a9ab7fa8ea891b0089b5bf75409450404ad
+    validation_status: exit-proof diagnostics, ten retirement tests, zombie-only group regression, decision matrix, formatting, and strict Clippy pass; complete changed-surface requalification remains
+    validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#103]
     dependencies: []
     overlaps: [P190, P197]
     reconciled_overlaps: [P190, P197]
-    blocker: provider-free Exit-Proof Diagnostic Packet 6 is active after real-browser finalize returned ExitUnproven; shared documentation remains owned by open P190
+    blocker: deterministic zombie-only exit-proof repair is focused-green and awaits complete changed-surface requalification; shared documentation remains owned by open P190
     updated_at: 2026-09-16

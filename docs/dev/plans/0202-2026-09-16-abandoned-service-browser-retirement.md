@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 8
+Plan version: 9
 
 State: OPEN
 
@@ -332,6 +332,36 @@ attempts and authorizes no browser or runtime effect.
 - Bound: one implementation attempt, one focused validation cycle, and 30
   active minutes. Stop without a live replay if the failure cannot be captured
   at the stable finalize seam.
+
+## Exit-Proof Diagnostic Result 6
+
+- Source checkpoint: `2243de8c`.
+- W7 `/root/p202_exit_cause` traced the exact path and found that finalization
+  collapsed nine identity, exit, lock, and time predicates into one unit error.
+  It recommended preserving fail-closed behavior while returning every failed
+  predicate with the observed evidence.
+- W8 `/root/p202_resource_implementation` found that Linux zombies retained
+  both the sealed start token and a signal-addressable process group. The older
+  PID helper already treated zombies as exited, but the P202 sealed PID and
+  group predicates did not.
+- The Linux zombie-only process-group fixture was red twice in 0.01 seconds,
+  reporting `(root_exited, process_group_empty) = (false, false)`. It now passes
+  with `(true, true)` after sealed PID observation recognizes zombie state and
+  group observation requires a non-zombie `/proc` member. Incomplete process
+  census still falls back conservatively to the raw process-group probe.
+- The exit-recourse fixture was red on the generic
+  `abandoned_browser_retirement:ExitUnproven`. It now passes across plan,
+  reservation, process-group, root, descendants, group emptiness, profile
+  lock, and both time-bound predicates, plus a combined failure. The typed
+  recourse preserves the complete observed evidence, state immutability,
+  cleanup ownership, and stable serialized `exit_unproven` code.
+- All ten retirement transaction tests, the zombie-only group regression, the
+  abandoned-lane decision matrix, formatting, strict workspace Clippy, patch
+  hygiene, and smoke-script syntax pass.
+- Progress classification: blocker reduction. The observed live cause now has
+  a deterministic reproducer and repair, but this packet authorizes no browser
+  replay. Complete changed-surface requalification remains before any decision
+  about another bounded acceptance run.
 
 ## Stop Condition
 
