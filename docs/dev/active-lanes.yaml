@@ -1,27 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P200
-    product_lane: PL-PLATFORM
-    objective: Keep Cargo admission accountable until exact test-scope descendants exit
-    plan: docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md
-    plan_ref: refs/remotes/origin/platform/p200-cargo-scope-descendant-lifetime
-    branch: platform/p200-cargo-scope-descendant-lifetime
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: fc2a3359
-    remote_ref: refs/remotes/origin/platform/p200-cargo-scope-descendant-lifetime
-    integration_receipt: null
-    integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
-    validation_status: local_passed
-    validation_ref: fc2a3359
-    work_items: [CochranResearchGroup/agent-browser#102]
-    dependencies: []
-    overlaps: [P190]
-    reconciled_overlaps: [P190]
-    blocker: protected exact-head CI and integration remain
-    updated_at: 2026-09-16
   - id: P190
     product_lane: PL-PLATFORM
     objective: Build the deterministic candidate identity, build coordination, and promotion advisory surface
@@ -39,8 +18,8 @@ lanes:
     validation_ref: 3430925f0cd20fef0df871a45299d981a9dc2d85
     work_items: [CochranResearchGroup/agent-browser#136]
     dependencies: []
-    overlaps: [P169, P197]
-    reconciled_overlaps: [P169, P197]
+    overlaps: [P197]
+    reconciled_overlaps: [P197]
     blocker: PR #152 remains draft while candidate build and workstation coordination continue; production-shaped qualification retains its later gate
     updated_at: 2026-09-16
   - id: P197
@@ -59,29 +38,8 @@ lanes:
     validation_status: pending
     validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#127]
-    dependencies: [P169]
+    dependencies: []
     overlaps: [P190]
     reconciled_overlaps: [P190]
     blocker: provider-free consumer admission contract and two consumer integrations remain in progress; every live challenge effect stays with issue #66
-    updated_at: 2026-09-16
-  - id: P169
-    product_lane: PL-CHALLENGE
-    objective: Deliver a provider-neutral challenge countermeasure control plane and bounded challenge-family adapters
-    plan: docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md
-    plan_ref: refs/remotes/origin/main
-    branch: challenge/p169-control-plane
-    target: main
-    plan_state: OPEN
-    custody_state: INTEGRATED
-    checkpoint: d7c59be27003189dc20fa21d79dbceed0d50a0c5
-    remote_ref: refs/remotes/origin/challenge/p169-control-plane
-    integration_receipt: 81de07cfb5790685ff506bdabff3609e92fd5eeb
-    integration: merge through the protected `main` workflow after custody normalization
-    validation_status: passed
-    validation_ref: 81de07cfb5790685ff506bdabff3609e92fd5eeb
-    work_items: [CochranResearchGroup/agent-browser#127, CochranResearchGroup/agent-browser#66]
-    dependencies: []
-    overlaps: [P190, P197]
-    reconciled_overlaps: [P190, P197]
-    blocker: W6 is admitted as Plan 0197; issue #66 retains the separately live-gated challenge acceptance leaf
     updated_at: 2026-09-16
