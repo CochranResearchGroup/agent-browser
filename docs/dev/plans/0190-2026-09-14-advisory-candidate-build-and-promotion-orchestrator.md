@@ -159,6 +159,19 @@ strict workspace Clippy, the architecture and documentation contract, the docs
 production build, and patch hygiene pass. The production coordination path was
 confirmed absent after validation; no runtime or installer effect occurred.
 
+Checkpoint `07aaf9e9` adds the provider-free executable-input collector. It
+combines Cargo dep-info from the CLI and linked local crates with explicit
+manifest, lockfile, build-script, package-version, toolchain, dashboard, and
+embedded-asset roots; resolves every file to a repository-contained canonical
+path; hashes content; and emits the pure crate's canonical closure schema. A
+production-shaped collection rejects a missing or placeholder dashboard and a
+closure with no embedded assets. Reviewed environment inputs accept only
+SHA-256 digests, never raw values. Focused collector tests, the candidate
+architecture guard, patch hygiene, the conservative release-asset fixture, and
+the validation-selector self-check pass. The collector cannot spawn Cargo or
+another process, and this checkpoint performed no candidate build or runtime
+effect.
+
 ## Frozen Decisions
 
 - The user retains authority to start, cancel, discard, install, supersede,
