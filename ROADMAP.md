@@ -27,18 +27,20 @@ field evidence and acceptance records into the same model.
 
 ## P207 | Tab Handle Refresh Custody Repair
 
-State: OPEN
+State: OPEN, SOURCE COMPLETE, BROWSER ACCEPTANCE BLOCKED PRE-LAUNCH
 
 Current state: [Plan 0207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)
 and [issue #175](https://github.com/CochranResearchGroup/agent-browser/issues/175)
-record the bounded PL-BUGFIX repair. The current handler may select a foreign
-or unattributed `about:blank` target by URL alone, synthesize a handle with
-stale caller metadata, and omit explicit top-level cleanup-attempt proof. P207
-will first add a pure provider-free red regression, then require canonical
-caller custody for reuse and cleanup. P197 has landed, so public contract parity
-is unblocked; P207 will not edit P205 Service State model sources. Full CI,
-installed-runtime mutation, provider effects, credentials, production, and
-release work are outside this plan.
+record the bounded PL-BUGFIX repair. Source checkpoint `c3d69f3e` now requires
+canonical same-caller Service State custody for compatible reuse and duplicate
+cleanup, persists canonical replacements, preserves peer targets, and returns
+explicit cleanup-attempt proof. All 8 focused refresh tests, required Rust
+quality checks, direct client and parity checks, and the docs build pass. Two
+disposable browser attempts stopped before Chrome launch because the isolated
+Service State lacked a reviewed stock-Chrome preference binding; both cleaned
+up. P207 remains open only for that acceptance prerequisite and protected
+integration. Full CI, installed-runtime mutation, provider effects,
+credentials, production, and release work remain outside this plan.
 
 ## P203 | Runtime Host Admission Routing
 

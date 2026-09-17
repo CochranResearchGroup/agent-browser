@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
-State: OPEN
+State: OPEN, SOURCE COMPLETE, BROWSER ACCEPTANCE BLOCKED PRE-LAUNCH
 
 Consolidation: required
 
@@ -45,21 +45,17 @@ result because caller identity was unproven and the top-level
 `duplicateCleanupAttempted: false` proof was absent. No accounting or provider
 effect occurred.
 
-Current `origin/main` retains the same defect:
+The defect was reproduced and repaired at implementation checkpoint
+`c3d69f3e`. The completed source change now:
 
-- `classify_live_page_candidate` treats every blank page as
-  `compatible_blank_tab` without Service State custody input;
-- `handle_tab_handle_refresh` takes the first URL-compatible live page before
-  the `open_if_missing` branch and does not join the target to its retained tab,
-  principal, profile-child access, or trace identity;
-- `service_tab_handle_from_parts` copies stale-handle metadata onto the selected
-  target and rebuilds `traceFilter` without `serviceName`, `agentName`, or
-  `taskName`;
-- refreshed reused and newly opened targets are returned from the handler
-  without a dedicated custody-safe refresh persistence transition; and
-- the response contains nested `duplicateTargetCleanup.attempted`, but the
-  generated client type does not declare cleanup proof and there is no
-  top-level `duplicateCleanupAttempted` field.
+- treats URL compatibility only as a discovery hint and joins reusable targets
+  to canonical Service State custody;
+- opens and durably persists a canonical replacement instead of adopting a
+  foreign or unattributed blank target;
+- limits duplicate cleanup to compatible targets with the same caller custody;
+- returns canonical service, agent, and task attribution; and
+- exposes top-level duplicate and peer cleanup-attempt proof while preserving
+  the nested cleanup receipt.
 
 The focused characterization command is fast and provider-free:
 
@@ -264,16 +260,23 @@ model.
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| Exact defect loop | focused pure planner regression exercises caller-A stale handle plus caller-B blank target | planned |
-| Caller-safe reuse | same-caller compatible target test plus foreign and unattributed rejection tests | planned |
-| Durable replacement | repository readback returns the canonical caller-bound opened target | planned |
-| Peer preservation | switch and close spies remain zero for peer targets; replace cleanup receives only caller-owned IDs | planned |
-| Caller attribution | returned handle preserves service, agent, task, principal, profile, route, and child-access proof | planned |
-| Cleanup proof | explicit booleans plus compatible nested evidence on every success | planned |
-| Public parity | generated type, client fixture, help, README, skill, and docs agree | planned |
-| Rust quality | focused tests, format check, strict workspace Clippy, and diff hygiene pass | planned |
-| Browser acceptance | at most one isolated disposable scenario proves target selection, peer survival, and residue cleanup | planned, local only |
+| Exact defect loop | red regression first selected caller-B's blank handle; final `scripts/ci/rust-tests.sh --focused tab_handle_refresh` passes 8 tests | complete at `c3d69f3e` |
+| Caller-safe reuse | pure planner requires canonical same-caller session, browser, principal, work lease, and profile-child evidence | complete |
+| Durable replacement | `test_tab_handle_refresh_opened_replacement_is_canonical_and_durable` reads the persisted caller-owned target back | complete |
+| Peer preservation | `test_tab_handle_refresh_replace_duplicates_preserves_peer_targets` excludes caller-B from the cleanup set | complete |
+| Caller attribution | canonical reused and persisted replacement handles retain service, agent, task, principal, profile, route, and child-access evidence | complete |
+| Cleanup proof | every handler response includes explicit duplicate and peer booleans plus the nested cleanup receipt | complete |
+| Public parity | generator, generated type, direct client fixture, MCP schema/help, README, skill, and docs agree; direct client, type, parity, and docs checks pass | complete |
+| Rust quality | format check, strict workspace Clippy, JavaScript syntax checks, focused tests, and diff hygiene pass | complete |
+| Browser acceptance | two disposable attempts stopped before Chrome launch with `stock_chrome_capability_selection_failed: no_matching_preference_binding`; cleanup completed | blocked pre-launch on missing isolated capability-registry binding |
 | External effect | no credential, provider, accounting, staging, production, or release effect | required none |
+
+The provider-free source and public contract are complete. Browser acceptance
+did not exercise the repaired path because the isolated test Service State had
+no reviewed stock-Chrome preference binding. No Chrome process was launched in
+either attempt, and both disposable homes were cleaned. This is an acceptance
+environment prerequisite, not evidence of a refresh-path failure. Full CI and
+further blind browser retries remain excluded.
 
 Completion requires every non-deferred row above to cite exact-head evidence.
 A passing helper test alone cannot prove caller binding, and a successful local

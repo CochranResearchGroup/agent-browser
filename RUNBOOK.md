@@ -8,6 +8,22 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)
 
+## Turn 372 | 2026-09-16
+
+[Plan 0207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)
+is source-complete at `c3d69f3e`. Refresh now joins compatible pages to
+canonical same-caller Service State custody, persists a replacement rather
+than adopting a foreign blank target, restricts duplicate cleanup to the
+caller's targets, and returns explicit cleanup-attempt evidence. All 8 focused
+refresh tests, formatting, strict workspace Clippy, direct client and contract
+parity checks, JavaScript syntax, docs build, and diff hygiene pass. Two
+disposable real-browser attempts stopped before Chrome launch with
+`stock_chrome_capability_selection_failed: no_matching_preference_binding`
+because the isolated registry lacked a reviewed stock-Chrome binding; cleanup
+completed after each attempt. No browser, provider, credential,
+installed-runtime, production, release, or full-CI effect occurred. P207 stays
+open for that exact acceptance prerequisite and protected integration.
+
 ## Turn 371 | 2026-09-16
 
 [Plan 0207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)

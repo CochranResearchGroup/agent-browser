@@ -30,16 +30,16 @@ lanes:
     branch: fix/p207-tab-handle-refresh-custody
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 0df31073
+    custody_state: SOURCE_COMPLETE_ACCEPTANCE_BLOCKED
+    checkpoint: c3d69f3e
     remote_ref: refs/remotes/origin/fix/p207-tab-handle-refresh-custody
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free custody regression, public response parity, and changed-surface local validation
-    validation_status: diagnosis complete; pure red regression and implementation pending
-    validation_ref: null
+    validation_status: 8 focused refresh tests, format, strict workspace Clippy, direct service client, client types, API MCP parity, service client contract, docs build, JavaScript syntax, and diff hygiene pass; disposable browser acceptance stopped before launch on missing isolated capability-registry preference binding
+    validation_ref: c3d69f3e
     work_items: [CochranResearchGroup/agent-browser#175]
     dependencies: []
     overlaps: [P204:docs/dev/active-lanes.yaml, P205:ServiceTabHandle-model-boundary]
     reconciled_overlaps: [P204:docs/dev/active-lanes.yaml, P205:ServiceTabHandle-model-boundary]
-    blocker: none; implementation remains bounded away from P205 Service State model edits
+    blocker: real-browser acceptance requires a reviewed stock-Chrome capability-registry binding in the isolated smoke state; no browser launched and no P205 model source was edited
     updated_at: 2026-09-16
