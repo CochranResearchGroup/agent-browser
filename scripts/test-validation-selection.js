@@ -50,6 +50,14 @@ expectSelection('service client only', ['packages/client/src/service-request.js'
   jobs: { docs: false, dashboard: false, serviceClient: true, workstation: false, rustQuality: false, rust: false },
 });
 
+expectSelection('repository tooling only', [
+  'scripts/lib/worktree-closeout.js',
+  'scripts/test-worktree-closeout.js',
+], {
+  tier: 'repository-tooling',
+  jobs: { docs: false, dashboard: false, serviceClient: false, repositoryTooling: true, workstation: false, rustQuality: false, rust: false, comprehensive: false },
+});
+
 expectSelection('workstation and release only', ['scripts/release/test-verify-release-assets.sh'], {
   tier: 'workstation',
   jobs: { docs: false, dashboard: false, serviceClient: false, workstation: true, rustQuality: false, rust: false },

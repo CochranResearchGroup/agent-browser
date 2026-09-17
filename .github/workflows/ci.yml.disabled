@@ -26,6 +26,7 @@ jobs:
       rust: ${{ steps.selection.outputs.rust }}
       dashboard: ${{ steps.selection.outputs.dashboard }}
       service_client: ${{ steps.selection.outputs.service_client }}
+      repository_tooling: ${{ steps.selection.outputs.repository_tooling }}
       service_smokes: ${{ steps.selection.outputs.service_smokes }}
       workstation: ${{ steps.selection.outputs.workstation }}
       rust_compartments: ${{ steps.selection.outputs.rust_compartments }}
@@ -305,6 +306,30 @@ jobs:
       - name: Test service client contracts
         run: pnpm test:service-client
 
+  repository-tooling:
+    name: Repository Tooling
+    needs: classify
+    if: needs.classify.outputs.repository_tooling == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Test repository tooling contracts
+        run: pnpm test:repository-tooling
+
   workstation-fixtures:
     name: Workstation Fixtures
     needs: classify
@@ -368,6 +393,7 @@ jobs:
       - rust-tests
       - dashboard
       - service-client
+      - repository-tooling
       - workstation-fixtures
     runs-on: ubuntu-latest
     steps:
@@ -381,7 +407,7 @@ jobs:
         env:
           VALIDATION_SELECTION_JSON: ${{ needs.classify.outputs.selection }}
           VALIDATION_RESULTS_JSON: >-
-            {"docs":"${{ needs.docs.result }}","versionSync":"${{ needs['version-sync'].result }}","rustQuality":"${{ needs['rust-quality'].result }}","rust":"${{ needs['rust-tests'].result }}","dashboard":"${{ needs.dashboard.result }}","serviceClient":"${{ needs['service-client'].result }}","workstation":"${{ needs['workstation-fixtures'].result }}"}
+            {"docs":"${{ needs.docs.result }}","versionSync":"${{ needs['version-sync'].result }}","rustQuality":"${{ needs['rust-quality'].result }}","rust":"${{ needs['rust-tests'].result }}","dashboard":"${{ needs.dashboard.result }}","serviceClient":"${{ needs['service-client'].result }}","repositoryTooling":"${{ needs['repository-tooling'].result }}","workstation":"${{ needs['workstation-fixtures'].result }}"}
         run: |
           set -euo pipefail
           node scripts/ci/verify-presubmit.js | tee presubmit-receipt.json
