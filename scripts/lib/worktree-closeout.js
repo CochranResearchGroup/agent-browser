@@ -38,6 +38,18 @@ export class CandidateDispositionRequiredError extends Error {
   }
 }
 
+export class CandidateBuildActiveError extends Error {
+  constructor(operationIds) {
+    super('active candidate builds must finish or be recovered before worktree closeout');
+    this.name = 'CandidateBuildActiveError';
+    this.code = 'worktree_closeout_candidate_build_active';
+    this.details = {
+      operationIds,
+      supportedActions: ['wait', 'recover-build', 'cancel-build'],
+    };
+  }
+}
+
 function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(',')}]`;
@@ -81,6 +93,14 @@ function validateRequest(request) {
   }
   if (!Array.isArray(request.candidateDispositions)) {
     throw new TypeError('request.candidateDispositions must be an array');
+  }
+  if (!Array.isArray(request.activeCandidateBuilds ?? [])) {
+    throw new TypeError('request.activeCandidateBuilds must be an array');
+  }
+  if ((request.activeCandidateBuilds ?? []).length > 0) {
+    throw new CandidateBuildActiveError(
+      request.activeCandidateBuilds.map(({ operationId }) => operationId),
+    );
   }
   if (
     request.supersedesRetainedOperationId !== undefined
@@ -179,6 +199,15 @@ function syncDirectory(path) {
   }
 }
 
+export function worktreeCloseoutOperationPath({
+  stateRoot,
+  repositoryId,
+  worktreeIncarnation,
+}) {
+  const identityDigest = sha256(canonicalJson({ repositoryId, worktreeIncarnation }));
+  return join(stateRoot, 'worktree-closeout', 'operations', `${identityDigest}.json`);
+}
+
 function atomicWriteJson(path, document) {
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
   writeFileSync(temporary, `${canonicalJson(document)}\n`, {
@@ -200,12 +229,13 @@ export function beginOrJoinWorktreeCloseout({ stateRoot, request }) {
 
   const requestJson = canonicalJson(request);
   const requestDigest = sha256(requestJson);
-  const identityDigest = sha256(canonicalJson({
+  const operationsRoot = join(stateRoot, 'worktree-closeout', 'operations');
+  const operationPath = worktreeCloseoutOperationPath({
+    stateRoot,
     repositoryId: request.repositoryId,
     worktreeIncarnation: request.worktreeIncarnation,
-  }));
-  const operationsRoot = join(stateRoot, 'worktree-closeout', 'operations');
-  const operationPath = join(operationsRoot, `${identityDigest}.json`);
+  });
+  const identityDigest = basename(operationPath, '.json');
   mkdirSync(operationsRoot, { recursive: true, mode: 0o700 });
 
   const operation = {
@@ -249,47 +279,59 @@ export function beginOrJoinWorktreeCloseout({ stateRoot, request }) {
           && retainedReceipt.requestDigest === existing.requestDigest
           && retainedReceipt.removal?.outcome === 'retained'
         ) {
-          const selectionPath = `${operationPath}.selection`;
+          operation.generation = existing.generation + 1;
+          const selectionPath = `${operationPath}.selection.${existing.operationId}.${requestDigest}.json`;
           const selectionTemporary = `${selectionPath}.${process.pid}.${randomUUID()}.tmp`;
-          writeFileSync(selectionTemporary, `${canonicalJson({
+          const proposedSelection = {
             schemaVersion: 'agent-browser.worktree-closeout-selection.v1',
             priorOperationId: existing.operationId,
+            requestDigest,
             ownerPid: process.pid,
-          })}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600, flush: true });
+            replacementOperation: operation,
+          };
+          writeFileSync(selectionTemporary, `${canonicalJson(proposedSelection)}\n`, {
+            encoding: 'utf8', flag: 'wx', mode: 0o600, flush: true,
+          });
+          let selection = proposedSelection;
           try {
             linkSync(selectionTemporary, selectionPath);
           } catch (selectionError) {
             if (selectionError?.code === 'EEXIST') {
-              return { outcome: 'joined_selection', operationId: existing.operationId };
+              selection = JSON.parse(readFileSync(selectionPath, 'utf8'));
+              if (
+                selection.schemaVersion !== 'agent-browser.worktree-closeout-selection.v1'
+                || selection.priorOperationId !== existing.operationId
+                || selection.requestDigest !== requestDigest
+                || selection.replacementOperation?.requestDigest !== requestDigest
+              ) {
+                throw new WorktreeCloseoutConflictError('retained selection record is invalid', {
+                  operationId: existing.operationId,
+                });
+              }
             }
-            throw selectionError;
+            if (selectionError?.code !== 'EEXIST') throw selectionError;
           } finally {
             unlinkSync(selectionTemporary);
           }
-          try {
-            const confirmed = readOperation(operationPath);
-            if (confirmed.operationId !== existing.operationId) {
-              return {
-                outcome: 'joined_existing',
-                operationId: confirmed.operationId,
-                generation: confirmed.generation,
-                requestDigest: confirmed.requestDigest,
-                operationPath,
-              };
-            }
-            operation.generation = existing.generation + 1;
-            atomicWriteJson(operationPath, operation);
+          const confirmed = readOperation(operationPath);
+          if (confirmed.operationId !== existing.operationId) {
             return {
-              outcome: 'started',
-              operationId: operation.operationId,
-              generation: operation.generation,
-              requestDigest,
+              outcome: 'joined_existing',
+              operationId: confirmed.operationId,
+              generation: confirmed.generation,
+              requestDigest: confirmed.requestDigest,
               operationPath,
-              supersededRetainedOperationId: existing.operationId,
             };
-          } finally {
-            unlinkSync(selectionPath);
           }
+          atomicWriteJson(operationPath, selection.replacementOperation);
+          return {
+            outcome: selection === proposedSelection ? 'started' : 'recovered_selection',
+            operationId: selection.replacementOperation.operationId,
+            generation: selection.replacementOperation.generation,
+            requestDigest,
+            operationPath,
+            supersededRetainedOperationId: existing.operationId,
+          };
         }
         throw new WorktreeCloseoutConflictError(
           'a different closeout request already owns this worktree incarnation',
@@ -356,7 +398,7 @@ export function executeWorktreeCloseout({
     throw locationError;
   }
   const receiptPath = `${operationPath}.${operation.operationId}.receipt.json`;
-  const effectPath = `${operationPath}.${operation.operationId}.effect.json`;
+  const effectPrefix = `${operationPath}.${operation.operationId}.effect`;
   const progressPath = `${operationPath}.${operation.operationId}.progress.json`;
   try {
     const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
@@ -380,34 +422,26 @@ export function executeWorktreeCloseout({
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
-  const effectAlreadyExists = existsSync(effectPath);
+  const effectClaimPath = (claimGeneration) => `${effectPrefix}.${claimGeneration}.json`;
+  const effectAlreadyExists = existsSync(effectClaimPath(operation.generation));
   if (typeof adapter.assertCandidatePins === 'function') {
     adapter.assertCandidatePins(operation.request, { allowDisposed: effectAlreadyExists });
   }
 
   let generation = operation.generation;
-  const effect = {
-    schemaVersion: 'agent-browser.worktree-closeout-effect.v1',
-    operationId: operation.operationId,
-    generation,
-    ownerPid: process.pid,
-  };
-  const effectTemporary = `${effectPath}.${process.pid}.${randomUUID()}.tmp`;
-  writeFileSync(effectTemporary, `${canonicalJson(effect)}\n`, {
-    encoding: 'utf8',
-    flag: 'wx',
-    mode: 0o600,
-    flush: true,
-  });
-  try {
-    linkSync(effectTemporary, effectPath);
-    syncDirectory(dirname(effectPath));
-  } catch (error) {
-    if (error?.code !== 'EEXIST') throw error;
-    const existing = JSON.parse(readFileSync(effectPath, 'utf8'));
-    if (existing.operationId !== operation.operationId) {
-      throw new WorktreeCloseoutConflictError('effect claim belongs to another operation', {
-        operationId: existing.operationId,
+  while (existsSync(effectClaimPath(generation + 1))) generation += 1;
+  const existingClaimPath = effectClaimPath(generation);
+  if (existsSync(existingClaimPath)) {
+    const existing = JSON.parse(readFileSync(existingClaimPath, 'utf8'));
+    if (
+      existing.schemaVersion !== 'agent-browser.worktree-closeout-effect.v1'
+      || existing.operationId !== operation.operationId
+      || existing.generation !== generation
+      || !Number.isInteger(existing.ownerPid)
+    ) {
+      throw new WorktreeCloseoutConflictError('effect claim is invalid', {
+        operationId: operation.operationId,
+        generation,
       });
     }
     if (!recover) {
@@ -418,69 +452,30 @@ export function executeWorktreeCloseout({
       ownerError.code = 'worktree_closeout_effect_owner_active';
       throw ownerError;
     }
-    const recoveryPath = `${effectPath}.recovery`;
-    const recoveryTemporary = `${recoveryPath}.${process.pid}.${randomUUID()}.tmp`;
-    try {
-      writeFileSync(recoveryTemporary, `${canonicalJson({
-        schemaVersion: 'agent-browser.worktree-closeout-recovery-guard.v1',
-        operationId: operation.operationId,
-        ownerPid: process.pid,
-      })}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600, flush: true });
-      linkSync(recoveryTemporary, recoveryPath);
-    } catch (recoveryError) {
-      if (recoveryError?.code === 'EEXIST') {
-        const guard = JSON.parse(readFileSync(recoveryPath, 'utf8'));
-        if (
-          guard.schemaVersion === 'agent-browser.worktree-closeout-recovery-guard.v1'
-          && guard.operationId === operation.operationId
-          && Number.isInteger(guard.ownerPid)
-          && processAlive(guard.ownerPid)
-        ) {
-          return { outcome: 'joined_recovery', operationId: operation.operationId };
-        }
-        try {
-          unlinkSync(recoveryPath);
-        } catch (unlinkError) {
-          if (unlinkError?.code !== 'ENOENT') throw unlinkError;
-        }
-        return executeWorktreeCloseout({
-          operationPath,
-          adapter,
-          recover,
-          faultInjector,
-          processAlive,
-        });
-      }
-      throw recoveryError;
-    } finally {
-      try {
-        unlinkSync(recoveryTemporary);
-      } catch (unlinkError) {
-        if (unlinkError?.code !== 'ENOENT') throw unlinkError;
-      }
+    generation += 1;
+  }
+  const effect = {
+    schemaVersion: 'agent-browser.worktree-closeout-effect.v1',
+    operationId: operation.operationId,
+    generation,
+    ownerPid: process.pid,
+  };
+  const claimedEffectPath = effectClaimPath(generation);
+  const effectTemporary = `${claimedEffectPath}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(effectTemporary, `${canonicalJson(effect)}\n`, {
+    encoding: 'utf8',
+    flag: 'wx',
+    mode: 0o600,
+    flush: true,
+  });
+  try {
+    linkSync(effectTemporary, claimedEffectPath);
+    syncDirectory(dirname(claimedEffectPath));
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      return { outcome: recover ? 'joined_recovery' : 'joined_in_progress', operationId: operation.operationId };
     }
-    try {
-      const confirmed = JSON.parse(readFileSync(effectPath, 'utf8'));
-      if (
-        confirmed.generation !== existing.generation
-        || confirmed.ownerPid !== existing.ownerPid
-      ) {
-        return { outcome: 'joined_recovery', operationId: operation.operationId };
-      }
-      if (confirmed.ownerPid !== process.pid && processAlive(confirmed.ownerPid)) {
-        const ownerError = new Error(`worktree_closeout_effect_owner_active:${confirmed.ownerPid}`);
-        ownerError.code = 'worktree_closeout_effect_owner_active';
-        throw ownerError;
-      }
-      generation = confirmed.generation + 1;
-      atomicWriteJson(effectPath, {
-        ...effect,
-        generation,
-        recoveredFromGeneration: confirmed.generation,
-      });
-    } finally {
-      unlinkSync(recoveryPath);
-    }
+    throw error;
   } finally {
     try {
       unlinkSync(effectTemporary);
@@ -490,11 +485,12 @@ export function executeWorktreeCloseout({
   }
 
   const assertFence = () => {
-    const current = JSON.parse(readFileSync(effectPath, 'utf8'));
+    const current = JSON.parse(readFileSync(claimedEffectPath, 'utf8'));
     if (
       current.operationId !== operation.operationId
       || current.generation !== generation
       || current.ownerPid !== process.pid
+      || existsSync(effectClaimPath(generation + 1))
     ) {
       const fenceError = new Error(`worktree_closeout_fence_superseded:${operation.operationId}`);
       fenceError.code = 'worktree_closeout_fence_superseded';
@@ -575,5 +571,8 @@ export function executeWorktreeCloseout({
     removal,
   };
   atomicWriteJson(receiptPath, receipt);
+  if (typeof adapter.verifyTerminalReceipt === 'function') {
+    adapter.verifyTerminalReceipt(operation.request, receipt);
+  }
   return { outcome: 'committed', receipt };
 }

@@ -21,6 +21,8 @@ import {
   digestExecutableInputClosure,
   encodeBuildSupportManifest,
 } from './candidate-executable-input.js';
+import { inspectWorktreeCloseout } from './worktree-closeout-filesystem-adapter.js';
+import { worktreeCloseoutOperationPath } from './worktree-closeout.js';
 
 const SEALED_ARTIFACT_SCHEMA_VERSION = 'agent-browser.sealed-artifact.v1';
 const BUILD_IDENTITY_SCHEMA_VERSION = 'agent-browser.candidate-build-identity.v1';
@@ -211,6 +213,25 @@ export function createCandidateBuildFilesystemAdapter({
     syncDirectory(dirname(path));
   }
 
+  function selectedCloseoutPath() {
+    if (!existsSync(join(root, '.git'))) return null;
+    const inspection = inspectWorktreeCloseout({ repositoryRoot: root, worktreePath: root });
+    const path = worktreeCloseoutOperationPath({
+      stateRoot: inspection.coordinationStateRoot,
+      repositoryId: inspection.repositoryId,
+      worktreeIncarnation: inspection.worktreeIncarnation,
+    });
+    if (!existsSync(path)) return null;
+    const operation = readJson(path);
+    const receipt = `${path}.${operation.operationId}.receipt.json`;
+    return existsSync(receipt) ? null : path;
+  }
+
+  function assertNoSelectedCloseout() {
+    const path = selectedCloseoutPath();
+    if (path) fail('candidate_build_worktree_closeout_active', path);
+  }
+
   return {
     async lookupSealed(plan) {
       const completed = completionPath(plan);
@@ -274,11 +295,22 @@ export function createCandidateBuildFilesystemAdapter({
       mkdirSync(dirname(path), { recursive: true });
       const operationId = operationIdFactory();
       const recoveryGuard = `${path}.recovery`;
+      assertNoSelectedCloseout();
       if (existsSync(recoveryGuard)) {
         fail('candidate_build_recovery_in_progress', recoveryGuard);
       }
       try {
         createClaim(path, plan, operationId);
+        try {
+          assertNoSelectedCloseout();
+        } catch (error) {
+          const created = readJson(path);
+          if (created.operationId === operationId) {
+            unlinkSync(path);
+            syncDirectory(dirname(path));
+          }
+          throw error;
+        }
         return { acquired: true, operationId, claimPath: path };
       } catch (error) {
         if (error?.code !== 'EEXIST') throw error;

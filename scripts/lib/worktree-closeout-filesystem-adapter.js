@@ -153,6 +153,33 @@ export function discoverPinnedCandidates(worktreePath) {
   return [...byCandidate.values()].sort((left, right) => left.candidateId.localeCompare(right.candidateId));
 }
 
+export function discoverActiveCandidateBuilds(worktreePath) {
+  const root = realpathSync(worktreePath);
+  const claimsRoot = join(root, 'cli', 'target', 'candidate-build-state', 'claims');
+  if (!existsSync(claimsRoot)) return [];
+  const active = [];
+  for (const entry of readdirSync(claimsRoot, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const claimPath = join(claimsRoot, entry.name);
+    const claim = JSON.parse(readFileSync(claimPath, 'utf8'));
+    if (claim.state !== 'building') continue;
+    if (
+      claim.schemaVersion !== 'agent-browser.candidate-build-claim.v1'
+      || typeof claim.operationId !== 'string'
+      || typeof claim.requestDigest !== 'string'
+    ) {
+      fail('worktree_closeout_candidate_claim_invalid', claimPath);
+    }
+    active.push({
+      operationId: claim.operationId,
+      requestDigest: claim.requestDigest,
+      ownerPid: claim.ownerPid ?? null,
+      claimPath,
+    });
+  }
+  return active.sort((left, right) => left.operationId.localeCompare(right.operationId));
+}
+
 function verifyArchive(locator) {
   for (const artifact of locator.artifacts) {
     const path = checkedArtifactPath(locator.archiveRoot, artifact.relativePath);
@@ -323,6 +350,13 @@ export function createWorktreeCloseoutFilesystemAdapter({
     if (!existsSync(request.worktreePath)) {
       if (allowDisposed) return [];
       fail('worktree_closeout_worktree_missing_before_effect', request.worktreePath);
+    }
+    const activeBuilds = discoverActiveCandidateBuilds(request.worktreePath);
+    if (activeBuilds.length > 0) {
+      fail(
+        'worktree_closeout_candidate_build_active',
+        activeBuilds.map(({ operationId }) => operationId).join(','),
+      );
     }
     const discovered = discoverPinnedCandidates(request.worktreePath);
     const expected = new Map((request.pinnedCandidates ?? [])

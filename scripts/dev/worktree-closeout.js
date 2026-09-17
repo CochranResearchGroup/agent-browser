@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import {
   beginOrJoinWorktreeCloseout,
   executeWorktreeCloseout,
 } from '../lib/worktree-closeout.js';
 import {
   createWorktreeCloseoutFilesystemAdapter,
+  discoverActiveCandidateBuilds,
   discoverPinnedCandidates,
   inspectWorktreeCloseout,
 } from '../lib/worktree-closeout-filesystem-adapter.js';
@@ -86,11 +88,13 @@ function main() {
       worktreePath: required(options, 'worktree'),
     });
     const pinnedCandidates = discoverPinnedCandidates(inspection.worktreePath);
+    const activeCandidateBuilds = discoverActiveCandidateBuilds(inspection.worktreePath);
     print({
       effect: 'none',
       request: {
         schemaVersion: 'agent-browser.worktree-closeout-request.v1',
         ...inspection,
+        activeCandidateBuilds,
         pinnedCandidates,
         candidateDispositions: [],
       },
@@ -116,6 +120,29 @@ function main() {
     return;
   }
 
+  if (command === 'lookup-archive') {
+    const repositoryRoot = resolve(options['repository-root'] ?? process.cwd());
+    if (!options['candidate-id']) fail('--candidate-id is required');
+    const commonGitDirectory = resolve(
+      repositoryRoot,
+      execFileSync('git', ['rev-parse', '--git-common-dir'], {
+        cwd: repositoryRoot,
+        encoding: 'utf8',
+      }).trim(),
+    );
+    const stateRoot = join(commonGitDirectory, 'agent-browser-worktree-closeout');
+    const adapter = createWorktreeCloseoutFilesystemAdapter({
+      repositoryRoot,
+      stateRoot,
+      archiveRoot: join(stateRoot, 'candidate-archives'),
+    });
+    const locator = adapter.resolveArchivedCandidate(options['candidate-id']);
+    print(locator
+      ? { outcome: 'found', effect: 'none', locator }
+      : { outcome: 'not_found', effect: 'none', candidateId: options['candidate-id'] });
+    return;
+  }
+
   if (command === 'apply') {
     const operationPath = required(options, 'operation');
     if (!options.apply) {
@@ -137,7 +164,6 @@ function main() {
     const repositoryRoot = required(options, 'repository-root');
     const operation = JSON.parse(readFileSync(operationPath, 'utf8'));
     assertOperationLocation(operationPath, operation.request.coordinationStateRoot);
-    assertCurrentInspection(repositoryRoot, operation.request);
     const adapter = createWorktreeCloseoutFilesystemAdapter({
       repositoryRoot,
       stateRoot: operation.request.coordinationStateRoot,
@@ -151,7 +177,7 @@ function main() {
     return;
   }
 
-  fail('expected inspect, begin, or apply');
+  fail('expected inspect, begin, lookup-archive, or apply');
 }
 
 try {
