@@ -1043,6 +1043,87 @@ records, then cut CLI callers over in bounded slices. Move records and policy
 together; do not stop at a types-only extraction. Retain adapter-specific tests
 for Service State joins and move pure behavior tests to the model interface.
 
+## Checkpoint 19 | Presentation Capacity Deep Kernel
+
+State transition: the provider-free model crate now owns the complete durable
+presentation-capacity record family and deterministic kernel. The CLI capacity
+module is an observation and inventory adapter: it qualifies Service State
+records into ordered immutable observations, delegates policy to the model,
+and retains no reserve arithmetic, queue ordering, conflict precedence,
+transition graph, dispatch, or reconciliation mutation.
+
+Acceptance state and progress classification: this P1 deep-kernel packet is
+accepted locally. It is not a types-only extraction. The model owns serde and
+default compatibility, constructor validation, ordinary and bound admission,
+pressure prefixes, protected reserves, browser exclusion, request-dependent
+conflict precedence, bounded queue aging, deterministic dispatch, transition
+and scene fencing, binding reflection, quarantine, reconciliation, warnings,
+and projections. The CLI owns route, display, browser, viewer, acquisition,
+handoff, and provider inventory joins.
+
+Compatibility evidence:
+
+- all 117 service-model tests pass, including 19 presentation-capacity kernel
+  tests covering serde, exact errors, reserves, pressure, queue clock and aging,
+  admission versus dispatch counting, conflict precedence, bound recovery,
+  route switching, transitions, quarantine, warnings, and reconciliation;
+- five CLI adapter tests pass for authoritative binding, live-handoff
+  substantiation, controller and viewer facts, qualified inventory, and a late
+  controller fencing staging;
+- all 61 presentation-focused, 99 service-health-focused, and 36
+  configured-adapter-focused CLI tests pass;
+- the production inventory outage fence test and all three route-switch tests
+  pass;
+- the exact CLI manifest compiles, strict workspace Clippy passes with warnings
+  denied, formatting and diff checks pass, and the architecture guard plus its
+  fixtures pass;
+- the duplicate-definition and forbidden-upward-reference scans pass;
+- no GitHub CI, browser, profile, provider, install, staging, production,
+  release, or shared-runtime effect was performed.
+
+Delegation and model-choice receipt:
+
+- `/root/p205_capacity_minimal_interface`, requested `gpt-6-astra` at high
+  effort for the frozen model files, implemented the kernel and its 19 tests;
+- `/root/p205_capacity_flexible_interface`, requested `gpt-5.6-sol` at high
+  effort, completed the read-only caller and mutation ledger; its later adapter
+  implementation attempt was interrupted after it produced no coherent file,
+  and no implementation claim from that attempt was trusted;
+- `/root/p205_capacity_common_interface`, requested `gpt-5.6-luna` at medium
+  effort, performed the closed-world compatibility audit that fixed the
+  required Service State joins, optional-identity behavior, error ordering,
+  and retained test set;
+- the primary integrated the Service State adapter, caller cutover, retained
+  join tests, and all acceptance evidence.
+
+Transitional caller-removal ledger: authority fields remain public only while
+inventory refresh, presentation lifecycle, abandoned-browser retirement,
+resource inspection, and retained-state guards are converted to typed model
+operations or immutable accessors. The known mutation owners are
+`presentation_inventory.rs`, `presentation_inventory/production.rs`,
+`presentation_lifecycle.rs`, `service_abandoned_browser_retirement.rs`, and
+the inventory-failure path in `service_store.rs`. Test fixtures may use public
+record construction until their owning production mutation is closed.
+
+Deletion test: deleting the model module now removes every capacity record and
+all capacity decisions. The CLI adapter contains only qualified inventory and
+observation joins plus delegation functions. Recreating the deleted module
+would require rebuilding serde compatibility, reserve and pressure policy,
+queue aging, conflict precedence, bound and route-switch custody, transition
+fencing, quarantine, dispatch, and reconciliation.
+
+Material blockers: the capacity authority fields are still a transitional
+cross-crate compatibility surface. The typed mutation closure above must land
+before those fields become private. The canonical Service State aggregate,
+codec and migration behavior, runtime-owner authority, effect transaction
+families, authentication and challenge records, and capability registry remain
+outside the model crate.
+
+Next action: close external presentation-capacity mutation through typed
+inventory, lifecycle, and retirement operations, then make authority fields
+private behind immutable accessors. Do not broaden that packet into provider
+effects or the canonical aggregate move.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -1050,9 +1131,9 @@ for Service State joins and move pure behavior tests to the model interface.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | eighteen families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | seventeen checkpoints and eighteen families accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | seventeen checkpoints accepted |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | presentation-capacity kernel accepted; aggregate interface pending |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | nineteen checkpoints and nineteen families accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | nineteen checkpoints accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | available; local use pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
