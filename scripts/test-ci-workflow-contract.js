@@ -5,6 +5,11 @@ import { readFileSync } from 'node:fs';
 
 const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 
+assert.match(workflow, /^on:\n  pull_request:\n    branches: \[main\]\n/m);
+assert.doesNotMatch(workflow, /^  push:/m, 'CI must not run after merges to main');
+assert.doesNotMatch(workflow, /^  workflow_dispatch:/m, 'CI must not expose a full-suite manual dispatch');
+assert.doesNotMatch(workflow, /^  schedule:/m, 'CI must not schedule periodic full-suite runs');
+assert.doesNotMatch(workflow, /\[full ci\]/, 'commit messages must not activate full CI');
 assert.match(
   workflow,
   /concurrency:\s+group: ci-\$\{\{ github\.workflow \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\s+cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/,
@@ -22,7 +27,6 @@ for (const [job, output] of [
   ['dashboard', 'dashboard'],
   ['service-client', 'service_client'],
   ['workstation-fixtures', 'workstation'],
-  ['comprehensive', 'comprehensive'],
 ]) {
   const escapedJob = job.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   assert.match(
@@ -33,7 +37,7 @@ for (const [job, output] of [
 }
 
 assert.match(workflow, /presubmit:\s+name: Presubmit\s+if: always\(\)/);
-for (const dependency of ['classify', 'docs', 'version-sync', 'rust-quality', 'rust-tests', 'dashboard', 'service-client', 'workstation-fixtures', 'comprehensive']) {
+for (const dependency of ['classify', 'docs', 'version-sync', 'rust-quality', 'rust-tests', 'dashboard', 'service-client', 'workstation-fixtures']) {
   assert.match(workflow, new RegExp(`\\n      - ${dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\n|$)`));
 }
 assert.match(workflow, /name: Verify selected jobs[\s\S]*?shell: bash[\s\S]*?set -euo pipefail[\s\S]*?node scripts\/ci\/verify-presubmit\.js \| tee presubmit-receipt\.json/);
@@ -42,7 +46,9 @@ assert.match(workflow, /rust-tests:[\s\S]*?name: Run no-launch service smokes\s+
 assert.match(workflow, /name: Run affected Rust compartments[\s\S]*?if \[\[ "\$compartment" == cli-\* \]\][\s\S]*?run_lane "\$\{cli_compartments\[@\]\}"[\s\S]*?run_lane "\$\{support_compartments\[@\]\}"/);
 assert.doesNotMatch(workflow, /xargs -r -P2[\s\S]*?rust-tests\.sh --compartment/);
 assert.match(workflow, /name: Upload presubmit receipts[\s\S]*?if: always\(\)/);
-assert.match(workflow, /qualification_args=\(--qualification comprehensive\)/);
-assert.match(workflow, /schedule:\s+- cron: '17 5 1 \* \*'/);
+for (const removedJob of ['comprehensive', 'rust-cross', 'native-e2e', 'windows-integration', 'global-install']) {
+  assert.doesNotMatch(workflow, new RegExp(`\\n  ${removedJob}:`), `${removedJob} must not exist in CI`);
+}
+assert.doesNotMatch(workflow, /--qualification comprehensive/);
 
 console.log('CI workflow selection and aggregate contract checks passed');

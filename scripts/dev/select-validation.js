@@ -9,30 +9,23 @@ const args = process.argv.slice(2);
 const baseArgIndex = args.findIndex((arg) => arg === '--base');
 const headArgIndex = args.findIndex((arg) => arg === '--head');
 const githubOutputArgIndex = args.findIndex((arg) => arg === '--github-output');
-const qualificationArgIndex = args.findIndex((arg) => arg === '--qualification');
 const json = args.includes('--json');
 const ci = args.includes('--ci');
 const base = baseArgIndex >= 0 ? args[baseArgIndex + 1] : defaultBase();
 const head = headArgIndex >= 0 ? args[headArgIndex + 1] : 'HEAD';
 const githubOutput = githubOutputArgIndex >= 0 ? args[githubOutputArgIndex + 1] : null;
-const qualificationMode = qualificationArgIndex >= 0 ? args[qualificationArgIndex + 1] : undefined;
 
-if (!base || !head || (githubOutputArgIndex >= 0 && !githubOutput) || (qualificationArgIndex >= 0 && !qualificationMode)) {
-  console.error('Missing value for --base, --head, --github-output, or --qualification');
+if (args.includes('--qualification')) {
+  console.error('--qualification is no longer supported; CI has no full-suite route');
   process.exit(2);
 }
-if (qualificationMode && qualificationMode !== 'comprehensive') {
-  console.error(`Unsupported qualification mode: ${qualificationMode}`);
+if (!base || !head || (githubOutputArgIndex >= 0 && !githubOutput)) {
+  console.error('Missing value for --base, --head, or --github-output');
   process.exit(2);
 }
 
 const files = changedFiles(base, head, { includeWorktree: !ci });
-const effectiveQualificationMode = qualificationMode ?? (
-  files.includes('package.json') && packageJsonFieldsChanged(base, dependencyMetadataFields())
-    ? 'comprehensive'
-    : undefined
-);
-const selection = classifyValidationSelection(files, { qualificationMode: effectiveQualificationMode });
+const selection = classifyValidationSelection(files);
 const recommendations = selectRecommendations(files, base);
 const report = { base, head, ...selection, recommendations };
 
@@ -96,7 +89,6 @@ function writeGithubOutputs(path, report) {
     service_client: report.jobs.serviceClient,
     service_smokes: report.serviceSmokes,
     workstation: report.jobs.workstation,
-    comprehensive: report.jobs.comprehensive,
     rust_compartments: JSON.stringify(report.rustCompartments),
     base: report.base,
     head: report.head,
