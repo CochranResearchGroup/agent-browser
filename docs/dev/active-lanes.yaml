@@ -22,3 +22,24 @@ lanes:
     reconciled_overlaps: [P202]
     blocker: exact-head forge evaluation and protected integration remain; every live challenge effect stays with issue #66
     updated_at: 2026-09-16
+  - id: P207
+    product_lane: PL-BUGFIX
+    objective: Make tab_handle_refresh reuse only caller-bound targets and return explicit cleanup proof
+    plan: docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md
+    plan_ref: refs/remotes/origin/fix/p207-tab-handle-refresh-custody
+    branch: fix/p207-tab-handle-refresh-custody
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 2632e31ce34e62873598088d0c92c498357aafe2
+    remote_ref: refs/remotes/origin/fix/p207-tab-handle-refresh-custody
+    integration_receipt: null
+    integration: merge through the protected pull-request workflow after provider-free custody regression, public response parity, and changed-surface local validation
+    validation_status: diagnosis complete; pure red regression and implementation pending
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#175]
+    dependencies: [P197]
+    overlaps: [P197:service-request-contract-and-docs, P204:docs/dev/active-lanes.yaml, P205:ServiceTabHandle-model-boundary]
+    reconciled_overlaps: [P207 owns browser-lifecycle repair and direct tests; P197 retains shared public contract files until its checkpoint; P207 does not edit P205 model files; P207 adds only its own catalog entry]
+    blocker: public contract parity waits for the P197 shared checkpoint; provider-free browser-lifecycle repair can proceed independently without Service-model edits
+    updated_at: 2026-09-16

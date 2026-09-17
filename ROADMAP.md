@@ -25,6 +25,21 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P207 | Tab Handle Refresh Custody Repair
+
+State: OPEN
+
+Current state: [Plan 0207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)
+and [issue #175](https://github.com/CochranResearchGroup/agent-browser/issues/175)
+record the bounded PL-BUGFIX repair. The current handler may select a foreign
+or unattributed `about:blank` target by URL alone, synthesize a handle with
+stale caller metadata, and omit explicit top-level cleanup-attempt proof. P207
+will first add a pure provider-free red regression, then require canonical
+caller custody for reuse and cleanup. Shared public contract files wait for the
+P197 checkpoint, and P207 will not edit P205 Service State model sources. Full
+CI, installed-runtime mutation, provider effects, credentials, production, and
+release work are outside this plan.
+
 ## P203 | Runtime Host Admission Routing
 
 State: CLOSED
