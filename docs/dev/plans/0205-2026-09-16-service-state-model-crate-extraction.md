@@ -2225,16 +2225,91 @@ Progress classification: this interface freeze is blocker reduction, not
 acceptance. The next and only implementation outcome is the Service challenge
 envelope extraction. Aggregate and codec closure remains a later packet.
 
+## Checkpoint 36 | Service Challenge Envelope Accepted
+
+State transition: Service Model now owns the canonical durable Service
+challenge record, state, private pending-effect fence, registered intent
+constants, typed start, resume, cancel, error and projection vocabulary, and
+all provider-free envelope decisions. `ServiceState.challenge_tasks` uses the
+canonical record and crate-owned empty-map predicate directly. Service Status
+and resource projections call the crate-owned summary directly. The CLI module
+is reduced from 1,058 to 851 lines and no longer defines a durable challenge
+record or duplicates a pure envelope transition.
+
+Compatibility and boundary evidence:
+
+- start still joins and validates the current retained handle before hashing
+  or idempotent replay. The model preserves the exact hashing tuple, stable
+  24-hex ID suffix, schema, camelCase wire shape, defaults, unknown-field
+  rejection, opaque receipt, and operation and idempotency redaction;
+- resume preparation preserves task, principal, operation replay, terminal,
+  timestamp, and deadline ordering before the CLI performs current-tab lookup.
+  Completion reproduces the exact selected-handle lease, principal, identity,
+  and trace predicate before deterministic Challenge Control execution;
+- cancellation preserves replay before terminal and timestamp checks and still
+  performs no deadline or current-handle validation. Resume and cancellation
+  retain the parsed RFC3339 offset exactly;
+- consumer orchestration remains CLI-owned in its prior order. Only the final
+  opaque receipt decode and typed Challenge Control admission decision moved
+  behind the model seam. Malformed evidence fails closed, and typed invalid
+  evidence retains the distinct no-detail error string;
+- projection key names and transition-count semantics, nullable terminal
+  fields, opaque receipt value, effect-pending flag, and summary counts remain
+  exact. Repository creation, raw parsing, clocks, current-state and policy
+  joins, dispatch, and response serialization remain CLI adapters; and
+- the architecture contract requires the module, canonical definitions,
+  exported public vocabulary, three constants, ten pure decisions, direct
+  aggregate type, and active serde predicate exactly once. Negative fixtures
+  cover missing ownership and exports, CLI duplicates, indirect aggregate
+  types, duplicate decisions, and commented or borrowed predicates.
+
+Validation evidence:
+
+- 136 Service Model unit tests and fourteen integration tests pass, including
+  nine new challenge-envelope unit tests;
+- six focused challenge-task CLI tests pass through the repository runner,
+  including durable dispatch replay and closed request fields. A direct Cargo
+  filter first exhausted the default test stack in the state-heavy dispatch
+  fixture; the prescribed focused runner supplied the repository's 16 MiB test
+  stack and passed the same six tests;
+- three authentication admission tests, two challenge-navigation tests, the
+  shared navigation-admission test, 41 focused Service Model CLI tests, 49
+  Service Status tests, and 39 Service Resources tests pass;
+- Service API and MCP parity, generated-client contract and type checks,
+  formatting, strict workspace Clippy, diff hygiene, the architecture guard,
+  and all guard mutation fixtures pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_challenge_seam_inventory`
+used requested `gpt-5.6-sol` high routing for a read-only owner, caller, and
+error-order inventory. `/root/p205_challenge_model_extract` used requested
+`gpt-5.6-terra` high routing and wrote only the new Service Model module and
+its unit tests; the primary owned exports, CLI cutover, aggregate references,
+guards, validation, and publication. Fresh `/root/p205_challenge_review` used
+requested `gpt-6-astra` high routing and found one P2 compatibility drift:
+resume and cancellation normalized nonzero RFC3339 offsets to UTC. The finding
+was accepted and repaired with nonzero-offset regression assertions. The
+runtime did not independently expose effective model metadata.
+
+Acceptance state and progress classification: the Service challenge envelope
+is accepted as outcome progress. Every previously embedded authentication and
+challenge owner named by Checkpoint 31 now has its canonical provider-free
+owner. The next action is a separate aggregate and codec closure freeze: move
+the canonical `ServiceState`, compatibility codec, revision access, and
+unknown-field preservation, then close remaining pure decisions before facade
+deletion. Do not combine that freeze with runtime, bug-fix, CI, or release work.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twenty-two families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twenty-three families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | presentation-capacity kernel accepted; aggregate interface pending |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | Service authentication envelope accepted through Checkpoint 34 |
+| Focused correctness | crate tests and affected CLI adapter tests | Service challenge envelope accepted through Checkpoint 36 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

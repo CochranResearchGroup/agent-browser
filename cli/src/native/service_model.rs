@@ -2186,10 +2186,10 @@ pub struct ServiceState {
     /// bindings and redacted receipts, never credentials or captured evidence.
     #[serde(
         default,
-        skip_serializing_if = "super::service_challenge_task::challenge_task_map_is_empty"
+        skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty"
     )]
     pub(crate) challenge_tasks:
-        BTreeMap<String, super::service_challenge_task::ServiceChallengeTaskRecord>,
+        BTreeMap<String, agent_browser_service_model::ServiceChallengeTaskRecord>,
     pub profile_seeding_handoffs: BTreeMap<String, ProfileSeedingHandoffRecord>,
     #[serde(
         default,

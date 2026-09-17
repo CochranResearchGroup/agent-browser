@@ -86,6 +86,47 @@ const SERVICE_AUTHENTICATION_DECISIONS = [
   'authentication_run_map_is_empty',
 ];
 
+const SERVICE_CHALLENGE_DEFINITIONS = [
+  'ServiceChallengeTaskState',
+  'ServiceChallengeTaskSummary',
+  'PendingChallengeTaskEffect',
+  'ChallengeTaskEffectKind',
+  'ServiceChallengeTaskRecord',
+  'ServiceChallengeTaskStartInput',
+  'PreparedServiceChallengeTaskStart',
+  'ServiceChallengeTaskStartDecision',
+  'ServiceChallengeTaskResumeInput',
+  'PreparedServiceChallengeTaskResume',
+  'ServiceChallengeTaskResumeDecision',
+  'ServiceChallengeTaskCancelInput',
+  'ServiceChallengeTaskCancelDecision',
+  'ServiceChallengeTaskError',
+  'ServiceChallengeTaskProjection',
+];
+
+const SERVICE_CHALLENGE_EXPORTED_DEFINITIONS = SERVICE_CHALLENGE_DEFINITIONS.filter(
+  (name) => !['PendingChallengeTaskEffect', 'ChallengeTaskEffectKind'].includes(name),
+);
+
+const SERVICE_CHALLENGE_DECISIONS = [
+  'prepare_service_challenge_task_start',
+  'complete_service_challenge_task_start',
+  'service_challenge_task_status',
+  'prepare_service_challenge_task_resume',
+  'complete_service_challenge_task_resume',
+  'cancel_service_challenge_task',
+  'project_service_challenge_task',
+  'challenge_task_map_is_empty',
+  'challenge_task_summary',
+  'admit_challenge_consumer_from_receipt',
+];
+
+const SERVICE_CHALLENGE_CONSTANTS = [
+  'SERVICE_CHALLENGE_TASK_SCHEMA_VERSION',
+  'AUTHENTICATION_CHALLENGE_INTENT_ID',
+  'NAVIGATION_CHALLENGE_INTENT_ID',
+];
+
 const SERVICE_MODEL_ALLOWED_DEPENDENCIES = new Set([
   'agent-browser-authentication-control',
   'agent-browser-challenge-control',
@@ -332,6 +373,10 @@ function check(root = repoRoot) {
   const serviceAuthenticationSource = read(root,
     'crates/agent-browser-service-model/src/service_authentication_run.rs');
   const serviceAuthentication = withoutCommentsAndStrings(serviceAuthenticationSource);
+  const serviceChallengePath = join(sourceRoot, 'service_challenge_task.rs');
+  const serviceChallengeSource = read(root,
+    'crates/agent-browser-service-model/src/service_challenge_task.rs');
+  const serviceChallenge = withoutCommentsAndStrings(serviceChallengeSource);
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
 
@@ -591,6 +636,75 @@ function check(root = repoRoot) {
       /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_service_model\s*::\s*authentication_run_map_is_empty["'][^\]]*\)\s*\]/,
     )),
     'CLI ServiceState must use the canonical Service authentication empty-map decision',
+  );
+  requireCondition(existsSync(serviceChallengePath),
+    'service-model must own src/service_challenge_task.rs');
+  const serviceChallengeExport = serviceModelLib.match(
+    /\bpub\s+use\s+service_challenge_task\s*::\s*\{([\s\S]*?)\}\s*;/,
+  );
+  requireCondition(/\bmod\s+service_challenge_task\s*;/.test(serviceModelLib),
+    'service-model lib must declare the Service challenge module');
+  requireCondition(Boolean(serviceChallengeExport),
+    'service-model lib must export the Service challenge interface');
+  for (const name of SERVICE_CHALLENGE_DEFINITIONS) {
+    const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...serviceChallengeSource.matchAll(definition)].length === 1,
+      `service-model Service challenge module must own exactly one definition: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(definition.source).test(source)),
+      `CLI must not duplicate Service challenge definition: ${name}`,
+    );
+    if (SERVICE_CHALLENGE_EXPORTED_DEFINITIONS.includes(name)) {
+      requireCondition(
+        Boolean(serviceChallengeExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+        `service-model lib must export Service challenge definition: ${name}`,
+      );
+    }
+  }
+  for (const name of SERVICE_CHALLENGE_DECISIONS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceChallenge),
+      `service-model must own Service challenge decision: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(`\\bfn\\s+${name}\\b`).test(source)),
+      `CLI must not duplicate Service challenge decision: ${name}`,
+    );
+    requireCondition(
+      Boolean(serviceChallengeExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export Service challenge decision: ${name}`,
+    );
+  }
+  for (const name of SERVICE_CHALLENGE_CONSTANTS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+const\\s+${name}\\b`).test(serviceChallenge),
+      `service-model must own Service challenge constant: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) =>
+        new RegExp(`\\b(?:pub\\s*)?(?:\\(?crate\\)?\\s*)?const\\s+${name}\\b`).test(source)),
+      `CLI must not duplicate Service challenge constant: ${name}`,
+    );
+    requireCondition(
+      Boolean(serviceChallengeExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export Service challenge constant: ${name}`,
+    );
+  }
+  requireCondition(
+    /challenge_tasks\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*ServiceChallengeTaskRecord\s*>/
+      .test(cliServiceModel),
+    'CLI ServiceState must use the canonical service-model Service challenge record',
+  );
+  const serviceChallengeField = withoutComments(cliServiceModelSource).match(
+    /((?:#\s*\[[^\]]*\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?challenge_tasks\s*:/,
+  );
+  requireCondition(
+    Boolean(serviceChallengeField?.[1].match(
+      /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_service_model\s*::\s*challenge_task_map_is_empty["'][^\]]*\)\s*\]/,
+    )),
+    'CLI ServiceState must use the canonical Service challenge empty-map decision',
   );
   for (const name of ABANDONED_RETIREMENT_RECORDS) {
     const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');

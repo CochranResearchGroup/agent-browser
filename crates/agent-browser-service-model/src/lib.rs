@@ -28,6 +28,7 @@ mod profile_reset_receipt;
 mod profile_seeding;
 mod request_provenance;
 mod service_authentication_run;
+mod service_challenge_task;
 mod session_tab;
 mod site_policy;
 mod terminal_outcome;
@@ -159,6 +160,20 @@ pub use service_authentication_run::{
     ServiceAuthenticationRunError, ServiceAuthenticationRunProjection,
     ServiceAuthenticationRunRecord, ServiceAuthenticationRunStartDecision,
     ServiceAuthenticationRunStartInput, SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION,
+};
+pub use service_challenge_task::{
+    admit_challenge_consumer_from_receipt, cancel_service_challenge_task,
+    challenge_task_map_is_empty, challenge_task_summary, complete_service_challenge_task_resume,
+    complete_service_challenge_task_start, prepare_service_challenge_task_resume,
+    prepare_service_challenge_task_start, project_service_challenge_task,
+    service_challenge_task_status, PreparedServiceChallengeTaskResume,
+    PreparedServiceChallengeTaskStart, ServiceChallengeTaskCancelDecision,
+    ServiceChallengeTaskCancelInput, ServiceChallengeTaskError, ServiceChallengeTaskProjection,
+    ServiceChallengeTaskRecord, ServiceChallengeTaskResumeDecision,
+    ServiceChallengeTaskResumeInput, ServiceChallengeTaskStartDecision,
+    ServiceChallengeTaskStartInput, ServiceChallengeTaskState, ServiceChallengeTaskSummary,
+    AUTHENTICATION_CHALLENGE_INTENT_ID, NAVIGATION_CHALLENGE_INTENT_ID,
+    SERVICE_CHALLENGE_TASK_SCHEMA_VERSION,
 };
 pub use session_tab::{
     BrowserSession, BrowserTab, LeaseState, ProfileLeaseDisposition, ProfileSelectionReason,

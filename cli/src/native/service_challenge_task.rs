@@ -7,91 +7,28 @@
 use super::service_model::{LeaseState, ServiceState, ServiceTabHandle};
 use super::service_store::ServiceStateRepository;
 use agent_browser_challenge_control::{
-    admit_challenge_consumer as decide_consumer_admission, challenge_profile,
-    execute_provider_free_task, ChallengeConsumerAdmissionError, ChallengeConsumerAdmissionReceipt,
-    ChallengeConsumerAdmissionRequest, ChallengeConsumerEvidence, ChallengeConsumerKind,
-    ChallengeTaskError, ChallengeTaskFixture, ChallengeTaskRequest,
+    challenge_profile, ChallengeConsumerAdmissionReceipt, ChallengeConsumerAdmissionRequest,
+    ChallengeConsumerKind, ChallengeTaskFixture,
 };
-use chrono::{DateTime, Duration, Utc};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use agent_browser_service_model::{
+    admit_challenge_consumer_from_receipt, cancel_service_challenge_task,
+    complete_service_challenge_task_resume, complete_service_challenge_task_start,
+    prepare_service_challenge_task_resume, prepare_service_challenge_task_start,
+    project_service_challenge_task, service_challenge_task_status,
+    ServiceChallengeTaskCancelDecision, ServiceChallengeTaskCancelInput,
+    ServiceChallengeTaskResumeDecision, ServiceChallengeTaskResumeInput,
+    ServiceChallengeTaskStartDecision, ServiceChallengeTaskStartInput,
+};
+pub(crate) use agent_browser_service_model::{
+    ServiceChallengeTaskRecord, ServiceChallengeTaskState, AUTHENTICATION_CHALLENGE_INTENT_ID,
+    NAVIGATION_CHALLENGE_INTENT_ID,
+};
+use chrono::Utc;
+use serde::Serialize;
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
-
-pub(crate) const SERVICE_CHALLENGE_TASK_SCHEMA_VERSION: &str =
-    "agent-browser.service-challenge-task.v1";
-/// Registered downstream intent used when Authentication Run consumes a task.
-pub(crate) const AUTHENTICATION_CHALLENGE_INTENT_ID: &str = "authentication-run-start";
-/// Registered downstream intent used when navigation consumes a task.
-pub(crate) const NAVIGATION_CHALLENGE_INTENT_ID: &str = "navigation-dispatch";
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ServiceChallengeTaskState {
-    #[default]
-    Ready,
-    Completed,
-    Cancelled,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ServiceChallengeTaskSummary {
-    pub(crate) total_count: usize,
-    pub(crate) active_count: usize,
-    pub(crate) terminal_count: usize,
-    pub(crate) cooldown_count: usize,
-    pub(crate) intervention_count: usize,
-    pub(crate) pending_effect_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct PendingChallengeTaskEffect {
-    operation_id_sha256: String,
-    reserved_at: String,
-    effect_kind: ChallengeTaskEffectKind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[allow(dead_code)] // Reserved custody shape; W5 provider-free execution never creates one.
-enum ChallengeTaskEffectKind {
-    RegisteredResolution,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ServiceChallengeTaskRecord {
-    schema_version: String,
-    task_id: String,
-    request_sha256: String,
-    idempotency_key_sha256: String,
-    created_at: String,
-    deadline_at: String,
-    service_name: String,
-    agent_name: String,
-    task_name: String,
-    principal_id: String,
-    challenge_profile_id: String,
-    site_policy_digest: String,
-    downstream_intent_id: String,
-    fixture: ChallengeTaskFixture,
-    max_transitions: u8,
-    service_tab_handle: ServiceTabHandle,
-    #[serde(default)]
-    state: ServiceChallengeTaskState,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    used_operation_id_sha256s: BTreeSet<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    completed_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    cancelled_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pending_effect: Option<PendingChallengeTaskEffect>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    receipt: Option<Value>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct ChallengeTaskStartIntent {
@@ -248,70 +185,35 @@ fn start_task_in_state(
     created_at: &str,
 ) -> Result<(ServiceChallengeTaskRecord, bool), String> {
     let current = exact_current_handle(state, &intent)?;
-    let idempotency_key_sha256 = canonical_sha256(&intent.idempotency_key)?;
-    let request_sha256 = canonical_sha256(&(
-        &intent.service_name,
-        &intent.agent_name,
-        &intent.task_name,
-        &intent.principal_id,
-        &intent.challenge_profile_id,
-        &intent.site_policy_digest,
-        &intent.downstream_intent_id,
-        intent.fixture,
-        &idempotency_key_sha256,
-        intent.deadline_ms,
-        intent.max_transitions,
-        &current,
-    ))?;
-    if let Some(existing) = state
-        .challenge_tasks
-        .values()
-        .find(|record| record.idempotency_key_sha256 == idempotency_key_sha256)
-    {
-        if existing.request_sha256 != request_sha256 {
-            return Err("challenge_task_idempotency_conflict".to_string());
+    let decision = prepare_service_challenge_task_start(
+        &state.challenge_tasks,
+        ServiceChallengeTaskStartInput {
+            service_name: intent.service_name,
+            agent_name: intent.agent_name,
+            task_name: intent.task_name,
+            principal_id: intent.principal_id,
+            challenge_profile_id: intent.challenge_profile_id,
+            site_policy_digest: intent.site_policy_digest,
+            downstream_intent_id: intent.downstream_intent_id,
+            fixture: intent.fixture,
+            idempotency_key: intent.idempotency_key,
+            deadline_ms: intent.deadline_ms,
+            max_transitions: intent.max_transitions,
+            current_service_tab_handle: current,
+            created_at: created_at.to_string(),
+        },
+    )
+    .map_err(|error| error.cli_message())?;
+    match decision {
+        ServiceChallengeTaskStartDecision::Replayed(record) => Ok((*record, true)),
+        ServiceChallengeTaskStartDecision::Create(prepared) => {
+            let record = complete_service_challenge_task_start(*prepared)
+                .map_err(|error| error.cli_message())?;
+            state
+                .challenge_tasks
+                .insert(record.task_id.clone(), record.clone());
+            Ok((record, false))
         }
-        return Ok((existing.clone(), true));
-    }
-    let created = DateTime::parse_from_rfc3339(created_at)
-        .map_err(|_| "challenge_task_created_at_invalid".to_string())?
-        .with_timezone(&Utc);
-    let deadline_delta = i64::try_from(intent.deadline_ms)
-        .map_err(|_| "challenge_task_deadline_invalid".to_string())?;
-    let task_id = format!("challenge-task-{}", &request_sha256[..24]);
-    let record = ServiceChallengeTaskRecord {
-        schema_version: SERVICE_CHALLENGE_TASK_SCHEMA_VERSION.to_string(),
-        task_id: task_id.clone(),
-        request_sha256,
-        idempotency_key_sha256,
-        created_at: created.to_rfc3339(),
-        deadline_at: (created + Duration::milliseconds(deadline_delta)).to_rfc3339(),
-        service_name: intent.service_name,
-        agent_name: intent.agent_name,
-        task_name: intent.task_name,
-        principal_id: intent.principal_id,
-        challenge_profile_id: intent.challenge_profile_id,
-        site_policy_digest: intent.site_policy_digest,
-        downstream_intent_id: intent.downstream_intent_id,
-        fixture: intent.fixture,
-        max_transitions: intent.max_transitions,
-        service_tab_handle: current,
-        state: ServiceChallengeTaskState::Ready,
-        used_operation_id_sha256s: BTreeSet::new(),
-        completed_at: None,
-        cancelled_at: None,
-        pending_effect: None,
-        receipt: None,
-    };
-    state.challenge_tasks.insert(task_id, record.clone());
-    Ok((record, false))
-}
-
-fn caller_owns_task(principal_id: &str, record: &ServiceChallengeTaskRecord) -> Result<(), String> {
-    if record.principal_id == principal_id {
-        Ok(())
-    } else {
-        Err("challenge_task_principal_mismatch".to_string())
     }
 }
 
@@ -387,7 +289,9 @@ pub(crate) fn admit_challenge_consumer(
         .challenge_tasks
         .get(challenge_task_id)
         .ok_or_else(|| "challenge_consumer_task_not_found".to_string())?;
-    caller_owns_task(principal_id, record)?;
+    if record.principal_id != principal_id {
+        return Err("challenge_task_principal_mismatch".to_string());
+    }
     if record.state != ServiceChallengeTaskState::Completed {
         return Err("challenge_consumer_task_not_completed".to_string());
     }
@@ -396,15 +300,8 @@ pub(crate) fn admit_challenge_consumer(
         return Err("challenge_consumer_service_tab_handle_mismatch".to_string());
     }
     let site_policy_digest = effective_site_policy_digest(state, site_policy_id)?;
-    let evidence: ChallengeConsumerEvidence = serde_json::from_value(
-        record
-            .receipt
-            .clone()
-            .ok_or_else(|| "challenge_consumer_receipt_missing".to_string())?,
-    )
-    .map_err(|error| format!("challenge_consumer_receipt_invalid:{error}"))?;
-    decide_consumer_admission(
-        &evidence,
+    admit_challenge_consumer_from_receipt(
+        record.receipt.as_ref(),
         ChallengeConsumerAdmissionRequest {
             consumer,
             consumer_operation_id: consumer_operation_id.to_string(),
@@ -412,23 +309,7 @@ pub(crate) fn admit_challenge_consumer(
             expected_downstream_intent_id: downstream_intent_id.to_string(),
         },
     )
-    .map_err(|error| match error {
-        ChallengeConsumerAdmissionError::InvalidRequest => {
-            "challenge_consumer_request_invalid".to_string()
-        }
-        ChallengeConsumerAdmissionError::InvalidReceipt => {
-            "challenge_consumer_receipt_invalid".to_string()
-        }
-        ChallengeConsumerAdmissionError::SitePolicyMismatch => {
-            "challenge_consumer_site_policy_mismatch".to_string()
-        }
-        ChallengeConsumerAdmissionError::DownstreamIntentMismatch => {
-            "challenge_consumer_downstream_intent_mismatch".to_string()
-        }
-        ChallengeConsumerAdmissionError::ChallengeWithheld => {
-            "challenge_consumer_admission_withheld".to_string()
-        }
-    })
+    .map_err(|error| error.cli_message())
 }
 
 fn status_task_in_state(
@@ -436,12 +317,8 @@ fn status_task_in_state(
     task_id: &str,
     principal_id: &str,
 ) -> Result<ServiceChallengeTaskRecord, String> {
-    let record = state
-        .challenge_tasks
-        .get(task_id)
-        .ok_or_else(|| "challenge_task_not_found".to_string())?;
-    caller_owns_task(principal_id, record)?;
-    Ok(record.clone())
+    service_challenge_task_status(&state.challenge_tasks, task_id, principal_id)
+        .map_err(|error| error.cli_message())
 }
 
 fn resume_task_in_state(
@@ -451,55 +328,30 @@ fn resume_task_in_state(
     operation_id: &str,
     resumed_at: &str,
 ) -> Result<(ServiceChallengeTaskRecord, bool), String> {
-    let snapshot = status_task_in_state(state, task_id, principal_id)?;
-    let operation_id_sha256 = canonical_sha256(&operation_id)?;
-    if snapshot
-        .used_operation_id_sha256s
-        .contains(&operation_id_sha256)
-    {
-        return Ok((snapshot, true));
-    }
-    if snapshot.state != ServiceChallengeTaskState::Ready {
-        return Err("challenge_task_not_resumable".to_string());
-    }
-    let resumed = DateTime::parse_from_rfc3339(resumed_at)
-        .map_err(|_| "challenge_task_resumed_at_invalid".to_string())?;
-    let deadline = DateTime::parse_from_rfc3339(&snapshot.deadline_at)
-        .map_err(|_| "challenge_task_deadline_invalid".to_string())?;
-    if resumed > deadline {
-        return Err("challenge_task_deadline_exceeded".to_string());
-    }
-    require_current_record_handle(state, &snapshot)?;
-    let profile = challenge_profile(&snapshot.challenge_profile_id)
-        .copied()
-        .ok_or_else(|| "challenge_task_profile_not_registered".to_string())?;
-    let receipt = execute_provider_free_task(ChallengeTaskRequest {
-        task_id: snapshot.task_id.clone(),
-        profile,
-        site_policy_digest: snapshot.site_policy_digest.clone(),
-        downstream_intent_id: snapshot.downstream_intent_id.clone(),
-        fixture: snapshot.fixture,
-        max_transitions: snapshot.max_transitions,
-    })
-    .map_err(|error| match error {
-        ChallengeTaskError::InvalidRequest => "challenge_task_execution_invalid".to_string(),
-        ChallengeTaskError::TransitionBudgetExceeded => {
-            "challenge_task_transition_budget_exceeded".to_string()
+    let decision = prepare_service_challenge_task_resume(
+        &state.challenge_tasks,
+        ServiceChallengeTaskResumeInput {
+            task_id: task_id.to_string(),
+            principal_id: principal_id.to_string(),
+            operation_id: operation_id.to_string(),
+            resumed_at: resumed_at.to_string(),
+        },
+    )
+    .map_err(|error| error.cli_message())?;
+    match decision {
+        ServiceChallengeTaskResumeDecision::Replayed(record) => Ok((*record, true)),
+        ServiceChallengeTaskResumeDecision::Execute(prepared) => {
+            let current = state
+                .service_tab_handle(prepared.service_tab_id())
+                .ok_or_else(|| "challenge_task_service_tab_handle_missing".to_string())?;
+            let record = complete_service_challenge_task_resume(*prepared, current)
+                .map_err(|error| error.cli_message())?;
+            state
+                .challenge_tasks
+                .insert(record.task_id.clone(), record.clone());
+            Ok((record, false))
         }
-    })?;
-    let receipt = serde_json::to_value(receipt)
-        .map_err(|error| format!("challenge_task_receipt_serialization_failed:{error}"))?;
-    let current = state
-        .challenge_tasks
-        .get_mut(task_id)
-        .ok_or_else(|| "challenge_task_not_found".to_string())?;
-    current
-        .used_operation_id_sha256s
-        .insert(operation_id_sha256);
-    current.state = ServiceChallengeTaskState::Completed;
-    current.completed_at = Some(resumed.to_rfc3339());
-    current.receipt = Some(receipt);
-    Ok((current.clone(), false))
+    }
 }
 
 fn cancel_task_in_state(
@@ -509,56 +361,31 @@ fn cancel_task_in_state(
     operation_id: &str,
     cancelled_at: &str,
 ) -> Result<(ServiceChallengeTaskRecord, bool), String> {
-    let snapshot = status_task_in_state(state, task_id, principal_id)?;
-    let operation_id_sha256 = canonical_sha256(&operation_id)?;
-    if snapshot
-        .used_operation_id_sha256s
-        .contains(&operation_id_sha256)
-    {
-        return Ok((snapshot, true));
+    let decision = cancel_service_challenge_task(
+        &state.challenge_tasks,
+        ServiceChallengeTaskCancelInput {
+            task_id: task_id.to_string(),
+            principal_id: principal_id.to_string(),
+            operation_id: operation_id.to_string(),
+            cancelled_at: cancelled_at.to_string(),
+        },
+    )
+    .map_err(|error| error.cli_message())?;
+    match decision {
+        ServiceChallengeTaskCancelDecision::Replayed(record) => Ok((*record, true)),
+        ServiceChallengeTaskCancelDecision::Cancelled(record) => {
+            let record = *record;
+            state
+                .challenge_tasks
+                .insert(record.task_id.clone(), record.clone());
+            Ok((record, false))
+        }
     }
-    if snapshot.state != ServiceChallengeTaskState::Ready {
-        return Err("challenge_task_not_cancellable".to_string());
-    }
-    let cancelled = DateTime::parse_from_rfc3339(cancelled_at)
-        .map_err(|_| "challenge_task_cancelled_at_invalid".to_string())?;
-    let current = state
-        .challenge_tasks
-        .get_mut(task_id)
-        .ok_or_else(|| "challenge_task_not_found".to_string())?;
-    current
-        .used_operation_id_sha256s
-        .insert(operation_id_sha256);
-    current.state = ServiceChallengeTaskState::Cancelled;
-    current.cancelled_at = Some(cancelled.to_rfc3339());
-    Ok((current.clone(), false))
 }
 
 fn task_projection(record: &ServiceChallengeTaskRecord, replayed: bool) -> Value {
-    json!({
-        "schemaVersion": record.schema_version,
-        "challengeTaskId": record.task_id,
-        "state": record.state,
-        "createdAt": record.created_at,
-        "deadlineAt": record.deadline_at,
-        "requestSha256": record.request_sha256,
-        "challengeProfileId": record.challenge_profile_id,
-        "sitePolicyDigest": record.site_policy_digest,
-        "downstreamIntentId": record.downstream_intent_id,
-        "browserId": record.service_tab_handle.browser_id,
-        "sessionName": record.service_tab_handle.session_name,
-        "tabId": record.service_tab_handle.tab_id,
-        "transitionCount": record.receipt.as_ref()
-            .and_then(|receipt| receipt.get("phases"))
-            .and_then(Value::as_array)
-            .map(|phases| phases.len().saturating_sub(1))
-            .unwrap_or(0),
-        "effectPending": record.pending_effect.is_some(),
-        "completedAt": record.completed_at,
-        "cancelledAt": record.cancelled_at,
-        "receipt": record.receipt,
-        "replayed": replayed,
-    })
+    serde_json::to_value(project_service_challenge_task(record, replayed))
+        .expect("Service challenge projection must serialize")
 }
 
 /// Start a durable, provider-free challenge task through Service State.
@@ -608,48 +435,6 @@ pub(crate) fn handle_service_challenge_task(command: &Value) -> Result<Value, St
             Ok(task_projection(&record, replayed))
         }
         _ => Err(format!("challenge_task_action_unsupported:{action}")),
-    }
-}
-
-pub(crate) fn challenge_task_map_is_empty(
-    value: &BTreeMap<String, ServiceChallengeTaskRecord>,
-) -> bool {
-    value.is_empty()
-}
-
-pub(crate) fn challenge_task_summary(state: &ServiceState) -> ServiceChallengeTaskSummary {
-    let records = state.challenge_tasks.values();
-    ServiceChallengeTaskSummary {
-        total_count: records.clone().count(),
-        active_count: records
-            .clone()
-            .filter(|record| record.state == ServiceChallengeTaskState::Ready)
-            .count(),
-        terminal_count: records
-            .clone()
-            .filter(|record| record.state != ServiceChallengeTaskState::Ready)
-            .count(),
-        cooldown_count: records
-            .clone()
-            .filter(|record| {
-                record.receipt.as_ref().is_some_and(|receipt| {
-                    receipt.get("cooldown").and_then(Value::as_str) == Some("active")
-                })
-            })
-            .count(),
-        intervention_count: records
-            .clone()
-            .filter(|record| {
-                record.receipt.as_ref().is_some_and(|receipt| {
-                    receipt
-                        .get("intervention")
-                        .is_some_and(|value| !value.is_null())
-                })
-            })
-            .count(),
-        pending_effect_count: records
-            .filter(|record| record.pending_effect.is_some())
-            .count(),
     }
 }
 
@@ -864,8 +649,16 @@ mod tests {
         assert!(!serde_json::to_string(&state)
             .unwrap()
             .contains("resume-operation-1"));
-        assert_eq!(challenge_task_summary(&state).terminal_count, 1);
-        assert_eq!(challenge_task_summary(&state).cooldown_count, 1);
+        assert_eq!(
+            agent_browser_service_model::challenge_task_summary(&state.challenge_tasks)
+                .terminal_count,
+            1
+        );
+        assert_eq!(
+            agent_browser_service_model::challenge_task_summary(&state.challenge_tasks)
+                .cooldown_count,
+            1
+        );
 
         let (replayed_record, replayed) = resume_task_in_state(
             &mut state,

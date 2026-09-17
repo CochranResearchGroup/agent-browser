@@ -324,7 +324,7 @@ pub(crate) struct ServiceStatusResponse {
     pub(crate) control_plane: StatusControlPlaneAuthority,
     pub(crate) service_state: Value,
     #[serde(rename = "challengeTaskSummary")]
-    pub(crate) challenge_task_summary: super::service_challenge_task::ServiceChallengeTaskSummary,
+    pub(crate) challenge_task_summary: agent_browser_service_model::ServiceChallengeTaskSummary,
     #[serde(rename = "serviceStateProjection")]
     pub(crate) service_state_projection: ServiceStateProjectionMetadata,
     #[serde(rename = "profileAllocations")]
@@ -573,8 +573,8 @@ impl ServiceStatusProjector {
             closed_tab_projection,
             launch_config: input.launch_config,
             service_state: response_state,
-            challenge_task_summary: super::service_challenge_task::challenge_task_summary(
-                &authority_state,
+            challenge_task_summary: agent_browser_service_model::challenge_task_summary(
+                &authority_state.challenge_tasks,
             ),
             service_state_projection,
             status_projection: StatusProjection {

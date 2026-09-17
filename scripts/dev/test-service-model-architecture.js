@@ -39,6 +39,9 @@ pub struct ServiceState {
   #[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]
   authentication_runs:
     BTreeMap<String, agent_browser_service_model::ServiceAuthenticationRunRecord>,
+  #[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]
+  challenge_tasks:
+    BTreeMap<String, agent_browser_service_model::ServiceChallengeTaskRecord>,
 }
 `;
 const validCapabilityRegistry = `
@@ -77,6 +80,43 @@ pub use service_authentication_run::{
   SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION,
 };
 `;
+const serviceChallengeDefinitions = [
+  'ServiceChallengeTaskState', 'ServiceChallengeTaskSummary',
+  'PendingChallengeTaskEffect', 'ChallengeTaskEffectKind',
+  'ServiceChallengeTaskRecord', 'ServiceChallengeTaskStartInput',
+  'PreparedServiceChallengeTaskStart', 'ServiceChallengeTaskStartDecision',
+  'ServiceChallengeTaskResumeInput', 'PreparedServiceChallengeTaskResume',
+  'ServiceChallengeTaskResumeDecision', 'ServiceChallengeTaskCancelInput',
+  'ServiceChallengeTaskCancelDecision', 'ServiceChallengeTaskError',
+  'ServiceChallengeTaskProjection',
+];
+const serviceChallengeExportedDefinitions = serviceChallengeDefinitions.filter(
+  (name) => !['PendingChallengeTaskEffect', 'ChallengeTaskEffectKind'].includes(name),
+);
+const serviceChallengeDecisions = [
+  'prepare_service_challenge_task_start', 'complete_service_challenge_task_start',
+  'service_challenge_task_status', 'prepare_service_challenge_task_resume',
+  'complete_service_challenge_task_resume', 'cancel_service_challenge_task',
+  'project_service_challenge_task', 'challenge_task_map_is_empty',
+  'challenge_task_summary', 'admit_challenge_consumer_from_receipt',
+];
+const serviceChallengeConstants = [
+  'SERVICE_CHALLENGE_TASK_SCHEMA_VERSION', 'AUTHENTICATION_CHALLENGE_INTENT_ID',
+  'NAVIGATION_CHALLENGE_INTENT_ID',
+];
+const validServiceChallenge = `${serviceChallengeDefinitions
+  .map((name) => `${['PendingChallengeTaskEffect', 'ChallengeTaskEffectKind'].includes(name)
+    ? '' : 'pub '}struct ${name};`).join('\n')}
+${serviceChallengeDecisions.map((name) => `pub fn ${name}() {}`).join('\n')}
+${serviceChallengeConstants.map((name) => `pub const ${name}: &str = "value";`).join('\n')}
+`;
+const validServiceChallengeExport = `mod service_challenge_task;
+pub use service_challenge_task::{
+  ${serviceChallengeExportedDefinitions.join(',\n  ')},
+  ${serviceChallengeDecisions.join(',\n  ')},
+  ${serviceChallengeConstants.join(',\n  ')},
+};
+`;
 
 const authenticationControlRecords = [
   'AuthenticationRunBinding', 'AuthenticationRunState',
@@ -105,7 +145,8 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   serviceModel = validCrashStateUse, authenticationManifest = validAuthenticationManifest,
   authentication = validAuthenticationControl,
   authenticationFacade = validAuthenticationFacade,
-  serviceAuthentication = validServiceAuthentication } = {}) {
+  serviceAuthentication = validServiceAuthentication,
+  serviceChallenge = validServiceChallenge } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'agent-browser-service-model-architecture-'));
   mkdirSync(join(root, 'crates/agent-browser-service-model/src'), { recursive: true });
   mkdirSync(join(root, 'crates/agent-browser-authentication-control/src'), { recursive: true });
@@ -123,6 +164,8 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/browser_capability_registry.rs'), capability);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_authentication_run.rs'),
     serviceAuthentication);
+  writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_challenge_task.rs'),
+    serviceChallenge);
   mkdirSync(join(root, 'cli/src/native'), { recursive: true });
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
@@ -135,6 +178,7 @@ const validAuthenticationManifest = '[package]\nname = "agent-browser-authentica
 const validSource = `${validCrashExport}
 ${validCapabilityExport}
 ${validServiceAuthenticationExport}
+${validServiceChallengeExport}
 // std::fs and provider are allowed in prose.
 pub struct BrowserProfile { pub id: String }
 pub fn profile(id: String) -> BrowserProfile { BrowserProfile { id } }
@@ -251,6 +295,106 @@ try {
   'duplicate CLI Service authentication decision was accepted');
 } finally {
   rmSync(duplicateServiceAuthenticationDecision, { recursive: true, force: true });
+}
+
+const missingServiceChallengeModule = fixture({ manifest: validManifest, source: validSource });
+try {
+  rmSync(join(missingServiceChallengeModule,
+    'crates/agent-browser-service-model/src/service_challenge_task.rs'));
+  ok(check(missingServiceChallengeModule).some((failure) =>
+    failure.includes('service_challenge_task.rs')),
+  'missing Service challenge module was accepted');
+} finally {
+  rmSync(missingServiceChallengeModule, { recursive: true, force: true });
+}
+
+const duplicateServiceChallengeDefinition = fixture({
+  manifest: validManifest,
+  source: validSource,
+  cli: 'pub(crate) struct ServiceChallengeTaskRecord;\n',
+});
+try {
+  ok(check(duplicateServiceChallengeDefinition).some((failure) =>
+    failure.includes('ServiceChallengeTaskRecord')),
+  'duplicate CLI Service challenge definition was accepted');
+} finally {
+  rmSync(duplicateServiceChallengeDefinition, { recursive: true, force: true });
+}
+
+const missingServiceChallengeExport = fixture({
+  manifest: validManifest,
+  source: validSource.replace(validServiceChallengeExport, ''),
+});
+try {
+  ok(check(missingServiceChallengeExport).some((failure) =>
+    failure.includes('export the Service challenge')),
+  'missing Service challenge export was accepted');
+} finally {
+  rmSync(missingServiceChallengeExport, { recursive: true, force: true });
+}
+
+const indirectServiceChallengeStateType = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    'agent_browser_service_model::ServiceChallengeTaskRecord',
+    'super::service_challenge_task::ServiceChallengeTaskRecord',
+  ),
+});
+try {
+  ok(check(indirectServiceChallengeStateType).some((failure) =>
+    failure.includes('canonical service-model Service challenge record')),
+  'indirect Service challenge aggregate type was accepted');
+} finally {
+  rmSync(indirectServiceChallengeStateType, { recursive: true, force: true });
+}
+
+const duplicateServiceChallengeDecision = fixture({
+  manifest: validManifest,
+  source: validSource,
+  cli: 'pub(crate) fn cancel_service_challenge_task() {}\n',
+});
+try {
+  ok(check(duplicateServiceChallengeDecision).some((failure) =>
+    failure.includes('cancel_service_challenge_task')),
+  'duplicate CLI Service challenge decision was accepted');
+} finally {
+  rmSync(duplicateServiceChallengeDecision, { recursive: true, force: true });
+}
+
+const commentedServiceChallengeSkipPredicate = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    '#[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]',
+    '// #[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]',
+  ),
+});
+try {
+  ok(check(commentedServiceChallengeSkipPredicate).some((failure) =>
+    failure.includes('Service challenge empty-map decision')),
+  'commented Service challenge empty-map predicate was accepted');
+} finally {
+  rmSync(commentedServiceChallengeSkipPredicate, { recursive: true, force: true });
+}
+
+const challengePredicateOnEarlierFieldOnly = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    '#[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]\n  challenge_tasks:',
+    `#[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]
+  unrelated_challenges: BTreeMap<String, String>,
+  #[serde(default)]
+  challenge_tasks:`,
+  ),
+});
+try {
+  ok(check(challengePredicateOnEarlierFieldOnly).some((failure) =>
+    failure.includes('Service challenge empty-map decision')),
+  'Service challenge guard borrowed a skip predicate from an earlier field');
+} finally {
+  rmSync(challengePredicateOnEarlierFieldOnly, { recursive: true, force: true });
 }
 
 const commentedServiceAuthenticationSkipPredicate = fixture({
