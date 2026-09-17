@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const SERVICE_MONITOR_STATE_VALUES: [&str; 3] = ["active", "paused", "faulted"];
 pub const SERVICE_TRACE_ACTIVITY_SOURCE_VALUES: [&str; 3] = ["event", "job", "metadata"];
 pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 23] = [
     "reconciliation",
@@ -4683,17 +4682,18 @@ pub use agent_browser_service_model::{
     BrowserRecordAuthoritySource, BrowserRecordLifecycleClassification, BrowserRecordProvenance,
     BrowserRecordSource, BrowserSession, BrowserTab, Challenge, ChallengePolicy, ChallengeState,
     ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt, InteractionMode,
-    JobControlPlaneMode, JobPriority, JobState, JobTarget, LeaseState, ProfileAllocationPolicy,
-    ProfileClass, ProfileConnectionState, ProfileKeyringPolicy, ProfileLeaseDisposition,
-    ProfileOrigin, ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
-    ProfileSeedingMode, ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness,
-    ProtectedBrowserOwnerObservation, RateLimitPolicy, RemoteViewAcquisitionLease,
-    RemoteViewHandoff, RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry,
-    ServiceActor, ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEntitySources,
-    ServiceEvent, ServiceEventKind, ServiceIncident, ServiceIncidentEscalation,
-    ServiceIncidentSeverity, ServiceIncidentState, ServiceJob, ServiceProvider, ServiceTabHandle,
-    ServiceTabHandleTraceFilter, SessionCleanupPolicy, SitePolicy, SitePolicySourceRecord,
-    TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
+    JobControlPlaneMode, JobPriority, JobState, JobTarget, LeaseState, MonitorState, MonitorTarget,
+    ProfileAllocationPolicy, ProfileClass, ProfileConnectionState, ProfileKeyringPolicy,
+    ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState, ProfileSeedingHandoffRecord,
+    ProfileSeedingHandoffState, ProfileSeedingMode, ProfileSelectionReason, ProfileSourceRecord,
+    ProfileTargetReadiness, ProtectedBrowserOwnerObservation, RateLimitPolicy,
+    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
+    RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
+    ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEntitySources, ServiceEvent,
+    ServiceEventKind, ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity,
+    ServiceIncidentState, ServiceJob, ServiceProvider, ServiceTabHandle,
+    ServiceTabHandleTraceFilter, SessionCleanupPolicy, SiteMonitor, SitePolicy,
+    SitePolicySourceRecord, TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
     SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
     SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
@@ -4703,6 +4703,7 @@ pub use agent_browser_service_model::{
     SERVICE_INCIDENT_ESCALATION_VALUES, SERVICE_INCIDENT_SEVERITY_VALUES,
     SERVICE_INCIDENT_STATE_VALUES, SERVICE_JOB_CONTROL_PLANE_MODE_VALUES,
     SERVICE_JOB_NAMING_WARNING_VALUES, SERVICE_JOB_PRIORITY_VALUES, SERVICE_JOB_STATE_VALUES,
+    SERVICE_MONITOR_STATE_VALUES,
 };
 #[cfg(test)]
 use agent_browser_service_model::{
@@ -4961,39 +4962,6 @@ fn boot_epoch_is_prior(
     )
 }
 
-/// Site or tab heartbeat managed by the service.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct SiteMonitor {
-    pub id: String,
-    pub name: String,
-    pub target: MonitorTarget,
-    pub interval_ms: u64,
-    pub state: MonitorState,
-    pub last_checked_at: Option<String>,
-    pub last_succeeded_at: Option<String>,
-    pub last_failed_at: Option<String>,
-    pub last_result: Option<String>,
-    pub consecutive_failures: u64,
-}
-
-impl Default for SiteMonitor {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            name: String::new(),
-            target: MonitorTarget::Url(String::new()),
-            interval_ms: 60_000,
-            state: MonitorState::Paused,
-            last_checked_at: None,
-            last_succeeded_at: None,
-            last_failed_at: None,
-            last_result: None,
-            consecutive_failures: 0,
-        }
-    }
-}
-
 /// Change the primary controller once, advance its ABA fencing epoch, and
 /// project that exact authority into every stream bound to the route.
 pub(crate) fn advance_route_controller_authority(
@@ -5043,26 +5011,6 @@ pub(crate) fn controller_authority_fence_matches(
                 && stream.controller_epoch == controller_epoch
         })
     })
-}
-
-/// Monitor target variants.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MonitorTarget {
-    Url(String),
-    Tab(String),
-    SitePolicy(String),
-    /// Checks retained no-launch target readiness for a login/service identity.
-    ProfileReadiness(String),
-}
-
-/// Monitor execution state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MonitorState {
-    Active,
-    Paused,
-    Faulted,
 }
 
 #[cfg(test)]

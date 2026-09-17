@@ -636,16 +636,52 @@ field families by provider-free closure. Select the next cohesive family with
 the highest aggregate-unblocking value; do not move incident derivation or
 other effect-facing joins.
 
+## Checkpoint 11 | Monitor Records
+
+State transition: the crate now owns the monitor record, target and state
+enums, legacy defaults, and stable state values. Monitor scheduling, clocks,
+probe execution, job admission, persistence, failure mutation, incident
+derivation, and Service State joins remain CLI adapters.
+
+Acceptance state and progress classification: this P1 record-family packet is
+accepted locally. It removes another direct aggregate field dependency without
+turning the model crate into a scheduler or monitoring runtime.
+
+Evidence:
+
+- all 63 service-model crate unit and integration tests pass, including three
+  monitor default and wire-contract tests;
+- CLI collection wire-contract, due-work filtering, upsert defaults, state
+  update, failure reset, and MCP sorted-resource tests pass;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no monitor probe, browser, profile, provider, runtime, install, staging,
+  production, release, or GitHub CI effect was performed.
+
+Material blockers: the aggregate still contains operational receipts,
+transactions, migrations, authority registries, runtime-owner state,
+authentication and challenge-task state, presentation capacity, and flattened
+forward-compatible fields. `BrowserCapabilityRegistry` is provider-free but
+remains an explicitly advisory draft of opaque JSON arrays; moving its envelope
+now would add little domain depth and could imply authority that the source
+contract denies.
+
+Next action: publish this checkpoint. Prefer the provider-free control-plane
+and reconciliation snapshot records next, then the profile-lifecycle
+authorization record closure. Defer the capability registry until its schema
+or ownership graduates from advisory draft status.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | ten families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | eleven families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | ten packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | ten packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | eleven packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | eleven packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

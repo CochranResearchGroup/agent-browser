@@ -9,6 +9,7 @@ mod entity_source;
 mod failure_recourse;
 mod incident;
 mod job_event;
+mod monitor;
 mod presentation;
 mod profile_access;
 mod profile_readiness;
@@ -47,6 +48,7 @@ pub use job_event::{
     SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME, SERVICE_JOB_NAMING_WARNING_VALUES,
     SERVICE_JOB_PRIORITY_VALUES, SERVICE_JOB_STATE_VALUES,
 };
+pub use monitor::{MonitorState, MonitorTarget, SiteMonitor, SERVICE_MONITOR_STATE_VALUES};
 pub use presentation::{
     ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,
     RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
