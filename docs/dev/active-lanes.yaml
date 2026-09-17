@@ -1,27 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P206
-    product_lane: PL-CHALLENGE
-    objective: Prove a provider-free visual and multi-round evidence contract inside one policy-authorized challenge attempt
-    plan: docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md
-    plan_ref: refs/heads/challenge/p206-visual-round-contract
-    branch: challenge/p206-visual-round-contract
-    target: main
-    plan_state: SOURCE_ACCEPTED_INTEGRATION_READY
-    custody_state: PUBLISHED_INTEGRATION_READY
-    checkpoint: 1c9ee159
-    remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
-    integration_receipt: null
-    integration: publish the reconciled branch and merge through the protected main workflow without restoring or dispatching operator-disabled GitHub CI
-    validation_status: repaired source validation passed 41 challenge-control tests including cumulative-overflow boundaries, strict workspace Clippy, formatting, challenge-control architecture and diff hygiene; main reconciliation changed no challenge or Cargo source, and conflict-affected policy, documentation, validation-selection, worktree-closeout, planning and diff-hygiene checks pass locally
-    validation_ref: 1c9ee159
-    work_items: [CochranResearchGroup/agent-browser#127]
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: [P197, P204, P208]
-    blocker: reconciled branch publication and protected integration remain; GitHub CI is operator-disabled and all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
-    updated_at: 2026-09-17
   - id: P204
     product_lane: PL-PLATFORM
     objective: Disable GitHub CI while retaining a reviewed path-selected workflow for explicit future re-enablement
@@ -50,17 +29,17 @@ lanes:
     plan_ref: refs/heads/challenge/p209-visual-provider-protocol
     branch: challenge/p209-visual-provider-protocol
     target: main
-    plan_state: SOURCE_ACCEPTED_DEPENDENCY_PENDING
-    custody_state: LOCAL_DEPENDENCY_HOLD
-    checkpoint: 9df85b9b
+    plan_state: SOURCE_ACCEPTED_INTEGRATION_READY
+    custody_state: LOCAL_INTEGRATION_READY
+    checkpoint: 3ef2ad9e
     remote_ref: null
     integration_receipt: null
-    integration: publish only after P206 PR 180 enters main and P209 reconciles that canonical checkpoint
-    validation_status: corrected P206 dependency reconciliation plus request-smuggling, provider response-time, request-preparation and response-digest hardening pass all 52 challenge-control tests, challenge-control architecture, strict workspace Clippy, formatting and diff hygiene; previously accepted unaffected extracted-crate gates remain reusable
-    validation_ref: 9df85b9b
+    integration: publish the canonically reconciled branch and merge normally without restoring or dispatching operator-disabled GitHub CI
+    validation_status: canonical P206 reconciliation passes all 52 challenge-control tests; request-smuggling, provider response-time, request-preparation and response-digest hardening plus challenge-control architecture, strict workspace Clippy, formatting and diff hygiene remain source-identical
+    validation_ref: 3ef2ad9e
     work_items: [CochranResearchGroup/agent-browser#127]
-    dependencies: [P206]
-    overlaps: [P206]
+    dependencies: []
+    overlaps: []
     reconciled_overlaps: [P206]
-    blocker: source is accepted locally and has joined corrected published P206 head 72eeea03; publication waits for PR 180 to enter main and canonical reconciliation, while all model-provider, image, browser, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    blocker: branch publication and protected integration remain; GitHub CI is operator-disabled and all model-provider, image, browser, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17

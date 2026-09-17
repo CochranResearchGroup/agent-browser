@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 10
+Plan version: 11
 
-State: SOURCE ACCEPTED | P206 INTEGRATION PENDING
+State: SOURCE ACCEPTED | INTEGRATION READY
 
 Consolidation: required
 
@@ -21,16 +21,16 @@ Branch: `challenge/p209-visual-provider-protocol`
 
 Target: `main`
 
-Dependency: P206 published head
-`72eeea031d323901bac289d433b2e8b7c09b5fd7` through PR #180
+Integrated dependency: P206 published head
+`82e256247e97dd579136c30f60788e20348e81f6`, merged through PR #180 as
+`d3f923a198845a0e50da174f7392dff230874eb0`
 
 Source baseline: `5da7d37d30ed15a1f7970e11e9581f3ad04e6599`
 
-Local reconciliation: merge `9df85b9b` joins corrected published P206 head
-`72eeea03`
+Canonical reconciliation: merge `3ef2ad9e` joins `main@d3f923a1`
 
-Publication gate: do not push or open a pull request until P206 PR #180 enters
-`main` and P209 reconciles that canonical checkpoint
+Publication gate: local exact-head validation, branch publication and a normal
+pull request without restoring or dispatching operator-disabled GitHub CI
 
 ## Objective
 
@@ -47,10 +47,9 @@ browser, attempt a CAPTCHA or mutate any runtime.
 
 ## Current State
 
-P206 W7-A is source-complete and acceptance-complete, reconciled with current
-`main@f5e3f31b`, and published at corrected head `72eeea03` for exact-head
-evaluation in PR #180. Pre-merge review repaired cumulative budget saturation
-and typed classification for an unrepresentable selection count. P206 defines
+P206 W7-A is integrated through PR #180 as `d3f923a1`. Pre-merge review
+repaired cumulative budget saturation and typed classification for an
+unrepresentable selection count. P206 defines
 fresh evidence, exact candidate sets, provider capability identity, round
 selection, effect receipt, after-state continuity, checked cumulative budgets
 and zero-effect replay.
@@ -64,9 +63,9 @@ protocol gap.
 P204 owns CI validation tiering, P205 owns Service-model extraction, P207 owns
 tab-handle refresh custody and P208 owns worktree closeout. P209 edits only the
 challenge-control crate, its provider fixtures and the bounded challenge-lane
-planning projections. P204 merged through PR #179. P209 has locally joined the
-corrected published P206 head at `9df85b9b` but remains unpushed until P206
-enters canonical `main`.
+planning projections. P204 merged through PR #179. P209 joined canonical P206
+and current main at `3ef2ad9e`. The join changes no P209 Rust source or Cargo
+dependency surface.
 
 ## Contract
 
@@ -113,8 +112,8 @@ attempt, performs no retry and does not decide challenge completion.
    duplicate, out-of-set and over-budget responses fail closed without intent.
 5. Prove serialized coordinate, event-sequence and retry smuggling is rejected
    as unknown protocol input.
-6. Reuse the accepted focused local validation while P206 integration is
-   pending. Run exact-head forge validation after canonical reconciliation.
+6. Reuse the accepted focused local validation and rerun the complete
+   challenge-control package after canonical reconciliation.
 
 Deferred to separately admitted successors:
 
@@ -141,8 +140,8 @@ until P209 enters canonical `main`.
 - Reassess after two checkpoints or 30 active minutes without outcome progress.
 - Overall effort ceiling: 180 active minutes through a clean local checkpoint.
 
-Publication, forge CI and protected integration time are excluded from the
-local implementation ceiling because they follow the P206 dependency join.
+Publication and protected integration time are excluded from the local
+implementation ceiling because they follow the P206 dependency join.
 
 ## Worker Assignments
 
@@ -174,9 +173,9 @@ The minimum provider-free matrix must prove:
 
 Local exit requires the focused challenge-control tests, crate architecture
 guard, formatting, strict local Clippy and diff hygiene at one clean commit.
-Publication exit additionally requires P206 integration into `main`, canonical
-reconciliation, a published branch and the then-current protected validation
-path.
+Publication exit additionally requires canonical reconciliation, a published
+branch and a normal protected merge. GitHub CI is operator-disabled and must
+not be restored or dispatched for this packet.
 
 ## Local Acceptance | 2026-09-16
 
@@ -264,14 +263,27 @@ visual-round and 11 provider-protocol cases, the challenge-control architecture
 guard, workspace formatting, strict workspace Clippy and diff hygiene. The
 prior unaffected extracted-crate evidence remains reusable.
 
-P209 remains local and unpushed until corrected P206 enters canonical `main`.
+P209 remained local and unpushed until corrected P206 entered canonical
+`main`.
+
+## Canonical P206 Reconciliation | 2026-09-17
+
+P206 exact head `82e25624` merged through PR #180 as `d3f923a1`. Local merge
+`3ef2ad9e` joins that canonical result and current main. The merge changes no
+P209 Rust source or Cargo dependency surface. The complete reconciled
+challenge-control package passes all 52 tests, including 25 visual-round and
+11 provider-protocol cases. Previously accepted architecture, formatting,
+strict Clippy and diff-hygiene evidence remains source-identical.
+
+GitHub CI remains disabled by operator direction. No workflow was restored,
+dispatched, retried or run. No provider, image, browser, credential, CAPTCHA,
+desktop-input, runtime or production effect occurred.
 
 ## Stop Condition
 
-Stop before any push or workflow trigger until P206 PR #180 merges and P209
-reconciles that canonical checkpoint. Also stop before any browser launch,
-image capture, model or provider call, credential use, desktop input, CAPTCHA
-attempt, retry, Service State mutation, installed runtime action, production
-effect or release. Replan if the pure protocol needs a public Service schema,
-provider-specific parser, image payload, coordinate or event authority, or a
-second challenge attempt.
+Stop before restoring or dispatching any GitHub CI workflow. Also stop before
+any browser launch, image capture, model or provider call, credential use,
+desktop input, CAPTCHA attempt, retry, Service State mutation, installed
+runtime action, production effect or release. Replan if the pure protocol
+needs a public Service schema, provider-specific parser, image payload,
+coordinate or event authority, or a second challenge attempt.
