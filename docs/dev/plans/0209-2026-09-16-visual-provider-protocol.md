@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 6
+Plan version: 7
 
 State: SOURCE ACCEPTED | P206 INTEGRATION PENDING
 
@@ -231,6 +231,13 @@ deserialization independently visible in the fixture suite.
 All 49 challenge-control tests, workspace formatting, strict workspace Clippy
 and diff hygiene pass at this checkpoint. No provider, image, browser,
 credential, CAPTCHA, desktop-input, runtime or production effect occurred.
+
+Checkpoint `e7250217` then consolidates every response-time boundary into the
+existing stale-response fixture. It proves rejection when provider output
+predates the request, claims a future production time, is produced at its own
+expiry, expires before adjudication, extends beyond request expiry, or is
+adjudicated at request expiry. The complete 49-test crate and strict workspace
+Clippy remain green.
 
 ## Stop Condition
 
