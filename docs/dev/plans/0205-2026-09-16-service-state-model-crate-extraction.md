@@ -1272,12 +1272,12 @@ or capability-registry promotion.
 
 ## Checkpoint 22 | Current-Main Synchronization And Next Gate
 
-State transition: P205 is synchronized with `origin/main` at `fb616aee` by
-merge commit `67f672dd`. The branch is zero commits behind current main. The
-only path modified on both sides since the prior merge base was `Cargo.lock`,
-and it merged without a conflict. No bug-fix issue or validation lane moved
-into P205 custody; the architecture lane only consumes integrated main as its
-dependency baseline.
+State transition: P205 first synchronized with `origin/main` at `fb616aee` by
+merge commit `67f672dd`, then consumed the concurrent main advance through
+`06972a5e` by merge commit `f5083df7`. The branch is zero commits behind
+current main. The shared Cargo manifests and lockfile merged without a
+conflict. No bug-fix issue or validation lane moved into P205 custody; the
+architecture lane only consumes integrated main as its dependency baseline.
 
 Acceptance state and progress classification: Checkpoint 21 remains accepted
 after synchronization. This is blocker reduction for the next architecture
