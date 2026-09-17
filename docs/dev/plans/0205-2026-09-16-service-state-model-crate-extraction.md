@@ -4405,6 +4405,66 @@ The next bounded outcome must come from the remaining classified runtime-owner
 surface without combining immutable reads, all-or-nothing transitions,
 retained partial mutation, sequential mutation, or effect-separated behavior.
 
+## Checkpoint 66 | Lifecycle Replacement Projection Freeze
+
+State transition: the next packet is frozen to the three production registry
+expressions in `lifecycle_replacement_decision`. No new Service Model API is
+required. One cached `profile_runtime_authority` projection will supply the
+exact owner and registry revision. One `runtime_resource_lanes` projection will
+supply every lifecycle value in lifecycle map-key order. Acceptance leaves 162
+classified production runtime-owner expressions and zero production direct
+registry access in `service_profile_acquisition.rs`.
+
+The existing malformed-history semantics are frozen. Lifecycle rows remain
+filtered by their embedded profile digest, stably sorted by owner generation,
+and matched to the current owner by the record's embedded logical browser ID
+and exact generation. The implementation must map each resource row to
+`row.lifecycle`; it must not join by `row.browser_id`, use a keyed lane
+projection, use an unstable sort, select the newest generation, or validate
+retained history more strongly. Equal-generation matches retain original map-
+key order and the first exact embedded identity match wins.
+
+No owner plus retained lifecycle history remains eligible as
+`no_lifecycle_owner`; history alone cannot create an operational replacement
+route. An owner without an exact embedded browser and generation match remains
+`lifecycle_owner_record_missing`. Current-process proof remains the presence of
+a PID in the Service browser record, not host observation. Active profile lease
+selection, replacement evidence, reason precedence, selected-profile and path
+fallback, canonical digest calculation, JSON fields, required actions, and
+aggregate nonmutation remain unchanged.
+
+Existing focused coverage already proves exact terminal replacement,
+zero-effect planning, required process-exit evidence, no-owner history, and
+reconciled absence evidence. New narrow witnesses must prove a lifecycle map
+key differing from its embedded browser ID, exact current-generation selection
+across multiple same-profile history rows, stable first-match behavior for
+equal-generation malformed rows, and exact projected registry revision,
+including `u64::MAX`. The architecture guard must require both projections,
+the lifecycle-value mapping, and stable sorting while rejecting direct registry
+access, persistence snapshots, keyed-lane substitution, map-key identity
+selection, unstable sorting, and latest-generation selection.
+
+Hard stops are changed malformed-row selection, stronger owner or binding
+predicates, changed reason precedence, observation or effect movement, new
+model API, or expansion into acquisition execution, recovery, workstation
+handoff selection, browser-lifecycle binding, or retained-target reattachment.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route for malformed-history ordering,
+semantic traps, witnesses, and the zero-new-API boundary.
+`/root/p205_receipt_cli_audit` used the workhorse `gpt-5.6-sol` high route for
+the exact three-expression inventory, existing-test lookup, and post-packet
+count. Both audits were read-only and performed no edit, build, test, Git,
+forge, CI, runtime, or child-agent action. The implementation is assigned to
+the strong kernel worker because stable malformed-history selection is the
+material correctness risk; the primary retains guard, integration, validation,
+acceptance, Git, and publication custody.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. Exit requires exact
+projection parity, the malformed-history witnesses, zero production direct
+registry access in the target file, and the targeted architecture contract.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
