@@ -57,6 +57,15 @@ function check(root) {
     const unrelatedPrimaryRegistry = relative === 'cli/src/native/stream/guacamole_primary_registry.rs';
     // Legacy wire-shape fixtures intentionally inspect their own local type.
     let fieldSource = source.replace(/\blegacy_(?:owner|state)_registry\s*\.\s*(?:revision|owners)\b/g, 'legacy_wire_field');
+    // Service Model owns this typed persistence projection. Its public field is
+    // not a direct view into RuntimeOwnerRegistry and remains outside this
+    // Lease Authority field-access contract.
+    if (relative === 'cli/src/native/service_store.rs') {
+      fieldSource = fieldSource.replace(
+        /\bpersistence\s*\.\s*lifecycle_records\b/g,
+        'service_model_persistence_lifecycle_rows',
+      );
+    }
     if (unrelatedPrimaryRegistry) fieldSource = fieldSource.replace(/\bself\s*\.\s*owners\b/g, 'primary_connection_rows');
     requireCondition(
       !/\.\s*(?:owners|principal_bindings|lifecycle_records)\b(?!\s*\()/.test(fieldSource),
@@ -153,6 +162,7 @@ function selfTest() {
     writeFileSync(join(root, '.github/workflows/lease-authority.yml'), 'strategy:\n  fail-fast: false\nrun: cargo test --profile ci -p agent-browser-lease-authority\ntargets: x86_64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc\n');
     writeFileSync(join(root, 'cli/src/native/mod.rs'), 'pub(crate) mod adapter;\n');
     writeFileSync(join(root, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\n');
+    writeFileSync(join(root, 'cli/src/native/service_store.rs'), 'fn project(persistence: &RuntimeOwnerPersistenceParts) { let _ = &persistence.lifecycle_records; }\n');
     writeFileSync(join(root, 'cli/src/runtime_owner_transfer.rs'), 'pub(crate) use agent_browser_lease_authority::RuntimeOwnerRegistry;\n');
     writeFileSync(join(root, 'cli/src/runtime_adoption.rs'), 'pub(crate) use agent_browser_lease_authority::BrowserAdoptionMode;\n');
     if (check(root).length) throw new Error('valid extracted fixture was rejected');
@@ -175,6 +185,7 @@ function selfTest() {
       ['mutable registry getter', 'mutable-registry-getter'],
       ['renamed mutable registry getter', 'renamed-mutable-registry-getter'],
       ['direct CLI registry map access', 'direct-registry-map'],
+      ['direct service-store registry map access', 'direct-service-store-registry-map'],
       ['direct CLI registry revision access', 'direct-registry-revision'],
       ['aliased CLI registry revision access', 'aliased-registry-revision'],
       ['CLI registry literal', 'cli-registry-literal'],
@@ -184,7 +195,7 @@ function selfTest() {
       try {
         mkdirSync(join(mutated, 'cli/src/native'), { recursive: true });
         mkdirSync(join(mutated, 'crates/agent-browser-lease-authority/src'), { recursive: true });
-        for (const path of ['Cargo.toml', 'cli/Cargo.toml', 'crates/agent-browser-lease-authority/Cargo.toml', 'crates/agent-browser-lease-authority/src/lib.rs', 'crates/agent-browser-lease-authority/src/runtime_owner.rs', '.github/workflows/lease-authority.yml', 'cli/src/native/mod.rs', 'cli/src/native/adapter.rs', 'cli/src/runtime_owner_transfer.rs', 'cli/src/runtime_adoption.rs']) {
+        for (const path of ['Cargo.toml', 'cli/Cargo.toml', 'crates/agent-browser-lease-authority/Cargo.toml', 'crates/agent-browser-lease-authority/src/lib.rs', 'crates/agent-browser-lease-authority/src/runtime_owner.rs', '.github/workflows/lease-authority.yml', 'cli/src/native/mod.rs', 'cli/src/native/adapter.rs', 'cli/src/native/service_store.rs', 'cli/src/runtime_owner_transfer.rs', 'cli/src/runtime_adoption.rs']) {
           mkdirSync(join(mutated, path, '..'), { recursive: true });
           writeFileSync(join(mutated, path), read(path, root));
         }
@@ -226,6 +237,7 @@ function selfTest() {
           writeFileSync(join(mutated, path), `${read(path, root)}\nimpl RuntimeOwnerRegistry { pub fn ${name}(&mut self) -> &mut BTreeMap<String, ProfileOwner> { &mut self.owners } }\n`);
         }
         if (mutation === 'direct-registry-map') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\nfn inspect() { state.runtime_owner_registry\n .owners.values(); }\n');
+        if (mutation === 'direct-service-store-registry-map') writeFileSync(join(mutated, 'cli/src/native/service_store.rs'), 'fn inspect() { state.runtime_owner_registry.lifecycle_records.values(); }\n');
         if (mutation === 'direct-registry-revision') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\nfn inspect() { state.runtime_owner_registry.revision; }\n');
         if (mutation === 'aliased-registry-revision') writeFileSync(join(mutated, 'cli/src/runtime_owner_transfer.rs'), 'pub(crate) use agent_browser_lease_authority::RuntimeOwnerRegistry;\nfn inspect(registry: &RuntimeOwnerRegistry) { registry.revision; }\n');
         if (mutation === 'cli-registry-literal') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\nfn inspect() { let registry = RuntimeOwnerRegistry { revision: 3 }; }\n');

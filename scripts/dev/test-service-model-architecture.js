@@ -423,6 +423,23 @@ fn persist_process_exited_browser_health_in_repository() {
   remove_browser_operational_record(service_state, id, session_id);
 }
 `;
+const validRuntimeReconciliation = `
+fn classify(state: &ServiceState) {
+  let authority = state.runtime_lane_authority(profile_identity_digest, logical_browser_id);
+  let owner = authority.owner.ok_or(owner_error)?;
+  let lifecycle = authority.lifecycle.ok_or(lifecycle_error)?;
+}
+`;
+const validLeaseAuthorityAdapter = `
+fn authorize(state: &ServiceState) {
+  let authority = state.profile_runtime_authority(profile_identity_digest);
+  match (claim.owner_generation(), authority.owner) {
+    (None, None) => true,
+    (Some(expected), Some(owner)) => authority.principal_binding.is_some(),
+    _ => false,
+  };
+}
+`;
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
@@ -430,6 +447,8 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   projectionCli = '', runtimeOwnerProjection = validRuntimeOwnerProjection,
   runtimeLifecycle = validRuntimeLifecycle,
   controlPlane = validControlPlane,
+  runtimeReconciliation = validRuntimeReconciliation,
+  leaseAuthorityAdapter = validLeaseAuthorityAdapter,
   principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
@@ -468,6 +487,9 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'cli/src/install.rs'), projectionCli);
   writeFileSync(join(root, 'cli/src/native/runtime_lifecycle.rs'), runtimeLifecycle);
   writeFileSync(join(root, 'cli/src/native/control_plane.rs'), controlPlane);
+  writeFileSync(join(root, 'cli/src/native/runtime_reconciliation.rs'), runtimeReconciliation);
+  writeFileSync(join(root, 'cli/src/native/service_lease_authority_adapter.rs'),
+    leaseAuthorityAdapter);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -736,6 +758,32 @@ for (const [name, mutation] of [
   ['superseded CLI legacy owner revocation wrapper', { runtimeLifecycle: `${validRuntimeLifecycle}
 pub(crate) fn revoke_legacy_owner_in_registry() {}
 ` }],
+  ['runtime reconciliation direct registry access after test item', {
+    runtimeReconciliation: `${validRuntimeReconciliation}
+#[cfg(test)]
+mod tests { fn fixture(state: &ServiceState) { let _ = &state.runtime_owner_registry; } }
+fn production(state: &ServiceState) { let _ = &state.runtime_owner_registry; }
+`,
+  }],
+  ['lease effect direct registry access after test item', {
+    leaseAuthorityAdapter: `${validLeaseAuthorityAdapter}
+#[cfg(test)]
+mod tests { fn fixture(state: &ServiceState) { let _ = &state.runtime_owner_registry; } }
+fn production(state: &ServiceState) { let _ = &state.runtime_owner_registry; }
+`,
+  }],
+  ['runtime reconciliation omits lane projection', {
+    runtimeReconciliation: validRuntimeReconciliation.replace(
+      'state.runtime_lane_authority(profile_identity_digest, logical_browser_id)',
+      'authority_fixture()',
+    ),
+  }],
+  ['lease effect omits profile projection', {
+    leaseAuthorityAdapter: validLeaseAuthorityAdapter.replace(
+      'state.profile_runtime_authority(profile_identity_digest)',
+      'authority_fixture()',
+    ),
+  }],
   ['ordinary lifecycle transition direct field access', {
     runtimeLifecycle: `
 impl Authority {

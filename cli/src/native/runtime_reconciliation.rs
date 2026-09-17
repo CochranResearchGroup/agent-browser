@@ -81,19 +81,13 @@ impl<'a> RuntimeResourceReconciler<'a> {
         else {
             return protected("runtime_lifecycle_profile_identity_unproven");
         };
-        let Some(owner) = self
+        let authority = self
             .state
-            .runtime_owner_registry
-            .owner(&profile_identity_digest)
-        else {
+            .runtime_lane_authority(&profile_identity_digest, logical_browser_id);
+        let Some(owner) = authority.owner else {
             return protected("runtime_lifecycle_owner_unproven");
         };
-        let Some(lifecycle) = self
-            .state
-            .runtime_owner_registry
-            .lifecycle_records()
-            .get(logical_browser_id)
-        else {
+        let Some(lifecycle) = authority.lifecycle else {
             return protected("runtime_lifecycle_record_unproven");
         };
         let Some(process_group_id) = evidence.process_group_id else {
@@ -358,6 +352,89 @@ mod tests {
             Some("runtime_lifecycle_owner_generation_changed")
         );
         assert!(!outcome.kill_sent);
+    }
+
+    fn owner_and_evidence_fixture() -> (ServiceState, RuntimeProcessEvidence, ProfileOwner) {
+        let profile_root = std::env::temp_dir().join("agent-browser-reconciler-projection-profile");
+        let profile_identity_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_root)
+                .unwrap();
+        let recorded = RecordedProcessIdentity {
+            pid: 4101,
+            start_token: "linux:fixture:101".to_string(),
+            executable_path: Some("/opt/agent-browser/chrome".to_string()),
+            browser_family: Some("chrome".to_string()),
+        };
+        let owner = ProfileOwner {
+            owner_id: "owner-reconciler-projection".to_string(),
+            profile_identity_digest,
+            state: ProfileOwnerState::Ready,
+            owner_generation: 8,
+            browser_id: "browser-reconciler-projection".to_string(),
+            daemon_session_route: "reconciler-projection".to_string(),
+            process_instance_digest: crate::native::runtime_lifecycle::digest_json(&recorded)
+                .unwrap(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "c".repeat(64),
+            target_set_digest: "d".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        };
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            owner.browser_id.clone(),
+            BrowserProcess {
+                id: owner.browser_id.clone(),
+                host: BrowserHost::LocalHeadless,
+                health: BrowserHealth::Faulted,
+                pid: Some(recorded.pid),
+                ..BrowserProcess::default()
+            },
+        );
+        state.browser_process_identities.insert(
+            owner.browser_id.clone(),
+            ServiceBrowserProcessIdentity {
+                process_identity: recorded.clone(),
+                user_data_dir: Some(profile_root.to_string_lossy().into_owned()),
+                runtime_profile: None,
+            },
+        );
+        let evidence = RuntimeProcessEvidence {
+            process: ObservedProcessIdentity {
+                pid: recorded.pid,
+                start_token: Some(recorded.start_token.clone()),
+                executable_path: recorded.executable_path.clone(),
+                browser_family: recorded.browser_family.clone(),
+                command_line: Some(vec!["chrome".to_string()]),
+            },
+            process_group_id: Some(recorded.pid),
+            logical_browser_id: Some(owner.browser_id.clone()),
+            profile_root: Some(profile_root.to_string_lossy().into_owned()),
+        };
+        (state, evidence, owner)
+    }
+
+    #[test]
+    fn missing_owner_precedes_missing_lifecycle() {
+        let (state, evidence, _) = owner_and_evidence_fixture();
+        assert_eq!(
+            RuntimeResourceReconciler::new(&state).classify(evidence),
+            RuntimeResourceDecision::Protected {
+                reason: "runtime_lifecycle_owner_unproven"
+            }
+        );
+    }
+
+    #[test]
+    fn present_owner_with_missing_lifecycle_is_record_unproven() {
+        let (mut state, evidence, owner) = owner_and_evidence_fixture();
+        state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(owner);
+        assert_eq!(
+            RuntimeResourceReconciler::new(&state).classify(evidence),
+            RuntimeResourceDecision::Protected {
+                reason: "runtime_lifecycle_record_unproven"
+            }
+        );
     }
 
     #[test]

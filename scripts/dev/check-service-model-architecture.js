@@ -211,6 +211,8 @@ const RUNTIME_OWNER_PROJECTION_CLI_FILES = [
   'cli/src/native/service_status_projection.rs',
   'cli/src/native/service_resources.rs',
   'cli/src/native/service_resources/retained_tree.rs',
+  'cli/src/native/runtime_reconciliation.rs',
+  'cli/src/native/service_lease_authority_adapter.rs',
 ];
 
 const SERVICE_CHALLENGE_DEFINITIONS = [
@@ -777,6 +779,10 @@ function check(root = repoRoot) {
     'cli/src/native/runtime_lifecycle.rs')));
   const cliControlPlaneSource = withoutCfgTestItems(read(root,
     'cli/src/native/control_plane.rs'));
+  const cliRuntimeReconciliation = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
+    'cli/src/native/runtime_reconciliation.rs')));
+  const cliLeaseAuthorityAdapter = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
+    'cli/src/native/service_lease_authority_adapter.rs')));
   const cliRuntimeOwnerProjectionSources = RUNTIME_OWNER_PROJECTION_CLI_FILES.map((path) => ({
     path,
     source: withoutCommentsAndStrings(withoutCfgTestItems(read(root, path))),
@@ -1252,6 +1258,14 @@ function check(root = repoRoot) {
   requireCondition(
     !/\bfn\s+revoke_legacy_owner_in_registry\b/.test(cliRuntimeLifecycle),
     'CLI must not retain the superseded legacy owner revocation wrapper',
+  );
+  requireCondition(
+    /\.\s*runtime_lane_authority\s*\(/.test(cliRuntimeReconciliation),
+    'runtime reconciliation must consume the purpose-specific lane authority projection',
+  );
+  requireCondition(
+    /\.\s*profile_runtime_authority\s*\(/.test(cliLeaseAuthorityAdapter),
+    'lease effect authorization must consume the purpose-specific profile authority projection',
   );
   requireCondition(
     !/\bRuntimeOwnerPersistenceSnapshot\b/.test(runtimeOwnerProjectionSource),
