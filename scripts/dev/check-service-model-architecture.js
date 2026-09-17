@@ -5,6 +5,17 @@ import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '../..');
 
+const ABANDONED_RETIREMENT_RECORDS = [
+  'AbandonedBrowserRetirementPlan',
+  'AbandonedBrowserRetirementTransaction',
+  'AbandonedBrowserRetirementReceipt',
+  'RetirementTerminalProjection',
+  'RetirementExitEvidence',
+  'RetirementExitFailure',
+  'RetirementRecourse',
+  'ResourceRetirementPolicy',
+];
+
 const FORBIDDEN_DEPENDENCIES = [
   'agent-browser',
   'agent-browser-cdp',
@@ -138,6 +149,42 @@ function check(root = repoRoot) {
       );
     }
   }
+
+  const retirement = withoutCommentsAndStrings(read(root,
+    'crates/agent-browser-service-model/src/abandoned_browser_retirement.rs'));
+  const cliSources = rustFilesUnder(join(root, 'cli/src'))
+    .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
+  for (const name of ABANDONED_RETIREMENT_RECORDS) {
+    const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...retirement.matchAll(definition)].length === 1,
+      `service-model abandoned retirement module must own exactly one definition: ${name}`,
+    );
+    requireCondition(
+      sources.reduce((count, source) => count + [...withoutCommentsAndStrings(source).matchAll(definition)].length, 0) === 1,
+      `service-model must not duplicate abandoned retirement record: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(definition.source).test(source)),
+      `CLI must not duplicate abandoned retirement record: ${name}`,
+    );
+  }
+  requireCondition(
+    /\bpub\s+const\s+ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1\b/.test(retirement),
+    'service-model must own the abandoned retirement plan schema constant',
+  );
+  for (const adapter of [
+    'RetirementObservation', 'RetirementReservation', 'ProcessSample',
+    'ServiceState', 'ServiceStateRepository', 'AbandonedBrowserRetirementRuntime',
+    'from_environment', 'resource_retirement_policy_from_environment',
+    'plan_abandoned_browser_retirement', 'reserve_abandoned_browser_retirement',
+    'finalize_abandoned_browser_retirement',
+  ]) {
+    requireCondition(!new RegExp(`\\b${adapter}\\b`).test(retirement),
+      `abandoned retirement model must not absorb CLI adapter: ${adapter}`);
+  }
+  requireCondition(!/\bstd\s*::\s*env\b/.test(retirement),
+    'abandoned retirement model must not read the environment');
 
   return failures;
 }

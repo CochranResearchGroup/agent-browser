@@ -3,6 +3,7 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod abandoned_browser_retirement;
 mod browser_process;
 mod browser_profile;
 mod browser_retirement;
@@ -28,6 +29,12 @@ mod session_tab;
 mod site_policy;
 mod terminal_outcome;
 
+pub use abandoned_browser_retirement::{
+    AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
+    AbandonedBrowserRetirementTransaction, ResourceRetirementPolicy, RetirementExitEvidence,
+    RetirementExitFailure, RetirementRecourse, RetirementTerminalProjection,
+    ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1,
+};
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
     BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,

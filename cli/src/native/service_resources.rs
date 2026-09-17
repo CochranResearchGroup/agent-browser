@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+pub(crate) use agent_browser_service_model::ResourceRetirementPolicy;
+
 use super::service_model::{
     BrowserHealth, LeaseState, ServiceEvent, ServiceEventKind, ServiceState,
 };
@@ -21,90 +23,52 @@ const TEMP_PROFILE_MIN_AGE_SECONDS: u64 = 30 * 60;
 const OWNED_CLOSING_GRACE_SECONDS: u64 = 5;
 const GC_REVIEW_TOKEN_TTL_SECONDS: u64 = 10 * 60;
 const GC_TERM_WAIT_MS: u64 = 1_500;
-const DEFAULT_ABANDONED_LANE_INACTIVITY_SECONDS: u64 = 5 * 60;
-const DEFAULT_PER_BROWSER_RSS_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-const DEFAULT_PER_BROWSER_DESCENDANTS: usize = 64;
-const DEFAULT_PER_BROWSER_TABS: usize = 128;
-const DEFAULT_WORKSTATION_LANES: usize = 16;
-const DEFAULT_WORKSTATION_PROCESSES: usize = 256;
-const DEFAULT_WORKSTATION_RSS_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 
-/// Bounded, read-only thresholds used by the resource projection. A policy is
-/// deliberately not effect authority: retirement still revalidates the exact
-/// owner, process, and activity observation immediately before any shutdown.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub(crate) struct ResourceRetirementPolicy {
-    pub(crate) inactivity_minimum_seconds: u64,
-    pub(crate) per_browser_max_rss_bytes: u64,
-    pub(crate) per_browser_max_descendants: usize,
-    pub(crate) per_browser_max_tabs: usize,
-    pub(crate) workstation_max_lanes: usize,
-    pub(crate) workstation_max_processes: usize,
-    pub(crate) workstation_max_rss_bytes: u64,
-}
-
-impl Default for ResourceRetirementPolicy {
-    fn default() -> Self {
-        Self {
-            inactivity_minimum_seconds: DEFAULT_ABANDONED_LANE_INACTIVITY_SECONDS,
-            per_browser_max_rss_bytes: DEFAULT_PER_BROWSER_RSS_BYTES,
-            per_browser_max_descendants: DEFAULT_PER_BROWSER_DESCENDANTS,
-            per_browser_max_tabs: DEFAULT_PER_BROWSER_TABS,
-            workstation_max_lanes: DEFAULT_WORKSTATION_LANES,
-            workstation_max_processes: DEFAULT_WORKSTATION_PROCESSES,
-            workstation_max_rss_bytes: DEFAULT_WORKSTATION_RSS_BYTES,
-        }
-    }
-}
-
-impl ResourceRetirementPolicy {
-    pub(crate) fn from_environment() -> Self {
-        let defaults = Self::default();
-        Self {
-            inactivity_minimum_seconds: bounded_env_u64(
-                "AGENT_BROWSER_RESOURCE_INACTIVITY_MIN_SECONDS",
-                defaults.inactivity_minimum_seconds,
-                60,
-                24 * 60 * 60,
-            ),
-            per_browser_max_rss_bytes: bounded_env_u64(
-                "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_RSS_BYTES",
-                defaults.per_browser_max_rss_bytes,
-                64 * 1024 * 1024,
-                64 * 1024 * 1024 * 1024,
-            ),
-            per_browser_max_descendants: bounded_env_usize(
-                "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_DESCENDANTS",
-                defaults.per_browser_max_descendants,
-                1,
-                4096,
-            ),
-            per_browser_max_tabs: bounded_env_usize(
-                "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_TABS",
-                defaults.per_browser_max_tabs,
-                1,
-                16384,
-            ),
-            workstation_max_lanes: bounded_env_usize(
-                "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_LANES",
-                defaults.workstation_max_lanes,
-                1,
-                4096,
-            ),
-            workstation_max_processes: bounded_env_usize(
-                "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_PROCESSES",
-                defaults.workstation_max_processes,
-                1,
-                65536,
-            ),
-            workstation_max_rss_bytes: bounded_env_u64(
-                "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_RSS_BYTES",
-                defaults.workstation_max_rss_bytes,
-                64 * 1024 * 1024,
-                1024 * 1024 * 1024 * 1024,
-            ),
-        }
+fn resource_retirement_policy_from_environment() -> ResourceRetirementPolicy {
+    let defaults = ResourceRetirementPolicy::default();
+    ResourceRetirementPolicy {
+        inactivity_minimum_seconds: bounded_env_u64(
+            "AGENT_BROWSER_RESOURCE_INACTIVITY_MIN_SECONDS",
+            defaults.inactivity_minimum_seconds,
+            60,
+            24 * 60 * 60,
+        ),
+        per_browser_max_rss_bytes: bounded_env_u64(
+            "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_RSS_BYTES",
+            defaults.per_browser_max_rss_bytes,
+            64 * 1024 * 1024,
+            64 * 1024 * 1024 * 1024,
+        ),
+        per_browser_max_descendants: bounded_env_usize(
+            "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_DESCENDANTS",
+            defaults.per_browser_max_descendants,
+            1,
+            4096,
+        ),
+        per_browser_max_tabs: bounded_env_usize(
+            "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_TABS",
+            defaults.per_browser_max_tabs,
+            1,
+            16384,
+        ),
+        workstation_max_lanes: bounded_env_usize(
+            "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_LANES",
+            defaults.workstation_max_lanes,
+            1,
+            4096,
+        ),
+        workstation_max_processes: bounded_env_usize(
+            "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_PROCESSES",
+            defaults.workstation_max_processes,
+            1,
+            65536,
+        ),
+        workstation_max_rss_bytes: bounded_env_u64(
+            "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_RSS_BYTES",
+            defaults.workstation_max_rss_bytes,
+            64 * 1024 * 1024,
+            1024 * 1024 * 1024 * 1024,
+        ),
     }
 }
 
@@ -516,7 +480,7 @@ fn service_resources_response_from_samples_for_environment(
     collection_warnings: Vec<String>,
     environment: ResourceRuntimeEnvironment,
 ) -> Value {
-    let policy = ResourceRetirementPolicy::from_environment();
+    let policy = resource_retirement_policy_from_environment();
     let observed_at = chrono::Utc::now().to_rfc3339();
     let snapshot = service_resource_authority_snapshot_from_samples_with_policy(
         state,
@@ -579,7 +543,7 @@ fn service_resource_authority_snapshot_from_samples_for_environment(
         processes,
         collection_warnings,
         environment,
-        &ResourceRetirementPolicy::from_environment(),
+        &resource_retirement_policy_from_environment(),
         &chrono::Utc::now().to_rfc3339(),
     )
 }
@@ -2715,7 +2679,7 @@ fn service_gc_apply_abandoned_response(
         validate_review_token(&candidates, token, unix_now_seconds())?;
     }
 
-    let policy = ResourceRetirementPolicy::from_environment();
+    let policy = resource_retirement_policy_from_environment();
     let mut receipts = Vec::new();
     for candidate in abandoned {
         let browser_id = candidate

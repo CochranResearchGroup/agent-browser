@@ -5,7 +5,7 @@
 //! replayable repository mutation. A repeated reservation requires recovery;
 //! it does not authorize repeating an uncertain process effect.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
@@ -19,122 +19,18 @@ use crate::runtime_owner_transfer::{
     CleanupObligationState, OwnerAuthorityClaim, RuntimeLaneLifecycleState,
 };
 
-const PLAN_SCHEMA: &str = "agent-browser.abandoned-browser-retirement-plan.v1";
+pub(crate) use agent_browser_service_model::{
+    AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
+    AbandonedBrowserRetirementTransaction, RetirementExitEvidence, RetirementExitFailure,
+    RetirementRecourse, RetirementTerminalProjection,
+    ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1 as PLAN_SCHEMA,
+};
 
 /// External observation prepared before entering a replayable mutation.
 #[derive(Debug, Clone)]
 pub(crate) struct RetirementObservation {
     pub(crate) processes: Vec<ProcessSample>,
     pub(crate) profile_identity_digest: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AbandonedBrowserRetirementPlan {
-    pub(crate) schema_version: String,
-    pub(crate) plan_id: String,
-    pub(crate) state_revision: u64,
-    pub(crate) browser_id: String,
-    pub(crate) browser_record_digest: String,
-    pub(crate) root: RecordedProcessIdentity,
-    pub(crate) descendants: Vec<RecordedProcessIdentity>,
-    pub(crate) process_group_id: u32,
-    pub(crate) profile_path: String,
-    pub(crate) profile_id: Option<String>,
-    pub(crate) profile_identity_digest: String,
-    pub(crate) owner_generation: u64,
-    pub(crate) owner_digest: String,
-    pub(crate) package_launch_identity_digest: String,
-    pub(crate) activity_digest: String,
-    pub(crate) policy: ResourceRetirementPolicy,
-    pub(crate) created_at: String,
-    pub(crate) expires_at: String,
-    pub(crate) expected_terminal: RetirementTerminalProjection,
-}
-
-/// Exact public-state postcondition. Profile records and profile files survive.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RetirementTerminalProjection {
-    pub(crate) browser_health: BrowserHealth,
-    pub(crate) lifecycle_state: RuntimeLaneLifecycleState,
-    pub(crate) cleanup_obligation_state: CleanupObligationState,
-    pub(crate) detached_session_ids: Vec<String>,
-    pub(crate) closed_tab_ids: Vec<String>,
-    pub(crate) released_display_allocation_ids: Vec<String>,
-    pub(crate) released_route_ids: Vec<String>,
-    pub(crate) released_viewer_lease_ids: Vec<String>,
-    pub(crate) released_acquisition_lease_ids: Vec<String>,
-    pub(crate) released_route_pool_entry_ids: Vec<String>,
-    pub(crate) preserved_profile_digest: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AbandonedBrowserRetirementTransaction {
-    pub(crate) plan: AbandonedBrowserRetirementPlan,
-    pub(crate) reserved_revision: u64,
-    pub(crate) reserved_browser_digest: String,
-    pub(crate) receipt: Option<AbandonedBrowserRetirementReceipt>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AbandonedBrowserRetirementReceipt {
-    pub(crate) plan_id: String,
-    pub(crate) browser_id: String,
-    pub(crate) completed_at: String,
-    pub(crate) terminal_revision: u64,
-    pub(crate) effect_evidence: RetirementExitEvidence,
-    pub(crate) terminal_projection: RetirementTerminalProjection,
-}
-
-/// Adapter-observed proof, tied to the exact reservation and process group.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RetirementExitEvidence {
-    pub(crate) plan_id: String,
-    pub(crate) reserved_revision: u64,
-    pub(crate) process_group_id: u32,
-    pub(crate) observed_at: String,
-    pub(crate) root_exited: bool,
-    pub(crate) descendants_exited: bool,
-    pub(crate) process_group_empty: bool,
-    pub(crate) profile_lock_released: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RetirementExitFailure {
-    pub(crate) failed_conditions: Vec<String>,
-    pub(crate) evidence: RetirementExitEvidence,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "code", content = "detail", rename_all = "snake_case")]
-pub(crate) enum RetirementRecourse {
-    InvalidPlan,
-    Expired,
-    StateRevisionChanged,
-    BrowserRecordChanged,
-    RootChanged,
-    DescendantsChanged,
-    ProcessGroupChanged,
-    ProfileChanged,
-    OwnerChanged,
-    ActivityChanged,
-    Ineligible(String),
-    ReservationMissing,
-    RecoveryRequired,
-    ExitUnproven(Box<RetirementExitFailure>),
-    TerminalCompareAndSwapFailed,
-    ObservationFailed(String),
-}
-
-impl std::fmt::Display for RetirementRecourse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "abandoned_browser_retirement:{self:?}")
-    }
 }
 
 type RetirementResult<T> = Result<T, RetirementRecourse>;

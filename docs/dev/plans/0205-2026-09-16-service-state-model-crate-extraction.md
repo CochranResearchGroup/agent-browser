@@ -1784,6 +1784,49 @@ implementation packets. The next action is the abandoned-retirement record
 and policy extraction only. Do not combine it with crash regeneration,
 authentication, challenge, capability-registry, bug-fix, or runtime work.
 
+## Checkpoint 29 | Abandoned-Retirement Records Accepted
+
+State transition: Service Model now canonically owns the abandoned-browser
+retirement plan, terminal projection, transaction, receipt, exit evidence,
+exit failure, recourse, schema constant, and resource-retirement policy data
+and defaults. `ServiceState` names the canonical transaction directly. The CLI
+retains observation, reservation, aggregate planning and publication,
+identity rechecks, profile-claim fencing, environment loading, repository
+transactions, and live effects.
+
+Compatibility evidence:
+
+- a frozen unsigned-plan fixture preserves exact serialized field order and
+  SHA-256 `7623ecef1ccaa39d6a4aa2dc83e2331906f53f3f269ef8f50c4b40eb7fdb6e10`;
+- strict retirement records round-trip and reject unknown fields, while the
+  policy retains defaults and permissive unknown-field decoding;
+- the CLI algorithm body from its result boundary onward is unchanged, so
+  sealing, expiry/replay order, revision expectations, identity rechecks,
+  profile fences, finalization replay, and effect sequencing remain intact;
+- Service Model passes 115 unit and fourteen integration tests; all fourteen
+  retirement, 39 resource, and 43 store CLI tests pass;
+- the Service Model architecture guard and mutation-fixture self-test pass,
+  workspace formatting passes, and strict workspace Clippy passes; and
+- no dependency, external schema, sidecar, migration, crash-regeneration,
+  GitHub CI, runtime, browser, profile, provider, install, staging,
+  production, or release effect was introduced.
+
+The structural guard now requires one model-owned retirement family and
+rejects retained CLI definitions plus native, repository, filesystem,
+process, clock, environment, provider, or runtime imports in the model module.
+
+Delegation and model-choice receipt: `/root/p205_owner_mutation_api` used
+`gpt-6-astra` at high effort for the record extraction, environment-loader
+adaptation, fixed wire/hash tests, deletion guard, and focused validation. The
+primary reviewed the final boundary and ran strict workspace Clippy.
+
+Acceptance state and progress classification: the abandoned-retirement
+record-only packet is accepted. This is outcome progress and removes that
+downward aggregate dependency without moving its effectful aggregate
+algorithms. Next action: implement the separately frozen crash-regeneration
+model and phase-transition packet. Do not combine it with authentication,
+challenge, capability-registry, bug-fix, or runtime work.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
