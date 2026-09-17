@@ -87,6 +87,7 @@ function writeGithubOutputs(path, report) {
     rust: report.jobs.rust,
     dashboard: report.jobs.dashboard,
     service_client: report.jobs.serviceClient,
+    repository_tooling: report.jobs.repositoryTooling,
     service_smokes: report.serviceSmokes,
     workstation: report.jobs.workstation,
     rust_compartments: JSON.stringify(report.rustCompartments),
@@ -226,6 +227,10 @@ function selectRecommendations(files, base) {
 
   if (files.some(isServiceClientSurface)) {
     add('pnpm test:service-client', 'service client package, examples, or generated helpers changed');
+  }
+
+  if (files.some(isRepositoryToolingSurface)) {
+    add('pnpm test:repository-tooling', 'candidate build or worktree closeout tooling changed');
   }
 
   if (files.some(isServiceAttributionNoLaunchSurface)) {
@@ -474,6 +479,17 @@ function isServiceClientSurface(file) {
     file.startsWith('scripts/test-service-') ||
     file === 'scripts/generate-service-request-client.js' ||
     file === 'scripts/generate-service-observability-client.js'
+  );
+}
+
+function isRepositoryToolingSurface(file) {
+  return (
+    file === 'scripts/candidate-build.js' ||
+    file.startsWith('scripts/lib/candidate-build-') ||
+    file.startsWith('scripts/test-candidate-build-') ||
+    file === 'scripts/dev/worktree-closeout.js' ||
+    file.startsWith('scripts/lib/worktree-closeout') ||
+    file === 'scripts/test-worktree-closeout.js'
   );
 }
 

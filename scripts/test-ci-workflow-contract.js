@@ -32,6 +32,7 @@ for (const [job, output] of [
   ['rust-tests', 'rust'],
   ['dashboard', 'dashboard'],
   ['service-client', 'service_client'],
+  ['repository-tooling', 'repository_tooling'],
   ['workstation-fixtures', 'workstation'],
 ]) {
   const escapedJob = job.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -43,7 +44,7 @@ for (const [job, output] of [
 }
 
 assert.match(workflow, /presubmit:\s+name: Presubmit\s+if: always\(\)/);
-for (const dependency of ['classify', 'docs', 'version-sync', 'rust-quality', 'rust-tests', 'dashboard', 'service-client', 'workstation-fixtures']) {
+for (const dependency of ['classify', 'docs', 'version-sync', 'rust-quality', 'rust-tests', 'dashboard', 'service-client', 'repository-tooling', 'workstation-fixtures']) {
   assert.match(workflow, new RegExp(`\\n      - ${dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\n|$)`));
 }
 assert.match(workflow, /name: Verify selected jobs[\s\S]*?shell: bash[\s\S]*?set -euo pipefail[\s\S]*?node scripts\/ci\/verify-presubmit\.js \| tee presubmit-receipt\.json/);

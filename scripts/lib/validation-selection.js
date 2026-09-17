@@ -1,7 +1,7 @@
 export const VALIDATION_SELECTION_SCHEMA_VERSION = 'agent-browser.validation-selection.v2';
 export const VALIDATION_SELECTION_VERSION = VALIDATION_SELECTION_SCHEMA_VERSION;
 
-const JOB_KEYS = Object.freeze(['docs', 'versionSync', 'rustQuality', 'rust', 'dashboard', 'serviceClient', 'workstation']);
+const JOB_KEYS = Object.freeze(['docs', 'versionSync', 'rustQuality', 'rust', 'dashboard', 'serviceClient', 'repositoryTooling', 'workstation']);
 
 /** Classifies changed paths without reading Git, the filesystem, or process environment. */
 export function classifyValidationSelection(files) {
@@ -52,11 +52,12 @@ function result({ changedFiles, tier, matchedSurfaces = [], unknownFiles = [], j
 }
 
 function emptyJobs() { return Object.fromEntries(JOB_KEYS.map((key) => [key, false])); }
-function allPresubmitJobs() { return { ...emptyJobs(), docs: true, versionSync: true, rustQuality: true, rust: true, dashboard: true, serviceClient: true, workstation: true }; }
+function allPresubmitJobs() { return { ...emptyJobs(), docs: true, versionSync: true, rustQuality: true, rust: true, dashboard: true, serviceClient: true, repositoryTooling: true, workstation: true }; }
 function enableSurfaceJobs(jobs, surface) {
   if (surface === 'docs') jobs.docs = true;
   if (surface === 'dashboard') jobs.dashboard = true;
   if (surface === 'service-client') jobs.serviceClient = true;
+  if (surface === 'repository-tooling') jobs.repositoryTooling = true;
   if (surface === 'workstation') jobs.workstation = true;
   if (surface === 'rust') { jobs.rustQuality = true; jobs.rust = true; }
 }
@@ -71,6 +72,7 @@ function surfacesFor(file) {
   if (isDocsOrGovernance(file)) surfaces.push('docs');
   if (file.startsWith('packages/dashboard/')) surfaces.push('dashboard');
   if (isServiceClient(file)) surfaces.push('service-client');
+  if (isRepositoryTooling(file)) surfaces.push('repository-tooling');
   if (isWorkstationOrRelease(file)) surfaces.push('workstation');
   if (isRustSource(file)) surfaces.push('rust');
   return surfaces;
@@ -88,6 +90,9 @@ function isDocsOrGovernance(file) {
 }
 function isServiceClient(file) {
   return file.startsWith('packages/client/') || file.startsWith('examples/service-client/') || file.startsWith('scripts/generate-service-') || file.startsWith('scripts/test-service-') || file.startsWith('docs/dev/contracts/') || file === 'cli/src/native/service_contracts.rs' || file === 'cli/src/native/service_request.rs' || file === 'cli/src/native/service_model.rs' || file.startsWith('cli/src/native/mcp');
+}
+function isRepositoryTooling(file) {
+  return file === 'scripts/candidate-build.js' || file.startsWith('scripts/lib/candidate-build-') || file.startsWith('scripts/test-candidate-build-') || file === 'scripts/dev/worktree-closeout.js' || file.startsWith('scripts/lib/worktree-closeout') || file === 'scripts/test-worktree-closeout.js';
 }
 function isWorkstationOrRelease(file) {
   return file.startsWith('cli/assets/workstation/') || file.startsWith('scripts/release/') || file.startsWith('scripts/vm/') || file.startsWith('scripts/test-workstation-') || file.startsWith('scripts/smoke-install-workstation-') || file === 'cli/src/install.rs' || file === 'cli/src/workstation_install.rs' || file.startsWith('cli/src/workstation_install/') || file === 'scripts/test-fresh-workstation-vm-harness.js' || file === 'scripts/test-guacamole-postgres-durability.js' || file === 'scripts/test-rdp-guac-postgres-hardening.js' || file === 'scripts/test-rdp-guac-route-specific-user-sync.js' || file === 'CHANGELOG.md' || file === '.github/workflows/release.yml';
