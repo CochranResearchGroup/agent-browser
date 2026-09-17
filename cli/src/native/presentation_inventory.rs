@@ -417,7 +417,7 @@ impl PresentationProviderInventory {
                 .insert(provider_route.slot_id.clone(), slot);
         }
         let previous = state.presentation_capacity.take();
-        let mut capacity = PresentationCapacityAuthority::from_service_state(config, state)?;
+        let mut capacity = super::presentation_capacity::from_service_state(config, state)?;
         if let Some(previous) = previous {
             capacity.queued_requests = previous.queued_requests;
             capacity.queue_clock = previous.queue_clock;

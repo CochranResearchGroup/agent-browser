@@ -2310,19 +2310,28 @@ mod tests {
         let mut capacity = state.presentation_capacity.clone().unwrap();
         assert!(capacity.admission_error.is_some());
         assert_eq!(capacity.slots, vec![slot]);
-        assert_eq!(capacity.reconcile_authoritative_bindings(&state), 0);
+        assert_eq!(
+            crate::native::presentation_capacity::reconcile_authoritative_bindings(
+                &mut capacity,
+                &state,
+            ),
+            0
+        );
         assert_eq!(
             capacity
                 .projection(PressureAdmission::admit(2))
                 .pressure_admitted_maximum,
             0
         );
-        assert!(!capacity.binding_warnings(&state).is_empty());
+        assert!(
+            !crate::native::presentation_capacity::binding_warnings(&capacity, &state).is_empty()
+        );
         let before = capacity.clone();
         for bound in [false, true] {
             let request = PresentationRequest::recovery("recover").for_browser("incumbent");
             let decision = if bound {
-                capacity.request_bound_recovery(
+                crate::native::presentation_capacity::request_bound_recovery(
+                    &mut capacity,
                     request,
                     PressureAdmission::admit(2),
                     &state,

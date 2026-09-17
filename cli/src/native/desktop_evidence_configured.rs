@@ -269,7 +269,13 @@ where
                     .presentation_capacity
                     .take()
                     .ok_or_else(|| "presentation capacity is missing".to_string())?;
-                let result = capacity.transition_slot(&slot_id, &request_id, next, Some(state));
+                let result = super::presentation_capacity::transition_slot(
+                    &mut capacity,
+                    &slot_id,
+                    &request_id,
+                    next,
+                    Some(state),
+                );
                 state.presentation_capacity = Some(capacity);
                 result.map(|_| ())
             })
@@ -806,7 +812,8 @@ where
                     .presentation_capacity
                     .take()
                     .ok_or_else(|| "presentation capacity is missing".to_string())?;
-                let result = capacity.transition_slot(
+                let result = super::presentation_capacity::transition_slot(
+                    &mut capacity,
                     &slot_id,
                     &request_id,
                     PresentationSlotState::CaptureReady,
@@ -1180,7 +1187,8 @@ where
             let Some(mut capacity) = state.presentation_capacity.take() else {
                 return Err("presentation_capacity_unavailable".to_string());
             };
-            let decision = capacity.request_bound_observation(
+            let decision = super::presentation_capacity::request_bound_observation(
+                &mut capacity,
                 PresentationRequest::observation(request_id.clone()).for_browser(&browser_id),
                 pressure,
                 state,
@@ -1236,7 +1244,13 @@ where
                 state.presentation_capacity = Some(capacity);
                 return Err("presentation_reserved_slot_missing".to_string());
             }
-            capacity.release_bound_presentation(&slot_id, &request_id, pressure, state)?;
+            super::presentation_capacity::release_bound_presentation(
+                &mut capacity,
+                &slot_id,
+                &request_id,
+                pressure,
+                state,
+            )?;
             state.presentation_capacity = Some(capacity);
             Ok(())
         });

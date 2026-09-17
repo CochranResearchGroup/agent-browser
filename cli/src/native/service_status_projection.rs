@@ -549,7 +549,8 @@ impl ServiceStatusProjector {
                 .presentation_capacity
                 .as_ref()
                 .map(|capacity| {
-                    capacity.projection_with_service_state(
+                    super::presentation_capacity::projection_with_service_state(
+                        capacity,
                         super::presentation_capacity::PressureAdmission::admit(
                             capacity.config.hard_maximum,
                         ),

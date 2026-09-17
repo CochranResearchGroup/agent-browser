@@ -460,18 +460,26 @@ mod tests {
             .qualify(&state, config, "production", "boot-test", |_, _| true)
             .unwrap();
         assert_eq!(serde_json::to_value(&state).unwrap(), before);
-        assert_eq!(capacity.reconcile_authoritative_bindings(&state), 0);
+        assert_eq!(
+            crate::native::presentation_capacity::reconcile_authoritative_bindings(
+                &mut capacity,
+                &state,
+            ),
+            0
+        );
         assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("browser"));
-        assert!(!capacity
-            .clone()
-            .request_bound_recovery(
+        let mut foreign_capacity = capacity.clone();
+        assert!(
+            !crate::native::presentation_capacity::request_bound_recovery(
+                &mut foreign_capacity,
                 PresentationRequest::recovery("foreign").for_browser("other-browser"),
                 PressureAdmission::admit(2),
                 &state,
                 "route",
                 "display"
             )
-            .is_granted());
+            .is_granted()
+        );
         let mut released_state = state.clone();
         released_state
             .remote_view_routes
@@ -480,7 +488,10 @@ mod tests {
             .state = "released".into();
         let mut released_capacity = capacity.clone();
         assert_eq!(
-            released_capacity.reconcile_authoritative_bindings(&released_state),
+            crate::native::presentation_capacity::reconcile_authoritative_bindings(
+                &mut released_capacity,
+                &released_state,
+            ),
             1
         );
         assert_eq!(
@@ -488,15 +499,17 @@ mod tests {
             PresentationSlotState::WarmIdle
         );
         assert!(released_capacity.slots[0].browser_id.is_none());
-        assert!(capacity
-            .request_bound_recovery(
+        assert!(
+            crate::native::presentation_capacity::request_bound_recovery(
+                &mut capacity,
                 PresentationRequest::recovery("recover").for_browser("browser"),
                 PressureAdmission::admit(2),
                 &state,
                 "route",
                 "display"
             )
-            .is_granted());
+            .is_granted()
+        );
         let mut unavailable = capacity.clone();
         unavailable.admission_error =
             Some("production_presentation_inventory_owner_unproven:route".into());
@@ -787,7 +800,13 @@ mod tests {
         let mut capacity = inventory
             .qualify(&pending, config, "production", &boot, |_, _| true)
             .expect("the native acquisition reservation must survive inventory reload");
-        assert_eq!(capacity.reconcile_authoritative_bindings(&pending), 0);
+        assert_eq!(
+            crate::native::presentation_capacity::reconcile_authoritative_bindings(
+                &mut capacity,
+                &pending,
+            ),
+            0
+        );
         assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("browser"));
         capacity
             .activate_bound_browser("route", "display", "browser")
@@ -851,15 +870,17 @@ mod tests {
         let mut capacity = inventory
             .qualify(&state, config, "production", "boot-test", |_, _| true)
             .unwrap();
-        assert!(!capacity
-            .request_bound_recovery(
+        assert!(
+            !crate::native::presentation_capacity::request_bound_recovery(
+                &mut capacity,
                 PresentationRequest::recovery("recover").for_browser("browser"),
                 PressureAdmission::admit(2),
                 &state,
                 "route",
                 "display"
             )
-            .is_granted());
+            .is_granted()
+        );
         state
             .display_allocations
             .get_mut("display")

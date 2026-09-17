@@ -1182,7 +1182,10 @@ fn reconcile_presentation_capacity_bindings(service_state: &mut ServiceState) ->
     let Some(mut capacity) = service_state.presentation_capacity.take() else {
         return 0;
     };
-    let repaired = capacity.reconcile_authoritative_bindings(service_state);
+    let repaired = super::presentation_capacity::reconcile_authoritative_bindings(
+        &mut capacity,
+        service_state,
+    );
     service_state.presentation_capacity = Some(capacity);
     repaired
 }
