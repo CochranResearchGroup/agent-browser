@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -28,9 +28,10 @@ Make ordinary pull-request validation deterministic and proportional to changed
 surfaces while preserving one stable aggregate presubmit check and a fail-safe
 fallback for unknown impact. Do not run full-suite CI: remove post-merge,
 scheduled, manually dispatched, commit-message-triggered, comprehensive Rust,
-and slow platform routes from the CI workflow. Keep comprehensive provider-free
-testing as a local command only. Issue #164 remains an independent enforcement
-item and does not gate elimination of duplicate CI.
+and slow platform routes from the CI workflow. Explicit operator clarification
+then disables GitHub CI entirely for now by retaining the reviewed workflow
+under a non-workflow `.disabled` suffix. Keep validation commands available
+locally. Re-enablement requires new maintainer direction.
 
 ## Current State
 
@@ -70,6 +71,10 @@ full-suite CI is not wanted. Version 5 therefore removes every full-suite route
 from `.github/workflows/ci.yml` and changes dependency and toolchain selection
 from comprehensive to broad ordinary presubmit. Candidate `d9fede9d` contains
 the executable workflow, selector, schema, and regression-contract change.
+The operator then clarified that focused CI should also be disabled for now.
+Run `35228725370` was cancelled, `.github/workflows/ci.yml` was removed, and the
+reviewed workflow was retained as `.github/workflows/ci.yml.disabled` in
+candidate `ca077d9e`.
 
 The pre-implementation docs-only probe against merge `aa7b67b1` remains the red
 baseline. Local validation is green for the selector and aggregate suites,
@@ -100,8 +105,8 @@ repository, issue, workflow, and run evidence therefore govern this plan.
    Remove comprehensive and slow-platform execution from GitHub CI entirely.
 5. Record selection tier, included and excluded lanes, elapsed time, and
    runner-time inputs without describing focused validation as comprehensive.
-6. Update the repository CI contract so pull requests are the sole CI trigger;
-   retain issue #164 only as an independent enforcement improvement.
+6. Retain the reviewed path-selected workflow under a `.disabled` suffix so
+   GitHub has no CI trigger. Re-enable only after new maintainer direction.
 
 ## Scope And Effect Boundary
 
@@ -180,9 +185,11 @@ Exit requires current evidence that:
 - selection, exclusions, tier, elapsed time, and runner-time inputs are recorded;
 - one organic docs-only pull request and one organic narrow Rust pull request
   demonstrate the selected behavior;
-- CI has no push, schedule, manual dispatch, commit-message full-suite trigger,
-  comprehensive Rust job, or slow platform matrix; and
-- issue #164 remains separately tracked for live enforcement of `Presubmit`.
+- GitHub has no active CI workflow or trigger;
+- the dormant workflow has no push, schedule, manual dispatch, commit-message
+  full-suite trigger, comprehensive Rust job, or slow platform matrix; and
+- issue #164 remains separately tracked for any future enforcement of
+  `Presubmit`.
 
 | Requirement | Current evidence | State |
 | --- | --- | --- |
@@ -192,10 +199,10 @@ Exit requires current evidence that:
 | Proportional job routing | Exact-range readback selects broad ordinary validation for this classifier/workflow change and excludes comprehensive Rust | green locally |
 | Service smoke routing | Selector fixtures distinguish unrelated Rust from service-owned Rust; workflow contract gates the smoke bundle on `serviceSmokes` | green locally |
 | Rust lane isolation | Organic run `35171646162` exposed same-target CLI executable replacement; exact-head run `35172965793` passed the corrected serialized CLI lane plus independent crate lane | green organically |
-| Full-suite CI absent | Candidate `d9fede9d` workflow contract rejects push, schedule, manual dispatch, commit-message activation, comprehensive Rust, and slow platform jobs | green locally; exact-head PR evidence pending |
+| GitHub CI disabled | Candidate `ca077d9e` removes the active workflow path, retains reviewed configuration as `.github/workflows/ci.yml.disabled`, and records cancellation of run `35228725370` | green locally; provider cancellation confirmed |
 | Economics receipt | Fixture covers selected lanes, exclusions, bounded wall time, observed runner time, and explicit measurement limits | green locally; organic receipt pending |
-| Organic docs and narrow-Rust evidence | Existing runs prove the broad baseline only | pending candidate workflow |
-| Protected aggregate enforcement | Live branch protection returns 404 and rulesets are empty | independent issue #164 |
+| Organic docs and narrow-Rust evidence | Existing runs prove the broad baseline only | deferred while CI is disabled |
+| Protected aggregate enforcement | Live branch protection returns 404 and rulesets are empty | independent issue #164 if CI resumes |
 
 ## Stop Condition
 
@@ -203,5 +210,6 @@ Stop before branch-protection or ruleset mutation, workflow dispatch or retry,
 test deletion for timing, automatic retry, installed-runtime or browser effect,
 provider or credential access, production or staging mutation, or release.
 Keep the plan open if implementation is ready but organic docs-only or
-narrow-Rust evidence is still missing. Do not restore a full-suite CI route as
-a substitute for missing evidence.
+narrow-Rust evidence is still missing. CI being disabled intentionally makes
+those organic receipts unavailable. Do not restore CI merely to manufacture
+acceptance evidence.

@@ -38,10 +38,13 @@ focused Rust compartments, bounded economics, and the stable fail-closed
 ordinary gate and the stable aggregate before merge commit `f5e3f31b`. Operator
 direction now removes every full-suite CI route: no `main` push, schedule,
 manual CI dispatch, commit-message trigger, comprehensive Rust job, or slow
-platform matrix remains in candidate `d9fede9d`. Broad ordinary presubmit is the fail-safe for unknown,
-dependency, toolchain, classifier, and workflow changes. Issue #164 remains an
-independent enforcement improvement rather than a prerequisite for eliminating
-duplicate CI. Organic docs-only and narrow-Rust evidence remain pending.
+platform matrix remains in candidate `d9fede9d`. Follow-up operator direction
+also disables focused CI for now: the workflow is retained only as
+`.github/workflows/ci.yml.disabled` in candidate `ca077d9e`, and active run
+`35228725370` was cancelled.
+Issue #164 remains an independent enforcement improvement for any future CI
+resumption. Organic docs-only and narrow-Rust evidence are deferred while CI is
+disabled.
 
 ## P203 | Runtime Host Admission Routing
 
