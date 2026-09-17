@@ -649,6 +649,83 @@ impl ServiceState {
         &self.lease_authority
     }
 
+    /// Return the current unexpired claim without exposing mutable authority.
+    pub fn current_lease_claim(
+        &self,
+        resource: &agent_browser_lease_authority::LeaseResourceKey,
+        now: &str,
+    ) -> Option<&agent_browser_lease_authority::ActiveLeaseClaim> {
+        self.lease_authority.current_claim(resource, now)
+    }
+
+    /// Read an existing release receipt without loading verification keys.
+    pub fn replay_lease_claim_release(
+        &self,
+        request: &agent_browser_lease_authority::ReleaseLeaseClaimRequest,
+    ) -> Result<
+        Option<agent_browser_lease_authority::LeaseClaimReleaseOutcome>,
+        agent_browser_lease_authority::LeaseAuthorityError,
+    > {
+        self.lease_authority.replay_release(request)
+    }
+
+    /// Read an existing recovery receipt without loading verification keys.
+    pub fn replay_lease_claim_recovery(
+        &self,
+        request: &agent_browser_lease_authority::RecoverLeaseClaimRequest,
+    ) -> Result<
+        Option<agent_browser_lease_authority::LeaseClaimRecoveryOutcome>,
+        agent_browser_lease_authority::LeaseAuthorityError,
+    > {
+        self.lease_authority.replay_recovery(request)
+    }
+
+    /// Read an existing revocation receipt without loading verification keys.
+    pub fn replay_lease_claim_revocation(
+        &self,
+        request: &agent_browser_lease_authority::RevokeLeaseClaimRequest,
+    ) -> Result<
+        Option<agent_browser_lease_authority::LeaseClaimRevocationOutcome>,
+        agent_browser_lease_authority::LeaseAuthorityError,
+    > {
+        self.lease_authority.replay_revocation(request)
+    }
+
+    /// Release through the authority kernel, preserving replay before key loading
+    /// and binding holder capabilities to this snapshot's principal registry.
+    pub fn release_lease_claim(
+        &mut self,
+        request: agent_browser_lease_authority::ReleaseLeaseClaimRequest,
+    ) -> Result<agent_browser_lease_authority::LeaseClaimReleaseOutcome, String> {
+        agent_browser_lease_authority::release_lease_claim(
+            &mut self.lease_authority,
+            &self.service_principals,
+            request,
+        )
+    }
+
+    /// Recover through the authority kernel, preserving replay before key loading
+    /// and binding the recovery controller to this snapshot's principal registry.
+    pub fn recover_lease_claim(
+        &mut self,
+        request: agent_browser_lease_authority::RecoverLeaseClaimRequest,
+    ) -> Result<agent_browser_lease_authority::LeaseClaimRecoveryOutcome, String> {
+        agent_browser_lease_authority::recover_lease_claim(
+            &mut self.lease_authority,
+            &self.service_principals,
+            request,
+        )
+    }
+
+    /// Revoke through the authority kernel, preserving replay before key loading
+    /// and the existing administrative verification and terminal receipt rules.
+    pub fn revoke_lease_claim(
+        &mut self,
+        request: agent_browser_lease_authority::RevokeLeaseClaimRequest,
+    ) -> Result<agent_browser_lease_authority::LeaseClaimRevocationOutcome, String> {
+        agent_browser_lease_authority::revoke_lease_claim(&mut self.lease_authority, request)
+    }
+
     pub fn acquire_lease_claim(
         &mut self,
         request: agent_browser_lease_authority::AcquireLeaseClaimRequest,
@@ -2924,6 +3001,164 @@ pub fn validate_service_state_invariants(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn current_lease_claim_requires_the_exact_resource_and_unexpired_claim() {
+        use agent_browser_lease_authority::{
+            AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey,
+        };
+
+        let mut state = ServiceState::default();
+        let resource = LeaseResourceKey::profile("profile-1");
+        let now = "2026-09-17T12:00:00Z";
+        let expires_at = "2026-09-17T12:05:00Z";
+        assert!(state.current_lease_claim(&resource, now).is_none());
+        let claim = state
+            .acquire_lease_claim(AcquireLeaseClaimRequest {
+                resource: resource.clone(),
+                parent_claim_id: None,
+                principal_id: "principal-1".to_string(),
+                capability_id: "capability-1".to_string(),
+                capability_revision: 1,
+                mode: LeaseClaimMode::Ephemeral,
+                expected_claim_revision: 0,
+                idempotency_key: "acquire-1".to_string(),
+                now: now.to_string(),
+                expires_at: expires_at.to_string(),
+                transition_deadline: None,
+                recovery_controller_id: None,
+                boot_epoch: None,
+                owner_generation: None,
+            })
+            .unwrap();
+        let before = state.clone();
+        assert_eq!(state.current_lease_claim(&resource, now), Some(&claim));
+        assert!(state
+            .current_lease_claim(&LeaseResourceKey::profile("profile-2"), now)
+            .is_none());
+        assert!(state.current_lease_claim(&resource, expires_at).is_none());
+        assert!(state.current_lease_claim(&resource, "invalid").is_none());
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn lease_claim_replay_misses_and_schema_errors_do_not_mutate_state() {
+        use agent_browser_lease_authority::{
+            LeaseAuthorityError, RecoverLeaseClaimRequest, ReleaseLeaseClaimRequest,
+            RevokeLeaseClaimRequest,
+        };
+
+        // Deliberately unverified wire envelopes exercise only receipt lookup and
+        // schema rejection. They never reach signature verification or key I/O.
+        let common = json!({
+            "schemaVersion": "unverified-fixture",
+            "signingKeyId": "unverified-fixture",
+            "signingKeyEpoch": 1,
+            "resource": { "kind": "profile", "id": "profile-1" },
+            "claimId": "claim-1",
+            "principalId": "principal-1",
+            "claimRevision": 1,
+            "fencingToken": 1,
+            "issuedAt": "2026-09-17T12:00:00Z",
+            "authorizationExpiresAt": "2026-09-17T12:01:00Z",
+            "proof": "unverified-fixture"
+        });
+        let mut release = common.clone();
+        release.as_object_mut().unwrap().extend(
+            json!({
+                "capabilityId": "capability-1",
+                "capabilityRevision": 1,
+                "ownerGeneration": null,
+                "actionClass": "lease_release",
+                "audience": "lease_authority_kernel",
+                "operationIdempotencyKey": "release-1"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        let release = ReleaseLeaseClaimRequest {
+            authorization: serde_json::from_value(release).unwrap(),
+            idempotency_key: "release-1".to_string(),
+            now: "2026-09-17T12:00:30Z".to_string(),
+        };
+        let mut recovery = common.clone();
+        recovery.as_object_mut().unwrap().extend(
+            json!({
+                "recoveryControllerId": "controller-1",
+                "recoveryControllerRevision": 1,
+                "idempotencyKey": "recover-1",
+                "claimExpiresAt": "2026-09-17T12:05:00Z",
+                "transitionDeadline": "2026-09-17T12:02:00Z",
+                "ownerGeneration": null
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        let recovery = RecoverLeaseClaimRequest {
+            authorization: serde_json::from_value(recovery).unwrap(),
+            now: release.now.clone(),
+        };
+        let mut revocation = common;
+        revocation.as_object_mut().unwrap().extend(
+            json!({
+                "administratorId": "administrator-1",
+                "administratorRevision": 1,
+                "idempotencyKey": "revoke-1",
+                "reasonCode": "test-revocation"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        let revocation = RevokeLeaseClaimRequest {
+            authorization: serde_json::from_value(revocation).unwrap(),
+            now: release.now.clone(),
+        };
+        let state = ServiceState::default();
+        let before = state.clone();
+        assert_eq!(state.replay_lease_claim_release(&release), Ok(None));
+        assert_eq!(state.replay_lease_claim_recovery(&recovery), Ok(None));
+        assert_eq!(state.replay_lease_claim_revocation(&revocation), Ok(None));
+        assert_eq!(state, before);
+
+        let mut unsupported: ServiceState = serde_json::from_value(json!({
+            "leaseAuthority": {
+                "schemaVersion": "unsupported",
+                "revision": 1,
+                "nextFencingTokens": { "profile:profile-1": 1 }
+            }
+        }))
+        .unwrap();
+        let before = unsupported.clone();
+        assert_eq!(
+            unsupported.replay_lease_claim_release(&release),
+            Err(LeaseAuthorityError::UnsupportedSchema)
+        );
+        assert_eq!(
+            unsupported.replay_lease_claim_recovery(&recovery),
+            Err(LeaseAuthorityError::UnsupportedSchema)
+        );
+        assert_eq!(
+            unsupported.replay_lease_claim_revocation(&revocation),
+            Err(LeaseAuthorityError::UnsupportedSchema)
+        );
+        let expected_error = "lease_authority_unsupported_schema".to_string();
+        assert_eq!(
+            unsupported.release_lease_claim(release),
+            Err(expected_error.clone())
+        );
+        assert_eq!(
+            unsupported.recover_lease_claim(recovery),
+            Err(expected_error.clone())
+        );
+        assert_eq!(
+            unsupported.revoke_lease_claim(revocation),
+            Err(expected_error)
+        );
+        assert_eq!(unsupported, before);
+    }
 
     fn challenge_task_state() -> ServiceState {
         ServiceState {

@@ -77,6 +77,13 @@ impl ServiceState {
   pub fn interrupt_crash_regeneration(&mut self) {}
   pub fn finish_crash_regeneration(&mut self) {}
   pub fn without_crash_regeneration_transactions(&self) {}
+  pub fn current_lease_claim(&self) {}
+  pub fn replay_lease_claim_release(&self) {}
+  pub fn replay_lease_claim_recovery(&self) {}
+  pub fn replay_lease_claim_revocation(&self) {}
+  pub fn release_lease_claim(&mut self) {}
+  pub fn recover_lease_claim(&mut self) {}
+  pub fn revoke_lease_claim(&mut self) {}
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -322,6 +329,11 @@ for (const [name, mutation] of [
     '',
   ) }],
   ['direct CLI crash map access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.crash_regeneration_transactions; }\n' }],
+  ['missing lease authority method', { serviceState: validServiceState.replace(
+    'pub fn recover_lease_claim(&mut self) {}',
+    '',
+  ) }],
+  ['direct CLI lease authority access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.lease_authority; }\n' }],
   ['missing authentication aggregate method', { serviceState: validServiceState.replace(
     'pub fn observe_service_authentication_run(&mut self) {}',
     '',

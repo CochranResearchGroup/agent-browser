@@ -2825,6 +2825,55 @@ remains open for that closure and the remaining receipt, authority, lifecycle,
 repository-sidecar, presentation, fixture-migration, privacy, facade-deletion,
 and final measurement gates.
 
+## Checkpoint 45 | Lease Authority Mutation Closure Accepted
+
+State transition: Service Model now owns the current-claim projection, exact
+release, recovery, and revocation replay lookups, and the corresponding three
+state-bound mutation entry points. The mutation methods bind the existing
+Lease Authority kernel directly to the aggregate's principal registry and
+authority state. They do not introduce a second verification path, key-loading
+path, signing oracle, clock, filesystem dependency, or runtime effect.
+
+The CLI Lease Authority adapter retains command parsing, authenticated-release
+authorization, replay-first ordering, error-context mapping, repository
+custody, and response construction. It now crosses typed `ServiceState`
+methods for replay and mutation instead of reaching into the embedded
+authority state. The Service resource projection obtains the current claim
+through the same aggregate seam. Production CLI code has zero direct field
+access to `ServiceState.lease_authority`; the existing immutable
+`lease_authority()` projection remains available to read-only authority joins.
+Test fixtures still construct the documented-hidden field and remain part of
+the final fixture and privacy packet.
+
+Acceptance evidence:
+
+- all 173 Service Model unit tests and fourteen integration tests pass;
+- the focused Lease Authority adapter lane passes three tests and the focused
+  Service resource lane passes 39 tests;
+- all 116 Lease Authority crate unit tests and its architecture contract pass;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  changed-surface selector readback, the Service Model architecture contract,
+  and all architecture mutation fixtures pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_lease_state_kernel` used the
+requested high-capability `gpt-6-astra` high route for the state-bound
+authority interface and provider-free tests. `/root/p205_lease_cli_cutover`
+used the requested workhorse `gpt-5.6-sol` high route for the adapter and
+resource cutover. The primary preserved the existing key-loading and
+verification boundary, strengthened the architecture contract and negative
+fixtures, reconciled both worker diffs, and independently ran the acceptance
+gates. Runtime-reported effective model metadata was not independently
+exposed.
+
+Acceptance state and progress classification: Lease Authority mutation
+closure is accepted and is outcome progress toward P4 field privacy. The next
+bounded outcome is exact receipt-map closure for profile lease reconciliation,
+profile recovery, and profile reset. P4 remains open for those receipts and
+the remaining principal, lifecycle, repository-sidecar, presentation,
+fixture-migration, privacy, facade-deletion, and final measurement gates.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -2832,9 +2881,9 @@ and final measurement gates.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | aggregate and twenty-three prerequisite families accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, and crash-regeneration transaction kernel accepted; remaining typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, and Lease Authority mutation closure accepted; remaining typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | crash-regeneration transaction map kernel accepted through Checkpoint 44 |
+| Focused correctness | crate tests and affected CLI adapter tests | Lease Authority mutation closure accepted through Checkpoint 45 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

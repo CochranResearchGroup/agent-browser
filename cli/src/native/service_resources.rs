@@ -1035,7 +1035,7 @@ fn resource_lane_activity_at(
     )];
     if let Some(profile_id) = browser.profile_id.as_deref() {
         let resource = agent_browser_lease_authority::LeaseResourceKey::profile(profile_id);
-        if let Some(claim) = state.lease_authority.current_claim(&resource, now) {
+        if let Some(claim) = state.current_lease_claim(&resource, now) {
             reasons.insert(format!("active_profile_claim:{}", claim.claim_id()));
             digest_facts.push(format!(
                 "profileClaim:{}:revision={}:expires={}",

@@ -32,19 +32,12 @@ pub(crate) fn release_lease_claim_in_repository<R: ServiceStateRepository>(
 ) -> Result<LeaseClaimReleaseOutcome, String> {
     if let Some(replayed) = repository
         .load_snapshot()?
-        .lease_authority()
-        .replay_release(&request)
+        .replay_lease_claim_release(&request)
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?
     {
         return Ok(replayed);
     }
-    repository.mutate(|state| {
-        release_lease_claim(
-            &mut state.lease_authority,
-            &state.service_principals,
-            request.clone(),
-        )
-    })
+    repository.mutate(|state| state.release_lease_claim(request.clone()))
 }
 
 pub(crate) fn recover_lease_claim_in_repository<R: ServiceStateRepository>(
@@ -53,19 +46,12 @@ pub(crate) fn recover_lease_claim_in_repository<R: ServiceStateRepository>(
 ) -> Result<LeaseClaimRecoveryOutcome, String> {
     if let Some(replayed) = repository
         .load_snapshot()?
-        .lease_authority()
-        .replay_recovery(&request)
+        .replay_lease_claim_recovery(&request)
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?
     {
         return Ok(replayed);
     }
-    repository.mutate(|state| {
-        recover_lease_claim(
-            &mut state.lease_authority,
-            &state.service_principals,
-            request.clone(),
-        )
-    })
+    repository.mutate(|state| state.recover_lease_claim(request.clone()))
 }
 
 pub(crate) fn revoke_lease_claim_in_repository<R: ServiceStateRepository>(
@@ -74,13 +60,12 @@ pub(crate) fn revoke_lease_claim_in_repository<R: ServiceStateRepository>(
 ) -> Result<LeaseClaimRevocationOutcome, String> {
     if let Some(replayed) = repository
         .load_snapshot()?
-        .lease_authority()
-        .replay_revocation(&request)
+        .replay_lease_claim_revocation(&request)
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?
     {
         return Ok(replayed);
     }
-    repository.mutate(|state| revoke_lease_claim(&mut state.lease_authority, request.clone()))
+    repository.mutate(|state| state.revoke_lease_claim(request.clone()))
 }
 
 pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
@@ -164,15 +149,11 @@ pub(crate) fn release_lease_claim_for_authenticated_state(
 ) -> Result<LeaseClaimReleaseOutcome, String> {
     let authorization =
         issue_lease_effect_authorization_for_state(state, claim, intent, raw_capability)?;
-    release_lease_claim(
-        &mut state.lease_authority,
-        &state.service_principals,
-        ReleaseLeaseClaimRequest {
-            authorization,
-            idempotency_key,
-            now,
-        },
-    )
+    state.release_lease_claim(ReleaseLeaseClaimRequest {
+        authorization,
+        idempotency_key,
+        now,
+    })
 }
 
 #[cfg(test)]

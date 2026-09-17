@@ -110,6 +110,16 @@ const SERVICE_STATE_AUTHENTICATION_METHODS = [
   'cancel_service_authentication_run',
 ];
 
+const SERVICE_STATE_LEASE_AUTHORITY_METHODS = [
+  'current_lease_claim',
+  'replay_lease_claim_release',
+  'replay_lease_claim_recovery',
+  'replay_lease_claim_revocation',
+  'release_lease_claim',
+  'recover_lease_claim',
+  'revoke_lease_claim',
+];
+
 const SERVICE_CHALLENGE_DEFINITIONS = [
   'ServiceChallengeTaskState',
   'ServiceChallengeTaskSummary',
@@ -735,6 +745,16 @@ function check(root = repoRoot) {
     'service-model aggregate must own the state_revision accessor');
   requireCondition(/\bpub\s+fn\s+from_configured_entities\s*\(/.test(serviceStateCode),
     'service-model aggregate must own the configured-entities constructor');
+  for (const name of SERVICE_STATE_LEASE_AUTHORITY_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own Lease Authority method: ${name}`,
+    );
+  }
+  requireCondition(
+    !cliProductionSources.some((source) => /\.\s*lease_authority\b(?!\s*\()/.test(source)),
+    'CLI production code must not access ServiceState.lease_authority directly',
+  );
   const serviceStateExport = serviceModelLib.match(/\bpub\s+use\s+service_state\s*::\s*\{([\s\S]*?)\}\s*;/);
   requireCondition(/\bmod\s+service_state\s*;/.test(serviceModelLib),
     'service-model lib must declare the ServiceState aggregate module');
