@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -33,17 +33,21 @@ issue #164 proves the aggregate check is enforced by live branch rules.
 
 ## Current State
 
-Issue #174 is claimed and P204 is admitted from `origin/main@2632e31c`. The
-current workflow has no pull-request concurrency group and runs Version Sync,
-Rust Quality, comprehensive Rust, Dashboard, Service Client, and Workstation
-Fixtures for every pull request and every push to `main`. The existing
-`scripts/dev/select-validation.js` command is advisory only: it returns changed
-files plus shell-command recommendations, has no versioned tier or job outputs,
-silently under-selects unknown paths, and is not consumed by CI.
+Issue #174 is claimed and P204 is admitted from `origin/main@2632e31c`.
+Implementation checkpoint `7f6c7e2e` adds the pure versioned classifier,
+exact-head workflow routing, pull-request cancellation, fixed job outputs,
+hermetic fixtures, fail-closed `Presubmit` aggregate, focused Rust compartment
+selection, changed-document link validation, and bounded economics receipts.
+Classifier and workflow self-changes fail safe to every ordinary presubmit job
+without duplicating the comprehensive Rust lane.
 
-A deterministic red-capable probe against docs-only merge `aa7b67b1` failed
-because the selector has no `tier` or job booleans. Current GitHub evidence also
-shows a docs-only pull request ran every application suite. Issue #164 remains
+The pre-implementation docs-only probe against merge `aa7b67b1` remains the red
+baseline. Local validation is green for the selector and aggregate suites,
+workflow syntax and semantics, policy wiring, planning audit, changed links,
+the docs production build, and the newly exposed Challenge Control compartment.
+Independent review found and the candidate corrected a fail-open shell pipeline,
+CLI adapter test omissions, omitted member manifests and installer fixtures,
+and missing in-CI execution of the classifier contract suite. Issue #164 remains
 open, and live readback reports no `main` branch protection or repository
 ruleset, so removing the post-merge fallback is not currently allowed.
 
@@ -115,6 +119,12 @@ effort to reconcile plan numbering and worktree admission. Read-only worker
 inspect issue #164, branch rules, and recent CI runs. The runtime did not expose
 effective model or effort for independent verification.
 
+Read-only reviewer `/root/candidate_review` was requested on `gpt-6-astra` at
+high effort for the frozen candidate. It identified the aggregate pipeline
+masking defect and four selection-coverage gaps. One bounded rework corrected
+all blocking findings and added regression assertions. The runtime again did
+not expose effective model or effort for independent verification.
+
 P197 remains primary writer for challenge consumers and generated
 service-request contracts. P204 owns CI workflow, selector, aggregate verifier,
 and its fixtures. The shared planning overlap is explicit: P204 writes only its
@@ -146,12 +156,12 @@ Exit requires current evidence that:
 
 | Requirement | Current evidence | State |
 | --- | --- | --- |
-| Deterministic classifier contract | Docs-only red probe found missing `tier` and job outputs | red, implementation pending |
-| Surface fixture matrix | No direct classifier fixture suite exists | pending |
-| PR cancellation and stable aggregate | Current workflow has neither | pending |
-| Proportional job routing | Current six ordinary jobs are unconditional | pending |
-| Comprehensive qualification retained | Manual and `[full ci]` slow lanes exist; ordinary Rust is still comprehensive | partial |
-| Economics receipt | Issue evidence records baseline runs and minutes; workflow emits no selection receipt | partial |
+| Deterministic classifier contract | `pnpm run test:validation-selection` passes the versioned selector and exact-range CLI contracts | green locally |
+| Surface fixture matrix | Docs, dashboard, client, workstation, Rust adapters and crates, dependency, self-change, rename, and unknown fixtures pass | green locally |
+| PR cancellation and stable aggregate | Workflow contract, YAML parse, and `actionlint` pass; selected failures propagate through `pipefail` | green statically, organic run pending |
+| Proportional job routing | Exact-range readback selects broad ordinary validation for this classifier/workflow change and excludes comprehensive Rust | green locally |
+| Comprehensive qualification retained | Manual, monthly, material dependency, toolchain, and temporary `main` routes select comprehensive without duplicate focused Rust | green statically; authorized dispatch pending |
+| Economics receipt | Fixture covers selected lanes, exclusions, bounded wall time, observed runner time, and explicit measurement limits | green locally; organic receipt pending |
 | Organic docs and narrow-Rust evidence | Existing runs prove the broad baseline only | pending candidate workflow |
 | Protected aggregate before removing `main` fallback | Live branch protection returns 404 and rulesets are empty | blocked on issue #164 |
 

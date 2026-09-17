@@ -31,12 +31,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 2632e31cfdc1858336af5acbf6e07143ee7787e7
-    remote_ref: null
+    checkpoint: 7f6c7e2e
+    remote_ref: refs/heads/platform/p204-ci-validation-tiering
     integration_receipt: null
     integration: merge through the protected pull-request workflow after selector fixtures, workflow validation, and changed-surface validation
-    validation_status: red selector probe captured; implementation pending
-    validation_ref: null
+    validation_status: implementation and bounded local validation green; pull-request and organic acceptance evidence pending
+    validation_ref: 7f6c7e2e
     work_items: [CochranResearchGroup/agent-browser#174]
     dependencies: [CochranResearchGroup/agent-browser#164]
     overlaps: [P197:ROADMAP.md, P197:RUNBOOK.md, P197:docs/dev/active-lanes.yaml]

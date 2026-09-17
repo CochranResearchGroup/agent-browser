@@ -7,6 +7,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 
+## Turn 371 | 2026-09-16
+
+[Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+has implementation checkpoint `7f6c7e2e`. The versioned classifier now drives
+exact-head conditional jobs and the stable fail-closed `Presubmit` aggregate;
+unknown and control-plane changes fail safe, while explicit comprehensive
+qualification avoids duplicate focused Rust. Selector, aggregate, economics,
+documentation-link, workflow, docs-build, policy, planning, and Challenge
+Control compartment validation is green locally. One independent review and
+bounded rework corrected every blocking finding. Organic PR receipts and an
+explicitly authorized comprehensive dispatch remain pending. The `main`
+fallback remains because issue #164 has not proved live required-check
+enforcement. No workflow dispatch, branch-rule, browser, provider, credential,
+installed-runtime, Service State, production, or release effect occurred.
+
 ## Turn 370 | 2026-09-16
 
 [Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)

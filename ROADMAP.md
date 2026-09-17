@@ -31,12 +31,13 @@ State: OPEN
 
 Current state: [Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 and [issue #174](https://github.com/CochranResearchGroup/agent-browser/issues/174)
-own the `PL-PLATFORM` repair. The first docs-only probe is red because the
-existing selector has no versioned tier or job outputs, and the workflow still
-runs every ordinary application suite for every pull request. P204 will add a
-pure classifier, deterministic surface fixtures, PR cancellation, conditional
-jobs, and one stable aggregate `Presubmit` check. The post-merge `main` fallback
-remains until issue #164 proves live enforcement; workflow dispatch, branch-rule
+own the `PL-PLATFORM` repair. Candidate `7f6c7e2e` adds the versioned classifier,
+surface fixtures, exact-head conditional jobs, pull-request cancellation,
+focused Rust compartments, bounded economics, and the stable fail-closed
+`Presubmit` aggregate. Local contract, workflow, docs, policy, and focused Rust
+validation is green. Organic PR evidence and an explicitly authorized
+comprehensive dispatch remain pending. The post-merge `main` fallback remains
+until issue #164 proves live enforcement; workflow dispatch, branch-rule
 mutation, installed-runtime effects, and release are outside this lane.
 
 ## P203 | Runtime Host Admission Routing
