@@ -3444,6 +3444,160 @@ projection closure. It must reduce the read-only production surface without a
 whole-registry getter or general iterator and without moving process, boot,
 browser, filesystem, or provider effects.
 
+## Checkpoint 54 | Immutable Runtime Owner Projection Interface Freeze
+
+State transition: the next runtime-owner packet is frozen as six
+purpose-specific immutable projections. It closes all eighteen production
+direct field expressions in `install.rs`, `service_boot_epoch.rs`,
+`service_diagnostics.rs`, `service_profile_diagnosis.rs`,
+`service_status_projection.rs`, `service_resources.rs`, and
+`service_resources/retained_tree.rs`. Test-only fixture access remains visible
+debt for the final aggregate fixture migration and does not justify a mutable
+production escape hatch.
+
+The model owns these borrowed or owned projection records:
+
+```rust
+pub struct RuntimeLifecycleAuthoritySummary {
+    pub registry_revision: u64,
+    pub owner_count: usize,
+    pub record_count: usize,
+    pub lifecycle_state_counts: BTreeMap<String, usize>,
+    pub cleanup_obligation_state_counts: BTreeMap<String, usize>,
+}
+
+pub struct RuntimeLifecycleBootEpochObservation {
+    pub logical_browser_id: String,
+    pub boot_epoch: Option<String>,
+}
+
+pub struct ProfileRuntimeAuthority<'a> {
+    pub registry_revision: u64,
+    pub owner: Option<&'a ProfileOwner>,
+    pub principal_binding: Option<&'a RuntimeOwnerPrincipalBinding>,
+}
+
+pub struct RuntimeControlPlaneAuthority<'a> {
+    pub attestation: Option<RuntimeOwnerAttestation>,
+    pub current_owner: Option<&'a ProfileOwner>,
+    pub lifecycle: Option<&'a RuntimeLifecycleRecord>,
+}
+
+pub struct RuntimeLaneAuthority<'a> {
+    pub owner: Option<&'a ProfileOwner>,
+    pub lifecycle: Option<&'a RuntimeLifecycleRecord>,
+}
+
+pub struct RuntimeResourceLane<'a> {
+    pub browser_id: &'a str,
+    pub lifecycle: &'a RuntimeLifecycleRecord,
+    pub browser_pid: Option<u32>,
+    pub tab_count: usize,
+}
+```
+
+`ServiceState` owns exactly six methods:
+
+```rust
+pub fn runtime_lifecycle_authority_summary(
+    &self,
+) -> RuntimeLifecycleAuthoritySummary;
+
+pub fn runtime_lifecycle_boot_epoch_observations(
+    &self,
+) -> Vec<RuntimeLifecycleBootEpochObservation>;
+
+pub fn profile_runtime_authority(
+    &self,
+    profile_identity_digest: &str,
+) -> ProfileRuntimeAuthority<'_>;
+
+pub fn runtime_control_plane_authority(
+    &self,
+    session_id: &str,
+    browser_id: &str,
+) -> Result<RuntimeControlPlaneAuthority<'_>, String>;
+
+pub fn runtime_lane_authority(
+    &self,
+    profile_identity_digest: &str,
+    browser_id: &str,
+) -> RuntimeLaneAuthority<'_>;
+
+pub fn runtime_resource_lanes(&self) -> Vec<RuntimeResourceLane<'_>>;
+```
+
+The summary preserves registry revision, owner and lifecycle counts, and every
+serialized lifecycle and cleanup state label in sorted maps, including the
+existing `unknown` fallback and omission of zero-count labels. Install and
+status retain repository loading, failure JSON, runtime-health observation,
+and response assembly. Resource summary reads the same typed counts and
+defaults absent owned, transferring, satisfied, and unknown labels to zero.
+
+Boot observations include exactly lifecycle rows with a process group or
+package-launch digest, retain lifecycle-map order, use the record's embedded
+logical browser ID, and preserve an absent boot epoch. The CLI retains current
+boot observation, cross-resource merging, assessment, and final finding sort.
+
+Profile authority performs independent exact owner and principal-binding
+lookups by canonical profile digest and supplies one same-snapshot registry
+revision. It does not hide a binding without an owner, repair a generation
+mismatch, or make a missing record an error. Live process observation, Chrome
+lock inspection, diagnosis ID and JSON assembly remain CLI-owned.
+
+Control-plane authority delegates `attestation_for_session` without changing
+its ambiguity or receipt-serialization errors. It then chooses the first owner
+in registry map order matching both attested owner ID and generation and
+independently looks up lifecycle evidence by the supplied browser ID. Current
+boot observation, process hashing, package-launch digest calculation, and
+effect-authority response assembly remain in the adapter.
+
+Lane authority returns independent owner and lifecycle options. Abandoned-lane
+classification must continue to report owner missing before lifecycle missing,
+while retained-tree verification preserves its separate `?` exits. It adds no
+validation, generation filtering, or joined absence state.
+
+Resource rows preserve lifecycle-map key order and retain the map key
+separately from the embedded logical browser ID. Each row joins only the
+browser PID and tab count for that exact key. The CLI keeps process samples,
+budgets, activity, RSS aggregation, disposition, GC policy, ancestry, and
+retirement effects. Public `runtimeLanes` still serializes only the lifecycle
+records in registry order.
+
+Model witnesses cover empty and complete summaries, every lifecycle and
+cleanup variant, `u64::MAX` revision, boot inclusion and missing epoch, key and
+embedded-ID mismatch, independent profile and lane presence combinations,
+binding mismatch visibility, session ambiguity and exact ID plus generation
+selection, resource joins and ordering, and full-state nonmutation. Focused CLI
+witnesses preserve install and status lifecycle JSON, diagnosis identity and
+trace revision, attestation custody, boot findings, resource summary and lane
+order, missing-evidence reason precedence, and retained-tree acceptance.
+
+The architecture guard must require the six types and methods, reject direct
+production field access in the seven files even after a test-gated item, and
+reject a registry return, mutable reference, generic owner or lifecycle
+iterator, callback, `Deref`, conversion, renamed getter, or persistence
+snapshot workaround. No test-only mutation helper is promoted into production.
+
+Hard stops are changed filtering or map order, collapsed missing states,
+changed error identity, binding or generation strengthening, malformed-record
+hiding, substituted revision, process or boot observation movement, altered
+runtime-health order, resource-policy movement, or any registry handle.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route for the exact projection
+boundary, borrowed-record semantics, order and error invariants, and effect
+separation. `/root/p205_receipt_cli_audit` used the requested workhorse
+`gpt-5.6-sol` high route for the production-only eighteen-expression inventory,
+caller mapping, existing witnesses, and two coverage gaps. Both were read-only
+and had no edit, build, test, Git, forge, CI, runtime, or child-agent custody.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. Exit requires zero
+production direct runtime-owner field access in all seven files, provider-free
+projection tests, affected adapter witnesses, and a guard that rejects every
+broad access route above.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
