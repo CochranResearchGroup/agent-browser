@@ -3859,21 +3859,8 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
                 ));
             }
             let resources = crate::native::service_resources::service_resources_response(state);
-            let lifecycle_record_count = state
-                .runtime_owner_registry
-                .lifecycle_records()
-                .len();
-            let missing_cleanup_obligation_count = state
-                .browsers
-                .keys()
-                .filter(|browser_id| {
-                    state.browser_process_identities.contains_key(*browser_id)
-                        && !state
-                            .runtime_owner_registry
-                            .lifecycle_records()
-                            .contains_key(*browser_id)
-                })
-                .count();
+            let (lifecycle_record_count, missing_cleanup_obligation_count) =
+                runtime_cleanup_obligation_counts(state);
             Ok(serde_json::json!({
                 "completedRuntimeLifecycles": completed_runtime_lifecycles,
                 "processGc": process_gc,
@@ -3981,6 +3968,25 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
             ))
         }
     }
+}
+
+fn runtime_cleanup_obligation_counts(
+    state: &crate::native::service_model::ServiceState,
+) -> (usize, usize) {
+    let lanes = state.runtime_resource_lanes();
+    let lane_browser_ids = lanes
+        .iter()
+        .map(|lane| lane.browser_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    let missing_cleanup_obligation_count = state
+        .browsers
+        .keys()
+        .filter(|browser_id| {
+            state.browser_process_identities.contains_key(*browser_id)
+                && !lane_browser_ids.contains(browser_id.as_str())
+        })
+        .count();
+    (lanes.len(), missing_cleanup_obligation_count)
 }
 
 fn read_runtime_monitor_receipt(path: &Path) -> Result<Option<Value>, String> {
@@ -13865,6 +13871,74 @@ mod tests {
                 "30000",
             ]
         );
+    }
+
+    #[test]
+    fn runtime_cleanup_obligation_counts_use_projected_lane_keys() {
+        use crate::native::service_model::{
+            BrowserProcess, ServiceBrowserProcessIdentity, ServiceState,
+        };
+        use crate::process_identity::RecordedProcessIdentity;
+        use crate::runtime_owner_transfer::{edit_registry_fixture, RuntimeLifecycleRecord};
+
+        let mut state = ServiceState::default();
+        for browser_id in [
+            "browser-no-process-identity",
+            "browser-missing-lifecycle",
+            "browser-tracked",
+            "lane-key-differs-from-embedded",
+        ] {
+            state.browsers.insert(
+                browser_id.to_string(),
+                BrowserProcess {
+                    id: browser_id.to_string(),
+                    ..BrowserProcess::default()
+                },
+            );
+        }
+        for (browser_id, pid) in [
+            ("browser-missing-lifecycle", 4101),
+            ("browser-tracked", 4102),
+            ("lane-key-differs-from-embedded", 4103),
+        ] {
+            state.browser_process_identities.insert(
+                browser_id.to_string(),
+                ServiceBrowserProcessIdentity {
+                    process_identity: RecordedProcessIdentity {
+                        pid,
+                        start_token: format!("linux:fixture:{pid}"),
+                        executable_path: None,
+                        browser_family: None,
+                    },
+                    user_data_dir: None,
+                    runtime_profile: None,
+                },
+            );
+        }
+        edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .extend([
+                (
+                    "lifecycle-only".to_string(),
+                    RuntimeLifecycleRecord {
+                        logical_browser_id: "embedded-lifecycle-only".to_string(),
+                        ..RuntimeLifecycleRecord::default()
+                    },
+                ),
+                (
+                    "browser-tracked".to_string(),
+                    RuntimeLifecycleRecord::default(),
+                ),
+                (
+                    "lane-key-differs-from-embedded".to_string(),
+                    RuntimeLifecycleRecord {
+                        logical_browser_id: "embedded-logical-browser".to_string(),
+                        ..RuntimeLifecycleRecord::default()
+                    },
+                ),
+            ]);
+
+        assert_eq!(runtime_cleanup_obligation_counts(&state), (3, 1));
     }
 
     #[cfg(unix)]

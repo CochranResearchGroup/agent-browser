@@ -4351,6 +4351,60 @@ production direct runtime-owner registry access in the frozen maintenance
 function, exact map-key count behavior, the focused witness, and the targeted
 architecture contract.
 
+## Checkpoint 65 | Workstation Cleanup-Obligation Projection Accepted
+
+State transition: workstation runtime maintenance now computes cleanup-
+obligation counts through one private helper backed by the existing
+`runtime_resource_lanes` projection. `trackedCount` remains the complete
+lifecycle map-row count. `missingCount` remains the number of Service browser
+keys with durable process identity and no lifecycle map key. The two frozen
+production registry reads are removed, leaving 165 classified production
+runtime-owner expressions.
+
+The helper collects projected `RuntimeResourceLane.browser_id` map keys once
+and never reads the embedded lifecycle browser ID. Its focused witness combines
+a lifecycle-only row, a browser without process identity, a process-backed
+browser without lifecycle evidence, an ordinary tracked browser, and a
+process-backed browser whose lifecycle map key differs from its embedded ID.
+The exact result is three tracked rows and one missing obligation. Process GC,
+retained-state pruning, resource projection, repository mutation, JSON output,
+install receipts, generation GC, backoff, and every workstation effect remain
+in their prior order and ownership boundary.
+
+The architecture contract extracts only the private count helper and
+`reconcile_runtime_maintenance`, requires `runtime_resource_lanes`, rejects
+direct registry access, and rejects embedded-ID membership. Its mutation
+fixtures cover all three failures without declaring the other workstation
+owner-selection paths closed.
+
+Acceptance evidence:
+
+- the focused
+  `runtime_cleanup_obligation_counts_use_projected_lane_keys` CLI witness
+  passes;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, and its expanded mutation fixtures
+  pass;
+- the changed-surface selector reports its conservative broad workstation
+  route; its full workstation and VM recommendations remain final-batch gates
+  because this packet changes one provider-free pure helper and the frozen
+  packet explicitly excludes workstation effects and comprehensive replay; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_reconciliation_cutover` used
+the requested fast `gpt-5.6-luna` medium route for the single-file helper and
+focused witness, ran targeted formatting only, and performed no build, Git,
+forge, CI, runtime, or child-agent action. The primary inspected the complete
+diff, implemented the targeted architecture guard and negative fixtures, and
+ran all packet acceptance gates.
+
+Acceptance state and progress classification: workstation cleanup-obligation
+projection closure is accepted and is outcome progress toward P4 field privacy.
+The next bounded outcome must come from the remaining classified runtime-owner
+surface without combining immutable reads, all-or-nothing transitions,
+retained partial mutation, sequential mutation, or effect-separated behavior.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -4358,9 +4412,9 @@ architecture contract.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections and two adapter cutovers, ordinary atomic runtime lifecycle transition, terminal profile-sync cross-field transition, and process-exit partial legacy revocation accepted; remaining transition closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections and three adapter cutovers, ordinary atomic runtime lifecycle transition, terminal profile-sync cross-field transition, and process-exit partial legacy revocation accepted; remaining transition closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | immutable authority adapter cutover accepted through Checkpoint 63 |
+| Focused correctness | crate tests and affected CLI adapter tests | workstation cleanup-obligation projection accepted through Checkpoint 65 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

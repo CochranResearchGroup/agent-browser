@@ -783,6 +783,8 @@ function check(root = repoRoot) {
     'cli/src/native/runtime_reconciliation.rs')));
   const cliLeaseAuthorityAdapter = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
     'cli/src/native/service_lease_authority_adapter.rs')));
+  const cliWorkstationInstallSource = withoutCfgTestItems(read(root,
+    'cli/src/workstation_install.rs'));
   const cliRuntimeOwnerProjectionSources = RUNTIME_OWNER_PROJECTION_CLI_FILES.map((path) => ({
     path,
     source: withoutCommentsAndStrings(withoutCfgTestItems(read(root, path))),
@@ -1266,6 +1268,28 @@ function check(root = repoRoot) {
   requireCondition(
     /\.\s*profile_runtime_authority\s*\(/.test(cliLeaseAuthorityAdapter),
     'lease effect authorization must consume the purpose-specific profile authority projection',
+  );
+  const workstationCleanupProjection = withoutCommentsAndStrings([
+    rustNamedFunctionDefinition(
+      cliWorkstationInstallSource,
+      'runtime_cleanup_obligation_counts',
+    ),
+    rustNamedFunctionDefinition(
+      cliWorkstationInstallSource,
+      'reconcile_runtime_maintenance',
+    ),
+  ].join('\n'));
+  requireCondition(
+    /\.\s*runtime_resource_lanes\s*\(/.test(workstationCleanupProjection),
+    'workstation cleanup-obligation counts must consume the runtime resource-lane projection',
+  );
+  requireCondition(
+    !/\.\s*runtime_owner_registry\b/.test(workstationCleanupProjection),
+    'workstation cleanup-obligation counts must not access ServiceState.runtime_owner_registry directly',
+  );
+  requireCondition(
+    !/\.\s*lifecycle\s*\.\s*logical_browser_id\b/.test(workstationCleanupProjection),
+    'workstation cleanup-obligation membership must use lifecycle map keys, not embedded browser IDs',
   );
   requireCondition(
     !/\bRuntimeOwnerPersistenceSnapshot\b/.test(runtimeOwnerProjectionSource),

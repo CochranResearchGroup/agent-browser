@@ -440,6 +440,16 @@ fn authorize(state: &ServiceState) {
   };
 }
 `;
+const validWorkstationInstall = `
+fn runtime_cleanup_obligation_counts(state: &ServiceState) -> (usize, usize) {
+  let lanes = state.runtime_resource_lanes();
+  let keys = lanes.iter().map(|lane| lane.browser_id).collect::<Vec<_>>();
+  (lanes.len(), keys.len())
+}
+fn reconcile_runtime_maintenance(state: &ServiceState) {
+  let _ = runtime_cleanup_obligation_counts(state);
+}
+`;
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
@@ -449,6 +459,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   controlPlane = validControlPlane,
   runtimeReconciliation = validRuntimeReconciliation,
   leaseAuthorityAdapter = validLeaseAuthorityAdapter,
+  workstationInstall = validWorkstationInstall,
   principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
@@ -490,6 +501,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'cli/src/native/runtime_reconciliation.rs'), runtimeReconciliation);
   writeFileSync(join(root, 'cli/src/native/service_lease_authority_adapter.rs'),
     leaseAuthorityAdapter);
+  writeFileSync(join(root, 'cli/src/workstation_install.rs'), workstationInstall);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -782,6 +794,24 @@ fn production(state: &ServiceState) { let _ = &state.runtime_owner_registry; }
     leaseAuthorityAdapter: validLeaseAuthorityAdapter.replace(
       'state.profile_runtime_authority(profile_identity_digest)',
       'authority_fixture()',
+    ),
+  }],
+  ['workstation cleanup counts access registry directly', {
+    workstationInstall: validWorkstationInstall.replace(
+      'let lanes = state.runtime_resource_lanes();',
+      'let lanes = state.runtime_owner_registry.lifecycle_records();',
+    ),
+  }],
+  ['workstation cleanup counts omit resource-lane projection', {
+    workstationInstall: validWorkstationInstall.replace(
+      'state.runtime_resource_lanes()',
+      'resource_lane_fixture()',
+    ),
+  }],
+  ['workstation cleanup counts use embedded browser ID', {
+    workstationInstall: validWorkstationInstall.replace(
+      'lane.browser_id',
+      'lane.lifecycle.logical_browser_id',
     ),
   }],
   ['ordinary lifecycle transition direct field access', {
