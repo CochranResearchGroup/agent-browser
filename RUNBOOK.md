@@ -20,6 +20,11 @@ hygiene pass. The branch remains local and unpushed behind P206 PR #180; no
 provider, image, browser, credential, CAPTCHA, desktop-input, runtime,
 production or CI-dispatch effect occurred.
 
+[Plan 0210](docs/dev/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md)
+records the proposed W7-C artifact-custody and one-shot fake-provider adapter.
+It is `PLANNED | NOT ADMITTED`; no branch, worktree or implementation has
+started, and P209 canonical integration is its hard source-admission gate.
+
 ## Turn 374 | 2026-09-17
 
 P209 local checkpoint `8ada33d5` is accepted. The pure protocol binds

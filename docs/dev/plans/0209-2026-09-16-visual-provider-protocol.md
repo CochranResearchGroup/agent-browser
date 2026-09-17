@@ -122,6 +122,10 @@ Deferred to separately admitted successors:
 - Service State, CLI, HTTP, MCP, generated-client or dashboard exposure;
 - browser, fixture-provider, installed-runtime or live challenge acceptance.
 
+[Plan 0210](0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md)
+is the planned W7-C successor. It is not admitted and cannot begin source work
+until P209 enters canonical `main`.
+
 ## Delivery Sequence And Budget
 
 - Attempt 1: one valid fake-provider tracer through request preparation,
