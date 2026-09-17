@@ -760,8 +760,7 @@ pub(crate) fn apply_existing_session_profile_selection(
         return Ok(None);
     };
     let binding = state
-        .runtime_owner_registry
-        .binding_for_session(&session_id)
+        .runtime_owner_binding_for_session(&session_id)
         .map_err(|_| "existing_session_profile_identity_ambiguous".to_string())?;
     let retained_observation = state
         .sessions

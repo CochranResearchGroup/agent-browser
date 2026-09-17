@@ -120,6 +120,12 @@ impl ServiceState {
   pub fn runtime_control_plane_authority(&self) {}
   pub fn runtime_lane_authority(&self) {}
   pub fn runtime_resource_lanes(&self) {}
+  pub fn runtime_owner_binding_for_session(
+    &self,
+    session_id: &str,
+  ) -> Result<Option<agent_browser_lease_authority::RuntimeOwnerBinding>, String> {
+    self.runtime_owner_registry.binding_for_session(session_id)
+  }
   pub fn apply_runtime_lifecycle_transition_atomically(
     &mut self,
     intent: agent_browser_lease_authority::RuntimeLifecycleIntent,
@@ -466,6 +472,38 @@ fn lifecycle_replacement_decision(state: &ServiceState) {
   let _ = (authority.registry_revision, lifecycle);
 }
 `;
+const validMain = `
+fn apply_existing_lane_profile_to_flags(state: &ServiceState) {
+  let _ = state.runtime_owner_binding_for_session(session_id);
+}
+`;
+const validDaemon = `
+fn apply_existing_session_profile_selection(state: &ServiceState) {
+  let _ = state.runtime_owner_binding_for_session(session_id);
+  let _ = state.runtime_owner_registry.principal_binding_for_owner(owner);
+}
+`;
+const validBrowserLifecycle = `
+fn navigation_browser_id_for_persistence(state: &ServiceState) {
+  let binding = state.runtime_owner_binding_for_session(session_id);
+  let owner = state.profile_runtime_authority(profile_identity_digest).owner;
+  let _ = (binding, owner);
+}
+`;
+const validProfileLease = `
+fn configured_profile_alias_matches_active_browser(state: &ServiceState) {
+  let binding = state.runtime_owner_binding_for_session(session_id);
+  let owner = state.profile_runtime_authority(profile_identity_digest).owner;
+  let _ = (binding, owner);
+}
+`;
+const validGuacamolePrimaryBinding = `
+fn resolve_inner(state: &ServiceState) {
+  let owners = state.runtime_owner_registry.owners();
+  let binding = state.runtime_owner_binding_for_session(session_id);
+  let _ = (owners, binding);
+}
+`;
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
@@ -477,6 +515,11 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   leaseAuthorityAdapter = validLeaseAuthorityAdapter,
   workstationInstall = validWorkstationInstall,
   profileAcquisition = validProfileAcquisition,
+  main = validMain,
+  daemon = validDaemon,
+  browserLifecycle = validBrowserLifecycle,
+  profileLease = validProfileLease,
+  guacamolePrimaryBinding = validGuacamolePrimaryBinding,
   principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
@@ -521,6 +564,14 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'cli/src/native/service_profile_acquisition.rs'),
     profileAcquisition);
   writeFileSync(join(root, 'cli/src/workstation_install.rs'), workstationInstall);
+  writeFileSync(join(root, 'cli/src/main.rs'), main);
+  mkdirSync(join(root, 'cli/src/native/action_runtime/runtime'), { recursive: true });
+  writeFileSync(join(root, 'cli/src/native/action_runtime/runtime/daemon.rs'), daemon);
+  writeFileSync(join(root, 'cli/src/native/action_runtime/runtime/profile_lease.rs'), profileLease);
+  writeFileSync(join(root, 'cli/src/native/browser_lifecycle.rs'), browserLifecycle);
+  mkdirSync(join(root, 'cli/src/native/stream'), { recursive: true });
+  writeFileSync(join(root, 'cli/src/native/stream/guacamole_primary_binding.rs'),
+    guacamolePrimaryBinding);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -671,6 +722,70 @@ for (const [name, mutation] of [
     'pub fn profile_runtime_authority(&self) {}',
     'pub fn profile_runtime_authority(&mut self) {}',
   ) }],
+  ['missing runtime-owner session binding projection', { serviceState: validServiceState.replace(
+    /  pub fn runtime_owner_binding_for_session\([\s\S]*?\n  \}\n/,
+    '',
+  ) }],
+  ['runtime-owner session binding reuses filtered wrapper', {
+    serviceState: validServiceState.replace(
+      'self.runtime_owner_registry.binding_for_session(session_id)',
+      'agent_browser_lease_authority::owner_binding_in_registry(&self.runtime_owner_registry, session_id)',
+    ),
+  }],
+  ['runtime-owner session binding substitutes attestation', {
+    serviceState: validServiceState.replace(
+      'self.runtime_owner_registry.binding_for_session(session_id)',
+      'self.runtime_owner_registry.attest_session(session_id).map(|_| None)',
+    ),
+  }],
+  ['runtime-owner session binding suppresses errors', {
+    serviceState: validServiceState.replace(
+      'self.runtime_owner_registry.binding_for_session(session_id)',
+      'self.runtime_owner_registry.binding_for_session(session_id).or(Ok(None))',
+    ),
+  }],
+  ['main session binding caller accesses registry directly', {
+    main: validMain.replace(
+      'state.runtime_owner_binding_for_session(session_id)',
+      'state.runtime_owner_registry.binding_for_session(session_id)',
+    ),
+  }],
+  ['daemon session binding caller accesses registry directly', {
+    daemon: validDaemon.replace(
+      'state.runtime_owner_binding_for_session(session_id)',
+      'state.runtime_owner_registry.binding_for_session(session_id)',
+    ),
+  }],
+  ['browser lifecycle session binding caller accesses registry directly', {
+    browserLifecycle: validBrowserLifecycle.replace(
+      'state.runtime_owner_binding_for_session(session_id)',
+      'state.runtime_owner_registry.binding_for_session(session_id)',
+    ),
+  }],
+  ['profile lease session binding caller accesses registry directly', {
+    profileLease: validProfileLease.replace(
+      'state.runtime_owner_binding_for_session(session_id)',
+      'state.runtime_owner_registry.binding_for_session(session_id)',
+    ),
+  }],
+  ['guacamole session binding caller accesses registry directly', {
+    guacamolePrimaryBinding: validGuacamolePrimaryBinding.replace(
+      'state.runtime_owner_binding_for_session(session_id)',
+      'state.runtime_owner_registry.binding_for_session(session_id)',
+    ),
+  }],
+  ['browser lifecycle owner join accesses registry directly', {
+    browserLifecycle: validBrowserLifecycle.replace(
+      'state.profile_runtime_authority(profile_identity_digest).owner',
+      'state.runtime_owner_registry.owner(profile_identity_digest)',
+    ),
+  }],
+  ['profile lease owner join omits profile authority', {
+    profileLease: validProfileLease.replace(
+      'state.profile_runtime_authority(profile_identity_digest).owner',
+      'owner_fixture()',
+    ),
+  }],
   ['runtime-owner projection persistence bypass', {
     runtimeOwnerProjection: `${validRuntimeOwnerProjection}\npub fn bypass(_: RuntimeOwnerPersistenceSnapshot) {}\n`,
   }],

@@ -104,8 +104,7 @@ impl PrimaryBinding {
             return Err("guacamole_primary_owner_ambiguous");
         }
         let mut binding = snapshot
-            .runtime_owner_registry
-            .binding_for_session(&owner.daemon_session_route)
+            .runtime_owner_binding_for_session(&owner.daemon_session_route)
             .map_err(|_| "guacamole_primary_owner_unavailable")?
             .ok_or("guacamole_primary_owner_unavailable")?;
         let expected_claim = OwnerAuthorityClaim::from_owner(owner);

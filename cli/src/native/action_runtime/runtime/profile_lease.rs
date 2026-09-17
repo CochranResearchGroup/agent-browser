@@ -624,10 +624,7 @@ pub(crate) fn configured_profile_alias_matches_active_browser(
     active_cdp_url: &str,
     service_state: &ServiceState,
 ) -> bool {
-    let Ok(Some(binding)) = service_state
-        .runtime_owner_registry
-        .binding_for_session(session_id)
-    else {
+    let Ok(Some(binding)) = service_state.runtime_owner_binding_for_session(session_id) else {
         return false;
     };
     if !binding.effect_capable {
@@ -656,8 +653,8 @@ pub(crate) fn configured_profile_alias_matches_active_browser(
         return false;
     }
     let Some(owner) = service_state
-        .runtime_owner_registry
-        .owner(&binding.claim.profile_identity_digest)
+        .profile_runtime_authority(&binding.claim.profile_identity_digest)
+        .owner
     else {
         return false;
     };

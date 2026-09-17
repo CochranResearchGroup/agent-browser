@@ -653,9 +653,7 @@ fn apply_existing_lane_profile_to_flags(
             .and_then(|path| path.as_deref())
             == flags.profile.as_deref()
         && matches!(
-            state
-                .runtime_owner_registry
-                .binding_for_session(&flags.session),
+            state.runtime_owner_binding_for_session(&flags.session),
             Ok(Some(_))
         );
     let selected_profile = (!configured_profile_is_inherited)

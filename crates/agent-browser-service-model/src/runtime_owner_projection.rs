@@ -79,6 +79,190 @@ mod tests {
         .unwrap()
     }
 
+    fn assert_session_binding_parity(
+        state: &ServiceState,
+        session: &str,
+    ) -> Result<Option<agent_browser_lease_authority::RuntimeOwnerBinding>, String> {
+        let before = state.clone();
+        let expected = state.runtime_owner_registry.binding_for_session(session);
+        let actual = state.runtime_owner_binding_for_session(session);
+        assert_eq!(actual, expected);
+        assert_eq!(*state, before);
+        actual
+    }
+
+    #[test]
+    fn session_binding_preserves_absence_exact_route_and_browser_alias() {
+        let empty = fixture(json!({}), json!({}), json!({}));
+        assert_eq!(assert_session_binding_parity(&empty, "route"), Ok(None));
+        let state = fixture(
+            json!({"profile": owner("profile", "session:alias", "route")}),
+            json!({}),
+            json!({}),
+        );
+        assert!(state.sessions.is_empty());
+        assert_eq!(state.service_principal_registry_revision(), 0);
+        for (session, effect_capable) in [("route", true), ("alias", false)] {
+            let binding = assert_session_binding_parity(&state, session)
+                .unwrap()
+                .unwrap();
+            assert_eq!(binding.effect_capable, effect_capable);
+            assert_eq!(
+                binding.claim,
+                agent_browser_lease_authority::OwnerAuthorityClaim::from_owner(
+                    state.profile_runtime_authority("profile").owner.unwrap()
+                )
+            );
+        }
+        assert_eq!(assert_session_binding_parity(&state, " route"), Ok(None));
+        let mut not_ready = owner("profile", "session:alias", "route");
+        not_ready["state"] = json!("orphaned");
+        let state = fixture(json!({"profile": not_ready}), json!({}), json!({}));
+        assert_eq!(assert_session_binding_parity(&state, "route"), Ok(None));
+    }
+
+    #[test]
+    fn session_binding_preserves_pending_transfer_and_previous_route_alias_without_authentication()
+    {
+        use agent_browser_lease_authority::{
+            BrowserAdoptionMode, CandidateOwnerAttachment, OwnerTransferRequest,
+        };
+
+        let profile_digest = "a".repeat(64);
+        let mut current = owner(&profile_digest, "session:alias", "original-route");
+        current["processInstanceDigest"] = json!("b".repeat(64));
+        current["cdpEndpointIdentityDigest"] = json!("c".repeat(64));
+        current["targetSetDigest"] = json!("d".repeat(64));
+        let mut state = fixture(
+            serde_json::to_value(BTreeMap::from([(profile_digest.clone(), current)])).unwrap(),
+            json!({}),
+            json!({}),
+        );
+        let request = OwnerTransferRequest {
+            mode: BrowserAdoptionMode::CooperativeTransfer,
+            logical_browser_id: "session:alias".into(),
+            profile_identity_digest: profile_digest,
+            expected_owner_id: Some("owner".into()),
+            expected_owner_generation: 7,
+            candidate_owner_id: "candidate".into(),
+            candidate_daemon_session_route: "candidate-route".into(),
+            process_instance_digest: "b".repeat(64),
+            browser_family: "chrome".into(),
+            cdp_endpoint_identity_digest: "c".repeat(64),
+            target_set_digest: "d".repeat(64),
+            selected_target_identity_digest: "e".repeat(64),
+            transfer_nonce_digest: "f".repeat(64),
+        };
+        state
+            .runtime_owner_registry
+            .begin_transfer(request.clone())
+            .unwrap();
+        assert!(
+            assert_session_binding_parity(&state, "original-route")
+                .unwrap()
+                .unwrap()
+                .effect_capable
+        );
+        state
+            .runtime_owner_registry
+            .commit_candidate(CandidateOwnerAttachment::from_request(&request, 8))
+            .unwrap();
+        for (session, effect_capable) in [
+            ("original-route", false),
+            ("alias", false),
+            ("candidate-route", true),
+        ] {
+            let binding = assert_session_binding_parity(&state, session)
+                .unwrap()
+                .unwrap();
+            assert_eq!(binding.effect_capable, effect_capable);
+            assert_eq!(binding.claim.owner_id, "candidate");
+            assert_eq!(binding.claim.owner_generation, 8);
+            assert_eq!(binding.claim.daemon_session_route, "candidate-route");
+        }
+        assert!(state.sessions.is_empty());
+        assert_eq!(state.service_principal_registry_revision(), 0);
+        assert_eq!(state.state_revision(), 31);
+        assert_eq!(state.runtime_owner_registry.revision(), u64::MAX);
+    }
+
+    #[test]
+    fn session_binding_retains_sole_terminal_history_and_exact_history_filtering() {
+        let history = json!({
+            "logicalBrowserId": "old-browser", "profileIdentityDigest": "old",
+            "ownerGeneration": 7, "lifecycleState": "terminal", "cleanupObligationState": "satisfied"
+        });
+        let sole = fixture(
+            json!({"old": owner("old", "old-browser", "route")}),
+            json!({}),
+            json!({"old-browser": history.clone()}),
+        );
+        let binding = assert_session_binding_parity(&sole, "route")
+            .unwrap()
+            .unwrap();
+        assert!(binding.effect_capable);
+        assert_eq!(binding.claim.profile_identity_digest, "old");
+        assert!(agent_browser_lease_authority::owner_binding_in_registry(
+            &sole.runtime_owner_registry,
+            "route"
+        )
+        .unwrap()
+        .is_none());
+
+        for case in 0..7 {
+            let mut row = history.clone();
+            let mut key = "old-browser";
+            match case {
+                0 => {}
+                // Embedded logical browser ID is intentionally not a filtering predicate.
+                1 => row["logicalBrowserId"] = json!("different-embedded-browser"),
+                2 => key = "different-map-key",
+                3 => row["profileIdentityDigest"] = json!("different-profile"),
+                4 => row["ownerGeneration"] = json!(8),
+                5 => row["lifecycleState"] = json!("ready"),
+                6 => row["cleanupObligationState"] = json!("owned"),
+                _ => unreachable!(),
+            }
+            let state = fixture(
+                json!({"old": owner("old", "old-browser", "route"), "new": owner("new", "new-browser", "route")}),
+                json!({}),
+                serde_json::to_value(BTreeMap::from([(key, row)])).unwrap(),
+            );
+            let result = assert_session_binding_parity(&state, "route");
+            if case <= 1 {
+                assert_eq!(
+                    result.unwrap().unwrap().claim.profile_identity_digest,
+                    "new"
+                );
+            } else {
+                assert_eq!(result.unwrap_err(), "runtime_owner_session_ambiguous: session 'route' matches multiple profile owners");
+            }
+        }
+    }
+
+    #[test]
+    fn session_binding_preserves_current_and_terminal_only_ambiguity() {
+        for terminal in [false, true] {
+            let records = if terminal {
+                json!({
+                    "a-browser": {"profileIdentityDigest": "a", "ownerGeneration": 7, "lifecycleState": "terminal", "cleanupObligationState": "satisfied"},
+                    "b-browser": {"profileIdentityDigest": "b", "ownerGeneration": 7, "lifecycleState": "terminal", "cleanupObligationState": "satisfied"}
+                })
+            } else {
+                json!({})
+            };
+            let state = fixture(
+                json!({"a": owner("a", "a-browser", "route"), "b": owner("b", "b-browser", "route")}),
+                json!({}),
+                records,
+            );
+            assert_eq!(
+                assert_session_binding_parity(&state, "route").unwrap_err(),
+                "runtime_owner_session_ambiguous: session 'route' matches multiple profile owners"
+            );
+        }
+    }
+
     #[test]
     fn summary_preserves_all_labels_counts_and_revision() {
         let empty = ServiceState::default().runtime_lifecycle_authority_summary();

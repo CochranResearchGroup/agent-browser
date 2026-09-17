@@ -922,6 +922,15 @@ impl ServiceState {
         }
     }
 
+    /// Project the kernel's session binding, including observation-only aliases
+    /// and sole terminal history, without admitting effects or changing errors.
+    pub fn runtime_owner_binding_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<agent_browser_lease_authority::RuntimeOwnerBinding>, String> {
+        self.runtime_owner_registry.binding_for_session(session_id)
+    }
+
     /// Preserve session attestation errors and the first exact owner ID/generation
     /// match. Lifecycle evidence is independently selected by the supplied browser key.
     pub fn runtime_control_plane_authority(

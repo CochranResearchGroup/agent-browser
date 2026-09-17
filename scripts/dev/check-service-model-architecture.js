@@ -196,7 +196,10 @@ const RUNTIME_OWNER_PROJECTION_METHODS = [
   'runtime_control_plane_authority',
   'runtime_lane_authority',
   'runtime_resource_lanes',
+  'runtime_owner_binding_for_session',
 ];
+
+const RUNTIME_OWNER_SESSION_BINDING_METHOD = 'runtime_owner_binding_for_session';
 
 const ATOMIC_RUNTIME_LIFECYCLE_METHOD = 'apply_runtime_lifecycle_transition_atomically';
 const ATOMIC_PROFILE_SYNC_LIFECYCLE_METHOD =
@@ -788,6 +791,15 @@ function check(root = repoRoot) {
     'cli/src/native/service_profile_acquisition.rs'));
   const cliWorkstationInstallSource = withoutCfgTestItems(read(root,
     'cli/src/workstation_install.rs'));
+  const cliMainSource = withoutCfgTestItems(read(root, 'cli/src/main.rs'));
+  const cliDaemonSource = withoutCfgTestItems(read(root,
+    'cli/src/native/action_runtime/runtime/daemon.rs'));
+  const cliBrowserLifecycleSource = withoutCfgTestItems(read(root,
+    'cli/src/native/browser_lifecycle.rs'));
+  const cliProfileLeaseSource = withoutCfgTestItems(read(root,
+    'cli/src/native/action_runtime/runtime/profile_lease.rs'));
+  const cliGuacamolePrimaryBindingSource = withoutCfgTestItems(read(root,
+    'cli/src/native/stream/guacamole_primary_binding.rs'));
   const cliRuntimeOwnerProjectionSources = RUNTIME_OWNER_PROJECTION_CLI_FILES.map((path) => ({
     path,
     source: withoutCommentsAndStrings(withoutCfgTestItems(read(root, path))),
@@ -1083,6 +1095,21 @@ function check(root = repoRoot) {
       `runtime-owner projection method must not expose registry, mutable, iterator, or callback access: ${name}`,
     );
   }
+  const runtimeOwnerSessionBindingMethod = rustPublicFunctionDefinition(
+    serviceStateCode,
+    RUNTIME_OWNER_SESSION_BINDING_METHOD,
+  );
+  requireCondition(
+    normalizeRust(runtimeOwnerSessionBindingMethod) === normalizeRust(`
+      pub fn runtime_owner_binding_for_session(
+        &self,
+        session_id: &str,
+      ) -> Result<Option<agent_browser_lease_authority::RuntimeOwnerBinding>, String> {
+        self.runtime_owner_registry.binding_for_session(session_id)
+      }
+    `),
+    'runtime-owner session binding projection must preserve its exact direct delegate contract',
+  );
   const atomicLifecycleMethod = rustPublicFunctionDefinition(
     serviceStateCode,
     ATOMIC_RUNTIME_LIFECYCLE_METHOD,
@@ -1318,6 +1345,48 @@ function check(root = repoRoot) {
       && !/\.\s*(?:last|max_by|max_by_key)\s*\(/.test(lifecycleReplacementDecision),
     'lifecycle replacement must preserve embedded-identity first-match semantics without authority bypasses',
   );
+  const runtimeOwnerSessionBindingCallers = [
+    ['cli/src/main.rs', rustNamedFunctionDefinition(
+      cliMainSource,
+      'apply_existing_lane_profile_to_flags',
+    )],
+    ['cli/src/native/action_runtime/runtime/daemon.rs', rustNamedFunctionDefinition(
+      cliDaemonSource,
+      'apply_existing_session_profile_selection',
+    )],
+    ['cli/src/native/browser_lifecycle.rs', rustNamedFunctionDefinition(
+      cliBrowserLifecycleSource,
+      'navigation_browser_id_for_persistence',
+    )],
+    ['cli/src/native/action_runtime/runtime/profile_lease.rs', rustNamedFunctionDefinition(
+      cliProfileLeaseSource,
+      'configured_profile_alias_matches_active_browser',
+    )],
+    ['cli/src/native/stream/guacamole_primary_binding.rs', rustNamedFunctionDefinition(
+      cliGuacamolePrimaryBindingSource,
+      'resolve_inner',
+    )],
+  ].map(([path, source]) => [path, withoutCommentsAndStrings(source)]);
+  for (const [path, source] of runtimeOwnerSessionBindingCallers) {
+    requireCondition(
+      /\.\s*runtime_owner_binding_for_session\s*\(/.test(source),
+      `runtime-owner session binding caller must consume the aggregate projection: ${path}`,
+    );
+    requireCondition(
+      !/\.\s*runtime_owner_registry\s*\.\s*binding_for_session\s*\(/.test(source),
+      `runtime-owner session binding caller must not invoke the registry binding directly: ${path}`,
+    );
+  }
+  for (const [path, source] of runtimeOwnerSessionBindingCallers.slice(2, 4)) {
+    requireCondition(
+      /\.\s*profile_runtime_authority\s*\(/.test(source),
+      `runtime-owner session binding owner join must consume profile authority: ${path}`,
+    );
+    requireCondition(
+      !/\.\s*runtime_owner_registry\b/.test(source),
+      `runtime-owner session binding owner join must not access the registry directly: ${path}`,
+    );
+  }
   requireCondition(
     !/\bRuntimeOwnerPersistenceSnapshot\b/.test(runtimeOwnerProjectionSource),
     'runtime-owner projections must not reuse the persistence snapshot as an access path',
