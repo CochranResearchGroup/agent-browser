@@ -1,11 +1,28 @@
 //! Provider-free durable record models for Agent Browser.
 //!
-//! This Module owns record compatibility and deterministic lifecycle decisions.
+//! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod entity_source;
+mod profile_access;
 mod profile_readiness;
 mod profile_seeding;
 
+pub use entity_source::{ServiceEntitySource, ServiceEntitySources};
+pub use profile_access::{
+    effective_profile_permissions, evaluate_profile_access, evaluate_profile_child_access,
+    mutate_profile_policy, profile_policy_target_for_preset, record_profile_eviction_receipt,
+    ProfileAccessDrain, ProfileAccessEvaluation, ProfileAccessGrant, ProfileAccessMode,
+    ProfileAccessNextAction, ProfileAccessPolicyState, ProfileAccessPreset, ProfileAccessResource,
+    ProfileAccessSubject, ProfileChildAccess, ProfileChildAccessEvidence,
+    ProfileChildAccessRequest, ProfileChildAccessResult, ProfileConnectionState,
+    ProfileEvictionMode, ProfileEvictionPlan, ProfileEvictionReceipt, ProfileIdentityAssurance,
+    ProfilePermission, ProfilePolicyAuditReceipt, ProfilePolicyMutationFailure,
+    ProfilePolicyMutationOutcome, ProfilePolicyMutationRequest, ProfilePolicyMutationResult,
+    ProfilePolicyRevisionDiff, ProfilePolicyTarget, ServiceProfileAccessDecision,
+    ServiceProfileAccessPolicy, PROFILE_ACCESS_DECISION_SCHEMA_V1, PROFILE_ACCESS_POLICY_SCHEMA_V1,
+    PROFILE_CHILD_ACCESS_SCHEMA_V1,
+};
 pub use profile_readiness::{
     BrowserBuild, BrowserProfileCompatibilityEvidence, ProfileAllocationPolicy,
     ProfileKeyringPolicy, ProfileReadinessState, ProfileTargetReadiness,

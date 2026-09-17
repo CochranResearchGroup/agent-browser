@@ -48,37 +48,6 @@ pub const SERVICE_BROWSER_HOST_VALUES: [&str; 6] = [
     "cloud_provider",
     "attached_existing",
 ];
-/// In-memory provenance for service entities after persisted state, config, and
-/// shipped defaults are layered. This is intentionally not serialized.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ServiceEntitySource {
-    PersistedState,
-    Config,
-    Builtin,
-    RuntimeObserved,
-}
-
-impl ServiceEntitySource {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::PersistedState => "persisted_state",
-            Self::Config => "config",
-            Self::Builtin => "builtin",
-            Self::RuntimeObserved => "runtime_observed",
-        }
-    }
-
-    pub fn overrideable(self) -> bool {
-        self == Self::Builtin
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ServiceEntitySources {
-    pub profiles: BTreeMap<String, ServiceEntitySource>,
-    pub site_policies: BTreeMap<String, ServiceEntitySource>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SitePolicySourceRecord {
@@ -2949,11 +2918,9 @@ impl ServiceState {
                 continue;
             };
             if access.connection_instance_id.as_deref() == Some(connection_instance_id)
-                && access.connection_state
-                    == super::service_profile_access_policy::ProfileConnectionState::Active
+                && access.connection_state == ProfileConnectionState::Active
             {
-                access.connection_state =
-                    super::service_profile_access_policy::ProfileConnectionState::Disconnected;
+                access.connection_state = ProfileConnectionState::Disconnected;
                 changed += 1;
             }
         }
@@ -5075,7 +5042,7 @@ pub struct BrowserProfile {
     pub profile_class: ProfileClass,
     /// Revisioned authorization policy. Missing legacy values evaluate as the
     /// trusted single-user `shared-local` preset.
-    pub access_policy: Option<super::service_profile_access_policy::ServiceProfileAccessPolicy>,
+    pub access_policy: Option<ServiceProfileAccessPolicy>,
     pub user_data_dir: Option<String>,
     pub site_policy_ids: Vec<String>,
     /// Target sites or identity providers this profile is intended to satisfy.
@@ -5156,9 +5123,10 @@ pub struct BrowserProfileRegistration {
 
 pub use agent_browser_service_model::{
     profile_seeding_handoff_id, BrowserBuild, BrowserProfileCompatibilityEvidence,
-    ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileReadinessState,
-    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
-    ProfileTargetReadiness,
+    ProfileAllocationPolicy, ProfileChildAccess, ProfileConnectionState, ProfileKeyringPolicy,
+    ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
+    ProfileSeedingMode, ProfileTargetReadiness, ServiceEntitySource, ServiceEntitySources,
+    ServiceProfileAccessPolicy,
 };
 #[cfg(test)]
 use agent_browser_service_model::{
@@ -5988,7 +5956,7 @@ pub struct BrowserTab {
     pub title: Option<String>,
     pub owner_session_id: Option<String>,
     /// Profile authority inherited when this tab was admitted.
-    pub profile_access: Option<super::service_profile_access_policy::ProfileChildAccess>,
+    pub profile_access: Option<ProfileChildAccess>,
     /// Authenticated principal inherited from the owning session work lease.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) principal_id: Option<String>,
@@ -6048,7 +6016,7 @@ pub struct ServiceTabHandle {
     pub cleanup_policy: Option<SessionCleanupPolicy>,
     pub lease_heartbeat_expected: bool,
     pub owner_session_id: Option<String>,
-    pub profile_access: Option<super::service_profile_access_policy::ProfileChildAccess>,
+    pub profile_access: Option<ProfileChildAccess>,
     pub job_id: Option<String>,
     pub trace_filter: ServiceTabHandleTraceFilter,
     pub valid: bool,
@@ -10772,10 +10740,6 @@ mod tests {
 
     #[test]
     fn closing_one_connection_marks_only_its_profile_children_disconnected() {
-        use super::super::service_profile_access_policy::{
-            ProfileChildAccess, ProfileConnectionState,
-        };
-
         let child = |connection: &str| ProfileChildAccess {
             subject_id: Some("client:fieldwork".to_string()),
             connection_instance_id: Some(connection.to_string()),

@@ -316,6 +316,43 @@ Next action: publish this checkpoint, then select the next self-contained
 durable family that reduces aggregate cross-module dependencies without moving
 effect adapters.
 
+## Checkpoint 3 | Entity Provenance And Profile-Access Kernel
+
+State transition: the crate now owns in-memory entity provenance plus the
+complete provider-free profile-access policy kernel. The CLI policy module is a
+named transitional re-export and one failure-projection adapter test. Service
+State fields for profile policy and child access refer directly to crate types,
+removing three aggregate upward edges.
+
+Acceptance state and progress classification: this P1 dependency-reduction
+packet is accepted locally and materially deepens the crate. The move preserves
+admission decisions, inherited child authority, reconnect fencing, policy
+canonicalization, revision conflicts, drain and eviction planning,
+deterministic identifiers, and privacy-bounded evidence. Filesystem custody,
+runtime observation, failure classification, and repository mutation remain
+CLI adapters.
+
+Evidence:
+
+- 21 crate tests pass in 2.11 seconds, including 11 profile-access authorization
+  and transition tests, two entity-source tests, and the eight earlier profile
+  tests;
+- strict Clippy for `agent-browser-service-model` passes;
+- the focused CLI privacy-projection adapter test passes without warnings;
+- the profile-policy repository mutation and configured-entity overlay tests
+  pass through the compatibility facade;
+- formatting, architecture guard, fixture guard, and diff checks remain green;
+- the CLI policy file shrinks from a 1,606-line implementation and test module
+  to a narrow named facade plus one adapter-specific regression test.
+
+Material blockers: `BrowserProfile` can now move after its remaining local
+record dependencies are extracted. The full aggregate still depends on several
+other CLI-owned durable record families listed in Checkpoint 1.
+
+Next action: publish this deep-module checkpoint, then move the neutral profile
+record family and `BrowserProfile` without moving its CLI derivation or
+persistence adapters.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
