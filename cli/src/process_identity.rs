@@ -6,16 +6,7 @@ use std::path::Path;
 #[cfg(any(target_os = "macos", windows))]
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct RecordedProcessIdentity {
-    pub pid: u32,
-    pub start_token: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub executable_path: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub browser_family: Option<String>,
-}
+pub use agent_browser_service_model::RecordedProcessIdentity;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ObservedProcessIdentity {

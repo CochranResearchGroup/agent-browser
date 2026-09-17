@@ -28,18 +28,6 @@ pub const SERVICE_INCIDENT_ESCALATION_VALUES: [&str; 7] = [
     "service_triage",
     "os_degraded_possible",
 ];
-pub const SERVICE_BROWSER_HEALTH_VALUES: [&str; 10] = [
-    "not_started",
-    "launching",
-    "ready",
-    "degraded",
-    "unreachable",
-    "process_exited",
-    "cdp_disconnected",
-    "reconnecting",
-    "closing",
-    "faulted",
-];
 pub const SERVICE_MONITOR_STATE_VALUES: [&str; 3] = ["active", "paused", "faulted"];
 pub const SERVICE_INTERACTION_MODE_VALUES: [&str; 5] = [
     "cdp_direct",
@@ -4903,181 +4891,30 @@ pub struct ControlPlaneSnapshot {
 }
 
 pub use agent_browser_service_model::{
-    profile_seeding_handoff_id, BrowserBuild, BrowserHost, BrowserProfile, BrowserSession,
-    BrowserTab, ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,
-    LeaseState, ProfileAllocationPolicy, ProfileClass, ProfileConnectionState,
-    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState,
-    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
-    ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness,
-    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
-    RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor, ServiceEntitySource,
-    ServiceEntitySources, ServiceTabHandle, ServiceTabHandleTraceFilter, SessionCleanupPolicy,
-    SitePolicySourceRecord, TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
+    profile_seeding_handoff_id, BrowserBuild, BrowserHealth, BrowserHealthObservation, BrowserHost,
+    BrowserProcess, BrowserProfile, BrowserRecordAuthoritySource,
+    BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,
+    BrowserSession, BrowserTab, ControlInputProvider, DisplayAllocation,
+    DurableHandoffPresentationReceipt, LeaseState, ProfileAllocationPolicy, ProfileClass,
+    ProfileConnectionState, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin,
+    ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
+    ProfileSeedingMode, ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness,
+    ProtectedBrowserOwnerObservation, RemoteViewAcquisitionLease, RemoteViewHandoff,
+    RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
+    ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEntitySources, ServiceTabHandle,
+    ServiceTabHandleTraceFilter, SessionCleanupPolicy, SitePolicySourceRecord, TabLifecycle,
+    ViewStream, ViewStreamProvider, ViewerLease,
 };
 #[cfg(test)]
 use agent_browser_service_model::{
-    ProfileChildAccess, SERVICE_BROWSER_BUILD_VALUES, SERVICE_BROWSER_HOST_VALUES,
-    SERVICE_CONTROL_INPUT_PROVIDER_VALUES, SERVICE_LEASE_STATE_VALUES,
+    ProfileChildAccess, SERVICE_BROWSER_BUILD_VALUES, SERVICE_BROWSER_HEALTH_VALUES,
+    SERVICE_BROWSER_HOST_VALUES, SERVICE_CONTROL_INPUT_PROVIDER_VALUES, SERVICE_LEASE_STATE_VALUES,
     SERVICE_PROFILE_ALLOCATION_VALUES, SERVICE_PROFILE_CLASS_VALUES,
     SERVICE_PROFILE_KEYRING_VALUES, SERVICE_PROFILE_LEASE_DISPOSITION_VALUES,
     SERVICE_PROFILE_READINESS_VALUES, SERVICE_PROFILE_SEEDING_MODE_VALUES,
     SERVICE_PROFILE_SELECTION_REASON_VALUES, SERVICE_SESSION_CLEANUP_VALUES,
     SERVICE_TAB_LIFECYCLE_VALUES, SERVICE_VIEW_STREAM_PROVIDER_VALUES,
 };
-
-/// A supervised or attached browser process known to the service.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BrowserRecordSource {
-    CallerProjection,
-    PersistedState,
-    RuntimeObserved,
-    ManagedRuntime,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BrowserRecordAuthoritySource {
-    CallerProjection,
-    LegacyUnproven,
-    ProcessIdentity,
-    ManagedRuntime,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BrowserRecordLifecycleClassification {
-    Live,
-    Reattachable,
-    InertLegacy,
-    ReviewRequired,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct BrowserRecordProvenance {
-    pub source: BrowserRecordSource,
-    pub authority_source: BrowserRecordAuthoritySource,
-    pub created_at: Option<String>,
-    pub last_observed_at: Option<String>,
-    pub lifecycle_classification: BrowserRecordLifecycleClassification,
-    pub recommended_action: String,
-    pub record_revision: u64,
-    pub evidence_digest: String,
-}
-
-impl Default for BrowserRecordProvenance {
-    fn default() -> Self {
-        Self {
-            source: BrowserRecordSource::PersistedState,
-            authority_source: BrowserRecordAuthoritySource::LegacyUnproven,
-            created_at: None,
-            last_observed_at: None,
-            lifecycle_classification: BrowserRecordLifecycleClassification::ReviewRequired,
-            recommended_action: "review".to_string(),
-            record_revision: 0,
-            evidence_digest: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct BrowserProcess {
-    pub id: String,
-    /// Host boot that authenticated process-scoped observations on this row.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub boot_epoch: Option<String>,
-    pub profile_id: Option<String>,
-    pub host: BrowserHost,
-    pub health: BrowserHealth,
-    pub display_isolation: Option<String>,
-    pub display_name: Option<String>,
-    pub display_allocation_id: Option<String>,
-    pub pid: Option<u32>,
-    pub cdp_endpoint: Option<String>,
-    pub view_streams: Vec<ViewStream>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub attachability: Option<Value>,
-    pub active_session_ids: Vec<String>,
-    pub tab_handles: Vec<ServiceTabHandle>,
-    pub last_error: Option<String>,
-    pub last_health_observation: Option<BrowserHealthObservation>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub record_provenance: Option<BrowserRecordProvenance>,
-}
-
-/// Receipt-linked observation of a browser owner committed by the protected
-/// lease authority. This projection is never operational authority: callers
-/// must revalidate every axis with the protected service before any effect.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProtectedBrowserOwnerObservation {
-    pub schema_version: String,
-    pub source: String,
-    #[serde(deserialize_with = "deserialize_protected_observation_authority")]
-    pub operational_authority: bool,
-    pub authority_receipt_id: String,
-    pub owner_id: String,
-    pub owner_generation: u64,
-    pub logical_browser_id: String,
-    pub daemon_session_route: String,
-    pub process_instance_digest: String,
-    pub process_pid: u32,
-    pub owner_revision: u64,
-    pub observed_at: String,
-    pub freshness_expires_at: String,
-}
-
-fn deserialize_protected_observation_authority<'de, D>(deserializer: D) -> Result<bool, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = bool::deserialize(deserializer)?;
-    if value {
-        return Err(<D::Error as serde::de::Error>::custom(
-            "protected_browser_owner_observation_invalid",
-        ));
-    }
-    Ok(false)
-}
-
-/// Durable process-instance evidence for a service browser.
-///
-/// `profile_id` remains a service-domain identity. Only `runtime_profile`
-/// names the runtime-profile subsystem, so custom service profiles are never
-/// reinterpreted as runtime profiles during health assessment.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServiceBrowserProcessIdentity {
-    pub process_identity: crate::process_identity::RecordedProcessIdentity,
-    pub user_data_dir: Option<String>,
-    pub runtime_profile: Option<String>,
-}
-
-impl Default for BrowserProcess {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            boot_epoch: None,
-            profile_id: None,
-            host: BrowserHost::LocalHeaded,
-            health: BrowserHealth::NotStarted,
-            display_isolation: None,
-            display_name: None,
-            display_allocation_id: None,
-            pid: None,
-            cdp_endpoint: None,
-            view_streams: Vec::new(),
-            attachability: None,
-            active_session_ids: Vec::new(),
-            tab_handles: Vec::new(),
-            last_error: None,
-            last_health_observation: None,
-            record_provenance: None,
-        }
-    }
-}
 
 pub fn retained_display_allocation_candidates(
     state: &ServiceState,
@@ -5320,33 +5157,6 @@ fn boot_epoch_is_prior(
         (recorded_boot_epoch, current_boot_epoch),
         (Some(recorded), Some(current)) if recorded != current
     )
-}
-
-/// Latest service-owned browser health evidence retained on the browser record.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct BrowserHealthObservation {
-    pub observed_at: String,
-    pub health: BrowserHealth,
-    pub reason_kind: Option<String>,
-    pub failure_class: Option<String>,
-    pub process_exit_cause: Option<String>,
-    pub message: Option<String>,
-    pub details: Option<serde_json::Value>,
-}
-
-impl Default for BrowserHealthObservation {
-    fn default() -> Self {
-        Self {
-            observed_at: String::new(),
-            health: BrowserHealth::NotStarted,
-            reason_kind: None,
-            failure_class: None,
-            process_exit_cause: None,
-            message: None,
-            details: None,
-        }
-    }
 }
 
 /// Queued or completed service work item.
@@ -5647,22 +5457,6 @@ impl Default for Challenge {
             result: None,
         }
     }
-}
-
-/// Browser process health as seen by the service.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BrowserHealth {
-    NotStarted,
-    Launching,
-    Ready,
-    Degraded,
-    Unreachable,
-    ProcessExited,
-    CdpDisconnected,
-    Reconnecting,
-    Closing,
-    Faulted,
 }
 
 /// Change the primary controller once, advance its ABA fencing epoch, and

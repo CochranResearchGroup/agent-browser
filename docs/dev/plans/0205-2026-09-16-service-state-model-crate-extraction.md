@@ -471,16 +471,55 @@ Next action: publish this checkpoint, then extract the provider-free browser
 process family without importing OS process observation or retained-owner
 authority into the model crate.
 
+## Checkpoint 7 | Browser Process Records
+
+State transition: the crate now owns browser process, health observation,
+record provenance, protected-owner observation, and service process-identity
+records, plus the provider-free recorded process identity. The CLI
+`process_identity` module re-exports that record while retaining boot-epoch,
+namespace, executable, PID, handle, signaling, and platform observation.
+
+Acceptance state and progress classification: this P1 dependency-reduction
+packet is accepted locally. `BrowserProcess` now closes entirely over
+crate-owned host, view-stream, tab-handle, health, provenance, and identity
+records. The protected-owner record still rejects
+`operationalAuthority=true` during deserialization and remains observational,
+never effect authority.
+
+Evidence:
+
+- five focused crate test groups pass for browser-health wire labels, process
+  defaults and omissions, provenance and observation defaults, protected-owner
+  fail-closed decoding, and nested process-identity round trips;
+- CLI collection wire-contract and nested Service State round-trip tests pass;
+- focused health-evidence retention and protected-owner projection tests pass;
+- exact process start-token and PID-reuse policy tests pass through the CLI
+  compatibility re-export;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no process observation, browser, provider, runtime, install, staging,
+  production, release, or GitHub CI effect was performed.
+
+Material blockers: the full Service State aggregate still depends on job,
+monitor, incident, challenge, provider, receipt, transaction, migration,
+presentation-capacity, runtime-owner, authentication, recovery, and lifecycle
+families. P204 still owns the shared validation and roadmap surfaces.
+
+Next action: publish this checkpoint and reassess aggregate dependency depth.
+Prefer another cohesive durable family over introducing an incomplete second
+Service State aggregate.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | six families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | seven families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | snapshot, transition, and projection interface tests plus deletion test | planned |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | six packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | six packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | seven packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | seven packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

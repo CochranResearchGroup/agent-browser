@@ -3,6 +3,7 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod browser_process;
 mod browser_profile;
 mod entity_source;
 mod presentation;
@@ -11,6 +12,12 @@ mod profile_readiness;
 mod profile_seeding;
 mod session_tab;
 
+pub use browser_process::{
+    BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
+    BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,
+    ProtectedBrowserOwnerObservation, RecordedProcessIdentity, ServiceBrowserProcessIdentity,
+    SERVICE_BROWSER_HEALTH_VALUES,
+};
 pub use browser_profile::{
     BrowserHost, BrowserProfile, BrowserProfileRegistration, ProfileClass, ProfileOrigin,
     ProfileSourceRecord, SitePolicySourceRecord, SERVICE_BROWSER_HOST_VALUES,
