@@ -100,7 +100,10 @@ pub use presentation_capacity::{
     PresentationRetirementConflict, PresentationSlot, PresentationSlotObservation,
     PresentationSlotState, PressureAdmission, SlotTransitionReceipt,
 };
-pub use principal_continuity::PrincipalContinuityRecourse;
+pub use principal_continuity::{
+    LegacyPrincipalMigrationDisposition, LegacySessionPrincipalMigrationPlan,
+    PrincipalContinuityDecision, PrincipalContinuityRecourse,
+};
 pub use profile_access::{
     effective_profile_permissions, evaluate_profile_access, evaluate_profile_child_access,
     mutate_profile_policy, profile_policy_target_for_preset, record_profile_eviction_receipt,

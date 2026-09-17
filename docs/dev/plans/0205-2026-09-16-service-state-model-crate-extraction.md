@@ -3119,6 +3119,119 @@ and legacy migration decisions with boot epoch supplied explicitly by the CLI.
 Runtime-owner mutation and repository-sidecar custody remain a later boundary
 rather than being exposed through a broad registry getter.
 
+## Checkpoint 50 | Principal Continuity Kernel Interface Freeze
+
+State transition: the next provider-free packet is frozen as three canonical
+records and five `ServiceState` methods. Service Model will own
+`PrincipalContinuityDecision`, `LegacyPrincipalMigrationDisposition`, and
+`LegacySessionPrincipalMigrationPlan`, plus aggregate entry points for current
+authenticated session-work authority, continuity recourse, legacy migration
+planning, session work-lease binding, and tab work-lease binding.
+
+The session binding method receives the observed boot epoch explicitly as an
+`Option<String>`. The CLI compatibility wrapper obtains that observation at
+the existing call boundary and contains no copied decision. Tab binding needs
+no host observation. The packet preserves the current SHA-256 work-lease ID,
+24-character lowercase digest prefix, saturating revision, exact error codes
+and messages, lexical expiry comparison, deterministic ordering, and current
+authority and owner-binding predicates.
+
+Decision precedence remains frozen. Session-work authority requires registered
+session provenance, nonterminal lease, present future expiry, a nonempty work
+lease with positive revision, exactly one matching registered owner binding,
+and current capability authority. Continuity distinguishes stale capability,
+missing or stale owner binding, mismatched owner principal, unproven holder,
+foreign holder, retained same-principal holder, stale same-principal session,
+and ready owner without a session in that order. Legacy labels never become
+authority, and a unique verified migration candidate remains observation-only
+until an explicit later commit path.
+
+The CLI retains boot observation, repository mutation, event append,
+runtime-owner mutation, capability files, transport mapping, and every browser
+or daemon effect. Rejoin ordering remains owner binding or refresh, session
+binding, session lease and observation update, ordered tab binding, then lease
+projection. The packet does not combine those steps into an atomic aggregate
+transition or begin runtime-owner sidecar closure.
+
+Hard stops are a broad principal or runtime-owner getter, model-side process or
+boot observation, callbacks, timestamp normalization, new authority checks,
+changed ambiguity or provenance behavior, changed errors, runtime-owner or
+envelope revision mutation, repository ordering changes, or merged session and
+tab transaction semantics.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` reused
+the requested high-capability `gpt-6-astra` high route for the consequential
+five-method interface, semantic precedence, and pure/effect boundary.
+`/root/p205_receipt_cli_audit` reused the requested workhorse
+`gpt-5.6-sol` high route for exact caller, ordering, and focused-witness
+inventory. Both workers are read-only; the primary owns the freeze,
+implementation split, integration, validation, and acceptance.
+
+Acceptance state and progress classification: this is an interface freeze, not
+implementation acceptance. It removes ambiguity from the next bounded packet
+but does not advance P4 until the canonical records and decisions move, CLI
+production callers use the aggregate seam, focused model and adapter witnesses
+pass, and the architecture guard rejects copied continuity logic.
+
+## Checkpoint 51 | Principal Continuity Kernel Accepted
+
+State transition: Service Model now owns the three canonical continuity and
+legacy-migration records plus five aggregate methods for authenticated retained
+session work, continuity recourse, legacy migration planning, session work
+binding, and tab work binding. The CLI Service Principal module is a thin
+compatibility facade: four functions delegate directly, while session binding
+obtains the current boot epoch and supplies it to the provider-free transition.
+All production principal, owner, session, tab, hashing, sorting, error, and
+mutation decisions moved out of that facade.
+
+The kernel preserves current authority and owner-binding predicates, error
+precedence and messages, NUL-delimited SHA-256 work-lease IDs with 24-character
+lowercase prefixes, saturating work revisions, deterministic holder and plan
+ordering, migration ambiguity, and the exact session and tab field deltas. It
+does not mutate the principal registry, runtime-owner registry, Service State
+envelope revision, repository state, or any browser or daemon resource.
+
+Boot observation remains CLI-owned and is read immediately before delegation.
+It therefore precedes the pure validation inside the model rather than
+occurring between validation and mutation as it did inside the former CLI
+implementation. The observation is an infallible read returning
+`Option<String>`; closed-world review confirmed that errors, IDs, revisions,
+and state mutation remain unchanged. No model-side process, filesystem, clock,
+or boot dependency was introduced.
+
+Acceptance evidence:
+
+- all 191 Service Model unit tests and fourteen integration tests pass,
+  including seven new continuity, migration, mutation-delta, ordering,
+  authority, wire, boot-input, saturation, and rejection-invariance tests;
+- 39 focused CLI witnesses pass: eight Service Principal tests, all 28 profile
+  lease tests, and exact health, control-plane, and daemon caller tests;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, its mutation fixtures, and the
+  changed-surface selector readback pass;
+- the first integrated model run failed only because the new synthetic fixture
+  used a non-SHA-256 profile identity; one bounded repair replaced it with the
+  Lease Authority's valid digest shape, after which the complete model lane
+  passed; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route for the model kernel,
+seven provider-free tests, and the one fixture repair. The primary independently
+ran the complete model lane. `/root/p205_receipt_cli_audit` used the requested
+workhorse `gpt-5.6-sol` high route for the 471-line CLI deletion and thin
+facade. The primary fixed test-only imports, integrated the architecture guard,
+and ran all CLI and quality gates. `/root/p205_privacy_audit` performed one
+closed-world comparison against `ec6d00f2` and returned no findings.
+
+Acceptance state and progress classification: Principal Continuity is accepted
+and is outcome progress toward P4 field privacy. The next bounded outcome is a
+runtime-owner and repository-sidecar interface freeze. That packet must
+separate pure owner projections and transitions from filesystem sidecar
+restoration, transaction ordering, process observation, and runtime effects
+before any implementation begins.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -3126,9 +3239,9 @@ rather than being exposed through a broad registry getter.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, and Service Principal registry closure accepted; remaining typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, and Principal Continuity kernel accepted; remaining typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | Service Principal registry closure accepted through Checkpoint 49 |
+| Focused correctness | crate tests and affected CLI adapter tests | Principal Continuity kernel accepted through Checkpoint 51 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

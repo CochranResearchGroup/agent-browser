@@ -103,6 +103,11 @@ impl ServiceState {
   pub fn register_profile_capability(&mut self) {}
   pub fn rotate_profile_capability(&mut self) {}
   pub fn lease_authority_view(&self) {}
+  pub fn authenticated_session_work_authority(&self) {}
+  pub fn principal_continuity_decision(&self) {}
+  pub fn plan_legacy_session_principal_migration(&self) {}
+  pub fn bind_session_work_lease(&mut self) {}
+  pub fn bind_tab_work_lease(&mut self) {}
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -187,6 +192,20 @@ const validCapabilityExport = `mod browser_capability_registry;
 pub use browser_capability_registry::{
   browser_profile_compatibility_matches,
   BrowserCapabilityRegistry,
+};
+`;
+const validPrincipalContinuity = `
+pub enum PrincipalContinuityRecourse {}
+pub struct PrincipalContinuityDecision;
+pub enum LegacyPrincipalMigrationDisposition {}
+pub struct LegacySessionPrincipalMigrationPlan;
+`;
+const validPrincipalContinuityExport = `mod principal_continuity;
+pub use principal_continuity::{
+  PrincipalContinuityRecourse,
+  PrincipalContinuityDecision,
+  LegacyPrincipalMigrationDisposition,
+  LegacySessionPrincipalMigrationPlan,
 };
 `;
 const serviceAuthenticationDefinitions = [
@@ -277,7 +296,7 @@ const validAuthenticationFacade = 'pub(crate) use agent_browser_authentication_c
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
-  cliTest = '',
+  cliTest = '', principalCli = '', principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
   authentication = validAuthenticationControl,
@@ -299,6 +318,8 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/abandoned_browser_retirement.rs'), retirement);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/crash_regeneration.rs'), crash);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/browser_capability_registry.rs'), capability);
+  writeFileSync(join(root, 'crates/agent-browser-service-model/src/principal_continuity.rs'),
+    principalContinuity);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_authentication_run.rs'),
     serviceAuthentication);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_challenge_task.rs'),
@@ -306,6 +327,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_state.rs'), serviceState);
   mkdirSync(join(root, 'cli/src/native'), { recursive: true });
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
+  writeFileSync(join(root, 'cli/src/native/service_principal.rs'), principalCli);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -316,6 +338,7 @@ const validManifest = '[package]\nname = "agent-browser-service-model"\nversion 
 const validAuthenticationManifest = '[package]\nname = "agent-browser-authentication-control"\nversion = "0.1.0"\n[dependencies]\nserde = "1"\n';
 const validSource = `${validCrashExport}
 ${validCapabilityExport}
+${validPrincipalContinuityExport}
 ${validServiceAuthenticationExport}
 ${validServiceChallengeExport}
 ${validServiceStateExport}
@@ -374,6 +397,22 @@ for (const [name, mutation] of [
   ['direct CLI principal registry access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.service_principals; }\n' }],
   ['direct CLI principal registry access after test-only item', {
     cli: '#[cfg(test)]\nuse crate::fixture;\nfn leak(state: &ServiceState) { let _ = &state.service_principals; }\n',
+  }],
+  ['missing principal continuity definition', {
+    principalContinuity: validPrincipalContinuity.replace(
+      'pub struct PrincipalContinuityDecision;',
+      '',
+    ),
+  }],
+  ['duplicate CLI principal continuity definition', {
+    principalCli: 'pub struct PrincipalContinuityDecision;\n',
+  }],
+  ['missing principal continuity aggregate method', { serviceState: validServiceState.replace(
+    'pub fn principal_continuity_decision(&self) {}',
+    '',
+  ) }],
+  ['copied CLI principal continuity state decision', {
+    principalCli: 'fn copied(state: &ServiceState) { let _ = &state.runtime_owner_registry; }\n',
   }],
   ['missing authentication aggregate method', { serviceState: validServiceState.replace(
     'pub fn observe_service_authentication_run(&mut self) {}',

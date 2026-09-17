@@ -5,101 +5,32 @@
 //! capability whose digest is retained in Service State. Raw capabilities are
 //! never persisted or projected into diagnostics.
 
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 #[cfg(test)]
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 
-use super::service_model::{BrowserSession, LeaseState, ServiceState};
+use super::service_model::{BrowserSession, ServiceState};
 #[cfg(test)]
 pub(crate) use agent_browser_lease_authority::{
     authenticate_profile_capability, authenticated_authority_is_current,
-    register_profile_capability,
+    register_profile_capability, ServicePrincipalFailureCode,
 };
 pub(crate) use agent_browser_lease_authority::{
     generate_profile_capability_token, AuthenticatedServicePrincipal, RegisteredProfileCapability,
-    ServicePrincipalError, ServicePrincipalFailureCode, ServicePrincipalProvenance,
-    ServicePrincipalRegistrationRequest, ServicePrincipalState, ServiceProfileCapability,
-    ServiceProfileCapabilityState,
+    ServicePrincipalError, ServicePrincipalProvenance, ServicePrincipalRegistrationRequest,
+    ServicePrincipalState, ServiceProfileCapability, ServiceProfileCapabilityState,
 };
-pub(crate) use agent_browser_service_model::PrincipalContinuityRecourse;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PrincipalContinuityDecision {
-    pub(crate) recourse: PrincipalContinuityRecourse,
-    pub(crate) requester_principal_id: String,
-    pub(crate) profile_id: String,
-    pub(crate) holder_session_ids: Vec<String>,
-    pub(crate) holder_principal_ids: Vec<String>,
-    pub(crate) effect_capable: bool,
-    pub(crate) reasons: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum LegacyPrincipalMigrationDisposition {
-    AlreadyPrincipalBound,
-    PrincipalBindingAvailable,
-    UnprovenPrincipal,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LegacySessionPrincipalMigrationPlan {
-    pub(crate) session_id: String,
-    pub(crate) profile_id: Option<String>,
-    pub(crate) candidate_principal_id: Option<String>,
-    pub(crate) disposition: LegacyPrincipalMigrationDisposition,
-    pub(crate) observation_only: bool,
-    pub(crate) recourse: PrincipalContinuityRecourse,
-    pub(crate) reasons: Vec<String>,
-}
+#[cfg(test)]
+pub(crate) use agent_browser_service_model::LegacyPrincipalMigrationDisposition;
+pub(crate) use agent_browser_service_model::{
+    LegacySessionPrincipalMigrationPlan, PrincipalContinuityDecision, PrincipalContinuityRecourse,
+};
 
 pub(crate) fn authenticated_session_work_authority(
     state: &ServiceState,
     session_id: &str,
     now: &str,
 ) -> Option<AuthenticatedServicePrincipal> {
-    let session = state.sessions.get(session_id)?;
-    let principal_id = session.principal_id.as_deref()?;
-    let profile_id = session.profile_id.as_deref()?;
-    if session.principal_provenance != Some(ServicePrincipalProvenance::RegisteredCapability)
-        || matches!(session.lease, LeaseState::Released | LeaseState::Expired)
-        || session
-            .expires_at
-            .as_deref()
-            .is_none_or(|expiry| expiry <= now)
-        || session.work_lease_id.as_deref().is_none_or(str::is_empty)
-        || session.work_lease_revision == 0
-    {
-        return None;
-    }
-    let matching = state
-        .runtime_owner_registry
-        .principal_bindings()
-        .values()
-        .filter(|binding| {
-            binding.principal_id == principal_id
-                && binding.profile_id == profile_id
-                && binding.provenance == ServicePrincipalProvenance::RegisteredCapability
-        })
-        .collect::<Vec<_>>();
-    let [binding] = matching.as_slice() else {
-        return None;
-    };
-    let capability = state.profile_capability(&binding.capability_id)?;
-    let authority = AuthenticatedServicePrincipal {
-        principal_id: principal_id.to_string(),
-        profile_id: profile_id.to_string(),
-        capability_id: binding.capability_id.clone(),
-        capability_revision: capability.revision,
-        provenance: binding.provenance,
-    };
-    state
-        .authenticated_authority_is_current(&authority)
-        .then_some(authority)
+    state.authenticated_session_work_authority(session_id, now)
 }
 
 pub(crate) fn bind_session_work_lease(
@@ -108,41 +39,8 @@ pub(crate) fn bind_session_work_lease(
     authority: &AuthenticatedServicePrincipal,
     expires_at: String,
 ) -> Result<BrowserSession, ServicePrincipalError> {
-    if !state.authenticated_authority_is_current(authority) {
-        return Err(principal_error(
-            ServicePrincipalFailureCode::CapabilityMismatch,
-        ));
-    }
-    let session = state
-        .sessions
-        .get_mut(session_id)
-        .ok_or_else(|| principal_error(ServicePrincipalFailureCode::WorkLeaseConflict))?;
-    if session.profile_id.as_deref() != Some(authority.profile_id.as_str()) {
-        return Err(principal_error(
-            ServicePrincipalFailureCode::ProfileMismatch,
-        ));
-    }
-    if session
-        .principal_id
-        .as_deref()
-        .is_some_and(|principal_id| principal_id != authority.principal_id)
-    {
-        return Err(principal_error(
-            ServicePrincipalFailureCode::WorkLeaseConflict,
-        ));
-    }
-    session.principal_id = Some(authority.principal_id.clone());
-    session.boot_epoch = crate::process_identity::current_boot_epoch();
-    session.principal_provenance = Some(authority.provenance);
-    session.work_lease_id = Some(work_lease_id(
-        "session",
-        &authority.principal_id,
-        session_id,
-        &authority.profile_id,
-    ));
-    session.work_lease_revision = session.work_lease_revision.saturating_add(1).max(1);
-    session.expires_at = Some(expires_at);
-    Ok(session.clone())
+    let boot_epoch = crate::process_identity::current_boot_epoch();
+    state.bind_session_work_lease(session_id, authority, expires_at, boot_epoch)
 }
 
 pub(crate) fn bind_tab_work_lease(
@@ -151,384 +49,26 @@ pub(crate) fn bind_tab_work_lease(
     authority: &AuthenticatedServicePrincipal,
     expires_at: String,
 ) -> Result<super::service_model::BrowserTab, ServicePrincipalError> {
-    if !state.authenticated_authority_is_current(authority) {
-        return Err(principal_error(
-            ServicePrincipalFailureCode::CapabilityMismatch,
-        ));
-    }
-    let owner_session_id = state
-        .tabs
-        .get(tab_id)
-        .and_then(|tab| tab.owner_session_id.clone())
-        .ok_or_else(|| principal_error(ServicePrincipalFailureCode::WorkLeaseConflict))?;
-    let session = state
-        .sessions
-        .get(&owner_session_id)
-        .ok_or_else(|| principal_error(ServicePrincipalFailureCode::WorkLeaseConflict))?;
-    if session.principal_id.as_deref() != Some(authority.principal_id.as_str())
-        || session.profile_id.as_deref() != Some(authority.profile_id.as_str())
-    {
-        return Err(principal_error(
-            ServicePrincipalFailureCode::WorkLeaseConflict,
-        ));
-    }
-    let tab = state
-        .tabs
-        .get_mut(tab_id)
-        .ok_or_else(|| principal_error(ServicePrincipalFailureCode::WorkLeaseConflict))?;
-    let session_id = tab
-        .owner_session_id
-        .as_deref()
-        .ok_or_else(|| principal_error(ServicePrincipalFailureCode::WorkLeaseConflict))?;
-    debug_assert_eq!(session_id, owner_session_id);
-    tab.principal_id = Some(authority.principal_id.clone());
-    tab.principal_provenance = Some(authority.provenance);
-    tab.work_lease_id = Some(work_lease_id(
-        "tab",
-        &authority.principal_id,
-        tab_id,
-        &authority.profile_id,
-    ));
-    tab.work_lease_revision = tab.work_lease_revision.saturating_add(1).max(1);
-    tab.work_lease_expires_at = Some(expires_at);
-    Ok(tab.clone())
+    state.bind_tab_work_lease(tab_id, authority, expires_at)
 }
 
 pub(crate) fn principal_continuity_decision(
     state: &ServiceState,
     authority: &AuthenticatedServicePrincipal,
 ) -> PrincipalContinuityDecision {
-    let mut reasons = Vec::new();
-    if !state.authenticated_authority_is_current(authority) {
-        reasons.push("principal_capability_not_current".to_string());
-        return continuity_decision(
-            authority,
-            PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
-            Vec::new(),
-            Vec::new(),
-            false,
-            reasons,
-        );
-    }
-
-    let owner_bindings = state
-        .runtime_owner_registry
-        .principal_bindings()
-        .values()
-        .filter(|binding| binding.profile_id == authority.profile_id)
-        .collect::<Vec<_>>();
-    if owner_bindings.len() != 1
-        || !state
-            .runtime_owner_registry
-            .principal_binding_is_current(owner_bindings.first().copied())
-    {
-        reasons.push("runtime_owner_principal_binding_not_current".to_string());
-        return continuity_decision(
-            authority,
-            PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
-            Vec::new(),
-            Vec::new(),
-            false,
-            reasons,
-        );
-    }
-    let owner_binding = owner_bindings[0];
-    if owner_binding.principal_id != authority.principal_id
-        || owner_binding.capability_id != authority.capability_id
-        || owner_binding.provenance != authority.provenance
-    {
-        reasons.push("runtime_owner_principal_mismatch".to_string());
-        return continuity_decision(
-            authority,
-            PrincipalContinuityRecourse::WaitForForeignPrincipal,
-            Vec::new(),
-            vec![owner_binding.principal_id.clone()],
-            false,
-            reasons,
-        );
-    }
-
-    let mut active_holders = state
-        .sessions
-        .values()
-        .filter(|session| {
-            session.profile_id.as_deref() == Some(authority.profile_id.as_str())
-                && matches!(
-                    session.lease,
-                    LeaseState::Exclusive | LeaseState::HumanTakeover
-                )
-        })
-        .collect::<Vec<_>>();
-    active_holders.sort_by(|left, right| left.id.cmp(&right.id));
-    let holder_session_ids = active_holders
-        .iter()
-        .map(|session| session.id.clone())
-        .collect::<Vec<_>>();
-    let holder_principal_ids = active_holders
-        .iter()
-        .filter_map(|session| session.principal_id.clone())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    if active_holders
-        .iter()
-        .any(|session| session.principal_id.is_none())
-    {
-        reasons.push("legacy_holder_principal_unproven".to_string());
-        return continuity_decision(
-            authority,
-            PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
-            holder_session_ids,
-            holder_principal_ids,
-            false,
-            reasons,
-        );
-    }
-    if holder_principal_ids
-        .iter()
-        .any(|principal_id| principal_id != &authority.principal_id)
-    {
-        reasons.push("foreign_principal_holds_profile".to_string());
-        return continuity_decision(
-            authority,
-            PrincipalContinuityRecourse::WaitForForeignPrincipal,
-            holder_session_ids,
-            holder_principal_ids,
-            false,
-            reasons,
-        );
-    }
-    if !active_holders.is_empty() {
-        reasons.push("same_principal_retained_holder".to_string());
-        return continuity_decision(
-            authority,
-            PrincipalContinuityRecourse::RejoinOwnedBrowser,
-            holder_session_ids,
-            holder_principal_ids,
-            true,
-            reasons,
-        );
-    }
-
-    let stale_same_principal = state.sessions.values().any(|session| {
-        session.profile_id.as_deref() == Some(authority.profile_id.as_str())
-            && session.principal_id.as_deref() == Some(authority.principal_id.as_str())
-            && matches!(session.lease, LeaseState::Released | LeaseState::Expired)
-    });
-    if stale_same_principal {
-        reasons.push("stale_same_principal_session".to_string());
-        continuity_decision(
-            authority,
-            PrincipalContinuityRecourse::ReplaceStaleSamePrincipalSession,
-            Vec::new(),
-            vec![authority.principal_id.clone()],
-            true,
-            reasons,
-        )
-    } else {
-        reasons.push("principal_owner_ready_without_session".to_string());
-        continuity_decision(
-            authority,
-            PrincipalContinuityRecourse::RejoinOwnedBrowser,
-            Vec::new(),
-            vec![authority.principal_id.clone()],
-            true,
-            reasons,
-        )
-    }
+    state.principal_continuity_decision(authority)
 }
 
 pub(crate) fn plan_legacy_session_principal_migration(
     state: &ServiceState,
 ) -> Vec<LegacySessionPrincipalMigrationPlan> {
-    let mut plans = state
-        .sessions
-        .values()
-        .map(|session| legacy_session_plan(state, session))
-        .collect::<Vec<_>>();
-    plans.sort_by(|left, right| left.session_id.cmp(&right.session_id));
-    plans
-}
-
-fn legacy_session_plan(
-    state: &ServiceState,
-    session: &BrowserSession,
-) -> LegacySessionPrincipalMigrationPlan {
-    if let Some(principal_id) = session.principal_id.clone() {
-        if session.profile_id.as_deref().is_some_and(|profile_id| {
-            verified_principal_owner_binding(state, profile_id, &principal_id).is_some()
-        }) && session.principal_provenance
-            == Some(ServicePrincipalProvenance::RegisteredCapability)
-        {
-            return LegacySessionPrincipalMigrationPlan {
-                session_id: session.id.clone(),
-                profile_id: session.profile_id.clone(),
-                candidate_principal_id: Some(principal_id),
-                disposition: LegacyPrincipalMigrationDisposition::AlreadyPrincipalBound,
-                observation_only: false,
-                recourse: PrincipalContinuityRecourse::RejoinOwnedBrowser,
-                reasons: vec!["session_principal_and_current_owner_authority_agree".to_string()],
-            };
-        }
-        return LegacySessionPrincipalMigrationPlan {
-            session_id: session.id.clone(),
-            profile_id: session.profile_id.clone(),
-            candidate_principal_id: Some(principal_id),
-            disposition: LegacyPrincipalMigrationDisposition::UnprovenPrincipal,
-            observation_only: true,
-            recourse: PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
-            reasons: vec!["session_principal_lacks_current_owner_authority".to_string()],
-        };
-    }
-
-    let owner_bindings = session
-        .profile_id
-        .as_deref()
-        .map(|profile_id| {
-            state
-                .runtime_owner_registry
-                .principal_bindings()
-                .values()
-                .filter(|binding| binding.profile_id == profile_id)
-                .filter(|binding| {
-                    verified_principal_owner_binding(state, profile_id, &binding.principal_id)
-                        == Some(*binding)
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    if owner_bindings.len() == 1 {
-        return LegacySessionPrincipalMigrationPlan {
-            session_id: session.id.clone(),
-            profile_id: session.profile_id.clone(),
-            candidate_principal_id: Some(owner_bindings[0].principal_id.clone()),
-            disposition: LegacyPrincipalMigrationDisposition::PrincipalBindingAvailable,
-            observation_only: true,
-            recourse: PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
-            reasons: vec![
-                "authenticated_registration_capability_and_owner_binding_agree".to_string(),
-                "staged_migration_requires_explicit_commit".to_string(),
-            ],
-        };
-    }
-
-    LegacySessionPrincipalMigrationPlan {
-        session_id: session.id.clone(),
-        profile_id: session.profile_id.clone(),
-        candidate_principal_id: None,
-        disposition: LegacyPrincipalMigrationDisposition::UnprovenPrincipal,
-        observation_only: true,
-        recourse: PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
-        reasons: vec!["legacy_labels_are_not_principal_authority".to_string()],
-    }
-}
-
-fn verified_principal_owner_binding<'a>(
-    state: &'a ServiceState,
-    profile_id: &str,
-    principal_id: &str,
-) -> Option<&'a crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding> {
-    let matching = state
-        .runtime_owner_registry
-        .principal_bindings()
-        .values()
-        .filter(|binding| {
-            binding.profile_id == profile_id
-                && binding.principal_id == principal_id
-                && binding.provenance == ServicePrincipalProvenance::RegisteredCapability
-                && state
-                    .runtime_owner_registry
-                    .principal_binding_is_current(Some(binding))
-                && state
-                    .service_principal(principal_id)
-                    .is_some_and(|principal| {
-                        principal.state == ServicePrincipalState::Active
-                            && principal.provenance
-                                == ServicePrincipalProvenance::RegisteredCapability
-                    })
-                && state
-                    .profile_capability(&binding.capability_id)
-                    .is_some_and(|capability| {
-                        capability.state == ServiceProfileCapabilityState::Active
-                            && capability.principal_id == binding.principal_id
-                            && capability.profile_id == binding.profile_id
-                    })
-        })
-        .collect::<Vec<_>>();
-    if matching.len() == 1 {
-        Some(matching[0])
-    } else {
-        None
-    }
-}
-
-fn continuity_decision(
-    authority: &AuthenticatedServicePrincipal,
-    recourse: PrincipalContinuityRecourse,
-    holder_session_ids: Vec<String>,
-    holder_principal_ids: Vec<String>,
-    effect_capable: bool,
-    mut reasons: Vec<String>,
-) -> PrincipalContinuityDecision {
-    reasons.sort();
-    reasons.dedup();
-    PrincipalContinuityDecision {
-        recourse,
-        requester_principal_id: authority.principal_id.clone(),
-        profile_id: authority.profile_id.clone(),
-        holder_session_ids,
-        holder_principal_ids,
-        effect_capable,
-        reasons,
-    }
-}
-
-fn work_lease_id(kind: &str, principal_id: &str, resource_id: &str, profile_id: &str) -> String {
-    let canonical = format!("{kind}\0{principal_id}\0{resource_id}\0{profile_id}");
-    format!(
-        "{kind}-work-lease-v1:{}",
-        digest_prefix(canonical.as_bytes())
-    )
-}
-
-fn digest_prefix(value: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(value))[..24].to_string()
-}
-
-fn principal_error(code: ServicePrincipalFailureCode) -> ServicePrincipalError {
-    let message = match code {
-        ServicePrincipalFailureCode::InvalidRegistration => {
-            "principal registration or capability is invalid"
-        }
-        ServicePrincipalFailureCode::RegistrationConflict => {
-            "principal or profile capability conflicts with current registration"
-        }
-        ServicePrincipalFailureCode::RegistryRevisionMismatch => {
-            "service principal registry revision changed"
-        }
-        ServicePrincipalFailureCode::CapabilityRotationConflict => {
-            "profile capability rotation does not match the one active grant"
-        }
-        ServicePrincipalFailureCode::CapabilityMissing => "profile capability is missing",
-        ServicePrincipalFailureCode::CapabilityMismatch => {
-            "profile capability does not match a current registered grant"
-        }
-        ServicePrincipalFailureCode::CapabilityRevoked => "profile capability is revoked",
-        ServicePrincipalFailureCode::PrincipalUnavailable => "registered principal is unavailable",
-        ServicePrincipalFailureCode::ProfileMismatch => {
-            "profile capability does not authorize the requested profile"
-        }
-        ServicePrincipalFailureCode::WorkLeaseConflict => {
-            "subordinate work lease conflicts with current principal authority"
-        }
-    };
-    ServicePrincipalError { code, message }
+    state.plan_legacy_session_principal_migration()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::service_model::{BrowserProfile, BrowserTab};
+    use crate::native::service_model::{BrowserProfile, BrowserTab, LeaseState};
     use crate::runtime_owner_transfer::{
         ProfileOwner, ProfileOwnerState, RuntimeOwnerPrincipalBinding, RuntimeOwnerRegistry,
     };

@@ -154,6 +154,20 @@ const SERVICE_STATE_PRINCIPAL_METHODS = [
   'lease_authority_view',
 ];
 
+const PRINCIPAL_CONTINUITY_DEFINITIONS = [
+  'PrincipalContinuityDecision',
+  'LegacyPrincipalMigrationDisposition',
+  'LegacySessionPrincipalMigrationPlan',
+];
+
+const SERVICE_STATE_CONTINUITY_METHODS = [
+  'authenticated_session_work_authority',
+  'principal_continuity_decision',
+  'plan_legacy_session_principal_migration',
+  'bind_session_work_lease',
+  'bind_tab_work_lease',
+];
+
 const SERVICE_CHALLENGE_DEFINITIONS = [
   'ServiceChallengeTaskState',
   'ServiceChallengeTaskSummary',
@@ -637,6 +651,9 @@ function check(root = repoRoot) {
   const serviceStateSource = read(root, 'crates/agent-browser-service-model/src/service_state.rs');
   const serviceState = withoutCommentsAndStrings(serviceStateSource);
   const serviceStateCode = serviceStateSource.split('#[cfg(test)]', 1)[0];
+  const principalContinuityPath = join(sourceRoot, 'principal_continuity.rs');
+  const principalContinuitySource = read(root,
+    'crates/agent-browser-service-model/src/principal_continuity.rs');
   const canonicalServiceState = withoutComments(serviceStateCode)
     .replace(/\bcrate\s*::/g, 'agent_browser_service_model::');
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
@@ -659,6 +676,8 @@ function check(root = repoRoot) {
   const authenticationClean = withoutCommentsAndStrings(authenticationSource);
   const cliAuthentication = withoutCommentsAndStrings(read(root,
     'cli/src/native/authentication_run.rs'));
+  const cliPrincipal = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
+    'cli/src/native/service_principal.rs')));
 
   requireCondition(existsSync(authenticationManifestPath),
     'agent-browser-authentication-control Cargo manifest must exist');
@@ -893,6 +912,29 @@ function check(root = repoRoot) {
     !cliProductionSources.some((source) => /\.\s*service_principals\b/.test(source)),
     'CLI production code must not access ServiceState.service_principals directly',
   );
+  requireCondition(existsSync(principalContinuityPath),
+    'service-model must own src/principal_continuity.rs');
+  for (const name of PRINCIPAL_CONTINUITY_DEFINITIONS) {
+    const definition = new RegExp(`\\bpub\\s+(?:struct|enum)\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...principalContinuitySource.matchAll(definition)].length === 1,
+      `service-model principal-continuity module must own exactly one definition: ${name}`,
+    );
+    requireCondition(
+      !cliProductionSources.some((source) => new RegExp(definition.source).test(source)),
+      `CLI must not duplicate principal-continuity definition: ${name}`,
+    );
+  }
+  for (const name of SERVICE_STATE_CONTINUITY_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own principal-continuity method: ${name}`,
+    );
+  }
+  requireCondition(
+    !/\.\s*(?:runtime_owner_registry|sessions|tabs)\b/.test(cliPrincipal),
+    'CLI service_principal production facade must not retain principal-continuity state decisions',
+  );
   const serviceStateExport = serviceModelLib.match(/\bpub\s+use\s+service_state\s*::\s*\{([\s\S]*?)\}\s*;/);
   requireCondition(/\bmod\s+service_state\s*;/.test(serviceModelLib),
     'service-model lib must declare the ServiceState aggregate module');
@@ -905,6 +947,15 @@ function check(root = repoRoot) {
   for (const name of SERVICE_STATE_RECEIPT_TYPES) {
     requireCondition(Boolean(serviceStateExport?.[1].match(new RegExp(`\\b${name}\\b`))),
       `service-model lib must export ServiceState receipt interface: ${name}`);
+  }
+  const principalContinuityExport = serviceModelLib.match(
+    /\bpub\s+use\s+principal_continuity\s*::\s*\{([\s\S]*?)\}\s*;/,
+  );
+  requireCondition(Boolean(principalContinuityExport),
+    'service-model lib must export the principal-continuity interface');
+  for (const name of PRINCIPAL_CONTINUITY_DEFINITIONS) {
+    requireCondition(Boolean(principalContinuityExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export principal-continuity definition: ${name}`);
   }
   requireCondition(/\bpub\s+use\s+agent_browser_service_model\s*::\s*(?:ServiceState\s*;|\{[^}]*\bServiceState\b[^}]*\}\s*;)/s.test(cliServiceModelSource)
     && !/\b(?:struct|enum|type)\s+ServiceState\b/.test(cliServiceModel)

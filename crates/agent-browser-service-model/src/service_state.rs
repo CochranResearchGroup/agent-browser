@@ -764,6 +764,54 @@ impl ServiceState {
         self.profile_policy_migration.as_ref()
     }
 
+    /// Authenticate retained session work using its explicit observation time.
+    pub fn authenticated_session_work_authority(
+        &self,
+        session_id: &str,
+        now: &str,
+    ) -> Option<agent_browser_lease_authority::AuthenticatedServicePrincipal> {
+        crate::principal_continuity::authenticated_session_work_authority(self, session_id, now)
+    }
+
+    /// Derive continuity recourse without changing owner or subordinate work state.
+    pub fn principal_continuity_decision(
+        &self,
+        authority: &agent_browser_lease_authority::AuthenticatedServicePrincipal,
+    ) -> PrincipalContinuityDecision {
+        crate::principal_continuity::principal_continuity_decision(self, authority)
+    }
+
+    /// Project ordered legacy migration decisions without promoting labels to authority.
+    pub fn plan_legacy_session_principal_migration(
+        &self,
+    ) -> Vec<LegacySessionPrincipalMigrationPlan> {
+        crate::principal_continuity::plan_legacy_session_principal_migration(self)
+    }
+
+    /// Bind one subordinate session using an externally observed boot epoch.
+    /// Owner authority, registry revisions, and the envelope revision are unchanged.
+    pub fn bind_session_work_lease(
+        &mut self,
+        session_id: &str,
+        authority: &agent_browser_lease_authority::AuthenticatedServicePrincipal,
+        expires_at: String,
+        boot_epoch: Option<String>,
+    ) -> Result<BrowserSession, agent_browser_lease_authority::ServicePrincipalError> {
+        crate::principal_continuity::bind_session_work_lease(
+            self, session_id, authority, expires_at, boot_epoch,
+        )
+    }
+
+    /// Bind one subordinate tab after checking its owner's principal and profile.
+    pub fn bind_tab_work_lease(
+        &mut self,
+        tab_id: &str,
+        authority: &agent_browser_lease_authority::AuthenticatedServicePrincipal,
+        expires_at: String,
+    ) -> Result<BrowserTab, agent_browser_lease_authority::ServicePrincipalError> {
+        crate::principal_continuity::bind_tab_work_lease(self, tab_id, authority, expires_at)
+    }
+
     /// Project the principal registry CAS revision without advancing it.
     pub fn service_principal_registry_revision(&self) -> u64 {
         self.service_principals.revision
