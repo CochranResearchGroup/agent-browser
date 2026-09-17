@@ -61,12 +61,16 @@ const serviceStateFieldAttributes = {
   challenge_tasks: '#[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]\n',
 };
 const validServiceState = `
+pub struct ConfiguredServiceStateInput;
 pub struct ServiceState {
 ${serviceStateMigrationFields.map((field) => `  ${serviceStateFieldAttributes[field] || ''}#[doc(hidden)]\n  pub ${field}: ${serviceStateFieldTypes[field] || 'String'},`).join('\n')}
   #[serde(skip_serializing_if = "agent_browser_lease_authority::ServicePrincipalRegistry::is_empty")]
   pub browser_capability_registry: agent_browser_service_model::BrowserCapabilityRegistry,
 }
-impl ServiceState { pub fn state_revision(&self) -> u64 { 0 } }
+impl ServiceState {
+  pub fn from_configured_entities() -> Self { Self {} }
+  pub fn state_revision(&self) -> u64 { 0 }
+}
 pub const SERVICE_STATE_SCHEMA_VERSION: &str = "v2";
 pub const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str = "legacy";
 pub enum ServiceStateCodecError {}
@@ -86,7 +90,8 @@ pub use service_state::{
   default_profile_seeding_url,
   encode_prepared_service_state_pretty, prepare_service_state_for_persistence,
   service_profile_sources, service_site_policy_sources,
-  validate_service_state_invariants, ServiceState, ServiceStateCodecError,
+  validate_service_state_invariants, ConfiguredServiceStateInput, ServiceState,
+  ServiceStateCodecError,
   LEGACY_SERVICE_STATE_SCHEMA_VERSION, SERVICE_STATE_SCHEMA_VERSION,
 };
 `;
@@ -280,8 +285,12 @@ for (const [name, mutation] of [
     '',
   ) }],
   ['missing revision accessor', { serviceState: validServiceState.replace(
-    'impl ServiceState { pub fn state_revision(&self) -> u64 { 0 } }',
-    'impl ServiceState {}',
+    'pub fn state_revision(&self) -> u64 { 0 }',
+    '',
+  ) }],
+  ['missing configured constructor', { serviceState: validServiceState.replace(
+    'pub fn from_configured_entities() -> Self { Self {} }',
+    '',
   ) }],
   ['upward aggregate import', { serviceState: `${validServiceState}\nuse crate::native::service_store::ServiceStateRepository;\n` }],
 ]) {

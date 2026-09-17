@@ -2619,6 +2619,57 @@ revision reads, migrate the one production aggregate literal, and add the
 smallest immutable projections. It will not attempt the full twenty-field
 privacy flip in one change.
 
+## Checkpoint 41 | First Privacy Preparation Packet Accepted
+
+State transition: all production CLI reads of the hidden Service State revision
+now use `state_revision()`. The runtime-health adapter uses the immutable
+`profile_policy_migration()` projection, leaving only the model's canonical
+materialization assignment as production field access. The sole production
+`ServiceState` struct literal was replaced by the typed
+`ConfiguredServiceStateInput` and `ServiceState::from_configured_entities`
+interface. That constructor owns defaulting and configuration-source marking,
+so future field privacy will not force the configuration adapter back into the
+aggregate implementation.
+
+The packet deliberately leaves test-only direct revision writes and aggregate
+literals unchanged. They remain compatibility debt for the final fixture and
+privacy migration, not production precedent. A first default-plus-assignment
+rewrite was rejected after strict Clippy exposed the shallow shape; the primary
+replaced it with the typed constructor rather than suppressing the lint. No
+hidden field became private yet because Rust would invalidate every remaining
+external aggregate literal at once.
+
+Acceptance evidence:
+
+- all 152 Service Model unit tests and fourteen integration tests pass;
+- the focused `service_state` lane passes 89 tests, and the configured snapshot
+  witness passes again after the typed constructor replaced the interim shape;
+- fourteen abandoned-browser-retirement tests, two profile-reset tests, three
+  profile-diagnosis tests, and three runtime-health tests pass;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  architecture contract, and all mutation fixtures pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_revision_literal_cutover` used
+the requested fast `gpt-5.6-luna` medium route for the bounded revision-read and
+configuration-literal inventory and cutover. `/root/p205_migration_projection`
+used the requested balanced `gpt-5.6-terra` high route for the immutable model
+projection and install adapter. The primary rejected the intermediate field
+assignment shape, added the typed configuration input and constructor, extended
+the architecture contract and negative fixture, and independently ran every
+acceptance gate. Runtime-reported effective model metadata was not independently
+exposed.
+
+Acceptance state and progress classification: the first P4 preparation packet
+is accepted as outcome progress. Production aggregate construction, revision
+inspection, and profile-policy migration inspection now cross explicit model
+interfaces. P4 remains open because approximately 350 test fixtures and the
+record-kernel, authority, lifecycle, repository-sidecar, and presentation
+mutation clusters still use migration-only field access. The next bounded
+outcome is the Service challenge task map kernel, followed separately by the
+authentication run map kernel.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -2626,7 +2677,7 @@ privacy flip in one change.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | aggregate and twenty-three prerequisite families accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods and helper closure accepted; typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections accepted; typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
 | Focused correctness | crate tests and affected CLI adapter tests | canonical aggregate accepted through Checkpoint 40 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |

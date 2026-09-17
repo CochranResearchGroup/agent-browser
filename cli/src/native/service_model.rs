@@ -2060,7 +2060,7 @@ pub fn assert_service_incident_activity_response_contract(value: &serde_json::Va
 pub use agent_browser_service_model::{
     browser_profile_compatibility_matches, builtin_site_policies, builtin_site_policy,
     default_profile_seeding_url, service_profile_sources, service_site_policy_sources,
-    BrowserCapabilityRegistry, ServiceState,
+    BrowserCapabilityRegistry, ConfiguredServiceStateInput, ServiceState,
 };
 
 /// Backend-owned allocation summary for one profile.

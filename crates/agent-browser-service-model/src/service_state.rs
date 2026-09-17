@@ -40,6 +40,20 @@ impl std::fmt::Display for ServiceStateCodecError {
 
 impl std::error::Error for ServiceStateCodecError {}
 
+/// Explicit configuration input for constructing the configured Service State
+/// overlay. Durable compatibility metadata and runtime-owned records are not
+/// accepted through this interface.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConfiguredServiceStateInput {
+    pub profiles: BTreeMap<String, BrowserProfile>,
+    pub sessions: BTreeMap<String, BrowserSession>,
+    pub monitors: BTreeMap<String, SiteMonitor>,
+    pub site_policies: BTreeMap<String, SitePolicy>,
+    pub providers: BTreeMap<String, ServiceProvider>,
+    pub browser_capability_registry: crate::BrowserCapabilityRegistry,
+    pub default_browser_build: Option<BrowserBuild>,
+}
+
 /// Top-level snapshot of the browser service control plane.
 ///
 /// Documented-hidden fields are temporary migration compatibility access.
@@ -294,6 +308,21 @@ fn overlay_persisted_profile_freshness(
 }
 
 impl ServiceState {
+    pub fn from_configured_entities(input: ConfiguredServiceStateInput) -> Self {
+        let mut state = Self {
+            profiles: input.profiles,
+            sessions: input.sessions,
+            monitors: input.monitors,
+            site_policies: input.site_policies,
+            providers: input.providers,
+            browser_capability_registry: input.browser_capability_registry,
+            default_browser_build: input.default_browser_build,
+            ..Self::default()
+        };
+        state.mark_config_entity_sources();
+        state
+    }
+
     pub fn state_revision(&self) -> u64 {
         self.state_revision
     }
@@ -318,6 +347,11 @@ impl ServiceState {
     }
     pub fn unknown_top_level_field_names(&self) -> Vec<String> {
         self.unknown_fields.keys().cloned().collect()
+    }
+
+    /// Returns the immutable profile-policy migration compatibility projection.
+    pub fn profile_policy_migration(&self) -> Option<&crate::ProfilePolicyMigrationReport> {
+        self.profile_policy_migration.as_ref()
     }
 
     /// Returns the immutable canonical lease authority projection. Mutations
@@ -2647,6 +2681,57 @@ mod tests {
         let mut prepared_again = persisted.clone();
         prepare_service_state_for_persistence(&mut prepared_again).unwrap();
         assert_eq!(prepared_again, persisted);
+    }
+
+    #[test]
+    fn profile_policy_migration_projection_preserves_optional_borrow() {
+        let report = ProfilePolicyMigrationReport {
+            schema_version: PROFILE_POLICY_MIGRATION_SCHEMA_VERSION.to_string(),
+            migration_id: "profile-policy-migration-test".to_string(),
+            source_revision: 3,
+            target_revision: 4,
+            entries: Vec::new(),
+            blocking_issue_count: 0,
+        };
+        let state = ServiceState {
+            profile_policy_migration: Some(report.clone()),
+            ..ServiceState::default()
+        };
+
+        assert_eq!(state.profile_policy_migration(), Some(&report));
+        assert_eq!(ServiceState::default().profile_policy_migration(), None);
+    }
+
+    #[test]
+    fn configured_input_constructs_and_marks_only_config_owned_entities() {
+        let input = ConfiguredServiceStateInput {
+            profiles: BTreeMap::from([(
+                "profile-a".to_string(),
+                BrowserProfile {
+                    id: "profile-a".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            providers: BTreeMap::from([(
+                "provider-a".to_string(),
+                ServiceProvider {
+                    id: "provider-a".to_string(),
+                    ..ServiceProvider::default()
+                },
+            )]),
+            default_browser_build: Some(BrowserBuild::StockChrome),
+            ..ConfiguredServiceStateInput::default()
+        };
+
+        let state = ServiceState::from_configured_entities(input);
+
+        assert_eq!(state.default_browser_build, Some(BrowserBuild::StockChrome));
+        assert_eq!(
+            state.profile_source("profile-a"),
+            Some(ServiceEntitySource::Config)
+        );
+        assert_eq!(state.providers["provider-a"].id, "provider-a");
+        assert!(state.jobs.is_empty());
     }
 
     #[test]

@@ -304,7 +304,7 @@ pub(crate) fn diagnose_service_profile(
     let diagnosis_id = digest_json(&(
         PROFILE_DIAGNOSIS_SCHEMA_V1,
         profile_id,
-        state.state_revision,
+        state.state_revision(),
         state.runtime_owner_registry.revision(),
         observed_at,
         correlation_id,
@@ -317,7 +317,7 @@ pub(crate) fn diagnose_service_profile(
         state: diagnosis_state,
         profile: json!({
             "id": profile.id,
-            "stateRevision": state.state_revision,
+            "stateRevision": state.state_revision(),
             "policyRevision": profile.access_policy.as_ref().map(|policy| policy.revision),
             "userDataPathDigest": profile_identity_digest,
             "allocation": profile.allocation,
@@ -381,7 +381,7 @@ pub(crate) fn diagnose_service_profile(
         trace: json!({
             "correlationId": correlation_id,
             "sourceComponent": "service_profile_diagnosis.rs::diagnose_service_profile",
-            "serviceStateRevision": state.state_revision,
+            "serviceStateRevision": state.state_revision(),
             "runtimeOwnerRegistryRevision": state.runtime_owner_registry.revision(),
             "buildIdentity": Value::Null,
             "buildIdentityUnavailableReason": "producer_build_identity_not_exposed_to_profile_diagnosis",

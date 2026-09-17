@@ -271,7 +271,7 @@ pub(crate) fn plan_abandoned_browser_retirement(
     let mut plan = AbandonedBrowserRetirementPlan {
         schema_version: PLAN_SCHEMA.to_string(),
         plan_id: String::new(),
-        state_revision: state.state_revision,
+        state_revision: state.state_revision(),
         browser_id: browser_id.to_string(),
         browser_record_digest: digest(browser)?,
         root: identity.process_identity.clone(),
@@ -361,7 +361,7 @@ pub(crate) fn reserve_abandoned_browser_retirement(
         .state_revision
         .checked_add(1)
         .ok_or(RetirementRecourse::StateRevisionChanged)?;
-    if state.state_revision != revision {
+    if state.state_revision() != revision {
         return Err(RetirementRecourse::StateRevisionChanged);
     }
     recheck_identity(state, plan)?;
@@ -533,7 +533,7 @@ pub(crate) fn revalidate_abandoned_browser_retirement_reservation(
     if transaction.plan != *plan {
         return Err(RetirementRecourse::InvalidPlan);
     }
-    if state.state_revision != transaction.reserved_revision {
+    if state.state_revision() != transaction.reserved_revision {
         return Err(RetirementRecourse::StateRevisionChanged);
     }
     recheck_identity(state, plan)?;
@@ -573,7 +573,7 @@ pub(crate) fn finalize_abandoned_browser_retirement(
         .reserved_revision
         .checked_add(1)
         .ok_or(RetirementRecourse::TerminalCompareAndSwapFailed)?;
-    if state.state_revision != terminal_revision {
+    if state.state_revision() != terminal_revision {
         return Err(RetirementRecourse::TerminalCompareAndSwapFailed);
     }
     recheck_identity(state, plan)?;

@@ -3,8 +3,8 @@ use crate::native::service_health::{
     BrowserRecoveryPolicyConfig, BrowserRecoveryPolicyValueSource,
 };
 use crate::native::service_model::{
-    BrowserBuild, BrowserCapabilityRegistry, BrowserProfile, BrowserSession, ServiceProvider,
-    ServiceState, SiteMonitor, SitePolicy,
+    BrowserBuild, BrowserCapabilityRegistry, BrowserProfile, BrowserSession,
+    ConfiguredServiceStateInput, ServiceProvider, ServiceState, SiteMonitor, SitePolicy,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use serde::Deserialize;
@@ -304,7 +304,7 @@ impl Config {
             return ServiceState::default();
         };
 
-        let mut state = ServiceState {
+        ServiceState::from_configured_entities(ConfiguredServiceStateInput {
             profiles: service.profiles.clone().unwrap_or_default(),
             sessions: service.sessions.clone().unwrap_or_default(),
             monitors: service.monitors.clone().unwrap_or_default(),
@@ -315,10 +315,7 @@ impl Config {
                 .clone()
                 .unwrap_or_default(),
             default_browser_build: service.default_browser_build,
-            ..ServiceState::default()
-        };
-        state.mark_config_entity_sources();
-        state
+        })
     }
 
     fn merge(self, other: Config) -> Config {

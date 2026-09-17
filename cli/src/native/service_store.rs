@@ -196,7 +196,7 @@ pub trait ServiceStateStore {
     /// without a cheaper durable revision projection.
     fn load_revision_without_recovery(&self) -> Result<u64, String> {
         self.load_without_recovery()
-            .map(|state| state.state_revision)
+            .map(|state| state.state_revision())
     }
 
     fn recovery_required(&self) -> bool {
@@ -1892,7 +1892,7 @@ impl ServiceStateFileGuard {
         };
         holder.hold_elapsed_ms = elapsed_millis(self.acquired_at.elapsed());
         holder.state_bytes = state_bytes.map(|value| value.min(u64::MAX as usize) as u64);
-        holder.state_revision = Some(state.state_revision);
+        holder.state_revision = Some(state.state_revision());
         holder.job_count = Some(state.jobs.len().min(u64::MAX as usize) as u64);
         holder.session_count = Some(state.sessions.len().min(u64::MAX as usize) as u64);
         holder.profile_count = Some(state.profiles.len().min(u64::MAX as usize) as u64);

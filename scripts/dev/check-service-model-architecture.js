@@ -182,7 +182,8 @@ const SERVICE_STATE_CODEC_EXPORTS = [
   'default_profile_seeding_url',
   'encode_prepared_service_state_pretty', 'prepare_service_state_for_persistence',
   'service_profile_sources', 'service_site_policy_sources',
-  'validate_service_state_invariants', 'ServiceState', 'ServiceStateCodecError',
+  'validate_service_state_invariants', 'ConfiguredServiceStateInput', 'ServiceState',
+  'ServiceStateCodecError',
   'LEGACY_SERVICE_STATE_SCHEMA_VERSION', 'SERVICE_STATE_SCHEMA_VERSION',
 ];
 
@@ -681,6 +682,8 @@ function check(root = repoRoot) {
   }
   requireCondition(/\bpub\s+fn\s+state_revision\s*\(/.test(serviceStateCode),
     'service-model aggregate must own the state_revision accessor');
+  requireCondition(/\bpub\s+fn\s+from_configured_entities\s*\(/.test(serviceStateCode),
+    'service-model aggregate must own the configured-entities constructor');
   const serviceStateExport = serviceModelLib.match(/\bpub\s+use\s+service_state\s*::\s*\{([\s\S]*?)\}\s*;/);
   requireCondition(/\bmod\s+service_state\s*;/.test(serviceModelLib),
     'service-model lib must declare the ServiceState aggregate module');

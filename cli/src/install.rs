@@ -2283,7 +2283,7 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
             })
         })
         .ok()
-        .and_then(|state| serde_json::to_value(state.profile_policy_migration).ok())
+        .and_then(|state| serde_json::to_value(state.profile_policy_migration()).ok())
         .unwrap_or(Value::Null);
     #[cfg(not(test))]
     {
