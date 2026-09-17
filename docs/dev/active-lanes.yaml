@@ -10,39 +10,39 @@ lanes:
     target: main
     plan_state: SOURCE_ACCEPTED_INTEGRATION_READY
     custody_state: PUBLISHED_INTEGRATION_READY
-    checkpoint: 4813d385
+    checkpoint: 1c9ee159
     remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
     integration_receipt: null
-    integration: merge through the protected main workflow after exact-head forge evaluation
-    validation_status: repaired exact-head local validation passed 41 challenge-control tests including cumulative-overflow boundaries, strict workspace Clippy, formatting, challenge-control architecture and diff hygiene; previously accepted unaffected extracted-crate gates remain reusable
-    validation_ref: 4813d385
+    integration: publish the reconciled branch and merge through the protected main workflow without restoring or dispatching operator-disabled GitHub CI
+    validation_status: repaired source validation passed 41 challenge-control tests including cumulative-overflow boundaries, strict workspace Clippy, formatting, challenge-control architecture and diff hygiene; main reconciliation changed no challenge or Cargo source, and conflict-affected policy, documentation, validation-selection, worktree-closeout, planning and diff-hygiene checks pass locally
+    validation_ref: 1c9ee159
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: []
-    reconciled_overlaps: [P197, P204]
-    blocker: corrected exact-head forge evaluation and protected integration remain; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    reconciled_overlaps: [P197, P204, P208]
+    blocker: reconciled branch publication and protected integration remain; GitHub CI is operator-disabled and all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17
   - id: P204
     product_lane: PL-PLATFORM
-    objective: Make ordinary CI path-selected with a stable aggregate presubmit while retaining fail-safe comprehensive qualification
+    objective: Disable GitHub CI while retaining a reviewed path-selected workflow for explicit future re-enablement
     plan: docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md
     plan_ref: refs/heads/platform/p204-ci-validation-tiering
     branch: platform/p204-ci-validation-tiering
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: b481ab01056dfd3e2b7615ea9bc483398d57a87b
+    checkpoint: ea254ecd
     remote_ref: refs/remotes/origin/platform/p204-ci-validation-tiering
     integration_receipt: null
     integration: merge through the protected pull-request workflow after selector fixtures, workflow validation, and changed-surface validation
-    validation_status: exact-head CI run 35172965793 passed every selected ordinary job and Presubmit; post-merge organic docs-only and narrow-Rust evidence plus authorized comprehensive qualification remain
-    validation_ref: b481ab01056dfd3e2b7615ea9bc483398d57a87b
+    validation_status: active CI run 35228725370 cancelled; main and Lease Authority CI files disabled; dormant workflow contract, actionlint, policy wiring, planning audit, documentation links, and docs build pass locally
+    validation_ref: ea254ecd
     work_items: [CochranResearchGroup/agent-browser#174]
-    dependencies: [CochranResearchGroup/agent-browser#164]
+    dependencies: []
     overlaps: [P197:ROADMAP.md, P197:RUNBOOK.md, P197:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204 writes only its own bounded planning sections and catalog entry; P197 retains its own records]
-    blocker: main-fallback removal remains blocked until issue #164 proves live Presubmit enforcement; implementation can proceed independently
-    updated_at: 2026-09-16
+    blocker: integration of the CI-disable correction remains; organic CI evidence is intentionally unavailable while disabled
+    updated_at: 2026-09-17
   - id: P209
     product_lane: PL-CHALLENGE
     objective: Freeze and prove the provider-neutral visual-reasoning request and response protocol over P206 evidence

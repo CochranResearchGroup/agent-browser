@@ -211,6 +211,34 @@ Testing directly.
 - Follow the [RDP remote-view handoff guide](docs/src/app/remote-view/page.mdx)
   for the operator and software-client workflows.
 
+## Worktree Closeout
+
+- Before closing a registered worktree, run:
+
+  ```bash
+  pnpm run worktree:closeout inspect \
+    --worktree <path> \
+    --repository-root <path>
+  ```
+
+  The command is advisory and returns the exact worktree identity, candidate
+  obligations, and supported dispositions without applying an effect.
+- Record one explicit `retain`, `archive`, or `discard` disposition for every
+  pinned candidate in the inspection request, then use `begin` to create or
+  join the repository-scoped durable operation. A second process must join the
+  same request instead of copying or removing the checkout independently.
+- Run `apply` without `--apply` to inspect consequences. Use `apply --apply`
+  only for the reviewed operation. Interrupted archive or removal work resumes
+  the same operation with `--recover`; changed dispositions start no effect and
+  return a typed conflict.
+- Use `lookup-archive --candidate-id <id>` to resolve a completed archive from
+  a fresh process. The locator is separate from the preserved candidate bytes
+  and is verified before reuse.
+- Do not use the helper to take custody from another active lane, bypass an
+  active candidate build, or infer runtime, install, or production authority.
+  Raw `git worktree remove` remains an explicit bypass and does not create a
+  governed closeout receipt.
+
 ## Testing
 
 ### Unit Tests
@@ -284,18 +312,24 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 ### CI Cadence
 
-Pull requests first run the versioned changed-surface classifier, then only the
-selected Documentation, Version Sync, Dashboard, Service Client, Rust Quality,
-affected Rust compartments, and Workstation Fixtures jobs. The stable
+GitHub CI is temporarily disabled by explicit operator direction. The dormant
+workflow is retained as `.github/workflows/ci.yml.disabled`; there is no active
+`.github/workflows/ci.yml`, automatic trigger, schedule, or manual CI dispatch.
+Do not re-enable or dispatch CI without new maintainer direction.
+
+When re-enabled, pull requests use the versioned changed-surface classifier and
+selected Documentation, Version Sync, Dashboard, Service Client, Repository
+Tooling, Rust Quality, affected Rust compartments, and Workstation Fixtures
+jobs. The stable
 `Presubmit` aggregate fails when a selected job is skipped, cancelled, or
 failed, and records the tier, exclusions, elapsed time, and observed runner
 minutes without describing the selected lane as comprehensive. Unknown paths
-and changes to the classifier or workflow fail safe to the broad ordinary
-presubmit. Material dependency or toolchain changes, manual dispatches, the
-monthly selection-drift audit, and the temporary `main` fallback run the
-comprehensive Rust lane. Retain the `main` fallback until issue #164 proves the
-`Presubmit` check is enforced by live branch rules. Pull-request concurrency
-cancels an older run when a newer head for the same pull request starts.
+and changes to dependencies, toolchains, the classifier, or the workflow fail
+safe to the broad ordinary presubmit. The dormant workflow has no `main` push
+trigger, schedule, manual dispatch, commit-message escape hatch, comprehensive
+Rust job, or slow platform matrix. Pull-request concurrency cancels an older
+run when a newer head for the same pull request starts. Issue #164 owns live
+enforcement of `Presubmit` if CI resumes.
 
 Documentation and governance-only changes run patch hygiene, policy and
 planning audits, changed-link validation, and the docs build without
@@ -305,7 +339,9 @@ which check the draft browser capability registry sample, generated service
 client files, JavaScript type coverage, service request helper contracts,
 service observability helper contracts, managed-profile flow contracts, and
 the no-launch service-client example broker-first contract without launching
-Chrome. Dashboard action-surface changes should run
+Chrome. Repository Tooling runs `pnpm test:repository-tooling` for the
+provider-free candidate-build and worktree-closeout contracts without building
+Rust or launching Chrome. Dashboard action-surface changes should run
 `pnpm test:dashboard-inspector-actions` so the Service right-pane inspector
 keeps selected-record state separate from mutable incident and job actions.
 Rust Quality runs Linux format and clippy before selected Rust compartments, so
@@ -317,9 +353,9 @@ lane so Cargo cannot replace a running shared `agent-browser` test executable;
 independent crate compartments run serially in the other lane. When a service-owned Rust surface
 is selected, the Rust job then builds one exact-head debug CLI and pins every
 command-based no-launch smoke to that binary. Unrelated focused Rust changes
-skip that service smoke bundle. Explicit comprehensive qualification uses `scripts/ci/rust-tests.sh`
-without a compartment and retains the two-lane provider-free suite plus the
-no-launch smoke bundle. Service request action changes
+skip that service smoke bundle. `scripts/ci/rust-tests.sh` without a
+compartment remains a local comprehensive provider-free command, not a GitHub
+CI route. Service request action changes
 must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`,
 `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
 HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
@@ -330,18 +366,13 @@ no-launch site-policy source smoke, and no-launch HTTP and MCP incident-summary
 smokes after the Rust suite, so the service contracts, MCP read resources,
 effective profile and site-policy provenance, and grouped incident summary
 contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci`
-when intentionally validating the optimized CI profile locally. The slow gates
-run when the CI workflow is started manually or when the pushed head commit
-message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E
-Tests, Windows Integration Test, and Global Install.
+when intentionally validating the optimized CI profile locally.
 
-Lease Authority changes also run the path-filtered
-`.github/workflows/lease-authority.yml` workflow. Its non-fail-fast matrix runs
-the `agent-browser-lease-authority` package directly on Linux, macOS ARM,
-macOS x86, and Windows. Treat that workflow as the authoritative
-target-platform gate for the extracted crate; workspace-wide cross-platform
-or browser E2E failures remain separate evidence unless they touch the crate or
-its adapter contract.
+The path-filtered Lease Authority matrix is also disabled and retained as
+`.github/workflows/lease-authority.yml.disabled`. When explicitly re-enabled,
+its non-fail-fast matrix runs the `agent-browser-lease-authority` package
+directly on Linux, macOS ARM, macOS x86, and Windows. Until then, do not claim
+target-platform CI evidence for the extracted crate.
 
 At a completed repair batch, before merge readiness or governed runtime
 effects, match validation to every touched surface since the batch baseline,

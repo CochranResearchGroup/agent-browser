@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 6
+Plan version: 8
 
 State: SOURCE ACCEPTED | INTEGRATION READY
 
@@ -26,8 +26,9 @@ Integrated prerequisite: P197 published head
 
 Source baseline: `cd22a39f989e29a27d6ec80283ae60667093fc9c`
 
-Integration: P206 joined canonical `main@f5e3f31b` at merge checkpoint
-`89bdfdbf`; exact-head forge evaluation and protected integration remain
+Integration: P206 joined canonical `main@692f77c6` at merge checkpoint
+`1c9ee159`; publication and protected integration remain. GitHub CI is
+operator-disabled and must not be restored or dispatched for this packet.
 
 ## Objective
 
@@ -54,14 +55,19 @@ fresh visual evidence, exact candidate-set and intent binding, per-round plus
 cumulative budgets, acknowledged-effect custody, after-state continuity and
 zero-effect terminal replay inside one attempt.
 
-P204 CI validation tiering merged through PR #179 as `f5e3f31b`. P206 joined
-that canonical checkpoint at `89bdfdbf` after resolving only the shared runbook
-projection. P205 owns Service-model extraction and remains source-disjoint.
+P204 CI validation tiering merged through PR #179 as `f5e3f31b`. Operator
+direction subsequently disabled the GitHub CI and Lease Authority workflows
+through PRs #185 and #186. P208 then merged through PR #182 as canonical
+`main@59928044`, and its closeout record merged at `main@692f77c6`. P206 joined
+those checkpoints at `bb961c96`, `db987e4e` and `1c9ee159`, resolving only the
+shared runbook projection. P205 owns Service-model
+extraction and remains source-disjoint.
 P206 owns only the pure challenge-control crate, its provider-free tests, this
 plan and the bounded challenge-lane projections. P206 started from P197's exact
 published head rather than recreating or cherry-picking that contract. The
-canonical reconciliation does not alter the accepted challenge-control source.
-Only exact-head forge evaluation and protected P206 integration remain.
+canonical reconciliations do not alter the accepted challenge-control source.
+Because GitHub CI is intentionally disabled, no new forge run is expected or
+authorized. Publication and protected P206 integration remain.
 
 ## Source Checkpoint
 
@@ -92,8 +98,7 @@ Validation at that source checkpoint:
 
 No browser, CAPTCHA, model provider, credential, desktop input, Service State,
 installed runtime, production or CI-policy effect occurred. P197 integration
-and canonical P206 reconciliation are complete; protected exact-head evaluation
-is the only remaining gate.
+and canonical P206 reconciliation are complete.
 
 ## Canonical Reconciliation | 2026-09-17
 
@@ -135,8 +140,22 @@ The repaired checkpoint passes all 41 challenge-control tests, including 25
 visual-round cases, the challenge-control architecture guard, workspace
 formatting, strict workspace Clippy and diff hygiene. The prior CDP, Lease
 Authority and desktop-services evidence remains reusable because the repair
-changes only challenge-control arithmetic and its fixture. Exact-head forge
-evaluation must run against the corrected published head before integration.
+changes only challenge-control arithmetic and its fixture. The corrected
+source was published at `72eeea03`. GitHub CI was then disabled by explicit
+operator direction, so the superseded old-head run is not exact-head evidence
+and no replacement run is expected or authorized.
+
+## Current-Main Reconciliation | 2026-09-17
+
+Merge checkpoint `1c9ee159` joins `main@692f77c6`, including the CI shutdown,
+P208 worktree-closeout transaction and its canonical closeout. None changes the
+challenge-control crate, workspace Cargo metadata, or the repaired P206
+fixtures. The exact repaired Rust source therefore retains the accepted 41-test
+package, architecture, formatting, strict Clippy and diff-hygiene evidence.
+Conflict-affected repository controls pass locally: policy wiring,
+documentation links, validation-selection fixtures, P208 closeout fixtures,
+the active planning audit and merge-result diff hygiene. No workflow was
+restored, dispatched, retried or otherwise run.
 
 ## Contract Boundary
 

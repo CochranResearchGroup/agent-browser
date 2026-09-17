@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-16
+Updated: 2026-09-17
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -25,22 +25,48 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P208 | Worktree Closeout And Candidate Custody
+
+State: CLOSED
+
+Current state: [Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md),
+[closed issue #171](https://github.com/CochranResearchGroup/agent-browser/issues/171),
+and merged [PR #182](https://github.com/CochranResearchGroup/agent-browser/pull/182)
+record the completed `PL-PLATFORM` repair. The integrated source serializes one durable
+repository-scoped closeout operation, requires explicit retain, archive, or
+discard choices for pinned candidates, verifies external archives from a fresh
+process, and recovers interrupted archive and Git-removal effects. The merged
+P204 validation contract retains a lightweight `Repository Tooling` lane for
+these provider-free Node contracts in the dormant workflow. Exact-head
+`8a010264` passed run `35227459177` before CI was disabled. Rebased source
+`c2ce2b35` passed conflict-affected local checks and merged as `59928044`.
+No worktree outside disposable fixtures,
+candidate, browser, provider, installed runtime, Service State, production, or
+release effect occurred.
+
 ## P204 | CI Validation Economics And Tiering
 
 State: OPEN
 
 Current state: [Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 and [issue #174](https://github.com/CochranResearchGroup/agent-browser/issues/174)
-own the `PL-PLATFORM` repair. Published source `b481ab01` adds the versioned classifier,
+own the `PL-PLATFORM` repair. Merged PR #179 added the versioned classifier,
 surface fixtures, exact-head conditional jobs, pull-request cancellation,
 focused Rust compartments, bounded economics, and the stable fail-closed
-`Presubmit` aggregate. Exact-head CI run `35172965793` passed every selected
-ordinary gate and the stable aggregate; it also proved the corrected isolation
-between serialized CLI compartments and the independent crate lane. Post-merge
-organic docs-only and narrow-Rust evidence and an explicitly authorized
-comprehensive dispatch remain pending. The post-merge `main` fallback remains
-until issue #164 proves live enforcement; workflow dispatch, branch-rule
-mutation, installed-runtime effects, and release are outside this lane.
+`Presubmit` aggregate. Exact-head CI run `35175068416` passed every selected
+ordinary gate and the stable aggregate before merge commit `f5e3f31b`. Operator
+direction now removes every full-suite CI route: no `main` push, schedule,
+manual CI dispatch, commit-message trigger, comprehensive Rust job, or slow
+platform matrix remains in candidate `d9fede9d`. Follow-up operator direction
+also disables focused CI for now: the workflow is retained only as
+`.github/workflows/ci.yml.disabled` in candidate `ca077d9e`, and active run
+`35228725370` was cancelled.
+The separate automatic Lease Authority matrix is likewise retained under a
+`.disabled` suffix in candidate `ea254ecd`, so no active workflow has a push or
+pull-request trigger.
+Issue #164 remains an independent enforcement improvement for any future CI
+resumption. Organic docs-only and narrow-Rust evidence are deferred while CI is
+disabled.
 
 ## P203 | Runtime Host Admission Routing
 
@@ -261,8 +287,13 @@ tree change, then joined merged P204 and current `main@f5e3f31b` at
 an over-budget restored total and could classify 256 selected candidates as a
 generic transition error. Repair checkpoint `4813d385` uses widened and checked
 budget arithmetic; all 41 challenge-control tests, including 25 visual-round
-cases, architecture, formatting, strict Clippy and diff hygiene pass. Corrected
-exact-head forge evaluation and protected P206 integration remain.
+cases, architecture, formatting, strict Clippy and diff hygiene pass. P206
+joined CI-disabled `main@f6d49f89` at `bb961c96`, P208's source integration at
+`db987e4e`, and current `main@692f77c6` at `1c9ee159`; none changes the accepted
+Rust source.
+Conflict-affected repository-control checks pass locally. GitHub CI remains
+operator-disabled and was not restored or run. Reconciled publication and
+protected P206 integration remain.
 Issue #66 retains the separately live-gated challenge acceptance leaf. This
 registration authorizes no challenge attempt, retry, browser effect, provider
 effect, credential use, runtime mutation, installation, or release.

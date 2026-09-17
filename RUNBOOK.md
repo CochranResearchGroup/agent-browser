@@ -19,6 +19,21 @@ strict workspace Clippy, formatting and diff hygiene. P209 remains local and
 unpushed until P206 PR #180 enters canonical `main`. No provider, browser,
 CAPTCHA, credential, runtime, production or CI-dispatch effect occurred.
 
+## Turn 380 | 2026-09-17
+
+P206 joined operator-disabled-CI `main@f6d49f89` at `bb961c96`, P208's source
+integration at `db987e4e`, and canonical `main@692f77c6` at `1c9ee159` after
+P208 closed. The only conflicts were shared runbook projections, resolved by
+retaining both plans' records. None of these main slices changes
+challenge-control source or Cargo metadata, so the repaired
+41-test source evidence at published head `72eeea03` remains reusable.
+Conflict-affected policy wiring, documentation links, validation-selection,
+P208 closeout fixtures, active planning audit and diff hygiene pass locally.
+GitHub CI remains disabled by operator direction; no workflow was restored,
+dispatched, retried or run. Reconciled publication and protected integration
+remain. No browser, provider, CAPTCHA, credential, runtime or production
+effect occurred.
+
 ## Turn 379 | 2026-09-17
 
 P206 pre-merge review reproduced two budget-boundary defects: cumulative
@@ -107,6 +122,71 @@ compartment, strict workspace Clippy and formatting, four architecture guards,
 and 114 selector-expanded extracted-crate tests. Exact-head forge evaluation
 and protected P206 integration remain. No browser, model provider, CAPTCHA,
 desktop input, credential, installed runtime or production effect occurred.
+
+## Turn 376 | 2026-09-17
+
+[Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md)
+is closed. PR #182 merged validated source `c2ce2b35` into `main` as
+`59928044`; issue #171 closed automatically. The durable advisory closeout
+transaction, candidate archive locator, two-process serialization, explicit
+retain/archive/discard dispositions, interrupted-effect recovery, policy, and
+dormant Repository Tooling definition are integrated. GitHub CI remains
+disabled. No real worktree, candidate, browser, provider, installed-runtime,
+Service State, production, or release effect occurred.
+
+## Turn 375 | 2026-09-17
+
+[Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md)
+exact-head `8a010264` passed GitHub run `35227459177`, including Repository
+Tooling and the stable Presubmit aggregate. Before integration, operator-directed
+PRs #185 and #186 disabled GitHub CI and advanced `main` to `f6d49f89`. P208 is
+rebased onto that tip without restoring an active workflow or trigger. The
+dormant workflow retains Repository Tooling, the obsolete comprehensive-job
+fixture expectation is removed, and the conflict-affected repository-tooling,
+selector, aggregate, dormant-workflow, policy, planning, documentation-link,
+and docs-build checks pass locally at `8c513789`. PR #182 integration remains.
+No real worktree, candidate, browser, provider, installed-runtime, Service
+State, production, or release effect occurred.
+
+## Turn 373 | 2026-09-17
+
+[Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md)
+is rebased onto `origin/main@f5e3f31b` after P204 merged through PR #179. The
+provider-free closeout transaction, candidate archive locator, two-process
+serialization, retain/archive/discard matrix, and interrupted-effect recovery
+remain source-qualified. Checkpoint `9d34365d` adds package registration and a
+dedicated `Repository Tooling` selector and CI lane; repository-tooling,
+validation-control-plane, workflow syntax, and release-verifier fixtures pass
+locally. P208 now owns the shared integration transition while preserving
+P204's still-open issue #164 records. Exact-head PR #182 evaluation and
+protected integration remain. No real worktree, candidate, browser, provider,
+installed-runtime, Service State, production, or release effect occurred.
+
+## Turn 374 | 2026-09-17
+
+The operator clarified that CI itself should be disabled for now, not merely
+the full-suite routes. Run `35228725370` was cancelled. The active
+`.github/workflows/ci.yml` is removed and the reviewed path-selected workflow
+is retained as `.github/workflows/ci.yml.disabled` at candidate `ca077d9e`,
+which GitHub does not load.
+There are no automatic or manual CI triggers. Re-enablement requires new
+maintainer direction. The separate Lease Authority CI matrix is also retained
+as `.github/workflows/lease-authority.yml.disabled` in candidate `ea254ecd`; no
+active workflow has a push or pull-request trigger. Manual release and governed P158 operational
+workflows remain separate and were not dispatched.
+
+## Turn 373 | 2026-09-17
+
+P204 initially interpreted operator direction as removing full CI while keeping
+focused PR CI. The
+bounded correction removes `main` push, scheduled, manual CI dispatch, and
+commit-message qualification routes together with the comprehensive Rust and
+slow platform jobs. Pull requests retain path-selected jobs, broad ordinary
+fail-safe coverage, superseded-head cancellation, and the stable `Presubmit`
+aggregate. Candidate `d9fede9d` passes the selector and workflow contract suite
+and `actionlint`. The local comprehensive Rust command remains available outside
+GitHub CI. Issue #164 remains useful for enforcing `Presubmit`, but it is no
+longer a dependency for removing duplicate post-merge CI.
 
 ## Turn 372 | 2026-09-16
 

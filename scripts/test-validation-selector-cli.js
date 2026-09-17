@@ -17,10 +17,11 @@ try {
     '--json',
     '--github-output', githubOutput,
   ], { encoding: 'utf8' }));
-  assert.equal(report.schemaVersion, 'agent-browser.validation-selection.v1');
+  assert.equal(report.schemaVersion, 'agent-browser.validation-selection.v2');
   assert.equal(report.tier, 'none');
   assert.deepEqual(report.changedFiles, []);
   assert.equal(report.jobs.versionSync, true);
+  assert.equal(Object.hasOwn(report.jobs, 'comprehensive'), false);
   const outputs = Object.fromEntries(
     readFileSync(githubOutput, 'utf8').trim().split('\n').map((line) => {
       const separator = line.indexOf('=');
@@ -30,9 +31,20 @@ try {
   assert.equal(outputs.tier, 'none');
   assert.equal(outputs.version_sync, 'true');
   assert.equal(outputs.rust, 'false');
+  assert.equal(outputs.repository_tooling, 'false');
   assert.equal(outputs.service_smokes, 'false');
+  assert.equal(Object.hasOwn(outputs, 'comprehensive'), false);
   assert.equal(outputs.rust_compartments, '[]');
   assert.equal(JSON.parse(outputs.selection).schemaVersion, report.schemaVersion);
+
+  assert.throws(
+    () => execFileSync('node', [
+      'scripts/dev/select-validation.js',
+      '--base', 'HEAD',
+      '--qualification', 'comprehensive',
+    ], { encoding: 'utf8', stdio: 'pipe' }),
+    (error) => error.status === 2 && /no full-suite route/.test(String(error.stderr)),
+  );
 
   const fixtureRepo = join(root, 'rename-repo');
   mkdirSync(join(fixtureRepo, 'docs'), { recursive: true });
