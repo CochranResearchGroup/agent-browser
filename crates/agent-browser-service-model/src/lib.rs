@@ -19,6 +19,8 @@ mod profile_lease;
 mod profile_lifecycle;
 mod profile_policy_migration;
 mod profile_readiness;
+mod profile_recovery_receipt;
+mod profile_reset_receipt;
 mod profile_seeding;
 mod request_provenance;
 mod session_tab;
@@ -102,6 +104,12 @@ pub use profile_readiness::{
     ProfileKeyringPolicy, ProfileReadinessState, ProfileTargetReadiness,
     SERVICE_BROWSER_BUILD_VALUES, SERVICE_PROFILE_ALLOCATION_VALUES,
     SERVICE_PROFILE_KEYRING_VALUES, SERVICE_PROFILE_READINESS_VALUES,
+};
+pub use profile_recovery_receipt::{
+    ProfileAcquisitionState, RecoveryReceipt, PROFILE_RECOVERY_RECEIPT_SCHEMA_V1,
+};
+pub use profile_reset_receipt::{
+    ProfileResetReceipt, ProfileResetScope, PROFILE_RESET_RECEIPT_SCHEMA_V1,
 };
 pub use profile_seeding::{
     profile_seeding_handoff_id, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,

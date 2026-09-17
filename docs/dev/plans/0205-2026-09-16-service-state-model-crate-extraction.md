@@ -906,16 +906,69 @@ receipts as separate passive closures, then evaluate the presentation-capacity
 kernel. Do not pull recovery execution or environment-derived capacity joins
 into the model crate.
 
+## Checkpoint 17 | Profile Recovery And Reset Receipts
+
+State transition: the crate now owns the terminal profile-recovery and profile-
+reset receipt records, their shared acquisition-state and reset-scope enums,
+and their exact receipt schema constants. Recovery and reset plans, evidence
+joins, parsing, sealing, verification, replay decisions, repository mutation,
+runtime effects, acquisition retry, and command transport remain in the CLI
+adapter behind the existing compatibility seam.
+
+Acceptance state and progress classification: this P1 aggregate-unblocking
+packet is accepted locally and moves two durable aggregate field types to the
+canonical model module. The module interface stays typed and small; adding a
+trait or port for one in-process adapter would create a hypothetical seam.
+Wire compatibility gains locality in the model crate while effect semantics
+retain locality in the CLI workflow.
+
+Evidence:
+
+- all 98 service-model crate unit and integration tests pass, including ten
+  new receipt round-trip, enum wire-value, optional-field, camel-case, schema,
+  and unknown-field tests;
+- all 37 CLI profile recovery and reset workflow tests pass through the
+  compatibility adapter;
+- a new populated Service State aggregate test proves both receipt maps round
+  trip with exact enum values and optional-field omission;
+- the mixed-version recovery-artifact reader test passes;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no recovery, reset, repository write, profile, browser, runtime, install,
+  staging, production, release, or GitHub CI effect was performed.
+
+Delegation receipt:
+
+- `/root/p205_recovery_receipt_model`, requested `gpt-5.6-luna` at medium
+  effort, implemented only the recovery receipt model and focused fixtures;
+- `/root/p205_reset_receipt_model`, requested `gpt-5.6-luna` at medium effort,
+  implemented only the reset receipt model and focused fixtures;
+- `/root/p205_receipt_seam_review`, requested `gpt-5.6-sol` at high effort,
+  found no architecture blocker and identified the populated aggregate codec
+  fixture and legacy optional-field readback added by the primary.
+
+Material blockers: moving receipts does not move the recovery workflow. The
+canonical aggregate still depends on presentation-capacity authority, runtime-
+owner authority, effect transaction families, authentication and challenge
+records, codec and migration behavior, and the advisory capability registry.
+The final crate deletion test remains pending.
+
+Next action: publish this checkpoint, then evaluate the presentation-capacity
+authority as a deep provider-free kernel. Move only deterministic inventory,
+admission, and state-transition behavior; keep environment-derived Service
+State joins and provider/runtime effects in CLI adapters.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | sixteen families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | eighteen families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | sixteen packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | sixteen packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | seventeen checkpoints and eighteen families accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | seventeen checkpoints accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

@@ -6959,6 +6959,80 @@ mod tests {
     }
 
     #[test]
+    fn service_state_round_trips_profile_recovery_and_reset_receipts() {
+        use super::super::service_profile_acquisition::{
+            ProfileAcquisitionState, ProfileResetReceipt, ProfileResetScope, RecoveryReceipt,
+            PROFILE_RECOVERY_RECEIPT_SCHEMA_V1, PROFILE_RESET_RECEIPT_SCHEMA_V1,
+        };
+
+        let recovery_receipt = RecoveryReceipt {
+            schema_version: PROFILE_RECOVERY_RECEIPT_SCHEMA_V1.to_string(),
+            recovery_id: "recovery-1".to_string(),
+            plan_id: "recovery-plan-1".to_string(),
+            principal_id: "principal-1".to_string(),
+            profile_id: "profile-1".to_string(),
+            producer_build_identity: None,
+            terminal_result: "applied".to_string(),
+            precondition_comparison: "matched".to_string(),
+            attempted_operation_ids: vec!["operation-1".to_string()],
+            compensation_result: "not_required".to_string(),
+            final_state_revision: 7,
+            acquisition_retry_state: ProfileAcquisitionState::Acquired,
+            browser_id: "browser-1".to_string(),
+            daemon_session_route: "session-1".to_string(),
+        };
+        let reset_receipt = ProfileResetReceipt {
+            schema_version: PROFILE_RESET_RECEIPT_SCHEMA_V1.to_string(),
+            reset_id: "reset-1".to_string(),
+            plan_id: "reset-plan-1".to_string(),
+            principal_id: "principal-1".to_string(),
+            profile_id: "profile-1".to_string(),
+            producer_build_identity: json!({"version": "test-build"}),
+            scope: ProfileResetScope::Authentication,
+            target_service_id: None,
+            terminal_result: "applied".to_string(),
+            applied_at: "2026-09-17T12:00:00Z".to_string(),
+            final_state_revision: 8,
+            browser_cookies_erased: false,
+            seeding_handoff: None,
+        };
+        let state = ServiceState {
+            profile_recovery_receipts: BTreeMap::from([(
+                recovery_receipt.recovery_id.clone(),
+                recovery_receipt,
+            )]),
+            profile_reset_receipts: BTreeMap::from([(
+                reset_receipt.reset_id.clone(),
+                reset_receipt,
+            )]),
+            ..ServiceState::default()
+        };
+
+        let encoded = serde_json::to_value(&state).expect("service state should serialize");
+        let decoded: ServiceState =
+            serde_json::from_value(encoded.clone()).expect("service state should deserialize");
+
+        assert_eq!(decoded, state);
+        assert_eq!(
+            encoded["profileRecoveryReceipts"]["recovery-1"]["acquisitionRetryState"],
+            "acquired"
+        );
+        assert!(encoded["profileRecoveryReceipts"]["recovery-1"]
+            .get("producerBuildIdentity")
+            .is_none());
+        assert_eq!(
+            encoded["profileResetReceipts"]["reset-1"]["scope"],
+            "authentication"
+        );
+        assert!(encoded["profileResetReceipts"]["reset-1"]
+            .get("targetServiceId")
+            .is_none());
+        assert!(encoded["profileResetReceipts"]["reset-1"]
+            .get("seedingHandoff")
+            .is_none());
+    }
+
+    #[test]
     fn service_state_round_trips_nested_entities() {
         let state = ServiceState {
             control_plane: Some(ControlPlaneSnapshot {

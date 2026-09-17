@@ -50,16 +50,17 @@ use agent_browser_lease_authority::{
     AcquireLeaseClaimRequest, LeaseClaimAcquisitionOutcome, LeaseClaimMode,
     LeaseEffectAuthorization, LeaseResourceKey,
 };
+pub(crate) use agent_browser_service_model::{
+    ProfileAcquisitionState, ProfileResetReceipt, ProfileResetScope, RecoveryReceipt,
+    PROFILE_RECOVERY_RECEIPT_SCHEMA_V1, PROFILE_RESET_RECEIPT_SCHEMA_V1,
+};
 
 pub(crate) const PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1: &str =
     "agent-browser.profile-acquisition-outcome.v1";
 pub(crate) const PROFILE_RECOVERY_PLAN_SCHEMA_V1: &str = "agent-browser.profile-recovery-plan.v1";
-pub(crate) const PROFILE_RECOVERY_RECEIPT_SCHEMA_V1: &str =
-    "agent-browser.profile-recovery-receipt.v1";
 pub(crate) const PROFILE_MITIGATION_ACTION_SCHEMA_V1: &str =
     "agent-browser.profile-mitigation-action.v1";
 pub(crate) const PROFILE_RESET_PLAN_SCHEMA_V1: &str = "agent-browser.profile-reset-plan.v1";
-pub(crate) const PROFILE_RESET_RECEIPT_SCHEMA_V1: &str = "agent-browser.profile-reset-receipt.v1";
 
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,14 +121,6 @@ pub(crate) fn recovery_profile_identity_digest(profile: &BrowserProfile) -> Resu
         .as_deref()
         .ok_or_else(|| "profile_recovery_identity_unavailable".to_string())?;
     crate::runtime_profile::resolved_profile_identity_digest(profile_hint, &profile.id)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ProfileAcquisitionState {
-    Acquired,
-    RecoveryAvailable,
-    Blocked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -261,34 +254,6 @@ pub(crate) struct RecoveryPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RecoveryReceipt {
-    pub(crate) schema_version: String,
-    pub(crate) recovery_id: String,
-    pub(crate) plan_id: String,
-    pub(crate) principal_id: String,
-    pub(crate) profile_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) producer_build_identity: Option<Value>,
-    pub(crate) terminal_result: String,
-    pub(crate) precondition_comparison: String,
-    pub(crate) attempted_operation_ids: Vec<String>,
-    pub(crate) compensation_result: String,
-    pub(crate) final_state_revision: u64,
-    pub(crate) acquisition_retry_state: ProfileAcquisitionState,
-    pub(crate) browser_id: String,
-    pub(crate) daemon_session_route: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ProfileResetScope {
-    Runtime,
-    Authentication,
-    ProfileData,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ProfileResetPlan {
     pub(crate) schema_version: String,
     pub(crate) plan_id: String,
@@ -315,26 +280,6 @@ pub(crate) struct ProfileResetPlan {
     pub(crate) proposed_effects: Vec<String>,
     pub(crate) preserved_data: Vec<String>,
     pub(crate) integrity_seal: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileResetReceipt {
-    pub(crate) schema_version: String,
-    pub(crate) reset_id: String,
-    pub(crate) plan_id: String,
-    pub(crate) principal_id: String,
-    pub(crate) profile_id: String,
-    pub(crate) producer_build_identity: Value,
-    pub(crate) scope: ProfileResetScope,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) target_service_id: Option<String>,
-    pub(crate) terminal_result: String,
-    pub(crate) applied_at: String,
-    pub(crate) final_state_revision: u64,
-    pub(crate) browser_cookies_erased: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) seeding_handoff: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
