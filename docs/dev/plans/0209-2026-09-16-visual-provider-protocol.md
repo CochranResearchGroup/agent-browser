@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 3
+Plan version: 4
 
-State: SOURCE ACCEPTED | PUBLICATION AND CI HELD
+State: SOURCE ACCEPTED | P206 INTEGRATION PENDING
 
 Consolidation: required
 
@@ -22,12 +22,14 @@ Branch: `challenge/p209-visual-provider-protocol`
 Target: `main`
 
 Dependency: P206 published head
-`5da7d37d30ed15a1f7970e11e9581f3ad04e6599`
+`99793061591fb7a673de1ce899fba1f4374afb3f` through PR #180
 
 Source baseline: `5da7d37d30ed15a1f7970e11e9581f3ad04e6599`
 
-Publication hold: do not push, start CI or open a pull request until issue #174
-lands through merged PR #179
+Local reconciliation: merge `24aee872` joins published P206 head `99793061`
+
+Publication gate: do not push or open a pull request until P206 PR #180 enters
+`main` and P209 reconciles that canonical checkpoint
 
 ## Objective
 
@@ -45,8 +47,8 @@ browser, attempt a CAPTCHA or mutate any runtime.
 ## Current State
 
 P206 W7-A is source-complete and acceptance-complete at `ac9f50a7`, reconciled
-with canonical P197 integration at `5da7d37d`, and held in draft PR #180 while
-the operator-directed CI change lands. It defines fresh evidence, exact
+with current `main@f5e3f31b` at published head `99793061`, and undergoing
+exact-head evaluation in PR #180. It defines fresh evidence, exact
 candidate sets, provider capability identity, round selection, effect receipt,
 after-state continuity, cumulative budgets and zero-effect replay.
 
@@ -59,7 +61,9 @@ protocol gap.
 P204 owns CI validation tiering, P205 owns Service-model extraction, P207 owns
 tab-handle refresh custody and P208 owns worktree closeout. P209 edits only the
 challenge-control crate, its provider fixtures and the bounded challenge-lane
-planning projections. It remains local during the CI hold.
+planning projections. P204 merged through PR #179. P209 has locally joined the
+published P206 head at `24aee872` but remains unpushed until P206 enters
+canonical `main`.
 
 ## Contract
 
@@ -106,8 +110,8 @@ attempt, performs no retry and does not decide challenge completion.
    duplicate, out-of-set and over-budget responses fail closed without intent.
 5. Prove serialized coordinate, event-sequence and retry smuggling is rejected
    as unknown protocol input.
-6. Run only focused local validation during the CI hold. Preserve full
-   publication and forge validation for after PR #179 merges.
+6. Reuse the accepted focused local validation while P206 integration is
+   pending. Run exact-head forge validation after canonical reconciliation.
 
 Deferred to separately admitted successors:
 
@@ -131,8 +135,7 @@ Deferred to separately admitted successors:
 - Overall effort ceiling: 180 active minutes through a clean local checkpoint.
 
 Publication, forge CI and protected integration time are excluded from the
-local implementation ceiling because the operator has explicitly held those
-actions on merged PR #179.
+local implementation ceiling because they follow the P206 dependency join.
 
 ## Worker Assignments
 
@@ -164,9 +167,9 @@ The minimum provider-free matrix must prove:
 
 Local exit requires the focused challenge-control tests, crate architecture
 guard, formatting, strict local Clippy and diff hygiene at one clean commit.
-Publication exit additionally requires merged PR #179, P206 integration into
-`main`, canonical reconciliation, a published branch and the then-current
-protected validation path.
+Publication exit additionally requires P206 integration into `main`, canonical
+reconciliation, a published branch and the then-current protected validation
+path.
 
 ## Local Acceptance | 2026-09-16
 
@@ -195,13 +198,15 @@ Local acceptance passed:
 
 No browser, image, provider, credential, CAPTCHA, desktop-input, runtime or
 production effect was performed. The branch remains local and unpushed. CI and
-publication remain held until issue #174 lands through merged PR #179.
+publication wait for P206 PR #180 to enter `main` and P209 to reconcile the
+canonical result.
 
 ## Stop Condition
 
-Stop before any push or workflow trigger while PR #179 is unmerged. Also stop
-before any browser launch, image capture, model or provider call, credential
-use, desktop input, CAPTCHA attempt, retry, Service State mutation, installed
-runtime action, production effect or release. Replan if the pure protocol needs
-a public Service schema, provider-specific parser, image payload, coordinate or
-event authority, or a second challenge attempt.
+Stop before any push or workflow trigger until P206 PR #180 merges and P209
+reconciles that canonical checkpoint. Also stop before any browser launch,
+image capture, model or provider call, credential use, desktop input, CAPTCHA
+attempt, retry, Service State mutation, installed runtime action, production
+effect or release. Replan if the pure protocol needs a public Service schema,
+provider-specific parser, image payload, coordinate or event authority, or a
+second challenge attempt.

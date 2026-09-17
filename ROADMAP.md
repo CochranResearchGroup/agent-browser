@@ -265,8 +265,10 @@ effect, credential use, runtime mutation, installation, or release.
 W7-B is locally admitted through
 [Plan 0209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md) on
 `challenge/p209-visual-provider-protocol`. It owns only a pure candidate-only
-provider protocol and fake serialized fixtures. Publication and CI remain held
-until issue #174 lands through merged PR #179.
+provider protocol and fake serialized fixtures. P204 merged through PR #179;
+P209 has locally joined published P206 head `99793061` at `24aee872` and remains
+unpushed until P206 PR #180 enters `main` and P209 reconciles that canonical
+checkpoint.
 Source checkpoint `4be65f06` is locally accepted with the complete provider-free
 matrix and selector-required local validation. It remains unpushed and creates
 no provider, browser, credential, CAPTCHA, runtime or production authority.

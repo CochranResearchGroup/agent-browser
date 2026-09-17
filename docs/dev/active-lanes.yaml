@@ -55,7 +55,7 @@ lanes:
     checkpoint: 4be65f06
     remote_ref: null
     integration_receipt: null
-    integration: publish only after PR 179 merges, P206 enters main, and P209 reconciles that canonical checkpoint
+    integration: publish only after P206 PR 180 enters main and P209 reconciles that canonical checkpoint
     validation_status: 48 challenge-control tests, strict workspace Clippy, formatting, four architecture guards, 114 selector-expanded extracted-crate tests, and diff hygiene passed locally; no CI was started
     validation_ref: 4be65f06
     work_items: [CochranResearchGroup/agent-browser#127]
