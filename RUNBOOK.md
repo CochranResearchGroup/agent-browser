@@ -41,6 +41,32 @@ and 114 selector-expanded extracted-crate tests. Exact-head forge evaluation
 and protected P206 integration remain. No browser, model provider, CAPTCHA,
 desktop input, credential, installed runtime or production effect occurred.
 
+## Turn 374 | 2026-09-17
+
+The operator clarified that CI itself should be disabled for now, not merely
+the full-suite routes. Run `35228725370` was cancelled. The active
+`.github/workflows/ci.yml` is removed and the reviewed path-selected workflow
+is retained as `.github/workflows/ci.yml.disabled` at candidate `ca077d9e`,
+which GitHub does not load.
+There are no automatic or manual CI triggers. Re-enablement requires new
+maintainer direction. The separate Lease Authority CI matrix is also retained
+as `.github/workflows/lease-authority.yml.disabled` in candidate `ea254ecd`; no
+active workflow has a push or pull-request trigger. Manual release and governed P158 operational
+workflows remain separate and were not dispatched.
+
+## Turn 373 | 2026-09-17
+
+P204 initially interpreted operator direction as removing full CI while keeping
+focused PR CI. The
+bounded correction removes `main` push, scheduled, manual CI dispatch, and
+commit-message qualification routes together with the comprehensive Rust and
+slow platform jobs. Pull requests retain path-selected jobs, broad ordinary
+fail-safe coverage, superseded-head cancellation, and the stable `Presubmit`
+aggregate. Candidate `d9fede9d` passes the selector and workflow contract suite
+and `actionlint`. The local comprehensive Rust command remains available outside
+GitHub CI. Issue #164 remains useful for enforcing `Presubmit`, but it is no
+longer a dependency for removing duplicate post-merge CI.
+
 ## Turn 372 | 2026-09-16
 
 [Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
