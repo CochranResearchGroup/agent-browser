@@ -123,6 +123,7 @@ pub(crate) mod runtime_lifecycle;
 pub(crate) mod runtime_reconciliation;
 #[allow(dead_code)]
 pub mod screenshot;
+pub(crate) mod service_abandoned_browser_retirement;
 #[allow(dead_code)]
 pub mod service_access;
 #[allow(dead_code)]

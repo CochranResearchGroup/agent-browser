@@ -1165,6 +1165,21 @@ fn apply_transition(
     }
 }
 
+/// Begin an exact abandoned-browser close inside an already locked, pure
+/// Service State mutation. Callers must first validate inactivity, retention,
+/// and the sealed lifecycle baseline; this helper preserves the lifecycle
+/// authority's owner-generation transition instead of editing registry rows.
+pub(crate) fn begin_abandoned_browser_close(
+    registry: &mut RuntimeOwnerRegistry,
+    claim: OwnerAuthorityClaim,
+) -> Result<RuntimeLifecycleRecord, String> {
+    let transition = apply_transition(registry, RuntimeLifecycleIntent::BeginClose { claim })?;
+    let RuntimeLifecycleTransition::LaneUpdated(record) = transition else {
+        return Err("runtime_lifecycle_abandoned_close_outcome_mismatch".to_string());
+    };
+    Ok(record)
+}
+
 /// Complete a closing lane inside an already locked Service State mutation.
 ///
 /// Service reconciliation uses this seam only after independently proving

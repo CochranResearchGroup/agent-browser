@@ -3921,6 +3921,8 @@ destructive cleanup. Resource warnings include
 when retained state shows avoidable duplicate pressure for one profile; install
 doctor reports those as `service_duplicate_profile_pressure`.
 
+Resource policy can be tuned with bounded environment variables. `AGENT_BROWSER_RESOURCE_INACTIVITY_MIN_SECONDS` controls abandoned-lane eligibility and defaults to 300 seconds, with accepted values from 60 through 86400. The remaining variables are warning thresholds only: `AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_RSS_BYTES` defaults to 4294967296 with a 67108864 through 68719476736 range; `AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_DESCENDANTS` defaults to 64 with a 1 through 4096 range; `AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_TABS` defaults to 128 with a 1 through 16384 range; `AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_LANES` defaults to 16 with a 1 through 4096 range; `AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_PROCESSES` defaults to 256 with a 1 through 65536 range; and `AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_RSS_BYTES` defaults to 68719476736 with a 67108864 through 1099511627776 range. Threshold findings do not authorize cleanup. Every retirement still requires a reviewed candidate or explicit force override plus fresh exact identity, ownership, inactivity, and process-tree revalidation.
+
 To install the optional read-only resource monitor timer, run
 `AGENT_BROWSER_BIN=$(pwd)/cli/target/debug/agent-browser bash scripts/install-resource-monitor-user-timer.sh`
 after building the intended binary. The timer writes an aggregate-only summary

@@ -2477,6 +2477,14 @@ pub struct ServiceState {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) browser_retirement_receipts:
         BTreeMap<String, super::service_browser_retirement::BrowserRetirementReceipt>,
+    /// Durable reservations and terminal receipts for exact live abandoned
+    /// browser retirement. External process observation and signaling remain
+    /// outside replayable Service State mutations.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) abandoned_browser_retirements: BTreeMap<
+        String,
+        super::service_abandoned_browser_retirement::AbandonedBrowserRetirementTransaction,
+    >,
     /// Replayable dependency-ordered crash recovery transactions.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) crash_regeneration_transactions:
@@ -2593,6 +2601,12 @@ impl ServiceState {
         agent_browser_lease_authority::ActiveLeaseClaim,
         agent_browser_lease_authority::LeaseAuthorityError,
     > {
+        if super::service_abandoned_browser_retirement::blocks_profile_claim(
+            self,
+            &request.resource,
+        ) {
+            return Err(agent_browser_lease_authority::LeaseAuthorityError::ClaimUnavailable);
+        }
         self.lease_authority.acquire(request)
     }
 
@@ -2603,6 +2617,12 @@ impl ServiceState {
         agent_browser_lease_authority::LeaseClaimAcquisitionOutcome,
         agent_browser_lease_authority::LeaseAuthorityError,
     > {
+        if super::service_abandoned_browser_retirement::blocks_profile_claim(
+            self,
+            &request.resource,
+        ) {
+            return Err(agent_browser_lease_authority::LeaseAuthorityError::ClaimUnavailable);
+        }
         self.lease_authority.acquire_with_receipt(request)
     }
 
