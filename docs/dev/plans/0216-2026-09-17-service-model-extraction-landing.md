@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -46,6 +46,12 @@ At admission, `platform/p205-service-model-crate` is clean at
 78 commits ahead and zero behind `origin/main@bea09376`. Issue #178 is open and
 no pull request exists.
 
+The published closeout and admission commit is
+`909a7c1dc51994ffd45ee855bcaef0bdd3e4b56d`. At the Plan 0216 version 2
+amendment, the worktree is clean, the local and remote P216 branch tips match,
+`origin/main` remains `bea09376`, the branch is 79 commits ahead and zero
+behind, issue #178 remains open, and no pull request exists.
+
 Plan 0205 accepted the canonical `agent-browser-service-model` crate, aggregate
 and persisted codec, provider-free records, pure transitions and projections,
 CLI adoption, architecture enforcement, and focused test-loop evidence.
@@ -61,27 +67,46 @@ The residual ledger contains 155 classified production runtime-owner field
 expressions plus fixture migration and facade-deletion debt. Those counts are
 diagnostic inventory, not P216 progress metrics or landing gates.
 
+P211 is an urgent dependent consumer, not part of the P216 implementation
+scope. Its published branch is clean at `1d325fa0` and currently changes ten
+files. Three files overlap the P216 branch: `cli/src/main.rs`,
+`cli/src/native/control_plane.rs`, and `docs/dev/active-lanes.yaml`. A
+read-only three-way merge preview found one source conflict in the
+`control_plane.rs` stale-owner shutdown test. The product semantics are
+compatible: P211 makes explicit daemon shutdown close the browser despite
+stale ownership metadata, while P205/P216 moves runtime-owner access behind
+the canonical Service Model and fixture seams. P211 has not yet edited the
+deferred Service State, installer, profile-acquisition, or remote-view join
+surfaces.
+
 ## Consolidated Batch
 
 1. Map each issue #178 acceptance statement to current source and durable local
    evidence. Record a blocker only when the current checkpoint contradicts the
    issue, not because optional privacy debt remains.
-2. Reconcile current `origin/main` once. Preserve P211 and P215 source custody;
+2. Record one P211 consumer handoff from the final P216 candidate: the
+   canonical crate and adapter seams P211 should consume, the three current
+   overlaps, and the known stale-owner shutdown-test reconciliation. Do not
+   merge, cherry-pick, or implement P211 product work in P216.
+3. Reconcile current `origin/main` once. Preserve P211 and P215 source custody;
    resolve only actual integration conflicts and shared planning projections.
-3. Repair at most two blocking defects demonstrated by the acceptance map or
+4. Repair at most two blocking defects demonstrated by the acceptance map or
    reconciliation. Do not continue opportunistic extraction, field privacy,
    facade deletion, test multiplication, or architecture-guard expansion.
-4. Run one final local qualification batch matched to the complete branch diff.
+5. Run one final local qualification batch matched to the complete branch diff.
    Reuse valid checkpoint evidence when its covered source is unchanged.
-5. Publish one pull request, review only the bounded landing contract, merge it,
+6. Publish one pull request, review only the bounded landing contract, merge it,
    verify canonical `main`, close issue #178 when its acceptance is satisfied,
-   and close this plan.
+   and close this plan. P211 then reconciles its existing branch and worktree
+   onto the integrated Service Model boundary before beginning its deferred
+   overlapping implementation.
 
 ## Scope
 
 Included:
 
 - issue #178 acceptance mapping;
+- one read-only P211 compatibility preview and exact consumer handoff;
 - one current-main reconciliation;
 - blocking integration repairs only;
 - existing Service Model and CLI architecture contracts;
@@ -98,6 +123,98 @@ Deferred unless separately admitted:
   aggregate or model decisions;
 - additional crate extraction, API redesign, performance optimization, or
   generalized projection work.
+- P211 shutdown, cold-install, presentation-requalification, profile-release,
+  trusted-single-user acquisition, remote-view, or documentation
+  implementation.
+
+## P211 Dependent-Consumer Sequencing
+
+P216 lands before P211 begins its deferred Service State, installer,
+profile-acquisition, presentation-inventory, or remote-view join work. P211 may
+retain and validate its already published lane-owned modules, but it must not
+create a second Service State model seam or continue into overlapping adapters
+until the P216 merge commit is available on `origin/main`.
+
+The P216 candidate handoff to P211 must identify:
+
+- the exact integrated Service Model commit and canonical crate paths;
+- the aggregate, codec, transition, and projection APIs relevant to shutdown,
+  ownership release, current-boot requalification, and remote-view admission;
+- any required CLI adapter that intentionally remains outside the pure model;
+- the three presently overlapping files and the expected semantic resolution
+  for `control_plane.rs`; and
+- any demonstrated missing API that would otherwise force P211 to recreate a
+  model decision in the CLI.
+
+The expected `control_plane.rs` reconciliation preserves both outcomes: P211's
+terminal explicit-shutdown behavior and P205/P216's canonical runtime-owner
+access and fixture conventions. `cli/src/main.rs` module registration and the
+active-lane catalog are coordination merges, not reasons to combine the lanes.
+
+P216 may repair a demonstrated issue #178 blocker inside its existing two-
+commit allowance. A model API needed only for unfinished P211 behavior remains
+P211 work after reconciliation unless the acceptance map proves the omission
+also violates issue #178. P216 completion does not wait for P211 completion,
+and P211 continues in its existing admitted worktree after reconciling the
+integrated P216 boundary.
+
+## Gate 1 Acceptance Map And P211 Consumer Handoff
+
+Gate 1 was evaluated against issue #178, current source at `909a7c1`, the
+published Plan 0205 evidence through `1ff20161`, and the current P211 checkpoint
+`1d325fa0`.
+
+| Issue #178 requirement | Exact evidence | Gate 1 disposition |
+| --- | --- | --- |
+| Canonical Service State records, pure derivations, wire invariants, and deterministic behavior live behind one coherent crate interface | `crates/agent-browser-service-model/src/service_state.rs` owns the sole aggregate, compatibility decoder, persistence preparation, deterministic encoder, transitions, and projections; the crate contains the canonical record modules exported by `src/lib.rs` | proved in source; final focused qualification pending |
+| CLI callers consume the extracted module without a second model or duplicated decisions | `cli/src/native/service_model.rs` re-exports the canonical aggregate; the architecture contract requires exactly one `ServiceState` definition and inherent implementation and rejects the classified duplicated record and decision families | proved in source; final architecture rerun pending |
+| Architecture guard rejects upward imports into CLI, runtime, browser, HTTP, MCP, filesystem, or platform providers | `scripts/dev/check-service-model-architecture.js` enforces the dependency allowlist, forbidden import paths, adapter modules, canonical aggregate, and caller cutovers; `scripts/dev/test-service-model-architecture.js` mutation fixtures currently pass | proved at Gate 1; final candidate rerun pending |
+| Focused crate and affected CLI adapter tests pass locally | Plan 0205 Checkpoint 69 records four model witnesses, eight CLI witnesses, formatting, strict Clippy, architecture, mutation, diff-hygiene, and selector passes at `1ff20161` | valid historical evidence for unchanged source; one final branch qualification pending |
+| Focused edit and test loop is measured against a baseline, with no unsupported acceleration claim | Plan 0205 records a 171.01-second cold CLI baseline, 4.08-second focused crate loop, 132-second affected CLI loop, and 0.44-second warm compatibility loop | measurement proved; claim limited to the cold pure-model feedback loop, not general workspace or CLI build time |
+| Source enters `main` through the protected pull-request workflow | branch is published at `909a7c1`, 79 commits ahead and zero behind `origin/main@bea09376`; issue #178 is open and no pull request exists | incomplete; Gates 3 and 4 own qualification and integration |
+
+No issue #178 source blocker was found. Full field privacy, the remaining 155
+classified direct expressions, fixture migration, and optional facade deletion
+remain outside the issue and P216.
+
+The P211 consumer handoff is:
+
+- Canonical aggregate and codec:
+  `agent_browser_service_model::ServiceState`,
+  `decode_persisted_service_state_json`,
+  `prepare_service_state_for_persistence`, and
+  `encode_prepared_service_state_pretty`.
+- Durable mutation custody remains in the CLI adapter
+  `ServiceStateRepository::mutate`; P211 must prepare external observations and
+  effects outside that closure.
+- Runtime ownership reads use `runtime_lifecycle_authority_summary`,
+  `runtime_lifecycle_boot_epoch_observations`, `profile_runtime_authority`,
+  `runtime_owner_binding_for_session`, `runtime_control_plane_authority`,
+  `runtime_lane_authority`, and `runtime_resource_lanes`.
+- Runtime ownership changes use
+  `apply_runtime_lifecycle_transition_atomically`,
+  `apply_runtime_lifecycle_transition_with_profile_sync_atomically`, or the
+  existing typed lease claim operations. Runtime persistence uses
+  `runtime_owner_persistence_parts`, `restore_runtime_owner_persistence`, and
+  `strip_runtime_lifecycle_for_persistence`.
+- Presentation requalification supplies observation in P211's adapter, then
+  uses `PresentationCapacityAuthority::from_revalidated_inventory` and
+  `reconcile_authoritative_bindings`; route and display compatibility uses
+  `route_pool_target_string` and `route_pool_entry_matches_display`.
+- Process discovery, browser closure, filesystem persistence, current-boot
+  observation, route probing, and remote-view effects remain CLI adapter work.
+- The current model has no bulk `shutdown` or `release_all` transition. If P211
+  proves that one atomic model decision is required, it must add that bounded
+  interface after reconciling onto integrated `main`; it must not recreate the
+  decision through direct aggregate-field mutation.
+- The known `cli/src/native/control_plane.rs` reconciliation keeps P211's
+  `CloseBrowser` result for explicit shutdown with stale authority and keeps
+  P205/P216's canonical runtime-owner API and test-fixture conventions.
+
+Gate 2 fetched `origin/main`, the P216 branch, and the P211 branch once. Remote
+`main` remains the admission commit `bea09376`, so no merge or rebase is
+required in P216. The P211 preview remains read-only and is not integrated into
+this branch.
 
 ## Delivery Sequence And Budget
 
@@ -108,8 +225,15 @@ ownership, compatibility facade, and architecture guard. Produce one compact
 requirement-to-evidence table. Classify each requirement as proved, blocking,
 or explicitly outside the issue.
 
+Add the bounded P211 consumer map from the current `1d325fa0` checkpoint. It is
+a compatibility and sequencing check, not an expansion of issue #178. Record a
+P216 blocker only if the current extracted boundary would force P211 to
+duplicate an already canonical model decision; do not pre-design unfinished
+P211 behavior.
+
 Exit: every issue acceptance statement has exact source or validation evidence,
-and any blocking defect has a bounded reproducer.
+any blocking defect has a bounded reproducer, and P211 has an exact consumer
+handoff against the candidate boundary.
 
 ### Gate 2 | Reconciliation And Blocking Repair
 
@@ -117,6 +241,11 @@ Fetch `origin/main` once and reconcile it into the inherited branch if needed.
 Repair only blockers from Gate 1 or actual merge conflicts. Preserve unrelated
 P211 and P215 work and do not rewrite their roadmap, runbook, catalog, or source
 sections independently.
+
+Do not merge or cherry-pick P211 into P216. Retain the read-only cross-lane
+merge preview as coordination evidence. P211 reconciles after P216 enters
+canonical `main`; the known stale-owner shutdown-test conflict is resolved in
+P211, where its product semantics are owned.
 
 Exit: the branch contains current main, has no unresolved conflicts, and has no
 known issue-acceptance blocker.
@@ -184,6 +313,7 @@ condition before assignment. The primary must inspect its diff.
 | CLI remains the effect adapter | forbidden-import guard and current adapter boundaries | locally proved at `1ff20161`; final candidate rerun pending |
 | Focused correctness | retained crate and affected CLI tests | passed at `1ff20161`; reconciliation impact review pending |
 | Build acceleration evidence | Plan 0205 baseline and focused-loop measurements | recorded; no new benchmark authorized |
+| P211 dependent-consumer readiness | current P211 branch, read-only merge preview, exact candidate handoff | three overlaps and one known test conflict classified; final candidate handoff pending |
 | Canonical integration | protected PR merge and `origin/main` readback | incomplete |
 | GitHub CI | none | explicitly excluded by operator direction |
 | Runtime or production effects | none | explicitly excluded |
@@ -199,12 +329,17 @@ condition before assignment. The primary must inspect its diff.
   policy 0052 admission is re-established.
 - No independent rewrite of P204, P211, or P215 source or shared planning
   sections.
+- No absorption of P211's urgent shutdown, cold-install, or remote-view fixes
+  into issue #178 or the P216 pull request.
 
 ## Stop Condition
 
 Stop with a clean published checkpoint if the acceptance map proves a material
 issue #178 requirement is absent and cannot be repaired inside two bounded
 commits, if current-main reconciliation exposes a real semantic conflict with
-P211 or P215, or if protected integration requires restoring operator-disabled
-CI. Do not convert any of those conditions into another open-ended extraction
-campaign.
+P211 or P215, if the extracted boundary would force P211 to duplicate a
+canonical model decision and the missing issue #178 interface cannot be
+repaired within the existing allowance, or if protected integration requires
+restoring operator-disabled CI. A mechanical P211 post-merge reconciliation is
+not a P216 blocker. Do not convert any of those conditions into another
+open-ended extraction campaign.
