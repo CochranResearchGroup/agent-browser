@@ -56,6 +56,23 @@ Until those gates pass, this document is planning evidence only. It grants no
 branch, worktree, provider, browser, credential, runtime, CI or effect
 authority.
 
+## Fixture Relationship
+
+The repository CAPTCHA lab remains the correct later acceptance surface for
+issue #66, but it is not P210's provider-free oracle. Its default hCaptcha test
+key does not open an image challenge, while its visual mode depends on an
+external non-production Always Challenge configuration and provider-served
+content. That behavior is intentionally outside a deterministic source test.
+
+P210 may reuse the lab's safety patterns: secrets remain server-side, request
+bodies have explicit byte ceilings, responses are not cached, and provider
+verification has a fixed timeout. P210 must not read the lab credentials,
+start the lab, open its widget, capture its pixels, use a retained browser or
+handoff, or treat a provider-selected live image as a source fixture. Its
+artifact matrix uses small repository-owned synthetic bytes with no private or
+third-party content. A later issue #66 packet may join the accepted adapter to
+the lab under a fresh provider and effect budget.
+
 ## Proposed Boundary
 
 Create a narrow `agent-browser-challenge-visual-adapter` crate that depends on
