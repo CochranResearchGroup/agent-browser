@@ -213,6 +213,7 @@ const RUNTIME_OWNER_PROJECTION_CLI_FILES = [
   'cli/src/native/service_resources/retained_tree.rs',
   'cli/src/native/runtime_reconciliation.rs',
   'cli/src/native/service_lease_authority_adapter.rs',
+  'cli/src/native/service_profile_acquisition.rs',
 ];
 
 const SERVICE_CHALLENGE_DEFINITIONS = [
@@ -783,6 +784,8 @@ function check(root = repoRoot) {
     'cli/src/native/runtime_reconciliation.rs')));
   const cliLeaseAuthorityAdapter = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
     'cli/src/native/service_lease_authority_adapter.rs')));
+  const cliProfileAcquisitionSource = withoutCfgTestItems(read(root,
+    'cli/src/native/service_profile_acquisition.rs'));
   const cliWorkstationInstallSource = withoutCfgTestItems(read(root,
     'cli/src/workstation_install.rs'));
   const cliRuntimeOwnerProjectionSources = RUNTIME_OWNER_PROJECTION_CLI_FILES.map((path) => ({
@@ -1290,6 +1293,30 @@ function check(root = repoRoot) {
   requireCondition(
     !/\.\s*lifecycle\s*\.\s*logical_browser_id\b/.test(workstationCleanupProjection),
     'workstation cleanup-obligation membership must use lifecycle map keys, not embedded browser IDs',
+  );
+  const lifecycleReplacementDecision = withoutCommentsAndStrings(
+    rustNamedFunctionDefinition(
+      cliProfileAcquisitionSource,
+      'lifecycle_replacement_decision',
+    ),
+  );
+  requireCondition(
+    /\.\s*profile_runtime_authority\s*\(/.test(lifecycleReplacementDecision)
+      && /\.\s*runtime_resource_lanes\s*\(/.test(lifecycleReplacementDecision),
+    'lifecycle replacement must consume profile authority and runtime resource-lane projections',
+  );
+  requireCondition(
+    /\.\s*map\s*\(\s*\|lane\|\s*lane\s*\.\s*lifecycle\s*\)/.test(lifecycleReplacementDecision)
+      && /\.\s*sort_by_key\s*\(\s*\|record\|\s*record\s*\.\s*owner_generation\s*\)/.test(lifecycleReplacementDecision),
+    'lifecycle replacement must preserve lifecycle values and stable owner-generation ordering',
+  );
+  requireCondition(
+    !/\blane\s*\.\s*browser_id\b/.test(lifecycleReplacementDecision)
+      && !/\.\s*runtime_lane_authority\s*\(/.test(lifecycleReplacementDecision)
+      && !/\bRuntimeOwnerPersistenceSnapshot\b/.test(lifecycleReplacementDecision)
+      && !/\.\s*sort_unstable(?:_by_key)?\s*\(/.test(lifecycleReplacementDecision)
+      && !/\.\s*(?:last|max_by|max_by_key)\s*\(/.test(lifecycleReplacementDecision),
+    'lifecycle replacement must preserve embedded-identity first-match semantics without authority bypasses',
   );
   requireCondition(
     !/\bRuntimeOwnerPersistenceSnapshot\b/.test(runtimeOwnerProjectionSource),

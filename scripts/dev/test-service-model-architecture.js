@@ -450,6 +450,22 @@ fn reconcile_runtime_maintenance(state: &ServiceState) {
   let _ = runtime_cleanup_obligation_counts(state);
 }
 `;
+const validProfileAcquisition = `
+fn lifecycle_replacement_decision(state: &ServiceState) {
+  let authority = state.profile_runtime_authority(profile_identity_digest);
+  let owner = authority.owner;
+  let mut records = state.runtime_resource_lanes().into_iter()
+    .map(|lane| lane.lifecycle)
+    .filter(|record| record.profile_identity_digest == profile_identity_digest)
+    .collect::<Vec<_>>();
+  records.sort_by_key(|record| record.owner_generation);
+  let lifecycle = owner.and_then(|owner| records.iter().copied().find(|record| {
+    record.logical_browser_id == owner.browser_id
+      && record.owner_generation == owner.owner_generation
+  }));
+  let _ = (authority.registry_revision, lifecycle);
+}
+`;
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
@@ -460,6 +476,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   runtimeReconciliation = validRuntimeReconciliation,
   leaseAuthorityAdapter = validLeaseAuthorityAdapter,
   workstationInstall = validWorkstationInstall,
+  profileAcquisition = validProfileAcquisition,
   principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
@@ -501,6 +518,8 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'cli/src/native/runtime_reconciliation.rs'), runtimeReconciliation);
   writeFileSync(join(root, 'cli/src/native/service_lease_authority_adapter.rs'),
     leaseAuthorityAdapter);
+  writeFileSync(join(root, 'cli/src/native/service_profile_acquisition.rs'),
+    profileAcquisition);
   writeFileSync(join(root, 'cli/src/workstation_install.rs'), workstationInstall);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
@@ -812,6 +831,36 @@ fn production(state: &ServiceState) { let _ = &state.runtime_owner_registry; }
     workstationInstall: validWorkstationInstall.replace(
       'lane.browser_id',
       'lane.lifecycle.logical_browser_id',
+    ),
+  }],
+  ['lifecycle replacement accesses registry directly', {
+    profileAcquisition: validProfileAcquisition.replace(
+      'state.profile_runtime_authority(profile_identity_digest)',
+      'state.runtime_owner_registry.owner(profile_identity_digest)',
+    ),
+  }],
+  ['lifecycle replacement substitutes keyed lane projection', {
+    profileAcquisition: validProfileAcquisition.replace(
+      'state.runtime_resource_lanes()',
+      'state.runtime_lane_authority(profile_identity_digest, browser_id)',
+    ),
+  }],
+  ['lifecycle replacement selects map key identity', {
+    profileAcquisition: validProfileAcquisition.replace(
+      'lane.lifecycle',
+      'lane.browser_id',
+    ),
+  }],
+  ['lifecycle replacement uses unstable generation order', {
+    profileAcquisition: validProfileAcquisition.replace(
+      'records.sort_by_key',
+      'records.sort_unstable_by_key',
+    ),
+  }],
+  ['lifecycle replacement selects latest generation', {
+    profileAcquisition: validProfileAcquisition.replace(
+      'records.iter().copied().find',
+      'records.iter().copied().max_by_key',
     ),
   }],
   ['ordinary lifecycle transition direct field access', {

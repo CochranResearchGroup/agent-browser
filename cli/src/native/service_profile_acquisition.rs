@@ -1277,14 +1277,12 @@ pub(crate) fn lifecycle_replacement_decision(
             "reason": "profile_identity_unavailable",
         });
     };
-    let owner = service_state
-        .runtime_owner_registry
-        .owners()
-        .get(&profile_identity_digest);
+    let authority = service_state.profile_runtime_authority(&profile_identity_digest);
+    let owner = authority.owner;
     let mut records = service_state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .values()
+        .runtime_resource_lanes()
+        .into_iter()
+        .map(|lane| lane.lifecycle)
         .filter(|record| record.profile_identity_digest == profile_identity_digest)
         .collect::<Vec<_>>();
     records.sort_by_key(|record| record.owner_generation);
@@ -1374,7 +1372,7 @@ pub(crate) fn lifecycle_replacement_decision(
     json!({
         "available": true,
         "profileId": profile.id,
-        "registryRevision": service_state.runtime_owner_registry.revision(),
+        "registryRevision": authority.registry_revision,
         "ownerId": owner.map(|owner| owner.owner_id.clone()),
         "ownerState": owner.map(|owner| owner.state),
         "replacementBrowserId": replacement_route.as_ref().map(|(browser_id, _)| browser_id.clone()),
@@ -1773,4 +1771,202 @@ fn service_request_has_route_hint_field(command: &Value, field: &str) -> bool {
 
 fn service_request_has_partial_route_hints(command: &Value) -> bool {
     service_request_route_hint_count(command) == 1
+}
+
+#[cfg(test)]
+mod lifecycle_replacement_projection_tests {
+    use super::*;
+    use crate::runtime_owner_transfer::{
+        edit_registry_fixture, CleanupObligationState, ProfileOwner, ProfileOwnerState,
+        RuntimeLaneLifecycleState, RuntimeLifecycleRecord, RuntimeOwnerRegistryFixture,
+    };
+    use std::collections::BTreeMap;
+
+    fn fixture() -> (BrowserProfile, ServiceState, ProfileOwner) {
+        let profile_path = std::env::temp_dir().join("agent-browser-p205-replacement-projection");
+        let digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path)
+                .unwrap();
+        let profile = BrowserProfile {
+            id: "projection-profile".into(),
+            user_data_dir: Some(profile_path.to_string_lossy().into_owned()),
+            ..BrowserProfile::default()
+        };
+        let owner = ProfileOwner {
+            owner_id: "projection-owner".into(),
+            profile_identity_digest: digest.clone(),
+            state: ProfileOwnerState::Ready,
+            owner_generation: 7,
+            browser_id: "embedded-browser".into(),
+            daemon_session_route: "projection-route".into(),
+            process_instance_digest: "a".repeat(64),
+            browser_family: "chrome".into(),
+            cdp_endpoint_identity_digest: "b".repeat(64),
+            target_set_digest: "c".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        };
+        let state = ServiceState {
+            state_revision: 43,
+            profiles: BTreeMap::from([(profile.id.clone(), profile.clone())]),
+            runtime_owner_registry: RuntimeOwnerRegistryFixture {
+                registry_revision: 19,
+                owner_records: BTreeMap::from([(digest, owner.clone())]),
+                ..RuntimeOwnerRegistryFixture::default()
+            }
+            .into_registry(),
+            ..ServiceState::default()
+        };
+        (profile, state, owner)
+    }
+
+    fn terminal_record(
+        owner: &ProfileOwner,
+        generation: u64,
+        marker: &str,
+    ) -> RuntimeLifecycleRecord {
+        RuntimeLifecycleRecord {
+            logical_browser_id: owner.browser_id.clone(),
+            profile_identity_digest: owner.profile_identity_digest.clone(),
+            owner_generation: generation,
+            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state: CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".into(),
+                "profile_lock_released".into(),
+                marker.into(),
+            ],
+            ..RuntimeLifecycleRecord::default()
+        }
+    }
+
+    #[test]
+    fn replacement_projection_joins_embedded_browser_not_lifecycle_map_key() {
+        let (profile, mut state, owner) = fixture();
+        edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                "different-map-key".into(),
+                terminal_record(&owner, 7, "selected"),
+            );
+        let before = state.clone();
+        let decision = lifecycle_replacement_decision(Some(&profile), &state);
+        assert_eq!(decision["replacementEligible"], true);
+        assert_eq!(decision["reason"], "terminal_cleanup_satisfied");
+        assert_eq!(decision["logicalBrowserId"], owner.browser_id);
+        assert_eq!(decision["replacementBrowserId"], owner.browser_id);
+        assert_eq!(
+            decision["replacementSessionName"],
+            owner.daemon_session_route
+        );
+        assert_eq!(decision["terminalEvidence"][2], "selected");
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn replacement_projection_selects_exact_current_generation_among_history() {
+        let (profile, mut state, owner) = fixture();
+        {
+            let mut registry = edit_registry_fixture(&mut state.runtime_owner_registry);
+            registry
+                .lifecycle_rows
+                .insert("a-newest".into(), terminal_record(&owner, 99, "newest"));
+            registry
+                .lifecycle_rows
+                .insert("z-oldest".into(), terminal_record(&owner, 1, "oldest"));
+            registry
+                .lifecycle_rows
+                .insert("m-current".into(), terminal_record(&owner, 7, "current"));
+            let mut wrong_browser = terminal_record(&owner, 7, "wrong-browser");
+            wrong_browser.logical_browser_id = "other-browser".into();
+            registry
+                .lifecycle_rows
+                .insert("b-wrong-browser".into(), wrong_browser);
+            let mut wrong_profile = terminal_record(&owner, 7, "wrong-profile");
+            wrong_profile.profile_identity_digest = "d".repeat(64);
+            registry
+                .lifecycle_rows
+                .insert("c-wrong-profile".into(), wrong_profile);
+        }
+        let before = state.clone();
+        let decision = lifecycle_replacement_decision(Some(&profile), &state);
+        assert_eq!(decision["ownerGeneration"], 7);
+        assert_eq!(decision["terminalEvidence"][2], "current");
+        assert_eq!(decision["replacementEligible"], true);
+        assert_eq!(state, before);
+
+        edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .remove("m-current");
+        let before = state.clone();
+        let missing = lifecycle_replacement_decision(Some(&profile), &state);
+        assert_eq!(missing["replacementEligible"], false);
+        assert_eq!(missing["reason"], "lifecycle_owner_record_missing");
+        assert_eq!(missing["ownerGeneration"], Value::Null);
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn replacement_projection_equal_generations_keep_first_map_order_match() {
+        for first_is_complete in [false, true] {
+            let (profile, mut state, owner) = fixture();
+            let complete = terminal_record(&owner, 7, "complete");
+            let mut incomplete = terminal_record(&owner, 7, "incomplete");
+            incomplete.terminal_evidence =
+                vec!["profile_lock_released".into(), "incomplete".into()];
+            let (first, last) = if first_is_complete {
+                (complete, incomplete)
+            } else {
+                (incomplete, complete)
+            };
+            let expected_evidence = first.terminal_evidence.clone();
+            {
+                let mut registry = edit_registry_fixture(&mut state.runtime_owner_registry);
+                // Deliberately insert in reverse key order: map order, not insertion
+                // order or evidence strength, breaks equal-generation ties.
+                registry.lifecycle_rows.insert("z-last".into(), last);
+                registry.lifecycle_rows.insert("a-first".into(), first);
+            }
+            let before = state.clone();
+            let decision = lifecycle_replacement_decision(Some(&profile), &state);
+            assert_eq!(decision["terminalEvidence"], json!(expected_evidence));
+            assert_eq!(decision["replacementEligible"], first_is_complete);
+            assert_eq!(
+                decision["reason"],
+                if first_is_complete {
+                    "terminal_cleanup_satisfied"
+                } else {
+                    "terminal_replacement_route_inconsistent"
+                }
+            );
+            assert_eq!(state, before);
+        }
+    }
+
+    #[test]
+    fn replacement_projection_preserves_max_registry_revision_and_entire_aggregate() {
+        let (profile, mut state, owner) = fixture();
+        {
+            let mut registry = edit_registry_fixture(&mut state.runtime_owner_registry);
+            registry.registry_revision = u64::MAX;
+            registry.lifecycle_rows.insert(
+                "historical-key".into(),
+                terminal_record(&owner, 7, "retained"),
+            );
+        }
+        state.profiles.insert(
+            "unrelated".into(),
+            BrowserProfile {
+                id: "unrelated".into(),
+                user_data_dir: Some("unrelated-path".into()),
+                ..BrowserProfile::default()
+            },
+        );
+        let before = state.clone();
+        let decision = lifecycle_replacement_decision(Some(&profile), &state);
+        assert_eq!(decision["registryRevision"], json!(u64::MAX));
+        assert_eq!(decision["replacementEligible"], true);
+        assert_eq!(state.state_revision(), 43);
+        assert_eq!(state, before);
+    }
 }

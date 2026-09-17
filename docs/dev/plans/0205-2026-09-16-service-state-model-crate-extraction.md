@@ -4465,6 +4465,58 @@ does not itself advance a P4 implementation criterion. Exit requires exact
 projection parity, the malformed-history witnesses, zero production direct
 registry access in the target file, and the targeted architecture contract.
 
+## Checkpoint 67 | Lifecycle Replacement Projection Accepted
+
+State transition: lifecycle replacement planning now consumes one cached
+`profile_runtime_authority` projection for owner and revision plus one
+`runtime_resource_lanes` projection mapped to lifecycle values. The three
+frozen production registry expressions are removed, leaving 162 classified
+production runtime-owner expressions and zero production direct registry
+access in `service_profile_acquisition.rs`.
+
+The decision retains lifecycle-map order before its stable owner-generation
+sort, filters by embedded profile digest, and selects the first exact embedded
+logical browser ID and generation match. Resource-row map keys do not
+participate in identity selection. Retained history without an owner remains
+non-authoritative, missing exact history remains a missing owner record, and
+no owner state, binding, boot, lease, observation, effect, reason, path, or JSON
+predicate changed.
+
+Four new provider-free witnesses prove differing map and embedded IDs, exact
+current-generation selection across older and newer history, missing-current-
+generation behavior, equal-generation first-map-order selection under
+conflicting evidence, maximum registry revision, and full aggregate
+nonmutation. The architecture contract requires both projections, lifecycle-
+value mapping, and stable sorting. Mutation fixtures reject direct registry
+access, keyed-lane substitution, map-key identity, unstable sorting, and
+latest-generation selection.
+
+Acceptance evidence:
+
+- five focused lifecycle-replacement tests pass, comprising the four new
+  projection witnesses and the existing terminal-replacement eligibility
+  witness;
+- all five focused P137 regression tests pass, including transferred terminal
+  ownership, no-owner history, exact process-exit evidence, reconciled absence,
+  and aggregate nonmutation;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract and expanded mutation fixtures, and the
+  changed-surface selector self-readback pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route for the single-file cutover and
+four malformed-history witnesses, ran targeted formatting only, and performed
+no build, Git, forge, CI, runtime, or child-agent action. The primary inspected
+the complete diff, implemented and mutation-tested the targeted architecture
+contract, and ran every local acceptance gate.
+
+Acceptance state and progress classification: lifecycle replacement projection
+closure is accepted and is outcome progress toward P4 field privacy. The next
+bounded outcome must again come from the classified runtime-owner surface and
+must not combine read-only authority with mutation or effect custody.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -4472,9 +4524,9 @@ registry access in the target file, and the targeted architecture contract.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections and three adapter cutovers, ordinary atomic runtime lifecycle transition, terminal profile-sync cross-field transition, and process-exit partial legacy revocation accepted; remaining transition closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections and four adapter cutovers, ordinary atomic runtime lifecycle transition, terminal profile-sync cross-field transition, and process-exit partial legacy revocation accepted; remaining transition closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | workstation cleanup-obligation projection accepted through Checkpoint 65 |
+| Focused correctness | crate tests and affected CLI adapter tests | lifecycle replacement projection accepted through Checkpoint 67 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
