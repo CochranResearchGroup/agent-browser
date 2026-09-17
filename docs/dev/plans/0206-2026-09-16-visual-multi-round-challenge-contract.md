@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 5
+Plan version: 6
 
 State: SOURCE ACCEPTED | INTEGRATION READY
 
@@ -114,6 +114,29 @@ while running alongside another Cargo claim. The exact test then passed 20 of
 20 isolated executions and the complete 108-test package rerun passed. No P206
 source or Lease Authority source changed in response; the failed sample remains
 diagnostic evidence rather than P206 invalidation.
+
+## Integration Review Repair | 2026-09-17
+
+Pre-merge self-check found that cumulative `u8` budget comparisons used
+saturating addition. With a maximum cumulative selection budget of 255, a
+restored total of 250 plus a valid 10-selection round saturated to 255 and was
+incorrectly admitted. A response selecting 256 candidates also returned the
+generic `InvalidTransition` error before reaching the typed per-round budget
+decision.
+
+Checkpoint `4813d385` widens selection-count comparisons to `usize`, uses
+checked addition for every cumulative budget axis, and uses checked addition
+when recording completed effect counts. The two minimal regressions first
+failed with an admitted intent and `InvalidTransition`, respectively, then
+passed with `CumulativeBudgetExceeded` and `RoundBudgetExceeded` after the
+repair.
+
+The repaired checkpoint passes all 41 challenge-control tests, including 25
+visual-round cases, the challenge-control architecture guard, workspace
+formatting, strict workspace Clippy and diff hygiene. The prior CDP, Lease
+Authority and desktop-services evidence remains reusable because the repair
+changes only challenge-control arithmetic and its fixture. Exact-head forge
+evaluation must run against the corrected published head before integration.
 
 ## Contract Boundary
 
