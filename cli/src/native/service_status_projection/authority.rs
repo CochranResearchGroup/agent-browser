@@ -25,8 +25,7 @@ pub(super) fn project_closed_tabs(
         .filter(|tab| tab.lifecycle == TabLifecycle::Closed)
         .count();
     if full_tab_history {
-        let mut projected = state.clone();
-        projected.crash_regeneration_transactions.clear();
+        let projected = state.without_crash_regeneration_transactions();
         return (
             projected,
             ClosedTabProjectionMetadata {
@@ -65,9 +64,8 @@ pub(super) fn project_closed_tabs(
         .into_iter()
         .skip(ORDINARY_CLOSED_TAB_CAP)
         .collect::<HashSet<_>>();
-    let mut projected = state.clone();
+    let mut projected = state.without_crash_regeneration_transactions();
     projected.tabs.retain(|id, _| !omitted_ids.contains(id));
-    projected.crash_regeneration_transactions.clear();
     let retained_closed_count = projected
         .tabs
         .values()

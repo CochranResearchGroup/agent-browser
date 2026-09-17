@@ -585,10 +585,7 @@ impl ServiceStatusProjector {
             },
             service_state_lock_diagnostics: super::service_store::service_state_lock_diagnostics(),
             runtime_lifecycle: input.runtime_lifecycle,
-            crash_regeneration_transactions:
-                agent_browser_service_model::crash_regeneration_statuses(
-                    &authority_state.crash_regeneration_transactions,
-                ),
+            crash_regeneration_transactions: authority_state.crash_regeneration_statuses(),
         };
         if input.service_state_projection == ServiceStateProjectionMode::DashboardSummary {
             let serialized_bytes = serde_json::to_vec(&response)

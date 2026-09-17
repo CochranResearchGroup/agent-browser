@@ -492,6 +492,7 @@ fn apply_receipt(evidence: &mut CrashRegenerationEvidence, receipt: CrashRegener
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ServiceState;
     use std::collections::BTreeMap;
 
     fn request() -> CrashRegenerationRequest {
@@ -509,6 +510,256 @@ mod tests {
                 handoff_id: "handoff-1".into(),
             },
         }
+    }
+
+    fn runtime_receipt() -> CrashRegenerationPhaseReceipt {
+        CrashRegenerationPhaseReceipt::RuntimeHostAuthority {
+            boot_epoch: "boot-1".into(),
+            runtime_host_id: "host-1".into(),
+            pid: 7,
+            socket_identity: "socket-1".into(),
+        }
+    }
+
+    fn state_with_transaction(transaction: CrashRegenerationTransaction) -> ServiceState {
+        let mut state = ServiceState::default();
+        state
+            .crash_regeneration_transactions
+            .insert(transaction.transaction_id.clone(), transaction);
+        state
+    }
+
+    #[test]
+    fn aggregate_create_replay_and_identity_errors_assign_only_success() {
+        let mut state = ServiceState::default();
+        let request = request();
+        assert!(state.crash_regeneration_transaction("tx-1").is_none());
+        let created = state.begin_or_resume_crash_regeneration(&request).unwrap();
+        assert_eq!(created.revision, 1);
+        assert_eq!(state.crash_regeneration_transaction("tx-1"), Some(&created));
+        let replayed = state.begin_or_resume_crash_regeneration(&request).unwrap();
+        assert_eq!(replayed.revision, 2);
+        assert_eq!(replayed.replay_count, 1);
+        assert_eq!(
+            state.crash_regeneration_transaction("tx-1"),
+            Some(&replayed)
+        );
+        for axis in 0..4 {
+            let mut invalid = request.clone();
+            let error = match axis {
+                0 => {
+                    invalid.boot_epoch = "boot-2".into();
+                    "crash_regeneration_transaction_identity_mismatch"
+                }
+                1 => {
+                    invalid.stable_identities.profile_id = "profile-2".into();
+                    "crash_regeneration_transaction_identity_mismatch"
+                }
+                2 => {
+                    invalid.transaction_id.clear();
+                    "crash_regeneration_request_invalid"
+                }
+                _ => {
+                    invalid.stable_identities.handoff_id.clear();
+                    "crash_regeneration_stable_identity_missing"
+                }
+            };
+            let before = state.clone();
+            assert_eq!(
+                state
+                    .begin_or_resume_crash_regeneration(&invalid)
+                    .unwrap_err(),
+                error
+            );
+            assert_eq!(state, before);
+        }
+    }
+
+    #[test]
+    fn aggregate_missing_transaction_precedes_cas_and_receipt_errors() {
+        let expected = begin_or_resume(None, &request()).unwrap();
+        let mut state = ServiceState::default();
+        let before = state.clone();
+        let wrong_phase = CrashRegenerationPhase::OperatorVisibleProof;
+        assert_eq!(
+            state
+                .apply_crash_regeneration_phase(&expected, wrong_phase, runtime_receipt())
+                .unwrap_err(),
+            "crash_regeneration_transaction_missing"
+        );
+        assert_eq!(
+            state
+                .interrupt_crash_regeneration(&expected, wrong_phase, "failure")
+                .unwrap_err(),
+            "crash_regeneration_transaction_missing"
+        );
+        assert_eq!(
+            state.finish_crash_regeneration(&expected).unwrap_err(),
+            "crash_regeneration_transaction_missing"
+        );
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn aggregate_phase_cas_and_receipt_failures_preserve_state() {
+        let original = begin_or_resume(None, &request()).unwrap();
+        let phase = CrashRegenerationPhase::RuntimeHostAuthority;
+        for axis in 0..6 {
+            let mut current = original.clone();
+            let mut expected = original.clone();
+            let mut receipt = runtime_receipt();
+            match axis {
+                0 => current.revision += 1,
+                1 => current.boot_epoch = "boot-2".into(),
+                2 => current.stable_identities.handoff_id = "handoff-2".into(),
+                3 => current.completed_phases.push(phase),
+                4 => expected.completed_phases.push(phase),
+                _ => {
+                    receipt = CrashRegenerationPhaseReceipt::RuntimeHostAuthority {
+                        boot_epoch: "boot-1".into(),
+                        runtime_host_id: String::new(),
+                        pid: 0,
+                        socket_identity: String::new(),
+                    };
+                }
+            }
+            let mut state = state_with_transaction(current);
+            let before = state.clone();
+            assert_eq!(
+                state
+                    .apply_crash_regeneration_phase(&expected, phase, receipt)
+                    .unwrap_err(),
+                if axis == 5 {
+                    "crash_regeneration_runtime_host_receipt_invalid"
+                } else {
+                    "crash_regeneration_compare_and_swap_mismatch"
+                },
+                "axis {axis}"
+            );
+            assert_eq!(state, before, "axis {axis}");
+        }
+    }
+
+    #[test]
+    fn aggregate_interruption_cas_failures_preserve_state() {
+        let original = begin_or_resume(None, &request()).unwrap();
+        let phase = CrashRegenerationPhase::RuntimeHostAuthority;
+        for axis in 0..3 {
+            let mut current = original.clone();
+            let mut expected = original.clone();
+            match axis {
+                0 => current.revision += 1,
+                1 => current.completed_phases.push(phase),
+                _ => expected.completed_phases.push(phase),
+            }
+            let mut state = state_with_transaction(current);
+            let before = state.clone();
+            assert_eq!(
+                state
+                    .interrupt_crash_regeneration(&expected, phase, "failure")
+                    .unwrap_err(),
+                "crash_regeneration_compare_and_swap_mismatch"
+            );
+            assert_eq!(state, before, "axis {axis}");
+        }
+    }
+
+    #[test]
+    fn aggregate_finish_cas_failures_preserve_state() {
+        let mut original = begin_or_resume(None, &request()).unwrap();
+        original.completed_phases = CrashRegenerationPhase::ORDER.to_vec();
+        for axis in 0..3 {
+            let mut current = original.clone();
+            let mut expected = original.clone();
+            match axis {
+                0 => current.revision += 1,
+                1 => current.completed_phases.clear(),
+                _ => expected.completed_phases.clear(),
+            }
+            let mut state = state_with_transaction(current);
+            let before = state.clone();
+            assert_eq!(
+                state.finish_crash_regeneration(&expected).unwrap_err(),
+                "crash_regeneration_compare_and_swap_mismatch"
+            );
+            assert_eq!(state, before, "axis {axis}");
+        }
+    }
+
+    #[test]
+    fn aggregate_assigns_successful_receipt_interruption_and_finish() {
+        let mut state = ServiceState::default();
+        let initial = state
+            .begin_or_resume_crash_regeneration(&request())
+            .unwrap();
+        let applied = state
+            .apply_crash_regeneration_phase(
+                &initial,
+                CrashRegenerationPhase::RuntimeHostAuthority,
+                runtime_receipt(),
+            )
+            .unwrap();
+        assert_eq!(applied.revision, 2);
+        assert_eq!(applied.evidence.runtime_host_pid, Some(7));
+        assert_eq!(state.crash_regeneration_transaction("tx-1"), Some(&applied));
+        let interrupted = state
+            .interrupt_crash_regeneration(
+                &applied,
+                CrashRegenerationPhase::BrowserAuthority,
+                "synthetic_failure",
+            )
+            .unwrap();
+        assert_eq!(interrupted.revision, 3);
+        assert_eq!(interrupted.state, CrashRegenerationState::Interrupted);
+        assert_eq!(interrupted.last_error.as_deref(), Some("synthetic_failure"));
+        assert_eq!(
+            state.crash_regeneration_transaction("tx-1"),
+            Some(&interrupted)
+        );
+
+        let mut completed = interrupted;
+        completed.completed_phases = CrashRegenerationPhase::ORDER.to_vec();
+        let mut state = state_with_transaction(completed.clone());
+        let finished = state.finish_crash_regeneration(&completed).unwrap();
+        assert_eq!(finished.revision, 4);
+        assert_eq!(finished.state, CrashRegenerationState::Ready);
+        assert_eq!(finished.current_phase, None);
+        assert_eq!(finished.last_error, None);
+        assert_eq!(
+            state.crash_regeneration_transaction("tx-1"),
+            Some(&finished)
+        );
+    }
+
+    #[test]
+    fn aggregate_status_order_and_redaction_preserve_the_original_snapshot() {
+        let mut state = ServiceState {
+            state_revision: 42,
+            ..ServiceState::default()
+        };
+        state
+            .unknown_fields
+            .insert("futureField".into(), serde_json::json!({"retained": true}));
+        for id in ["tx-z", "tx-a", "tx-m"] {
+            let mut request = request();
+            request.transaction_id = id.into();
+            state.begin_or_resume_crash_regeneration(&request).unwrap();
+        }
+        let statuses = state.crash_regeneration_statuses();
+        assert_eq!(
+            statuses
+                .iter()
+                .map(|status| status.transaction_id.as_str())
+                .collect::<Vec<_>>(),
+            ["tx-a", "tx-m", "tx-z"]
+        );
+        let before = state.clone();
+        let projected = state.without_crash_regeneration_transactions();
+        assert_eq!(state, before);
+        assert!(projected.crash_regeneration_statuses().is_empty());
+        let mut restored = projected;
+        restored.crash_regeneration_transactions = before.crash_regeneration_transactions.clone();
+        assert_eq!(restored, before);
     }
 
     #[test]

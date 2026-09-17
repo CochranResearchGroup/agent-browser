@@ -78,16 +78,7 @@ fn begin_or_resume<R: ServiceStateRepository>(
     repository: &R,
     request: &CrashRegenerationRequest,
 ) -> Result<CrashRegenerationTransaction, String> {
-    repository.mutate(|state| {
-        let existing = state
-            .crash_regeneration_transactions
-            .get(&request.transaction_id);
-        let transaction = agent_browser_service_model::begin_or_resume(existing, request)?;
-        state
-            .crash_regeneration_transactions
-            .insert(transaction.transaction_id.clone(), transaction.clone());
-        Ok(transaction)
-    })
+    repository.mutate(|state| state.begin_or_resume_crash_regeneration(request))
 }
 
 fn persist_phase_receipt<R: ServiceStateRepository>(
@@ -96,23 +87,8 @@ fn persist_phase_receipt<R: ServiceStateRepository>(
     phase: CrashRegenerationPhase,
     receipt: CrashRegenerationPhaseReceipt,
 ) -> Result<CrashRegenerationTransaction, String> {
-    repository.mutate(|state| {
-        let current = state
-            .crash_regeneration_transactions
-            .get_mut(&expected.transaction_id)
-            .ok_or_else(|| "crash_regeneration_transaction_missing".to_string())?;
-        if current.revision != expected.revision
-            || current.boot_epoch != expected.boot_epoch
-            || current.stable_identities != expected.stable_identities
-            || next_phase(current) != Some(phase)
-        {
-            return Err("crash_regeneration_compare_and_swap_mismatch".to_string());
-        }
-        let updated =
-            agent_browser_service_model::apply_phase_receipt(expected, phase, receipt.clone())?;
-        *current = updated.clone();
-        Ok(updated)
-    })
+    repository
+        .mutate(|state| state.apply_crash_regeneration_phase(expected, phase, receipt.clone()))
 }
 
 fn persist_interruption<R: ServiceStateRepository>(
@@ -122,14 +98,7 @@ fn persist_interruption<R: ServiceStateRepository>(
     error: &str,
 ) -> Result<(), String> {
     repository.mutate(|state| {
-        let current = state
-            .crash_regeneration_transactions
-            .get_mut(&expected.transaction_id)
-            .ok_or_else(|| "crash_regeneration_transaction_missing".to_string())?;
-        if current.revision != expected.revision || next_phase(current) != Some(phase) {
-            return Err("crash_regeneration_compare_and_swap_mismatch".to_string());
-        }
-        *current = agent_browser_service_model::interrupt(expected, phase, error)?;
+        state.interrupt_crash_regeneration(expected, phase, error)?;
         Ok(())
     })
 }
@@ -141,18 +110,7 @@ fn finish_ready<R: ServiceStateRepository>(
     if transaction.state == CrashRegenerationState::Ready {
         return Ok(transaction);
     }
-    repository.mutate(|state| {
-        let current = state
-            .crash_regeneration_transactions
-            .get_mut(&transaction.transaction_id)
-            .ok_or_else(|| "crash_regeneration_transaction_missing".to_string())?;
-        if current.revision != transaction.revision || next_phase(current).is_some() {
-            return Err("crash_regeneration_compare_and_swap_mismatch".to_string());
-        }
-        let updated = agent_browser_service_model::finish_ready(&transaction)?;
-        *current = updated.clone();
-        Ok(updated)
-    })
+    repository.mutate(|state| state.finish_crash_regeneration(&transaction))
 }
 
 #[cfg(test)]

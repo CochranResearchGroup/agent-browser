@@ -70,6 +70,13 @@ ${serviceStateMigrationFields.map((field) => `  ${serviceStateFieldAttributes[fi
 impl ServiceState {
   pub fn from_configured_entities() -> Self { Self {} }
   pub fn state_revision(&self) -> u64 { 0 }
+  pub fn crash_regeneration_transaction(&self) {}
+  pub fn crash_regeneration_statuses(&self) {}
+  pub fn begin_or_resume_crash_regeneration(&mut self) {}
+  pub fn apply_crash_regeneration_phase(&mut self) {}
+  pub fn interrupt_crash_regeneration(&mut self) {}
+  pub fn finish_crash_regeneration(&mut self) {}
+  pub fn without_crash_regeneration_transactions(&self) {}
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -310,6 +317,11 @@ for (const [name, mutation] of [
     'pub fn from_configured_entities() -> Self { Self {} }',
     '',
   ) }],
+  ['missing crash aggregate method', { serviceState: validServiceState.replace(
+    'pub fn interrupt_crash_regeneration(&mut self) {}',
+    '',
+  ) }],
+  ['direct CLI crash map access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.crash_regeneration_transactions; }\n' }],
   ['missing authentication aggregate method', { serviceState: validServiceState.replace(
     'pub fn observe_service_authentication_run(&mut self) {}',
     '',

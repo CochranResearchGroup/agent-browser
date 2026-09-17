@@ -314,6 +314,109 @@ fn overlay_persisted_profile_freshness(
 }
 
 impl ServiceState {
+    /// Inspect one crash transaction without granting mutable record access.
+    pub fn crash_regeneration_transaction(
+        &self,
+        id: &str,
+    ) -> Option<&CrashRegenerationTransaction> {
+        self.crash_regeneration_transactions.get(id)
+    }
+
+    /// Project crash status in deterministic transaction-map order.
+    pub fn crash_regeneration_statuses(&self) -> Vec<CrashRegenerationStatus> {
+        crate::crash_regeneration::crash_regeneration_statuses(
+            &self.crash_regeneration_transactions,
+        )
+    }
+
+    /// Insert or replay a transaction only after its identity checks succeed.
+    pub fn begin_or_resume_crash_regeneration(
+        &mut self,
+        request: &CrashRegenerationRequest,
+    ) -> Result<CrashRegenerationTransaction, String> {
+        let transaction = crate::crash_regeneration::begin_or_resume(
+            self.crash_regeneration_transactions
+                .get(&request.transaction_id),
+            request,
+        )?;
+        self.crash_regeneration_transactions
+            .insert(transaction.transaction_id.clone(), transaction.clone());
+        Ok(transaction)
+    }
+
+    /// Compare the persisted identity and phase before applying a validated receipt.
+    pub fn apply_crash_regeneration_phase(
+        &mut self,
+        expected: &CrashRegenerationTransaction,
+        phase: CrashRegenerationPhase,
+        receipt: CrashRegenerationPhaseReceipt,
+    ) -> Result<CrashRegenerationTransaction, String> {
+        let current =
+            self.crash_regeneration_transaction_for_transition(&expected.transaction_id)?;
+        if current.revision != expected.revision
+            || current.boot_epoch != expected.boot_epoch
+            || current.stable_identities != expected.stable_identities
+            || crate::crash_regeneration::next_phase(current) != Some(phase)
+        {
+            return Err("crash_regeneration_compare_and_swap_mismatch".to_string());
+        }
+        let updated = crate::crash_regeneration::apply_phase_receipt(expected, phase, receipt)?;
+        *current = updated.clone();
+        Ok(updated)
+    }
+
+    /// Persist an interruption only when the revision and pending phase still match.
+    pub fn interrupt_crash_regeneration(
+        &mut self,
+        expected: &CrashRegenerationTransaction,
+        phase: CrashRegenerationPhase,
+        error: &str,
+    ) -> Result<CrashRegenerationTransaction, String> {
+        let current =
+            self.crash_regeneration_transaction_for_transition(&expected.transaction_id)?;
+        if current.revision != expected.revision
+            || crate::crash_regeneration::next_phase(current) != Some(phase)
+        {
+            return Err("crash_regeneration_compare_and_swap_mismatch".to_string());
+        }
+        let updated = crate::crash_regeneration::interrupt(expected, phase, error)?;
+        *current = updated.clone();
+        Ok(updated)
+    }
+
+    /// Finish a persisted transaction after revision and phase-completion checks.
+    pub fn finish_crash_regeneration(
+        &mut self,
+        expected: &CrashRegenerationTransaction,
+    ) -> Result<CrashRegenerationTransaction, String> {
+        let current =
+            self.crash_regeneration_transaction_for_transition(&expected.transaction_id)?;
+        if current.revision != expected.revision
+            || crate::crash_regeneration::next_phase(current).is_some()
+        {
+            return Err("crash_regeneration_compare_and_swap_mismatch".to_string());
+        }
+        let updated = crate::crash_regeneration::finish_ready(expected)?;
+        *current = updated.clone();
+        Ok(updated)
+    }
+
+    /// Clone the aggregate without private crash evidence for public projection.
+    pub fn without_crash_regeneration_transactions(&self) -> Self {
+        let mut state = self.clone();
+        state.crash_regeneration_transactions.clear();
+        state
+    }
+
+    fn crash_regeneration_transaction_for_transition(
+        &mut self,
+        id: &str,
+    ) -> Result<&mut CrashRegenerationTransaction, String> {
+        self.crash_regeneration_transactions
+            .get_mut(id)
+            .ok_or_else(|| "crash_regeneration_transaction_missing".to_string())
+    }
+
     /// Inspect an authentication run without granting mutable record access.
     pub fn service_authentication_run(&self, id: &str) -> Option<&ServiceAuthenticationRunRecord> {
         self.authentication_runs.get(id)

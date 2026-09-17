@@ -28,6 +28,16 @@ const CRASH_REGENERATION_DEFINITIONS = [
   'CrashRegenerationPhaseReceipt',
 ];
 
+const SERVICE_STATE_CRASH_REGENERATION_METHODS = [
+  'crash_regeneration_transaction',
+  'crash_regeneration_statuses',
+  'begin_or_resume_crash_regeneration',
+  'apply_crash_regeneration_phase',
+  'interrupt_crash_regeneration',
+  'finish_crash_regeneration',
+  'without_crash_regeneration_transactions',
+];
+
 const CAPABILITY_REGISTRY_DEFINITIONS = [
   'BrowserCapabilityRegistry',
 ];
@@ -703,6 +713,16 @@ function check(root = repoRoot) {
     /BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*CrashRegenerationTransaction\s*>/
       .test(canonicalServiceState),
     'service-model ServiceState must use the canonical crash regeneration transaction',
+  );
+  for (const name of SERVICE_STATE_CRASH_REGENERATION_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own crash-regeneration aggregate method: ${name}`,
+    );
+  }
+  requireCondition(
+    !cliProductionSources.some((source) => /\.\s*crash_regeneration_transactions\b/.test(source)),
+    'CLI production code must not access ServiceState.crash_regeneration_transactions directly',
   );
   for (const name of SERVICE_STATE_CODEC_EXPORTS) {
     requireCondition(new RegExp(`\\b(?:pub\\s+)?(?:fn|struct|enum|type|const)\\s+${name}\\b`).test(serviceStateCode),
