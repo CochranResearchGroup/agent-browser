@@ -2152,6 +2152,79 @@ browser, profile, provider, credential, install, staging, production, or
 release effect occurred. Next action: freeze and extract only the Service
 challenge envelope. Do not combine it with aggregate and codec closure.
 
+## Checkpoint 35 | Service Challenge Envelope Interface Freeze
+
+State transition: the final embedded CLI owner is bounded before edits. The
+1,058-line `service_challenge_task` module currently mixes five responsibilities:
+command parsing, live Service State joins, repository and clock custody, the
+durable challenge envelope, and deterministic envelope transitions. This
+packet moves only the last two provider-free responsibilities into Service
+Model. Challenge Control remains the canonical owner of challenge requests,
+profiles, execution receipts, consumer evidence, and admission decisions.
+
+Frozen Service Model ownership:
+
+- `SERVICE_CHALLENGE_TASK_SCHEMA_VERSION`, the two registered downstream intent
+  constants, `ServiceChallengeTaskState`, `ServiceChallengeTaskSummary`,
+  `ServiceChallengeTaskRecord`, its private pending-effect record and kind, and
+  the typed start, resume, projection, and error vocabulary;
+- deterministic hash and ID derivation, exact idempotent start, status and
+  principal ownership, operation replay, deadline validation, provider-free
+  resume execution, cancellation, redacted projection, summary, empty-map
+  omission, and typed conversion of the opaque receipt into
+  `ChallengeConsumerEvidence` before admission; and
+- a two-phase resume seam: model preparation preserves replay, terminal-state,
+  timestamp, and deadline ordering; the CLI then supplies the exact current tab
+  join; model completion validates that handle, executes the deterministic
+  Challenge Control transition, and commits the next record. The full
+  Challenge Control receipt remains value-compatible opaque JSON in the
+  durable envelope.
+
+Frozen CLI ownership:
+
+- raw JSON command parsing, forbidden fields, required strings, registered
+  profile and fixture decoding, digest syntax checks, and public error strings;
+- current tab lookup, controlled-lease and principal joins, trace matching,
+  effective site-policy lookup, repository load and mutation, timestamps,
+  action dispatch, JSON response serialization, and test fixture assembly;
+- consumer-admission orchestration in its existing order: task and principal,
+  completed state, current retained handle, supplied handle, effective policy,
+  typed receipt decode, then Challenge Control admission. Pure receipt decode
+  and admission move behind a Service Model helper, but no generic JSON value
+  grants authority; and
+- no browser, desktop, provider, credential, network, filesystem, process,
+  transport, install, or runtime effect moves into Service Model.
+
+Required compatibility evidence:
+
+1. Freeze the current empty and populated Service State wire shape, schema and
+   enum casing, field order, defaults, unknown-field rejection, opaque receipt,
+   omission of empty task maps, stable hashes and IDs, and secret-free
+   projections.
+2. Preserve start error and replay ordering; resume operation replay before
+   terminal, timestamp, deadline, current-handle, profile, and execution
+   checks; cancellation replay before terminal and timestamp checks; and the
+   exact consumer-admission failure order.
+3. Require one canonical owner and direct `ServiceState` type for every moved
+   definition and decision. Extend the positive dependency and active serde
+   predicate guards with discriminating mutation fixtures.
+4. Run Service Model tests, focused Service challenge CLI tests, affected
+   authentication and navigation consumer tests, Service Model focused tests,
+   formatting, strict workspace Clippy, diff hygiene, architecture guards, and
+   local Service API and client parity. GitHub CI remains explicitly excluded.
+
+Critical path and worker boundary: the P205 owner freezes the API, integrates
+the CLI adapter, owns shared manifests and guards, interprets compatibility,
+and publishes the checkpoint. One balanced implementation worker may write
+only the new Service Model challenge module and its unit tests. A fresh strong
+reviewer receives a frozen read-only diff after local focused tests. Neither
+worker receives repository, plan, forge, runtime, browser, provider, install,
+or effect custody; workers may not spawn children.
+
+Progress classification: this interface freeze is blocker reduction, not
+acceptance. The next and only implementation outcome is the Service challenge
+envelope extraction. Aggregate and codec closure remains a later packet.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
