@@ -10,6 +10,15 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
 - [P209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md)
 
+## Turn 377 | 2026-09-17
+
+P209 checkpoint `89edafd5` proves request preparation rejects invalid policy,
+mutated evidence, malformed artifact identity or digest, pre-observation and
+expired preparation times, and over-budget execution plans before a provider
+request exists. The complete 49-test challenge-control crate, strict workspace
+Clippy, formatting and diff hygiene pass. No provider, browser, CAPTCHA,
+credential, runtime, production or CI-dispatch effect occurred.
+
 ## Turn 376 | 2026-09-17
 
 P209 checkpoint `e7250217` completes the provider-response temporal fixture:

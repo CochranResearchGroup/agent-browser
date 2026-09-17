@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 7
+Plan version: 8
 
 State: SOURCE ACCEPTED | P206 INTEGRATION PENDING
 
@@ -238,6 +238,13 @@ predates the request, claims a future production time, is produced at its own
 expiry, expires before adjudication, extends beyond request expiry, or is
 adjudicated at request expiry. The complete 49-test crate and strict workspace
 Clippy remain green.
+
+Checkpoint `89edafd5` completes request-preparation guard coverage in the
+existing execution-budget fixture. Invalid policy, mutated evidence, malformed
+artifact identity or digest, pre-observation preparation, expired evidence and
+over-budget execution plans all fail before a provider request exists. The
+complete 49-test crate, formatting, strict workspace Clippy and diff hygiene
+remain green.
 
 ## Stop Condition
 
