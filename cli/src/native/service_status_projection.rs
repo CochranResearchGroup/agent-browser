@@ -556,12 +556,14 @@ impl ServiceStatusProjector {
                         Some(&authority_state),
                     )
                 });
+        let current_boot_epoch = crate::process_identity::current_boot_epoch();
         let response = ServiceStatusResponse {
             control_plane: input.control_plane,
             profile_allocations,
             manual_browsers,
             retained_display_allocations: super::service_model::retained_display_allocation_summary(
                 &authority_state,
+                current_boot_epoch.as_deref(),
             ),
             presentation_capacity,
             desktop_evidence_policy:

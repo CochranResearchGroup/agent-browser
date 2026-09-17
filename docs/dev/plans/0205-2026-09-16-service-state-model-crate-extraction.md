@@ -282,6 +282,40 @@ Next action: publish this first extraction checkpoint, then move the next
 cohesive model family and replace hidden boot-epoch reads with explicit
 observation inputs before attempting the aggregate move.
 
+## Checkpoint 2 | Profile Readiness And Observation Inputs
+
+State transition: the crate now also owns profile readiness, compatibility
+evidence, browser-build parsing, allocation and keyring policy, their wire-value
+contracts, and the explicit freshness-evidence decision. Both Service State
+paths that previously read the host boot epoch now receive it as an explicit
+input sampled by CLI adapters.
+
+Acceptance state and progress classification: the second P1 packet is accepted
+locally. This is outcome progress. The CLI compatibility module re-exports the
+canonical crate types while all duplicate definitions and the duplicate
+freshness predicate are removed. Retained-display classification now uses a
+pure fail-closed prior-boot comparison.
+
+Evidence:
+
+- eight crate tests pass, including full readiness enum/default coverage,
+  browser-build aliases, record wire shape, and freshness decisions;
+- four focused CLI readiness derivation tests pass;
+- the CLI collection-record contract and persisted-freshness tests pass;
+- stale-session expiry passes with an explicit test boot epoch;
+- current, prior, missing, and unavailable boot-epoch comparisons pass as a
+  pure model test;
+- the architecture guard and formatting checks remain green.
+
+Material blockers: the aggregate still embeds durable records owned by other
+CLI modules, so it cannot move without first relocating those records or
+depending on an existing provider-free crate. P204 still owns the shared
+validation and planning surfaces.
+
+Next action: publish this checkpoint, then select the next self-contained
+durable family that reduces aggregate cross-module dependencies without moving
+effect adapters.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |

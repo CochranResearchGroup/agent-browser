@@ -48,9 +48,6 @@ pub const SERVICE_BROWSER_HOST_VALUES: [&str; 6] = [
     "cloud_provider",
     "attached_existing",
 ];
-pub const SERVICE_BROWSER_BUILD_VALUES: [&str; 3] =
-    ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"];
-
 /// In-memory provenance for service entities after persisted state, config, and
 /// shipped defaults are layered. This is intentionally not serialized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,19 +96,6 @@ pub struct ProfileSourceRecord {
     pub overrideable: bool,
     pub precedence: Vec<String>,
 }
-pub const SERVICE_PROFILE_ALLOCATION_VALUES: [&str; 5] = [
-    "shared_service",
-    "per_service",
-    "per_site",
-    "per_identity",
-    "caller_supplied",
-];
-pub const SERVICE_PROFILE_KEYRING_VALUES: [&str; 4] = [
-    "basic_password_store",
-    "real_os_keychain",
-    "managed_vault",
-    "manual_login_profile",
-];
 pub const SERVICE_LEASE_STATE_VALUES: [&str; 5] = [
     "shared",
     "exclusive",
@@ -132,28 +116,6 @@ pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 7] = [
 ];
 pub const SERVICE_PROFILE_LEASE_DISPOSITION_VALUES: [&str; 3] =
     ["new_browser", "reused_browser", "active_lease_conflict"];
-pub const SERVICE_PROFILE_READINESS_VALUES: [&str; 6] = [
-    "unknown",
-    "needs_manual_seeding",
-    "seeded_unknown_freshness",
-    "fresh",
-    "stale",
-    "blocked_by_attached_devtools",
-];
-pub const SERVICE_PROFILE_SEEDING_MODE_VALUES: [&str; 3] =
-    ["not_required", "detached_headed_no_cdp", "attachable_ok"];
-pub const SERVICE_PROFILE_SEEDING_HANDOFF_STATE_VALUES: [&str; 10] = [
-    "not_required",
-    "needs_manual_seeding",
-    "seeding_launched_detached",
-    "seeding_waiting_for_close",
-    "completion_declared_waiting_for_close",
-    "seeding_closed_unverified",
-    "verification_pending",
-    "fresh",
-    "failed",
-    "abandoned",
-];
 pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
     "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
 ];
@@ -2904,7 +2866,11 @@ impl ServiceState {
     /// snapshot reads stay deterministic. The retained browser and tab records
     /// are preserved while the expired session is removed from active browser
     /// ownership.
-    pub fn expire_stale_session_leases(&mut self, observed_at: &str) -> Vec<String> {
+    pub fn expire_stale_session_leases(
+        &mut self,
+        observed_at: &str,
+        current_boot_epoch: Option<&str>,
+    ) -> Vec<String> {
         let expired_session_ids = self
             .sessions
             .iter()
@@ -2937,7 +2903,7 @@ impl ServiceState {
             if let Some(session) = self.sessions.get_mut(session_id) {
                 session.lease = LeaseState::Expired;
                 session.last_lease_observed_at = Some(observed_at.to_string());
-                session.boot_epoch = crate::process_identity::current_boot_epoch();
+                session.boot_epoch = current_boot_epoch.map(str::to_string);
             }
         }
         for browser in self.browsers.values_mut() {
@@ -3428,7 +3394,7 @@ fn derive_profile_target_readiness(
         .target_readiness
         .iter()
         .filter(|row| !row.target_service_id.is_empty())
-        .filter(|row| row_has_explicit_freshness_evidence(row))
+        .filter(|row| row.has_explicit_freshness_evidence())
         .map(|row| (row.target_service_id.clone(), row.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut target_service_ids = profile
@@ -3465,16 +3431,6 @@ fn derive_profile_target_readiness(
             }
         })
         .collect()
-}
-
-fn row_has_explicit_freshness_evidence(row: &ProfileTargetReadiness) -> bool {
-    matches!(
-        row.state,
-        ProfileReadinessState::Fresh
-            | ProfileReadinessState::Stale
-            | ProfileReadinessState::BlockedByAttachedDevtools
-    ) || row.last_verified_at.is_some()
-        || row.freshness_expires_at.is_some()
 }
 
 fn normalize_explicit_target_readiness(
@@ -5198,53 +5154,18 @@ pub struct BrowserProfileRegistration {
     pub source: Option<String>,
 }
 
-/// Browser compatibility evidence retained on externally registered profiles.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct BrowserProfileCompatibilityEvidence {
-    pub browser_family: Option<String>,
-    pub browser_build: Option<BrowserBuild>,
-    pub browser_version: Option<String>,
-    pub evidence: String,
-    pub observed_at: Option<String>,
-    pub source: Option<String>,
-}
-
-/// No-launch service view of whether a profile can satisfy a target identity.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ProfileTargetReadiness {
-    pub target_service_id: String,
-    pub login_id: Option<String>,
-    pub state: ProfileReadinessState,
-    pub manual_seeding_required: bool,
-    pub evidence: String,
-    pub recommended_action: String,
-    pub seeding_mode: ProfileSeedingMode,
-    pub cdp_attachment_allowed_during_seeding: bool,
-    pub preferred_keyring: Option<ProfileKeyringPolicy>,
-    pub setup_scopes: Vec<String>,
-    pub last_verified_at: Option<String>,
-    pub freshness_expires_at: Option<String>,
-}
-
 pub use agent_browser_service_model::{
-    profile_seeding_handoff_id, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
-    ProfileSeedingMode,
+    profile_seeding_handoff_id, BrowserBuild, BrowserProfileCompatibilityEvidence,
+    ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileReadinessState,
+    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
+    ProfileTargetReadiness,
 };
-
-/// Profile readiness state for one target service or login identity.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProfileReadinessState {
-    #[default]
-    Unknown,
-    NeedsManualSeeding,
-    SeededUnknownFreshness,
-    Fresh,
-    Stale,
-    BlockedByAttachedDevtools,
-}
+#[cfg(test)]
+use agent_browser_service_model::{
+    SERVICE_BROWSER_BUILD_VALUES, SERVICE_PROFILE_ALLOCATION_VALUES,
+    SERVICE_PROFILE_KEYRING_VALUES, SERVICE_PROFILE_READINESS_VALUES,
+    SERVICE_PROFILE_SEEDING_MODE_VALUES,
+};
 
 /// A supervised or attached browser process known to the service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -5582,18 +5503,24 @@ impl RetainedDisplayAllocationCandidate {
 
 pub fn retained_display_allocation_candidates(
     state: &ServiceState,
+    current_boot_epoch: Option<&str>,
 ) -> Vec<RetainedDisplayAllocationCandidate> {
     let mut candidates = state
         .display_allocations
         .values()
-        .map(|allocation| classify_retained_display_allocation(state, allocation))
+        .map(|allocation| {
+            classify_retained_display_allocation(state, allocation, current_boot_epoch)
+        })
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| left.id.cmp(&right.id));
     candidates
 }
 
-pub fn retained_display_allocation_summary(state: &ServiceState) -> Value {
-    let candidates = retained_display_allocation_candidates(state);
+pub fn retained_display_allocation_summary(
+    state: &ServiceState,
+    current_boot_epoch: Option<&str>,
+) -> Value {
+    let candidates = retained_display_allocation_candidates(state, current_boot_epoch);
     let mut class_counts = BTreeMap::new();
     let mut apply_safe_ids = Vec::new();
     let mut retained_ids = Vec::new();
@@ -5624,13 +5551,9 @@ pub fn retained_display_allocation_summary(state: &ServiceState) -> Value {
 fn classify_retained_display_allocation(
     state: &ServiceState,
     allocation: &DisplayAllocation,
+    current_boot_epoch: Option<&str>,
 ) -> RetainedDisplayAllocationCandidate {
-    let current_boot_epoch = crate::process_identity::current_boot_epoch();
-    if crate::process_identity::boot_epoch_status(
-        allocation.boot_epoch.as_deref(),
-        current_boot_epoch.as_deref(),
-    ) == crate::process_identity::BootEpochStatus::Prior
-    {
+    if boot_epoch_is_prior(allocation.boot_epoch.as_deref(), current_boot_epoch) {
         return RetainedDisplayAllocationCandidate {
             id: allocation.id.clone(),
             class_name: "prior-boot-observation",
@@ -5809,6 +5732,16 @@ fn classify_retained_display_allocation(
         linked_incident_ids,
         linked_route_pool_entry_ids,
     }
+}
+
+fn boot_epoch_is_prior(
+    recorded_boot_epoch: Option<&str>,
+    current_boot_epoch: Option<&str>,
+) -> bool {
+    matches!(
+        (recorded_boot_epoch, current_boot_epoch),
+        (Some(recorded), Some(current)) if recorded != current
+    )
 }
 
 /// Pending or completed acquisition transaction for an operator-visible route.
@@ -6446,34 +6379,6 @@ pub enum BrowserHost {
     AttachedExisting,
 }
 
-/// Browser build or engine variant preference for a site policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BrowserBuild {
-    StockChrome,
-    StealthcdpChromium,
-    CdpFreeHeaded,
-}
-
-impl BrowserBuild {
-    pub fn parse_label(value: &str) -> Option<Self> {
-        match value.trim() {
-            "stock_chrome" | "stock-chrome" | "chrome" | "google_chrome" | "google-chrome" => {
-                Some(Self::StockChrome)
-            }
-            "stealthcdp_chromium"
-            | "stealthcdp-chromium"
-            | "stealth_chromium"
-            | "stealth-chromium"
-            | "chromium-stealthcdp" => Some(Self::StealthcdpChromium),
-            "cdp_free_headed" | "cdp-free-headed" | "cdp_free" | "cdp-free" => {
-                Some(Self::CdpFreeHeaded)
-            }
-            _ => None,
-        }
-    }
-}
-
 /// Browser process health as seen by the service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -6675,29 +6580,6 @@ pub enum ChallengePolicy {
     ProviderAllowed,
     ProviderPreferred,
     Deny,
-}
-
-/// How the service may allocate or share this profile.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProfileAllocationPolicy {
-    #[default]
-    SharedService,
-    PerService,
-    PerSite,
-    PerIdentity,
-    CallerSupplied,
-}
-
-/// Browser credential-store posture for launches using this profile.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProfileKeyringPolicy {
-    #[default]
-    BasicPasswordStore,
-    RealOsKeychain,
-    ManagedVault,
-    ManualLoginProfile,
 }
 
 /// Service-side actor category.
@@ -10811,7 +10693,8 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let expired = state.expire_stale_session_leases("2026-06-19T22:45:00Z");
+        let expired =
+            state.expire_stale_session_leases("2026-06-19T22:45:00Z", Some("test-boot-epoch"));
 
         assert_eq!(
             expired,
@@ -10821,6 +10704,10 @@ mod tests {
             ]
         );
         assert_eq!(state.sessions["expired-session"].lease, LeaseState::Expired);
+        assert_eq!(
+            state.sessions["expired-session"].boot_epoch.as_deref(),
+            Some("test-boot-epoch")
+        );
         assert_eq!(
             state.sessions["orphaned-session"].lease,
             LeaseState::Expired
@@ -10965,5 +10852,13 @@ mod tests {
         assert_eq!(provider_value["capabilities"][0], "human_approval");
         assert_eq!(challenge_value["kind"], "two_factor");
         assert_eq!(challenge_value["state"], "waiting_for_human");
+    }
+
+    #[test]
+    fn boot_epoch_prior_classification_is_pure_and_fail_closed() {
+        assert!(boot_epoch_is_prior(Some("boot:old"), Some("boot:new")));
+        assert!(!boot_epoch_is_prior(Some("boot:same"), Some("boot:same")));
+        assert!(!boot_epoch_is_prior(None, Some("boot:current")));
+        assert!(!boot_epoch_is_prior(Some("boot:recorded"), None));
     }
 }

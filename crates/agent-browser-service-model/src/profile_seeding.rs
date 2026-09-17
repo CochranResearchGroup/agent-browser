@@ -1,5 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+pub const SERVICE_PROFILE_SEEDING_MODE_VALUES: [&str; 3] =
+    ["not_required", "detached_headed_no_cdp", "attachable_ok"];
+
+pub const SERVICE_PROFILE_SEEDING_HANDOFF_STATE_VALUES: [&str; 10] = [
+    "not_required",
+    "needs_manual_seeding",
+    "seeding_launched_detached",
+    "seeding_waiting_for_close",
+    "completion_declared_waiting_for_close",
+    "seeding_closed_unverified",
+    "verification_pending",
+    "fresh",
+    "failed",
+    "abandoned",
+];
+
 /// Persisted lifecycle for a CDP-free profile seeding handoff.
 ///
 /// The record is deliberately provider-free. Its caller supplies process and

@@ -387,7 +387,9 @@ async fn reconcile_service_state_with_controller_fence(
     let mut remote_view_repair = reconcile_remote_view_state(state, controller_fence_held);
     remote_view_repair.completed_acquisition_rollbacks =
         reconcile_inactive_terminal_route_quarantines(state, &before, reconciled_at.as_str());
-    let expired_session_leases = state.expire_stale_session_leases(reconciled_at.as_str());
+    let current_boot_epoch = crate::process_identity::current_boot_epoch();
+    let expired_session_leases =
+        state.expire_stale_session_leases(reconciled_at.as_str(), current_boot_epoch.as_deref());
     let completed_runtime_lifecycles = reconcile_absent_runtime_lifecycles(state);
     normalize_ready_browsers_without_runtime_evidence(state);
     state.refresh_service_tab_handles();

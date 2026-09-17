@@ -1483,7 +1483,8 @@ pub(crate) mod service_commands {
             )
         });
         let display_allocation_candidates = if options.display_allocations {
-            retained_display_allocation_candidates(state)
+            let current_boot_epoch = crate::process_identity::current_boot_epoch();
+            retained_display_allocation_candidates(state, current_boot_epoch.as_deref())
         } else {
             Vec::new()
         };
