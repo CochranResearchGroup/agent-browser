@@ -457,6 +457,51 @@ fn serialized_effect_instructions_and_retry_fields_are_rejected() {
 }
 
 #[test]
+fn serialized_requests_reject_effect_authority_and_nested_unknown_fields() {
+    let policy = policy();
+    let evidence = evidence();
+    let request = prepare_request(&policy, &evidence);
+    let serialized = serde_json::to_value(request).unwrap();
+
+    for (field, value) in [
+        ("coordinate", serde_json::json!({"x": 10, "y": 20})),
+        ("eventSequence", serde_json::json!(["pointer_down"])),
+        ("retry", serde_json::json!(true)),
+        ("instructions", serde_json::json!("click at 10,20")),
+    ] {
+        let mut smuggled = serialized.clone();
+        smuggled
+            .as_object_mut()
+            .unwrap()
+            .insert(field.to_string(), value);
+        assert!(
+            serde_json::from_value::<agent_browser_challenge_control::VisualProviderRequest>(
+                smuggled
+            )
+            .is_err()
+        );
+    }
+
+    let mut artifact_smuggling = serialized.clone();
+    artifact_smuggling["preparedArtifact"]["bytes"] = serde_json::json!("opaque-image-data");
+    assert!(
+        serde_json::from_value::<agent_browser_challenge_control::VisualProviderRequest>(
+            artifact_smuggling
+        )
+        .is_err()
+    );
+
+    let mut plan_smuggling = serialized;
+    plan_smuggling["executionPlan"]["repeatCount"] = serde_json::json!(2);
+    assert!(
+        serde_json::from_value::<agent_browser_challenge_control::VisualProviderRequest>(
+            plan_smuggling
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn replaying_identical_provider_input_is_deterministic_and_effect_free() {
     let policy = policy();
     let evidence = evidence();
