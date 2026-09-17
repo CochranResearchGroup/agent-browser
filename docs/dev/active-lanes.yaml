@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 80efb9511f0c89ee637a61b1e4637393c77be1a4
+    checkpoint: ea5195653cd8024bb60096a4d70c21b5f6bb70c4
     remote_ref: refs/remotes/origin/challenge/p197-consumer-integration
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free W6 validation
-    validation_status: pending
-    validation_ref: null
+    validation_status: combined provider-free challenge-control, focused authentication and navigation, strict Clippy and formatting, Service API/MCP parity, service client, no-launch collections, route-confusion, docs build, and documentation contract checks green; protected dependency integration and exact-head forge CI pending
+    validation_ref: ea5195653cd8024bb60096a4d70c21b5f6bb70c4
     work_items: [CochranResearchGroup/agent-browser#127]
-    dependencies: []
+    dependencies: [P202]
     overlaps: [P202]
     reconciled_overlaps: [P202]
-    blocker: refreshed exact-head validation and shared user-facing documentation remain before integration; P202 is the current primary writer for those shared surfaces, and every live challenge effect stays with issue #66
+    blocker: P202 protected integration, canonical-main reconciliation, final branch publication, and exact-head forge CI remain; every live challenge effect stays with issue #66
     updated_at: 2026-09-16
   - id: P202
     product_lane: PL-PLATFORM
