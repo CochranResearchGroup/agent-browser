@@ -573,9 +573,7 @@ impl ServiceStatusProjector {
             closed_tab_projection,
             launch_config: input.launch_config,
             service_state: response_state,
-            challenge_task_summary: agent_browser_service_model::challenge_task_summary(
-                &authority_state.challenge_tasks,
-            ),
+            challenge_task_summary: authority_state.service_challenge_task_summary(),
             service_state_projection,
             status_projection: StatusProjection {
                 schema_version: 1,

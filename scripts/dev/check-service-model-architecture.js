@@ -127,6 +127,15 @@ const SERVICE_CHALLENGE_CONSTANTS = [
   'NAVIGATION_CHALLENGE_INTENT_ID',
 ];
 
+const SERVICE_STATE_CHALLENGE_METHODS = [
+  'service_challenge_task',
+  'service_challenge_task_summary',
+  'start_service_challenge_task',
+  'status_service_challenge_task',
+  'resume_service_challenge_task',
+  'cancel_service_challenge_task',
+];
+
 const SERVICE_STATE_DIRECT_OWNER_FIELDS = [
   [
     'presentation_capacity',
@@ -489,6 +498,9 @@ function check(root = repoRoot) {
     .replace(/\bcrate\s*::/g, 'agent_browser_service_model::');
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
+  const cliProductionSources = rustFilesUnder(join(root, 'cli/src'))
+    .map((path) => readFileSync(path, 'utf8').split('#[cfg(test)]', 1)[0])
+    .map((source) => withoutCommentsAndStrings(source));
 
   const authenticationManifestPath = join(root,
     'crates/agent-browser-authentication-control/Cargo.toml');
@@ -874,6 +886,16 @@ function check(root = repoRoot) {
       /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_service_model\s*::\s*challenge_task_map_is_empty["'][^\]]*\)\s*\]/,
     )),
     'service-model ServiceState must use the canonical Service challenge empty-map decision',
+  );
+  for (const name of SERVICE_STATE_CHALLENGE_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own Service challenge aggregate method: ${name}`,
+    );
+  }
+  requireCondition(
+    !cliProductionSources.some((source) => /\.\s*challenge_tasks\b/.test(source)),
+    'CLI production code must not access ServiceState.challenge_tasks directly',
   );
   for (const name of ABANDONED_RETIREMENT_RECORDS) {
     const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');

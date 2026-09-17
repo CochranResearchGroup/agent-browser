@@ -178,6 +178,7 @@ pub enum ServiceChallengeTaskError {
     NotResumable,
     ResumedAtInvalid,
     DeadlineExceeded,
+    ServiceTabHandleMissing,
     ServiceTabHandleMismatch,
     ProfileNotRegistered,
     ExecutionInvalid,
@@ -206,6 +207,9 @@ impl ServiceChallengeTaskError {
             Self::NotResumable => "challenge_task_not_resumable".to_string(),
             Self::ResumedAtInvalid => "challenge_task_resumed_at_invalid".to_string(),
             Self::DeadlineExceeded => "challenge_task_deadline_exceeded".to_string(),
+            Self::ServiceTabHandleMissing => {
+                "challenge_task_service_tab_handle_missing".to_string()
+            }
             Self::ServiceTabHandleMismatch => {
                 "challenge_task_service_tab_handle_mismatch".to_string()
             }

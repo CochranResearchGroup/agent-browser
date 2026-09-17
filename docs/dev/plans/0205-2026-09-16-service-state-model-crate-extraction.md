@@ -2670,6 +2670,52 @@ mutation clusters still use migration-only field access. The next bounded
 outcome is the Service challenge task map kernel, followed separately by the
 authentication run map kernel.
 
+## Checkpoint 42 | Service Challenge Task Map Kernel Accepted
+
+State transition: the canonical `ServiceState` aggregate now owns challenge
+task lookup, summary, start, status, resume, and cancellation. These methods
+compose the existing record-level decisions while owning map replay and
+insertion semantics. Replay remains non-mutating, start inserts only a newly
+created task, resume resolves the current Service tab handle only after replay
+has been ruled out, and cancellation inserts only the newly cancelled record.
+The model now reports the formerly adapter-local missing-handle failure through
+the stable `challenge_task_service_tab_handle_missing` CLI identity.
+
+The CLI continues to own command parsing, timestamps, repository custody, the
+exact-current-handle preparation for start, task projection, and consumer
+admission joins. Production CLI code has zero direct access to
+`ServiceState.challenge_tasks`; four remaining direct accesses are confined to
+the existing test module and remain part of the final fixture/privacy packet.
+The architecture contract requires all six aggregate methods and rejects a
+production CLI direct-map access, with negative fixtures for both regressions.
+
+Acceptance evidence:
+
+- all 157 Service Model unit tests and fourteen integration tests pass;
+- the focused Service challenge adapter lane passes four tests, the focused
+  resource lane passes 39 tests, and the focused status lane passes 49 tests;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  changed-surface selector readback, the architecture contract, and all
+  architecture mutation fixtures pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_challenge_state_kernel` used
+the requested balanced `gpt-5.6-terra` high route for the aggregate mutation
+kernel and model tests. `/root/p205_challenge_cli_cutover` used the requested
+capable `gpt-5.6-sol` high route for the higher-fan-out adapter cutover. The
+primary reviewed the combined ordering and error semantics, strengthened the
+architecture contract and negative fixtures, and independently ran every
+acceptance gate. Runtime-reported effective model metadata was not
+independently exposed.
+
+Acceptance state and progress classification: the Service challenge task map
+kernel is accepted and is outcome progress toward P4 field privacy. The next
+bounded outcome is the Service authentication run map kernel. P4 remains open
+for that kernel and the crash, lease, authority, lifecycle, repository-sidecar,
+presentation, fixture-migration, privacy, facade-deletion, and final
+measurement gates.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -2677,9 +2723,9 @@ authentication run map kernel.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | aggregate and twenty-three prerequisite families accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections accepted; typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, and Service challenge task map kernel accepted; remaining typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | canonical aggregate accepted through Checkpoint 40 |
+| Focused correctness | crate tests and affected CLI adapter tests | Service challenge task map kernel accepted through Checkpoint 42 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

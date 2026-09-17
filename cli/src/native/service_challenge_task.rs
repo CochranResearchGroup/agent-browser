@@ -11,13 +11,9 @@ use agent_browser_challenge_control::{
     ChallengeConsumerKind, ChallengeTaskFixture,
 };
 use agent_browser_service_model::{
-    admit_challenge_consumer_from_receipt, cancel_service_challenge_task,
-    complete_service_challenge_task_resume, complete_service_challenge_task_start,
-    prepare_service_challenge_task_resume, prepare_service_challenge_task_start,
-    project_service_challenge_task, service_challenge_task_status,
-    ServiceChallengeTaskCancelDecision, ServiceChallengeTaskCancelInput,
-    ServiceChallengeTaskResumeDecision, ServiceChallengeTaskResumeInput,
-    ServiceChallengeTaskStartDecision, ServiceChallengeTaskStartInput,
+    admit_challenge_consumer_from_receipt, project_service_challenge_task,
+    ServiceChallengeTaskCancelInput, ServiceChallengeTaskResumeInput,
+    ServiceChallengeTaskStartInput,
 };
 pub(crate) use agent_browser_service_model::{
     ServiceChallengeTaskRecord, ServiceChallengeTaskState, AUTHENTICATION_CHALLENGE_INTENT_ID,
@@ -179,42 +175,27 @@ fn exact_current_handle(
     }
 }
 
-fn start_task_in_state(
-    state: &mut ServiceState,
+fn challenge_task_start_input(
+    state: &ServiceState,
     intent: ChallengeTaskStartIntent,
     created_at: &str,
-) -> Result<(ServiceChallengeTaskRecord, bool), String> {
+) -> Result<ServiceChallengeTaskStartInput, String> {
     let current = exact_current_handle(state, &intent)?;
-    let decision = prepare_service_challenge_task_start(
-        &state.challenge_tasks,
-        ServiceChallengeTaskStartInput {
-            service_name: intent.service_name,
-            agent_name: intent.agent_name,
-            task_name: intent.task_name,
-            principal_id: intent.principal_id,
-            challenge_profile_id: intent.challenge_profile_id,
-            site_policy_digest: intent.site_policy_digest,
-            downstream_intent_id: intent.downstream_intent_id,
-            fixture: intent.fixture,
-            idempotency_key: intent.idempotency_key,
-            deadline_ms: intent.deadline_ms,
-            max_transitions: intent.max_transitions,
-            current_service_tab_handle: current,
-            created_at: created_at.to_string(),
-        },
-    )
-    .map_err(|error| error.cli_message())?;
-    match decision {
-        ServiceChallengeTaskStartDecision::Replayed(record) => Ok((*record, true)),
-        ServiceChallengeTaskStartDecision::Create(prepared) => {
-            let record = complete_service_challenge_task_start(*prepared)
-                .map_err(|error| error.cli_message())?;
-            state
-                .challenge_tasks
-                .insert(record.task_id.clone(), record.clone());
-            Ok((record, false))
-        }
-    }
+    Ok(ServiceChallengeTaskStartInput {
+        service_name: intent.service_name,
+        agent_name: intent.agent_name,
+        task_name: intent.task_name,
+        principal_id: intent.principal_id,
+        challenge_profile_id: intent.challenge_profile_id,
+        site_policy_digest: intent.site_policy_digest,
+        downstream_intent_id: intent.downstream_intent_id,
+        fixture: intent.fixture,
+        idempotency_key: intent.idempotency_key,
+        deadline_ms: intent.deadline_ms,
+        max_transitions: intent.max_transitions,
+        current_service_tab_handle: current,
+        created_at: created_at.to_string(),
+    })
 }
 
 fn require_current_record_handle(
@@ -286,8 +267,7 @@ pub(crate) fn admit_challenge_consumer(
     consumer: ChallengeConsumerKind,
 ) -> Result<ChallengeConsumerAdmissionReceipt, String> {
     let record = state
-        .challenge_tasks
-        .get(challenge_task_id)
+        .service_challenge_task(challenge_task_id)
         .ok_or_else(|| "challenge_consumer_task_not_found".to_string())?;
     if record.principal_id != principal_id {
         return Err("challenge_task_principal_mismatch".to_string());
@@ -312,77 +292,6 @@ pub(crate) fn admit_challenge_consumer(
     .map_err(|error| error.cli_message())
 }
 
-fn status_task_in_state(
-    state: &ServiceState,
-    task_id: &str,
-    principal_id: &str,
-) -> Result<ServiceChallengeTaskRecord, String> {
-    service_challenge_task_status(&state.challenge_tasks, task_id, principal_id)
-        .map_err(|error| error.cli_message())
-}
-
-fn resume_task_in_state(
-    state: &mut ServiceState,
-    task_id: &str,
-    principal_id: &str,
-    operation_id: &str,
-    resumed_at: &str,
-) -> Result<(ServiceChallengeTaskRecord, bool), String> {
-    let decision = prepare_service_challenge_task_resume(
-        &state.challenge_tasks,
-        ServiceChallengeTaskResumeInput {
-            task_id: task_id.to_string(),
-            principal_id: principal_id.to_string(),
-            operation_id: operation_id.to_string(),
-            resumed_at: resumed_at.to_string(),
-        },
-    )
-    .map_err(|error| error.cli_message())?;
-    match decision {
-        ServiceChallengeTaskResumeDecision::Replayed(record) => Ok((*record, true)),
-        ServiceChallengeTaskResumeDecision::Execute(prepared) => {
-            let current = state
-                .service_tab_handle(prepared.service_tab_id())
-                .ok_or_else(|| "challenge_task_service_tab_handle_missing".to_string())?;
-            let record = complete_service_challenge_task_resume(*prepared, current)
-                .map_err(|error| error.cli_message())?;
-            state
-                .challenge_tasks
-                .insert(record.task_id.clone(), record.clone());
-            Ok((record, false))
-        }
-    }
-}
-
-fn cancel_task_in_state(
-    state: &mut ServiceState,
-    task_id: &str,
-    principal_id: &str,
-    operation_id: &str,
-    cancelled_at: &str,
-) -> Result<(ServiceChallengeTaskRecord, bool), String> {
-    let decision = cancel_service_challenge_task(
-        &state.challenge_tasks,
-        ServiceChallengeTaskCancelInput {
-            task_id: task_id.to_string(),
-            principal_id: principal_id.to_string(),
-            operation_id: operation_id.to_string(),
-            cancelled_at: cancelled_at.to_string(),
-        },
-    )
-    .map_err(|error| error.cli_message())?;
-    match decision {
-        ServiceChallengeTaskCancelDecision::Replayed(record) => Ok((*record, true)),
-        ServiceChallengeTaskCancelDecision::Cancelled(record) => {
-            let record = *record;
-            state
-                .challenge_tasks
-                .insert(record.task_id.clone(), record.clone());
-            Ok((record, false))
-        }
-    }
-}
-
 fn task_projection(record: &ServiceChallengeTaskRecord, replayed: bool) -> Value {
     serde_json::to_value(project_service_challenge_task(record, replayed))
         .expect("Service challenge projection must serialize")
@@ -403,15 +312,21 @@ pub(crate) fn handle_service_challenge_task(command: &Value) -> Result<Value, St
         "service_challenge_task_start" => {
             let intent = parse_start_intent(command)?;
             let created_at = Utc::now().to_rfc3339();
-            let (record, replayed) = repository
-                .mutate(|state| start_task_in_state(state, intent.clone(), &created_at))?;
+            let (record, replayed) = repository.mutate(|state| {
+                let input = challenge_task_start_input(state, intent.clone(), &created_at)?;
+                state
+                    .start_service_challenge_task(input)
+                    .map_err(|error| error.cli_message())
+            })?;
             Ok(task_projection(&record, replayed))
         }
         "service_challenge_task_status" => {
             let task_id = required_string(command, "challengeTaskId")?;
             let principal_id = caller_principal(command)?;
             let state = repository.load_snapshot()?;
-            let record = status_task_in_state(&state, &task_id, &principal_id)?;
+            let record = state
+                .status_service_challenge_task(&task_id, &principal_id)
+                .map_err(|error| error.cli_message())?;
             Ok(task_projection(&record, false))
         }
         "service_challenge_task_resume" => {
@@ -420,7 +335,14 @@ pub(crate) fn handle_service_challenge_task(command: &Value) -> Result<Value, St
             let operation_id = required_string(command, "operationId")?;
             let resumed_at = Utc::now().to_rfc3339();
             let (record, replayed) = repository.mutate(|state| {
-                resume_task_in_state(state, &task_id, &principal_id, &operation_id, &resumed_at)
+                state
+                    .resume_service_challenge_task(ServiceChallengeTaskResumeInput {
+                        task_id: task_id.clone(),
+                        principal_id: principal_id.clone(),
+                        operation_id: operation_id.clone(),
+                        resumed_at: resumed_at.clone(),
+                    })
+                    .map_err(|error| error.cli_message())
             })?;
             Ok(task_projection(&record, replayed))
         }
@@ -430,7 +352,14 @@ pub(crate) fn handle_service_challenge_task(command: &Value) -> Result<Value, St
             let operation_id = required_string(command, "operationId")?;
             let cancelled_at = Utc::now().to_rfc3339();
             let (record, replayed) = repository.mutate(|state| {
-                cancel_task_in_state(state, &task_id, &principal_id, &operation_id, &cancelled_at)
+                state
+                    .cancel_service_challenge_task(ServiceChallengeTaskCancelInput {
+                        task_id: task_id.clone(),
+                        principal_id: principal_id.clone(),
+                        operation_id: operation_id.clone(),
+                        cancelled_at: cancelled_at.clone(),
+                    })
+                    .map_err(|error| error.cli_message())
             })?;
             Ok(task_projection(&record, replayed))
         }
@@ -470,15 +399,19 @@ pub(crate) fn complete_provider_free_test_task(
         "maxTransitions": 8,
         "serviceTabHandle": supplied_handle,
     });
-    let (record, _) =
-        start_task_in_state(state, parse_start_intent(&command)?, "2026-09-16T00:00:00Z")?;
-    let (completed, _) = resume_task_in_state(
-        state,
-        &record.task_id,
-        principal_id,
-        "complete-provider-free-test-task",
-        "2026-09-16T00:01:00Z",
-    )?;
+    let input =
+        challenge_task_start_input(state, parse_start_intent(&command)?, "2026-09-16T00:00:00Z")?;
+    let (record, _) = state
+        .start_service_challenge_task(input)
+        .map_err(|error| error.cli_message())?;
+    let (completed, _) = state
+        .resume_service_challenge_task(ServiceChallengeTaskResumeInput {
+            task_id: record.task_id,
+            principal_id: principal_id.to_string(),
+            operation_id: "complete-provider-free-test-task".to_string(),
+            resumed_at: "2026-09-16T00:01:00Z".to_string(),
+        })
+        .map_err(|error| error.cli_message())?;
     Ok(completed.task_id)
 }
 
@@ -589,27 +522,32 @@ mod tests {
         let mut state = service_state();
         let command = start_command(&state);
         let intent = parse_start_intent(&command).unwrap();
-        let (first, replayed) =
-            start_task_in_state(&mut state, intent, "2026-09-15T12:00:00Z").unwrap();
+        let input = challenge_task_start_input(&state, intent, "2026-09-15T12:00:00Z").unwrap();
+        let (first, replayed) = state.start_service_challenge_task(input).unwrap();
         assert!(!replayed);
 
         let replay_intent = parse_start_intent(&command).unwrap();
-        let (second, replayed) =
-            start_task_in_state(&mut state, replay_intent, "2026-09-15T12:01:00Z").unwrap();
+        let replay_input =
+            challenge_task_start_input(&state, replay_intent, "2026-09-15T12:01:00Z").unwrap();
+        let (second, replayed) = state.start_service_challenge_task(replay_input).unwrap();
         assert!(replayed);
         assert_eq!(first, second);
         assert_eq!(state.challenge_tasks.len(), 1);
 
         let mut conflicting = command.clone();
         conflicting["downstreamIntentId"] = json!("different-intent");
+        let conflicting_input = challenge_task_start_input(
+            &state,
+            parse_start_intent(&conflicting).unwrap(),
+            "2026-09-15T12:01:00Z",
+        )
+        .unwrap();
         assert_eq!(
-            start_task_in_state(
-                &mut state,
-                parse_start_intent(&conflicting).unwrap(),
-                "2026-09-15T12:01:00Z",
-            )
-            .unwrap_err(),
-            "challenge_task_idempotency_conflict"
+            state
+                .start_service_challenge_task(conflicting_input)
+                .unwrap_err()
+                .cli_message(),
+            "challenge_task_idempotency_conflict",
         );
 
         let projection = task_projection(&first, false).to_string();
@@ -623,25 +561,29 @@ mod tests {
     fn status_resume_and_cancel_enforce_ownership_and_terminal_replay() {
         let mut state = service_state();
         let command = start_command(&state);
-        let (record, _) = start_task_in_state(
-            &mut state,
+        let input = challenge_task_start_input(
+            &state,
             parse_start_intent(&command).unwrap(),
             "2026-09-15T12:00:00Z",
         )
         .unwrap();
+        let (record, _) = state.start_service_challenge_task(input).unwrap();
 
         assert_eq!(
-            status_task_in_state(&state, &record.task_id, "different-principal").unwrap_err(),
-            "challenge_task_principal_mismatch"
+            state
+                .status_service_challenge_task(&record.task_id, "different-principal")
+                .unwrap_err()
+                .cli_message(),
+            "challenge_task_principal_mismatch",
         );
-        let (completed, replayed) = resume_task_in_state(
-            &mut state,
-            &record.task_id,
-            "principal-1",
-            "resume-operation-1",
-            "2026-09-15T12:01:00Z",
-        )
-        .unwrap();
+        let (completed, replayed) = state
+            .resume_service_challenge_task(ServiceChallengeTaskResumeInput {
+                task_id: record.task_id.clone(),
+                principal_id: "principal-1".to_string(),
+                operation_id: "resume-operation-1".to_string(),
+                resumed_at: "2026-09-15T12:01:00Z".to_string(),
+            })
+            .unwrap();
         assert!(!replayed);
         assert_eq!(completed.state, ServiceChallengeTaskState::Completed);
         assert_eq!(completed.receipt.as_ref().unwrap()["admission"], "admitted");
@@ -660,63 +602,70 @@ mod tests {
             1
         );
 
-        let (replayed_record, replayed) = resume_task_in_state(
-            &mut state,
-            &record.task_id,
-            "principal-1",
-            "resume-operation-1",
-            "2026-09-15T12:02:00Z",
-        )
-        .unwrap();
+        let (replayed_record, replayed) = state
+            .resume_service_challenge_task(ServiceChallengeTaskResumeInput {
+                task_id: record.task_id.clone(),
+                principal_id: "principal-1".to_string(),
+                operation_id: "resume-operation-1".to_string(),
+                resumed_at: "2026-09-15T12:02:00Z".to_string(),
+            })
+            .unwrap();
         assert!(replayed);
 
         let mut expired_state = service_state();
         let expired_command = start_command(&expired_state);
-        let (expired, _) = start_task_in_state(
-            &mut expired_state,
+        let expired_input = challenge_task_start_input(
+            &expired_state,
             parse_start_intent(&expired_command).unwrap(),
             "2026-09-15T12:00:00Z",
         )
         .unwrap();
+        let (expired, _) = expired_state
+            .start_service_challenge_task(expired_input)
+            .unwrap();
         assert_eq!(
-            resume_task_in_state(
-                &mut expired_state,
-                &expired.task_id,
-                "principal-1",
-                "expired-operation-1",
-                "2026-09-15T12:03:00Z",
-            )
-            .unwrap_err(),
-            "challenge_task_deadline_exceeded"
+            expired_state
+                .resume_service_challenge_task(ServiceChallengeTaskResumeInput {
+                    task_id: expired.task_id,
+                    principal_id: "principal-1".to_string(),
+                    operation_id: "expired-operation-1".to_string(),
+                    resumed_at: "2026-09-15T12:03:00Z".to_string(),
+                })
+                .unwrap_err()
+                .cli_message(),
+            "challenge_task_deadline_exceeded",
         );
         assert_eq!(replayed_record, completed);
 
         let mut cancel_state = service_state();
         let cancel_command = start_command(&cancel_state);
-        let (cancel_record, _) = start_task_in_state(
-            &mut cancel_state,
+        let cancel_input = challenge_task_start_input(
+            &cancel_state,
             parse_start_intent(&cancel_command).unwrap(),
             "2026-09-15T12:00:00Z",
         )
         .unwrap();
-        let (cancelled, replayed) = cancel_task_in_state(
-            &mut cancel_state,
-            &cancel_record.task_id,
-            "principal-1",
-            "cancel-operation-1",
-            "2026-09-15T12:01:00Z",
-        )
-        .unwrap();
+        let (cancel_record, _) = cancel_state
+            .start_service_challenge_task(cancel_input)
+            .unwrap();
+        let (cancelled, replayed) = cancel_state
+            .cancel_service_challenge_task(ServiceChallengeTaskCancelInput {
+                task_id: cancel_record.task_id.clone(),
+                principal_id: "principal-1".to_string(),
+                operation_id: "cancel-operation-1".to_string(),
+                cancelled_at: "2026-09-15T12:01:00Z".to_string(),
+            })
+            .unwrap();
         assert!(!replayed);
         assert_eq!(cancelled.state, ServiceChallengeTaskState::Cancelled);
-        let (_, replayed) = cancel_task_in_state(
-            &mut cancel_state,
-            &cancel_record.task_id,
-            "principal-1",
-            "cancel-operation-1",
-            "2026-09-15T12:02:00Z",
-        )
-        .unwrap();
+        let (_, replayed) = cancel_state
+            .cancel_service_challenge_task(ServiceChallengeTaskCancelInput {
+                task_id: cancel_record.task_id,
+                principal_id: "principal-1".to_string(),
+                operation_id: "cancel-operation-1".to_string(),
+                cancelled_at: "2026-09-15T12:02:00Z".to_string(),
+            })
+            .unwrap();
         assert!(replayed);
     }
 
@@ -730,21 +679,22 @@ mod tests {
             json!(effective_site_policy_digest(state, "example").unwrap());
         command["downstreamIntentId"] = json!(downstream_intent_id);
         command["fixtureScenarioId"] = json!(fixture);
-        let (record, _) = start_task_in_state(
+        let input = challenge_task_start_input(
             state,
             parse_start_intent(&command).unwrap(),
             "2026-09-15T12:00:00Z",
         )
         .unwrap();
-        resume_task_in_state(
-            state,
-            &record.task_id,
-            "principal-1",
-            "complete-consumer-task",
-            "2026-09-15T12:01:00Z",
-        )
-        .unwrap()
-        .0
+        let (record, _) = state.start_service_challenge_task(input).unwrap();
+        state
+            .resume_service_challenge_task(ServiceChallengeTaskResumeInput {
+                task_id: record.task_id,
+                principal_id: "principal-1".to_string(),
+                operation_id: "complete-consumer-task".to_string(),
+                resumed_at: "2026-09-15T12:01:00Z".to_string(),
+            })
+            .unwrap()
+            .0
     }
 
     #[test]

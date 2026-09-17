@@ -1686,9 +1686,7 @@ fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> Reso
                     == crate::runtime_owner_transfer::CleanupObligationState::Unknown
             })
             .count(),
-        challenge_tasks: agent_browser_service_model::challenge_task_summary(
-            &state.challenge_tasks,
-        ),
+        challenge_tasks: state.service_challenge_task_summary(),
     }
 }
 

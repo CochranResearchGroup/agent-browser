@@ -760,6 +760,70 @@ impl ServiceState {
         changed
     }
 
+    pub fn service_challenge_task(&self, id: &str) -> Option<&ServiceChallengeTaskRecord> {
+        self.challenge_tasks.get(id)
+    }
+
+    pub fn service_challenge_task_summary(&self) -> ServiceChallengeTaskSummary {
+        challenge_task_summary(&self.challenge_tasks)
+    }
+
+    pub fn start_service_challenge_task(
+        &mut self,
+        input: ServiceChallengeTaskStartInput,
+    ) -> Result<(ServiceChallengeTaskRecord, bool), ServiceChallengeTaskError> {
+        match prepare_service_challenge_task_start(&self.challenge_tasks, input)? {
+            ServiceChallengeTaskStartDecision::Replayed(record) => Ok((*record, true)),
+            ServiceChallengeTaskStartDecision::Create(prepared) => {
+                let record = complete_service_challenge_task_start(*prepared)?;
+                self.challenge_tasks
+                    .insert(record.task_id.clone(), record.clone());
+                Ok((record, false))
+            }
+        }
+    }
+
+    pub fn status_service_challenge_task(
+        &self,
+        id: &str,
+        principal: &str,
+    ) -> Result<ServiceChallengeTaskRecord, ServiceChallengeTaskError> {
+        service_challenge_task_status(&self.challenge_tasks, id, principal)
+    }
+
+    pub fn resume_service_challenge_task(
+        &mut self,
+        input: ServiceChallengeTaskResumeInput,
+    ) -> Result<(ServiceChallengeTaskRecord, bool), ServiceChallengeTaskError> {
+        match prepare_service_challenge_task_resume(&self.challenge_tasks, input)? {
+            ServiceChallengeTaskResumeDecision::Replayed(record) => Ok((*record, true)),
+            ServiceChallengeTaskResumeDecision::Execute(prepared) => {
+                let current_service_tab_handle = self
+                    .service_tab_handle(prepared.service_tab_id())
+                    .ok_or(ServiceChallengeTaskError::ServiceTabHandleMissing)?;
+                let record =
+                    complete_service_challenge_task_resume(*prepared, current_service_tab_handle)?;
+                self.challenge_tasks
+                    .insert(record.task_id.clone(), record.clone());
+                Ok((record, false))
+            }
+        }
+    }
+
+    pub fn cancel_service_challenge_task(
+        &mut self,
+        input: ServiceChallengeTaskCancelInput,
+    ) -> Result<(ServiceChallengeTaskRecord, bool), ServiceChallengeTaskError> {
+        match cancel_service_challenge_task(&self.challenge_tasks, input)? {
+            ServiceChallengeTaskCancelDecision::Replayed(record) => Ok((*record, true)),
+            ServiceChallengeTaskCancelDecision::Cancelled(record) => {
+                self.challenge_tasks
+                    .insert(record.task_id.clone(), (*record).clone());
+                Ok((*record, false))
+            }
+        }
+    }
+
     pub fn service_tab_handle(&self, tab_id: &str) -> Option<ServiceTabHandle> {
         let tab = self.tabs.get(tab_id)?;
         let browser = self.browsers.get(&tab.browser_id);
@@ -2572,6 +2636,221 @@ pub fn validate_service_state_invariants(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn challenge_task_state() -> ServiceState {
+        ServiceState {
+            profiles: BTreeMap::from([(
+                "profile-1".to_string(),
+                BrowserProfile {
+                    id: "profile-1".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("profile-1".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-1".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-1".to_string(),
+                BrowserSession {
+                    id: "session-1".to_string(),
+                    service_name: Some("consumer-service".to_string()),
+                    agent_name: Some("challenge-worker".to_string()),
+                    task_name: Some("challenge-aware-task".to_string()),
+                    profile_id: Some("profile-1".to_string()),
+                    lease: LeaseState::Exclusive,
+                    browser_ids: vec!["browser-1".to_string()],
+                    tab_ids: vec!["tab-1".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            tabs: BTreeMap::from([(
+                "tab-1".to_string(),
+                BrowserTab {
+                    id: "tab-1".to_string(),
+                    browser_id: "browser-1".to_string(),
+                    target_id: Some("target-1".to_string()),
+                    lifecycle: TabLifecycle::Ready,
+                    owner_session_id: Some("session-1".to_string()),
+                    profile_access: Some(ProfileChildAccess {
+                        subject_id: Some("principal-1".to_string()),
+                        ..ProfileChildAccess::default()
+                    }),
+                    ..BrowserTab::default()
+                },
+            )]),
+            ..ServiceState::default()
+        }
+    }
+
+    fn challenge_task_start_input(
+        current_service_tab_handle: ServiceTabHandle,
+        idempotency_key: &str,
+    ) -> ServiceChallengeTaskStartInput {
+        ServiceChallengeTaskStartInput {
+            service_name: "consumer-service".to_string(),
+            agent_name: "challenge-worker".to_string(),
+            task_name: "challenge-aware-task".to_string(),
+            principal_id: "principal-1".to_string(),
+            challenge_profile_id: "turnstile-checkbox-p169-v1".to_string(),
+            site_policy_digest: "a".repeat(64),
+            downstream_intent_id: "authenticate-account".to_string(),
+            fixture: agent_browser_challenge_control::ChallengeTaskFixture::PassAfterAcknowledgedResolution,
+            idempotency_key: idempotency_key.to_string(),
+            deadline_ms: 120_000,
+            max_transitions: 8,
+            current_service_tab_handle,
+            created_at: "2026-09-16T00:00:00Z".to_string(),
+        }
+    }
+
+    fn start_challenge_task(
+        state: &mut ServiceState,
+        idempotency_key: &str,
+    ) -> ServiceChallengeTaskRecord {
+        let input =
+            challenge_task_start_input(state.service_tab_handle("tab-1").unwrap(), idempotency_key);
+        let (record, replayed) = state.start_service_challenge_task(input).unwrap();
+        assert!(!replayed);
+        record
+    }
+
+    #[test]
+    fn challenge_task_start_replays_or_rejects_conflicting_requests() {
+        let mut state = challenge_task_state();
+        let input = challenge_task_start_input(
+            state.service_tab_handle("tab-1").unwrap(),
+            "start-replay-key",
+        );
+        let (created, replayed) = state.start_service_challenge_task(input.clone()).unwrap();
+        assert!(!replayed);
+        assert_eq!(
+            state.service_challenge_task(&created.task_id),
+            Some(&created)
+        );
+
+        let (replayed_record, replayed) = state.start_service_challenge_task(input).unwrap();
+        assert!(replayed);
+        assert_eq!(replayed_record, created);
+        assert_eq!(state.service_challenge_task_summary().total_count, 1);
+
+        let mut conflicting = challenge_task_start_input(
+            state.service_tab_handle("tab-1").unwrap(),
+            "start-replay-key",
+        );
+        conflicting.deadline_ms += 1;
+        assert_eq!(
+            state.start_service_challenge_task(conflicting).unwrap_err(),
+            ServiceChallengeTaskError::IdempotencyConflict
+        );
+    }
+
+    #[test]
+    fn challenge_task_resume_requires_a_current_handle_after_preparation() {
+        let mut state = challenge_task_state();
+        let created = start_challenge_task(&mut state, "resume-key");
+        let input = ServiceChallengeTaskResumeInput {
+            task_id: created.task_id.clone(),
+            principal_id: "principal-1".to_string(),
+            operation_id: "resume-1".to_string(),
+            resumed_at: "2026-09-16T00:01:00Z".to_string(),
+        };
+        let tab = state.tabs.remove("tab-1").unwrap();
+        assert_eq!(
+            state
+                .resume_service_challenge_task(input.clone())
+                .unwrap_err(),
+            ServiceChallengeTaskError::ServiceTabHandleMissing
+        );
+        assert_eq!(
+            state
+                .service_challenge_task(&created.task_id)
+                .unwrap()
+                .state,
+            ServiceChallengeTaskState::Ready
+        );
+
+        state.tabs.insert("tab-1".to_string(), tab);
+        let (completed, replayed) = state.resume_service_challenge_task(input.clone()).unwrap();
+        assert!(!replayed);
+        assert_eq!(completed.state, ServiceChallengeTaskState::Completed);
+
+        state.tabs.remove("tab-1");
+        let mut replay_input = input;
+        replay_input.resumed_at = "invalid".to_string();
+        let (replayed_record, replayed) =
+            state.resume_service_challenge_task(replay_input).unwrap();
+        assert!(replayed);
+        assert_eq!(replayed_record, completed);
+    }
+
+    #[test]
+    fn challenge_task_cancel_replays_without_a_second_insert() {
+        let mut state = challenge_task_state();
+        let created = start_challenge_task(&mut state, "cancel-key");
+        let input = ServiceChallengeTaskCancelInput {
+            task_id: created.task_id.clone(),
+            principal_id: "principal-1".to_string(),
+            operation_id: "cancel-1".to_string(),
+            cancelled_at: "2026-09-16T00:01:00Z".to_string(),
+        };
+        let (cancelled, replayed) = state.cancel_service_challenge_task(input.clone()).unwrap();
+        assert!(!replayed);
+        assert_eq!(cancelled.state, ServiceChallengeTaskState::Cancelled);
+
+        let mut replay_input = input;
+        replay_input.cancelled_at = "invalid".to_string();
+        let (replayed_record, replayed) =
+            state.cancel_service_challenge_task(replay_input).unwrap();
+        assert!(replayed);
+        assert_eq!(replayed_record, cancelled);
+        assert_eq!(state.service_challenge_task_summary().total_count, 1);
+    }
+
+    #[test]
+    fn challenge_task_status_enforces_the_record_principal() {
+        let mut state = challenge_task_state();
+        let created = start_challenge_task(&mut state, "status-key");
+        assert_eq!(
+            state
+                .status_service_challenge_task(&created.task_id, "principal-1")
+                .unwrap(),
+            created
+        );
+        assert_eq!(
+            state
+                .status_service_challenge_task(&created.task_id, "principal-2")
+                .unwrap_err(),
+            ServiceChallengeTaskError::PrincipalMismatch
+        );
+    }
+
+    #[test]
+    fn challenge_task_summary_and_lookup_are_aggregate_accessors() {
+        let mut state = challenge_task_state();
+        let created = start_challenge_task(&mut state, "summary-key");
+        assert_eq!(
+            state.service_challenge_task(&created.task_id),
+            Some(&created)
+        );
+        assert_eq!(
+            state.service_challenge_task_summary(),
+            ServiceChallengeTaskSummary {
+                total_count: 1,
+                active_count: 1,
+                terminal_count: 0,
+                cooldown_count: 0,
+                intervention_count: 0,
+                pending_effect_count: 0,
+            }
+        );
+    }
 
     #[test]
     fn builtin_policy_inventory_and_default_seeding_url_are_canonical() {

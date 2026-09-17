@@ -70,6 +70,12 @@ ${serviceStateMigrationFields.map((field) => `  ${serviceStateFieldAttributes[fi
 impl ServiceState {
   pub fn from_configured_entities() -> Self { Self {} }
   pub fn state_revision(&self) -> u64 { 0 }
+  pub fn service_challenge_task(&self) {}
+  pub fn service_challenge_task_summary(&self) {}
+  pub fn start_service_challenge_task(&mut self) {}
+  pub fn status_service_challenge_task(&self) {}
+  pub fn resume_service_challenge_task(&mut self) {}
+  pub fn cancel_service_challenge_task(&mut self) {}
 }
 pub const SERVICE_STATE_SCHEMA_VERSION: &str = "v2";
 pub const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str = "legacy";
@@ -292,6 +298,11 @@ for (const [name, mutation] of [
     'pub fn from_configured_entities() -> Self { Self {} }',
     '',
   ) }],
+  ['missing challenge aggregate method', { serviceState: validServiceState.replace(
+    'pub fn resume_service_challenge_task(&mut self) {}',
+    '',
+  ) }],
+  ['direct CLI challenge map access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.challenge_tasks; }\n' }],
   ['upward aggregate import', { serviceState: `${validServiceState}\nuse crate::native::service_store::ServiceStateRepository;\n` }],
 ]) {
   const root = fixture({ manifest: validManifest, source: validSource, ...mutation });
