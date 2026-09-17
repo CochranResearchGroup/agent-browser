@@ -52,12 +52,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 9d34365d302baa7725b3d4689a7b079dea4258a5
+    checkpoint: 5b369e3399c6d5bef1e8591092866d3a85f86acd
     remote_ref: refs/remotes/origin/platform/p208-worktree-closeout
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free concurrency, crash-recovery, candidate-custody, and changed-surface validation
-    validation_status: provider-free closeout, candidate-build, selector, workflow, and policy fixtures green locally; exact-head forge evaluation pending
-    validation_ref: 9d34365d302baa7725b3d4689a7b079dea4258a5
+    validation_status: provider-free closeout, candidate-build, selector, workflow, policy, planning, documentation-link, docs-build, release-verifier, and package-command checks green locally; exact-head forge evaluation pending
+    validation_ref: 5b369e3399c6d5bef1e8591092866d3a85f86acd
     work_items: [CochranResearchGroup/agent-browser#171]
     dependencies: []
     overlaps: []

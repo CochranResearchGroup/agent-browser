@@ -27,6 +27,8 @@ Implementation checkpoint: `907ae9f2fe669478b73f152f84d9e25a59cfb7db`
 
 Validation-wiring checkpoint: `9d34365d302baa7725b3d4689a7b079dea4258a5`
 
+Local validation checkpoint: `5b369e3399c6d5bef1e8591092866d3a85f86acd`
+
 Pull request: `CochranResearchGroup/agent-browser#182` (draft pending exact-head validation)
 
 ## Objective
@@ -155,7 +157,7 @@ reasoning for the specialist tier.
 | Interrupted preservation | Fault points before, during, and after publication resume the same fenced operation; partial archives never become complete | proven by interrupted archive publication and fresh terminal verification on `907ae9f2` |
 | Interrupted removal | Recovery reconciles filesystem and Git registration after intent or effect without a second removal | proven by post-removal recovery and CLI replay on `907ae9f2` |
 | Advisory authority | Status and plan remain read-only; explicit operator choices are supported and typed rather than reduced to generic denial | proven on rebased implementation `907ae9f2` |
-| Policy and documentation | Policies and command guidance describe the implemented boundary and raw-Git limitation | complete through policies, AGENTS guidance, package invocation, and repository-tooling validation at `9d34365d` |
+| Policy and documentation | Policies and command guidance describe the implemented boundary and raw-Git limitation | complete through policies, tested AGENTS/package invocation, and repository-tooling validation at `5b369e33` |
 | Integration | Final published head passes selected gates and enters `main` through the linked PR | draft PR #182; final exact-head gates and protected integration pending |
 
 ## Version 3 Checkpoint
@@ -176,8 +178,9 @@ remaining P1 blocker. Its patch-equivalent rebased implementation is
 the helper as `pnpm run worktree:closeout`, adds the provider-free repository
 tooling test command, and extends the versioned selector plus stable Presubmit
 aggregate with a dedicated `Repository Tooling` job. Local focused checks are
-green. PR #182 remains draft only until the reconciled final head is published
-and exact-head forge evaluation completes.
+green at `5b369e33`, including a read-only package-command invocation after the
+pnpm argument form was corrected. PR #182 remains draft only until the
+reconciled final head is published and exact-head forge evaluation completes.
 
 Exit requires every row complete or an explicit separately tracked deferral that
 does not weaken the issue's promised outcome. A clean worktree, copied archive,
