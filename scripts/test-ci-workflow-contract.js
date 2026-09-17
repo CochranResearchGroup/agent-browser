@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
-const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+assert.equal(existsSync('.github/workflows/ci.yml'), false, 'active CI workflow must remain absent');
+const workflow = readFileSync('.github/workflows/ci.yml.disabled', 'utf8');
 
-assert.match(workflow, /^on:\n  pull_request:\n    branches: \[main\]\n/m);
+assert.match(workflow, /^# Dormant while this file has the `\.disabled` suffix\.\non:\n  pull_request:/m);
 assert.doesNotMatch(workflow, /^  push:/m, 'CI must not run after merges to main');
 assert.doesNotMatch(workflow, /^  workflow_dispatch:/m, 'CI must not expose a full-suite manual dispatch');
 assert.doesNotMatch(workflow, /^  schedule:/m, 'CI must not schedule periodic full-suite runs');

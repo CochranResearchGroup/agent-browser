@@ -1,5 +1,6 @@
 name: CI
 
+# Dormant while this file has the `.disabled` suffix.
 on:
   pull_request:
     branches: [main]

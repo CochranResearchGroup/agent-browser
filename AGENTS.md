@@ -284,19 +284,23 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 ### CI Cadence
 
-Pull requests first run the versioned changed-surface classifier, then only the
-selected Documentation, Version Sync, Dashboard, Service Client, Rust Quality,
-affected Rust compartments, and Workstation Fixtures jobs. The stable
+GitHub CI is temporarily disabled by explicit operator direction. The dormant
+workflow is retained as `.github/workflows/ci.yml.disabled`; there is no active
+`.github/workflows/ci.yml`, automatic trigger, schedule, or manual CI dispatch.
+Do not re-enable or dispatch CI without new maintainer direction.
+
+When re-enabled, pull requests use the versioned changed-surface classifier and
+only the selected Documentation, Version Sync, Dashboard, Service Client, Rust
+Quality, affected Rust compartments, and Workstation Fixtures jobs. The stable
 `Presubmit` aggregate fails when a selected job is skipped, cancelled, or
 failed, and records the tier, exclusions, elapsed time, and observed runner
 minutes without describing the selected lane as comprehensive. Unknown paths
 and changes to dependencies, toolchains, the classifier, or the workflow fail
-safe to the broad ordinary presubmit. The CI workflow runs only for pull
-requests. It has no `main` push trigger, schedule, manual dispatch, commit
-message escape hatch, comprehensive Rust job, or slow platform matrix.
-Pull-request concurrency cancels an older run when a newer head for the same
-pull request starts. Issue #164 owns live enforcement of `Presubmit`, but its
-state does not authorize duplicate post-merge CI.
+safe to the broad ordinary presubmit. The dormant workflow has no `main` push
+trigger, schedule, manual dispatch, commit-message escape hatch, comprehensive
+Rust job, or slow platform matrix. Pull-request concurrency cancels an older
+run when a newer head for the same pull request starts. Issue #164 owns live
+enforcement of `Presubmit` if CI resumes.
 
 Documentation and governance-only changes run patch hygiene, policy and
 planning audits, changed-link validation, and the docs build without
