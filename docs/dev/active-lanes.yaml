@@ -9,16 +9,16 @@ lanes:
     branch: challenge/p197-consumer-integration
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: fb406432d90dc8f0a04de84afaa38b6ae3bacc39
+    custody_state: PUBLISHED_INTEGRATION_READY
+    checkpoint: 4321961c6545c405a85578b84788e0db6112d10a
     remote_ref: refs/remotes/origin/challenge/p197-consumer-integration
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free W6 validation
-    validation_status: pending
-    validation_ref: null
+    validation_status: combined provider-free challenge-control, focused authentication and navigation, strict Clippy and formatting, Service API/MCP parity, service client, no-launch collections, route-confusion, docs build, and documentation contract checks green; dependency integrated and exact-head forge evaluation pending
+    validation_ref: ca0f3447b473a652710b2b5202f75cfa628f52bb
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: []
-    reconciled_overlaps: []
-    blocker: provider-free consumer admission contract and two consumer integrations remain in progress; every live challenge effect stays with issue #66
+    reconciled_overlaps: [P202]
+    blocker: exact-head forge evaluation and protected integration remain; every live challenge effect stays with issue #66
     updated_at: 2026-09-16

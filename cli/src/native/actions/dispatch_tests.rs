@@ -336,6 +336,86 @@ async fn challenge_task_start_dispatches_without_browser_and_replays_durably() {
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn challenge_navigation_denial_precedes_confirmation_and_browser_work() {
+    let env_guard = EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+    ]);
+    let _lock = crate::native::auth::AUTH_TEST_MUTEX.lock().unwrap();
+    let home = std::env::temp_dir().join(format!(
+        "agent-browser-challenge-navigation-preflight-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&home).unwrap();
+    env_guard.set("HOME", home.to_str().unwrap());
+    env_guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    env_guard.set(
+        "AGENT_BROWSER_HOME",
+        home.join(".agent-browser").to_str().unwrap(),
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&ServiceState::default())
+        .unwrap();
+
+    let mut daemon_state = DaemonState::new();
+    daemon_state.confirm_actions = Some(ConfirmActions {
+        categories: HashSet::from(["navigate".to_string()]),
+    });
+    let response = execute_command(
+        &json!({
+            "id": "challenge-navigation-denied-1",
+            "action": "navigate",
+            "url": "https://example.test/after-challenge",
+            "clientSubjectId": "principal-1",
+            "challengeTaskId": "missing-challenge-task",
+            "sitePolicyId": "example",
+            "operationId": "navigation-operation-1",
+            "serviceTabHandle": ServiceTabHandle {
+                browser_id: "browser-1".to_string(),
+                tab_id: "tab-1".to_string(),
+                valid: true,
+                ..ServiceTabHandle::default()
+            },
+        }),
+        &mut daemon_state,
+    )
+    .await;
+
+    assert_eq!(response["success"], false, "{response}");
+    assert_eq!(
+        response["error"], "challenge_consumer_task_not_found",
+        "{response}"
+    );
+    assert!(daemon_state.pending_confirmation.is_none());
+    assert!(daemon_state.browser.is_none());
+}
+
+#[test]
+fn later_navigation_failure_retains_admission_as_a_separate_fact() {
+    let admission = json!({
+        "consumer": "navigation",
+        "consumerAdmission": "admitted",
+        "challengeOutcome": "passed",
+    });
+    let mut response = error_response(
+        "challenge-navigation-failed-1",
+        "navigation_transport_failed",
+    );
+
+    attach_navigation_challenge_admission(&mut response, Some(&admission));
+
+    assert_eq!(response["success"], false);
+    assert_eq!(response["error"], "navigation_transport_failed");
+    assert_eq!(response["data"]["challengeConsumerAdmission"], admission);
+}
+
+#[tokio::test]
 async fn configured_desktop_provider_gates_precede_confirmation_and_dispatch_effects() {
     let mut state = DaemonState::new();
     state.confirm_actions = Some(ConfirmActions {

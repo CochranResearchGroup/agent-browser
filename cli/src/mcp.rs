@@ -1311,6 +1311,11 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minLength": 1,
                         "description": "Opaque durable challenge task identifier returned by service_challenge_task_start."
                     },
+                    "sitePolicyId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Registered effective site policy resolved by challenge-aware authentication and navigation consumers."
+                    },
                     "sitePolicyDigest": {
                         "type": "string",
                         "pattern": "^[0-9a-fA-F]{64}$",
