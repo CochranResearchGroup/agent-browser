@@ -216,7 +216,7 @@ Testing directly.
 - Before closing a registered worktree, run:
 
   ```bash
-  pnpm run worktree:closeout -- inspect \
+  pnpm run worktree:closeout inspect \
     --worktree <path> \
     --repository-root <path>
   ```
