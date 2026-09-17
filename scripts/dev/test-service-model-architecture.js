@@ -65,6 +65,9 @@ pub struct ConfiguredServiceStateInput;
 pub struct ProfileRecoveryReceiptIdentity;
 pub struct ProfileResetReceiptIdentity;
 pub enum ProfileReceiptReplayError {}
+pub struct RuntimeOwnerPersistenceSnapshot;
+pub struct RuntimeOwnerPersistenceRestore;
+pub struct RuntimeOwnerPersistenceParts;
 pub struct ServiceState {
 ${serviceStateMigrationFields.map((field) => `  ${serviceStateFieldAttributes[field] || ''}#[doc(hidden)]\n  pub ${field}: ${serviceStateFieldTypes[field] || 'String'},`).join('\n')}
   #[serde(skip_serializing_if = "agent_browser_lease_authority::ServicePrincipalRegistry::is_empty")]
@@ -108,6 +111,9 @@ impl ServiceState {
   pub fn plan_legacy_session_principal_migration(&self) {}
   pub fn bind_session_work_lease(&mut self) {}
   pub fn bind_tab_work_lease(&mut self) {}
+  pub fn restore_runtime_owner_persistence(&mut self) {}
+  pub fn runtime_owner_persistence_parts(&self) {}
+  pub fn strip_runtime_lifecycle_for_persistence(&mut self) {}
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -147,7 +153,9 @@ pub use service_state::{
   service_profile_sources, service_site_policy_sources,
   validate_service_state_invariants, ConfiguredServiceStateInput, ServiceState,
   ProfileReceiptReplayError, ProfileRecoveryReceiptIdentity,
-  ProfileResetReceiptIdentity, ServiceStateCodecError,
+  ProfileResetReceiptIdentity, RuntimeOwnerPersistenceParts,
+  RuntimeOwnerPersistenceRestore, RuntimeOwnerPersistenceSnapshot,
+  ServiceStateCodecError,
   LEGACY_SERVICE_STATE_SCHEMA_VERSION, SERVICE_STATE_SCHEMA_VERSION,
 };
 `;
@@ -296,7 +304,8 @@ const validAuthenticationFacade = 'pub(crate) use agent_browser_authentication_c
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
-  cliTest = '', principalCli = '', principalContinuity = validPrincipalContinuity,
+  cliTest = '', principalCli = '', serviceStore = '',
+  principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
   authentication = validAuthenticationControl,
@@ -328,6 +337,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   mkdirSync(join(root, 'cli/src/native'), { recursive: true });
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
   writeFileSync(join(root, 'cli/src/native/service_principal.rs'), principalCli);
+  writeFileSync(join(root, 'cli/src/native/service_store.rs'), serviceStore);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -413,6 +423,38 @@ for (const [name, mutation] of [
   ) }],
   ['copied CLI principal continuity state decision', {
     principalCli: 'fn copied(state: &ServiceState) { let _ = &state.runtime_owner_registry; }\n',
+  }],
+  ['missing runtime-owner persistence type', { serviceState: validServiceState.replace(
+    'pub struct RuntimeOwnerPersistenceSnapshot;',
+    '',
+  ) }],
+  ['missing runtime-owner persistence method', { serviceState: validServiceState.replace(
+    'pub fn restore_runtime_owner_persistence(&mut self) {}',
+    '',
+  ) }],
+  ['direct repository runtime-owner access', {
+    serviceStore: 'fn leak(state: &ServiceState) { let _ = &state.runtime_owner_registry; }\n',
+  }],
+  ['runtime-owner persistence call outside repository adapter', {
+    cli: 'fn leak(state: &mut ServiceState) { state.strip_runtime_lifecycle_for_persistence(); }\n',
+  }],
+  ['copied repository lifecycle strip', {
+    serviceStore: 'fn leak(registry: &RuntimeOwnerRegistry) { let _ = registry.persistence_projection_without_lifecycle_records(); }\n',
+  }],
+  ['runtime-owner persistence getter escape hatch', {
+    serviceState: `${validServiceState}\nimpl RuntimeOwnerPersistenceSnapshot { pub fn registry(&self) {} }\n`,
+  }],
+  ['runtime-owner persistence public field escape hatch', {
+    serviceState: validServiceState.replace(
+      'pub struct RuntimeOwnerPersistenceSnapshot;',
+      'pub struct RuntimeOwnerPersistenceSnapshot { pub registry: RuntimeOwnerRegistry }',
+    ),
+  }],
+  ['runtime-owner persistence getter after private helper', {
+    serviceState: `${validServiceState}\nimpl RuntimeOwnerPersistenceSnapshot { fn helper(&self) {} pub fn registry(&self) {} }\n`,
+  }],
+  ['runtime-owner persistence deref escape hatch', {
+    serviceState: `${validServiceState}\nimpl Deref for RuntimeOwnerPersistenceSnapshot { type Target = (); fn deref(&self) -> &() { &() } }\n`,
   }],
   ['missing authentication aggregate method', { serviceState: validServiceState.replace(
     'pub fn observe_service_authentication_run(&mut self) {}',

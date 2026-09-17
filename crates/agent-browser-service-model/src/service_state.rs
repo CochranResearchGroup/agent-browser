@@ -46,6 +46,31 @@ impl std::fmt::Display for ServiceStateCodecError {
 
 impl std::error::Error for ServiceStateCodecError {}
 
+/// Repository transport with exactly the existing owner-registry wire shape.
+/// The retained registry is deliberately inaccessible as a runtime authority handle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RuntimeOwnerPersistenceSnapshot {
+    registry: agent_browser_lease_authority::RuntimeOwnerRegistry,
+}
+
+/// Sidecars already selected by the repository's compatibility rules.
+/// `None` preserves embedded state; `Some` replaces it, including empty values.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RuntimeOwnerPersistenceRestore {
+    pub owner_registry: Option<RuntimeOwnerPersistenceSnapshot>,
+    pub lifecycle_records:
+        Option<BTreeMap<String, agent_browser_lease_authority::RuntimeLifecycleRecord>>,
+}
+
+/// Owned persistence projections without exposing the live owner registry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnerPersistenceParts {
+    pub owner_registry: RuntimeOwnerPersistenceSnapshot,
+    pub lifecycle_registry_revision: u64,
+    pub lifecycle_records: BTreeMap<String, agent_browser_lease_authority::RuntimeLifecycleRecord>,
+}
+
 /// Exact sealed recovery identity used to match a retained terminal receipt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProfileRecoveryReceiptIdentity<'a> {
@@ -762,6 +787,42 @@ impl ServiceState {
     /// Returns the immutable profile-policy migration compatibility projection.
     pub fn profile_policy_migration(&self) -> Option<&crate::ProfilePolicyMigrationReport> {
         self.profile_policy_migration.as_ref()
+    }
+
+    /// Restore selected owner state before selected lifecycle evidence. Historical
+    /// lifecycle-sidecar revisions do not participate in owner authority restoration.
+    /// Selection, envelope parsing, and filesystem custody remain in the repository.
+    pub fn restore_runtime_owner_persistence(&mut self, input: RuntimeOwnerPersistenceRestore) {
+        if let Some(snapshot) = input.owner_registry {
+            self.runtime_owner_registry = snapshot.registry;
+        }
+        if let Some(records) = input.lifecycle_records {
+            self.runtime_owner_registry
+                .restore_lifecycle_records(records);
+        }
+    }
+
+    /// Project the legacy owner payload and separate lifecycle evidence while
+    /// preserving the source aggregate and its revisions. The repository owns
+    /// serialization order and strips its prepared clone only after lifecycle encoding.
+    pub fn runtime_owner_persistence_parts(&self) -> RuntimeOwnerPersistenceParts {
+        RuntimeOwnerPersistenceParts {
+            owner_registry: RuntimeOwnerPersistenceSnapshot {
+                registry: self
+                    .runtime_owner_registry
+                    .persistence_projection_without_lifecycle_records(),
+            },
+            lifecycle_registry_revision: self.runtime_owner_registry.revision(),
+            lifecycle_records: self.runtime_owner_registry.lifecycle_records().clone(),
+        }
+    }
+
+    /// Remove only lifecycle evidence from a repository-prepared clone. Owner
+    /// authority, principal bindings, and both registry and envelope revisions remain intact.
+    pub fn strip_runtime_lifecycle_for_persistence(&mut self) {
+        self.runtime_owner_registry = self
+            .runtime_owner_registry
+            .persistence_projection_without_lifecycle_records();
     }
 
     /// Authenticate retained session work using its explicit observation time.
@@ -3276,6 +3337,259 @@ pub fn validate_service_state_invariants(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    mod runtime_owner_persistence {
+        use super::*;
+        use agent_browser_lease_authority::{RuntimeLifecycleRecord, RuntimeOwnerRegistry};
+
+        fn registry(browser_id: &str, revision: u64) -> RuntimeOwnerRegistry {
+            // Persistence accepts the existing wire contract without new authority validation.
+            serde_json::from_value(json!({
+                "revision": revision,
+                "owners": {"profile-digest": {
+                    "ownerId": format!("owner:{browser_id}"),
+                    "profileIdentityDigest": "profile-digest",
+                    "state": "ready", "ownerGeneration": 7,
+                    "browserId": browser_id, "daemonSessionRoute": "route",
+                    "processInstanceDigest": "process-digest", "browserFamily": "chrome",
+                    "cdpEndpointIdentityDigest": "cdp-digest", "targetSetDigest": "target-digest",
+                    "pendingTransfer": null, "lastTransition": null
+                }},
+                "principalBindings": {"profile-digest": {
+                    "principalId": "principal:test", "profileId": "profile:test",
+                    "profileIdentityDigest": "profile-digest", "capabilityId": "capability:test",
+                    "provenance": "registered_capability", "ownerGeneration": 7
+                }},
+                "lifecycleRecords": {browser_id: {
+                    "logicalBrowserId": browser_id, "profileIdentityDigest": "profile-digest",
+                    "ownerGeneration": 7, "lifecycleState": "ready",
+                    "cleanupObligationState": "owned", "bootEpoch": "synthetic-boot"
+                }}
+            }))
+            .unwrap()
+        }
+
+        fn snapshot(registry: &RuntimeOwnerRegistry) -> RuntimeOwnerPersistenceSnapshot {
+            serde_json::from_value(serde_json::to_value(registry).unwrap()).unwrap()
+        }
+
+        fn embedded_state() -> ServiceState {
+            let mut state = ServiceState {
+                state_revision: 73,
+                runtime_owner_registry: registry("embedded", 19),
+                ..ServiceState::default()
+            };
+            state
+                .unknown_fields
+                .insert("futureField".to_string(), json!({"retain": true}));
+            state.profiles.insert(
+                "profile:test".to_string(),
+                BrowserProfile {
+                    id: "profile:test".to_string(),
+                    ..BrowserProfile::default()
+                },
+            );
+            state
+        }
+
+        #[test]
+        fn restoration_preserves_selection_precedence_empty_values_and_revisions() {
+            let embedded = embedded_state();
+            let owner = registry("sidecar-owner", 3);
+            let lifecycle = registry("sidecar-lifecycle", u64::MAX)
+                .lifecycle_records()
+                .clone();
+            let empty = RuntimeOwnerRegistry::default();
+            let cases = [
+                (
+                    "none",
+                    None,
+                    None,
+                    embedded.runtime_owner_registry.clone(),
+                    None,
+                ),
+                ("owner", Some(snapshot(&owner)), None, owner.clone(), None),
+                (
+                    "lifecycle",
+                    None,
+                    Some(lifecycle.clone()),
+                    embedded.runtime_owner_registry.clone(),
+                    Some(lifecycle.clone()),
+                ),
+                (
+                    "both",
+                    Some(snapshot(&owner)),
+                    Some(lifecycle.clone()),
+                    owner.clone(),
+                    Some(lifecycle.clone()),
+                ),
+                (
+                    "empty owner",
+                    Some(snapshot(&empty)),
+                    None,
+                    empty.clone(),
+                    None,
+                ),
+                (
+                    "empty lifecycle",
+                    None,
+                    Some(BTreeMap::new()),
+                    embedded.runtime_owner_registry.clone(),
+                    Some(BTreeMap::new()),
+                ),
+                (
+                    "empty both",
+                    Some(snapshot(&empty)),
+                    Some(BTreeMap::new()),
+                    empty.clone(),
+                    Some(BTreeMap::new()),
+                ),
+                (
+                    "empty owner with lifecycle",
+                    Some(snapshot(&empty)),
+                    Some(lifecycle.clone()),
+                    empty,
+                    Some(lifecycle),
+                ),
+            ];
+            for (
+                name,
+                owner_registry,
+                lifecycle_records,
+                mut expected_registry,
+                expected_records,
+            ) in cases
+            {
+                if let Some(records) = expected_records {
+                    expected_registry.restore_lifecycle_records(records);
+                }
+                let expected_revision = expected_registry.revision();
+                let mut expected = embedded.clone();
+                expected.runtime_owner_registry = expected_registry;
+                let mut actual = embedded.clone();
+                actual.restore_runtime_owner_persistence(RuntimeOwnerPersistenceRestore {
+                    owner_registry,
+                    lifecycle_records,
+                });
+                assert_eq!(actual, expected, "{name}");
+                assert_eq!(actual.state_revision(), 73, "{name}");
+                assert_eq!(
+                    actual.runtime_owner_registry.revision(),
+                    expected_revision,
+                    "{name}"
+                );
+            }
+        }
+
+        #[test]
+        fn parts_are_owned_preserve_source_and_separate_lifecycle_from_owner_wire() {
+            let state = embedded_state();
+            let before = state.clone();
+            let mut parts = state.runtime_owner_persistence_parts();
+            assert_eq!(state, before);
+            assert_eq!(parts.lifecycle_registry_revision, 19);
+            assert_eq!(
+                &parts.lifecycle_records,
+                state.runtime_owner_registry.lifecycle_records()
+            );
+            let mut expected_owner_wire =
+                serde_json::to_value(&state.runtime_owner_registry).unwrap();
+            expected_owner_wire
+                .as_object_mut()
+                .unwrap()
+                .remove("lifecycleRecords");
+            assert_eq!(
+                serde_json::to_value(&parts.owner_registry).unwrap(),
+                expected_owner_wire
+            );
+            let retained_snapshot = parts.owner_registry.clone();
+            parts.lifecycle_records.clear();
+            assert_eq!(state, before);
+            assert_eq!(parts.owner_registry, retained_snapshot);
+            assert!(!state.runtime_owner_registry.lifecycle_records().is_empty());
+        }
+
+        #[test]
+        fn strip_changes_only_lifecycle_records_and_is_idempotent() {
+            let mut state = embedded_state();
+            let before = state.clone();
+            let parts = state.runtime_owner_persistence_parts();
+            state.strip_runtime_lifecycle_for_persistence();
+            let mut expected = before.clone();
+            expected
+                .runtime_owner_registry
+                .restore_lifecycle_records(BTreeMap::new());
+            assert_eq!(state, expected);
+            assert_eq!(
+                serde_json::to_value(&state.runtime_owner_registry).unwrap(),
+                serde_json::to_value(&parts.owner_registry).unwrap()
+            );
+            assert_eq!(
+                state.runtime_owner_registry.revision(),
+                before.runtime_owner_registry.revision()
+            );
+            assert_eq!(state.state_revision(), before.state_revision());
+            state.strip_runtime_lifecycle_for_persistence();
+            assert_eq!(state, expected);
+            assert!(!before.runtime_owner_registry.lifecycle_records().is_empty());
+        }
+
+        #[test]
+        fn snapshot_wire_is_transparent_and_retains_registry_compatibility() {
+            let registry = registry("wire", 29);
+            let wire = serde_json::to_value(&registry).unwrap();
+            let snapshot: RuntimeOwnerPersistenceSnapshot =
+                serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(serde_json::to_value(&snapshot).unwrap(), wire);
+            assert!(wire.get("registry").is_none());
+            assert_eq!(wire["revision"], 29);
+            assert!(wire.get("principalBindings").is_some());
+            assert!(wire.get("lifecycleRecords").is_some());
+            let empty: RuntimeOwnerPersistenceSnapshot = serde_json::from_value(json!({})).unwrap();
+            assert_eq!(
+                serde_json::to_value(empty).unwrap(),
+                serde_json::to_value(RuntimeOwnerRegistry::default()).unwrap()
+            );
+            let mut future = wire;
+            future["futureRegistryField"] = json!(true);
+            let ordinary: RuntimeOwnerRegistry = serde_json::from_value(future.clone()).unwrap();
+            let wrapped: RuntimeOwnerPersistenceSnapshot = serde_json::from_value(future).unwrap();
+            assert_eq!(
+                serde_json::to_value(wrapped).unwrap(),
+                serde_json::to_value(ordinary).unwrap()
+            );
+        }
+
+        #[test]
+        fn lifecycle_restore_overrides_conflicting_owner_evidence_without_advancing_authority() {
+            let mut state = embedded_state();
+            let owner = registry("same-browser", 2);
+            let replacement = BTreeMap::from([(
+                "same-browser".to_string(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: "same-browser".to_string(),
+                    owner_generation: 99,
+                    terminal_evidence: vec!["selected-sidecar-evidence".to_string()],
+                    ..RuntimeLifecycleRecord::default()
+                },
+            )]);
+            state.restore_runtime_owner_persistence(RuntimeOwnerPersistenceRestore {
+                owner_registry: Some(snapshot(&owner)),
+                lifecycle_records: Some(replacement.clone()),
+            });
+            assert_eq!(
+                state.runtime_owner_registry.lifecycle_records(),
+                &replacement
+            );
+            assert_eq!(state.runtime_owner_registry.owners(), owner.owners());
+            assert_eq!(
+                state.runtime_owner_registry.principal_bindings(),
+                owner.principal_bindings()
+            );
+            assert_eq!(state.runtime_owner_registry.revision(), 2);
+            assert_eq!(state.state_revision(), 73);
+        }
+    }
 
     mod principal_registry_boundary {
         use super::*;

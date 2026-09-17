@@ -168,6 +168,18 @@ const SERVICE_STATE_CONTINUITY_METHODS = [
   'bind_tab_work_lease',
 ];
 
+const RUNTIME_OWNER_PERSISTENCE_DEFINITIONS = [
+  'RuntimeOwnerPersistenceSnapshot',
+  'RuntimeOwnerPersistenceRestore',
+  'RuntimeOwnerPersistenceParts',
+];
+
+const RUNTIME_OWNER_PERSISTENCE_METHODS = [
+  'restore_runtime_owner_persistence',
+  'runtime_owner_persistence_parts',
+  'strip_runtime_lifecycle_for_persistence',
+];
+
 const SERVICE_CHALLENGE_DEFINITIONS = [
   'ServiceChallengeTaskState',
   'ServiceChallengeTaskSummary',
@@ -582,6 +594,7 @@ function check(root = repoRoot) {
   const manifest = read(root, 'crates/agent-browser-service-model/Cargo.toml');
   const sourceFiles = rustFilesUnder(sourceRoot);
   const sources = sourceFiles.map((path) => readFileSync(path, 'utf8'));
+  const modelSource = sources.join('\n');
   requireCondition(existsSync(manifestPath), 'agent-browser-service-model Cargo manifest must exist');
   requireCondition(existsSync(join(sourceRoot, 'lib.rs')), 'agent-browser-service-model must own src/lib.rs');
   requireCondition(
@@ -658,10 +671,13 @@ function check(root = repoRoot) {
     .replace(/\bcrate\s*::/g, 'agent_browser_service_model::');
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
-  const cliProductionSources = rustFilesUnder(join(root, 'cli/src'))
+  const cliProductionEntries = rustFilesUnder(join(root, 'cli/src'))
     .filter((path) => !/(?:^|[/\\])(?:tests?[/\\]|(?:[^/\\]*_)?tests?\.rs$)/.test(path))
-    .map((path) => withoutCfgTestItems(readFileSync(path, 'utf8')))
-    .map((source) => withoutCommentsAndStrings(source));
+    .map((path) => ({
+      path,
+      source: withoutCommentsAndStrings(withoutCfgTestItems(readFileSync(path, 'utf8'))),
+    }));
+  const cliProductionSources = cliProductionEntries.map(({ source }) => source);
 
   const authenticationManifestPath = join(root,
     'crates/agent-browser-authentication-control/Cargo.toml');
@@ -678,6 +694,8 @@ function check(root = repoRoot) {
     'cli/src/native/authentication_run.rs'));
   const cliPrincipal = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
     'cli/src/native/service_principal.rs')));
+  const cliServiceStore = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
+    'cli/src/native/service_store.rs')));
 
   requireCondition(existsSync(authenticationManifestPath),
     'agent-browser-authentication-control Cargo manifest must exist');
@@ -935,6 +953,48 @@ function check(root = repoRoot) {
     !/\.\s*(?:runtime_owner_registry|sessions|tabs)\b/.test(cliPrincipal),
     'CLI service_principal production facade must not retain principal-continuity state decisions',
   );
+  for (const name of RUNTIME_OWNER_PERSISTENCE_DEFINITIONS) {
+    const definition = new RegExp(`\\bpub\\s+struct\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...modelSource.matchAll(definition)].length === 1,
+      `service-model must own exactly one runtime-owner persistence type: ${name}`,
+    );
+  }
+  for (const name of RUNTIME_OWNER_PERSISTENCE_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own runtime-owner persistence method: ${name}`,
+    );
+  }
+  requireCondition(
+    !/\.\s*runtime_owner_registry\b/.test(cliServiceStore),
+    'CLI service_store production code must not access ServiceState.runtime_owner_registry directly',
+  );
+  requireCondition(
+    !/\.\s*(?:restore_lifecycle_records|persistence_projection_without_lifecycle_records)\s*\(/.test(cliServiceStore),
+    'CLI service_store must delegate runtime-owner lifecycle persistence decisions to ServiceState',
+  );
+  requireCondition(
+    !/\bimpl\s+RuntimeOwnerPersistenceSnapshot\b/.test(modelSource)
+      && !/impl\s+(?:(?:std\s*::\s*(?:ops|convert|borrow)\s*::\s*)?)(?:DerefMut|Deref|AsRef|AsMut|Borrow|BorrowMut|From|Into)\b[^\{]*RuntimeOwnerPersistenceSnapshot\b/.test(modelSource),
+    'runtime-owner persistence snapshot must not expose inherent methods or conversion escape hatches',
+  );
+  const persistenceSnapshotDefinition = rustStructDefinition(
+    modelSource,
+    'RuntimeOwnerPersistenceSnapshot',
+  );
+  requireCondition(
+    !/\bpub(?:\([^)]*\))?\s+registry\s*:/.test(persistenceSnapshotDefinition),
+    'runtime-owner persistence snapshot registry field must remain private',
+  );
+  const persistenceCalls = new RegExp(
+    `\\.\\s*(?:${RUNTIME_OWNER_PERSISTENCE_METHODS.join('|')})\\s*\\(`,
+  );
+  requireCondition(
+    !cliProductionEntries.some(({ path, source }) =>
+      !/(?:^|[/\\])service_store\.rs$/.test(path) && persistenceCalls.test(source)),
+    'runtime-owner persistence methods may be called only by the CLI service_store adapter',
+  );
   const serviceStateExport = serviceModelLib.match(/\bpub\s+use\s+service_state\s*::\s*\{([\s\S]*?)\}\s*;/);
   requireCondition(/\bmod\s+service_state\s*;/.test(serviceModelLib),
     'service-model lib must declare the ServiceState aggregate module');
@@ -947,6 +1007,10 @@ function check(root = repoRoot) {
   for (const name of SERVICE_STATE_RECEIPT_TYPES) {
     requireCondition(Boolean(serviceStateExport?.[1].match(new RegExp(`\\b${name}\\b`))),
       `service-model lib must export ServiceState receipt interface: ${name}`);
+  }
+  for (const name of RUNTIME_OWNER_PERSISTENCE_DEFINITIONS) {
+    requireCondition(Boolean(serviceStateExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export runtime-owner persistence type: ${name}`);
   }
   const principalContinuityExport = serviceModelLib.match(
     /\bpub\s+use\s+principal_continuity\s*::\s*\{([\s\S]*?)\}\s*;/,

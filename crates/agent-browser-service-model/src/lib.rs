@@ -186,7 +186,8 @@ pub use service_state::{
     default_profile_seeding_url, encode_prepared_service_state_pretty,
     prepare_service_state_for_persistence, service_profile_sources, service_site_policy_sources,
     validate_service_state_invariants, ConfiguredServiceStateInput, ProfileReceiptReplayError,
-    ProfileRecoveryReceiptIdentity, ProfileResetReceiptIdentity, ServiceState,
+    ProfileRecoveryReceiptIdentity, ProfileResetReceiptIdentity, RuntimeOwnerPersistenceParts,
+    RuntimeOwnerPersistenceRestore, RuntimeOwnerPersistenceSnapshot, ServiceState,
     ServiceStateCodecError, LEGACY_SERVICE_STATE_SCHEMA_VERSION, SERVICE_STATE_SCHEMA_VERSION,
 };
 pub use session_tab::{

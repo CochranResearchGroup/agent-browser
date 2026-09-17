@@ -3365,6 +3365,85 @@ only when `service_store.rs` has zero production direct access to the field,
 the model and repository witnesses pass, and the architecture guard rejects
 both copied persistence logic and an authority escape hatch.
 
+## Checkpoint 53 | Runtime Owner Persistence Boundary Accepted
+
+State transition: Service Model now owns the opaque runtime-owner persistence
+snapshot, selected restoration input, owned persistence projection, and three
+aggregate operations for restore, projection, and lifecycle stripping. The CLI
+repository retains sidecar selection, schema envelopes, parsing,
+serialization, filesystem paths, transaction recovery, locking,
+compare-and-swap, temporary files, replacement, rollback, and marker custody.
+All six production repository dereferences of the aggregate field are removed.
+
+The transparent snapshot preserves the existing owner-registry JSON body while
+keeping the registry field private and providing no inherent method, getter,
+conversion, `Deref`, mutable view, callback, or transition surface.
+Restoration applies the selected owner snapshot before selected lifecycle
+records. `None` retains embedded state while an explicit empty value replaces
+it. Lifecycle-sidecar historical revision remains non-authoritative. The owned
+projection preserves the source aggregate, carries the original revision and
+lifecycle records, and strips lifecycle records only from its owner snapshot.
+The separate strip operation changes only lifecycle evidence on the prepared
+clone and is idempotent.
+
+Repository load still selects sidecars from nonempty schema strings, overlays
+owner authority before lifecycle evidence, and retains the missing-primary fast
+return. Preparation still migrates, refreshes derived views, removes builtins,
+projects and serializes lifecycle evidence, strips the prepared clone, then
+serializes primary state, handoffs, and the owner sidecar. Commit and recovery
+still write and replace handoff, owner, lifecycle, and primary artifacts in
+that order, with primary as the final visibility point and the transaction
+marker cleared last.
+
+Acceptance evidence:
+
+- all 196 Service Model unit tests and fourteen integration tests pass,
+  including five new tests spanning eight restoration selections, explicit
+  empty values, precedence and revision preservation, owned projections,
+  exact and idempotent stripping, transparent wire compatibility, and
+  lifecycle override without authority advancement;
+- the three exact repository witnesses for legacy-writer owner survival,
+  lifecycle-sidecar compatibility, and four-file atomicity pass;
+- four additional save/load, persisted-revision, recovery-idempotence, and
+  concurrent-revision replay witnesses pass;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, its mutation fixtures, and the
+  changed-surface selector readback pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+One initial local Cargo command incorrectly combined workspace and package
+selection, so Cargo ran the broad CLI suite instead of the intended model
+crate. That non-gate run encountered one unrelated route-host failure and then
+the known default-stack overflow. No source repair was inferred from it. The
+correct model-manifest command and all scoped acceptance witnesses passed under
+the repository wrapper.
+
+Independent review found no semantic, wire, precedence, revision, ordering, or
+custody defect. It found one blocking architecture-guard omission: a public
+snapshot field or a getter placed after a private helper could evade the first
+guard. The primary completed the single allowed review repair by rejecting a
+public registry field, all inherent snapshot implementations, selected
+conversion traits, and persistence-method calls outside `service_store.rs`.
+Public-field and helper-before-getter fixtures now fail closed alongside the
+existing getter, `Deref`, direct-field, copied-strip, and foreign-caller
+fixtures.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route for the three model
+types, three aggregate methods, and provider-free matrix. `/root/p205_receipt_cli_audit`
+used the requested workhorse `gpt-5.6-sol` high route for the six-access
+repository cutover and exact ordering preservation. The primary implemented
+and hardened the architecture guard, ran all local acceptance gates, and
+reconciled the independent `/root/p205_privacy_audit` review finding.
+
+Acceptance state and progress classification: runtime-owner repository
+persistence closure is accepted and is outcome progress toward P4 field
+privacy. The next bounded outcome is purpose-specific immutable runtime-owner
+projection closure. It must reduce the read-only production surface without a
+whole-registry getter or general iterator and without moving process, boot,
+browser, filesystem, or provider effects.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -3372,9 +3451,9 @@ both copied persistence logic and an authority escape hatch.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, and Principal Continuity kernel accepted; remaining typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, and runtime-owner persistence boundary accepted; remaining typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | Principal Continuity kernel accepted through Checkpoint 51 |
+| Focused correctness | crate tests and affected CLI adapter tests | runtime-owner persistence boundary accepted through Checkpoint 53 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

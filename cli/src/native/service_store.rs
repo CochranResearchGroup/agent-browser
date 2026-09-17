@@ -14,8 +14,14 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use agent_browser_service_model::{
+    RuntimeOwnerPersistenceParts, RuntimeOwnerPersistenceRestore, RuntimeOwnerPersistenceSnapshot,
+};
+
 use crate::process_identity::{observe_process, ProcessObservation};
-use crate::runtime_owner_transfer::{RuntimeLifecycleRecord, RuntimeOwnerRegistry};
+use crate::runtime_owner_transfer::RuntimeLifecycleRecord;
+#[cfg(test)]
+use crate::runtime_owner_transfer::RuntimeOwnerRegistry;
 
 use super::service_model::{RemoteViewHandoff, ServiceState};
 
@@ -133,11 +139,22 @@ struct RemoteViewHandoffRegistry {
 /// Upgrade-safe authority state stored outside the legacy-compatible primary
 /// service snapshot. Older binaries can rewrite `state.json`, but they cannot
 /// erase the current effect-capable owner generation from this sidecar.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 struct DurableRuntimeOwnerRegistry {
     schema_version: String,
-    registry: RuntimeOwnerRegistry,
+    registry: RuntimeOwnerPersistenceSnapshot,
+}
+
+impl Default for DurableRuntimeOwnerRegistry {
+    fn default() -> Self {
+        Self {
+            schema_version: String::new(),
+            registry: ServiceState::default()
+                .runtime_owner_persistence_parts()
+                .owner_registry,
+        }
+    }
 }
 
 /// New lifecycle evidence is isolated from the legacy owner-registry shape so
@@ -408,14 +425,12 @@ impl ServiceStateStore for JsonServiceStateStore {
             },
         )
         .handoffs;
-        if !owner_registry.schema_version.is_empty() {
-            state.runtime_owner_registry = owner_registry.registry;
-        }
-        if !lifecycle_registry.schema_version.is_empty() {
-            state
-                .runtime_owner_registry
-                .restore_lifecycle_records(lifecycle_registry.records);
-        }
+        state.restore_runtime_owner_persistence(RuntimeOwnerPersistenceRestore {
+            owner_registry: (!owner_registry.schema_version.is_empty())
+                .then_some(owner_registry.registry),
+            lifecycle_records: (!lifecycle_registry.schema_version.is_empty())
+                .then_some(lifecycle_registry.records),
+        });
         state.mark_persisted_entity_sources();
         if let Err(error) =
             super::presentation_inventory::overlay_provider_inventory_from_environment(&mut state)
@@ -626,11 +641,10 @@ fn prepare_service_state_transaction(
                 super::service_state_migration::prepare_service_state_for_persistence(&mut state)?;
                 state.refresh_derived_views();
                 state.remove_builtin_entity_defaults_for_persistence();
+                let runtime_owner_persistence = state.runtime_owner_persistence_parts();
                 let lifecycle_registry_payload =
-                    runtime_lifecycle_registry_payload(&state.runtime_owner_registry)?;
-                state.runtime_owner_registry = state
-                    .runtime_owner_registry
-                    .persistence_projection_without_lifecycle_records();
+                    runtime_lifecycle_registry_payload(&runtime_owner_persistence)?;
+                state.strip_runtime_lifecycle_for_persistence();
                 let state_payload = String::from_utf8(
                     agent_browser_service_model::encode_prepared_service_state_pretty(&state)
                         .map_err(|err| format!("Failed to serialize service state: {err}"))?,
@@ -642,7 +656,7 @@ fn prepare_service_state_transaction(
                         &state.remote_view_handoffs,
                     )?,
                     owner_registry_payload: Some(runtime_owner_registry_payload(
-                        &state.runtime_owner_registry,
+                        &runtime_owner_persistence.owner_registry,
                     )?),
                     lifecycle_registry_payload: Some(lifecycle_registry_payload),
                 })
@@ -1438,7 +1452,9 @@ fn load_runtime_owner_registry(state_path: &Path) -> Result<DurableRuntimeOwnerR
     })
 }
 
-fn runtime_owner_registry_payload(registry: &RuntimeOwnerRegistry) -> Result<String, String> {
+fn runtime_owner_registry_payload(
+    registry: &RuntimeOwnerPersistenceSnapshot,
+) -> Result<String, String> {
     let registry = DurableRuntimeOwnerRegistry {
         schema_version: RUNTIME_OWNER_REGISTRY_SCHEMA_VERSION.to_string(),
         registry: registry.clone(),
@@ -1476,11 +1492,13 @@ fn load_runtime_lifecycle_registry(
     })
 }
 
-fn runtime_lifecycle_registry_payload(registry: &RuntimeOwnerRegistry) -> Result<String, String> {
+fn runtime_lifecycle_registry_payload(
+    persistence: &RuntimeOwnerPersistenceParts,
+) -> Result<String, String> {
     let registry = DurableRuntimeLifecycleRegistry {
         schema_version: RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION.to_string(),
-        registry_revision: registry.revision(),
-        records: registry.lifecycle_records().clone(),
+        registry_revision: persistence.lifecycle_registry_revision,
+        records: persistence.lifecycle_records.clone(),
     };
     Ok(format!(
         "{}\n",
@@ -4512,9 +4530,13 @@ mod tests {
         let mut owner_sidecar = registry.clone();
         crate::runtime_owner_transfer::edit_registry_fixture(&mut owner_sidecar)
             .registry_revision += 7;
+        let owner_sidecar_snapshot: RuntimeOwnerPersistenceSnapshot = serde_json::from_value(
+            serde_json::to_value(&owner_sidecar).expect("owner fixture should serialize"),
+        )
+        .expect("owner fixture should retain the persistence wire shape");
         fs::write(
             runtime_owner_registry_path(&path),
-            runtime_owner_registry_payload(&owner_sidecar).unwrap(),
+            runtime_owner_registry_payload(&owner_sidecar_snapshot).unwrap(),
         )
         .unwrap();
         fs::write(
