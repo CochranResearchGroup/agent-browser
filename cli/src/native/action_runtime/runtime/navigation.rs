@@ -16,6 +16,9 @@ use crate::native::browser_navigation::{
 use crate::native::network::resolve_fetch_paused;
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
 use crate::native::runtime_lifecycle::{RuntimeLifecycleAuthority, RuntimeLifecycleIntent};
+use crate::native::service_challenge_task::{
+    admit_challenge_consumer, NAVIGATION_CHALLENGE_INTENT_ID,
+};
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,
     service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
@@ -39,6 +42,7 @@ use crate::runtime_profile::{
     clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
 };
+use agent_browser_challenge_control::ChallengeConsumerKind;
 #[cfg(target_os = "linux")]
 use agent_browser_lease_authority::{
     reconcile_protected_browser_owner, ProtectedBrowserOwnerReconciliationRequest,
@@ -53,6 +57,82 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 const RUNTIME_HANDOFF_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
 
+fn required_navigation_challenge_string(command: &Value, field: &str) -> Result<String, String> {
+    command
+        .get(field)
+        .or_else(|| command.get("params").and_then(|params| params.get(field)))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| format!("navigation_challenge_{field}_required"))
+}
+
+fn navigation_challenge_admission_in_state(
+    command: &Value,
+    service_state: &ServiceState,
+) -> Result<Option<Value>, String> {
+    let challenge_task_id = command
+        .get("challengeTaskId")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("challengeTaskId"))
+        })
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let Some(challenge_task_id) = challenge_task_id else {
+        return Ok(None);
+    };
+    let principal_id = command
+        .get("clientSubjectId")
+        .or_else(|| command.get("callerId"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "navigation_challenge_principal_required".to_string())?;
+    let site_policy_id = required_navigation_challenge_string(command, "sitePolicyId")?;
+    let operation_id = required_navigation_challenge_string(command, "operationId")?;
+    let supplied_handle: ServiceTabHandle = serde_json::from_value(
+        command
+            .get("serviceTabHandle")
+            .or_else(|| {
+                command
+                    .get("params")
+                    .and_then(|params| params.get("serviceTabHandle"))
+            })
+            .cloned()
+            .ok_or_else(|| "navigation_challenge_service_tab_handle_required".to_string())?,
+    )
+    .map_err(|error| format!("navigation_challenge_service_tab_handle_invalid:{error}"))?;
+    serde_json::to_value(admit_challenge_consumer(
+        service_state,
+        challenge_task_id,
+        principal_id,
+        &supplied_handle,
+        &site_policy_id,
+        NAVIGATION_CHALLENGE_INTENT_ID,
+        &operation_id,
+        ChallengeConsumerKind::Navigation,
+    )?)
+    .map(Some)
+    .map_err(|error| format!("navigation_challenge_admission_invalid:{error}"))
+}
+
+pub(crate) fn navigation_challenge_admission(command: &Value) -> Result<Option<Value>, String> {
+    if command.get("challengeTaskId").is_none()
+        && command
+            .get("params")
+            .and_then(|params| params.get("challengeTaskId"))
+            .is_none()
+    {
+        return Ok(None);
+    }
+    let repository = LockedServiceStateRepository::default_json()?;
+    navigation_challenge_admission_in_state(command, &repository.load_snapshot()?)
+}
+
 /// Upgrade handoffs share the durable service-state lock with active runtimes.
 /// Their owner transfer is bounded by the outer transaction, so tolerate a
 /// short writer burst instead of failing at the ordinary interactive budget.
@@ -62,12 +142,24 @@ fn runtime_handoff_service_repository(
     Ok(LockedServiceStateRepository::default_json()?
         .with_lock_timeout(RUNTIME_HANDOFF_SERVICE_STATE_LOCK_TIMEOUT))
 }
-pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+pub(crate) async fn handle_navigate(
+    cmd: &Value,
+    state: &mut DaemonState,
+    challenge_admission: Option<Value>,
+) -> Result<Value, String> {
     let cancellation = state.current_cancellation.clone();
     let url = cmd
         .get("url")
         .and_then(|v| v.as_str())
         .ok_or("Missing 'url' parameter")?;
+    let challenge_requested = cmd.get("challengeTaskId").is_some()
+        || cmd
+            .get("params")
+            .and_then(|params| params.get("challengeTaskId"))
+            .is_some();
+    if challenge_requested && challenge_admission.is_none() {
+        return Err("navigation_challenge_admission_missing".to_string());
+    }
     {
         let df = state.domain_filter.read().await;
         if let Some(ref filter) = *df {
@@ -2519,6 +2611,176 @@ pub(crate) fn write_runtime_handoff(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn challenge_navigation_state() -> ServiceState {
+        use crate::native::service_model::{
+            BrowserHealth, ProfileOrigin, ServiceTabHandleTraceFilter, SitePolicy, TabLifecycle,
+        };
+        use crate::native::service_profile_access_policy::{
+            ProfileChildAccess, ProfileConnectionState, ProfileIdentityAssurance,
+        };
+
+        let profile_access = ProfileChildAccess {
+            schema_version: "agent-browser.profile-child-access.v1".to_string(),
+            parent_policy_revision: 1,
+            access_decision_id: "navigation-decision-1".to_string(),
+            subject_id: Some("principal-1".to_string()),
+            identity_assurance: ProfileIdentityAssurance::AuthenticatedIngress,
+            connection_instance_id: Some("navigation-connection-1".to_string()),
+            connection_state: ProfileConnectionState::Active,
+            permissions: Vec::new(),
+        };
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "browser-1".to_string(),
+            BrowserProcess {
+                id: "browser-1".to_string(),
+                profile_id: Some("profile-1".to_string()),
+                health: BrowserHealth::Ready,
+                active_session_ids: vec!["session-1".to_string()],
+                ..BrowserProcess::default()
+            },
+        );
+        state.sessions.insert(
+            "session-1".to_string(),
+            BrowserSession {
+                id: "session-1".to_string(),
+                service_name: Some("navigation-service".to_string()),
+                agent_name: Some("navigation-worker".to_string()),
+                task_name: Some("navigate-task".to_string()),
+                profile_id: Some("profile-1".to_string()),
+                lease: LeaseState::Exclusive,
+                ..BrowserSession::default()
+            },
+        );
+        state.tabs.insert(
+            "tab-1".to_string(),
+            BrowserTab {
+                id: "tab-1".to_string(),
+                browser_id: "browser-1".to_string(),
+                target_id: Some("target-1".to_string()),
+                session_id: Some("session-1".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                owner_session_id: Some("session-1".to_string()),
+                profile_access: Some(profile_access),
+                ..BrowserTab::default()
+            },
+        );
+        state.site_policies.insert(
+            "example".to_string(),
+            SitePolicy {
+                id: "example".to_string(),
+                name: "Example".to_string(),
+                origin_pattern: "https://example.test".to_string(),
+                ..SitePolicy::default()
+            },
+        );
+        let handle = state.service_tab_handle("tab-1").unwrap();
+        assert_eq!(handle.profile_origin, ProfileOrigin::AgentBrowserOwned);
+        assert_eq!(
+            handle.trace_filter,
+            ServiceTabHandleTraceFilter {
+                browser_id: Some("browser-1".to_string()),
+                profile_id: Some("profile-1".to_string()),
+                session_id: Some("session-1".to_string()),
+                service_name: Some("navigation-service".to_string()),
+                agent_name: Some("navigation-worker".to_string()),
+                task_name: Some("navigate-task".to_string()),
+            }
+        );
+        state
+    }
+
+    fn challenge_navigation_command(state: &ServiceState, task_id: &str) -> Value {
+        json!({
+            "action": "navigate",
+            "url": "https://example.test/after-challenge",
+            "serviceName": "navigation-service",
+            "agentName": "navigation-worker",
+            "taskName": "navigate-task",
+            "clientSubjectId": "principal-1",
+            "challengeTaskId": task_id,
+            "sitePolicyId": "example",
+            "operationId": "navigation-operation-1",
+            "serviceTabHandle": state.service_tab_handle("tab-1").unwrap(),
+        })
+    }
+
+    #[test]
+    fn navigation_uses_shared_admission_before_any_consumer_effect() {
+        let mut state = challenge_navigation_state();
+        let task_id = crate::native::service_challenge_task::complete_provider_free_test_task(
+            &mut state,
+            "navigation-service",
+            "navigation-worker",
+            "navigate-task",
+            "principal-1",
+            "example",
+            NAVIGATION_CHALLENGE_INTENT_ID,
+            "challenge_not_present",
+        )
+        .unwrap();
+        let before = state.clone();
+        let admission = navigation_challenge_admission_in_state(
+            &challenge_navigation_command(&state, &task_id),
+            &state,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(admission["consumer"], "navigation");
+        assert_eq!(admission["consumerAdmission"], "admitted");
+        assert_eq!(state, before);
+
+        let later_consumer_failure = Err::<(), _>("navigation_transport_failed");
+        assert_eq!(
+            later_consumer_failure.unwrap_err(),
+            "navigation_transport_failed"
+        );
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn withheld_navigation_admission_fails_before_dispatch() {
+        let mut state = challenge_navigation_state();
+        let task_id = crate::native::service_challenge_task::complete_provider_free_test_task(
+            &mut state,
+            "navigation-service",
+            "navigation-worker",
+            "navigate-task",
+            "principal-1",
+            "example",
+            NAVIGATION_CHALLENGE_INTENT_ID,
+            "rejected_resolution",
+        )
+        .unwrap();
+        assert_eq!(
+            navigation_challenge_admission_in_state(
+                &challenge_navigation_command(&state, &task_id),
+                &state,
+            )
+            .unwrap_err(),
+            "challenge_consumer_admission_withheld"
+        );
+    }
+
+    #[tokio::test]
+    async fn challenge_navigation_handler_rejects_preflight_bypass() {
+        let mut state = DaemonState::new();
+        let command = json!({
+            "action": "navigate",
+            "url": "https://example.test/after-challenge",
+            "challengeTaskId": "challenge-task-1",
+        });
+
+        assert_eq!(
+            handle_navigate(&command, &mut state, None)
+                .await
+                .unwrap_err(),
+            "navigation_challenge_admission_missing"
+        );
+        assert!(state.browser.is_none());
+    }
 
     #[test]
     fn retained_close_uses_attached_runtime_profile_when_manager_has_no_profile_path() {

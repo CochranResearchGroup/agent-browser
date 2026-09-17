@@ -1248,6 +1248,18 @@ returns the persisted terminal receipt. These W5 actions never launch a
 browser, emit input, contact a provider, use credentials, or prove live CAPTCHA
 acceptance.
 
+Challenge-aware Authentication Run start accepts `challengeTaskId` and
+`sitePolicyId` only as a pair. Challenge-aware `navigate` additionally requires
+the authenticated `clientSubjectId`, or `callerId` on the direct native path, a
+unique `operationId`, and the exact current `serviceTabHandle`. The Service
+resolves and hashes the effective site policy,
+then verifies the principal, downstream intent, and tab before confirmation,
+recovery, browser launch, or dispatch. Successful admission and any later
+consumer failure expose the typed `challengeConsumerAdmission` receipt; a later
+failure does not rewrite the retained challenge outcome or admission decision.
+This consumer gate grants no CAPTCHA, provider, credential, retry, or production
+authority.
+
 Receipts contain authority, hashed input, cleanup, and verification metadata.
 They do not contain frame pixels, plaintext typed content, or the full motion
 path. A partial input effect returns an explicit uncertain receipt and is never
@@ -1889,16 +1901,18 @@ persisted-state profile provenance across HTTP, MCP, and the service client
 without launching a browser.
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
-Fast CI runs the draft browser capability registry sample guard in the Service
-Client job, then runs the no-launch service contract metadata smoke, the
-no-launch profile-source smoke, the no-launch site-policy source smoke, and the
-no-launch HTTP and MCP incident-summary smokes after the Rust suite, covering
+Path-selected pull-request CI runs the draft browser capability registry sample
+guard when the Service Client surface is selected. Selected Rust changes run
+affected provider-free compartments. When those changes touch service-owned
+Rust surfaces, the same job follows with the no-launch service contract
+metadata, profile-source, site-policy source, and HTTP and MCP incident-summary
+smokes, covering
 the future browser registry fixture, service contract metadata, effective
 profile and site-policy provenance, and grouped service incident remedies
 without starting Chrome. Service request action changes must keep `SERVICE_REQUEST_ACTIONS`,
 `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
 HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
-aligned; the fast parity, client, and Rust gates include no-launch guards for
+aligned; the selected parity, client, and service-Rust gates include no-launch guards for
 that invariant. Run both incident-summary smokes before changing incident
 summary grouping or filters; together they guard HTTP `summary=true` and MCP
 `service_incidents` with `summary: true` across state, severity, escalation,

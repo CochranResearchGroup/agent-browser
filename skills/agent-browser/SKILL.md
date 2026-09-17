@@ -1103,6 +1103,18 @@ cooldown, intervention, and admission fields. These actions have no browser,
 provider, credential, network, or desktop-input authority and are not live
 CAPTCHA acceptance.
 
+For challenge-aware Authentication Run start, supply `challengeTaskId` and
+`sitePolicyId` together. Challenge-aware `navigate` also requires the
+authenticated `clientSubjectId`, or `callerId` on the direct native path, a
+unique `operationId`, and the exact current `serviceTabHandle`. The Service
+resolves and hashes the effective site policy
+and verifies the principal, downstream intent, and tab before confirmation,
+recovery, browser launch, or dispatch. Inspect the typed
+`challengeConsumerAdmission` receipt on successful admission and on any later
+consumer failure. A later failure does not rewrite the retained challenge
+outcome or admission decision. Never treat consumer admission as CAPTCHA,
+provider, credential, retry, or production authority.
+
 Use `cloudflare-turnstile-v1` only for a visible Cloudflare checkbox challenge
 on an exactly bound service-owned X11 browser. First run `desktop locate` with
 the same locator ID. The interaction recipe derives coordinates from the exact
