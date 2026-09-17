@@ -22,3 +22,24 @@ lanes:
     reconciled_overlaps: []
     blocker: provider-free consumer admission contract and two consumer integrations remain in progress; every live challenge effect stays with issue #66
     updated_at: 2026-09-16
+  - id: P204
+    product_lane: PL-PLATFORM
+    objective: Make ordinary CI path-selected with a stable aggregate presubmit while retaining fail-safe comprehensive qualification
+    plan: docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md
+    plan_ref: refs/heads/platform/p204-ci-validation-tiering
+    branch: platform/p204-ci-validation-tiering
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 2632e31cfdc1858336af5acbf6e07143ee7787e7
+    remote_ref: null
+    integration_receipt: null
+    integration: merge through the protected pull-request workflow after selector fixtures, workflow validation, and changed-surface validation
+    validation_status: red selector probe captured; implementation pending
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#174]
+    dependencies: [CochranResearchGroup/agent-browser#164]
+    overlaps: [P197:ROADMAP.md, P197:RUNBOOK.md, P197:docs/dev/active-lanes.yaml]
+    reconciled_overlaps: [P204 writes only its own bounded planning sections and catalog entry; P197 retains its own records]
+    blocker: main-fallback removal remains blocked until issue #164 proves live Presubmit enforcement; implementation can proceed independently
+    updated_at: 2026-09-16

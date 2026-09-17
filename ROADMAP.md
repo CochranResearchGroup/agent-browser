@@ -25,6 +25,20 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P204 | CI Validation Economics And Tiering
+
+State: OPEN
+
+Current state: [Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+and [issue #174](https://github.com/CochranResearchGroup/agent-browser/issues/174)
+own the `PL-PLATFORM` repair. The first docs-only probe is red because the
+existing selector has no versioned tier or job outputs, and the workflow still
+runs every ordinary application suite for every pull request. P204 will add a
+pure classifier, deterministic surface fixtures, PR cancellation, conditional
+jobs, and one stable aggregate `Presubmit` check. The post-merge `main` fallback
+remains until issue #164 proves live enforcement; workflow dispatch, branch-rule
+mutation, installed-runtime effects, and release are outside this lane.
+
 ## P203 | Runtime Host Admission Routing
 
 State: CLOSED
