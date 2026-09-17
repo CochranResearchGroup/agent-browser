@@ -3786,6 +3786,68 @@ rollback and success parity, the ordinary CLI transition cutover, exact focused
 witnesses, and a targeted guard without obscuring the 175 deferred production
 accesses.
 
+## Checkpoint 57 | Atomic Runtime Lifecycle Transition Accepted
+
+State transition: Service Model now owns the ordinary all-or-nothing runtime
+lifecycle transition. The aggregate clones its hidden registry, delegates the
+exact typed intent to the Lease Authority kernel, and commits the staged
+registry only after success. The ordinary CLI transition prepares its intent
+inside each repository mutation invocation and delegates to that aggregate
+method. This removes the two direct registry expressions frozen at Checkpoint
+56 and leaves 175 production expressions across 27 files plus 288 test-only
+expressions as explicit migration debt.
+
+The accepted method adds no validation, error mapping, observation, retry,
+revision update, persistence work, callback, registry handle, or outcome
+filter. Success returns the exact kernel transition and changes only the
+registry. Every kernel error preserves the complete Service State aggregate,
+including unrelated profiles, tabs, unknown fields, principal bindings,
+pending transfer state, lifecycle evidence, and the envelope revision. CLI
+boot observation and canonical route-policy conversion remain in the adapter.
+Caller outcome mismatch checks remain after repository mutation and therefore
+retain their existing post-commit behavior.
+
+Acceptance evidence:
+
+- all 208 Service Model unit tests and fourteen integration tests pass,
+  including five new model witnesses for registration, transfer, close,
+  explicit boot inputs, revision saturation, raw-kernel success parity, and
+  rollback after ambiguity, historical-row removal, profile mismatch, and
+  transfer rejection;
+- all twenty focused `runtime_lifecycle` CLI tests pass, including a new
+  non-rollback in-memory repository witness that first proves the raw kernel
+  mutates owner state and revision before its ambiguity error, then proves the
+  aggregate-backed CLI transition preserves the complete pre-call state;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, its mutation fixtures, and changed-
+  surface selector readback pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+The independent closed-world review accepted the implementation semantics but
+found two blocking proof gaps. First, the guard checked clone, apply, and commit
+tokens across the whole aggregate source instead of the named method. Second,
+the existing CLI failure witness did not prove its selected kernel error
+mutated before failing. The single allowed review repair now brace-extracts and
+exact-normalizes the method signature and body, adds negative fixtures for
+receiver, callback, persistence, registry, iterator, error-mapping, missing-
+commit, and misplaced-body escapes, and adds the mutation-before-error CLI
+witness. Closed-world verification passed both accepted findings.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route for the aggregate implementation
+and five model witnesses. `/root/p205_receipt_cli_audit` used the workhorse
+`gpt-5.6-sol` high route for the CLI cutover and exact production inventory.
+The primary hardened the architecture contract, ran all local acceptance
+gates, and reconciled one bounded independent review and repair cycle.
+
+Acceptance state and progress classification: atomic runtime lifecycle
+transition closure is accepted and is outcome progress toward P4 field
+privacy. The next bounded outcome is the two-access terminal-replacement
+profile synchronization join. It must preserve CLI path and canonical-route
+preflight before intent preparation, aggregate profile validation before the
+kernel, cross-field rollback, and post-commit caller outcome checks.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -3793,9 +3855,9 @@ accesses.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, and immutable runtime-owner projections accepted; remaining transition closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections, and ordinary atomic runtime lifecycle transition accepted; remaining cross-field and partial transition closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | immutable runtime-owner projections accepted through Checkpoint 55 |
+| Focused correctness | crate tests and affected CLI adapter tests | atomic runtime lifecycle transition accepted through Checkpoint 57 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

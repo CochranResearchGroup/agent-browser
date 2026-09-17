@@ -120,6 +120,15 @@ impl ServiceState {
   pub fn runtime_control_plane_authority(&self) {}
   pub fn runtime_lane_authority(&self) {}
   pub fn runtime_resource_lanes(&self) {}
+  pub fn apply_runtime_lifecycle_transition_atomically(
+    &mut self,
+    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,
+  ) -> Result<agent_browser_lease_authority::RuntimeLifecycleTransition, String> {
+    let mut staged = self.runtime_owner_registry.clone();
+    let transition = staged.apply_lifecycle_transition(intent)?;
+    self.runtime_owner_registry = staged;
+    Ok(transition)
+  }
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -319,11 +328,20 @@ ${authenticationControlTraits.map((name) => `pub trait ${name} {}`).join('\n')}
 pub const AUTHENTICATION_RUN_SCHEMA_VERSION: &str = "schema";
 `;
 const validAuthenticationFacade = 'pub(crate) use agent_browser_authentication_control::*;\n';
+const validRuntimeLifecycle = `
+impl Authority {
+  pub(crate) fn transition(&self) {
+    state.apply_runtime_lifecycle_transition_atomically(prepare_lifecycle_intent(intent));
+  }
+  fn transition_terminal_replacement_with_profile_sync(&self) {}
+}
+`;
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
   cliTest = '', principalCli = '', serviceStore = '',
   projectionCli = '', runtimeOwnerProjection = validRuntimeOwnerProjection,
+  runtimeLifecycle = validRuntimeLifecycle,
   principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
@@ -360,6 +378,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'cli/src/native/service_principal.rs'), principalCli);
   writeFileSync(join(root, 'cli/src/native/service_store.rs'), serviceStore);
   writeFileSync(join(root, 'cli/src/install.rs'), projectionCli);
+  writeFileSync(join(root, 'cli/src/native/runtime_lifecycle.rs'), runtimeLifecycle);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -518,6 +537,54 @@ for (const [name, mutation] of [
   }],
   ['runtime-owner projection impl escape hatch', {
     runtimeOwnerProjection: `${validRuntimeOwnerProjection}\nimpl RuntimeResourceLane { pub fn registry(&self) -> &RuntimeOwnerRegistry { todo!() } }\n`,
+  }],
+  ['missing atomic runtime lifecycle method', { serviceState: validServiceState.replace(
+    /  pub fn apply_runtime_lifecycle_transition_atomically\([\s\S]*?\n  \}\n/,
+    '',
+  ) }],
+  ['atomic runtime lifecycle registry argument', { serviceState: validServiceState.replace(
+    'intent: agent_browser_lease_authority::RuntimeLifecycleIntent,',
+    'registry: &mut RuntimeOwnerRegistry,',
+  ) }],
+  ['atomic runtime lifecycle callback argument', { serviceState: validServiceState.replace(
+    'intent: agent_browser_lease_authority::RuntimeLifecycleIntent,',
+    'intent: agent_browser_lease_authority::RuntimeLifecycleIntent, callback: impl FnOnce(),',
+  ) }],
+  ['atomic runtime lifecycle persistence argument', { serviceState: validServiceState.replace(
+    'intent: agent_browser_lease_authority::RuntimeLifecycleIntent,',
+    'intent: agent_browser_lease_authority::RuntimeLifecycleIntent, snapshot: RuntimeOwnerPersistenceSnapshot,',
+  ) }],
+  ['atomic runtime lifecycle wrong receiver', { serviceState: validServiceState.replace(
+    '    &mut self,\n    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,',
+    '    &self,\n    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,',
+  ) }],
+  ['atomic runtime lifecycle registry result', { serviceState: validServiceState.replace(
+    ') -> Result<agent_browser_lease_authority::RuntimeLifecycleTransition, String> {',
+    ') -> Result<&mut RuntimeOwnerRegistry, String> {',
+  ) }],
+  ['atomic runtime lifecycle iterator result', { serviceState: validServiceState.replace(
+    ') -> Result<agent_browser_lease_authority::RuntimeLifecycleTransition, String> {',
+    ') -> impl Iterator<Item = RuntimeOwnerRegistry> {',
+  ) }],
+  ['atomic runtime lifecycle error mapping', { serviceState: validServiceState.replace(
+    '    let mut staged = self.runtime_owner_registry.clone();\n',
+    '    if false { return Err("changed_error".into()); }\n    let mut staged = self.runtime_owner_registry.clone();\n',
+  ) }],
+  ['atomic runtime lifecycle missing commit', { serviceState: validServiceState.replace(
+    '    self.runtime_owner_registry = staged;\n',
+    '',
+  ) }],
+  ['atomic runtime lifecycle misplaced structure', { serviceState: validServiceState.replace(
+    '    let mut staged = self.runtime_owner_registry.clone();\n    let transition = staged.apply_lifecycle_transition(intent)?;\n    self.runtime_owner_registry = staged;\n    Ok(transition)\n',
+    '    helper(self, intent)\n',
+  ) }],
+  ['ordinary lifecycle transition direct field access', {
+    runtimeLifecycle: `
+impl Authority {
+  pub(crate) fn transition(&self) { let _ = state.runtime_owner_registry.clone(); }
+  fn transition_terminal_replacement_with_profile_sync(&self) {}
+}
+`,
   }],
   ['missing authentication aggregate method', { serviceState: validServiceState.replace(
     'pub fn observe_service_authentication_run(&mut self) {}',

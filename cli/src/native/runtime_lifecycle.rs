@@ -136,10 +136,9 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
         intent: RuntimeLifecycleIntent,
     ) -> Result<RuntimeLifecycleTransition, String> {
         self.repository.mutate(|state| {
-            let mut registry = state.runtime_owner_registry.clone();
-            let transition = apply_transition(&mut registry, intent.clone())?;
-            state.runtime_owner_registry = registry;
-            Ok(transition)
+            state.apply_runtime_lifecycle_transition_atomically(prepare_lifecycle_intent(
+                intent.clone(),
+            ))
         })
     }
 
@@ -737,10 +736,16 @@ fn apply_transition(
     registry: &mut RuntimeOwnerRegistry,
     intent: RuntimeLifecycleIntent,
 ) -> Result<RuntimeLifecycleTransition, String> {
+    registry.apply_lifecycle_transition(prepare_lifecycle_intent(intent))
+}
+
+fn prepare_lifecycle_intent(
+    intent: RuntimeLifecycleIntent,
+) -> agent_browser_lease_authority::RuntimeLifecycleIntent {
     use agent_browser_lease_authority::RuntimeLifecycleIntent as KernelIntent;
 
     // Host boot observation and canonical route naming remain CLI responsibilities.
-    let intent = match intent {
+    match intent {
         RuntimeLifecycleIntent::RegisterCurrentOwner(owner) => {
             KernelIntent::RegisterCurrentOwner(owner)
         }
@@ -847,8 +852,7 @@ fn apply_transition(
             expected_owner_generation,
             terminal_evidence,
         },
-    };
-    registry.apply_lifecycle_transition(intent)
+    }
 }
 
 /// Begin an exact abandoned-browser close inside an already locked, pure
@@ -2115,6 +2119,55 @@ mod tests {
             repository.load_snapshot().unwrap().runtime_owner_registry,
             before
         );
+    }
+
+    #[test]
+    fn partial_kernel_failure_rolls_back_inside_the_aggregate() {
+        let repository = MemoryRepository::default();
+        let current_owner = owner();
+        let record = RuntimeLifecycleRecord {
+            logical_browser_id: current_owner.browser_id.clone(),
+            profile_identity_digest: current_owner.profile_identity_digest.clone(),
+            owner_generation: current_owner.owner_generation,
+            terminal_evidence: vec!["retained-evidence".to_string()],
+            ..RuntimeLifecycleRecord::default()
+        };
+        repository
+            .mutate(|state| {
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .lifecycle_rows
+                .extend([
+                    (current_owner.browser_id.clone(), record.clone()),
+                    ("historical-browser".to_string(), record.clone()),
+                ]);
+                Ok(())
+            })
+            .unwrap();
+        let before = repository.load_snapshot().unwrap();
+        let intent = RuntimeLifecycleIntent::RegisterCurrentOwner(current_owner.clone());
+        let mut raw_registry = before.runtime_owner_registry.clone();
+
+        assert_eq!(
+            apply_transition(&mut raw_registry, intent.clone()).unwrap_err(),
+            "runtime_lifecycle_record_ambiguous"
+        );
+        assert!(raw_registry
+            .owner(&current_owner.profile_identity_digest)
+            .is_some());
+        assert_ne!(
+            raw_registry.revision(),
+            before.runtime_owner_registry.revision()
+        );
+
+        assert_eq!(
+            RuntimeLifecycleAuthority::new(&repository)
+                .transition(intent)
+                .unwrap_err(),
+            "runtime_lifecycle_record_ambiguous"
+        );
+        assert_eq!(repository.load_snapshot().unwrap(), before);
     }
 
     #[test]

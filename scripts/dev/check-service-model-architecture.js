@@ -198,6 +198,8 @@ const RUNTIME_OWNER_PROJECTION_METHODS = [
   'runtime_resource_lanes',
 ];
 
+const ATOMIC_RUNTIME_LIFECYCLE_METHOD = 'apply_runtime_lifecycle_transition_atomically';
+
 const RUNTIME_OWNER_PROJECTION_CLI_FILES = [
   'cli/src/install.rs',
   'cli/src/native/service_boot_epoch.rs',
@@ -509,6 +511,25 @@ function rustStructDefinition(source, name) {
   return depth === 0 ? source.slice(match.index, cursor) : '';
 }
 
+function rustPublicFunctionDefinition(source, name) {
+  const header = new RegExp(`\\bpub\\s+fn\\s+${name}\\b[^\\{]*\\{`);
+  const match = header.exec(source);
+  if (!match) return '';
+
+  let depth = 1;
+  let cursor = match.index + match[0].length;
+  while (cursor < source.length && depth > 0) {
+    if (source[cursor] === '{') depth += 1;
+    else if (source[cursor] === '}') depth -= 1;
+    cursor += 1;
+  }
+  return depth === 0 ? source.slice(match.index, cursor) : '';
+}
+
+function normalizeRust(source) {
+  return source.replace(/\s+/g, ' ').trim();
+}
+
 function importedPaths(source) {
   const clean = withoutCommentsAndStrings(source);
   const paths = [];
@@ -730,6 +751,8 @@ function check(root = repoRoot) {
     'cli/src/native/service_principal.rs')));
   const cliServiceStore = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
     'cli/src/native/service_store.rs')));
+  const cliRuntimeLifecycle = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
+    'cli/src/native/runtime_lifecycle.rs')));
   const cliRuntimeOwnerProjectionSources = RUNTIME_OWNER_PROJECTION_CLI_FILES.map((path) => ({
     path,
     source: withoutCommentsAndStrings(withoutCfgTestItems(read(root, path))),
@@ -1025,6 +1048,35 @@ function check(root = repoRoot) {
       `runtime-owner projection method must not expose registry, mutable, iterator, or callback access: ${name}`,
     );
   }
+  const atomicLifecycleMethod = rustPublicFunctionDefinition(
+    serviceStateCode,
+    ATOMIC_RUNTIME_LIFECYCLE_METHOD,
+  );
+  requireCondition(
+    normalizeRust(atomicLifecycleMethod) === normalizeRust(`
+      pub fn apply_runtime_lifecycle_transition_atomically(
+        &mut self,
+        intent: agent_browser_lease_authority::RuntimeLifecycleIntent,
+      ) -> Result<agent_browser_lease_authority::RuntimeLifecycleTransition, String> {
+        let mut staged = self.runtime_owner_registry.clone();
+        let transition = staged.apply_lifecycle_transition(intent)?;
+        self.runtime_owner_registry = staged;
+        Ok(transition)
+      }
+    `),
+    'atomic runtime lifecycle method must preserve its exact signature and clone, apply, commit, return body',
+  );
+  const ordinaryTransition = cliRuntimeLifecycle.match(
+    /pub\s*\(\s*crate\s*\)\s+fn\s+transition\b[\s\S]*?(?=\n\s*fn\s+transition_terminal_replacement_with_profile_sync\b)/,
+  )?.[0] ?? '';
+  requireCondition(
+    ordinaryTransition.includes(ATOMIC_RUNTIME_LIFECYCLE_METHOD),
+    'CLI ordinary runtime lifecycle transition must delegate to the aggregate atomic method',
+  );
+  requireCondition(
+    !/\.\s*runtime_owner_registry\b/.test(ordinaryTransition),
+    'CLI ordinary runtime lifecycle transition must not clone or assign the aggregate registry field',
+  );
   requireCondition(
     !/\bRuntimeOwnerPersistenceSnapshot\b/.test(runtimeOwnerProjectionSource),
     'runtime-owner projections must not reuse the persistence snapshot as an access path',
