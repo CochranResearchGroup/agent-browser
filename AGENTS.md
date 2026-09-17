@@ -312,7 +312,9 @@ Rust Quality runs Linux format and clippy before selected Rust compartments, so
 style or lint failures fail fast. `scripts/ci/rust-tests.sh --compartment`
 keeps each compartment serial inside its process and gives every CLI
 compartment a disposable home and XDG runtime tree; at most two disjoint
-compartments overlap through Cargo admission. When a service-owned Rust surface
+lanes overlap through Cargo admission. CLI compartments run serially in one
+lane so Cargo cannot replace a running shared `agent-browser` test executable;
+independent crate compartments run serially in the other lane. When a service-owned Rust surface
 is selected, the Rust job then builds one exact-head debug CLI and pins every
 command-based no-launch smoke to that binary. Unrelated focused Rust changes
 skip that service smoke bundle. Explicit comprehensive qualification uses `scripts/ci/rust-tests.sh`

@@ -206,8 +206,36 @@ jobs:
         env:
           RUST_COMPARTMENTS: ${{ needs.classify.outputs.rust_compartments }}
         run: |
-          jq -r '.[]' <<< "$RUST_COMPARTMENTS" | \
-            xargs -r -P2 -n1 bash -c "scripts/ci/rust-tests.sh --compartment \"\$1\"" _
+          mapfile -t compartments < <(jq -r '.[]' <<< "$RUST_COMPARTMENTS")
+          cli_compartments=()
+          support_compartments=()
+          for compartment in "${compartments[@]}"; do
+            if [[ "$compartment" == cli-* ]]; then
+              cli_compartments+=("$compartment")
+            else
+              support_compartments+=("$compartment")
+            fi
+          done
+          run_lane() {
+            local lane_status=0
+            for compartment in "$@"; do
+              scripts/ci/rust-tests.sh --compartment "$compartment" || lane_status=1
+            done
+            return "$lane_status"
+          }
+          set +e
+          run_lane "${cli_compartments[@]}" &
+          cli_pid=$!
+          run_lane "${support_compartments[@]}" &
+          support_pid=$!
+          wait "$cli_pid"
+          cli_status=$?
+          wait "$support_pid"
+          support_status=$?
+          set -e
+          if [[ "$cli_status" -ne 0 || "$support_status" -ne 0 ]]; then
+            exit 1
+          fi
         timeout-minutes: 30
 
       - name: Run no-launch service smokes
