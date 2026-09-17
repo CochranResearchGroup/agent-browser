@@ -24,6 +24,18 @@ export class WorktreeCloseoutConflictError extends Error {
   }
 }
 
+export class CandidateDispositionRequiredError extends Error {
+  constructor(candidateIds) {
+    super('every pinned candidate requires an explicit closeout disposition');
+    this.name = 'CandidateDispositionRequiredError';
+    this.code = 'worktree_closeout_candidate_disposition_required';
+    this.details = {
+      candidateIds,
+      supportedDispositions: ['retain', 'archive', 'discard'],
+    };
+  }
+}
+
 function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(',')}]`;
@@ -65,6 +77,36 @@ function validateRequest(request) {
   }
   if (!Array.isArray(request.candidateDispositions)) {
     throw new TypeError('request.candidateDispositions must be an array');
+  }
+  const pinnedCandidates = request.pinnedCandidates ?? [];
+  if (!Array.isArray(pinnedCandidates)) {
+    throw new TypeError('request.pinnedCandidates must be an array');
+  }
+  const pinnedIds = new Set();
+  for (const candidate of pinnedCandidates) {
+    requireNonemptyString(candidate?.candidateId, 'request.pinnedCandidates[].candidateId');
+    if (pinnedIds.has(candidate.candidateId)) {
+      throw new TypeError(`duplicate pinned candidate ${candidate.candidateId}`);
+    }
+    pinnedIds.add(candidate.candidateId);
+  }
+  const dispositions = new Map();
+  for (const selection of request.candidateDispositions) {
+    requireNonemptyString(selection?.candidateId, 'request.candidateDispositions[].candidateId');
+    if (!['retain', 'archive', 'discard'].includes(selection.disposition)) {
+      throw new TypeError(`unsupported candidate disposition ${selection.disposition}`);
+    }
+    if (dispositions.has(selection.candidateId)) {
+      throw new TypeError(`duplicate candidate disposition ${selection.candidateId}`);
+    }
+    if (!pinnedIds.has(selection.candidateId)) {
+      throw new TypeError(`candidate disposition is not pinned: ${selection.candidateId}`);
+    }
+    dispositions.set(selection.candidateId, selection.disposition);
+  }
+  const unselected = [...pinnedIds].filter((candidateId) => !dispositions.has(candidateId));
+  if (unselected.length > 0) {
+    throw new CandidateDispositionRequiredError(unselected);
   }
 }
 
