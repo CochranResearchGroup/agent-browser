@@ -22,24 +22,3 @@ lanes:
     reconciled_overlaps: []
     blocker: provider-free consumer admission contract and two consumer integrations remain in progress; every live challenge effect stays with issue #66
     updated_at: 2026-09-16
-  - id: P202
-    product_lane: PL-PLATFORM
-    objective: Classify and safely retire exact abandoned service-owned browser process trees
-    plan: docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md
-    plan_ref: refs/heads/platform/p202-abandoned-browser-retirement
-    branch: platform/p202-abandoned-browser-retirement
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 3de2a6c096e8aafdb12aa64aed8faa3b6d51f0c6
-    remote_ref: refs/remotes/origin/platform/p202-abandoned-browser-retirement
-    integration_receipt: null
-    integration: merge through the protected `main` workflow after provider-free regression, isolated real-browser acceptance, and complete changed-surface validation
-    validation_status: provider-free, selected changed-surface checks, Packet 12 isolated exact-artifact real-browser acceptance, Packet 13 P190 documentation reconciliation, and published-diff self-check green; exact-head CI pending
-    validation_ref: 3de2a6c096e8aafdb12aa64aed8faa3b6d51f0c6
-    work_items: [CochranResearchGroup/agent-browser#103]
-    dependencies: []
-    overlaps: [P197]
-    reconciled_overlaps: [P197]
-    blocker: exact-head forge CI remains before draft removal
-    updated_at: 2026-09-16

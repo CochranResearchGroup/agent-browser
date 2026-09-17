@@ -43,17 +43,21 @@ Service State, retained-profile, production, or release effect occurred.
 
 ## P202 | Abandoned Service Browser Retirement
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
-owns the bounded no-live implementation for
-[issue #103](https://github.com/CochranResearchGroup/agent-browser/issues/103).
-P202 starts from `main@151ebccd` and will join existing exact process-tree
-shutdown and record-retirement primitives into owner-aware abandoned-lane
-classification, per-lane resource/status projection, and sealed activity-aware
-retirement. P190 and P197 retain their existing shared-surface ownership. No
-installed cleanup, browser shutdown, protected-profile effect, runtime restart,
-provider mutation, production effect, or release is authorized.
+and closed [issue #103](https://github.com/CochranResearchGroup/agent-browser/issues/103)
+record the bounded no-live repair. Merged
+[PR #168](https://github.com/CochranResearchGroup/agent-browser/pull/168)
+landed source head `6f099292` in `main` as `528f2ef0`. Service status now
+projects bounded per-lane resource and activity evidence, classifies only
+complete inactive service-owned lanes, and retires an exact reviewed process
+tree through a sealed reserve, effect, and finalize transaction. Provider-free
+qualification and the isolated disposable real-browser acceptance passed; CI
+run `35163527521` passed every ordinary gate at reviewed code head `d7ceca98`,
+and the final delta contained only integrated P203 closeout documentation. No
+installed cleanup, retained-profile effect, provider mutation, production
+effect, or release occurred during integration or closeout.
 
 ## P201 | X Display Live Occupancy
 
