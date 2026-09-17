@@ -29,7 +29,7 @@ lanes:
     plan_ref: refs/heads/platform/p212-desktop-candidate-intent-contract
     branch: platform/p212-desktop-candidate-intent-contract
     target: main
-    plan_state: SOURCE_ACCEPTED
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     checkpoint: 00f41715
     remote_ref: null
@@ -40,6 +40,7 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: [P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml]
-    reconciled_overlaps: [P211 owns CLI shutdown and workstation routing; P212 owns only desktop-services candidate-intent source and fixtures; shared planning projections reconcile at integration]
+    reconciled_overlaps: [P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml]
+    overlap_disposition: P211 owns CLI shutdown and workstation routing; P212 owns only desktop-services candidate-intent source and fixtures; shared planning projections reconcile at integration
     blocker: publication and protected integration remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17

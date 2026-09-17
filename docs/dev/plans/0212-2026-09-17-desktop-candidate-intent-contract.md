@@ -4,7 +4,7 @@ Date: 2026-09-17
 
 Plan version: 2
 
-State: SOURCE_ACCEPTED
+State: OPEN
 
 Consolidation: required
 
@@ -213,13 +213,16 @@ Local acceptance passes:
 - the strengthened desktop-services architecture guard;
 - workspace formatting and strict workspace Clippy;
 - documentation links, changed-surface selection and diff hygiene; and
-- the active planning and catalog audits.
+- the active planning-contract audit.
 
 The selector expands to broad validation because the modified architecture
 guard is conservatively classified as an unknown repository-tooling surface.
 The source change remains limited to desktop services and its provider-free
 guard; no CLI, Service State, challenge crate, browser, capture, provider,
 credential, CAPTCHA, desktop-input, runtime, production or CI effect occurred.
+The active-lane auditor correctly retains publication, exact-tip catalog
+refresh and shared-file reconciliation as integration work rather than source
+acceptance evidence.
 
 ## Stop Condition
 
