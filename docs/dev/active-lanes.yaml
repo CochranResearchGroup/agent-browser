@@ -31,12 +31,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: ca077d9e
+    checkpoint: ea254ecd
     remote_ref: refs/remotes/origin/platform/p204-ci-validation-tiering
     integration_receipt: null
     integration: merge through the protected pull-request workflow after selector fixtures, workflow validation, and changed-surface validation
-    validation_status: active CI run 35228725370 cancelled; dormant workflow contract, actionlint, policy wiring, planning audit, documentation links, and docs build pass locally
-    validation_ref: ca077d9e
+    validation_status: active CI run 35228725370 cancelled; main and Lease Authority CI files disabled; dormant workflow contract, actionlint, policy wiring, planning audit, documentation links, and docs build pass locally
+    validation_ref: ea254ecd
     work_items: [CochranResearchGroup/agent-browser#174]
     dependencies: []
     overlaps: [P197:ROADMAP.md, P197:RUNBOOK.md, P197:docs/dev/active-lanes.yaml]

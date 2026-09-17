@@ -16,7 +16,10 @@ the full-suite routes. Run `35228725370` was cancelled. The active
 is retained as `.github/workflows/ci.yml.disabled` at candidate `ca077d9e`,
 which GitHub does not load.
 There are no automatic or manual CI triggers. Re-enablement requires new
-maintainer direction.
+maintainer direction. The separate Lease Authority CI matrix is also retained
+as `.github/workflows/lease-authority.yml.disabled` in candidate `ea254ecd`; no
+active workflow has a push or pull-request trigger. Manual release and governed P158 operational
+workflows remain separate and were not dispatched.
 
 ## Turn 373 | 2026-09-17
 

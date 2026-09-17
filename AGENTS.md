@@ -337,13 +337,11 @@ effective profile and site-policy provenance, and grouped incident summary
 contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci`
 when intentionally validating the optimized CI profile locally.
 
-Lease Authority changes also run the path-filtered
-`.github/workflows/lease-authority.yml` workflow. Its non-fail-fast matrix runs
-the `agent-browser-lease-authority` package directly on Linux, macOS ARM,
-macOS x86, and Windows. Treat that workflow as the authoritative
-target-platform gate for the extracted crate; workspace-wide cross-platform
-or browser E2E failures remain separate evidence unless they touch the crate or
-its adapter contract.
+The path-filtered Lease Authority matrix is also disabled and retained as
+`.github/workflows/lease-authority.yml.disabled`. When explicitly re-enabled,
+its non-fail-fast matrix runs the `agent-browser-lease-authority` package
+directly on Linux, macOS ARM, macOS x86, and Windows. Until then, do not claim
+target-platform CI evidence for the extracted crate.
 
 At a completed repair batch, before merge readiness or governed runtime
 effects, match validation to every touched surface since the batch baseline,
