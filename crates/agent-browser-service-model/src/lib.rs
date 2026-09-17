@@ -5,6 +5,7 @@
 
 mod browser_profile;
 mod entity_source;
+mod presentation;
 mod profile_access;
 mod profile_readiness;
 mod profile_seeding;
@@ -16,6 +17,12 @@ pub use browser_profile::{
     SERVICE_PROFILE_CLASS_VALUES,
 };
 pub use entity_source::{ServiceEntitySource, ServiceEntitySources};
+pub use presentation::{
+    ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,
+    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
+    RetainedDisplayAllocationCandidate, RoutePoolEntry, ViewStream, ViewStreamProvider,
+    ViewerLease, SERVICE_CONTROL_INPUT_PROVIDER_VALUES, SERVICE_VIEW_STREAM_PROVIDER_VALUES,
+};
 pub use profile_access::{
     effective_profile_permissions, evaluate_profile_access, evaluate_profile_child_access,
     mutate_profile_policy, profile_policy_target_for_preset, record_profile_eviction_receipt,

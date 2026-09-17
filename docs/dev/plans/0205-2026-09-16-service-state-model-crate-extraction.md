@@ -427,16 +427,60 @@ the provider-free remote-view record family before the browser-process family,
 so `ViewStream` and route controller fencing have one canonical downward owner
 without pulling provider orchestration into the crate.
 
+## Checkpoint 6 | Presentation Records And Controller Fencing
+
+State transition: the crate now owns the provider-free presentation record
+family: durable handoffs and presentation receipts, display allocations,
+remote-view routes, route-pool entries, acquisition rollback snapshots, viewer
+leases, view streams, provider and input enums, and the retained-allocation
+candidate projection record. Route controller advancement and stream
+projection move with the records as pure deterministic fencing behavior.
+
+Acceptance state and progress classification: this P1 dependency-reduction
+packet is accepted locally. The source module is named `presentation` because
+the architecture guard reserves `remote_view` for effect adapters. Route
+checkout, handoff resolution, Guacamole and RDP integration, display capture,
+viewer effects, health reconciliation, retained-allocation classification,
+and full Service State joins remain in CLI adapters.
+
+Evidence:
+
+- five focused crate tests pass for exact defaults, camel-case and omission
+  rules, strict receipt round-trip, provider enum values, retained-candidate
+  JSON, and same-ID controller regrant fencing;
+- CLI collection wire-contract, nested aggregate, durable handoff, legacy
+  controller epoch, and former-controller and ABA fencing tests pass;
+- human-takeover controller transition and expired-viewer reconciliation
+  adapter tests pass;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- a test-only `ProfileChildAccess` import repaired an older narrowed façade
+  without restoring the unused production re-export;
+- no browser, provider, runtime, install, staging, production, release, or
+  GitHub CI effect was performed.
+
+Material blockers: `BrowserProcess` can now move after extracting its health,
+provenance, and process-identity record closure. Process capture and owner
+observation must remain CLI adapters. The full Service State aggregate still
+depends on job, monitor, incident, challenge, provider, receipt, transaction,
+and presentation-capacity families. P204 still owns the shared validation and
+roadmap surfaces.
+
+Next action: publish this checkpoint, then extract the provider-free browser
+process family without importing OS process observation or retained-owner
+authority into the model crate.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | five families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | six families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | snapshot, transition, and projection interface tests plus deletion test | planned |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | five packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | five packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | six packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | six packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
