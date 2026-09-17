@@ -31,12 +31,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: PUBLISHED_SOURCE_CHECKPOINT
-    checkpoint: 5a98dbfc
+    checkpoint: ac9f50a7
     remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
     integration_receipt: null
     integration: integrate only after P197 enters main and P206 reconciles that canonical checkpoint
-    validation_status: 36 challenge-control tests, challenge-control architecture guard, formatting, strict workspace Clippy, diff hygiene, and changed-surface selection passed at the source checkpoint
-    validation_ref: 5a98dbfc
+    validation_status: 39 challenge-control tests including the complete 23-case visual-round matrix, challenge-control architecture guard, formatting, strict workspace Clippy, diff hygiene, and changed-surface selection passed at the source checkpoint
+    validation_ref: ac9f50a7
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: [P197]
     overlaps: [P197]

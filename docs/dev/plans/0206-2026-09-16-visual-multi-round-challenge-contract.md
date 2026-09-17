@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -47,7 +47,7 @@ attempt a CAPTCHA.
 
 Plan 0187 W0 through W5 are integrated. P197 W6 is source-complete and
 published at `cd22a39f` through draft PR #157, which remains open, draft and
-mergeable. P206 is source-complete at `5a98dbfc`. The pure
+mergeable. P206 is source-complete and acceptance-complete at `ac9f50a7`. The pure
 `agent-browser-challenge-control` crate now owns deterministic round identity,
 fresh visual evidence, exact candidate-set and intent binding, per-round plus
 cumulative budgets, acknowledged-effect custody, after-state continuity and
@@ -62,16 +62,19 @@ that contract.
 
 ## Source Checkpoint
 
-Source commit `5a98dbfc` adds the provider-free `visual_round` contract and a
-20-case synthetic integration matrix. Review hardening closed two persisted
-state defects before checkpointing: an after-state can no longer be classified
-without a recorded effect receipt, and a restored selection cannot escape its
-evidence-bound candidate set even if its intent digest is recomputed.
+Validated source checkpoint `ac9f50a7` contains implementation commit
+`5a98dbfc` and a 23-case synthetic `visual_round` integration matrix. Review
+hardening closed two persisted state defects before checkpointing: an
+after-state can no longer be classified without a recorded effect receipt, and
+a restored selection cannot escape its evidence-bound candidate set even if
+its intent digest is recomputed. The final matrix also directly proves
+duplicate candidate ambiguity, repeated and reordered round rejection, policy
+digest mismatch, and the existing checkbox profiles' one-attempt ceiling.
 
 Validation at that source checkpoint:
 
 - `scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml -p
-  agent-browser-challenge-control -- --nocapture`: 36 passed;
+  agent-browser-challenge-control -- --nocapture`: 39 passed;
 - `node scripts/test-challenge-control-crate-architecture.js`: passed;
 - `scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check`:
   passed;
