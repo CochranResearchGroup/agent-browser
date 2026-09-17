@@ -362,8 +362,9 @@ export function createCandidateBuildFilesystemAdapter({
           mkdirSync(dirname(archivedClaim), { recursive: true });
           atomicCopy(path, archivedClaim);
           const partialArtifacts = artifactPaths(plan).artifactDirectory;
+          let archivedArtifacts = null;
           if (existsSync(partialArtifacts)) {
-            const archivedArtifacts = join(
+            archivedArtifacts = join(
               state,
               'failed',
               'artifacts',
@@ -375,6 +376,19 @@ export function createCandidateBuildFilesystemAdapter({
             syncDirectory(dirname(archivedArtifacts));
           }
           atomicWrite(path, encodeJson(claimDocument(plan, operationId)));
+          try {
+            assertNoSelectedCloseout();
+          } catch (error) {
+            atomicWrite(path, readFileSync(archivedClaim));
+            if (archivedArtifacts && existsSync(archivedArtifacts)) {
+              renameSync(archivedArtifacts, partialArtifacts);
+              syncDirectory(dirname(archivedArtifacts));
+              syncDirectory(dirname(partialArtifacts));
+            }
+            unlinkSync(recoveryGuard);
+            syncDirectory(dirname(recoveryGuard));
+            throw error;
+          }
           unlinkSync(recoveryGuard);
           syncDirectory(dirname(recoveryGuard));
           return {
@@ -428,8 +442,9 @@ export function createCandidateBuildFilesystemAdapter({
           );
           atomicCopy(path, archivedClaim);
           const partialArtifacts = artifactPaths(plan).artifactDirectory;
+          let archivedArtifacts = null;
           if (existsSync(partialArtifacts)) {
-            const archivedArtifacts = join(
+            archivedArtifacts = join(
               state,
               'abandoned',
               'artifacts',
@@ -441,6 +456,19 @@ export function createCandidateBuildFilesystemAdapter({
             syncDirectory(dirname(archivedArtifacts));
           }
           atomicWrite(path, encodeJson(claimDocument(plan, operationId)));
+          try {
+            assertNoSelectedCloseout();
+          } catch (error) {
+            atomicWrite(path, readFileSync(archivedClaim));
+            if (archivedArtifacts && existsSync(archivedArtifacts)) {
+              renameSync(archivedArtifacts, partialArtifacts);
+              syncDirectory(dirname(archivedArtifacts));
+              syncDirectory(dirname(partialArtifacts));
+            }
+            unlinkSync(recoveryGuard);
+            syncDirectory(dirname(recoveryGuard));
+            throw error;
+          }
           unlinkSync(recoveryGuard);
           syncDirectory(dirname(recoveryGuard));
           return {

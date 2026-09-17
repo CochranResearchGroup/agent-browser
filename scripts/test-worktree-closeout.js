@@ -174,6 +174,56 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === 'begin') {
       'a pinned candidate without a disposition must return supported choices without selecting an operation',
     );
 
+    let malformedEffectCount = 0;
+    const malformedOperationState = join(fixtureRoot, 'malformed-operation-state');
+    const malformedOperation = beginOrJoinWorktreeCloseout({
+      stateRoot: malformedOperationState,
+      request: {
+        ...request,
+        coordinationStateRoot: malformedOperationState,
+        archiveRoot: join(malformedOperationState, 'candidate-archives'),
+      },
+    });
+    const tamperedOperation = JSON.parse(readFileSync(malformedOperation.operationPath, 'utf8'));
+    tamperedOperation.request.expectedRef = 'refs/heads/tampered';
+    writeFileSync(malformedOperation.operationPath, `${JSON.stringify(tamperedOperation)}\n`);
+    assert.throws(
+      () => executeWorktreeCloseout({
+        operationPath: malformedOperation.operationPath,
+        adapter: { removeWorktree() { malformedEffectCount += 1; } },
+      }),
+      (error) => error.code === 'worktree_closeout_operation_digest_mismatch',
+    );
+    assert.equal(malformedEffectCount, 0);
+
+    const malformedEffectState = join(fixtureRoot, 'malformed-effect-state');
+    const malformedEffectOperation = beginOrJoinWorktreeCloseout({
+      stateRoot: malformedEffectState,
+      request: {
+        ...request,
+        coordinationStateRoot: malformedEffectState,
+        archiveRoot: join(malformedEffectState, 'candidate-archives'),
+      },
+    });
+    writeFileSync(
+      `${malformedEffectOperation.operationPath}.${malformedEffectOperation.operationId}.effect.1.json`,
+      `${JSON.stringify({
+        schemaVersion: 'agent-browser.worktree-closeout-effect.v1',
+        operationId: malformedEffectOperation.operationId,
+        generation: 1,
+        ownerPid: 'not-an-integer',
+      })}\n`,
+    );
+    assert.throws(
+      () => executeWorktreeCloseout({
+        operationPath: malformedEffectOperation.operationPath,
+        adapter: { removeWorktree() { malformedEffectCount += 1; } },
+        recover: true,
+      }),
+      (error) => error instanceof WorktreeCloseoutConflictError,
+    );
+    assert.equal(malformedEffectCount, 0);
+
     const candidateRoot = join(fixtureRoot, 'worktree', 'cli', 'target', 'sealed');
     mkdirSync(candidateRoot, { recursive: true });
     const artifacts = [
@@ -573,6 +623,20 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === 'begin') {
     assert.equal(
       archiveAfterRetainOperation.supersededRetainedOperationId,
       retainOperation.operationId,
+    );
+    assert.throws(
+      () => beginOrJoinWorktreeCloseout({
+        stateRoot: archiveAfterRetainRequest.coordinationStateRoot,
+        request: {
+          ...archiveAfterRetainRequest,
+          candidateDispositions: [{
+            candidateId: 'candidate-retained',
+            disposition: 'discard',
+          }],
+        },
+      }),
+      (error) => error instanceof WorktreeCloseoutConflictError,
+      'a conflicting retained-operation replacement must not acquire a second operation',
     );
     const archivedAfterRetain = executeWorktreeCloseout({
       operationPath: archiveAfterRetainOperation.operationPath,

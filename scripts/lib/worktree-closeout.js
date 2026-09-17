@@ -126,6 +126,13 @@ function validateRequest(request) {
     }
     const artifactNames = new Set(candidate.artifacts.map((artifact) => {
       requireNonemptyString(artifact?.relativePath, 'candidate.artifacts[].relativePath');
+      const artifactFromSource = relative(resolve(candidate.sourceRoot), resolve(
+        candidate.sourceRoot,
+        artifact.relativePath,
+      ));
+      if (artifactFromSource.startsWith('..') || isAbsolute(artifactFromSource)) {
+        throw new TypeError('candidate artifact path must stay inside sourceRoot');
+      }
       if (!/^[a-f0-9]{64}$/.test(artifact?.sha256 ?? '')) {
         throw new TypeError('candidate.artifacts[].sha256 must be a lowercase SHA-256 digest');
       }
@@ -188,6 +195,42 @@ function readOperation(operationPath) {
     throw error;
   }
   return operation;
+}
+
+function validateTerminalReceipt(operation, receipt, receiptPath) {
+  if (
+    receipt.schemaVersion !== 'agent-browser.worktree-closeout-receipt.v1'
+    || receipt.operationId !== operation.operationId
+    || receipt.requestDigest !== operation.requestDigest
+    || !Number.isInteger(receipt.generation)
+    || receipt.generation < operation.generation
+    || JSON.stringify(receipt.candidateDispositions)
+      !== JSON.stringify(operation.request.candidateDispositions)
+    || !receipt.removal?.outcome
+  ) {
+    const receiptError = new Error(`worktree_closeout_receipt_invalid:${receiptPath}`);
+    receiptError.code = 'worktree_closeout_receipt_invalid';
+    throw receiptError;
+  }
+  return receipt;
+}
+
+function verifyRetainedCandidateBytes(request) {
+  if (!existsSync(request.worktreePath)) {
+    const error = new Error(`worktree_closeout_retained_worktree_missing:${request.worktreePath}`);
+    error.code = 'worktree_closeout_retained_worktree_missing';
+    throw error;
+  }
+  for (const candidate of request.pinnedCandidates) {
+    for (const artifact of candidate.artifacts) {
+      const path = resolve(candidate.sourceRoot, artifact.relativePath);
+      if (!existsSync(path) || sha256(readFileSync(path)) !== artifact.sha256) {
+        const error = new Error(`worktree_closeout_retained_artifact_invalid:${artifact.relativePath}`);
+        error.code = 'worktree_closeout_retained_artifact_invalid';
+        throw error;
+      }
+    }
+  }
 }
 
 function syncDirectory(path) {
@@ -274,13 +317,12 @@ export function beginOrJoinWorktreeCloseout({ stateRoot, request }) {
         }
         if (
           request.supersedesRetainedOperationId === existing.operationId
-          && retainedReceipt?.schemaVersion === 'agent-browser.worktree-closeout-receipt.v1'
-          && retainedReceipt.operationId === existing.operationId
-          && retainedReceipt.requestDigest === existing.requestDigest
-          && retainedReceipt.removal?.outcome === 'retained'
+          && retainedReceipt?.removal?.outcome === 'retained'
         ) {
+          validateTerminalReceipt(existing, retainedReceipt, retainedReceiptPath);
+          verifyRetainedCandidateBytes(existing.request);
           operation.generation = existing.generation + 1;
-          const selectionPath = `${operationPath}.selection.${existing.operationId}.${requestDigest}.json`;
+          const selectionPath = `${operationPath}.selection.${existing.operationId}.json`;
           const selectionTemporary = `${selectionPath}.${process.pid}.${randomUUID()}.tmp`;
           const proposedSelection = {
             schemaVersion: 'agent-browser.worktree-closeout-selection.v1',
@@ -402,19 +444,7 @@ export function executeWorktreeCloseout({
   const progressPath = `${operationPath}.${operation.operationId}.progress.json`;
   try {
     const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
-    if (
-      receipt.schemaVersion !== 'agent-browser.worktree-closeout-receipt.v1'
-      || receipt.operationId !== operation.operationId
-      || receipt.requestDigest !== operation.requestDigest
-      || !Number.isInteger(receipt.generation)
-      || JSON.stringify(receipt.candidateDispositions)
-        !== JSON.stringify(operation.request.candidateDispositions)
-      || !receipt.removal?.outcome
-    ) {
-      const receiptError = new Error(`worktree_closeout_receipt_invalid:${receiptPath}`);
-      receiptError.code = 'worktree_closeout_receipt_invalid';
-      throw receiptError;
-    }
+    validateTerminalReceipt(operation, receipt, receiptPath);
     if (typeof adapter.verifyTerminalReceipt === 'function') {
       adapter.verifyTerminalReceipt(operation.request, receipt);
     }
@@ -570,6 +600,9 @@ export function executeWorktreeCloseout({
     candidateDispositions: operation.request.candidateDispositions,
     removal,
   };
+  if (typeof adapter.verifyTerminalReceipt === 'function') {
+    adapter.verifyTerminalReceipt(operation.request, receipt);
+  }
   atomicWriteJson(receiptPath, receipt);
   if (typeof adapter.verifyTerminalReceipt === 'function') {
     adapter.verifyTerminalReceipt(operation.request, receipt);
