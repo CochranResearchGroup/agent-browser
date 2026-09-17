@@ -12,13 +12,15 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 
 ## Turn 374 | 2026-09-17
 
-P209 source checkpoint `4be65f06` is locally accepted. The pure protocol binds
+P209 local checkpoint `8ada33d5` is accepted. The pure protocol binds
 prepared visual artifacts and P206 evidence into deterministic provider
 requests, admits only candidate identities or typed abstention, and binds a
 caller-owned, policy-checked execution budget before provider adjudication. It
 rejects serialized coordinate, event, retry and instruction smuggling. All 48
 challenge-control tests, strict workspace Clippy, formatting,
-four architecture guards and 114 selector-expanded extracted-crate tests pass.
+four architecture guards and 114 selector-expanded extracted-crate tests pass;
+the exact P206 dependency reconciliation also passes the 48-test
+challenge-control compartment, formatting and strict workspace Clippy.
 The branch has locally joined published P206 head `99793061` and remains
 unpushed until PR #180 enters `main` and the canonical checkpoint is reconciled.
 No browser, provider, CAPTCHA, credential, runtime or production effect

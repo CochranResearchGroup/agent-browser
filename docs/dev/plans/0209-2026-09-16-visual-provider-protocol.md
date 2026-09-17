@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 4
+Plan version: 5
 
 State: SOURCE ACCEPTED | P206 INTEGRATION PENDING
 
@@ -200,6 +200,20 @@ No browser, image, provider, credential, CAPTCHA, desktop-input, runtime or
 production effect was performed. The branch remains local and unpushed. CI and
 publication wait for P206 PR #180 to enter `main` and P209 to reconcile the
 canonical result.
+
+## Published-Dependency Reconciliation | 2026-09-17
+
+Local merge `24aee872` joins published P206 head `99793061`, including current
+`main@f5e3f31b` and its path-selected validation machinery. Documentation
+checkpoint `8ada33d5` removes the superseded PR #179 CI hold while preserving
+the P206 integration gate. At that exact checkpoint, all 48 challenge-control
+tests, the challenge-control architecture guard, workspace formatting and
+strict workspace Clippy pass. The previously accepted CDP, Lease Authority and
+desktop-services gates remain reusable because P209 changes none of their
+source or dependency closure.
+
+The branch remains local and unpushed until PR #180 enters `main`. That is an
+integration-order boundary, not a stop on local development or validation.
 
 ## Stop Condition
 
