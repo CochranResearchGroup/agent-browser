@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 4
+Plan version: 5
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -30,7 +30,7 @@ Validation-wiring checkpoint: `e757add6`
 
 Local validation checkpoint: `8c5137890c0224d60965104d964a789fda9b9396`
 
-Pull request: `CochranResearchGroup/agent-browser#182` (ready; integration pending)
+Pull request: `CochranResearchGroup/agent-browser#182` (merged as `599280442715e04ab9a3109640bdfba637462f09`)
 
 ## Objective
 
@@ -68,6 +68,11 @@ retained only in `.github/workflows/ci.yml.disabled`, and no automatic trigger
 or dispatch route was restored. The conflict-affected selector, aggregate,
 workflow contract, policy, planning, documentation, and closeout surfaces pass
 locally at `8c513789`.
+
+PR #182 merged validated source head `c2ce2b35` into `main` as `59928044`.
+Issue #171 closed automatically. The plan outcome is complete; no real
+worktree, candidate, browser, provider, installed runtime, Service State,
+production, or release effect was performed.
 
 ## Consolidated Batch
 
@@ -163,7 +168,7 @@ reasoning for the specialist tier.
 | Interrupted removal | Recovery reconciles filesystem and Git registration after intent or effect without a second removal | proven by post-removal recovery and CLI replay on `907ae9f2` |
 | Advisory authority | Status and plan remain read-only; explicit operator choices are supported and typed rather than reduced to generic denial | proven on rebased implementation `907ae9f2` |
 | Policy and documentation | Policies and command guidance describe the implemented boundary and raw-Git limitation | complete through policies, tested AGENTS/package invocation, and repository-tooling validation at `5b369e33` |
-| Integration | Validated source enters `main` through the linked PR without reviving disabled CI | pre-rebase exact-head run `35227459177` passed; rebased conflict surfaces pass locally at `8c513789`; PR #182 integration pending |
+| Integration | Validated source enters `main` through the linked PR without reviving disabled CI | complete: source `c2ce2b35` merged through PR #182 as `59928044`; issue #171 closed |
 
 ## Version 3 Checkpoint
 
@@ -198,6 +203,14 @@ authorized re-enable. Rebase conflict resolution removed the obsolete
 validation-control-plane, policy, active-plan, documentation-link, and docs
 build checks locally. Automatic exact-head forge re-evaluation is unavailable
 by design; integration through PR #182 is the only remaining plan gate.
+
+## Version 5 Closeout
+
+PR #182 merged source `c2ce2b35` into `main` as `59928044` on 2026-09-17.
+Issue #171 closed with the merge. The dormant CI configuration remained
+dormant, the implementation and its provider-free evidence entered the
+canonical branch, and all acceptance rows are complete. Branch and worktree
+retirement remain separate Git-custody operations rather than product gates.
 
 Exit requires every row complete or an explicit separately tracked deferral that
 does not weaken the issue's promised outcome. A clean worktree, copied archive,
