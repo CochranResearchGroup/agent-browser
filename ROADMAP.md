@@ -343,6 +343,19 @@ authority join. All 58 challenge-control tests, all 12 desktop-services tests,
 the strengthened architecture guard, workspace formatting and strict workspace
 Clippy pass locally. Publication and protected integration remain. GitHub CI
 remains operator-disabled.
+P213 exact head `c8012bd0` merged through PR #196 as `7e56d9c7`. The next
+platform boundary is admitted through
+[Plan 0214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
+on `platform/p214-candidate-event-plan`. P214 defines exact raw pointer-event
+budget semantics and a deterministic effect-free plan before any executor is
+introduced. Every move, down and up consumes the permit budget; key semantics,
+provider calls, route claims and event emission remain excluded. P214 avoids
+P205's Cargo manifest and lockfile surfaces. GitHub CI remains
+operator-disabled. Source checkpoint `f90ef7a7` now produces exact-budget,
+checked, deterministic raw pointer plans without an executor. All 18
+desktop-services tests, all 58 challenge-control tests, the strengthened
+architecture guard, workspace formatting and strict workspace Clippy pass
+locally. Publication and protected integration remain.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

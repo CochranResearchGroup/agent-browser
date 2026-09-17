@@ -271,20 +271,7 @@ pub fn desktop_candidate_effect_permit_digest(permit: &DesktopCandidateEffectPer
 
 fn valid_observation(observation: &DesktopCandidateObservation) -> bool {
     let binding = &observation.binding;
-    !binding.browser_id.trim().is_empty()
-        && !binding.session_name.trim().is_empty()
-        && binding
-            .profile_id
-            .as_deref()
-            .is_none_or(|profile_id| !profile_id.trim().is_empty())
-        && !binding.display_allocation_id.trim().is_empty()
-        && !binding.stream_id.trim().is_empty()
-        && !binding.route_id.trim().is_empty()
-        && binding.width > 0
-        && binding.height > 0
-        && binding.scale_millis > 0
-        && binding.coordinate_space == COORDINATE_SPACE
-        && !binding.geometry_epoch.trim().is_empty()
+    valid_binding(binding)
         && valid_digest(&observation.evidence_digest)
         && valid_digest(&observation.frame_digest)
         && valid_digest(&observation.context_digest)
@@ -303,6 +290,23 @@ fn valid_observation(observation: &DesktopCandidateObservation) -> bool {
         && observation.candidate_set_digest == desktop_candidate_set_digest(&observation.candidates)
         && observation.captured_at_ms < observation.expires_at_ms
         && observation.observation_digest == desktop_candidate_observation_digest(observation)
+}
+
+fn valid_binding(binding: &DesktopBinding) -> bool {
+    !binding.browser_id.trim().is_empty()
+        && !binding.session_name.trim().is_empty()
+        && binding
+            .profile_id
+            .as_deref()
+            .is_none_or(|profile_id| !profile_id.trim().is_empty())
+        && !binding.display_allocation_id.trim().is_empty()
+        && !binding.stream_id.trim().is_empty()
+        && !binding.route_id.trim().is_empty()
+        && binding.width > 0
+        && binding.height > 0
+        && binding.scale_millis > 0
+        && binding.coordinate_space == COORDINATE_SPACE
+        && !binding.geometry_epoch.trim().is_empty()
 }
 
 fn valid_intent(intent: &DesktopCandidateIntent) -> bool {
@@ -444,6 +448,44 @@ fn valid_digest(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// Validates the canonical structure of a permit crossing into a pure next stage.
+pub fn validate_desktop_candidate_effect_permit(
+    permit: &DesktopCandidateEffectPermit,
+) -> Result<(), DesktopCandidateAdmissionError> {
+    let selection_ids = permit
+        .selected_candidates
+        .iter()
+        .map(|candidate| candidate.candidate_id.as_str());
+    let planned_events = permit
+        .planned_pointer_events
+        .checked_add(permit.planned_key_events);
+    if !valid_digest(&permit.source_intent_digest)
+        || !valid_digest(&permit.evidence_digest)
+        || !valid_digest(&permit.candidate_set_digest)
+        || !valid_binding(&permit.binding)
+        || permit.selected_candidates.is_empty()
+        || !unique_nonempty(selection_ids)
+        || permit
+            .selected_candidates
+            .iter()
+            .any(|candidate| !valid_candidate(&permit.binding, candidate))
+        || !valid_digest(&permit.controller_authority_digest)
+        || !valid_digest(&permit.provider_capability_digest)
+        || permit.planned_steps == 0
+        || permit.planned_steps > MAX_PLANNED_STEPS
+        || usize::from(permit.planned_steps) != permit.selected_candidates.len()
+        || permit.planned_pointer_events > MAX_PLANNED_EVENTS
+        || permit.planned_key_events > MAX_PLANNED_EVENTS
+        || planned_events
+            .is_none_or(|count| count < permit.planned_steps || count > MAX_PLANNED_EVENTS)
+        || permit.expires_at_ms == 0
+        || permit.permit_digest != desktop_candidate_effect_permit_digest(permit)
+    {
+        return Err(DesktopCandidateAdmissionError::InvalidIntent);
+    }
+    Ok(())
 }
 
 fn digest_owned_parts(parts: &[String]) -> String {
