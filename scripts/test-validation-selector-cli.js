@@ -30,6 +30,7 @@ try {
   assert.equal(outputs.tier, 'none');
   assert.equal(outputs.version_sync, 'true');
   assert.equal(outputs.rust, 'false');
+  assert.equal(outputs.service_smokes, 'false');
   assert.equal(outputs.rust_compartments, '[]');
   assert.equal(JSON.parse(outputs.selection).schemaVersion, report.schemaVersion);
 

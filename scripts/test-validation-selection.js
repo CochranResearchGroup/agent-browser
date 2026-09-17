@@ -20,6 +20,9 @@ function expectSelection(name, files, expected) {
   if (expected.compartments) {
     assert.deepEqual(actual.rustCompartments, expected.compartments, `${name}: rust compartments`);
   }
+  if (Object.hasOwn(expected, 'serviceSmokes')) {
+    assert.equal(actual.serviceSmokes, expected.serviceSmokes, `${name}: service smokes`);
+  }
   assert.ok(Array.isArray(actual.matchedSurfaces), `${name}: matched surfaces`);
   assert.ok(Array.isArray(actual.unknownFiles), `${name}: unknown files`);
   assert.ok(Array.isArray(actual.exclusions), `${name}: exclusions`);
@@ -55,6 +58,7 @@ expectSelection('focused Rust compartment', ['crates/agent-browser-cdp/src/lib.r
   tier: 'focused',
   jobs: { docs: false, dashboard: false, serviceClient: false, workstation: false, rustQuality: true, rust: true, comprehensive: false },
   compartments: ['transport'],
+  serviceSmokes: false,
 });
 
 expectSelection('multiple known surfaces remain focused', [
@@ -93,6 +97,14 @@ expectSelection('service contract Rust selects service client and focused Rust',
   tier: 'focused',
   jobs: { docs: false, dashboard: false, serviceClient: true, workstation: false, rustQuality: true, rust: true, comprehensive: false },
   compartments: ['cli-native'],
+  serviceSmokes: true,
+});
+
+expectSelection('service HTTP adapter selects no-launch service smokes', ['cli/src/native/stream/http.rs'], {
+  tier: 'focused',
+  jobs: { docs: false, dashboard: false, serviceClient: false, workstation: false, rustQuality: true, rust: true, comprehensive: false },
+  compartments: ['cli-native'],
+  serviceSmokes: true,
 });
 
 expectSelection('all named Rust compartments are explicit', [

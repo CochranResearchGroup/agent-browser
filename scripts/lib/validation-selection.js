@@ -25,6 +25,7 @@ export function classifyValidationSelection(files, { qualificationMode } = {}) {
     matchedSurfaces,
     jobs,
     rustCompartments: rustCompartmentsFor(changedFiles),
+    serviceSmokes: changedFiles.some(isServiceSmokeSurface),
     reasons: matchedSurfaces.map((surface) => `${surface} surface selected`),
   });
 }
@@ -37,15 +38,16 @@ function comprehensiveResult(changedFiles, reasons) {
     tier: 'comprehensive',
     matchedSurfaces: ['material-dependency-toolchain'],
     jobs: { ...allPresubmitJobs(), rust: false, comprehensive: true },
+    serviceSmokes: true,
     reasons,
   });
 }
 
 function broadResult(changedFiles, unknownFiles, reasons, matchedSurfaces = []) {
-  return result({ changedFiles, tier: 'broad', matchedSurfaces, unknownFiles, jobs: allPresubmitJobs(), rustCompartments: allRustCompartments(), reasons });
+  return result({ changedFiles, tier: 'broad', matchedSurfaces, unknownFiles, jobs: allPresubmitJobs(), rustCompartments: allRustCompartments(), serviceSmokes: true, reasons });
 }
 
-function result({ changedFiles, tier, matchedSurfaces = [], unknownFiles = [], jobs = emptyJobs(), rustCompartments = [], reasons }) {
+function result({ changedFiles, tier, matchedSurfaces = [], unknownFiles = [], jobs = emptyJobs(), rustCompartments = [], serviceSmokes = false, reasons }) {
   const normalizedJobs = { ...emptyJobs(), ...jobs, versionSync: true };
   return Object.freeze({
     schemaVersion: VALIDATION_SELECTION_SCHEMA_VERSION,
@@ -55,6 +57,7 @@ function result({ changedFiles, tier, matchedSurfaces = [], unknownFiles = [], j
     unknownFiles: Object.freeze([...unknownFiles].sort()),
     jobs: Object.freeze(normalizedJobs),
     rustCompartments: Object.freeze([...rustCompartments].sort()),
+    serviceSmokes,
     exclusions: Object.freeze(JOB_KEYS.filter((key) => !normalizedJobs[key])),
     reasons: Object.freeze([...reasons]),
   });
@@ -102,6 +105,9 @@ function isWorkstationOrRelease(file) {
   return file.startsWith('cli/assets/workstation/') || file.startsWith('scripts/release/') || file.startsWith('scripts/vm/') || file.startsWith('scripts/test-workstation-') || file.startsWith('scripts/smoke-install-workstation-') || file === 'cli/src/install.rs' || file === 'cli/src/workstation_install.rs' || file.startsWith('cli/src/workstation_install/') || file === 'scripts/test-fresh-workstation-vm-harness.js' || file === 'scripts/test-guacamole-postgres-durability.js' || file === 'scripts/test-rdp-guac-postgres-hardening.js' || file === 'scripts/test-rdp-guac-route-specific-user-sync.js' || file === 'CHANGELOG.md' || file === '.github/workflows/release.yml';
 }
 function isRustSource(file) { return file.startsWith('cli/src/') || file.startsWith('cli/tests/') || file.startsWith('crates/'); }
+function isServiceSmokeSurface(file) {
+  return file.startsWith('cli/src/native/service_') || file.startsWith('cli/src/native/mcp') || file === 'cli/src/native/stream/http.rs' || file === 'cli/src/mcp.rs';
+}
 function isClassifierOrWorkflow(file) { return file === 'package.json' || file === 'scripts/lib/validation-selection.js' || file === 'scripts/test-validation-selection.js' || file === 'scripts/dev/select-validation.js' || file.startsWith('.github/workflows/'); }
 function isMaterialDependencyOrToolchain(file) {
   return new Set(['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'Cargo.lock', 'Cargo.toml', 'cli/Cargo.toml', 'rust-toolchain', 'rust-toolchain.toml']).has(file) || /^crates\/[^/]+\/Cargo\.toml$/.test(file) || file.startsWith('.cargo/') || file.startsWith('.github/actions/');

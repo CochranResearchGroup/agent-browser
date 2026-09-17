@@ -30,6 +30,7 @@ jobs:
       rust: ${{ steps.selection.outputs.rust }}
       dashboard: ${{ steps.selection.outputs.dashboard }}
       service_client: ${{ steps.selection.outputs.service_client }}
+      service_smokes: ${{ steps.selection.outputs.service_smokes }}
       workstation: ${{ steps.selection.outputs.workstation }}
       comprehensive: ${{ steps.selection.outputs.comprehensive }}
       rust_compartments: ${{ steps.selection.outputs.rust_compartments }}
@@ -210,6 +211,7 @@ jobs:
         timeout-minutes: 30
 
       - name: Run no-launch service smokes
+        if: needs.classify.outputs.service_smokes == 'true'
         run: |
           pnpm test:service-status-fixed-input-harness
           scripts/ci/cargo-safe.sh build --manifest-path cli/Cargo.toml

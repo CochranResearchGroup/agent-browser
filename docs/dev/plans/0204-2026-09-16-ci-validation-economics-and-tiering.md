@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -41,6 +41,12 @@ selection, changed-document link validation, and bounded economics receipts.
 Classifier and workflow self-changes fail safe to every ordinary presubmit job
 without duplicating the comprehensive Rust lane.
 
+The first organic broad run exposed one remaining proportionality leak: every
+focused Rust change inherited the command-based no-launch service smoke bundle.
+Version 3 adds a deterministic `serviceSmokes` selection bit. Service-owned
+Rust surfaces and fail-safe broad selection retain the bundle, while unrelated
+focused Rust compartments no longer pay for the extra CLI build and smokes.
+
 The pre-implementation docs-only probe against merge `aa7b67b1` remains the red
 baseline. Local validation is green for the selector and aggregate suites,
 workflow syntax and semantics, policy wiring, planning audit, changed links,
@@ -65,6 +71,7 @@ repository, issue, workflow, and run evidence therefore govern this plan.
    outputs, conditionally selected jobs, and one stable aggregate `Presubmit`
    check that fails closed on malformed or missing selected-job results.
 4. Replace ordinary comprehensive Rust execution with mapped compartments and
+   run the no-launch service smoke bundle only for service-owned Rust surfaces;
    retain comprehensive execution only for the explicit qualification routes.
 5. Record selection tier, included and excluded lanes, elapsed time, and
    runner-time inputs without describing focused validation as comprehensive.
@@ -160,6 +167,7 @@ Exit requires current evidence that:
 | Surface fixture matrix | Docs, dashboard, client, workstation, Rust adapters and crates, dependency, self-change, rename, and unknown fixtures pass | green locally |
 | PR cancellation and stable aggregate | Workflow contract, YAML parse, and `actionlint` pass; selected failures propagate through `pipefail` | green statically, organic run pending |
 | Proportional job routing | Exact-range readback selects broad ordinary validation for this classifier/workflow change and excludes comprehensive Rust | green locally |
+| Service smoke routing | Selector fixtures distinguish unrelated Rust from service-owned Rust; workflow contract gates the smoke bundle on `serviceSmokes` | green locally |
 | Comprehensive qualification retained | Manual, monthly, material dependency, toolchain, and temporary `main` routes select comprehensive without duplicate focused Rust | green statically; authorized dispatch pending |
 | Economics receipt | Fixture covers selected lanes, exclusions, bounded wall time, observed runner time, and explicit measurement limits | green locally; organic receipt pending |
 | Organic docs and narrow-Rust evidence | Existing runs prove the broad baseline only | pending candidate workflow |

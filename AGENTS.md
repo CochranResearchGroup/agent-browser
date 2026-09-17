@@ -312,16 +312,17 @@ Rust Quality runs Linux format and clippy before selected Rust compartments, so
 style or lint failures fail fast. `scripts/ci/rust-tests.sh --compartment`
 keeps each compartment serial inside its process and gives every CLI
 compartment a disposable home and XDG runtime tree; at most two disjoint
-compartments overlap through Cargo admission. The selected Rust job then builds
-one exact-head debug CLI and pins every command-based no-launch smoke to that
-binary. Explicit comprehensive qualification uses `scripts/ci/rust-tests.sh`
+compartments overlap through Cargo admission. When a service-owned Rust surface
+is selected, the Rust job then builds one exact-head debug CLI and pins every
+command-based no-launch smoke to that binary. Unrelated focused Rust changes
+skip that service smoke bundle. Explicit comprehensive qualification uses `scripts/ci/rust-tests.sh`
 without a compartment and retains the two-lane provider-free suite plus the
 no-launch smoke bundle. Service request action changes
 must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`,
 `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
 HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
-aligned; the fast parity, client, and Rust gates include no-launch guards for
-that invariant. The Rust job also runs the no-launch service contract metadata
+aligned; the selected parity, client, and service-Rust gates include no-launch guards for
+that invariant. The selected service-Rust path also runs the no-launch service contract metadata
 smoke, no-launch MCP resource-read smoke, no-launch profile-source smoke,
 no-launch site-policy source smoke, and no-launch HTTP and MCP incident-summary
 smokes after the Rust suite, so the service contracts, MCP read resources,

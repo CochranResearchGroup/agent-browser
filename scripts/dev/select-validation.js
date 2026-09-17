@@ -94,6 +94,7 @@ function writeGithubOutputs(path, report) {
     rust: report.jobs.rust,
     dashboard: report.jobs.dashboard,
     service_client: report.jobs.serviceClient,
+    service_smokes: report.serviceSmokes,
     workstation: report.jobs.workstation,
     comprehensive: report.jobs.comprehensive,
     rust_compartments: JSON.stringify(report.rustCompartments),

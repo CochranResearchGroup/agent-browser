@@ -1891,7 +1891,8 @@ Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
 Path-selected pull-request CI runs the draft browser capability registry sample
 guard when the Service Client surface is selected. Selected Rust changes run
-affected provider-free compartments followed by the no-launch service contract
+affected provider-free compartments. When those changes touch service-owned
+Rust surfaces, the same job follows with the no-launch service contract
 metadata, profile-source, site-policy source, and HTTP and MCP incident-summary
 smokes, covering
 the future browser registry fixture, service contract metadata, effective
@@ -1899,7 +1900,7 @@ profile and site-policy provenance, and grouped service incident remedies
 without starting Chrome. Service request action changes must keep `SERVICE_REQUEST_ACTIONS`,
 `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
 HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
-aligned; the selected parity, client, and Rust gates include no-launch guards for
+aligned; the selected parity, client, and service-Rust gates include no-launch guards for
 that invariant. Run both incident-summary smokes before changing incident
 summary grouping or filters; together they guard HTTP `summary=true` and MCP
 `service_incidents` with `summary: true` across state, severity, escalation,
