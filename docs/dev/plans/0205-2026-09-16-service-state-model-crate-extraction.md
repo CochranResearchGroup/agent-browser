@@ -241,17 +241,58 @@ Workers may not spawn children. Parallel writes must remain disjoint. The
 primary inspects each returned diff and decisive evidence without repeating the
 worker investigation.
 
+## Checkpoint 1 | P0 Freeze And First P1 Cutover
+
+State transition: the plan and issue are published, the dependency and fixture
+freeze is complete, the architecture guard is green, and the first cohesive
+durable family is owned by the new crate. P205 is still in progress because the
+canonical aggregate and remaining record families remain in the CLI.
+
+Acceptance state and progress classification: P0 is accepted for the first
+packet and P1 has begun. This is outcome progress, not hardening. The extracted
+profile-seeding family preserves the existing wire shape and owns its lifecycle
+severity, message, lease-blocking, key, and codec behavior. The CLI retains a
+temporary re-export only; it no longer defines a duplicate implementation.
+
+Evidence:
+
+- source baseline focused loop:
+  `service_state_round_trips_nested_entities` passed after a cold build in
+  171.01 seconds;
+- crate loop: three profile-seeding compatibility and behavior tests passed in
+  4.08 seconds;
+- affected CLI loop: six profile-seeding command, MCP, action, model, and output
+  tests passed after the expected monolith rebuild in 132 seconds;
+- warm compatibility loop: the nested aggregate round-trip passed in 0.44
+  seconds;
+- architecture guard fixtures cover the absent crate, a clean crate, forbidden
+  Cargo dependencies and CLI paths, and forbidden Rust imports; both the
+  fixture suite and repository guard pass;
+- dependency ledger identified 74 directly reachable Service State model types,
+  plus presentation, migration, profile lifecycle, retirement, ownership,
+  authentication, challenge, request, and terminal record families. Existing
+  lease-authority types stay canonical in their provider-free crate. Host and
+  process observations stay in CLI adapters.
+
+Material blockers: P204 still owns shared CI, validation, roadmap, runbook, and
+active-lane files. Their integration is not required for the next disjoint
+model packet, but P205 will not edit them until that ownership is released.
+
+Next action: publish this first extraction checkpoint, then move the next
+cohesive model family and replace hidden boot-epoch reads with explicit
+observation inputs before attempting the aggregate move.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | first family accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | snapshot, transition, and projection interface tests plus deletion test | planned |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | pending |
-| Focused correctness | crate tests and affected CLI adapter tests | pending |
-| Build acceleration | comparable baseline and candidate focused-loop receipts | unproven |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | first packet accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | first packet accepted |
+| Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
 

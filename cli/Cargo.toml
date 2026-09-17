@@ -16,6 +16,7 @@ agent-browser-cdp = { path = "../crates/agent-browser-cdp" }
 agent-browser-challenge-control = { path = "../crates/agent-browser-challenge-control" }
 agent-browser-desktop-services = { path = "../crates/agent-browser-desktop-services" }
 agent-browser-lease-authority = { path = "../crates/agent-browser-lease-authority" }
+agent-browser-service-model = { path = "../crates/agent-browser-service-model" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 dirs = "5.0"

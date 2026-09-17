@@ -53,6 +53,7 @@ dependencies = [
  "agent-browser-challenge-control",
  "agent-browser-desktop-services",
  "agent-browser-lease-authority",
+ "agent-browser-service-model",
  "async-trait",
  "base64",
  "chrono",
@@ -133,6 +134,14 @@ dependencies = [
  "serde_json",
  "sha2",
  "uuid",
+]
+
+[[package]]
+name = "agent-browser-service-model"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

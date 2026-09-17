@@ -6,6 +6,7 @@ members = [
     "crates/agent-browser-challenge-control",
     "crates/agent-browser-desktop-services",
     "crates/agent-browser-lease-authority",
+    "crates/agent-browser-service-model",
 ]
 resolver = "2"
 
