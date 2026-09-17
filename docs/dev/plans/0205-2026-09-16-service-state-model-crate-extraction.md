@@ -1320,6 +1320,132 @@ reduces the decision time; retain one primary writer and one review/rework
 cycle. Do not implement until the canonical owner, dependency direction,
 deletion test, and retained compatibility fixtures are explicit.
 
+## Checkpoint 23 | Runtime-Owner Kernel Ownership Freeze
+
+State transition: the runtime-owner boundary is frozen for implementation.
+`agent-browser-lease-authority` is the canonical owner of the complete
+provider-free runtime-owner custody kernel. The service-model crate may embed
+that canonical registry, and the CLI may load, observe, orchestrate, and
+persist it. This keeps dependencies directed downward and matches Lease
+Authority's existing ownership of principal provenance, profile identity,
+claims, fencing, custody, and authenticated transitions.
+
+Canonical Lease Authority surface:
+
+- the existing runtime-owner wire and value family: profile owner state and
+  owner, transfer request/proposal/attachment, authority claim and binding,
+  receipt attestation and owner attestation, transition kind and receipt,
+  rollback snapshot and transition record, runtime lifecycle and cleanup
+  states and record, registry and principal binding, reverse-transfer request,
+  and typed failure code and error;
+- the current provider-free constructors, validation, hashing, exact identity
+  comparisons, receipt construction, registry observations, principal-binding
+  checks, and registry transition methods;
+- `BrowserAdoptionMode` as the same three-variant `snake_case` wire enum,
+  removing the only upward type dependency from the kernel; and
+- a pure registry lookup for the current effect-capable session binding,
+  including its existing terminal-history filtering.
+
+Retained CLI adapter surface:
+
+- repository snapshot helpers, Service State joins, sidecar overlay and
+  persistence, and transaction commit ordering;
+- action-string admission policy and user-facing error presentation;
+- runtime lifecycle authority, process and boot observation, runtime adoption
+  orchestration, profile synchronization, cleanup, browser, provider, and
+  other host effects.
+
+Dependency direction after the move:
+
+```text
+CLI adapters -> agent-browser-service-model -> agent-browser-lease-authority
+           \-------------------------------> agent-browser-lease-authority
+```
+
+The service-model crate already depends on Lease Authority. Lease Authority
+must not acquire a dependency on the service-model crate or the CLI. A new
+runtime-owner crate and a split record/transition ownership model are rejected:
+both add a boundary without eliminating a dependency, while split ownership
+would require a cycle, duplicated wire records, or translation between two
+canonical authorities.
+
+Compatibility freeze:
+
+- preserve every existing serde case convention, unknown-field rule,
+  default, optional-field omission, and serialize-only record;
+- preserve `RuntimeOwnerRegistry::is_empty()` exactly: it considers owners and
+  principal bindings, not lifecycle records;
+- preserve conservative `Unknown` lifecycle and cleanup defaults;
+- preserve generation, revision, compare-and-swap, pending-transfer, replay,
+  abort, reversal, claim, attestation-hash, and error-order semantics;
+- preserve the intentional distinction between the guarded relaunch binding
+  lookup and the current effect-capable binding lookup, which filters terminal
+  cleanup-satisfied history;
+- preserve primary-state and runtime-owner/lifecycle sidecar precedence and
+  wire compatibility; extraction does not remove either durable surface; and
+- preserve action gate ordering before stream broadcast, browser recovery, or
+  any other effect.
+
+Encapsulation disposition: current production adapters directly mutate owner,
+principal-binding, lifecycle, and revision fields. The extraction must not
+make those fields unrestricted public merely to compile. Freeze the exact
+caller ledger, introduce the minimum typed operations or bounded accessors
+needed by those adapters, and close the transitional surface in the same
+packet. Any access that cannot yet be closed must be explicitly enumerated as
+a temporary compatibility debt before the packet can be accepted.
+
+Deletion and acceptance tests:
+
+1. remove all CLI-owned canonical runtime-owner record and transition
+   definitions; a transitional CLI module may contain re-exports and adapters
+   only;
+2. prove exactly one workspace definition for each moved record and for
+   `BrowserAdoptionMode`, and reject CLI, repository, clock, process, runtime-
+   adoption, and service-model imports from the Lease Authority module;
+3. in a standalone Lease Authority test, execute owner generation 7 to an
+   observation-only proposal, commit generation 8, replay without another
+   increment, and reverse to generation 9; assert claims, principal-binding
+   generations, and byte-equivalent serialized replay receipts;
+4. retain the legacy-default, lifecycle round-trip, principal-binding,
+   cooperative transfer, attestation, replay, abort, orphan adoption, legacy
+   revocation, reversal, mismatch, manual preservation, terminal-history,
+   repository persistence, fixture-corpus, and gate-order coverage at the
+   appropriate kernel or CLI layer; and
+5. run Lease Authority tests, focused runtime-owner and Service State adapter
+   tests, the Lease Authority and service-model architecture guards, strict
+   workspace Clippy, and formatting. GitHub CI remains skipped.
+
+Implementation slices:
+
+1. add the canonical Lease Authority module, provider-free tests, and
+   architecture/deletion guards without changing runtime behavior;
+2. reduce the CLI runtime-owner module to compatibility re-exports plus
+   repository, action-admission, and error-presentation adapters;
+3. cut the service-model aggregate field and CLI callers to the canonical
+   types, preserving sidecar overlay and persistence ordering; and
+4. close direct registry mutation through the smallest typed interface, run
+   the frozen local gates, publish the packet, and stop before the next
+   aggregate dependency family.
+
+Delegation and model-choice receipt:
+
+- `/root/p205_runtime_owner_placement` used `gpt-6-astra` at high effort for
+  the canonical ownership, dependency, and deletion-test decision;
+- `/root/p205_runtime_owner_minimal` used `gpt-5.6-sol` at high effort for the
+  smallest behavior-preserving cutover and caller seam;
+- `/root/p205_runtime_owner_compat` used `gpt-5.6-luna` at medium effort for
+  the serde, fixture, dependency, deletion-guard, and regression ledger; and
+- the primary reconciled those read-only reports against current source and
+  retained one bounded implementation sequence. No worker received Git,
+  runtime, provider, browser, install, or production-effect custody.
+
+Progress classification: this checkpoint is blocker reduction and an
+implementation-ready architecture decision. It is not acceptance of the
+runtime-owner extraction and does not move the final `ServiceState` aggregate.
+The next action is the four-slice runtime-owner kernel implementation above.
+No bug-fix issue, GitHub CI, runtime effect, or other aggregate dependency
+family enters this packet.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
