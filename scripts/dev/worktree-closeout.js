@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import {
   beginOrJoinWorktreeCloseout,
   executeWorktreeCloseout,
 } from '../lib/worktree-closeout.js';
 import {
   createWorktreeCloseoutFilesystemAdapter,
+  discoverPinnedCandidates,
   inspectWorktreeCloseout,
 } from '../lib/worktree-closeout-filesystem-adapter.js';
 
@@ -45,6 +46,37 @@ function print(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+function assertCurrentInspection(repositoryRoot, request) {
+  const current = inspectWorktreeCloseout({
+    repositoryRoot,
+    worktreePath: request.worktreePath,
+  });
+  for (const field of [
+    'repositoryId',
+    'coordinationStateRoot',
+    'archiveRoot',
+    'worktreeIncarnation',
+    'worktreePath',
+    'expectedHead',
+    'expectedRef',
+    'dirtyStateDigest',
+  ]) {
+    if (current[field] !== request[field]) {
+      const error = new Error(`worktree_closeout_revalidation_conflict:${field}`);
+      error.code = 'worktree_closeout_revalidation_conflict';
+      throw error;
+    }
+  }
+  return current;
+}
+
+function assertOperationLocation(operationPath, stateRoot) {
+  const fromState = relative(resolve(stateRoot), resolve(operationPath));
+  if (fromState.startsWith('..') || isAbsolute(fromState)) {
+    fail('operation must be inside the repository coordination state root');
+  }
+}
+
 function main() {
   const { command, options } = parseArguments(process.argv.slice(2));
   if (command === 'inspect') {
@@ -53,12 +85,13 @@ function main() {
       repositoryRoot,
       worktreePath: required(options, 'worktree'),
     });
+    const pinnedCandidates = discoverPinnedCandidates(inspection.worktreePath);
     print({
       effect: 'none',
       request: {
         schemaVersion: 'agent-browser.worktree-closeout-request.v1',
         ...inspection,
-        pinnedCandidates: [],
+        pinnedCandidates,
         candidateDispositions: [],
       },
       next: 'Add every pinned candidate and an explicit retain, archive, or discard disposition before begin.',
@@ -68,8 +101,16 @@ function main() {
 
   if (command === 'begin') {
     const request = JSON.parse(readFileSync(required(options, 'request'), 'utf8'));
+    const repositoryRoot = required(options, 'repository-root');
+    assertCurrentInspection(repositoryRoot, request);
+    const discovered = discoverPinnedCandidates(request.worktreePath);
+    if (JSON.stringify(discovered) !== JSON.stringify(request.pinnedCandidates ?? [])) {
+      const error = new Error('worktree_closeout_candidate_pins_changed');
+      error.code = 'worktree_closeout_candidate_pins_changed';
+      throw error;
+    }
     print(beginOrJoinWorktreeCloseout({
-      stateRoot: required(options, 'state-root'),
+      stateRoot: request.coordinationStateRoot,
       request,
     }));
     return;
@@ -94,10 +135,13 @@ function main() {
       return;
     }
     const repositoryRoot = required(options, 'repository-root');
+    const operation = JSON.parse(readFileSync(operationPath, 'utf8'));
+    assertOperationLocation(operationPath, operation.request.coordinationStateRoot);
+    assertCurrentInspection(repositoryRoot, operation.request);
     const adapter = createWorktreeCloseoutFilesystemAdapter({
       repositoryRoot,
-      stateRoot: required(options, 'state-root'),
-      archiveRoot: required(options, 'archive-root'),
+      stateRoot: operation.request.coordinationStateRoot,
+      archiveRoot: operation.request.archiveRoot,
     });
     print(executeWorktreeCloseout({
       operationPath,

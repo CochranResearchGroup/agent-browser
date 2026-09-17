@@ -22,29 +22,90 @@ import {
 const scriptPath = fileURLToPath(import.meta.url);
 const closeoutCliPath = fileURLToPath(new URL('./dev/worktree-closeout.js', import.meta.url));
 
-if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
+function installSyntheticCompletedCandidate(worktreePath, candidateId) {
+  const sealedRoot = join(worktreePath, 'cli', 'target', candidateId, 'sealed');
+  const completionRoot = join(
+    worktreePath,
+    'cli',
+    'target',
+    'candidate-build-state',
+    'completed',
+  );
+  mkdirSync(sealedRoot, { recursive: true });
+  mkdirSync(completionRoot, { recursive: true });
+  const paths = {
+    binaryPath: join(sealedRoot, 'agent-browser'),
+    candidateManifestPath: join(sealedRoot, 'candidate-manifest.json'),
+    inputClosurePath: join(sealedRoot, 'executable-input-closure.json'),
+    supportManifestPath: join(sealedRoot, 'build-support-manifest.json'),
+    sealedArtifactPath: join(sealedRoot, 'sealed-artifact.json'),
+  };
+  for (const [field, path] of Object.entries(paths)) writeFileSync(path, `${field}:${candidateId}\n`);
+  writeFileSync(join(completionRoot, `${candidateId}.json`), `${JSON.stringify({
+    schemaVersion: 'agent-browser.candidate-build-completion.v1',
+    candidateId,
+    ...paths,
+  })}\n`);
+}
+
+if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === 'begin') {
   const result = beginOrJoinWorktreeCloseout({
     stateRoot: process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_STATE_ROOT,
     request: JSON.parse(process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_REQUEST),
   });
   process.send?.(result);
+} else if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === 'apply') {
+  const adapter = createWorktreeCloseoutFilesystemAdapter({
+    repositoryRoot: process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_REPOSITORY_ROOT,
+    stateRoot: process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_STATE_ROOT,
+    archiveRoot: process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_ARCHIVE_ROOT,
+  });
+  const pause = process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_PAUSE === '1';
+  const result = executeWorktreeCloseout({
+    operationPath: process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_OPERATION_PATH,
+    adapter,
+    faultInjector(point) {
+      if (pause && point === 'after_dispositions_before_removal') {
+        process.send?.({ kind: 'barrier' });
+        const waitArray = new Int32Array(new SharedArrayBuffer(4));
+        while (!existsSync(process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_RELEASE_PATH)) {
+          Atomics.wait(waitArray, 0, 0, 10);
+        }
+      }
+    },
+  });
+  process.send?.({ kind: 'result', result });
 } else {
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'agent-browser-worktree-closeout-'));
   try {
     const request = {
       schemaVersion: 'agent-browser.worktree-closeout-request.v1',
       repositoryId: 'fixture-repository',
+      coordinationStateRoot: join(fixtureRoot, 'state'),
+      archiveRoot: join(fixtureRoot, 'archives'),
       worktreeIncarnation: 'fixture-worktree-incarnation',
       worktreePath: join(fixtureRoot, 'worktree'),
       expectedHead: 'a'.repeat(40),
       expectedRef: 'refs/heads/fixture',
       candidateDispositions: [],
     };
+    const candidateContract = {
+      candidateId: 'candidate-a',
+      sourceRoot: join(fixtureRoot, 'worktree'),
+      artifacts: [
+        'cli/target/sealed/agent-browser',
+        'cli/target/sealed/candidate-manifest.json',
+        'cli/target/sealed/executable-input-closure.json',
+        'cli/target/sealed/build-support-manifest.json',
+        'cli/target/sealed/sealed-artifact.json',
+        'cli/target/candidate-build-state/completed/request.json',
+      ].map((relativePath) => ({ relativePath, sha256: '0'.repeat(64) })),
+    };
     const runWorker = () => new Promise((resolve, reject) => {
       const child = fork(scriptPath, [], {
         env: {
           ...process.env,
-          AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER: '1',
+          AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER: 'begin',
           AGENT_BROWSER_WORKTREE_CLOSEOUT_STATE_ROOT: join(fixtureRoot, 'state'),
           AGENT_BROWSER_WORKTREE_CLOSEOUT_REQUEST: JSON.stringify(request),
         },
@@ -86,7 +147,7 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
         stateRoot: join(fixtureRoot, 'state'),
         request: {
           ...request,
-          pinnedCandidates: [{ candidateId: 'candidate-a' }],
+          pinnedCandidates: [candidateContract],
           candidateDispositions: [{ candidateId: 'candidate-a', disposition: 'archive' }],
         },
       }),
@@ -101,7 +162,7 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
         stateRoot: join(fixtureRoot, 'unselected-state'),
         request: {
           ...request,
-          pinnedCandidates: [{ candidateId: 'candidate-pinned' }],
+          pinnedCandidates: [{ ...candidateContract, candidateId: 'candidate-pinned' }],
         },
       }),
       (error) => error instanceof CandidateDispositionRequiredError
@@ -116,7 +177,10 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
     const artifacts = [
       ['agent-browser', Buffer.from('synthetic candidate binary\n')],
       ['candidate-manifest.json', Buffer.from('{"candidateId":"candidate-pinned"}\n')],
-      ['nested/receipt.json', Buffer.from('{"state":"qualified"}\n')],
+      ['executable-input-closure.json', Buffer.from('{"files":[]}\n')],
+      ['build-support-manifest.json', Buffer.from('{"inputs":[]}\n')],
+      ['sealed-artifact.json', Buffer.from('{"state":"sealed"}\n')],
+      ['candidate-build-state/completed/request.json', Buffer.from('{"state":"qualified"}\n')],
     ].map(([relativePath, bytes]) => {
       const path = join(candidateRoot, relativePath);
       mkdirSync(join(path, '..'), { recursive: true });
@@ -172,6 +236,23 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
         `archived bytes must match for ${artifact.relativePath}`,
       );
     }
+    const laterReceiptBytes = Buffer.from('{"state":"later"}\n');
+    writeFileSync(join(candidateRoot, 'candidate-build-state/completed/later.json'), laterReceiptBytes);
+    assert.throws(
+      () => freshAdapter.archiveCandidate({
+        operationId: first.operationId,
+        generation: 1,
+        candidate: {
+          ...candidate,
+          artifacts: [...candidate.artifacts, {
+            relativePath: 'candidate-build-state/completed/later.json',
+            sha256: createHash('sha256').update(laterReceiptBytes).digest('hex'),
+          }],
+        },
+      }),
+      (error) => error.code === 'worktree_closeout_archive_request_mismatch',
+      'an existing archive must match the complete requested artifact set',
+    );
     const discardRoot = join(fixtureRoot, 'discard-candidate');
     mkdirSync(discardRoot, { recursive: true });
     const discardBytes = Buffer.from('discard only this artifact\n');
@@ -195,7 +276,8 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
     execFileSync('git', ['config', 'user.email', 'fixture@example.invalid'], { cwd: gitRepository });
     execFileSync('git', ['config', 'user.name', 'Fixture'], { cwd: gitRepository });
     writeFileSync(join(gitRepository, 'tracked.txt'), 'baseline\n');
-    execFileSync('git', ['add', 'tracked.txt'], { cwd: gitRepository });
+    writeFileSync(join(gitRepository, '.gitignore'), 'cli/target/\n');
+    execFileSync('git', ['add', 'tracked.txt', '.gitignore'], { cwd: gitRepository });
     execFileSync('git', ['commit', '-m', 'fixture baseline'], { cwd: gitRepository });
     execFileSync('git', ['branch', 'closeout-fixture'], { cwd: gitRepository });
     execFileSync('git', ['worktree', 'add', gitWorktree, 'closeout-fixture'], { cwd: gitRepository });
@@ -214,6 +296,49 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
     ], { encoding: 'utf8' }));
     assert.equal(cliInspection.effect, 'none');
     assert.equal(cliInspection.request.worktreeIncarnation, inspection.worktreeIncarnation);
+    assert.equal(cliInspection.request.pinnedCandidates.length, 0);
+
+    const discoveredSealedRoot = join(gitWorktree, 'cli', 'target', 'candidate', 'sealed');
+    const discoveredCompletionRoot = join(
+      gitWorktree,
+      'cli',
+      'target',
+      'candidate-build-state',
+      'completed',
+    );
+    mkdirSync(discoveredSealedRoot, { recursive: true });
+    mkdirSync(discoveredCompletionRoot, { recursive: true });
+    const discoveredPaths = {
+      binaryPath: join(discoveredSealedRoot, 'agent-browser'),
+      candidateManifestPath: join(discoveredSealedRoot, 'candidate-manifest.json'),
+      inputClosurePath: join(discoveredSealedRoot, 'executable-input-closure.json'),
+      supportManifestPath: join(discoveredSealedRoot, 'build-support-manifest.json'),
+      sealedArtifactPath: join(discoveredSealedRoot, 'sealed-artifact.json'),
+    };
+    for (const [field, path] of Object.entries(discoveredPaths)) {
+      writeFileSync(path, `${field}\n`);
+    }
+    writeFileSync(join(discoveredCompletionRoot, 'request.json'), `${JSON.stringify({
+      schemaVersion: 'agent-browser.candidate-build-completion.v1',
+      candidateId: 'candidate-discovered',
+      ...discoveredPaths,
+    })}\n`);
+    const discoveredInspection = JSON.parse(execFileSync(process.execPath, [
+      closeoutCliPath,
+      'inspect',
+      '--repository-root',
+      gitRepository,
+      '--worktree',
+      gitWorktree,
+    ], { encoding: 'utf8' }));
+    assert.equal(discoveredInspection.request.pinnedCandidates.length, 1);
+    assert.equal(
+      discoveredInspection.request.pinnedCandidates[0].candidateId,
+      'candidate-discovered',
+    );
+    assert.equal(discoveredInspection.request.pinnedCandidates[0].artifacts.length, 6);
+    rmSync(join(gitWorktree, 'cli'), { recursive: true, force: true });
+
     writeFileSync(join(gitWorktree, 'tracked.txt'), 'drifted\n');
     assert.throws(
       () => removeInspectedWorktree({ repositoryRoot: gitRepository, inspection }),
@@ -223,20 +348,27 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
     );
     assert.equal(existsSync(gitWorktree), true);
     writeFileSync(join(gitWorktree, 'tracked.txt'), 'baseline\n');
-    const removalStateRoot = join(fixtureRoot, 'removal-state');
     const removalRequest = {
       schemaVersion: 'agent-browser.worktree-closeout-request.v1',
       ...inspection,
       pinnedCandidates: [],
       candidateDispositions: [],
     };
+    assert.throws(
+      () => beginOrJoinWorktreeCloseout({
+        stateRoot: join(fixtureRoot, 'split-brain-state'),
+        request: removalRequest,
+      }),
+      /stateRoot must match request.coordinationStateRoot/,
+      'a caller-selected state root must not split repository coordination',
+    );
     const removalOperation = beginOrJoinWorktreeCloseout({
-      stateRoot: removalStateRoot,
+      stateRoot: removalRequest.coordinationStateRoot,
       request: removalRequest,
     });
     const removalAdapter = createWorktreeCloseoutFilesystemAdapter({
-      stateRoot: removalStateRoot,
-      archiveRoot: join(fixtureRoot, 'removal-archives'),
+      stateRoot: removalRequest.coordinationStateRoot,
+      archiveRoot: removalRequest.archiveRoot,
       repositoryRoot: gitRepository,
     });
     const preview = JSON.parse(execFileSync(process.execPath, [
@@ -273,6 +405,140 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
     });
     assert.equal(replayedRemoval.outcome, 'replayed_terminal');
     assert.deepEqual(replayedRemoval.receipt, recoveredRemoval.receipt);
+
+    const concurrentWorktree = join(fixtureRoot, 'concurrent-worktree');
+    execFileSync('git', ['branch', 'concurrent-fixture'], { cwd: gitRepository });
+    execFileSync('git', ['worktree', 'add', concurrentWorktree, 'concurrent-fixture'], {
+      cwd: gitRepository,
+    });
+    const concurrentInspection = inspectWorktreeCloseout({
+      repositoryRoot: gitRepository,
+      worktreePath: concurrentWorktree,
+    });
+    const concurrentRequest = {
+      schemaVersion: 'agent-browser.worktree-closeout-request.v1',
+      ...concurrentInspection,
+      pinnedCandidates: [],
+      candidateDispositions: [],
+    };
+    const concurrentOperation = beginOrJoinWorktreeCloseout({
+      stateRoot: concurrentRequest.coordinationStateRoot,
+      request: concurrentRequest,
+    });
+    const releasePath = join(fixtureRoot, 'release-concurrent-removal');
+    const spawnApplyWorker = (pause) => {
+      const child = fork(scriptPath, [], {
+        env: {
+          ...process.env,
+          AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER: 'apply',
+          AGENT_BROWSER_WORKTREE_CLOSEOUT_OPERATION_PATH: concurrentOperation.operationPath,
+          AGENT_BROWSER_WORKTREE_CLOSEOUT_REPOSITORY_ROOT: gitRepository,
+          AGENT_BROWSER_WORKTREE_CLOSEOUT_STATE_ROOT: concurrentRequest.coordinationStateRoot,
+          AGENT_BROWSER_WORKTREE_CLOSEOUT_ARCHIVE_ROOT: concurrentRequest.archiveRoot,
+          AGENT_BROWSER_WORKTREE_CLOSEOUT_PAUSE: pause ? '1' : '0',
+          AGENT_BROWSER_WORKTREE_CLOSEOUT_RELEASE_PATH: releasePath,
+        },
+        stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
+      });
+      let signalBarrier;
+      const barrier = new Promise((resolveBarrier) => { signalBarrier = resolveBarrier; });
+      const result = new Promise((resolveResult, rejectResult) => {
+        child.on('message', (message) => {
+          if (message.kind === 'barrier') signalBarrier();
+          if (message.kind === 'result') resolveResult(message.result);
+        });
+        child.once('error', rejectResult);
+        child.once('exit', (code) => {
+          if (code !== 0) rejectResult(new Error(`apply worker exited ${code}`));
+        });
+      });
+      return { barrier, result };
+    };
+    const firstApply = spawnApplyWorker(true);
+    await firstApply.barrier;
+    const joiningApply = spawnApplyWorker(false);
+    const joined = await joiningApply.result;
+    assert.equal(joined.outcome, 'joined_in_progress');
+    writeFileSync(releasePath, 'release\n');
+    const committed = await firstApply.result;
+    assert.equal(committed.outcome, 'committed');
+    assert.equal(committed.receipt.removal.outcome, 'removed');
+    const replayWorker = spawnApplyWorker(false);
+    const replayed = await replayWorker.result;
+    assert.equal(replayed.outcome, 'replayed_terminal');
+    assert.equal(replayed.receipt.operationId, committed.receipt.operationId);
+    assert.equal(existsSync(concurrentWorktree), false);
+
+    const retainedWorktree = join(fixtureRoot, 'retained-worktree');
+    execFileSync('git', ['branch', 'retained-fixture'], { cwd: gitRepository });
+    execFileSync('git', ['worktree', 'add', retainedWorktree, 'retained-fixture'], {
+      cwd: gitRepository,
+    });
+    installSyntheticCompletedCandidate(retainedWorktree, 'candidate-retained');
+    const retainedInspection = JSON.parse(execFileSync(process.execPath, [
+      closeoutCliPath,
+      'inspect',
+      '--repository-root',
+      gitRepository,
+      '--worktree',
+      retainedWorktree,
+    ], { encoding: 'utf8' })).request;
+    retainedInspection.candidateDispositions = [{
+      candidateId: 'candidate-retained',
+      disposition: 'retain',
+    }];
+    const retainOperation = beginOrJoinWorktreeCloseout({
+      stateRoot: retainedInspection.coordinationStateRoot,
+      request: retainedInspection,
+    });
+    const retainedAdapter = createWorktreeCloseoutFilesystemAdapter({
+      repositoryRoot: gitRepository,
+      stateRoot: retainedInspection.coordinationStateRoot,
+      archiveRoot: retainedInspection.archiveRoot,
+    });
+    const retained = executeWorktreeCloseout({
+      operationPath: retainOperation.operationPath,
+      adapter: retainedAdapter,
+    });
+    assert.equal(retained.receipt.removal.outcome, 'retained');
+    assert.equal(existsSync(retainedWorktree), true);
+
+    const archiveAfterRetainRequest = {
+      ...retainedInspection,
+      supersedesRetainedOperationId: retainOperation.operationId,
+      candidateDispositions: [{
+        candidateId: 'candidate-retained',
+        disposition: 'archive',
+      }],
+    };
+    const archiveAfterRetainOperation = beginOrJoinWorktreeCloseout({
+      stateRoot: archiveAfterRetainRequest.coordinationStateRoot,
+      request: archiveAfterRetainRequest,
+    });
+    assert.equal(
+      archiveAfterRetainOperation.supersededRetainedOperationId,
+      retainOperation.operationId,
+    );
+    const archivedAfterRetain = executeWorktreeCloseout({
+      operationPath: archiveAfterRetainOperation.operationPath,
+      adapter: retainedAdapter,
+    });
+    assert.equal(archivedAfterRetain.receipt.removal.outcome, 'removed');
+    assert.equal(existsSync(retainedWorktree), false);
+    const retainedLocator = retainedAdapter.resolveArchivedCandidate('candidate-retained');
+    assert.equal(retainedLocator.candidateId, 'candidate-retained');
+    writeFileSync(
+      join(retainedLocator.archiveRoot, retainedLocator.artifacts[0].relativePath),
+      'corrupted after terminal receipt\n',
+    );
+    assert.throws(
+      () => executeWorktreeCloseout({
+        operationPath: archiveAfterRetainOperation.operationPath,
+        adapter: retainedAdapter,
+      }),
+      (error) => error.code === 'worktree_closeout_archive_digest_mismatch',
+      'terminal replay must freshly verify archived candidate custody',
+    );
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }

@@ -8,6 +8,7 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -97,6 +98,61 @@ function validateCandidate(candidate) {
   }
 }
 
+function candidateDigest(candidate) {
+  return sha256(JSON.stringify({
+    candidateId: candidate.candidateId,
+    sourceRoot: resolve(candidate.sourceRoot),
+    artifacts: candidate.artifacts,
+  }));
+}
+
+export function discoverPinnedCandidates(worktreePath) {
+  const root = realpathSync(worktreePath);
+  const completedRoot = join(root, 'cli', 'target', 'candidate-build-state', 'completed');
+  if (!existsSync(completedRoot)) return [];
+  const requiredFields = [
+    'binaryPath',
+    'candidateManifestPath',
+    'inputClosurePath',
+    'supportManifestPath',
+    'sealedArtifactPath',
+  ];
+  const byCandidate = new Map();
+  for (const entry of readdirSync(completedRoot, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const completionPath = join(completedRoot, entry.name);
+    const receipt = JSON.parse(readFileSync(completionPath, 'utf8'));
+    if (
+      receipt.schemaVersion !== 'agent-browser.candidate-build-completion.v1'
+      || typeof receipt.candidateId !== 'string'
+      || requiredFields.some((field) => typeof receipt[field] !== 'string')
+    ) {
+      fail('worktree_closeout_candidate_completion_invalid', completionPath);
+    }
+    const paths = [...requiredFields.map((field) => receipt[field]), completionPath];
+    const artifacts = paths.map((path) => {
+      const absolute = resolve(path);
+      const relativePath = relative(root, absolute);
+      if (
+        relativePath === ''
+        || relativePath.startsWith('..')
+        || isAbsolute(relativePath)
+        || !existsSync(absolute)
+      ) {
+        fail('worktree_closeout_candidate_artifact_invalid', absolute);
+      }
+      return { relativePath, sha256: sha256(readFileSync(absolute)) };
+    }).sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+    const candidate = { candidateId: receipt.candidateId, sourceRoot: root, artifacts };
+    const existing = byCandidate.get(candidate.candidateId);
+    if (existing && candidateDigest(existing) !== candidateDigest(candidate)) {
+      fail('worktree_closeout_candidate_identity_conflict', candidate.candidateId);
+    }
+    byCandidate.set(candidate.candidateId, candidate);
+  }
+  return [...byCandidate.values()].sort((left, right) => left.candidateId.localeCompare(right.candidateId));
+}
+
 function verifyArchive(locator) {
   for (const artifact of locator.artifacts) {
     const path = checkedArtifactPath(locator.archiveRoot, artifact.relativePath);
@@ -108,6 +164,15 @@ function verifyArchive(locator) {
 
 function git(args, cwd) {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+}
+
+function gitOptional(args, cwd) {
+  try {
+    return git(args, cwd);
+  } catch (error) {
+    if (error?.status === 1) return null;
+    throw error;
+  }
 }
 
 function filesystemIdentity(path) {
@@ -142,10 +207,12 @@ export function inspectWorktreeCloseout({ repositoryRoot, worktreePath }) {
   const commonGitDirectory = realpathSync(resolve(root, git(['rev-parse', '--git-common-dir'], root)));
   const worktreeGitDirectory = realpathSync(git(['rev-parse', '--absolute-git-dir'], path));
   const head = git(['rev-parse', 'HEAD'], path);
-  const ref = git(['symbolic-ref', '-q', 'HEAD'], path) || 'HEAD';
+  const ref = gitOptional(['symbolic-ref', '-q', 'HEAD'], path) ?? 'HEAD';
   const dirtyState = git(['status', '--porcelain=v1', '--untracked-files=all'], path);
   return {
     repositoryId: filesystemIdentity(commonGitDirectory),
+    coordinationStateRoot: join(commonGitDirectory, 'agent-browser-worktree-closeout'),
+    archiveRoot: join(commonGitDirectory, 'agent-browser-worktree-closeout', 'candidate-archives'),
     worktreeIncarnation: filesystemIdentity(worktreeGitDirectory),
     worktreePath: path,
     expectedHead: head,
@@ -158,6 +225,8 @@ export function inspectWorktreeCloseout({ repositoryRoot, worktreePath }) {
 function assertSameInspection(expected, actual) {
   for (const field of [
     'repositoryId',
+    'coordinationStateRoot',
+    'archiveRoot',
     'worktreeIncarnation',
     'worktreePath',
     'expectedHead',
@@ -168,6 +237,11 @@ function assertSameInspection(expected, actual) {
       fail('worktree_closeout_revalidation_conflict', field);
     }
   }
+}
+
+function isWithin(parent, child) {
+  const fromParent = relative(resolve(parent), resolve(child));
+  return fromParent === '' || (!fromParent.startsWith('..') && !isAbsolute(fromParent));
 }
 
 export function removeInspectedWorktree({ repositoryRoot, inspection }) {
@@ -215,7 +289,56 @@ export function createWorktreeCloseoutFilesystemAdapter({
     throw new TypeError('stateRoot and archiveRoot are required');
   }
   const locatorRoot = join(resolve(stateRoot), 'worktree-closeout', 'archives');
+  const durableStateRoot = resolve(stateRoot);
   const durableArchiveRoot = resolve(archiveRoot);
+
+  function assertDurableStorage(worktreePath) {
+    if (
+      isWithin(worktreePath, durableStateRoot)
+      || isWithin(worktreePath, durableArchiveRoot)
+    ) {
+      fail('worktree_closeout_storage_inside_worktree', resolve(worktreePath));
+    }
+  }
+
+  function revalidateWorktree(inspection) {
+    if (!repositoryRoot) throw new TypeError('repositoryRoot is required for revalidation');
+    if (!existsSync(inspection.worktreePath)) {
+      const registered = registeredWorktrees(resolve(repositoryRoot))
+        .some((entry) => entry.path === resolve(inspection.worktreePath));
+      if (registered) {
+        fail('worktree_closeout_missing_registered_path', inspection.worktreePath);
+      }
+      return { outcome: 'already_removed', worktreePath: resolve(inspection.worktreePath) };
+    }
+    const current = inspectWorktreeCloseout({
+      repositoryRoot,
+      worktreePath: inspection.worktreePath,
+    });
+    assertSameInspection(inspection, current);
+    return current;
+  }
+
+  function assertCandidatePins(request, { allowDisposed = false } = {}) {
+    if (!existsSync(request.worktreePath)) {
+      if (allowDisposed) return [];
+      fail('worktree_closeout_worktree_missing_before_effect', request.worktreePath);
+    }
+    const discovered = discoverPinnedCandidates(request.worktreePath);
+    const expected = new Map((request.pinnedCandidates ?? [])
+      .map((candidate) => [candidate.candidateId, candidate]));
+    for (const candidate of discovered) {
+      const requested = expected.get(candidate.candidateId);
+      if (!requested || candidateDigest(requested) !== candidateDigest(candidate)) {
+        fail('worktree_closeout_candidate_pins_changed', candidate.candidateId);
+      }
+      expected.delete(candidate.candidateId);
+    }
+    if (!allowDisposed && expected.size > 0) {
+      fail('worktree_closeout_candidate_pins_changed', [...expected.keys()].join(','));
+    }
+    return discovered;
+  }
 
   function locatorPath(candidateId) {
     return join(locatorRoot, `${sha256(candidateId)}.json`);
@@ -242,7 +365,16 @@ export function createWorktreeCloseoutFilesystemAdapter({
       `${sha256(operationId)}-${candidateKey}`,
     );
     const existing = resolveArchivedCandidate(candidate.candidateId);
-    if (existing) return { outcome: 'already_archived', locator: existing };
+    if (existing) {
+      const requestedArtifacts = candidate.artifacts.map(({ relativePath, sha256: digest }) => ({
+        relativePath,
+        sha256: digest,
+      }));
+      if (JSON.stringify(existing.artifacts) !== JSON.stringify(requestedArtifacts)) {
+        fail('worktree_closeout_archive_request_mismatch', candidate.candidateId);
+      }
+      return { outcome: 'already_archived', locator: existing };
+    }
 
     rmSync(staging, { recursive: true, force: true });
     mkdirSync(staging, { recursive: true, mode: 0o700 });
@@ -320,5 +452,44 @@ export function createWorktreeCloseoutFilesystemAdapter({
     return removeInspectedWorktree({ repositoryRoot, inspection });
   }
 
-  return { archiveCandidate, discardCandidate, removeWorktree, resolveArchivedCandidate };
+  function verifyTerminalReceipt(request, receipt) {
+    for (const selection of receipt.candidateDispositions) {
+      if (selection.disposition !== 'archive') continue;
+      const candidate = request.pinnedCandidates.find(
+        ({ candidateId }) => candidateId === selection.candidateId,
+      );
+      const locator = resolveArchivedCandidate(selection.candidateId);
+      if (!locator) fail('worktree_closeout_archive_locator_missing', selection.candidateId);
+      const requested = candidate.artifacts.map(({ relativePath, sha256: digest }) => ({
+        relativePath,
+        sha256: digest,
+      }));
+      if (JSON.stringify(locator.artifacts) !== JSON.stringify(requested)) {
+        fail('worktree_closeout_archive_request_mismatch', selection.candidateId);
+      }
+    }
+    if (receipt.removal.outcome === 'retained') {
+      revalidateWorktree(request);
+      assertCandidatePins(request);
+    } else {
+      const path = resolve(request.worktreePath);
+      if (
+        existsSync(path)
+        || registeredWorktrees(resolve(repositoryRoot)).some((entry) => entry.path === path)
+      ) {
+        fail('worktree_closeout_terminal_removal_invalid', path);
+      }
+    }
+  }
+
+  return {
+    archiveCandidate,
+    assertDurableStorage,
+    assertCandidatePins,
+    discardCandidate,
+    removeWorktree,
+    resolveArchivedCandidate,
+    revalidateWorktree,
+    verifyTerminalReceipt,
+  };
 }
