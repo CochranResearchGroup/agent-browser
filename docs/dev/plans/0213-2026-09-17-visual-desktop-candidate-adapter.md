@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 2
+Plan version: 3
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -69,6 +69,11 @@ desktop-services tests pass with the strengthened challenge architecture
 guard, formatting, strict workspace Clippy, documentation links, planning
 audit, selector readback and diff hygiene. Publication and protected
 integration remain.
+
+P213 exact head `c8012bd0` merged through PR #196 as canonical
+`main@7e56d9c7`. No GitHub Actions branch or merge-head run started. Issue #194
+closed through the PR. P213 is closed; P214 owns the effect-free raw-event
+planning boundary before any executor.
 
 ## Architecture Boundary
 
