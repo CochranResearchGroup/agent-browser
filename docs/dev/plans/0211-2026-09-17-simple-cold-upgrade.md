@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -71,6 +71,11 @@ tests prove fixed ordering, continuation after failure, foreign-process
 preservation, and owned-residue failure. Focused tests, workspace Clippy with
 warnings denied, and formatting pass. Platform effect adapters and the public
 command remain the next slice.
+
+Checkpoint `b36bf40b` removes the prior daemon-shutdown exception that detached
+a live browser when owner-authority metadata was stale. Daemon termination now
+always selects browser close. Its focused stale-owner regression, the four
+controller tests, strict workspace Clippy, and formatting pass.
 
 ## Consolidated Batch
 
@@ -152,9 +157,9 @@ will rebase after those checkpoints before touching overlapping surfaces.
 
 | Requirement | Acceptance evidence | Current state |
 | --- | --- | --- |
-| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | not implemented |
+| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | controller implemented; public command pending |
 | Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | not implemented |
-| Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | not implemented |
+| Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | browser-on-daemon-stop invariant green; remaining adapters pending |
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | not implemented |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller green; adapters pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |

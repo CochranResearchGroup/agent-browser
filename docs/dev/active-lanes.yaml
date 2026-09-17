@@ -52,12 +52,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: b0ea9cc8
+    checkpoint: b36bf40b
     remote_ref: null
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, and documentation validation
-    validation_status: cold-shutdown controller has four passing focused tests; strict workspace Clippy and formatting pass; platform adapters and public routing remain
-    validation_ref: b0ea9cc8
+    validation_status: cold-shutdown controller has four passing focused tests; stale-owner daemon shutdown now closes the browser and its focused test passes; strict workspace Clippy and formatting pass; remaining platform adapters and public routing remain
+    validation_ref: b36bf40b
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183]
     dependencies: [P205, P207]
     overlaps: [P205:Service-State-model, P207:cli-help-and-user-docs]
