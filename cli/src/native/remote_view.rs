@@ -15,6 +15,7 @@ use super::service_model::{
     BrowserHost, DisplayAllocation, RemoteViewAcquisitionLease, RoutePoolEntry, ServiceState,
     ViewStreamProvider,
 };
+pub use agent_browser_service_model::{route_pool_entry_matches_display, route_pool_target_string};
 
 #[cfg(test)]
 mod helper_action_tests;
@@ -303,16 +304,6 @@ pub fn normalize_remote_view_open_intent(command: &Value) -> Result<RemoteViewOp
         manual_login_launch: command_or_params_bool(command, "manualLoginLaunch").unwrap_or(false),
         dry_run: command_or_params_bool(command, "dryRun").unwrap_or(false),
     })
-}
-
-pub fn route_pool_target_string(entry: &RoutePoolEntry, key: &str) -> Option<String> {
-    entry
-        .target
-        .get(key)
-        .and_then(Value::as_str)
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
 }
 
 #[cfg(all(unix, not(test)))]
@@ -1165,40 +1156,6 @@ fn route_binding_id_component(value: &str) -> String {
     } else {
         output
     }
-}
-
-pub fn route_pool_entry_matches_display(
-    entry: &RoutePoolEntry,
-    display_allocation_id: &str,
-    allocation: Option<&DisplayAllocation>,
-) -> bool {
-    if let Some(target_allocation_id) = route_pool_target_string(entry, "displayAllocationId") {
-        if target_allocation_id != display_allocation_id {
-            return false;
-        }
-    }
-    if let Some(target_browser_id) = route_pool_target_string(entry, "browserId") {
-        if allocation.and_then(|allocation| allocation.owner_browser_id.as_deref())
-            != Some(target_browser_id.as_str())
-        {
-            return false;
-        }
-    }
-    if let Some(target_session_id) = route_pool_target_string(entry, "sessionId") {
-        if allocation.and_then(|allocation| allocation.owner_session_id.as_deref())
-            != Some(target_session_id.as_str())
-        {
-            return false;
-        }
-    }
-    if let Some(target_display_name) = route_pool_target_string(entry, "displayName") {
-        if allocation.is_some_and(|allocation| {
-            allocation.display_name.as_deref() != Some(target_display_name.as_str())
-        }) {
-            return false;
-        }
-    }
-    true
 }
 
 pub fn ensure_route_pool_entry_matches_display(

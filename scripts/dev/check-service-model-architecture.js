@@ -166,6 +166,26 @@ const SERVICE_STATE_DIRECT_OWNER_FIELDS = [
   ],
 ];
 
+const SERVICE_STATE_MIGRATION_FIELDS = [
+  'schema_version', 'state_revision', 'profile_lease_schema_version',
+  'presentation_capacity', 'profile_policy_migration', 'service_principals',
+  'lease_authority', 'profile_lease_reconcile_receipts', 'profile_recovery_receipts',
+  'profile_reset_receipts', 'profile_lifecycle_authorizations',
+  'profile_lifecycle_effect_receipts', 'browser_retirement_receipts',
+  'abandoned_browser_retirements', 'crash_regeneration_transactions',
+  'protected_browser_owner_observations', 'runtime_owner_registry',
+  'authentication_runs', 'challenge_tasks', 'unknown_fields',
+];
+
+const SERVICE_STATE_CODEC_EXPORTS = [
+  'builtin_site_policies', 'builtin_site_policy', 'decode_persisted_service_state_json',
+  'default_profile_seeding_url',
+  'encode_prepared_service_state_pretty', 'prepare_service_state_for_persistence',
+  'service_profile_sources', 'service_site_policy_sources',
+  'validate_service_state_invariants', 'ServiceState', 'ServiceStateCodecError',
+  'LEGACY_SERVICE_STATE_SCHEMA_VERSION', 'SERVICE_STATE_SCHEMA_VERSION',
+];
+
 const SERVICE_MODEL_ALLOWED_DEPENDENCIES = new Set([
   'agent-browser-authentication-control',
   'agent-browser-challenge-control',
@@ -460,6 +480,12 @@ function check(root = repoRoot) {
   const serviceChallengeSource = read(root,
     'crates/agent-browser-service-model/src/service_challenge_task.rs');
   const serviceChallenge = withoutCommentsAndStrings(serviceChallengeSource);
+  const serviceStatePath = join(sourceRoot, 'service_state.rs');
+  const serviceStateSource = read(root, 'crates/agent-browser-service-model/src/service_state.rs');
+  const serviceState = withoutCommentsAndStrings(serviceStateSource);
+  const serviceStateCode = serviceStateSource.split('#[cfg(test)]', 1)[0];
+  const canonicalServiceState = withoutComments(serviceStateCode)
+    .replace(/\bcrate\s*::/g, 'agent_browser_service_model::');
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
 
@@ -606,34 +632,68 @@ function check(root = repoRoot) {
   );
   const cliServiceModelSource = read(root, 'cli/src/native/service_model.rs');
   const cliServiceModel = withoutCommentsAndStrings(cliServiceModelSource);
-  const serviceStateDefinition = rustStructDefinition(cliServiceModelSource, 'ServiceState');
-  const serviceStateSyntax = withoutComments(serviceStateDefinition);
-  requireCondition(Boolean(serviceStateDefinition),
-    'CLI must contain the ServiceState definition during aggregate dependency closure');
-  requireCondition(
-    !/\bsuper\s*::/.test(serviceStateSyntax),
-    'CLI ServiceState definition must not route canonical owners through a CLI super:: path',
-  );
+  requireCondition(existsSync(serviceStatePath), 'service-model must own src/service_state.rs');
+  const serviceStateDefinitions = [...serviceStateCode.matchAll(/\b(?:pub\s+)?struct\s+ServiceState\b/g)];
+  requireCondition(serviceStateDefinitions.length === 1,
+    'service-model aggregate module must own exactly one ServiceState struct');
+  requireCondition([...serviceStateCode.matchAll(/\bimpl\s+ServiceState\b/g)].length === 1,
+    'service-model aggregate module must own exactly one inherent ServiceState impl');
+  requireCondition(!/\bsuper\s*::/.test(serviceStateCode),
+    'service-model aggregate must not use super:: imports');
+  requireCondition(!/\b(?:crate|agent_browser_service_model)\s*::\s*native\b/.test(serviceState),
+    'service-model aggregate must not import upward CLI adapters');
+  const serviceStateStruct = rustStructDefinition(serviceStateCode, 'ServiceState');
+  const hiddenFields = [...serviceStateStruct.matchAll(
+    /#\s*\[\s*doc\s*\(\s*hidden\s*\)\s*\]\s*(?:pub(?:\([^)]*\))?\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:/g,
+  )].map((match) => match[1]);
+  requireCondition(hiddenFields.length === 20,
+    `service-model aggregate must mark exactly 20 migration fields #[doc(hidden)] (found ${hiddenFields.length})`);
+  for (const field of SERVICE_STATE_MIGRATION_FIELDS) {
+    requireCondition(hiddenFields.includes(field),
+      `service-model aggregate migration field must be #[doc(hidden)]: ${field}`);
+  }
   for (const [field, pattern] of SERVICE_STATE_DIRECT_OWNER_FIELDS) {
     requireCondition(
-      pattern.test(serviceStateSyntax),
-      `CLI ServiceState field must use its direct canonical owner: ${field}`,
+      pattern.test(canonicalServiceState),
+      `service-model ServiceState field must use its direct canonical owner: ${field}`,
     );
   }
-  const servicePrincipalField = serviceStateSyntax.match(
+  const servicePrincipalField = canonicalServiceState.match(
     /((?:#\s*\[[^\]]*\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?service_principals\s*:/,
   );
   requireCondition(
     Boolean(servicePrincipalField?.[1].match(
       /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_lease_authority\s*::\s*ServicePrincipalRegistry\s*::\s*is_empty["'][^\]]*\)\s*\]/,
     )),
-    'CLI ServiceState must use the direct Lease Authority principal omission predicate',
+    'service-model ServiceState must use the direct Lease Authority principal omission predicate',
   );
   requireCondition(
     /BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*CrashRegenerationTransaction\s*>/
-      .test(cliServiceModel),
-    'CLI ServiceState must use the canonical service-model crash regeneration transaction',
+      .test(canonicalServiceState),
+    'service-model ServiceState must use the canonical crash regeneration transaction',
   );
+  for (const name of SERVICE_STATE_CODEC_EXPORTS) {
+    requireCondition(new RegExp(`\\b(?:pub\\s+)?(?:fn|struct|enum|type|const)\\s+${name}\\b`).test(serviceStateCode),
+      `service-model aggregate must own codec/revision interface: ${name}`);
+    requireCondition(name === 'validate_service_state_invariants' || !cliSources.some((source) =>
+      new RegExp(`\\b(?:fn|struct|enum|type|const)\\s+${name}\\b`).test(source)),
+    `CLI must not duplicate service-model codec/revision interface: ${name}`);
+  }
+  requireCondition(/\bpub\s+fn\s+state_revision\s*\(/.test(serviceStateCode),
+    'service-model aggregate must own the state_revision accessor');
+  const serviceStateExport = serviceModelLib.match(/\bpub\s+use\s+service_state\s*::\s*\{([\s\S]*?)\}\s*;/);
+  requireCondition(/\bmod\s+service_state\s*;/.test(serviceModelLib),
+    'service-model lib must declare the ServiceState aggregate module');
+  requireCondition(Boolean(serviceStateExport),
+    'service-model lib must export the ServiceState aggregate interface');
+  for (const name of SERVICE_STATE_CODEC_EXPORTS) {
+    requireCondition(Boolean(serviceStateExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export ServiceState aggregate interface: ${name}`);
+  }
+  requireCondition(/\bpub\s+use\s+agent_browser_service_model\s*::\s*(?:ServiceState\s*;|\{[^}]*\bServiceState\b[^}]*\}\s*;)/s.test(cliServiceModelSource)
+    && !/\b(?:struct|enum|type)\s+ServiceState\b/.test(cliServiceModel)
+    && !/\bimpl\s+ServiceState\b/.test(cliServiceModel),
+  'CLI service_model module must be a reexport-only ServiceState facade');
   requireCondition(existsSync(capabilityRegistryPath),
     'service-model must own src/browser_capability_registry.rs');
   const capabilityRegistryExport = serviceModelLib.match(
@@ -673,8 +733,8 @@ function check(root = repoRoot) {
   );
   requireCondition(
     /browser_capability_registry\s*:\s*agent_browser_service_model\s*::\s*BrowserCapabilityRegistry/
-      .test(cliServiceModel),
-    'CLI ServiceState must use the canonical service-model browser capability registry',
+      .test(canonicalServiceState),
+    'service-model ServiceState must use the canonical browser capability registry',
   );
   requireCondition(existsSync(serviceAuthenticationPath),
     'service-model must own src/service_authentication_run.rs');
@@ -731,17 +791,17 @@ function check(root = repoRoot) {
   );
   requireCondition(
     /authentication_runs\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*ServiceAuthenticationRunRecord\s*>/
-      .test(cliServiceModel),
-    'CLI ServiceState must use the canonical service-model Service authentication record',
+      .test(canonicalServiceState),
+    'service-model ServiceState must use the canonical Service authentication record',
   );
-  const serviceAuthenticationField = withoutComments(cliServiceModelSource).match(
+  const serviceAuthenticationField = canonicalServiceState.match(
     /((?:#\s*\[[^\]]*\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?authentication_runs\s*:/,
   );
   requireCondition(
     Boolean(serviceAuthenticationField?.[1].match(
       /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_service_model\s*::\s*authentication_run_map_is_empty["'][^\]]*\)\s*\]/,
     )),
-    'CLI ServiceState must use the canonical Service authentication empty-map decision',
+    'service-model ServiceState must use the canonical Service authentication empty-map decision',
   );
   requireCondition(existsSync(serviceChallengePath),
     'service-model must own src/service_challenge_task.rs');
@@ -800,17 +860,17 @@ function check(root = repoRoot) {
   }
   requireCondition(
     /challenge_tasks\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*ServiceChallengeTaskRecord\s*>/
-      .test(cliServiceModel),
-    'CLI ServiceState must use the canonical service-model Service challenge record',
+      .test(canonicalServiceState),
+    'service-model ServiceState must use the canonical Service challenge record',
   );
-  const serviceChallengeField = withoutComments(cliServiceModelSource).match(
+  const serviceChallengeField = canonicalServiceState.match(
     /((?:#\s*\[[^\]]*\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?challenge_tasks\s*:/,
   );
   requireCondition(
     Boolean(serviceChallengeField?.[1].match(
       /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_service_model\s*::\s*challenge_task_map_is_empty["'][^\]]*\)\s*\]/,
     )),
-    'CLI ServiceState must use the canonical Service challenge empty-map decision',
+    'service-model ServiceState must use the canonical Service challenge empty-map decision',
   );
   for (const name of ABANDONED_RETIREMENT_RECORDS) {
     const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');

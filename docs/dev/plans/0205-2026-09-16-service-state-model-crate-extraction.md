@@ -2537,16 +2537,98 @@ substantial P3 pure-decision closure together because the language ownership
 rule makes that the smallest compilable deep-module move. Facade deletion and
 private-field closure remain separate P4 outcomes.
 
+## Checkpoint 40 | Canonical Aggregate And Persisted Codec Accepted
+
+State transition: Service Model now owns the only `ServiceState` declaration,
+the only inherent implementation, the 44-field aggregate, all nineteen
+existing aggregate methods, ordinary persisted compatibility decoding,
+deterministic prepared-state encoding, explicit invariant validation, revision
+successor and no-op decisions, and the flattened unknown top-level field bag.
+The CLI no longer declares or implements the aggregate. Its temporary
+`native::service_model` compatibility path re-exports the crate-owned type
+while repository, staged-migration, process, transport, and effect custody
+remain CLI adapters.
+
+The repository cutover preserves the frozen ordering. It prepares a checked
+successor before the mutator, compares the payload while ignoring only the
+revision, revalidates no-ops against durable state, replays stale candidates
+under exclusive custody, and commits the exact prepared primary and sidecar
+payloads. Persisted decode uses the model compatibility codec; raw transport
+decode and staged migration remain distinct CLI paths. The known staged
+migration key-list defect remains frozen for the bugfix lane and was not
+silently changed.
+
+Aggregate helper closure is canonical. Abandoned-retirement profile fencing
+and remote-view route matching moved below the CLI. Built-in policy inventory,
+default profile-seeding URL selection, and inactive-lease classification now
+have one Service Model owner; the three identical CLI helpers were deleted.
+`LeaseState::is_inactive()` is the shared typed decision. The exact twenty
+migration-only fields remain `#[doc(hidden)] pub` under the recorded ledger;
+this checkpoint does not claim final field privacy.
+
+The architecture contract now requires the aggregate module, exactly one
+`ServiceState` declaration and inherent implementation, all direct owner paths,
+the codec and revision interface, the exact twenty-field hidden ledger, the
+crate exports, no upward or `super::` imports, and a CLI re-export without a
+second aggregate or implementation. Mutation fixtures reject a missing module,
+duplicate CLI aggregate, foreign CLI implementation, missing re-export,
+additional hidden field, missing codec, missing revision accessor, upward
+import, and the earlier owner and serde-predicate mutations.
+
+Acceptance evidence:
+
+- all 150 Service Model unit tests and fourteen integration tests pass;
+- the focused `service_model` lane passes 41 tests and the focused
+  `service_state` lane passes 89 tests;
+- five prepared-transaction tests pass, including no-op revision preservation,
+  stale no-op replay, adjacent-revision convergence, and competing-writer
+  serialization; the persisted revision probe also passes independently;
+- Service API/MCP parity passes for 66 browser controls, 26 Service tools,
+  19 Service resources, 101 native Service actions, and 118 Service-request
+  actions;
+- generated Service client contract and JavaScript type checks pass, and all
+  route-confusion no-launch gates pass;
+- the changed-surface selector retains the broad local route; formatting,
+  strict workspace Clippy with `-D warnings`, diff hygiene, the architecture
+  contract, and all mutation fixtures pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_aggregate_challenge` used the
+requested strong `gpt-6-astra` high route to implement the crate aggregate,
+codec, method closure, and model tests. `/root/p205_method_disposition` used
+the requested reliable `gpt-5.6-sol` high route for the CLI ownership cutover.
+`/root/p205_aggregate_interface` used the requested balanced
+`gpt-5.6-terra` high route for the migration invariant adapter.
+`/root/p205_aggregate_guard` used the requested fast `gpt-5.6-luna` medium
+route for the architecture guard and mutation fixtures; the primary found and
+closed two guard gaps by counting all hidden fields and adding the missing
+negative mutations. `/root/p205_privacy_audit` used the requested reliable
+`gpt-5.6-sol` high route for a read-only direct-access audit. The primary
+integrated every diff, repaired test-only facade visibility, removed the three
+duplicate helpers, and independently ran the acceptance gates. Runtime-reported
+effective model metadata was not independently exposed.
+
+Acceptance state and progress classification: P2 is accepted and the aggregate
+portion of P3 is accepted as outcome progress. P4 remains open. The privacy
+audit found 351 external aggregate literals, approximately 350 of them test
+fixtures, plus high-fan-out runtime-owner, presentation-capacity, principal,
+lease, recovery, lifecycle, retirement, authentication, and challenge mutation
+clusters. The next bounded packet will close trivial codec metadata and direct
+revision reads, migrate the one production aggregate literal, and add the
+smallest immutable projections. It will not attempt the full twenty-field
+privacy flip in one change.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twenty-three families accepted; aggregate pending |
-| Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
-| One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | presentation-capacity kernel accepted; aggregate interface pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | aggregate and twenty-three prerequisite families accepted |
+| Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
+| One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods and helper closure accepted; typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | Service challenge envelope accepted through Checkpoint 36 |
+| Focused correctness | crate tests and affected CLI adapter tests | canonical aggregate accepted through Checkpoint 40 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

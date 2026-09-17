@@ -29,12 +29,13 @@ mod profile_seeding;
 mod request_provenance;
 mod service_authentication_run;
 mod service_challenge_task;
+mod service_state;
 mod session_tab;
 mod site_policy;
 mod terminal_outcome;
 
 pub use abandoned_browser_retirement::{
-    AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
+    blocks_profile_claim, AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
     AbandonedBrowserRetirementTransaction, ResourceRetirementPolicy, RetirementExitEvidence,
     RetirementExitFailure, RetirementRecourse, RetirementTerminalProjection,
     ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1,
@@ -85,10 +86,11 @@ pub use job_event::{
 pub use monitor::{MonitorState, MonitorTarget, SiteMonitor, SERVICE_MONITOR_STATE_VALUES};
 pub use operational_snapshot::{ControlPlaneSnapshot, ServiceReconciliationSnapshot};
 pub use presentation::{
-    ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,
-    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
-    RetainedDisplayAllocationCandidate, RoutePoolEntry, ViewStream, ViewStreamProvider,
-    ViewerLease, SERVICE_CONTROL_INPUT_PROVIDER_VALUES, SERVICE_VIEW_STREAM_PROVIDER_VALUES,
+    route_pool_entry_matches_display, route_pool_target_string, ControlInputProvider,
+    DisplayAllocation, DurableHandoffPresentationReceipt, RemoteViewAcquisitionLease,
+    RemoteViewHandoff, RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry,
+    ViewStream, ViewStreamProvider, ViewerLease, SERVICE_CONTROL_INPUT_PROVIDER_VALUES,
+    SERVICE_VIEW_STREAM_PROVIDER_VALUES,
 };
 pub use presentation_capacity::{
     CapacityDecision, CapacityLimitingResource, CapacityNextSafeAction,
@@ -174,6 +176,13 @@ pub use service_challenge_task::{
     ServiceChallengeTaskStartInput, ServiceChallengeTaskState, ServiceChallengeTaskSummary,
     AUTHENTICATION_CHALLENGE_INTENT_ID, NAVIGATION_CHALLENGE_INTENT_ID,
     SERVICE_CHALLENGE_TASK_SCHEMA_VERSION,
+};
+pub use service_state::{
+    builtin_site_policies, builtin_site_policy, decode_persisted_service_state_json,
+    default_profile_seeding_url, encode_prepared_service_state_pretty,
+    prepare_service_state_for_persistence, service_profile_sources, service_site_policy_sources,
+    validate_service_state_invariants, ServiceState, ServiceStateCodecError,
+    LEGACY_SERVICE_STATE_SCHEMA_VERSION, SERVICE_STATE_SCHEMA_VERSION,
 };
 pub use session_tab::{
     BrowserSession, BrowserTab, LeaseState, ProfileLeaseDisposition, ProfileSelectionReason,

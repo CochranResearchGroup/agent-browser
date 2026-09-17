@@ -631,10 +631,13 @@ fn prepare_service_state_transaction(
                 state.runtime_owner_registry = state
                     .runtime_owner_registry
                     .persistence_projection_without_lifecycle_records();
-                let serialized = serde_json::to_string_pretty(&state)
-                    .map_err(|err| format!("Failed to serialize service state: {err}"))?;
+                let state_payload = String::from_utf8(
+                    agent_browser_service_model::encode_prepared_service_state_pretty(&state)
+                        .map_err(|err| format!("Failed to serialize service state: {err}"))?,
+                )
+                .map_err(|err| format!("Failed to encode service state as UTF-8: {err}"))?;
                 Ok(ServiceStateTransaction {
-                    state_payload: format!("{serialized}\n"),
+                    state_payload,
                     handoff_payload: remote_view_handoff_registry_payload(
                         &state.remote_view_handoffs,
                     )?,
@@ -782,15 +785,12 @@ where
                 if !predicate(&baseline) {
                     return Ok(None);
                 }
-                let baseline_revision = baseline.state_revision;
-                let mut candidate = baseline.clone();
-                candidate.state_revision = baseline_revision
-                    .checked_add(1)
-                    .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+                let baseline_revision = baseline.state_revision();
+                let mut candidate = baseline
+                    .checked_successor()
+                    .map_err(|error| error.to_string())?;
                 let result = mutator(&mut candidate)?;
-                let candidate_revision = candidate.state_revision;
-                candidate.state_revision = baseline_revision;
-                if candidate == baseline {
+                if candidate.payload_eq_ignoring_revision(&baseline) {
                     let commit_deadline = Instant::now() + timeout.max(Duration::from_millis(1));
                     let mut file_guard = acquire_service_state_file_lock_until(
                         path,
@@ -806,7 +806,7 @@ where
                     file_guard.set_state_summary(&baseline, None);
                     file_guard.set_phase("load_current");
                     let current_revision = if self.store.recovery_required() {
-                        self.store.load()?.state_revision
+                        self.store.load()?.state_revision()
                     } else {
                         self.store.load_revision_without_recovery()?
                     };
@@ -828,7 +828,6 @@ where
                     }
                     return Ok(Some(result));
                 }
-                candidate.state_revision = candidate_revision;
                 let transaction = self
                     .store
                     .prepare_save(&candidate)?
@@ -851,7 +850,7 @@ where
                 #[cfg(test)]
                 wait_for_production_scale_load_current_barrier()?;
                 let current_revision = if self.store.recovery_required() {
-                    self.store.load()?.state_revision
+                    self.store.load()?.state_revision()
                 } else {
                     self.store.load_revision_without_recovery()?
                 };
@@ -942,19 +941,14 @@ where
             return Ok(None);
         }
 
-        let baseline_revision = baseline.state_revision;
-        let mut candidate = baseline.clone();
-        candidate.state_revision = baseline_revision
-            .checked_add(1)
-            .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+        let mut candidate = baseline
+            .checked_successor()
+            .map_err(|error| error.to_string())?;
         file_guard.set_phase("mutate");
         let result = mutator(&mut candidate)?;
-        let candidate_revision = candidate.state_revision;
-        candidate.state_revision = baseline_revision;
-        if candidate == baseline {
+        if candidate.payload_eq_ignoring_revision(&baseline) {
             return Ok(Some(result));
         }
-        candidate.state_revision = candidate_revision;
 
         drop(process_guard);
         file_guard.set_phase("prepare_contended");

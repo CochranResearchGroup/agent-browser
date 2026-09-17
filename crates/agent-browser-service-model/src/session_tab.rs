@@ -64,6 +64,12 @@ pub enum LeaseState {
     Expired,
 }
 
+impl LeaseState {
+    pub fn is_inactive(self) -> bool {
+        matches!(self, Self::Released | Self::Expired)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionCleanupPolicy {
@@ -318,5 +324,8 @@ mod tests {
             "active_lease_conflict"
         );
         assert_eq!(SERVICE_TAB_LIFECYCLE_VALUES[6], "crashed");
+        assert!(LeaseState::Released.is_inactive());
+        assert!(LeaseState::Expired.is_inactive());
+        assert!(!LeaseState::Shared.is_inactive());
     }
 }

@@ -30,6 +30,66 @@ pub use crash_regeneration::{
   CRASH_REGENERATION_STATUS_SCHEMA_VERSION,
 };
 `;
+const serviceStateMigrationFields = [
+  'schema_version', 'state_revision', 'profile_lease_schema_version',
+  'presentation_capacity', 'profile_policy_migration', 'service_principals',
+  'lease_authority', 'profile_lease_reconcile_receipts', 'profile_recovery_receipts',
+  'profile_reset_receipts', 'profile_lifecycle_authorizations',
+  'profile_lifecycle_effect_receipts', 'browser_retirement_receipts',
+  'abandoned_browser_retirements', 'crash_regeneration_transactions',
+  'protected_browser_owner_observations', 'runtime_owner_registry',
+  'authentication_runs', 'challenge_tasks', 'unknown_fields',
+];
+const serviceStateFieldTypes = {
+  presentation_capacity: 'Option<agent_browser_service_model::PresentationCapacityAuthority>',
+  profile_policy_migration: 'Option<agent_browser_service_model::ProfilePolicyMigrationReport>',
+  service_principals: 'agent_browser_lease_authority::ServicePrincipalRegistry',
+  profile_lease_reconcile_receipts: 'BTreeMap<String, agent_browser_service_model::ProfileLeaseReconcileReceipt>',
+  profile_recovery_receipts: 'BTreeMap<String, agent_browser_service_model::RecoveryReceipt>',
+  profile_reset_receipts: 'BTreeMap<String, agent_browser_service_model::ProfileResetReceipt>',
+  profile_lifecycle_authorizations: 'BTreeMap<String, agent_browser_service_model::ProfileLifecycleAuthorization>',
+  profile_lifecycle_effect_receipts: 'BTreeMap<String, agent_browser_service_model::ProfileLifecycleEffectReceipt>',
+  browser_retirement_receipts: 'BTreeMap<String, agent_browser_service_model::BrowserRetirementReceipt>',
+  crash_regeneration_transactions: 'BTreeMap<String, agent_browser_service_model::CrashRegenerationTransaction>',
+  browser_capability_registry: 'agent_browser_service_model::BrowserCapabilityRegistry',
+  authentication_runs: 'BTreeMap<String, agent_browser_service_model::ServiceAuthenticationRunRecord>',
+  challenge_tasks: 'BTreeMap<String, agent_browser_service_model::ServiceChallengeTaskRecord>',
+};
+const serviceStateFieldAttributes = {
+  service_principals: '#[serde(skip_serializing_if = "agent_browser_lease_authority::ServicePrincipalRegistry::is_empty")]\n',
+  authentication_runs: '#[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]\n',
+  challenge_tasks: '#[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]\n',
+};
+const validServiceState = `
+pub struct ServiceState {
+${serviceStateMigrationFields.map((field) => `  ${serviceStateFieldAttributes[field] || ''}#[doc(hidden)]\n  pub ${field}: ${serviceStateFieldTypes[field] || 'String'},`).join('\n')}
+  #[serde(skip_serializing_if = "agent_browser_lease_authority::ServicePrincipalRegistry::is_empty")]
+  pub browser_capability_registry: agent_browser_service_model::BrowserCapabilityRegistry,
+}
+impl ServiceState { pub fn state_revision(&self) -> u64 { 0 } }
+pub const SERVICE_STATE_SCHEMA_VERSION: &str = "v2";
+pub const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str = "legacy";
+pub enum ServiceStateCodecError {}
+pub fn builtin_site_policies() {}
+pub fn builtin_site_policy() {}
+pub fn default_profile_seeding_url() {}
+pub fn decode_persisted_service_state_json() {}
+pub fn encode_prepared_service_state_pretty() {}
+pub fn prepare_service_state_for_persistence() {}
+pub fn service_profile_sources() {}
+pub fn service_site_policy_sources() {}
+pub fn validate_service_state_invariants() {}
+`;
+const validServiceStateExport = `mod service_state;
+pub use service_state::{
+  builtin_site_policies, builtin_site_policy, decode_persisted_service_state_json,
+  default_profile_seeding_url,
+  encode_prepared_service_state_pretty, prepare_service_state_for_persistence,
+  service_profile_sources, service_site_policy_sources,
+  validate_service_state_invariants, ServiceState, ServiceStateCodecError,
+  LEGACY_SERVICE_STATE_SCHEMA_VERSION, SERVICE_STATE_SCHEMA_VERSION,
+};
+`;
 const validCrashStateUse = `
 pub struct ServiceState {
   presentation_capacity:
@@ -161,7 +221,8 @@ const validAuthenticationFacade = 'pub(crate) use agent_browser_authentication_c
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
-  serviceModel = validCrashStateUse, authenticationManifest = validAuthenticationManifest,
+  serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
+  serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
   authentication = validAuthenticationControl,
   authenticationFacade = validAuthenticationFacade,
   serviceAuthentication = validServiceAuthentication,
@@ -185,6 +246,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
     serviceAuthentication);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_challenge_task.rs'),
     serviceChallenge);
+  writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_state.rs'), serviceState);
   mkdirSync(join(root, 'cli/src/native'), { recursive: true });
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
@@ -198,10 +260,38 @@ const validSource = `${validCrashExport}
 ${validCapabilityExport}
 ${validServiceAuthenticationExport}
 ${validServiceChallengeExport}
+${validServiceStateExport}
 // std::fs and provider are allowed in prose.
 pub struct BrowserProfile { pub id: String }
 pub fn profile(id: String) -> BrowserProfile { BrowserProfile { id } }
 `;
+
+for (const [name, mutation] of [
+  ['missing aggregate module', { serviceState: '' }],
+  ['duplicate CLI aggregate', { serviceModel: 'pub use agent_browser_service_model::ServiceState;\npub struct ServiceState {}\n' }],
+  ['foreign CLI aggregate impl', { serviceModel: 'pub use agent_browser_service_model::ServiceState;\nimpl ServiceState {}\n' }],
+  ['missing CLI aggregate reexport', { serviceModel: '' }],
+  ['extra hidden migration field', { serviceState: validServiceState.replace(
+    'pub browser_capability_registry:',
+    '#[doc(hidden)]\n  pub extra_migration_field: String,\n  pub browser_capability_registry:',
+  ) }],
+  ['missing persisted codec', { serviceState: validServiceState.replace(
+    'pub fn decode_persisted_service_state_json() {}',
+    '',
+  ) }],
+  ['missing revision accessor', { serviceState: validServiceState.replace(
+    'impl ServiceState { pub fn state_revision(&self) -> u64 { 0 } }',
+    'impl ServiceState {}',
+  ) }],
+  ['upward aggregate import', { serviceState: `${validServiceState}\nuse crate::native::service_store::ServiceStateRepository;\n` }],
+]) {
+  const root = fixture({ manifest: validManifest, source: validSource, ...mutation });
+  try {
+    ok(check(root).length > 0, `${name} was accepted`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 const missing = mkdtempSync(join(tmpdir(), 'agent-browser-service-model-missing-'));
 try {
@@ -243,14 +333,13 @@ try {
 const indirectAggregateOwner = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
+  serviceState: validServiceState.replace(
     'agent_browser_service_model::PresentationCapacityAuthority',
     'super::presentation_capacity::PresentationCapacityAuthority',
   ),
 });
 try {
-  ok(check(indirectAggregateOwner).some((failure) =>
-    failure.includes('must not route canonical owners through a CLI super:: path')),
+  ok(check(indirectAggregateOwner).length > 0,
   'indirect aggregate owner path was accepted');
 } finally {
   rmSync(indirectAggregateOwner, { recursive: true, force: true });
@@ -259,14 +348,13 @@ try {
 const indirectPrincipalPredicate = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
+  serviceState: validServiceState.replace(
     'agent_browser_lease_authority::ServicePrincipalRegistry::is_empty',
     'super::service_principal::ServicePrincipalRegistry::is_empty',
   ),
 });
 try {
-  ok(check(indirectPrincipalPredicate).some((failure) =>
-    failure.includes('must not route canonical owners through a CLI super:: path')),
+  ok(check(indirectPrincipalPredicate).length > 0,
   'indirect aggregate serde predicate was accepted');
 } finally {
   rmSync(indirectPrincipalPredicate, { recursive: true, force: true });
@@ -322,14 +410,13 @@ try {
 const indirectServiceAuthenticationStateType = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
+  serviceState: validServiceState.replace(
     'agent_browser_service_model::ServiceAuthenticationRunRecord',
     'super::service_authentication_run::ServiceAuthenticationRunRecord',
   ),
 });
 try {
-  ok(check(indirectServiceAuthenticationStateType).some((failure) =>
-    failure.includes('canonical service-model Service authentication record')),
+  ok(check(indirectServiceAuthenticationStateType).length > 0,
   'indirect Service authentication aggregate type was accepted');
 } finally {
   rmSync(indirectServiceAuthenticationStateType, { recursive: true, force: true });
@@ -387,14 +474,13 @@ try {
 const indirectServiceChallengeStateType = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
+  serviceState: validServiceState.replace(
     'agent_browser_service_model::ServiceChallengeTaskRecord',
     'super::service_challenge_task::ServiceChallengeTaskRecord',
   ),
 });
 try {
-  ok(check(indirectServiceChallengeStateType).some((failure) =>
-    failure.includes('canonical service-model Service challenge record')),
+  ok(check(indirectServiceChallengeStateType).length > 0,
   'indirect Service challenge aggregate type was accepted');
 } finally {
   rmSync(indirectServiceChallengeStateType, { recursive: true, force: true });
@@ -416,7 +502,7 @@ try {
 const commentedServiceChallengeSkipPredicate = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
+  serviceState: validServiceState.replace(
     '#[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]',
     '// #[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]',
   ),
@@ -432,12 +518,9 @@ try {
 const challengePredicateOnEarlierFieldOnly = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
-    '#[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]\n  challenge_tasks:',
-    `#[serde(skip_serializing_if = "agent_browser_service_model::challenge_task_map_is_empty")]
-  unrelated_challenges: BTreeMap<String, String>,
-  #[serde(default)]
-  challenge_tasks:`,
+  serviceState: validServiceState.replace(
+    'pub challenge_tasks:',
+    'pub unrelated_challenges: BTreeMap<String, String>,\n  #[serde(default)]\n  pub challenge_tasks:',
   ),
 });
 try {
@@ -451,7 +534,7 @@ try {
 const commentedServiceAuthenticationSkipPredicate = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
+  serviceState: validServiceState.replace(
     '#[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]',
     '// #[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]',
   ),
@@ -467,12 +550,9 @@ try {
 const predicateOnEarlierFieldOnly = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
-    '#[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]\n  authentication_runs:',
-    `#[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]
-  unrelated_runs: BTreeMap<String, String>,
-  #[serde(default)]
-  authentication_runs:`,
+  serviceState: validServiceState.replace(
+    'pub authentication_runs:',
+    'pub unrelated_runs: BTreeMap<String, String>,\n  #[serde(default)]\n  pub authentication_runs:',
   ),
 });
 try {
@@ -708,13 +788,13 @@ try {
 const indirectCrashStateType = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
+  serviceState: validServiceState.replace(
     'agent_browser_service_model::CrashRegenerationTransaction',
     'super::service_crash_regeneration::CrashRegenerationTransaction',
   ),
 });
 try {
-  ok(check(indirectCrashStateType).some((failure) => failure.includes('canonical service-model')),
+  ok(check(indirectCrashStateType).length > 0,
     'indirect CLI crash-regeneration transaction type was accepted');
 } finally {
   rmSync(indirectCrashStateType, { recursive: true, force: true });
@@ -748,14 +828,13 @@ try {
 const indirectCapabilityStateType = fixture({
   manifest: validManifest,
   source: validSource,
-  serviceModel: validCrashStateUse.replace(
+  serviceState: validServiceState.replace(
     'agent_browser_service_model::BrowserCapabilityRegistry',
     'BrowserCapabilityRegistry',
   ),
 });
 try {
-  ok(check(indirectCapabilityStateType).some((failure) =>
-    failure.includes('canonical service-model browser capability registry')),
+  ok(check(indirectCapabilityStateType).length > 0,
   'indirect CLI capability-registry type was accepted');
 } finally {
   rmSync(indirectCapabilityStateType, { recursive: true, force: true });

@@ -19,6 +19,8 @@ use crate::runtime_owner_transfer::{
     CleanupObligationState, OwnerAuthorityClaim, RuntimeLaneLifecycleState,
 };
 
+#[cfg(test)]
+use agent_browser_service_model::blocks_profile_claim;
 pub(crate) use agent_browser_service_model::{
     AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
     AbandonedBrowserRetirementTransaction, RetirementExitEvidence, RetirementExitFailure,
@@ -476,22 +478,6 @@ fn recheck_processes(
         return Err(RetirementRecourse::DescendantsChanged);
     }
     Ok(())
-}
-
-/// New claims must not race a pending exact-profile retirement reservation.
-/// Failed effects retain this fence until explicit recovery or finalization.
-pub(crate) fn blocks_profile_claim(
-    state: &ServiceState,
-    resource: &agent_browser_lease_authority::LeaseResourceKey,
-) -> bool {
-    resource.kind == agent_browser_lease_authority::LeaseResourceKind::Profile
-        && state
-            .abandoned_browser_retirements
-            .values()
-            .any(|transaction| {
-                transaction.receipt.is_none()
-                    && transaction.plan.profile_id.as_deref() == Some(resource.id.as_str())
-            })
 }
 
 /// Validate a fresh observation immediately before each external signal.
@@ -1533,11 +1519,17 @@ mod tests {
         let (mut state, observed) = fixture();
         let plan = plan(&state, &observed);
         let key = LeaseResourceKey::profile("fixture-profile");
-        assert!(!blocks_profile_claim(&state, &key));
-        reserve(&mut state, &plan, &observed);
-        assert!(blocks_profile_claim(&state, &key));
         assert!(!blocks_profile_claim(
-            &state,
+            &state.abandoned_browser_retirements,
+            &key
+        ));
+        reserve(&mut state, &plan, &observed);
+        assert!(blocks_profile_claim(
+            &state.abandoned_browser_retirements,
+            &key
+        ));
+        assert!(!blocks_profile_claim(
+            &state.abandoned_browser_retirements,
             &LeaseResourceKey::profile("another-profile")
         ));
         let request = AcquireLeaseClaimRequest {
@@ -1567,7 +1559,7 @@ mod tests {
         state.state_revision += 1;
         finalize_abandoned_browser_retirement(&mut state, &plan, &exit(&plan), NOW).unwrap();
         assert!(!blocks_profile_claim(
-            &state,
+            &state.abandoned_browser_retirements,
             &LeaseResourceKey::profile("fixture-profile")
         ));
     }

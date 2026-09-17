@@ -247,6 +247,53 @@ impl Default for RoutePoolEntry {
     }
 }
 
+/// Return one normalized string binding from a route-pool target.
+pub fn route_pool_target_string(entry: &RoutePoolEntry, key: &str) -> Option<String> {
+    entry
+        .target
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+/// Return whether a route-pool entry's optional target bindings admit one
+/// display allocation.
+pub fn route_pool_entry_matches_display(
+    entry: &RoutePoolEntry,
+    display_allocation_id: &str,
+    allocation: Option<&DisplayAllocation>,
+) -> bool {
+    if let Some(target_allocation_id) = route_pool_target_string(entry, "displayAllocationId") {
+        if target_allocation_id != display_allocation_id {
+            return false;
+        }
+    }
+    if let Some(target_browser_id) = route_pool_target_string(entry, "browserId") {
+        if allocation.and_then(|allocation| allocation.owner_browser_id.as_deref())
+            != Some(target_browser_id.as_str())
+        {
+            return false;
+        }
+    }
+    if let Some(target_session_id) = route_pool_target_string(entry, "sessionId") {
+        if allocation.and_then(|allocation| allocation.owner_session_id.as_deref())
+            != Some(target_session_id.as_str())
+        {
+            return false;
+        }
+    }
+    if let Some(target_display_name) = route_pool_target_string(entry, "displayName") {
+        if allocation.is_some_and(|allocation| {
+            allocation.display_name.as_deref() != Some(target_display_name.as_str())
+        }) {
+            return false;
+        }
+    }
+    true
+}
+
 #[derive(Debug, Clone)]
 pub struct RetainedDisplayAllocationCandidate {
     pub id: String,
@@ -562,6 +609,76 @@ mod tests {
         );
         stream.project_controller(&route);
         assert_eq!(stream.controller_epoch, 2);
+    }
+
+    #[test]
+    fn route_pool_target_string_trims_and_rejects_empty_or_non_string_values() {
+        let entry = RoutePoolEntry {
+            target: json!({
+                "displayAllocationId": "  display-a  ",
+                "empty": "   ",
+                "number": 10
+            }),
+            ..RoutePoolEntry::default()
+        };
+
+        assert_eq!(
+            route_pool_target_string(&entry, "displayAllocationId").as_deref(),
+            Some("display-a")
+        );
+        assert_eq!(route_pool_target_string(&entry, "empty"), None);
+        assert_eq!(route_pool_target_string(&entry, "number"), None);
+        assert_eq!(route_pool_target_string(&entry, "missing"), None);
+    }
+
+    #[test]
+    fn route_pool_entry_matches_exact_display_target_bindings() {
+        let entry = RoutePoolEntry {
+            target: json!({
+                "displayAllocationId": "display-a",
+                "browserId": "browser-a",
+                "sessionId": "session-a",
+                "displayName": ":10"
+            }),
+            ..RoutePoolEntry::default()
+        };
+        let allocation = DisplayAllocation {
+            id: "display-a".into(),
+            display_name: Some(":10".into()),
+            owner_browser_id: Some("browser-a".into()),
+            owner_session_id: Some("session-a".into()),
+            ..DisplayAllocation::default()
+        };
+
+        assert!(route_pool_entry_matches_display(
+            &entry,
+            "display-a",
+            Some(&allocation)
+        ));
+
+        let mut wrong_display_name = allocation.clone();
+        wrong_display_name.display_name = Some(":11".into());
+        assert!(!route_pool_entry_matches_display(
+            &entry,
+            "display-a",
+            Some(&wrong_display_name)
+        ));
+        assert!(!route_pool_entry_matches_display(
+            &entry,
+            "display-b",
+            Some(&allocation)
+        ));
+        assert!(!route_pool_entry_matches_display(&entry, "display-a", None));
+    }
+
+    #[test]
+    fn display_name_target_allows_absent_allocation_context() {
+        let entry = RoutePoolEntry {
+            target: json!({ "displayName": ":10" }),
+            ..RoutePoolEntry::default()
+        };
+
+        assert!(route_pool_entry_matches_display(&entry, "display-a", None));
     }
 
     #[test]
