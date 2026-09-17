@@ -40,7 +40,7 @@ crate fails this plan.
 
 ## Current State
 
-Current `origin/main` is the source baseline. The 11,000-line
+The recorded source baseline is `2632e31c`. The 11,000-line
 `cli/src/native/service_model.rs` owns most canonical records and substantial
 pure derivation logic, but `ServiceState` also embeds durable types from
 presentation capacity, principal state, profile lease and recovery, lifecycle,
@@ -54,12 +54,13 @@ not the first packet. The current repository and in-memory repositories already
 form the real persistence adapter seam. The extraction will preserve that seam
 outside the crate while replacing direct model decisions incrementally.
 
-P202 is integrated and closed. P197 is clean and published on its challenge
-branch. P204 owns the current CI workflow, validation selector,
-`scripts/ci/rust-tests.sh`, `package.json`, `AGENTS.md`, `ROADMAP.md`,
-`RUNBOOK.md`, and `docs/dev/active-lanes.yaml` transition. P205 will not edit
-those shared surfaces until P204 publishes an integration checkpoint. This
-plan and issue #178 are the durable P205 authorities meanwhile.
+P202 is integrated and closed. P197 is published on its challenge branch.
+P204's validation implementation is integrated into `origin/main` and was
+merged into P205 after Checkpoint 18. P205 may consume the installed validation
+selector and crate-compartment support, but P204 still has an active catalog
+entry. P205 therefore will not independently rewrite P204's roadmap, runbook,
+or active-lane sections. This plan and issue #178 remain the durable P205
+authorities.
 
 ## Consolidated Batch
 
@@ -73,8 +74,8 @@ plan and issue #178 are the durable P205 authorities meanwhile.
 4. Cut CLI repositories and transport adapters over to the crate, then delete
    the old `cli/src/native/service_model.rs` implementation and transitional
    facade.
-5. Add the dedicated crate compartment and changed-surface selection after
-   P204 releases those files, then measure the focused edit and test loop.
+5. Use the integrated dedicated crate compartment and changed-surface
+   selection, then measure the focused edit and test loop.
 
 ## Module Interface
 
@@ -181,8 +182,8 @@ same seam.
 
 - Delete the CLI model implementation and transitional facade.
 - Prove zero duplicate canonical record and derivation definitions.
-- After P204 integration, add the dedicated crate compartment and validation
-  selector route without weakening the comprehensive lane.
+- Use P204's integrated dedicated crate compartment and validation selector
+  route without weakening the comprehensive lane.
 - Measure the same focused edit and test loop against the baseline. Report
   locality and correctness regardless of timing; claim acceleration only from
   comparable evidence.
@@ -1053,7 +1054,7 @@ for Service State joins and move pure behavior tests to the model interface.
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | seventeen checkpoints and eighteen families accepted |
 | Focused correctness | crate tests and affected CLI adapter tests | seventeen checkpoints accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
-| Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
+| Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | available; local use pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
 
 Every material checkpoint records the transition, acceptance state, progress
@@ -1076,7 +1077,7 @@ out of scope by explicit user direction.
 ## Stop Condition
 
 Stop the affected packet before any runtime effect, provider or credential use,
-production or staging mutation, release, shared-file edit still owned by P204,
+production or staging mutation, release, edits to P204's active shared sections,
 unreconciled duplicate model, weakened compatibility contract, or a fourth
 attempt at the same failed approach. Preserve a clean published checkpoint and
 the exact unresolved dependency rather than hiding it behind a shallow facade.
