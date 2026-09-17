@@ -283,7 +283,7 @@
     "repairPolicy": {
       "type": "string",
       "enum": ["reject_only", "reuse_compatible", "open_if_missing", "replace_duplicates"],
-      "description": "Repair policy for action=tab_handle_refresh. reject_only returns structured stale evidence, reuse_compatible can bind to a compatible retained target, open_if_missing can create a replacement tab in the routed browser session, and replace_duplicates reuses or opens one compatible target while best-effort closing other compatible live targets."
+      "description": "Repair policy for action=tab_handle_refresh. Compatible reuse requires canonical Service State custody for the same caller. open_if_missing persists a canonical replacement when no caller-bound target exists. replace_duplicates closes only compatible targets with the same caller custody. Responses report duplicateCleanupAttempted, peerCleanupAttempted, and duplicateTargetCleanup evidence."
     },
     "browserBuild": {
       "type": "string",

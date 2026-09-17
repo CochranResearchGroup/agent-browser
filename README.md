@@ -4378,9 +4378,12 @@ classification or repair before more work. The refresh action accepts stale
 handles, returns candidate evidence, and supports `reject_only`,
 `reuse_compatible`, `open_if_missing`, or `replace_duplicates` repair policies
 using the current service session and optional `desiredUrl` hint.
-`replace_duplicates` selects one compatible target and best-effort closes other
-compatible live targets so repeated route-bound opens do not grow stale tab
-sets. `service_remote_view_route_preflight`, HTTP
+Compatible reuse requires canonical Service State custody for the same caller.
+`open_if_missing` persists a canonical replacement when no caller-bound target
+exists. `replace_duplicates` closes only compatible same-caller targets and
+preserves foreign or unattributed peers. Every response includes
+`duplicateCleanupAttempted`, `peerCleanupAttempted`, and nested
+`duplicateTargetCleanup` evidence. `service_remote_view_route_preflight`, HTTP
 `GET /api/service/remote-view/route-preflight`, MCP
 `service_remote_view_route_preflight`, and `getServiceRemoteViewRoutePreflight()`
 return a no-launch `fastPreflight` summary with component evidence for the

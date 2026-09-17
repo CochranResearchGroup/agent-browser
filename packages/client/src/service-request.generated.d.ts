@@ -437,6 +437,16 @@ export interface ServiceTabHandleRefreshData {
   url?: string | null;
   title?: string | null;
   serviceTabHandle?: ServiceTabHandle | null;
+  duplicateCleanupAttempted: boolean;
+  peerCleanupAttempted: boolean;
+  duplicateTargetCleanup: {
+    policy: "preserve" | "replace_duplicates" | string;
+    attempted: boolean;
+    closedCount: number;
+    closedTargets: Record<string, unknown>[];
+    failedTargets: Record<string, unknown>[];
+    [key: string]: unknown;
+  };
   candidates: Record<string, unknown>[];
   [key: string]: unknown;
 }

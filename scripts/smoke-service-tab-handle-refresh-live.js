@@ -21,6 +21,7 @@ const { session } = context;
 const serviceName = 'ServiceTabHandleRefreshSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'plan0034TabHandleRefresh';
+const profileId = 'tab-handle-refresh-profile';
 const targetServiceId = 'generic-tab-handle-site';
 const browserId = `session:${session}`;
 const primaryHtml = '<!doctype html><title>Plan 0034 Refresh Primary</title><main>primary</main>';
@@ -98,6 +99,7 @@ async function serviceRequest(body, label) {
       agentName,
       taskName,
       targetServiceId,
+      runtimeProfile: profileId,
       jobTimeoutMs: 60000,
       ...body,
     }, 90000);
@@ -136,6 +138,23 @@ async function serviceTrace() {
 try {
   streamPort = await ensureStreamPort(context, 120000);
 
+  const profileUpsert = await httpJsonWithTimeout(
+    streamPort,
+    'POST',
+    `/api/service/profiles/${encodeURIComponent(profileId)}`,
+    {
+      name: 'Tab Handle Refresh Profile',
+      allocation: 'per_service',
+      keyring: 'basic_password_store',
+      persistent: true,
+      targetServiceIds: [targetServiceId],
+      sharedServiceIds: [serviceName],
+    },
+    60000,
+  );
+  assert(profileUpsert.success === true, `profile upsert failed: ${JSON.stringify(profileUpsert)}`);
+  assert(profileUpsert.data?.profile?.id === profileId, `profile id mismatch: ${JSON.stringify(profileUpsert)}`);
+
   const primaryTab = await serviceRequest(
     {
       action: 'tab_new',
@@ -164,6 +183,8 @@ try {
   assert(validRefresh.data?.ok === true, `valid refresh was not ok: ${JSON.stringify(validRefresh)}`);
   assert(validRefresh.data?.decision === 'exact_handle_still_valid', `valid refresh decision mismatch: ${JSON.stringify(validRefresh.data)}`);
   assert(validRefresh.data?.serviceTabHandle?.targetId === handle.targetId, `valid refresh changed target: ${JSON.stringify(validRefresh.data)}`);
+  assert(validRefresh.data?.duplicateCleanupAttempted === false, `valid refresh attempted duplicate cleanup: ${JSON.stringify(validRefresh.data)}`);
+  assert(validRefresh.data?.peerCleanupAttempted === false, `valid refresh attempted peer cleanup: ${JSON.stringify(validRefresh.data)}`);
 
   const fallbackTab = await serviceRequest(
     {
@@ -212,6 +233,8 @@ try {
   assert(rejectRefresh.data?.ok === false, `reject refresh unexpectedly succeeded: ${JSON.stringify(rejectRefresh)}`);
   assert(rejectRefresh.data?.decision === 'rejected_stale_or_missing_target', `reject refresh decision mismatch: ${JSON.stringify(rejectRefresh.data)}`);
   assert(Array.isArray(rejectRefresh.data?.candidates), `reject refresh missing candidates: ${JSON.stringify(rejectRefresh.data)}`);
+  assert(rejectRefresh.data?.duplicateCleanupAttempted === false, `reject refresh attempted duplicate cleanup: ${JSON.stringify(rejectRefresh.data)}`);
+  assert(rejectRefresh.data?.peerCleanupAttempted === false, `reject refresh attempted peer cleanup: ${JSON.stringify(rejectRefresh.data)}`);
 
   const openRefresh = await serviceRequest(
     {
@@ -223,13 +246,28 @@ try {
     'open stale tab_handle_refresh',
   );
   assert(openRefresh.data?.ok === true, `open refresh was not ok: ${JSON.stringify(openRefresh)}`);
-  assert(
-    ['opened_replacement_target', 'reused_compatible_target'].includes(openRefresh.data?.decision),
-    `open refresh decision mismatch: ${JSON.stringify(openRefresh.data)}`,
-  );
+  assert(openRefresh.data?.decision === 'opened_replacement_target', `open refresh decision mismatch: ${JSON.stringify(openRefresh.data)}`);
   assert(openRefresh.data?.serviceTabHandle?.valid === true, `open refresh did not return valid handle: ${JSON.stringify(openRefresh.data)}`);
   assert(openRefresh.data?.serviceTabHandle?.targetId !== handle.targetId, `open refresh reused stale target: ${JSON.stringify(openRefresh.data)}`);
   assert(openRefresh.data?.serviceTabHandle?.browserId === browserId, `open refresh browser mismatch: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.serviceTabHandle?.traceFilter?.serviceName === serviceName, `open refresh lost service attribution: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.serviceTabHandle?.traceFilter?.agentName === agentName, `open refresh lost agent attribution: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.serviceTabHandle?.traceFilter?.taskName === taskName, `open refresh lost task attribution: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.duplicateCleanupAttempted === false, `open refresh attempted duplicate cleanup: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.peerCleanupAttempted === false, `open refresh attempted peer cleanup: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.duplicateTargetCleanup?.attempted === false, `open refresh nested cleanup evidence mismatch: ${JSON.stringify(openRefresh.data)}`);
+
+  const preservedFallback = await serviceRequest(
+    {
+      action: 'tab_handle_refresh',
+      serviceTabHandle: fallbackHandle,
+      repairPolicy: 'reject_only',
+      desiredUrl: fallbackUrl,
+    },
+    'preserved fallback tab_handle_refresh',
+  );
+  assert(preservedFallback.data?.ok === true, `fallback peer was not preserved: ${JSON.stringify(preservedFallback)}`);
+  assert(preservedFallback.data?.serviceTabHandle?.targetId === fallbackHandle.targetId, `fallback peer target changed: ${JSON.stringify(preservedFallback.data)}`);
 
   const trace = await serviceTrace();
   const refreshJobs = (trace?.jobs ?? []).filter((job) => job.action === 'tab_handle_refresh');
