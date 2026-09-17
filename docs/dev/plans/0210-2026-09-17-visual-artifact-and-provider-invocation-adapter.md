@@ -71,6 +71,8 @@ but none are part of P210.
 
 The proposed contract contains:
 
+- `VisualInvocationPolicy`: exact maximum payload, serialized request and
+  serialized response bytes, allowed media types and dimension bounds;
 - `VisualArtifactEnvelope`: artifact identity, byte digest and length, media
   type, dimensions, source evidence, frame, context and geometry digests,
   redaction policy and receipt digests, provider capability, preparation time,
@@ -95,22 +97,25 @@ retry instructions, raw provider text or a second attempt token.
    provider call.
 2. Payload bytes match the declared digest and length; empty or oversized
    payloads fail before a provider call.
-3. Media type and dimensions come from a small policy-owned allowlist and are
+3. Serialized request and response bodies are measured against explicit
+   policy ceilings before transport or deserialization; an oversized body is
+   a terminal typed failure, never a truncation or retry signal.
+4. Media type and dimensions come from a small policy-owned allowlist and are
    included in the artifact and invocation digests.
-4. A nonempty redaction policy digest and redaction receipt digest are required
+5. A nonempty redaction policy digest and redaction receipt digest are required
    even for repository-owned synthetic fixtures.
-5. Retention is exactly `ephemeral_process_local`; the adapter exposes no save,
+6. Retention is exactly `ephemeral_process_local`; the adapter exposes no save,
    log, cache or replay-of-bytes operation.
-6. Artifact, request, evidence, capability and expiry identities agree before
+7. Artifact, request, evidence, capability and expiry identities agree before
    transport invocation.
-7. One orchestration call invokes the transport zero or one time. Invalid
+8. One orchestration call invokes the transport zero or one time. Invalid
    input, malformed output, timeout, abstention or rejection never triggers a
    retry.
-8. Provider output remains limited to P209's candidate identities or typed
+9. Provider output remains limited to P209's candidate identities or typed
    abstention. The adapter cannot broaden that response schema.
-9. Raw payload bytes and raw provider output do not appear in errors, receipts,
+10. Raw payload bytes and raw provider output do not appear in errors, receipts,
    debug formatting or durable test snapshots.
-10. Adjudication remains deterministic and effect-free after transport output
+11. Adjudication remains deterministic and effect-free after transport output
     is obtained.
 
 ## Consolidated Batch
@@ -141,14 +146,15 @@ The minimum matrix includes:
 3. source evidence, frame, context or geometry mismatch;
 4. byte digest or byte-length mismatch;
 5. empty and policy-oversized payloads;
-6. unsupported media type, zero dimensions and dimensions above policy bounds;
-7. missing or malformed redaction policy and receipt digests;
-8. non-ephemeral retention posture;
-9. stale artifact, stale request and capability mismatch;
-10. malformed JSON, unknown fields and coordinate, event, retry or instruction
+6. serialized request or response above its exact policy ceiling;
+7. unsupported media type, zero dimensions and dimensions above policy bounds;
+8. missing or malformed redaction policy and receipt digests;
+9. non-ephemeral retention posture;
+10. stale artifact, stale request and capability mismatch;
+11. malformed JSON, unknown fields and coordinate, event, retry or instruction
     smuggling in provider output;
-11. typed ambiguous, unsupported and inconclusive responses; and
-12. transport failure with exactly one call, no retry, no selection and no raw
+12. typed ambiguous, unsupported and inconclusive responses; and
+13. transport failure with exactly one call, no retry, no selection and no raw
     payload in the returned error.
 
 ## Delivery Budget
