@@ -866,7 +866,7 @@ pub(crate) fn apply_existing_session_profile_selection(
     }
     if let Some(principal_binding) = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .get(&binding.claim.profile_identity_digest)
     {
         // Superseding a browser does not promote its predecessor's capability.
@@ -1060,7 +1060,7 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
         route_authorization
             .get("runtimeOwnerRegistryRevision")
             .and_then(Value::as_u64)
-            == Some(state.runtime_owner_registry.revision)
+            == Some(state.runtime_owner_registry.revision())
             && route_authorization.get("ownerId").and_then(Value::as_str)
                 == Some(owner.owner_id.as_str())
             && route_authorization
@@ -1075,7 +1075,7 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
                 route_authorization
                     .get("runtimeOwnerRegistryRevision")
                     .and_then(Value::as_u64)
-                    == Some(state.runtime_owner_registry.revision)
+                    == Some(state.runtime_owner_registry.revision())
                     && route_authorization.get("ownerId").is_some_and(Value::is_null)
                     && route_authorization
                         .get("ownerGeneration")
@@ -1087,7 +1087,7 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
                 && owner.daemon_session_route == session_id
                 && state
                     .runtime_owner_registry
-                    .lifecycle_records
+                    .lifecycle_records()
                     .get(&owner.browser_id)
                     .is_some_and(|lifecycle| {
                         lifecycle.owner_generation == owner.owner_generation
@@ -1288,7 +1288,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
     };
     let Some(lifecycle) = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&binding.claim.logical_browser_id)
     else {
         return Ok(false);
@@ -1402,7 +1402,7 @@ fn exact_terminal_owner_allows_profile_relaunch(
         session_projection_inert && browser_projection_inert && tab_projection_inert;
     let principal_projection_absent = !state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .contains_key(&binding.claim.profile_identity_digest);
     // A terminal owner cannot carry effect authority into its replacement.
     // Once exact cleanup and process absence are proven, a current shared-local
@@ -1503,7 +1503,7 @@ fn apply_authenticated_orphaned_owner_recourse(
         agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
     let principal_binding = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .get(&profile_digest);
     let owner_projection_absent = !state.sessions.contains_key(session_id)
         && !state
@@ -1668,7 +1668,7 @@ fn apply_registered_session_profile_continuity(
         agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
     let Some(principal_binding) = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .get(&profile_digest)
     else {
         return Ok(false);

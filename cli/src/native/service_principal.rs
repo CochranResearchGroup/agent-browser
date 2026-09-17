@@ -75,7 +75,7 @@ pub(crate) fn authenticated_session_work_authority(
     }
     let matching = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .values()
         .filter(|binding| {
             binding.principal_id == principal_id
@@ -211,7 +211,7 @@ pub(crate) fn principal_continuity_decision(
 
     let owner_bindings = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .values()
         .filter(|binding| binding.profile_id == authority.profile_id)
         .collect::<Vec<_>>();
@@ -385,7 +385,7 @@ fn legacy_session_plan(
         .map(|profile_id| {
             state
                 .runtime_owner_registry
-                .principal_bindings
+                .principal_bindings()
                 .values()
                 .filter(|binding| binding.profile_id == profile_id)
                 .filter(|binding| {
@@ -428,7 +428,7 @@ fn verified_principal_owner_binding<'a>(
 ) -> Option<&'a crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding> {
     let matching = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .values()
         .filter(|binding| {
             binding.profile_id == profile_id
@@ -650,22 +650,24 @@ mod tests {
         .unwrap();
         let profile_digest = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .keys()
             .next()
             .unwrap()
             .clone();
-        state.runtime_owner_registry.principal_bindings.insert(
-            profile_digest.clone(),
-            RuntimeOwnerPrincipalBinding {
-                principal_id: foreign_authority.principal_id.clone(),
-                profile_id: foreign_authority.profile_id.clone(),
-                profile_identity_digest: profile_digest,
-                capability_id: foreign.capability.capability_id,
-                provenance: foreign_authority.provenance,
-                owner_generation: 7,
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
+            .insert(
+                profile_digest.clone(),
+                RuntimeOwnerPrincipalBinding {
+                    principal_id: foreign_authority.principal_id.clone(),
+                    profile_id: foreign_authority.profile_id.clone(),
+                    profile_identity_digest: profile_digest,
+                    capability_id: foreign.capability.capability_id,
+                    provenance: foreign_authority.provenance,
+                    owner_generation: 7,
+                },
+            );
         let session = state.sessions.get_mut("synthetic-session").unwrap();
         session.principal_id = Some(foreign_authority.principal_id);
         session.principal_provenance = Some(foreign_authority.provenance);
@@ -819,7 +821,7 @@ mod tests {
 
         let state: ServiceState = serde_json::from_value(legacy).unwrap();
         assert!(state.service_principals.is_empty());
-        assert!(state.runtime_owner_registry.principal_bindings.is_empty());
+        assert!(state.runtime_owner_registry.principal_bindings().is_empty());
         let plans = plan_legacy_session_principal_migration(&state);
         assert_eq!(
             plans[0].disposition,

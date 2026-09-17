@@ -469,7 +469,7 @@ pub(crate) fn reconcile_absent_runtime_lifecycles(state: &mut ServiceState) -> u
         .collect::<BTreeMap<_, _>>();
     let candidates = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .values()
         .filter(|lifecycle| {
             matches!(
@@ -1806,7 +1806,7 @@ fn persist_closed_browser_health_with_context(
             && outcome.is_some_and(|outcome| !outcome.os_degraded_possible())
             && service_state
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .get(&id)
                 .is_some_and(|lifecycle| {
                     use crate::runtime_owner_transfer::{
@@ -2136,7 +2136,7 @@ pub fn merge_reconciled_service_state(
         .collect::<BTreeSet<_>>();
     let ready_owner_routes = target
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .filter(|owner| {
             owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
@@ -3600,7 +3600,7 @@ fn proven_terminal_degraded_placeholder(
     }
     let Some(lifecycle) = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(browser_id)
     else {
         return false;
@@ -3627,7 +3627,7 @@ fn proven_terminal_degraded_placeholder(
         && owner.pending_transfer.is_none()
         && !state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .contains_key(&lifecycle.profile_identity_digest)
         && !state.sessions.contains_key(&owner.daemon_session_route)
         && !state
@@ -3826,20 +3826,22 @@ mod tests {
             last_transition: None,
         };
         let mut runtime_owner_registry = RuntimeOwnerRegistry::from_owner(owner);
-        runtime_owner_registry.lifecycle_records.insert(
-            logical_browser_id.clone(),
-            RuntimeLifecycleRecord {
-                logical_browser_id,
-                boot_epoch: None,
-                profile_identity_digest,
-                owner_generation,
-                lifecycle_state: RuntimeLaneLifecycleState::Closing,
-                cleanup_obligation_state: CleanupObligationState::Owned,
-                process_group_id: Some(process_group_id),
-                package_launch_identity_digest: Some("package-closing".to_string()),
-                terminal_evidence: Vec::new(),
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                logical_browser_id.clone(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id,
+                    boot_epoch: None,
+                    profile_identity_digest,
+                    owner_generation,
+                    lifecycle_state: RuntimeLaneLifecycleState::Closing,
+                    cleanup_obligation_state: CleanupObligationState::Owned,
+                    process_group_id: Some(process_group_id),
+                    package_launch_identity_digest: Some("package-closing".to_string()),
+                    terminal_evidence: Vec::new(),
+                },
+            );
 
         ServiceState {
             profiles: BTreeMap::from([(
@@ -3871,7 +3873,7 @@ mod tests {
 
         reconcile_service_state(&mut state).await;
 
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-closing"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
@@ -3910,16 +3912,15 @@ mod tests {
             .find(|process_group_id| !process_group_is_running(*process_group_id))
             .unwrap();
         let mut state = closing_runtime_lifecycle_state(&profile_root, absent_process_group);
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .get_mut("browser-closing")
             .unwrap()
             .lifecycle_state = RuntimeLaneLifecycleState::Ready;
 
         reconcile_service_state(&mut state).await;
 
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-closing"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
@@ -3950,17 +3951,19 @@ mod tests {
             .find(|process_group_id| !process_group_is_running(*process_group_id))
             .unwrap();
         let mut state = closing_runtime_lifecycle_state(&profile_root, absent_process_group);
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture
+            .lifecycle_rows
             .get_mut("browser-closing")
             .unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Transferring;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Transferring;
+        drop(registry_fixture);
 
         reconcile_service_state(&mut state).await;
 
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-closing"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
@@ -3998,14 +4001,15 @@ mod tests {
         let mut state = closing_runtime_lifecycle_state(&profile_root, absent_process_group);
         let profile_identity_digest = state
             .runtime_owner_registry
-            .owners
+            .owners()
             .keys()
             .next()
             .unwrap()
             .clone();
-        let owner = state
-            .runtime_owner_registry
-            .owners
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture
+            .owner_records
             .get_mut(&profile_identity_digest)
             .unwrap();
         owner.pending_transfer = Some(OwnerTransferProposal {
@@ -4028,17 +4032,20 @@ mod tests {
             candidate_owner_generation: owner.owner_generation + 1,
             candidate_effect_capable: false,
         });
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
+        drop(registry_fixture);
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture
+            .lifecycle_rows
             .get_mut("browser-closing")
             .unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Transferring;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Transferring;
+        drop(registry_fixture);
 
         reconcile_service_state(&mut state).await;
 
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-closing"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Transferring
@@ -4076,7 +4083,7 @@ mod tests {
 
         reconcile_service_state(&mut state).await;
 
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-closing"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
@@ -4117,7 +4124,7 @@ mod tests {
 
         reconcile_service_state(&mut state).await;
 
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-closing"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
@@ -4148,7 +4155,7 @@ mod tests {
 
         reconcile_service_state(&mut state).await;
 
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-closing"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Closing
@@ -4915,7 +4922,7 @@ mod tests {
             .unwrap();
 
         let persisted = store.load().unwrap();
-        let lifecycle = &persisted.runtime_owner_registry.lifecycle_records["browser-closing"];
+        let lifecycle = &persisted.runtime_owner_registry.lifecycle_records()["browser-closing"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
@@ -7881,21 +7888,23 @@ mod tests {
             pending_transfer: None,
             last_transition: None,
         });
-        state.runtime_owner_registry.lifecycle_records.insert(
-            browser_id.to_string(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: browser_id.to_string(),
-                profile_identity_digest: profile_digest,
-                owner_generation: 3,
-                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
-                cleanup_obligation_state: CleanupObligationState::Satisfied,
-                terminal_evidence: vec![
-                    "exact_process_exited".to_string(),
-                    "profile_lock_released".to_string(),
-                ],
-                ..RuntimeLifecycleRecord::default()
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                browser_id.to_string(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: browser_id.to_string(),
+                    profile_identity_digest: profile_digest,
+                    owner_generation: 3,
+                    lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                    cleanup_obligation_state: CleanupObligationState::Satisfied,
+                    terminal_evidence: vec![
+                        "exact_process_exited".to_string(),
+                        "profile_lock_released".to_string(),
+                    ],
+                    ..RuntimeLifecycleRecord::default()
+                },
+            );
         for case in [
             "missing_exit",
             "missing_lock",
@@ -7905,11 +7914,10 @@ mod tests {
             "session_present",
         ] {
             let mut uncertain = state.clone();
-            let lifecycle = uncertain
-                .runtime_owner_registry
-                .lifecycle_records
-                .get_mut(browser_id)
-                .unwrap();
+            let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+                &mut uncertain.runtime_owner_registry,
+            );
+            let lifecycle = registry_fixture.lifecycle_rows.get_mut(browser_id).unwrap();
             match case {
                 "missing_exit" => lifecycle
                     .terminal_evidence
@@ -7937,6 +7945,7 @@ mod tests {
                 }
                 _ => unreachable!(),
             }
+            drop(registry_fixture);
             reconcile_service_state(&mut uncertain).await;
             assert!(uncertain.browsers.contains_key(browser_id), "{case}");
         }

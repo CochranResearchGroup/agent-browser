@@ -103,7 +103,7 @@ fn verified_root(
     let owner = state.runtime_owner_registry.owner(&profile_digest)?;
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(browser_id)?;
     if owner.state != ProfileOwnerState::Ready
         || owner.pending_transfer.is_some()

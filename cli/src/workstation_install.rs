@@ -3861,7 +3861,7 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
             let resources = crate::native::service_resources::service_resources_response(state);
             let lifecycle_record_count = state
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .len();
             let missing_cleanup_obligation_count = state
                 .browsers
@@ -3870,7 +3870,7 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
                     state.browser_process_identities.contains_key(*browser_id)
                         && !state
                             .runtime_owner_registry
-                            .lifecycle_records
+                            .lifecycle_records()
                             .contains_key(*browser_id)
                 })
                 .count();
@@ -9509,7 +9509,7 @@ fn runtime_source_session_is_bound(
                             && receipt.logical_browser_id == logical_browser_id
                             && service_state
                                 .runtime_owner_registry
-                                .owners
+                                .owners()
                                 .values()
                                 .any(|owner| {
                                     owner.state
@@ -9825,7 +9825,7 @@ fn legacy_transferred_owner_prepare_rejection_can_fallback(
                     || (source_is_runtime_host
                         && !service_state
                             .runtime_owner_registry
-                            .lifecycle_records
+                            .lifecycle_records()
                             .contains_key(&owner.browser_id)))
         })
 }
@@ -14417,19 +14417,19 @@ mod tests {
             pending_transfer: None,
             last_transition: None,
         };
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .insert(migration.profile_identity_digest.clone(), owner.clone());
 
         assert!(runtime_orphan_owner_requires_fencing(&state, &migration));
         owner.state = ProfileOwnerState::Orphaned;
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .insert(migration.profile_identity_digest.clone(), owner);
         assert!(!runtime_orphan_owner_requires_fencing(&state, &migration));
-        state.runtime_owner_registry.owners.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
+            .clear();
         assert!(!runtime_orphan_owner_requires_fencing(&state, &migration));
     }
 
@@ -15216,7 +15216,11 @@ mod tests {
         let process_digest = "2".repeat(64);
         let profile_digest = "1".repeat(64);
         let mut service_state = crate::native::service_model::ServiceState::default();
-        service_state.runtime_owner_registry.owners.insert(
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut service_state.runtime_owner_registry,
+        )
+        .owner_records
+        .insert(
             profile_digest.clone(),
             ProfileOwner {
                 owner_id: "owner-recovered".to_string(),
@@ -20223,10 +20227,11 @@ mod tests {
             last_transition: None,
         };
         let mut service_state = ServiceState::default();
-        service_state
-            .runtime_owner_registry
-            .owners
-            .insert(migration.profile_identity_digest.clone(), owner.clone());
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut service_state.runtime_owner_registry,
+        )
+        .owner_records
+        .insert(migration.profile_identity_digest.clone(), owner.clone());
 
         assert!(legacy_transferred_owner_prepare_rejection_can_fallback(
             &service_state,
@@ -20242,12 +20247,13 @@ mod tests {
         ));
 
         let mut generation_one_state = service_state;
-        generation_one_state
-            .runtime_owner_registry
-            .owners
-            .get_mut(&migration.profile_identity_digest)
-            .unwrap()
-            .owner_generation = 1;
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut generation_one_state.runtime_owner_registry,
+        )
+        .owner_records
+        .get_mut(&migration.profile_identity_digest)
+        .unwrap()
+        .owner_generation = 1;
         assert!(!legacy_transferred_owner_prepare_rejection_can_fallback(
             &generation_one_state,
             &migration,
@@ -20260,13 +20266,14 @@ mod tests {
             "handoff-candidate",
             true,
         ));
-        generation_one_state
-            .runtime_owner_registry
-            .lifecycle_records
-            .insert(
-                migration.logical_browser_id.clone(),
-                crate::runtime_owner_transfer::RuntimeLifecycleRecord::default(),
-            );
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut generation_one_state.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .insert(
+            migration.logical_browser_id.clone(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord::default(),
+        );
         assert!(!legacy_transferred_owner_prepare_rejection_can_fallback(
             &generation_one_state,
             &migration,
@@ -20279,10 +20286,11 @@ mod tests {
         same_route_owner.owner_generation = 5;
         same_route_owner.browser_id = migration.logical_browser_id.clone();
         same_route_owner.daemon_session_route = "logical-browser".to_string();
-        same_route_state
-            .runtime_owner_registry
-            .owners
-            .insert(migration.profile_identity_digest.clone(), same_route_owner);
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut same_route_state.runtime_owner_registry,
+        )
+        .owner_records
+        .insert(migration.profile_identity_digest.clone(), same_route_owner);
         assert!(legacy_transferred_owner_prepare_rejection_can_fallback(
             &same_route_state,
             &migration,

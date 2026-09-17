@@ -437,7 +437,7 @@ fn service_control_plane_attestation(
     // custody instead of treating missing transfer history as sufficient proof.
     let current_owner = service_state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .find(|candidate| {
             owner.as_ref().is_some_and(|attested| {
@@ -447,7 +447,7 @@ fn service_control_plane_attestation(
         });
     let lifecycle = service_state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(browser_id);
     let boot = crate::process_identity::current_boot_epoch();
     let launch_checks = current_owner.zip(lifecycle).map(|(current, lifecycle)| {
@@ -750,7 +750,13 @@ mod tests {
         use crate::runtime_owner_transfer::{
             CleanupObligationState, RuntimeLaneLifecycleState, RuntimeLifecycleRecord,
         };
-        let owner = state.runtime_owner_registry.owners.values().next().unwrap();
+        let owner = state
+            .runtime_owner_registry
+            .owners()
+            .values()
+            .next()
+            .unwrap()
+            .clone();
         let record = RuntimeLifecycleRecord {
             logical_browser_id: owner.browser_id.clone(),
             profile_identity_digest: owner.profile_identity_digest.clone(),
@@ -760,14 +766,13 @@ mod tests {
             boot_epoch: crate::process_identity::current_boot_epoch(),
             process_group_id: Some(4242),
             package_launch_identity_digest: Some(
-                super::super::runtime_lifecycle::package_launch_identity_digest(owner, Some(4242))
+                super::super::runtime_lifecycle::package_launch_identity_digest(&owner, Some(4242))
                     .unwrap(),
             ),
             ..RuntimeLifecycleRecord::default()
         };
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .insert(owner.browser_id.clone(), record);
     }
 
@@ -839,9 +844,11 @@ mod tests {
         assert_eq!(proof["ownerCustody"]["verified"], true);
         for defect in ["generation", "digest", "boot", "cleanup", "missing"] {
             let mut invalid = state.clone();
-            let record = invalid
-                .runtime_owner_registry
-                .lifecycle_records
+            let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+                &mut invalid.runtime_owner_registry,
+            );
+            let record = registry_fixture
+                .lifecycle_rows
                 .get_mut("browser-1")
                 .unwrap();
             match defect {
@@ -853,10 +860,11 @@ mod tests {
                         crate::runtime_owner_transfer::CleanupObligationState::Unknown
                 }
                 "missing" => {
-                    invalid.runtime_owner_registry.lifecycle_records.clear();
+                    registry_fixture.lifecycle_rows.clear();
                 }
                 _ => unreachable!(),
             }
+            drop(registry_fixture);
             assert_eq!(attest(&invalid, &handle())["complete"], false, "{defect}");
         }
     }

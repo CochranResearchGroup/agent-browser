@@ -775,21 +775,23 @@ fn late_close_health_does_not_resurrect_removed_terminal_browser() {
         last_transition: None,
     };
     let mut registry = RuntimeOwnerRegistry::from_owner(owner);
-    registry.lifecycle_records.insert(
-        browser_id.into(),
-        RuntimeLifecycleRecord {
-            logical_browser_id: browser_id.into(),
-            profile_identity_digest: "1".repeat(64),
-            owner_generation: 1,
-            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
-            cleanup_obligation_state: CleanupObligationState::Satisfied,
-            terminal_evidence: vec![
-                "exact_process_exited".into(),
-                "profile_lock_released".into(),
-            ],
-            ..RuntimeLifecycleRecord::default()
-        },
-    );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+        .lifecycle_rows
+        .insert(
+            browser_id.into(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: browser_id.into(),
+                profile_identity_digest: "1".repeat(64),
+                owner_generation: 1,
+                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state: CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".into(),
+                    "profile_lock_released".into(),
+                ],
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
     // Cleanup already removed the operational browser and session. A late CDP
     // close failure must remain evidence, not recreate an ownerless active row.
     for case in 0..7 {
@@ -798,32 +800,35 @@ fn late_close_health_does_not_resurrect_removed_terminal_browser() {
             ..ServiceState::default()
         };
         if case == 1 {
-            state
-                .runtime_owner_registry
-                .lifecycle_records
-                .get_mut(browser_id)
-                .unwrap()
-                .lifecycle_state = RuntimeLaneLifecycleState::Ready;
+            crate::runtime_owner_transfer::edit_registry_fixture(
+                &mut state.runtime_owner_registry,
+            )
+            .lifecycle_rows
+            .get_mut(browser_id)
+            .unwrap()
+            .lifecycle_state = RuntimeLaneLifecycleState::Ready;
         }
         if case == 3 {
-            state
-                .runtime_owner_registry
-                .lifecycle_records
-                .get_mut(browser_id)
-                .unwrap()
-                .owner_generation = 2;
+            crate::runtime_owner_transfer::edit_registry_fixture(
+                &mut state.runtime_owner_registry,
+            )
+            .lifecycle_rows
+            .get_mut(browser_id)
+            .unwrap()
+            .owner_generation = 2;
         }
         if case == 4 {
-            state
-                .runtime_owner_registry
-                .lifecycle_records
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+                .lifecycle_rows
                 .get_mut(browser_id)
                 .unwrap()
                 .terminal_evidence
                 .pop();
         }
         if case == 6 {
-            state.runtime_owner_registry.owners.clear();
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+                .owner_records
+                .clear();
         }
         store.save(&state).unwrap();
         persist_closed_browser_health_in_repository(

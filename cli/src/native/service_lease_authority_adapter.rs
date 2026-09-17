@@ -122,7 +122,7 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
                     && owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
                     && state
                         .runtime_owner_registry
-                        .principal_bindings
+                        .principal_bindings()
                         .get(&profile_identity_digest)
                         .is_some_and(|binding| {
                             binding.owner_generation == expected
@@ -372,7 +372,7 @@ mod tests {
                 last_transition: None,
             },
         );
-        registry.principal_bindings.insert(
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry).principal_records.insert(
             profile_identity_digest.clone(),
             crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
                 principal_id: "principal:last30days".to_string(),
@@ -505,12 +505,13 @@ mod tests {
                     .get_mut("capability:last30days-social")
                     .unwrap()
                     .state = agent_browser_lease_authority::ServiceProfileCapabilityState::Active;
-                state
-                    .runtime_owner_registry
-                    .principal_bindings
-                    .get_mut(&profile_identity_digest)
-                    .unwrap()
-                    .principal_id = "principal:foreign".to_string();
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .principal_records
+                .get_mut(&profile_identity_digest)
+                .unwrap()
+                .principal_id = "principal:foreign".to_string();
                 Ok(())
             })
             .unwrap();

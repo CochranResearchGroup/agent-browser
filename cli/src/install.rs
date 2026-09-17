@@ -2402,7 +2402,7 @@ fn summarize_runtime_lifecycle_authority(
 ) -> Value {
     let mut lifecycle_counts = BTreeMap::<String, usize>::new();
     let mut cleanup_counts = BTreeMap::<String, usize>::new();
-    for record in registry.lifecycle_records.values() {
+    for record in registry.lifecycle_records().values() {
         let lifecycle = serde_json::to_value(record.lifecycle_state)
             .ok()
             .and_then(|value| value.as_str().map(str::to_string))
@@ -2416,9 +2416,9 @@ fn summarize_runtime_lifecycle_authority(
     }
     json!({
         "available": true,
-        "registryRevision": registry.revision,
-        "ownerCount": registry.owners.len(),
-        "recordCount": registry.lifecycle_records.len(),
+        "registryRevision": registry.revision(),
+        "ownerCount": registry.owners().len(),
+        "recordCount": registry.lifecycle_records().len(),
         "lifecycleStateCounts": lifecycle_counts,
         "cleanupObligationStateCounts": cleanup_counts,
     })
@@ -5717,17 +5717,20 @@ mod tests {
 
     #[test]
     fn service_status_lifecycle_summary_uses_its_reconciled_registry_snapshot() {
-        let mut registry = crate::runtime_owner_transfer::RuntimeOwnerRegistry {
-            revision: 7,
-            ..crate::runtime_owner_transfer::RuntimeOwnerRegistry::default()
-        };
-        registry.lifecycle_records.insert(
-            "browser-fixed".to_string(),
-            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-                logical_browser_id: "browser-fixed".to_string(),
-                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
-            },
-        );
+        let mut registry = crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+            registry_revision: 7,
+            ..crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture::default()
+        }
+        .into_registry();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .lifecycle_rows
+            .insert(
+                "browser-fixed".to_string(),
+                crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                    logical_browser_id: "browser-fixed".to_string(),
+                    ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+                },
+            );
 
         let lifecycle = runtime_lifecycle_status_json_for_registry(&registry);
         assert_eq!(lifecycle["lifecycle"]["registryRevision"], 7);

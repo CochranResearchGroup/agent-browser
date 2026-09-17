@@ -925,7 +925,7 @@ fn presentation_evidence_for_backend(
         .ok_or_else(|| "dashboard candidate durable handoff lacks a session".to_string())?;
     let owner = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .find(|owner| {
             crate::native::remote_view_handoff::runtime_owner_controls_browser(
@@ -1176,7 +1176,7 @@ pub(crate) fn candidate_presentation_prerequisite(
                 state, handoff,
             );
         let owner = owner_session.as_deref().and_then(|owner_session| {
-            state.runtime_owner_registry.owners.values().find(|owner| {
+            state.runtime_owner_registry.owners().values().find(|owner| {
                 crate::native::remote_view_handoff::runtime_owner_matches_browser_or_legacy_route_alias(
                     state,
                     owner,
@@ -2523,9 +2523,8 @@ mod tests {
     #[test]
     fn candidate_presentation_bootstrap_accepts_exact_legacy_owner_route_alias() {
         let mut state = exact_candidate_presentation_state();
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .values_mut()
             .next()
             .unwrap()
@@ -2565,15 +2564,13 @@ mod tests {
             },
         );
         state.browsers.get_mut("browser-1").unwrap().profile_id = Some("profile-1".to_string());
-        let owner = state
-            .runtime_owner_registry
-            .owners
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.browser_id = "session:historical-source-session".to_string();
         owner.profile_identity_digest =
             agent_browser_lease_authority::canonical_profile_identity_digest(&profile_dir).unwrap();
+        drop(registry_fixture);
 
         let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
 
@@ -2589,9 +2586,8 @@ mod tests {
     #[test]
     fn candidate_presentation_bootstrap_rejects_occupied_legacy_owner_route_alias() {
         let mut state = exact_candidate_presentation_state();
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .values_mut()
             .next()
             .unwrap()
@@ -2663,12 +2659,9 @@ mod tests {
         use crate::runtime_owner_transfer::{OwnerTransferProposal, OwnerTransferRequest};
 
         let mut state = exact_candidate_presentation_state();
-        let owner = state
-            .runtime_owner_registry
-            .owners
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.pending_transfer = Some(OwnerTransferProposal {
             request: OwnerTransferRequest {
                 mode: BrowserAdoptionMode::CooperativeTransfer,
@@ -2689,6 +2682,7 @@ mod tests {
             candidate_owner_generation: owner.owner_generation + 1,
             candidate_effect_capable: false,
         });
+        drop(registry_fixture);
 
         let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
 
@@ -2702,7 +2696,9 @@ mod tests {
     #[test]
     fn candidate_presentation_bootstrap_rejects_handoff_without_current_owner() {
         let mut state = exact_candidate_presentation_state();
-        state.runtime_owner_registry.owners.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
+            .clear();
 
         let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
 
@@ -2849,13 +2845,11 @@ mod tests {
             .get_mut("browser-1")
             .unwrap()
             .process_identity = process_identity;
-        let owner = state
-            .runtime_owner_registry
-            .owners
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.process_instance_digest = process_digest;
+        drop(registry_fixture);
         let (port, server) = serve_runtime_targets_once("target-1");
         let browser = state.browsers.get_mut("browser-1").unwrap();
         browser.pid = Some(std::process::id());
@@ -2897,9 +2891,8 @@ mod tests {
             .get_mut("browser-1")
             .unwrap()
             .process_identity = process_identity;
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .values_mut()
             .next()
             .unwrap()

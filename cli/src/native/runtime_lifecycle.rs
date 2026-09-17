@@ -1,9 +1,8 @@
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::runtime_owner_transfer::{
-    CandidateOwnerAttachment, CleanupObligationState, OwnerAuthorityClaim, OwnerTransferError,
-    OwnerTransferProposal, OwnerTransferReceipt, OwnerTransferRequest, ProfileOwner,
-    ReverseOwnerTransferRequest, RuntimeLaneLifecycleState, RuntimeLifecycleRecord,
-    RuntimeOwnerBinding, RuntimeOwnerRegistry,
+    CandidateOwnerAttachment, CleanupObligationState, OwnerAuthorityClaim, OwnerTransferProposal,
+    OwnerTransferReceipt, OwnerTransferRequest, ProfileOwner, ReverseOwnerTransferRequest,
+    RuntimeLaneLifecycleState, RuntimeLifecycleRecord, RuntimeOwnerBinding, RuntimeOwnerRegistry,
 };
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -86,19 +85,7 @@ pub(crate) enum RuntimeLifecycleIntent {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum RuntimeLifecycleTransition {
-    OwnerRegistered(ProfileOwner),
-    TerminalReplacementActivated(ProfileOwner),
-    ObservedOwnerSuperseded(ProfileOwner),
-    OwnerEvidenceRefreshed(ProfileOwner),
-    TransferPrepared(OwnerTransferProposal),
-    CandidateCommitted(OwnerTransferReceipt),
-    TransferAborted(bool),
-    TransferReversed(OwnerTransferReceipt),
-    LegacyOwnerRevoked(ProfileOwner),
-    LaneUpdated(RuntimeLifecycleRecord),
-}
+pub(crate) use agent_browser_lease_authority::RuntimeLifecycleTransition;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RuntimeEffectAdmission {
@@ -278,7 +265,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
         let authorizes_effect = |claim: &OwnerAuthorityClaim| {
             registry.authorizes(claim)
                 && registry
-                    .lifecycle_records
+                    .lifecycle_records()
                     .get(&claim.logical_browser_id)
                     .is_some_and(|lifecycle| {
                         lifecycle.profile_identity_digest == claim.profile_identity_digest
@@ -319,7 +306,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             let registry = self.repository.load_snapshot()?.runtime_owner_registry;
             let owner = registry.owner(&binding.claim.profile_identity_digest);
             let lifecycle = registry
-                .lifecycle_records
+                .lifecycle_records()
                 .get(&binding.claim.logical_browser_id);
             if registry.authorizes(&binding.claim)
                 && owner.is_some_and(|owner| owner.pending_transfer.is_none())
@@ -402,7 +389,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             .owner(&stale_claim.profile_identity_digest)
             .ok_or_else(|| "runtime_lifecycle_relinquish_owner_missing".to_string())?;
         let lifecycle = registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(&current.browser_id)
             .ok_or_else(|| "runtime_lifecycle_relinquish_record_missing".to_string())?;
         let restored_lifecycle_matches = matches!(
@@ -440,7 +427,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             return Err("runtime_lifecycle_process_tree_identity_mismatch".to_string());
         }
         let lifecycle = registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(&binding.claim.logical_browser_id)
             .ok_or_else(|| "runtime_lifecycle_process_tree_record_missing".to_string())?;
         if lifecycle.profile_identity_digest != binding.claim.profile_identity_digest
@@ -512,7 +499,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             && canonical_route_viewer_runtime_profile(&owner.daemon_session_route)
             && owner.browser_id == format!("session:{}", owner.daemon_session_route)
         {
-            let mut migration_sources = registry.owners.values().filter(|current| {
+            let mut migration_sources = registry.owners().values().filter(|current| {
                 current.profile_identity_digest != owner.profile_identity_digest
                     && current.browser_id == owner.browser_id
                     && current.daemon_session_route == owner.daemon_session_route
@@ -522,7 +509,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
                 return Err("runtime_lifecycle_terminal_profile_migration_ambiguous".to_string());
             }
             if let Some(current) = migration_source {
-                let lifecycle = registry.lifecycle_records.get(&current.browser_id);
+                let lifecycle = registry.lifecycle_records().get(&current.browser_id);
                 let migration_is_exact = current.pending_transfer.is_none()
                     && lifecycle.is_some_and(|lifecycle| {
                         lifecycle.profile_identity_digest == current.profile_identity_digest
@@ -533,10 +520,10 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
                             && terminal_cleanup_evidence_complete(lifecycle)
                     })
                     && !registry
-                        .principal_bindings
+                        .principal_bindings()
                         .contains_key(&current.profile_identity_digest)
                     && !registry
-                        .principal_bindings
+                        .principal_bindings()
                         .contains_key(&owner.profile_identity_digest);
                 if migration_is_exact {
                     let expected_owner = OwnerAuthorityClaim::from_owner(&current);
@@ -577,7 +564,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
                 .repository
                 .load_snapshot()?
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .get(&current.browser_id)
                 .cloned();
             if lifecycle.as_ref().is_some_and(|lifecycle| {
@@ -746,423 +733,122 @@ fn terminal_cleanup_evidence_complete(lifecycle: &RuntimeLifecycleRecord) -> boo
     process_absence_proven && profile_lock_release_proven
 }
 
-fn is_digest(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-
 fn apply_transition(
     registry: &mut RuntimeOwnerRegistry,
     intent: RuntimeLifecycleIntent,
 ) -> Result<RuntimeLifecycleTransition, String> {
-    match intent {
+    use agent_browser_lease_authority::RuntimeLifecycleIntent as KernelIntent;
+
+    // Host boot observation and canonical route naming remain CLI responsibilities.
+    let intent = match intent {
         RuntimeLifecycleIntent::RegisterCurrentOwner(owner) => {
-            let owner = registry
-                .register_current_owner(owner)
-                .map_err(owner_error)?;
-            let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
-            lifecycle.owner_generation = owner.owner_generation;
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::OwnerRegistered(owner))
+            KernelIntent::RegisterCurrentOwner(owner)
         }
         RuntimeLifecycleIntent::RegisterManagedLane {
             owner,
             process_group_id,
             package_launch_identity_digest,
-        } => {
-            if !is_digest(&package_launch_identity_digest) {
-                return Err("runtime_lifecycle_package_launch_identity_invalid".to_string());
-            }
-            let owner = registry
-                .register_current_owner(owner)
-                .map_err(owner_error)?;
-            let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
-            lifecycle.owner_generation = owner.owner_generation;
-            lifecycle.process_group_id = process_group_id;
-            lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
-            lifecycle.boot_epoch = crate::process_identity::current_boot_epoch();
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::OwnerRegistered(owner))
-        }
+        } => KernelIntent::RegisterManagedLane {
+            owner,
+            process_group_id,
+            package_launch_identity_digest,
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+        },
         RuntimeLifecycleIntent::ActivateTerminalReplacement {
             owner,
             process_group_id,
             package_launch_identity_digest,
-        } => {
-            crate::runtime_owner_transfer::validate_profile_owner(&owner).map_err(owner_error)?;
-            if !is_digest(&package_launch_identity_digest) {
-                return Err("runtime_lifecycle_package_launch_identity_invalid".to_string());
-            }
-            let current = registry
-                .owner(&owner.profile_identity_digest)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_replacement_owner_missing".to_string())?;
-            let lifecycle = registry
-                .lifecycle_records
-                .get(&current.browser_id)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_replacement_record_missing".to_string())?;
-            if owner.owner_generation != current.owner_generation.saturating_add(1)
-                || current.pending_transfer.is_some()
-                || lifecycle.profile_identity_digest != owner.profile_identity_digest
-                || lifecycle.owner_generation != current.owner_generation
-                || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Terminal
-                || lifecycle.cleanup_obligation_state != CleanupObligationState::Satisfied
-                || registry
-                    .principal_bindings
-                    .get(&owner.profile_identity_digest)
-                    .is_some_and(|binding| binding.owner_generation > current.owner_generation)
-                || registry
-                    .lifecycle_records
-                    .iter()
-                    .any(|(logical_id, record)| {
-                        logical_id != &current.browser_id
-                            && (logical_id == &owner.browser_id
-                                || record.profile_identity_digest == owner.profile_identity_digest)
-                    })
-            {
-                return Err("runtime_lifecycle_terminal_replacement_rejected".to_string());
-            }
-            registry
-                .owners
-                .insert(owner.profile_identity_digest.clone(), owner.clone());
-            if let Some(binding) = registry
-                .principal_bindings
-                .get_mut(&owner.profile_identity_digest)
-            {
-                binding.owner_generation = owner.owner_generation;
-            }
-            registry.revision = registry.revision.saturating_add(1);
-            let mut lifecycle = lifecycle;
-            if owner.browser_id != current.browser_id {
-                registry.lifecycle_records.remove(&current.browser_id);
-            }
-            lifecycle.logical_browser_id = owner.browser_id.clone();
-            lifecycle.owner_generation = owner.owner_generation;
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
-            lifecycle.process_group_id = process_group_id;
-            lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
-            lifecycle.boot_epoch = crate::process_identity::current_boot_epoch();
-            lifecycle.terminal_evidence.clear();
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::TerminalReplacementActivated(
-                owner,
-            ))
-        }
+        } => KernelIntent::ActivateTerminalReplacement {
+            owner,
+            process_group_id,
+            package_launch_identity_digest,
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+        },
         RuntimeLifecycleIntent::MigrateTerminalProfileReplacement {
             expected_owner,
             owner,
             process_group_id,
             package_launch_identity_digest,
-        } => {
-            crate::runtime_owner_transfer::validate_profile_owner(&owner).map_err(owner_error)?;
-            let expected_browser_id = format!("session:{}", owner.daemon_session_route);
-            let lifecycle = registry
-                .lifecycle_records
-                .get(&expected_owner.logical_browser_id)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_profile_migration_record_missing".to_string())?;
-            if !is_digest(&package_launch_identity_digest)
-                || !registry.authorizes(&expected_owner)
-                || owner.profile_identity_digest == expected_owner.profile_identity_digest
-                || owner.owner_generation != expected_owner.owner_generation.saturating_add(1)
-                || owner.browser_id != expected_owner.logical_browser_id
-                || owner.daemon_session_route != expected_owner.daemon_session_route
-                || owner.browser_id != expected_browser_id
-                || !canonical_route_viewer_runtime_profile(&owner.daemon_session_route)
-                || registry.owner(&owner.profile_identity_digest).is_some()
-                || lifecycle.profile_identity_digest != expected_owner.profile_identity_digest
-                || lifecycle.owner_generation != expected_owner.owner_generation
-                || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Terminal
-                || lifecycle.cleanup_obligation_state != CleanupObligationState::Satisfied
-                || !terminal_cleanup_evidence_complete(&lifecycle)
-                || registry
-                    .principal_bindings
-                    .contains_key(&expected_owner.profile_identity_digest)
-                || registry
-                    .principal_bindings
-                    .contains_key(&owner.profile_identity_digest)
-                || registry
-                    .lifecycle_records
-                    .iter()
-                    .any(|(logical_id, record)| {
-                        logical_id != &expected_owner.logical_browser_id
-                            && (logical_id == &owner.browser_id
-                                || record.profile_identity_digest == owner.profile_identity_digest)
-                    })
-            {
-                return Err("runtime_lifecycle_terminal_profile_migration_rejected".to_string());
-            }
-            registry
-                .owners
-                .remove(&expected_owner.profile_identity_digest);
-            registry
-                .owners
-                .insert(owner.profile_identity_digest.clone(), owner.clone());
-            registry.revision = registry.revision.saturating_add(1);
-            let mut lifecycle = lifecycle;
-            lifecycle.profile_identity_digest = owner.profile_identity_digest.clone();
-            lifecycle.owner_generation = owner.owner_generation;
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
-            lifecycle.process_group_id = process_group_id;
-            lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
-            lifecycle.boot_epoch = crate::process_identity::current_boot_epoch();
-            lifecycle.terminal_evidence.clear();
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::TerminalReplacementActivated(
-                owner,
-            ))
-        }
+        } => KernelIntent::MigrateTerminalProfileReplacement {
+            canonical_route_viewer_profile: owner.browser_id
+                == format!("session:{}", owner.daemon_session_route)
+                && canonical_route_viewer_runtime_profile(&owner.daemon_session_route),
+            expected_owner,
+            owner,
+            process_group_id,
+            package_launch_identity_digest,
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+        },
         RuntimeLifecycleIntent::SupersedeObservedOwner {
             expected_owner,
             owner,
             process_group_id,
             package_launch_identity_digest,
-        } => {
-            crate::runtime_owner_transfer::validate_profile_owner(&owner).map_err(owner_error)?;
-            if !is_digest(&package_launch_identity_digest)
-                || !registry.authorizes(&expected_owner)
-                || owner.profile_identity_digest != expected_owner.profile_identity_digest
-                || owner.owner_generation != expected_owner.owner_generation.saturating_add(1)
-                || registry
-                    .principal_bindings
-                    .get(&owner.profile_identity_digest)
-                    .is_some_and(|binding| {
-                        binding.owner_generation > expected_owner.owner_generation
-                    })
-            {
-                return Err("runtime_lifecycle_observed_supersession_rejected".to_string());
-            }
-            registry.lifecycle_records.retain(|logical_id, record| {
-                logical_id == &owner.browser_id
-                    || record.profile_identity_digest != owner.profile_identity_digest
-            });
-            registry
-                .owners
-                .insert(owner.profile_identity_digest.clone(), owner.clone());
-            if let Some(binding) = registry
-                .principal_bindings
-                .get_mut(&owner.profile_identity_digest)
-            {
-                binding.owner_generation = owner.owner_generation;
-            }
-            registry.revision = registry.revision.saturating_add(1);
-            let lifecycle = RuntimeLifecycleRecord {
-                logical_browser_id: owner.browser_id.clone(),
-                boot_epoch: crate::process_identity::current_boot_epoch(),
-                profile_identity_digest: owner.profile_identity_digest.clone(),
-                owner_generation: owner.owner_generation,
-                lifecycle_state: RuntimeLaneLifecycleState::Ready,
-                cleanup_obligation_state: CleanupObligationState::Owned,
-                process_group_id,
-                package_launch_identity_digest: Some(package_launch_identity_digest),
-                terminal_evidence: Vec::new(),
-            };
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::ObservedOwnerSuperseded(owner))
-        }
+        } => KernelIntent::SupersedeObservedOwner {
+            expected_owner,
+            owner,
+            process_group_id,
+            package_launch_identity_digest,
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+        },
         RuntimeLifecycleIntent::RefreshCurrentOwnerEvidence {
             claim,
             cdp_endpoint_identity_digest,
             target_set_digest,
-        } => {
-            if !registry.authorizes(&claim)
-                || !is_digest(&cdp_endpoint_identity_digest)
-                || !is_digest(&target_set_digest)
-            {
-                return Err("runtime_lifecycle_owner_evidence_refresh_rejected".to_string());
-            }
-            let owner = registry
-                .owners
-                .get_mut(&claim.profile_identity_digest)
-                .ok_or_else(|| "runtime_lifecycle_owner_missing".to_string())?;
-            if owner.cdp_endpoint_identity_digest != cdp_endpoint_identity_digest
-                || owner.target_set_digest != target_set_digest
-            {
-                owner.cdp_endpoint_identity_digest = cdp_endpoint_identity_digest;
-                owner.target_set_digest = target_set_digest;
-                registry.revision = registry.revision.saturating_add(1);
-            }
-            Ok(RuntimeLifecycleTransition::OwnerEvidenceRefreshed(
-                owner.clone(),
-            ))
-        }
-        RuntimeLifecycleIntent::BeginTransfer(request) => {
-            let current_owner = registry
-                .owner(&request.profile_identity_digest)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_owner_missing".to_string())?;
-            let proposal = registry.begin_transfer(request).map_err(owner_error)?;
-            let mut lifecycle = take_or_bootstrap_lifecycle(registry, &current_owner)?;
-            if lifecycle.owner_generation != proposal.previous_owner_generation {
-                return Err("runtime_lifecycle_generation_mismatch".to_string());
-            }
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Transferring;
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Transferring;
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::TransferPrepared(proposal))
-        }
+        } => KernelIntent::RefreshCurrentOwnerEvidence {
+            claim,
+            cdp_endpoint_identity_digest,
+            target_set_digest,
+        },
+        RuntimeLifecycleIntent::BeginTransfer(request) => KernelIntent::BeginTransfer(request),
         RuntimeLifecycleIntent::CommitCandidate(attachment) => {
-            let profile_identity_digest = attachment.profile_identity_digest.clone();
-            let receipt = registry.commit_candidate(attachment).map_err(owner_error)?;
-            let owner = registry
-                .owner(&profile_identity_digest)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_owner_missing_after_commit".to_string())?;
-            let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
-            lifecycle.owner_generation = owner.owner_generation;
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::CandidateCommitted(receipt))
+            KernelIntent::CommitCandidate(attachment)
         }
         RuntimeLifecycleIntent::AbortTransfer {
             profile_identity_digest,
             expected_owner_id,
             expected_owner_generation,
             transfer_nonce_digest,
-        } => {
-            let owner = registry
-                .owner(&profile_identity_digest)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_owner_missing".to_string())?;
-            let aborted = registry
-                .abort_pending_transfer(
-                    &profile_identity_digest,
-                    &expected_owner_id,
-                    expected_owner_generation,
-                    &transfer_nonce_digest,
-                )
-                .map_err(owner_error)?;
-            if aborted {
-                let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
-                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
-                lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
-                lifecycle.owner_generation = owner.owner_generation;
-                store_lifecycle(registry, lifecycle)?;
-            }
-            Ok(RuntimeLifecycleTransition::TransferAborted(aborted))
-        }
-        RuntimeLifecycleIntent::ReverseTransfer(request) => {
-            let profile_identity_digest = request.profile_identity_digest.clone();
-            let receipt = registry.reverse_transfer(request).map_err(owner_error)?;
-            let owner = registry
-                .owner(&profile_identity_digest)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_owner_missing_after_reverse".to_string())?;
-            let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
-            lifecycle.owner_generation = owner.owner_generation;
-            lifecycle.lifecycle_state = match owner.state {
-                crate::runtime_owner_transfer::ProfileOwnerState::Ready => {
-                    RuntimeLaneLifecycleState::Ready
-                }
-                crate::runtime_owner_transfer::ProfileOwnerState::Orphaned => {
-                    RuntimeLaneLifecycleState::Retained
-                }
-                _ => return Err("runtime_lifecycle_reverse_owner_state_invalid".to_string()),
-            };
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::TransferReversed(receipt))
-        }
+        } => KernelIntent::AbortTransfer {
+            profile_identity_digest,
+            expected_owner_id,
+            expected_owner_generation,
+            transfer_nonce_digest,
+        },
+        RuntimeLifecycleIntent::ReverseTransfer(request) => KernelIntent::ReverseTransfer(request),
         RuntimeLifecycleIntent::RevokeLegacyOwner {
             profile_identity_digest,
             logical_browser_id,
             expected_daemon_session_route,
             expected_owner_id,
             expected_owner_generation,
-        } => {
-            let owner = registry
-                .revoke_legacy_daemon_owner(
-                    &profile_identity_digest,
-                    &logical_browser_id,
-                    &expected_daemon_session_route,
-                    &expected_owner_id,
-                    expected_owner_generation,
-                )
-                .map_err(owner_error)?;
-            let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
-            lifecycle.owner_generation = owner.owner_generation;
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Retained;
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
-            store_lifecycle(registry, lifecycle)?;
-            Ok(RuntimeLifecycleTransition::LegacyOwnerRevoked(owner))
+        } => KernelIntent::RevokeLegacyOwner {
+            profile_identity_digest,
+            logical_browser_id,
+            expected_daemon_session_route,
+            expected_owner_id,
+            expected_owner_generation,
+        },
+        RuntimeLifecycleIntent::PreserveRetained { claim } => {
+            KernelIntent::PreserveRetained { claim }
         }
-        RuntimeLifecycleIntent::PreserveRetained { claim } => update_effect_owned_lane(
-            registry,
-            &claim,
-            RuntimeLaneLifecycleState::Retained,
-            CleanupObligationState::Owned,
-        ),
         RuntimeLifecycleIntent::BeginRecoveryClose { claim } => {
-            let owner = registry
-                .owner(&claim.profile_identity_digest)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_recovery_owner_missing".to_string())?;
-            if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
-                || OwnerAuthorityClaim::from_owner(&owner) != claim
-            {
-                return Err("runtime_lifecycle_recovery_owner_mismatch".to_string());
-            }
-            let lifecycle = registry
-                .lifecycle_records
-                .get_mut(&claim.logical_browser_id)
-                .ok_or_else(|| "runtime_lifecycle_recovery_record_missing".to_string())?;
-            if lifecycle.profile_identity_digest != claim.profile_identity_digest
-                || lifecycle.owner_generation != claim.owner_generation
-                || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Retained
-                || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
-            {
-                return Err("runtime_lifecycle_recovery_compare_and_swap_mismatch".to_string());
-            }
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Closing;
-            let lifecycle = lifecycle.clone();
-            registry.revision = registry.revision.saturating_add(1);
-            Ok(RuntimeLifecycleTransition::LaneUpdated(lifecycle))
+            KernelIntent::BeginRecoveryClose { claim }
         }
-        RuntimeLifecycleIntent::BeginClose { claim } => update_effect_owned_lane(
-            registry,
-            &claim,
-            RuntimeLaneLifecycleState::Closing,
-            CleanupObligationState::Owned,
-        ),
+        RuntimeLifecycleIntent::BeginClose { claim } => KernelIntent::BeginClose { claim },
         RuntimeLifecycleIntent::CompleteClose {
             logical_browser_id,
             profile_identity_digest,
             expected_owner_generation,
             terminal_evidence,
-        } => {
-            if terminal_evidence.is_empty()
-                || terminal_evidence
-                    .iter()
-                    .any(|evidence| evidence.trim().is_empty())
-            {
-                return Err("runtime_lifecycle_terminal_evidence_missing".to_string());
-            }
-            let lifecycle = registry
-                .lifecycle_records
-                .get_mut(&logical_browser_id)
-                .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?;
-            if lifecycle.profile_identity_digest != profile_identity_digest
-                || lifecycle.owner_generation != expected_owner_generation
-                || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Closing
-                || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
-            {
-                return Err("runtime_lifecycle_close_compare_and_swap_mismatch".to_string());
-            }
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Terminal;
-            lifecycle.cleanup_obligation_state = CleanupObligationState::Satisfied;
-            lifecycle.terminal_evidence = terminal_evidence;
-            let lifecycle = lifecycle.clone();
-            registry.revision = registry.revision.saturating_add(1);
-            Ok(RuntimeLifecycleTransition::LaneUpdated(lifecycle))
-        }
-    }
+        } => KernelIntent::CompleteClose {
+            logical_browser_id,
+            profile_identity_digest,
+            expected_owner_generation,
+            terminal_evidence,
+        },
+    };
+    registry.apply_lifecycle_transition(intent)
 }
 
 /// Begin an exact abandoned-browser close inside an already locked, pure
@@ -1229,7 +915,7 @@ pub(crate) fn complete_reconciled_abandoned_ready_lane(
         .cloned()
         .ok_or_else(|| "runtime_lifecycle_abandoned_owner_mismatch".to_string())?;
     let lifecycle = registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&logical_browser_id)
         .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?;
     if lifecycle.profile_identity_digest != profile_identity_digest
@@ -1276,7 +962,7 @@ pub(crate) fn complete_reconciled_abandoned_transfer_lane(
         .cloned()
         .ok_or_else(|| "runtime_lifecycle_abandoned_transfer_owner_mismatch".to_string())?;
     let lifecycle = registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&logical_browser_id)
         .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?;
     if lifecycle.profile_identity_digest != profile_identity_digest
@@ -1325,103 +1011,6 @@ pub(crate) fn revoke_legacy_owner_in_registry(
         return Err("runtime_lifecycle_legacy_revoke_outcome_mismatch".to_string());
     };
     Ok(owner)
-}
-
-fn update_effect_owned_lane(
-    registry: &mut RuntimeOwnerRegistry,
-    claim: &OwnerAuthorityClaim,
-    lifecycle_state: RuntimeLaneLifecycleState,
-    cleanup_obligation_state: CleanupObligationState,
-) -> Result<RuntimeLifecycleTransition, String> {
-    if !registry.authorizes(claim) {
-        return Err("runtime_lifecycle_owner_generation_stale".to_string());
-    }
-    let owner = registry
-        .owner(&claim.profile_identity_digest)
-        .cloned()
-        .ok_or_else(|| "runtime_lifecycle_owner_missing".to_string())?;
-    let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
-    lifecycle.owner_generation = owner.owner_generation;
-    lifecycle.lifecycle_state = lifecycle_state;
-    lifecycle.cleanup_obligation_state = cleanup_obligation_state;
-    store_lifecycle(registry, lifecycle.clone())?;
-    Ok(RuntimeLifecycleTransition::LaneUpdated(lifecycle))
-}
-
-fn take_or_bootstrap_lifecycle(
-    registry: &mut RuntimeOwnerRegistry,
-    owner: &ProfileOwner,
-) -> Result<RuntimeLifecycleRecord, String> {
-    let matching_keys = registry
-        .lifecycle_records
-        .iter()
-        .filter(|(_, lifecycle)| {
-            lifecycle.logical_browser_id == owner.browser_id
-                || lifecycle.profile_identity_digest == owner.profile_identity_digest
-        })
-        .map(|(key, _)| key.clone())
-        .collect::<Vec<_>>();
-    if matching_keys.len() > 1 {
-        return Err("runtime_lifecycle_record_ambiguous".to_string());
-    }
-    if let Some(key) = matching_keys.first() {
-        let mut lifecycle = if key == &owner.browser_id {
-            registry
-                .lifecycle_records
-                .get(key)
-                .cloned()
-                .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?
-        } else {
-            registry
-                .lifecycle_records
-                .remove(key)
-                .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?
-        };
-        if lifecycle.profile_identity_digest != owner.profile_identity_digest {
-            return Err("runtime_lifecycle_profile_identity_mismatch".to_string());
-        }
-        lifecycle.logical_browser_id = owner.browser_id.clone();
-        return Ok(lifecycle);
-    }
-    Ok(RuntimeLifecycleRecord {
-        logical_browser_id: owner.browser_id.clone(),
-        boot_epoch: None,
-        profile_identity_digest: owner.profile_identity_digest.clone(),
-        owner_generation: owner.owner_generation,
-        lifecycle_state: RuntimeLaneLifecycleState::Unknown,
-        cleanup_obligation_state: CleanupObligationState::Unknown,
-        process_group_id: None,
-        package_launch_identity_digest: None,
-        terminal_evidence: Vec::new(),
-    })
-}
-
-fn store_lifecycle(
-    registry: &mut RuntimeOwnerRegistry,
-    lifecycle: RuntimeLifecycleRecord,
-) -> Result<(), String> {
-    if lifecycle.logical_browser_id.trim().is_empty()
-        || lifecycle.profile_identity_digest.trim().is_empty()
-        || lifecycle.owner_generation == 0
-    {
-        return Err("runtime_lifecycle_record_invalid".to_string());
-    }
-    if registry
-        .lifecycle_records
-        .get(&lifecycle.logical_browser_id)
-        == Some(&lifecycle)
-    {
-        return Ok(());
-    }
-    registry
-        .lifecycle_records
-        .insert(lifecycle.logical_browser_id.clone(), lifecycle);
-    registry.revision = registry.revision.saturating_add(1);
-    Ok(())
-}
-
-fn owner_error(error: OwnerTransferError) -> String {
-    format!("runtime_owner_transfer_{:?}: {}", error.code, error.message)
 }
 
 #[cfg(test)]
@@ -1524,8 +1113,8 @@ mod tests {
             RuntimeLifecycleTransition::OwnerRegistered(_)
         ));
         let state = repository.load_snapshot().unwrap();
-        assert_eq!(state.runtime_owner_registry.owners.len(), 1);
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-a"];
+        assert_eq!(state.runtime_owner_registry.owners().len(), 1);
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-a"];
         assert_eq!(lifecycle.owner_generation, 7);
         assert_eq!(
             lifecycle.lifecycle_state,
@@ -1541,22 +1130,32 @@ mod tests {
     fn retained_lifecycle_transition_does_not_reauthenticate_prior_process_evidence() {
         let current_owner = owner();
         let mut registry = RuntimeOwnerRegistry::from_owner(current_owner.clone());
-        registry.lifecycle_records.insert(
-            current_owner.browser_id.clone(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: current_owner.browser_id.clone(),
-                boot_epoch: Some("boot:synthetic-previous".to_string()),
-                profile_identity_digest: current_owner.profile_identity_digest.clone(),
-                owner_generation: current_owner.owner_generation,
-                lifecycle_state: RuntimeLaneLifecycleState::Ready,
-                cleanup_obligation_state: CleanupObligationState::Owned,
-                process_group_id: Some(4100),
-                package_launch_identity_digest: Some(digest("launch")),
-                terminal_evidence: Vec::new(),
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .lifecycle_rows
+            .insert(
+                current_owner.browser_id.clone(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: current_owner.browser_id.clone(),
+                    boot_epoch: Some("boot:synthetic-previous".to_string()),
+                    profile_identity_digest: current_owner.profile_identity_digest.clone(),
+                    owner_generation: current_owner.owner_generation,
+                    lifecycle_state: RuntimeLaneLifecycleState::Ready,
+                    cleanup_obligation_state: CleanupObligationState::Owned,
+                    process_group_id: Some(4100),
+                    package_launch_identity_digest: Some(digest("launch")),
+                    terminal_evidence: Vec::new(),
+                },
+            );
 
-        let lifecycle = take_or_bootstrap_lifecycle(&mut registry, &current_owner).unwrap();
+        let RuntimeLifecycleTransition::LaneUpdated(lifecycle) = apply_transition(
+            &mut registry,
+            RuntimeLifecycleIntent::PreserveRetained {
+                claim: OwnerAuthorityClaim::from_owner(&current_owner),
+            },
+        )
+        .unwrap() else {
+            panic!("retained transition must return its lifecycle record");
+        };
         assert_eq!(
             lifecycle.boot_epoch.as_deref(),
             Some("boot:synthetic-previous")
@@ -1588,7 +1187,7 @@ mod tests {
             .unwrap();
         assert!(binding.effect_capable);
         let registered = repository.load_snapshot().unwrap();
-        let lifecycle = &registered.runtime_owner_registry.lifecycle_records["session:alpha"];
+        let lifecycle = &registered.runtime_owner_registry.lifecycle_records()["session:alpha"];
         assert_eq!(lifecycle.process_group_id, Some(4100));
         assert_eq!(
             lifecycle.boot_epoch,
@@ -1597,14 +1196,16 @@ mod tests {
         assert!(lifecycle
             .package_launch_identity_digest
             .as_deref()
-            .is_some_and(is_digest));
+            .is_some_and(|value| {
+                value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+            }));
         let mut effect_binding = binding.clone();
         authority.authorize_effect(&mut effect_binding).unwrap();
         let revision = repository
             .load_snapshot()
             .unwrap()
             .runtime_owner_registry
-            .revision;
+            .revision();
         let initial_target_set_digest = repository
             .load_snapshot()
             .unwrap()
@@ -1625,7 +1226,7 @@ mod tests {
                 .load_snapshot()
                 .unwrap()
                 .runtime_owner_registry
-                .revision,
+                .revision(),
             revision
         );
 
@@ -1707,15 +1308,15 @@ mod tests {
         let state = repository.load_snapshot().unwrap();
         assert!(!state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key("session:legacy-route-alias"));
         assert!(state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key("session:stable-browser"));
         let principal_binding = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .get(&canonical.claim.profile_identity_digest)
             .unwrap();
         assert_eq!(
@@ -1741,7 +1342,11 @@ mod tests {
         repository
             .mutate(|state| {
                 state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(current.clone());
-                state.runtime_owner_registry.lifecycle_records.insert(
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .lifecycle_rows
+                .insert(
                     current.browser_id.clone(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: current.browser_id.clone(),
@@ -1765,13 +1370,16 @@ mod tests {
 
         repository
             .mutate(|state| {
-                let lifecycle = state
-                    .runtime_owner_registry
-                    .lifecycle_records
+                let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                );
+                let lifecycle = registry_fixture
+                    .lifecycle_rows
                     .get_mut(&current.browser_id)
                     .unwrap();
                 lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Terminal;
                 lifecycle.cleanup_obligation_state = CleanupObligationState::Satisfied;
+                drop(registry_fixture);
                 Ok(())
             })
             .unwrap();
@@ -1797,7 +1405,11 @@ mod tests {
         repository
             .mutate(|state| {
                 state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(current.clone());
-                state.runtime_owner_registry.lifecycle_records.insert(
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .lifecycle_rows
+                .insert(
                     current.browser_id.clone(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: current.browser_id.clone(),
@@ -1841,10 +1453,10 @@ mod tests {
         let state = repository.load_snapshot().unwrap();
         assert!(!state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key("session:stale-transferring"));
         assert_eq!(
-            state.runtime_owner_registry.lifecycle_records["session:fresh"].lifecycle_state,
+            state.runtime_owner_registry.lifecycle_records()["session:fresh"].lifecycle_state,
             RuntimeLaneLifecycleState::Ready
         );
     }
@@ -2008,7 +1620,7 @@ mod tests {
             .authorize_effect(&mut replacement.clone())
             .unwrap();
         let state = repository.load_snapshot().unwrap();
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["session:reopened"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["session:reopened"];
         assert_eq!(lifecycle.lifecycle_state, RuntimeLaneLifecycleState::Ready);
         assert_eq!(
             lifecycle.cleanup_obligation_state,
@@ -2017,7 +1629,7 @@ mod tests {
         assert!(lifecycle.terminal_evidence.is_empty());
         let principal_binding = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .get(&replacement.claim.profile_identity_digest)
             .unwrap();
         assert_eq!(
@@ -2087,9 +1699,10 @@ mod tests {
         let state = repository.load_snapshot().unwrap();
         assert!(!state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key("session:replacement"));
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["session:new-replacement"];
+        let lifecycle =
+            &state.runtime_owner_registry.lifecycle_records()["session:new-replacement"];
         assert_eq!(lifecycle.logical_browser_id, "session:new-replacement");
         assert_eq!(lifecycle.lifecycle_state, RuntimeLaneLifecycleState::Ready);
         assert_eq!(
@@ -2203,7 +1816,7 @@ mod tests {
             .runtime_owner_registry
             .owner(&replacement_binding.claim.profile_identity_digest)
             .is_some());
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records[&browser_id];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()[&browser_id];
         assert_eq!(
             lifecycle.profile_identity_digest,
             replacement_binding.claim.profile_identity_digest
@@ -2249,20 +1862,22 @@ mod tests {
             current.daemon_session_route = route.to_string();
             let expected_owner = OwnerAuthorityClaim::from_owner(&current);
             let mut registry = RuntimeOwnerRegistry::from_owner(current.clone());
-            registry.lifecycle_records.insert(
-                browser_id.clone(),
-                RuntimeLifecycleRecord {
-                    logical_browser_id: browser_id.clone(),
-                    profile_identity_digest: current.profile_identity_digest.clone(),
-                    owner_generation: current.owner_generation,
-                    lifecycle_state: RuntimeLaneLifecycleState::Terminal,
-                    cleanup_obligation_state: CleanupObligationState::Satisfied,
-                    terminal_evidence,
-                    ..RuntimeLifecycleRecord::default()
-                },
-            );
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+                .lifecycle_rows
+                .insert(
+                    browser_id.clone(),
+                    RuntimeLifecycleRecord {
+                        logical_browser_id: browser_id.clone(),
+                        profile_identity_digest: current.profile_identity_digest.clone(),
+                        owner_generation: current.owner_generation,
+                        lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                        cleanup_obligation_state: CleanupObligationState::Satisfied,
+                        terminal_evidence,
+                        ..RuntimeLifecycleRecord::default()
+                    },
+                );
             if principal_bound {
-                registry.principal_bindings.insert(
+                crate::runtime_owner_transfer::edit_registry_fixture(&mut registry).principal_records.insert(
                     current.profile_identity_digest.clone(),
                     crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
                         principal_id: "principal:protected".to_string(),
@@ -2340,7 +1955,11 @@ mod tests {
             .unwrap();
         repository
             .mutate(|state| {
-                state.runtime_owner_registry.lifecycle_records.insert(
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .lifecycle_rows
+                .insert(
                     "session:occupied".to_string(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: "session:occupied".to_string(),
@@ -2378,7 +1997,7 @@ mod tests {
             "session:old"
         );
         assert_eq!(
-            state.runtime_owner_registry.lifecycle_records["session:old"].lifecycle_state,
+            state.runtime_owner_registry.lifecycle_records()["session:old"].lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
         );
     }
@@ -2395,7 +2014,7 @@ mod tests {
             .unwrap();
         let transferring = repository.load_snapshot().unwrap();
         assert_eq!(
-            transferring.runtime_owner_registry.lifecycle_records["browser-a"]
+            transferring.runtime_owner_registry.lifecycle_records()["browser-a"]
                 .cleanup_obligation_state,
             CleanupObligationState::Transferring
         );
@@ -2413,7 +2032,8 @@ mod tests {
             .unwrap();
         let aborted = repository.load_snapshot().unwrap();
         assert_eq!(
-            aborted.runtime_owner_registry.lifecycle_records["browser-a"].cleanup_obligation_state,
+            aborted.runtime_owner_registry.lifecycle_records()["browser-a"]
+                .cleanup_obligation_state,
             CleanupObligationState::Owned
         );
 
@@ -2426,7 +2046,7 @@ mod tests {
             ))
             .unwrap();
         let committed = repository.load_snapshot().unwrap();
-        let lifecycle = &committed.runtime_owner_registry.lifecycle_records["browser-a"];
+        let lifecycle = &committed.runtime_owner_registry.lifecycle_records()["browser-a"];
         assert_eq!(lifecycle.owner_generation, 8);
         assert_eq!(
             lifecycle.cleanup_obligation_state,
@@ -2463,7 +2083,7 @@ mod tests {
             ))
             .unwrap();
         let reversed = repository.load_snapshot().unwrap();
-        let lifecycle = &reversed.runtime_owner_registry.lifecycle_records["browser-a"];
+        let lifecycle = &reversed.runtime_owner_registry.lifecycle_records()["browser-a"];
         assert_eq!(lifecycle.owner_generation, 9);
         assert_eq!(lifecycle.lifecycle_state, RuntimeLaneLifecycleState::Ready);
         assert_eq!(
@@ -2518,7 +2138,7 @@ mod tests {
             .unwrap();
 
         let closing = repository.load_snapshot().unwrap();
-        let lifecycle = &closing.runtime_owner_registry.lifecycle_records["browser-a"];
+        let lifecycle = &closing.runtime_owner_registry.lifecycle_records()["browser-a"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Closing
@@ -2560,7 +2180,7 @@ mod tests {
             .unwrap();
 
         let terminal = repository.load_snapshot().unwrap();
-        let lifecycle = &terminal.runtime_owner_registry.lifecycle_records["browser-a"];
+        let lifecycle = &terminal.runtime_owner_registry.lifecycle_records()["browser-a"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
@@ -2587,8 +2207,8 @@ mod tests {
             .unwrap();
 
         let state = repository.load_snapshot().unwrap();
-        assert_eq!(state.runtime_owner_registry.lifecycle_records.len(), 1);
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-a"];
+        assert_eq!(state.runtime_owner_registry.lifecycle_records().len(), 1);
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-a"];
         assert_eq!(lifecycle.owner_generation, 8);
         assert_eq!(
             lifecycle.lifecycle_state,
@@ -2631,7 +2251,7 @@ mod tests {
             .unwrap();
 
         let state = repository.load_snapshot().unwrap();
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-a"];
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records()["browser-a"];
         assert_eq!(
             lifecycle.lifecycle_state,
             RuntimeLaneLifecycleState::Terminal
@@ -2647,16 +2267,18 @@ mod tests {
         let repository = registered_repository();
         repository
             .mutate(|state| {
-                let mut lifecycle = state
-                    .runtime_owner_registry
-                    .lifecycle_records
-                    .remove("browser-a")
-                    .expect("registered owner must have lifecycle accountability");
+                let mut lifecycle = crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .lifecycle_rows
+                .remove("browser-a")
+                .expect("registered owner must have lifecycle accountability");
                 lifecycle.logical_browser_id = "session:historical-alias".to_string();
-                state
-                    .runtime_owner_registry
-                    .lifecycle_records
-                    .insert(lifecycle.logical_browser_id.clone(), lifecycle);
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .lifecycle_rows
+                .insert(lifecycle.logical_browser_id.clone(), lifecycle);
                 Ok(())
             })
             .unwrap();
@@ -2712,11 +2334,11 @@ mod tests {
         assert!(owner.owner_generation > candidate_claim.owner_generation);
         assert!(restored
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key(&owner.browser_id));
         assert!(!restored
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key("session:historical-alias"));
     }
 }

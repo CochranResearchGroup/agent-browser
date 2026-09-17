@@ -117,7 +117,7 @@ pub(crate) fn service_boot_epoch_findings(
     }
     for lifecycle in state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .values()
         .filter(|lifecycle| {
             lifecycle.process_group_id.is_some()

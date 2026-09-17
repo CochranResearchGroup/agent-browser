@@ -1609,6 +1609,93 @@ implementation-ready deep-interface decision. Checkpoint 24 remains accepted;
 runtime-owner encapsulation remains open until all four fields are private and
 the local gate set passes.
 
+## Checkpoint 26 | Runtime-Owner Encapsulation Accepted
+
+State transition: the runtime-owner custody kernel is now fully encapsulated
+in Lease Authority. `revision`, `owners`, `principal_bindings`, and
+`lifecycle_records` are private. CLI production code uses immutable
+projections and named mutations; no mutable map getter, mutable row getter,
+generic edit closure, registry literal, or revision setter remains.
+
+The pure lifecycle state machine moved behind
+`apply_lifecycle_transition`. All fifteen existing lifecycle intents and ten
+outcomes retain their prior error strings and ordering, revision behavior,
+partial-mutation behavior, bootstrap and rekey rules, and replay semantics.
+The CLI still owns repository locking, clone/apply/publish, boot observation,
+route naming, profile synchronization, and error presentation. It supplies
+boot identity and a computed canonical-route verdict as observations.
+
+The other direct mutation owners now use named Lease Authority operations:
+
+- registered-principal rotation preserves the old-binding removal and first
+  revision increment even when no ready owner remains, then preserves the
+  second increment on successful bind;
+- runtime-reset terminalization preserves the CLI's filesystem preflight and
+  effect order, one revision increment, orphaned owner state, terminal and
+  satisfied lifecycle state, and deduplicated evidence;
+- lifecycle sidecar restoration and persistence projection preserve exact
+  precedence and perform no revision mutation; and
+- whole-registry replacement remains only at the existing Service State
+  transaction publish boundaries.
+
+Test-only malformed and legacy registry setup now uses a `cfg(test)` serde
+wire fixture/editor in the CLI facade. It reconstructs through the production
+decoder when an edit ends and does not exist in normal builds. This preserves
+coverage without admitting a production `from_parts` or mutable accessor.
+
+Structural evidence:
+
+- the Lease Authority guard requires private registry fields, immutable
+  projections, one canonical runtime-owner module, and no upward adapter
+  dependencies;
+- it rejects public registry fields, named or renamed mutable-reference
+  getters, direct CLI map or revision access, duplicate canonical types,
+  `BrowserAdoptionMode` duplication, and CLI registry literals; and
+- the guard and every mutation-fixture self-test pass against the current
+  tree.
+
+Local acceptance evidence:
+
+- all 116 Lease Authority tests pass;
+- all 31 runtime-owner, 21 runtime-lifecycle, 148 profile-focused, and 43
+  service-store-focused CLI tests pass;
+- the CLI all-target check passes;
+- the Lease Authority architecture guard and self-test pass;
+- workspace formatting and strict workspace Clippy with warnings denied pass;
+- the first focused-test attempt encountered an sccache transport disconnect;
+  the documented cache-off retry passed, so this was infrastructure noise and
+  not a product failure; and
+- no GitHub CI, runtime, browser, profile, provider, install, staging,
+  production, or release effect occurred.
+
+Delegation and model-choice receipt:
+
+- `/root/p205_owner_lifecycle_kernel` used `gpt-6-astra` at high effort to
+  extract the lifecycle state machine and then the named principal, reset, and
+  persistence operations with focused regression tests;
+- `/root/p205_owner_projection_audit` used `gpt-5.6-luna` at medium effort for
+  the first bounded production read-only cutover and all-target verification;
+- `/root/p205_owner_mutation_api` used `gpt-6-astra` at high effort for final
+  field privatization, test-only fixture reconstruction, remaining caller
+  conversion, and structural guard closure; and
+- the primary froze the interfaces, integrated the disjoint slices, reviewed
+  the final structural state, and reran the full crate and strict workspace
+  gates.
+
+Acceptance state and progress classification: the complete Checkpoint 23
+runtime-owner packet is accepted. This is outcome progress and removes the
+runtime-owner downward ownership blocker from the final aggregate. The
+canonical `ServiceState` aggregate remains in the CLI because abandoned-
+retirement and crash-regeneration transaction records, authentication and
+challenge records, and the advisory capability registry still require their
+separate ownership decisions.
+
+Next action: publish this accepted checkpoint, synchronize with current main
+if it advanced, and freeze the ownership matrix for abandoned-retirement and
+crash-regeneration durable transaction records without moving process,
+cleanup, or repository effects. Do not begin authentication, challenge,
+capability-registry, bug-fix, or runtime work in that packet.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |

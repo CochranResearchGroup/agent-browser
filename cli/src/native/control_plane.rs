@@ -2351,7 +2351,11 @@ mod tests {
         let repository = LockedServiceStateRepository::default_json().unwrap();
         repository
             .mutate(|state| {
-                state.runtime_owner_registry.owners.insert(
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .owner_records
+                .insert(
                     binding.claim.profile_identity_digest.clone(),
                     crate::runtime_owner_transfer::ProfileOwner {
                         owner_id: binding.claim.owner_id.clone(),
@@ -4077,7 +4081,7 @@ mod tests {
         assert!(!persisted.tabs.contains_key("target:old"));
         let owner = persisted
             .runtime_owner_registry
-            .owners
+            .owners()
             .get(&profile_digest)
             .unwrap();
         assert_eq!(
@@ -4085,7 +4089,7 @@ mod tests {
             crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
         );
         assert_eq!(owner.owner_generation, 2);
-        let lifecycle = &persisted.runtime_owner_registry.lifecycle_records[&browser_id];
+        let lifecycle = &persisted.runtime_owner_registry.lifecycle_records()[&browser_id];
         assert_eq!(lifecycle.owner_generation, 2);
         assert_eq!(
             lifecycle.lifecycle_state,

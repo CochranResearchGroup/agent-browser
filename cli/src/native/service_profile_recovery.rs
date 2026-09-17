@@ -34,9 +34,7 @@ use super::service_principal::{
 use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
-use crate::runtime_owner_transfer::{
-    CleanupObligationState, ProfileOwnerState, RuntimeLaneLifecycleState,
-};
+use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
 #[cfg(target_os = "linux")]
 use agent_browser_lease_authority::{
     acquire_protected_ephemeral_profile_claim, authorize_protected_browser_launch,
@@ -494,7 +492,7 @@ fn bind_acquired_profile_principal<R: ServiceStateRepository>(
         };
         let existing_binding = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .get(&profile_identity_digest);
         let same_capability_authority = existing_binding.is_some_and(|binding| {
             binding.principal_id == principal_binding.principal_id
@@ -810,7 +808,7 @@ pub(crate) fn plan_profile_acquisition(
     };
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&owner.browser_id);
     let Some(lifecycle) = lifecycle else {
         return Ok(blocked_outcome_with_recourse(
@@ -831,7 +829,7 @@ pub(crate) fn plan_profile_acquisition(
         .is_some();
     let binding = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .get(&profile_identity_digest);
 
     if process_proven && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready {
@@ -2034,7 +2032,7 @@ fn plan_profile_reset(
         PROFILE_RESET_PLAN_SCHEMA_V1,
         &reset_id,
         state.state_revision,
-        state.runtime_owner_registry.revision,
+        state.runtime_owner_registry.revision(),
         &authority.principal_id,
         &authority.profile_id,
         &profile_identity_digest,
@@ -2055,7 +2053,7 @@ fn plan_profile_reset(
         expires_at: expires_at.to_string(),
         idempotency_key_digest,
         service_state_revision: state.state_revision,
-        runtime_owner_revision: state.runtime_owner_registry.revision,
+        runtime_owner_revision: state.runtime_owner_registry.revision(),
         producer_build_identity,
         principal_id: authority.principal_id.clone(),
         profile_id: authority.profile_id.clone(),
@@ -2086,7 +2084,7 @@ fn validate_runtime_reset_owner(
 ) -> Result<(), String> {
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&owner.browser_id)
         .ok_or_else(|| "profile_reset_runtime_lifecycle_missing".to_string())?;
     let browser_inert = state
@@ -2127,7 +2125,7 @@ fn runtime_reset_evidence_digest(
         owner,
         state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(&owner.browser_id),
         state.browsers.get(&owner.browser_id),
         state.browser_process_identities.get(&owner.browser_id),
@@ -2199,7 +2197,7 @@ fn validate_profile_reset_preconditions(
     if now >= expires_at {
         return Err("profile_reset_plan_expired".to_string());
     }
-    if state.runtime_owner_registry.revision != plan.runtime_owner_revision {
+    if state.runtime_owner_registry.revision() != plan.runtime_owner_revision {
         return Err("profile_reset_plan_stale".to_string());
     }
     let profile = state
@@ -2263,11 +2261,11 @@ fn apply_runtime_reset_state(
         .ok_or_else(|| "profile_reset_plan_stale".to_string())?;
     if !state
         .runtime_owner_registry
-        .owners
+        .owners()
         .contains_key(&plan.profile_identity_digest)
         || !state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key(browser_id)
     {
         return Err("profile_reset_plan_stale".to_string());
@@ -2295,29 +2293,9 @@ fn apply_runtime_reset_state(
     });
     state.browsers.remove(browser_id);
     state.browser_process_identities.remove(browser_id);
-    let owner = state
+    state
         .runtime_owner_registry
-        .owners
-        .get_mut(&plan.profile_identity_digest)
-        .expect("runtime reset owner was validated before effects");
-    owner.state = ProfileOwnerState::Orphaned;
-    let lifecycle = state
-        .runtime_owner_registry
-        .lifecycle_records
-        .get_mut(browser_id)
-        .expect("runtime reset lifecycle was validated before effects");
-    lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Terminal;
-    lifecycle.cleanup_obligation_state = CleanupObligationState::Satisfied;
-    if !lifecycle
-        .terminal_evidence
-        .iter()
-        .any(|evidence| evidence == "profile_runtime_reset_applied")
-    {
-        lifecycle
-            .terminal_evidence
-            .push("profile_runtime_reset_applied".to_string());
-    }
-    state.runtime_owner_registry.revision = state.runtime_owner_registry.revision.saturating_add(1);
+        .apply_runtime_reset_terminalization(&plan.profile_identity_digest, browser_id);
     Ok(())
 }
 
@@ -2613,7 +2591,7 @@ fn plan_principal_reconciliation(
         schema_version: PROFILE_MITIGATION_ACTION_SCHEMA_V1.to_string(),
         action_id: digest_json(&(
             "reconcile_exact_principal_profile_identity",
-            state.runtime_owner_registry.revision,
+            state.runtime_owner_registry.revision(),
             &identities,
         ))?,
         action_type: MitigationActionType::ReconcileExactPrincipalProfileIdentity,
@@ -2644,7 +2622,7 @@ fn plan_principal_reconciliation(
         PROFILE_RECOVERY_PLAN_SCHEMA_V1,
         &recovery_id,
         state.state_revision,
-        state.runtime_owner_registry.revision,
+        state.runtime_owner_registry.revision(),
         &identities,
         &blocker,
         &action,
@@ -2661,7 +2639,7 @@ fn plan_principal_reconciliation(
         expires_at: expires_at.to_string(),
         idempotency_key_digest,
         service_state_revision: state.state_revision,
-        runtime_owner_revision: state.runtime_owner_registry.revision,
+        runtime_owner_revision: state.runtime_owner_registry.revision(),
         producer_build_identity,
         identities,
         dominant_blocker: blocker.clone(),
@@ -2706,7 +2684,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         .ok_or_else(|| "profile_recovery_owner_missing".to_string())?;
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&owner.browser_id)
         .ok_or_else(|| "profile_recovery_lifecycle_missing".to_string())?;
     let active_profile_lease_session_ids =
@@ -2812,7 +2790,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         schema_version: PROFILE_MITIGATION_ACTION_SCHEMA_V1.to_string(),
         action_id: digest_json(&(
             action_name,
-            state.runtime_owner_registry.revision,
+            state.runtime_owner_registry.revision(),
             &identities,
         ))?,
         action_type,
@@ -2850,7 +2828,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         PROFILE_RECOVERY_PLAN_SCHEMA_V1,
         &recovery_id,
         state.state_revision,
-        state.runtime_owner_registry.revision,
+        state.runtime_owner_registry.revision(),
         &identities,
         &blocker,
         &action,
@@ -2867,7 +2845,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         expires_at: expires_at.to_string(),
         idempotency_key_digest,
         service_state_revision: state.state_revision,
-        runtime_owner_revision: state.runtime_owner_registry.revision,
+        runtime_owner_revision: state.runtime_owner_registry.revision(),
         producer_build_identity,
         identities,
         dominant_blocker: blocker.clone(),
@@ -2925,12 +2903,12 @@ where
             .ok_or_else(|| "profile_recovery_owner_generation_exhausted".to_string())?;
         let lifecycle = state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(&owner.browser_id)
             .ok_or_else(|| "profile_recovery_postcondition_lifecycle_missing".to_string())?;
         let principal_binding = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .get(&plan.identities.profile_identity_digest);
         if owner.owner_generation != expected_generation
             || owner.browser_id != acquired.browser_id
@@ -2970,7 +2948,7 @@ where
                 .map(|action| action.action_id.clone())
                 .collect(),
             compensation_result: "not_required".to_string(),
-            final_state_revision: state.runtime_owner_registry.revision,
+            final_state_revision: state.runtime_owner_registry.revision(),
             acquisition_retry_state: ProfileAcquisitionState::Acquired,
             browser_id: acquired.browser_id.clone(),
             daemon_session_route: acquired.daemon_session_route.clone(),
@@ -3063,7 +3041,7 @@ fn validate_plan_preconditions(
     // between a plan response and its subsequent apply request. The recovery
     // authority is the exact profile graph below plus the independently
     // revisioned runtime-owner registry, not unrelated control-plane history.
-    if state.runtime_owner_registry.revision != plan.runtime_owner_revision {
+    if state.runtime_owner_registry.revision() != plan.runtime_owner_revision {
         return Err("profile_recovery_plan_stale".to_string());
     }
     let profile = state
@@ -3078,7 +3056,7 @@ fn validate_plan_preconditions(
         .ok_or_else(|| "profile_recovery_plan_stale".to_string())?;
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&plan.identities.durable_browser_id)
         .ok_or_else(|| "profile_recovery_plan_stale".to_string())?;
     let active_profile_lease_session_ids = active_conflicting_profile_lease_session_ids(
@@ -3426,9 +3404,9 @@ mod tests {
                     ..BrowserProfile::default()
                 },
             )]),
-            runtime_owner_registry: RuntimeOwnerRegistry {
-                revision: 55,
-                owners: BTreeMap::from([(
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+                registry_revision: 55,
+                owner_records: BTreeMap::from([(
                     profile_identity_digest.clone(),
                     ProfileOwner {
                         owner_id: "owner:generation-55".to_string(),
@@ -3445,7 +3423,7 @@ mod tests {
                         last_transition: None,
                     },
                 )]),
-                lifecycle_records: BTreeMap::from([(
+                lifecycle_rows: BTreeMap::from([(
                     browser_id.clone(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: browser_id,
@@ -3460,8 +3438,9 @@ mod tests {
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
-                ..RuntimeOwnerRegistry::default()
-            },
+                ..crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture::default()
+            }
+            .into_registry(),
             ..ServiceState::default()
         }
     }
@@ -3515,29 +3494,34 @@ mod tests {
         let mut initial = state();
         let profile_identity_digest = initial
             .runtime_owner_registry
-            .owners
+            .owners()
             .keys()
             .next()
             .unwrap()
             .clone();
-        initial.runtime_owner_registry.principal_bindings.insert(
-            profile_identity_digest.clone(),
-            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
-                principal_id: "principal:last30days".to_string(),
-                profile_id: "last30days-facebook".to_string(),
-                profile_identity_digest: profile_identity_digest.clone(),
-                capability_id: "capability:test".to_string(),
-                provenance: ServicePrincipalProvenance::RegisteredCapability,
-                owner_generation: 55,
-            },
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut initial.runtime_owner_registry)
+            .principal_records
+            .insert(
+                profile_identity_digest.clone(),
+                crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                    principal_id: "principal:last30days".to_string(),
+                    profile_id: "last30days-facebook".to_string(),
+                    profile_identity_digest: profile_identity_digest.clone(),
+                    capability_id: "capability:test".to_string(),
+                    provenance: ServicePrincipalProvenance::RegisteredCapability,
+                    owner_generation: 55,
+                },
+            );
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
         );
-        let owner = initial
-            .runtime_owner_registry
-            .owners
+        let owner = registry_fixture
+            .owner_records
             .get_mut(&profile_identity_digest)
             .unwrap();
         owner.owner_generation = 56;
         owner.daemon_session_route = "replacement-route".to_string();
+        drop(registry_fixture);
         initial.sessions.insert(
             "replacement-route".to_string(),
             BrowserSession {
@@ -3552,7 +3536,7 @@ mod tests {
 
         let current = repository.load_snapshot().unwrap();
         assert_eq!(
-            current.runtime_owner_registry.principal_bindings[&profile_identity_digest]
+            current.runtime_owner_registry.principal_bindings()[&profile_identity_digest]
                 .owner_generation,
             56
         );
@@ -3761,25 +3745,27 @@ mod tests {
         let mut state = state();
         let profile_identity_digest = state
             .runtime_owner_registry
-            .owners
+            .owners()
             .keys()
             .next()
             .unwrap()
             .clone();
         let owner = state
             .runtime_owner_registry
-            .owners
+            .owners()
             .get(&profile_identity_digest)
             .unwrap()
             .clone();
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture
+            .lifecycle_rows
             .get_mut(&owner.browser_id)
             .unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence.clear();
+        drop(registry_fixture);
         state.browsers.insert(
             owner.browser_id.clone(),
             BrowserProcess {
@@ -3789,7 +3775,7 @@ mod tests {
             },
         );
         if include_binding {
-            state.runtime_owner_registry.principal_bindings.insert(
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry).principal_records.insert(
                 profile_identity_digest.clone(),
                 crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
                     principal_id: principal_id.to_string(),
@@ -3991,18 +3977,16 @@ mod tests {
     #[test]
     fn ready_owner_with_proven_absent_runtime_gets_preserving_repair_plan() {
         let mut state = state();
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence = vec![
             "service_reconcile_process_group_absent:14768".to_string(),
             "service_reconcile_profile_lock_absent".to_string(),
         ];
+        drop(registry_fixture);
         let before = state.clone();
 
         let outcome = plan_terminal_owner_recovery(
@@ -4035,18 +4019,17 @@ mod tests {
     #[tokio::test]
     async fn ready_inert_owner_repair_launches_once_and_replays_without_effect() {
         let mut initial = state();
-        let lifecycle = initial
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
+        );
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence = vec![
             "service_reconcile_process_group_absent:14768".to_string(),
             "service_reconcile_profile_lock_absent".to_string(),
         ];
+        drop(registry_fixture);
         let repository = MemoryRepository::new(initial);
         let plan = plan_terminal_owner_recovery(
             &repository.load_snapshot().unwrap(),
@@ -4148,23 +4131,27 @@ mod tests {
         profile.user_data_dir = Some(profile_root.to_string_lossy().to_string());
         profile.authenticated_service_ids = vec!["bill".to_string()];
         let profile_identity_digest = recovery_profile_identity_digest(profile).unwrap();
-        let mut owner = initial.runtime_owner_registry.owners.pop_first().unwrap().1;
+        let mut owner = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
+        )
+        .owner_records
+        .pop_first()
+        .unwrap()
+        .1;
         owner.profile_identity_digest = profile_identity_digest.clone();
-        initial
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut initial.runtime_owner_registry)
+            .owner_records
             .insert(profile_identity_digest.clone(), owner);
-        let lifecycle = initial
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
+        );
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.profile_identity_digest = profile_identity_digest;
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence =
             vec!["service_reconcile_process_group_absent:4294967295".to_string()];
+        drop(registry_fixture);
         initial.browsers.insert(
             "session:durable-browser".to_string(),
             BrowserProcess {
@@ -4290,18 +4277,17 @@ mod tests {
     #[tokio::test]
     async fn ready_inert_owner_repair_refuses_new_browser_before_launch() {
         let mut initial = state();
-        let lifecycle = initial
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
+        );
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence = vec![
             "service_reconcile_process_group_absent:14768".to_string(),
             "service_reconcile_profile_lock_absent".to_string(),
         ];
+        drop(registry_fixture);
         let repository = MemoryRepository::new(initial);
         let plan = plan_terminal_owner_recovery(
             &repository.load_snapshot().unwrap(),
@@ -4360,29 +4346,27 @@ mod tests {
         let profile = state.profiles.get_mut("last30days-facebook").unwrap();
         profile.user_data_dir = Some(profile_root.to_string_lossy().to_string());
         let profile_identity_digest = recovery_profile_identity_digest(profile).unwrap();
-        let owner = state
-            .runtime_owner_registry
-            .owners
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.profile_identity_digest = profile_identity_digest.clone();
-        let owner = state.runtime_owner_registry.owners.pop_first().unwrap().1;
-        state
-            .runtime_owner_registry
-            .owners
+        drop(registry_fixture);
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.pop_first().unwrap().1;
+        registry_fixture
+            .owner_records
             .insert(profile_identity_digest.clone(), owner);
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        drop(registry_fixture);
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.profile_identity_digest = profile_identity_digest;
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence =
             vec!["service_reconcile_process_group_absent:4294967295".to_string()];
+        drop(registry_fixture);
 
         let outcome = plan_terminal_owner_recovery(
             &state,
@@ -4408,9 +4392,8 @@ mod tests {
     #[test]
     fn terminal_owner_plan_preserves_secondary_evidence_when_blocked() {
         let mut state = state();
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .values_mut()
             .next()
             .unwrap()
@@ -4438,13 +4421,14 @@ mod tests {
     #[tokio::test]
     async fn apply_retries_once_persists_receipt_and_replays_without_effect() {
         let mut reconciled_state = state();
-        reconciled_state
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap()
-            .terminal_evidence = vec![
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut reconciled_state.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .values_mut()
+        .next()
+        .unwrap()
+        .terminal_evidence = vec![
             "service_reconcile_process_group_absent:7136".to_string(),
             "service_reconcile_profile_lock_absent".to_string(),
         ];
@@ -4883,7 +4867,10 @@ mod tests {
         .unwrap();
         repository
             .mutate(|state| {
-                state.runtime_owner_registry.revision += 1;
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .registry_revision += 1;
                 Ok(())
             })
             .unwrap();
@@ -5177,7 +5164,7 @@ mod tests {
         assert!(current.tabs.contains_key("peer-tab"));
         assert!(current.profiles.contains_key("last30days-facebook"));
         assert_eq!(
-            current.runtime_owner_registry.lifecycle_records["session:durable-browser"]
+            current.runtime_owner_registry.lifecycle_records()["session:durable-browser"]
                 .cleanup_obligation_state,
             CleanupObligationState::Satisfied
         );
@@ -5208,7 +5195,7 @@ mod tests {
                 .load_snapshot()
                 .unwrap()
                 .runtime_owner_registry
-                .owners[&plan.profile_identity_digest]
+                .owners()[&plan.profile_identity_digest]
                 .state,
             ProfileOwnerState::Orphaned
         );
@@ -5229,7 +5216,10 @@ mod tests {
         )
         .unwrap();
         let mut changed = initial;
-        changed.runtime_owner_registry.revision += 1;
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut changed.runtime_owner_registry,
+        )
+        .registry_revision += 1;
         let repository = MemoryRepository::new(changed);
 
         let error = apply_profile_reset(&repository, &plan, "2026-09-10T12:01:00Z", seal_key())

@@ -98,7 +98,7 @@ pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<P
         .collect::<BTreeSet<_>>();
     let legacy_bindings = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .values()
         .filter(|binding| !canonical_profile_ids.contains(&binding.profile_id))
         .collect::<Vec<_>>();
@@ -129,10 +129,10 @@ pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<P
         .filter_map(|session| session.profile_id.clone())
         .filter(|profile_id| !bound_profiles.contains(profile_id))
         .collect::<BTreeSet<_>>();
-    for owner in state.runtime_owner_registry.owners.values() {
+    for owner in state.runtime_owner_registry.owners().values() {
         if state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .contains_key(&owner.profile_identity_digest)
         {
             continue;
@@ -548,7 +548,7 @@ fn bind_registered_principal_to_current_owner(
     )?;
     let Some(owner) = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .get(&profile_identity_digest)
         .cloned()
     else {
@@ -589,51 +589,25 @@ fn rotate_registered_principal_owner_binding(
         profile_path,
         &registered.capability.profile_id,
     )?;
-    if let Some(existing) = state
-        .runtime_owner_registry
-        .principal_bindings
-        .get(&profile_identity_digest)
-        .cloned()
-    {
-        if existing.principal_id != registered.principal.principal_id
-            || existing.profile_id != registered.capability.profile_id
-            || existing.capability_id != previous_capability_id
-            || existing.provenance != ServicePrincipalProvenance::RegisteredCapability
-        {
-            return Err("profile_owner_binding_rotation_mismatch".to_string());
-        }
-        state
-            .runtime_owner_registry
-            .principal_bindings
-            .remove(&profile_identity_digest);
-        state.runtime_owner_registry.revision =
-            state.runtime_owner_registry.revision.saturating_add(1);
-    }
-    let Some(owner) = state
-        .runtime_owner_registry
-        .owners
-        .get(&profile_identity_digest)
-        .cloned()
-    else {
-        return Ok(false);
-    };
-    if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready {
-        return Ok(false);
-    }
     state
         .runtime_owner_registry
-        .bind_principal_authority(
-            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
-                principal_id: registered.principal.principal_id.clone(),
-                profile_id: registered.capability.profile_id.clone(),
-                profile_identity_digest,
-                capability_id: registered.capability.capability_id.clone(),
-                provenance: ServicePrincipalProvenance::RegisteredCapability,
-                owner_generation: owner.owner_generation,
-            },
+        .rotate_registered_principal_authority(
+            &profile_identity_digest,
+            previous_capability_id,
+            &registered.principal.principal_id,
+            &registered.capability.profile_id,
+            &registered.capability.capability_id,
         )
-        .map_err(|error| format!("profile_owner_binding_failed:{error:?}"))?;
-    Ok(true)
+        .map_err(|error| match error {
+            agent_browser_lease_authority::RuntimeOwnerPrincipalRotationError::RotationMismatch => {
+                "profile_owner_binding_rotation_mismatch".to_string()
+            }
+            agent_browser_lease_authority::RuntimeOwnerPrincipalRotationError::BindingFailed(
+                error,
+            ) => {
+                format!("profile_owner_binding_failed:{error:?}")
+            }
+        })
 }
 
 fn mutate_profile_lease(command: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -1093,7 +1067,7 @@ pub(crate) fn rejoin_profile_lease(
         .ok_or_else(|| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
     let has_principal_binding = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .values()
         .any(|binding| {
             binding.principal_id == authority.principal_id
@@ -1107,7 +1081,7 @@ pub(crate) fn rejoin_profile_lease(
         lease.profile_identity_digest.as_deref().and_then(|digest| {
             (!state
                 .runtime_owner_registry
-                .principal_bindings
+                .principal_bindings()
                 .contains_key(digest))
             .then(|| exact_rejoin_target_for_owner(state, authority, digest, now))
             .flatten()
@@ -1243,7 +1217,7 @@ pub(crate) fn plan_profile_lease_reconciliation(
     if lease.blocking_identity_axes == ["owner_generation_or_binding_mismatch"] {
         let binding = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .values()
             .find(|binding| {
                 binding.principal_id == authority.principal_id
@@ -1256,7 +1230,7 @@ pub(crate) fn plan_profile_lease_reconciliation(
         let owner = binding.and_then(|binding| {
             state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .get(&binding.profile_identity_digest)
                 .map(|owner| (binding, owner))
         });
@@ -1435,7 +1409,7 @@ pub(crate) fn apply_profile_lease_reconciliation(
         if transition.action == "refresh_principal_owner_binding" {
             let binding = state
                 .runtime_owner_registry
-                .principal_bindings
+                .principal_bindings()
                 .values()
                 .find(|binding| {
                     binding.principal_id == authority.principal_id
@@ -1446,7 +1420,7 @@ pub(crate) fn apply_profile_lease_reconciliation(
                 .ok_or_else(|| lease_error(ProfileLeaseFailureCode::PlanInvalid, &plan.lease_id))?;
             let owner = state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .get(&binding.profile_identity_digest)
                 .ok_or_else(|| lease_error(ProfileLeaseFailureCode::PlanInvalid, &plan.lease_id))?;
             if binding.owner_generation.to_string() != transition.from_state
@@ -1508,7 +1482,7 @@ fn bound_profile_lease(
 ) -> ProfileLeaseRecord {
     let owner = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .get(&binding.profile_identity_digest);
     let owner_current = state
         .runtime_owner_registry
@@ -1695,7 +1669,7 @@ fn project_exact_terminal_history(
     let Some(owner) = record
         .profile_identity_digest
         .as_deref()
-        .and_then(|digest| state.runtime_owner_registry.owners.get(digest))
+        .and_then(|digest| state.runtime_owner_registry.owners().get(digest))
     else {
         return;
     };
@@ -1713,7 +1687,7 @@ fn project_exact_terminal_history(
     }
     let exact_terminal = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&owner.browser_id)
         .is_some_and(|lifecycle| {
             lifecycle.logical_browser_id == owner.browser_id
@@ -1748,7 +1722,7 @@ fn unbound_capability_profile_lease(
         });
     let owner = profile_identity_digest
         .as_deref()
-        .and_then(|digest| state.runtime_owner_registry.owners.get(digest));
+        .and_then(|digest| state.runtime_owner_registry.owners().get(digest));
     let sessions = sessions_for_profile(state, &capability.profile_id);
     let session_ids = sessions
         .iter()
@@ -1771,7 +1745,7 @@ fn unbound_capability_profile_lease(
             && profile_identity_digest.as_deref().is_some_and(|digest| {
                 !state
                     .runtime_owner_registry
-                    .principal_bindings
+                    .principal_bindings()
                     .contains_key(digest)
                     && exact_rejoin_target_for_owner(state, &authority, digest, now).is_some()
             });
@@ -1845,7 +1819,7 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
         .copied()
         .filter(|session| !inactive_or_expired(session.lease, session.expires_at.as_deref(), now))
         .collect::<Vec<_>>();
-    let has_nonterminal_owner = state.runtime_owner_registry.owners.values().any(|owner| {
+    let has_nonterminal_owner = state.runtime_owner_registry.owners().values().any(|owner| {
         owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Failed
             && state
                 .browsers
@@ -2063,7 +2037,7 @@ fn exact_rejoin_target(
     }
     let binding = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .values()
         .find(|binding| {
             binding.principal_id == authority.principal_id
@@ -2073,7 +2047,7 @@ fn exact_rejoin_target(
         })?;
     let owner = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .get(&binding.profile_identity_digest)?;
     if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready
         || owner.owner_generation < binding.owner_generation
@@ -2094,7 +2068,7 @@ fn exact_rejoin_target_for_owner(
     }
     let owner = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .get(profile_identity_digest)?;
     if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready {
         return None;
@@ -2169,7 +2143,7 @@ fn bind_principal_to_current_owner(
         .ok_or_else(|| "profile_identity_digest_missing".to_string())?;
     let owner_generation = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .get(profile_identity_digest)
         .filter(|owner| owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready)
         .map(|owner| owner.owner_generation)
@@ -2196,7 +2170,7 @@ fn refresh_principal_binding_to_current_owner(
 ) -> Result<(), String> {
     let existing = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .values()
         .find(|binding| {
             binding.principal_id == authority.principal_id
@@ -2214,7 +2188,7 @@ fn refresh_principal_binding_to_current_owner(
     }
     let owner_generation = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .get(&existing.profile_identity_digest)
         .map(|owner| owner.owner_generation)
         .ok_or_else(|| "profile_owner_missing".to_string())?;
@@ -2276,7 +2250,7 @@ fn routes_for_browser(state: &ServiceState, browser_id: &str) -> Vec<String> {
 fn cleanup_obligation_for_browser(state: &ServiceState, browser_id: &str) -> Option<String> {
     state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(browser_id)
         .and_then(|record| {
             serde_json::to_value(record.cleanup_obligation_state)
@@ -2432,7 +2406,7 @@ mod tests {
         .unwrap();
         let mut owner = state
             .runtime_owner_registry
-            .owners
+            .owners()
             .values()
             .next()
             .unwrap()
@@ -2555,18 +2529,21 @@ mod tests {
         );
         let mut owner = state
             .runtime_owner_registry
-            .owners
+            .owners()
             .values()
             .next()
             .unwrap()
             .clone();
         owner.profile_identity_digest = expected.clone();
-        state.runtime_owner_registry.owners.clear();
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
+            .clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .insert(expected.clone(), owner);
-        state.runtime_owner_registry.principal_bindings.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
+            .clear();
         let registered = super::super::service_principal::RegisteredProfileCapability {
             principal: state.service_principals.principals[&authority.principal_id].clone(),
             capability: state.service_principals.profile_capabilities[&authority.capability_id]
@@ -2599,12 +2576,12 @@ mod tests {
         .unwrap();
         assert!(!repaired.observation_only);
         assert_eq!(
-            existing.runtime_owner_registry.principal_bindings[&expected].capability_id,
+            existing.runtime_owner_registry.principal_bindings()[&expected].capability_id,
             authority.capability_id
         );
         assert!(bind_registered_principal_to_current_owner(&mut state, &registered).unwrap());
         assert_eq!(
-            state.runtime_owner_registry.principal_bindings[&expected].principal_id,
+            state.runtime_owner_registry.principal_bindings()[&expected].principal_id,
             authority.principal_id
         );
         let foreign = register_profile_capability(
@@ -2621,7 +2598,7 @@ mod tests {
         .unwrap();
         assert!(bind_registered_principal_to_current_owner(&mut state, &foreign).is_err());
         assert_eq!(
-            state.runtime_owner_registry.principal_bindings[&expected].principal_id,
+            state.runtime_owner_registry.principal_bindings()[&expected].principal_id,
             authority.principal_id
         );
     }
@@ -2652,12 +2629,9 @@ mod tests {
         };
         let (mut state, _, lease_id) = state_with_lease();
         state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Released;
-        let owner = state
-            .runtime_owner_registry
-            .owners
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.owner_generation += 1;
         let record = RuntimeLifecycleRecord {
             logical_browser_id: owner.browser_id.clone(),
@@ -2671,9 +2645,9 @@ mod tests {
             ],
             ..RuntimeLifecycleRecord::default()
         };
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        drop(registry_fixture);
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .insert(record.logical_browser_id.clone(), record);
         let lease = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
         assert_eq!(lease.state, "historical");
@@ -2688,9 +2662,8 @@ mod tests {
         state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Exclusive;
         assert!(!doctor_profile_leases(&state, NOW).healthy);
         state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Released;
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .values_mut()
             .next()
             .unwrap()
@@ -2738,7 +2711,9 @@ mod tests {
         guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
         let (mut state, _, _) = state_with_lease();
         state.service_principals = Default::default();
-        state.runtime_owner_registry.principal_bindings.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
+            .clear();
         let session = state.sessions.get_mut("session-odollo").unwrap();
         session.principal_id = None;
         session.principal_provenance = None;
@@ -2775,7 +2750,10 @@ mod tests {
             .load_snapshot()
             .unwrap();
         assert_eq!(persisted.service_principals.profile_capabilities.len(), 1);
-        assert_eq!(persisted.runtime_owner_registry.principal_bindings.len(), 1);
+        assert_eq!(
+            persisted.runtime_owner_registry.principal_bindings().len(),
+            1
+        );
         let blocked = profile_leases_for_state(&persisted, NOW)
             .into_iter()
             .find(|lease| lease.profile_id == "odollo-fulfillment")
@@ -2823,7 +2801,9 @@ mod tests {
         guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
         let (mut state, _, _) = state_with_lease();
         state.service_principals = Default::default();
-        state.runtime_owner_registry.principal_bindings.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
+            .clear();
         let session = state.sessions.get_mut("session-odollo").unwrap();
         session.principal_id = None;
         session.principal_provenance = None;
@@ -2899,7 +2879,7 @@ mod tests {
         assert_eq!(
             persisted
                 .runtime_owner_registry
-                .principal_bindings
+                .principal_bindings()
                 .values()
                 .next()
                 .unwrap()
@@ -2956,7 +2936,9 @@ mod tests {
     #[test]
     fn pre_registered_capability_can_rejoin_unique_owner_after_launch() {
         let (mut state, authority, _) = state_with_lease();
-        state.runtime_owner_registry.principal_bindings.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
+            .clear();
         let session = state.sessions.get_mut("session-odollo").unwrap();
         session.principal_id = None;
         session.principal_provenance = None;
@@ -2995,10 +2977,10 @@ mod tests {
             state.sessions["session-odollo"].principal_id.as_deref(),
             Some("principal:odollo-fulfillment")
         );
-        assert_eq!(state.runtime_owner_registry.principal_bindings.len(), 1);
+        assert_eq!(state.runtime_owner_registry.principal_bindings().len(), 1);
         let binding = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .values()
             .next()
             .unwrap();
@@ -3010,10 +2992,11 @@ mod tests {
     #[test]
     fn reconcile_plan_rejoins_missing_binding_and_rejects_changed_custody() {
         let (mut state, authority, _) = state_with_lease();
-        state.runtime_owner_registry.principal_bindings.clear();
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
+            .clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .values_mut()
             .next()
             .unwrap()
@@ -3116,7 +3099,9 @@ mod tests {
     #[test]
     fn pre_registered_capability_cannot_rejoin_ambiguous_profile_work() {
         let (mut state, authority, _) = state_with_lease();
-        state.runtime_owner_registry.principal_bindings.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
+            .clear();
         let session = state.sessions.get_mut("session-odollo").unwrap();
         session.principal_id = None;
         session.principal_provenance = None;
@@ -3155,7 +3140,7 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.code, ProfileLeaseFailureCode::ActionNotAuthorized);
-        assert!(state.runtime_owner_registry.principal_bindings.is_empty());
+        assert!(state.runtime_owner_registry.principal_bindings().is_empty());
         assert!(state.sessions["session-odollo"].principal_id.is_none());
         assert!(state.sessions["session-odollo-foreign"]
             .principal_id
@@ -3506,7 +3491,9 @@ mod tests {
         };
         let (retained, _, _) = state_with_lease();
         state.runtime_owner_registry = retained.runtime_owner_registry;
-        state.runtime_owner_registry.principal_bindings.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
+            .clear();
         state.browsers.insert(
             "browser-odollo".to_string(),
             super::super::service_model::BrowserProcess {
@@ -3789,22 +3776,24 @@ mod tests {
         let (mut state, authority, lease_id) = state_with_lease();
         let profile_digest = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .values()
             .next()
             .unwrap()
             .profile_identity_digest
             .clone();
         state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Released;
-        let owner = state
-            .runtime_owner_registry
-            .owners
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture
+            .owner_records
             .get_mut(&profile_digest)
             .unwrap();
         owner.owner_generation = 10;
         owner.browser_id = "browser-odollo-replayed".to_string();
         owner.daemon_session_route = "session-odollo-replayed".to_string();
         owner.process_instance_digest = "process-odollo-replayed".to_string();
+        drop(registry_fixture);
         state.sessions.insert(
             "session-odollo-replayed".to_string(),
             BrowserSession {
@@ -3852,7 +3841,7 @@ mod tests {
         assert!(!rejoined.observation_only);
         assert_eq!(rejoined.owner_generation, Some(10));
         assert_eq!(
-            state.runtime_owner_registry.principal_bindings[&profile_digest].owner_generation,
+            state.runtime_owner_registry.principal_bindings()[&profile_digest].owner_generation,
             10
         );
         assert_eq!(
@@ -3872,18 +3861,20 @@ mod tests {
         let (mut state, authority, lease_id) = state_with_lease();
         let profile_digest = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .values()
             .find(|binding| binding.principal_id == authority.principal_id)
             .unwrap()
             .profile_identity_digest
             .clone();
-        let owner = state
-            .runtime_owner_registry
-            .owners
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture
+            .owner_records
             .get_mut(&profile_digest)
             .unwrap();
         owner.owner_generation += 1;
+        drop(registry_fixture);
         state.sessions.clear();
         state.tabs.clear();
 
@@ -3931,8 +3922,8 @@ mod tests {
         assert!(resolved.blocking_identity_axes.is_empty());
         assert_eq!(resolved.state, "owned_idle");
         assert_eq!(
-            state.runtime_owner_registry.principal_bindings[&profile_digest].owner_generation,
-            state.runtime_owner_registry.owners[&profile_digest].owner_generation
+            state.runtime_owner_registry.principal_bindings()[&profile_digest].owner_generation,
+            state.runtime_owner_registry.owners()[&profile_digest].owner_generation
         );
     }
 
@@ -3941,15 +3932,14 @@ mod tests {
         let (mut state, authority, lease_id) = state_with_lease();
         let profile_digest = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .values()
             .find(|binding| binding.principal_id == authority.principal_id)
             .unwrap()
             .profile_identity_digest
             .clone();
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .get_mut(&profile_digest)
             .unwrap()
             .owner_generation += 1;

@@ -1279,11 +1279,11 @@ pub(crate) fn lifecycle_replacement_decision(
     };
     let owner = service_state
         .runtime_owner_registry
-        .owners
+        .owners()
         .get(&profile_identity_digest);
     let mut records = service_state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .values()
         .filter(|record| record.profile_identity_digest == profile_identity_digest)
         .collect::<Vec<_>>();
@@ -1374,7 +1374,7 @@ pub(crate) fn lifecycle_replacement_decision(
     json!({
         "available": true,
         "profileId": profile.id,
-        "registryRevision": service_state.runtime_owner_registry.revision,
+        "registryRevision": service_state.runtime_owner_registry.revision(),
         "ownerId": owner.map(|owner| owner.owner_id.clone()),
         "ownerState": owner.map(|owner| owner.state),
         "replacementBrowserId": replacement_route.as_ref().map(|(browser_id, _)| browser_id.clone()),

@@ -412,7 +412,9 @@ impl ServiceStateStore for JsonServiceStateStore {
             state.runtime_owner_registry = owner_registry.registry;
         }
         if !lifecycle_registry.schema_version.is_empty() {
-            state.runtime_owner_registry.lifecycle_records = lifecycle_registry.records;
+            state
+                .runtime_owner_registry
+                .restore_lifecycle_records(lifecycle_registry.records);
         }
         state.mark_persisted_entity_sources();
         if let Err(error) =
@@ -626,7 +628,9 @@ fn prepare_service_state_transaction(
                 state.remove_builtin_entity_defaults_for_persistence();
                 let lifecycle_registry_payload =
                     runtime_lifecycle_registry_payload(&state.runtime_owner_registry)?;
-                state.runtime_owner_registry.lifecycle_records.clear();
+                state.runtime_owner_registry = state
+                    .runtime_owner_registry
+                    .persistence_projection_without_lifecycle_records();
                 let serialized = serde_json::to_string_pretty(&state)
                     .map_err(|err| format!("Failed to serialize service state: {err}"))?;
                 Ok(ServiceStateTransaction {
@@ -1481,8 +1485,8 @@ fn load_runtime_lifecycle_registry(
 fn runtime_lifecycle_registry_payload(registry: &RuntimeOwnerRegistry) -> Result<String, String> {
     let registry = DurableRuntimeLifecycleRegistry {
         schema_version: RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION.to_string(),
-        registry_revision: registry.revision,
-        records: registry.lifecycle_records.clone(),
+        registry_revision: registry.revision(),
+        records: registry.lifecycle_records().clone(),
     };
     Ok(format!(
         "{}\n",
@@ -2435,15 +2439,17 @@ mod tests {
     fn runtime_registry(label: &str) -> RuntimeOwnerRegistry {
         let owner = runtime_owner(label);
         let mut registry = RuntimeOwnerRegistry::from_owner(owner.clone());
-        registry.lifecycle_records.insert(
-            owner.browser_id.clone(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: owner.browser_id,
-                profile_identity_digest: owner.profile_identity_digest,
-                owner_generation: owner.owner_generation,
-                ..RuntimeLifecycleRecord::default()
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .lifecycle_rows
+            .insert(
+                owner.browser_id.clone(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: owner.browser_id,
+                    profile_identity_digest: owner.profile_identity_digest,
+                    owner_generation: owner.owner_generation,
+                    ..RuntimeLifecycleRecord::default()
+                },
+            );
         registry
     }
 
@@ -4499,13 +4505,41 @@ mod tests {
         let legacy_owner_registry: LegacyRuntimeOwnerRegistry =
             serde_json::from_value(owner_json["registry"].clone())
                 .expect("legacy owner reader should accept the durable registry");
-        assert_eq!(legacy_state_registry.revision, registry.revision);
-        assert_eq!(legacy_state_registry.owners, registry.owners);
-        assert_eq!(legacy_owner_registry.revision, registry.revision);
-        assert_eq!(legacy_owner_registry.owners, registry.owners);
+        assert_eq!(legacy_state_registry.revision, registry.revision());
+        assert_eq!(&legacy_state_registry.owners, registry.owners());
+        assert_eq!(legacy_owner_registry.revision, registry.revision());
+        assert_eq!(&legacy_owner_registry.owners, registry.owners());
 
         let loaded = store.load().expect("new reader should merge the sidecar");
         assert_eq!(loaded.runtime_owner_registry, registry);
+
+        // A present lifecycle sidecar replaces even conflicting owner-sidecar
+        // evidence. Its historical revision does not advance owner authority.
+        let mut owner_sidecar = registry.clone();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut owner_sidecar)
+            .registry_revision += 7;
+        fs::write(
+            runtime_owner_registry_path(&path),
+            runtime_owner_registry_payload(&owner_sidecar).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            runtime_lifecycle_registry_path(&path),
+            serde_json::to_string(&DurableRuntimeLifecycleRegistry {
+                schema_version: RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION.to_string(),
+                registry_revision: u64::MAX,
+                records: BTreeMap::new(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let loaded = store
+            .load()
+            .expect("present empty lifecycle sidecar should win");
+        assert_eq!(
+            loaded.runtime_owner_registry,
+            owner_sidecar.persistence_projection_without_lifecycle_records()
+        );
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -4577,11 +4611,11 @@ mod tests {
                 .is_none());
             assert!(loaded
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .contains_key("browser-before"));
             assert!(!loaded
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .contains_key("browser-after"));
             assert!(!loaded.browsers.contains_key("browser-after"));
             assert!(!service_state_transaction_path(&path).exists());

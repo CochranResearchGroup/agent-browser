@@ -4261,7 +4261,7 @@ mod tests {
     fn service_access_plan_reuses_ready_transferred_owner_for_tab_acquisition() {
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+            RuntimeLifecycleRecord,
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-transferred-owner";
@@ -4327,11 +4327,11 @@ mod tests {
                     ..BrowserSession::default()
                 },
             )]),
-            runtime_owner_registry: RuntimeOwnerRegistry {
-                revision: 659,
-                owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
-                principal_bindings: BTreeMap::new(),
-                lifecycle_records: BTreeMap::from([(
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+                registry_revision: 659,
+                owner_records: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_records: BTreeMap::new(),
+                lifecycle_rows: BTreeMap::from([(
                     browser_id.to_string(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: browser_id.to_string(),
@@ -4342,7 +4342,8 @@ mod tests {
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
-            },
+            }
+            .into_registry(),
             ..ServiceState::default()
         };
 
@@ -4394,7 +4395,7 @@ mod tests {
     fn stale_transferring_owner_without_live_authority_does_not_block_cold_launch() {
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+            RuntimeLifecycleRecord,
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-incompatible-ready-owner";
@@ -4440,11 +4441,11 @@ mod tests {
                     ..BrowserProcess::default()
                 },
             )]),
-            runtime_owner_registry: RuntimeOwnerRegistry {
-                revision: 21,
-                owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
-                principal_bindings: BTreeMap::new(),
-                lifecycle_records: BTreeMap::from([(
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+                registry_revision: 21,
+                owner_records: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_records: BTreeMap::new(),
+                lifecycle_rows: BTreeMap::from([(
                     browser_id.to_string(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: browser_id.to_string(),
@@ -4455,7 +4456,8 @@ mod tests {
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
-            },
+            }
+            .into_registry(),
             ..ServiceState::default()
         };
 
@@ -4466,7 +4468,8 @@ mod tests {
         };
         let plan = service_access_plan_for_state(&state, request.clone());
         let mut without_history = state.clone();
-        without_history.runtime_owner_registry = RuntimeOwnerRegistry::default();
+        without_history.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::default();
         let clean_plan = service_access_plan_for_state(&without_history, request);
 
         assert_eq!(
@@ -5857,7 +5860,7 @@ mod tests {
         };
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+            RuntimeLifecycleRecord,
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-terminal-profile";
@@ -5896,11 +5899,11 @@ mod tests {
                     ..BrowserProfile::default()
                 },
             )]),
-            runtime_owner_registry: RuntimeOwnerRegistry {
-                revision: 11,
-                owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
-                principal_bindings: BTreeMap::new(),
-                lifecycle_records: BTreeMap::from([(
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+                registry_revision: 11,
+                owner_records: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_records: BTreeMap::new(),
+                lifecycle_rows: BTreeMap::from([(
                     "session:terminal-lane".to_string(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: "session:terminal-lane".to_string(),
@@ -5915,7 +5918,8 @@ mod tests {
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
-            },
+            }
+            .into_registry(),
             ..ServiceState::default()
         };
         let authority = AuthenticatedServicePrincipal {

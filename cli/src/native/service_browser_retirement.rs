@@ -175,7 +175,7 @@ fn require_inert_browser(state: &ServiceState, browser: &BrowserProcess) -> Resu
         || state.browser_process_identities.contains_key(&browser.id)
         || state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key(&browser.id)
     {
         return Err("browser_retirement_live_authority_present".to_string());

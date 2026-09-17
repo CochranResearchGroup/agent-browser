@@ -1266,7 +1266,7 @@ pub(crate) mod action_commands {
             .collect::<std::collections::BTreeSet<_>>();
         let managed = state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .keys()
             .cloned()
             .collect::<std::collections::BTreeSet<_>>();

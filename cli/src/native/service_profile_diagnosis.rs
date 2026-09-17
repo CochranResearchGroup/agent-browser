@@ -118,7 +118,7 @@ pub(crate) fn diagnose_service_profile(
 
     let binding = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .get(&profile_identity_digest);
     let leases = profile_leases_for_state(state, observed_at)
         .into_iter()
@@ -305,7 +305,7 @@ pub(crate) fn diagnose_service_profile(
         PROFILE_DIAGNOSIS_SCHEMA_V1,
         profile_id,
         state.state_revision,
-        state.runtime_owner_registry.revision,
+        state.runtime_owner_registry.revision(),
         observed_at,
         correlation_id,
     ))?;
@@ -382,7 +382,7 @@ pub(crate) fn diagnose_service_profile(
             "correlationId": correlation_id,
             "sourceComponent": "service_profile_diagnosis.rs::diagnose_service_profile",
             "serviceStateRevision": state.state_revision,
-            "runtimeOwnerRegistryRevision": state.runtime_owner_registry.revision,
+            "runtimeOwnerRegistryRevision": state.runtime_owner_registry.revision(),
             "buildIdentity": Value::Null,
             "buildIdentityUnavailableReason": "producer_build_identity_not_exposed_to_profile_diagnosis",
         }),

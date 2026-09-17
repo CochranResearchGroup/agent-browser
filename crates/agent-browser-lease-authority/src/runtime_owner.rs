@@ -308,17 +308,17 @@ pub struct RuntimeLifecycleRecord {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct RuntimeOwnerRegistry {
-    pub revision: u64,
-    pub owners: BTreeMap<String, ProfileOwner>,
+    revision: u64,
+    owners: BTreeMap<String, ProfileOwner>,
     /// Authenticated service-principal authority for each profile owner.
     ///
     /// Missing bindings identify legacy observation-only owners. The map is
     /// keyed by canonical profile identity digest so it cannot drift from the
     /// existing owner authority into a second owner registry.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub principal_bindings: BTreeMap<String, RuntimeOwnerPrincipalBinding>,
+    principal_bindings: BTreeMap<String, RuntimeOwnerPrincipalBinding>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub lifecycle_records: BTreeMap<String, RuntimeLifecycleRecord>,
+    lifecycle_records: BTreeMap<String, RuntimeLifecycleRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -359,7 +359,630 @@ pub struct OwnerTransferError {
     pub message: &'static str,
 }
 
+/// A registered capability rotation either mismatches prior custody or fails
+/// the existing binding validation after removing the previous binding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeOwnerPrincipalRotationError {
+    RotationMismatch,
+    BindingFailed(OwnerTransferError),
+}
+
+/// The complete set of lifecycle intentions accepted by the concrete runtime
+/// lifecycle kernel. Host observations and route policy are supplied by callers.
+#[derive(Debug, Clone)]
+pub enum RuntimeLifecycleIntent {
+    RegisterCurrentOwner(ProfileOwner),
+    RegisterManagedLane {
+        owner: ProfileOwner,
+        process_group_id: Option<u32>,
+        package_launch_identity_digest: String,
+        boot_epoch: Option<String>,
+    },
+    ActivateTerminalReplacement {
+        owner: ProfileOwner,
+        process_group_id: Option<u32>,
+        package_launch_identity_digest: String,
+        boot_epoch: Option<String>,
+    },
+    MigrateTerminalProfileReplacement {
+        /// CLI-observed canonical route and logical browser naming policy.
+        canonical_route_viewer_profile: bool,
+        expected_owner: OwnerAuthorityClaim,
+        owner: ProfileOwner,
+        process_group_id: Option<u32>,
+        package_launch_identity_digest: String,
+        boot_epoch: Option<String>,
+    },
+    SupersedeObservedOwner {
+        expected_owner: OwnerAuthorityClaim,
+        owner: ProfileOwner,
+        process_group_id: Option<u32>,
+        package_launch_identity_digest: String,
+        boot_epoch: Option<String>,
+    },
+    RefreshCurrentOwnerEvidence {
+        claim: OwnerAuthorityClaim,
+        cdp_endpoint_identity_digest: String,
+        target_set_digest: String,
+    },
+    BeginTransfer(OwnerTransferRequest),
+    CommitCandidate(CandidateOwnerAttachment),
+    AbortTransfer {
+        profile_identity_digest: String,
+        expected_owner_id: String,
+        expected_owner_generation: u64,
+        transfer_nonce_digest: String,
+    },
+    ReverseTransfer(ReverseOwnerTransferRequest),
+    RevokeLegacyOwner {
+        profile_identity_digest: String,
+        logical_browser_id: String,
+        expected_daemon_session_route: String,
+        expected_owner_id: String,
+        expected_owner_generation: u64,
+    },
+    PreserveRetained {
+        claim: OwnerAuthorityClaim,
+    },
+    BeginRecoveryClose {
+        claim: OwnerAuthorityClaim,
+    },
+    BeginClose {
+        claim: OwnerAuthorityClaim,
+    },
+    CompleteClose {
+        logical_browser_id: String,
+        profile_identity_digest: String,
+        expected_owner_generation: u64,
+        terminal_evidence: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeLifecycleTransition {
+    OwnerRegistered(ProfileOwner),
+    TerminalReplacementActivated(ProfileOwner),
+    ObservedOwnerSuperseded(ProfileOwner),
+    OwnerEvidenceRefreshed(ProfileOwner),
+    TransferPrepared(OwnerTransferProposal),
+    CandidateCommitted(OwnerTransferReceipt),
+    TransferAborted(bool),
+    TransferReversed(OwnerTransferReceipt),
+    LegacyOwnerRevoked(ProfileOwner),
+    LaneUpdated(RuntimeLifecycleRecord),
+}
+
 impl RuntimeOwnerRegistry {
+    /// Current monotonic registry revision.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Current owners indexed by canonical profile identity.
+    pub fn owners(&self) -> &BTreeMap<String, ProfileOwner> {
+        &self.owners
+    }
+
+    /// Current authenticated principal bindings.
+    pub fn principal_bindings(&self) -> &BTreeMap<String, RuntimeOwnerPrincipalBinding> {
+        &self.principal_bindings
+    }
+
+    /// Lifecycle evidence indexed by logical browser identity.
+    pub fn lifecycle_records(&self) -> &BTreeMap<String, RuntimeLifecycleRecord> {
+        &self.lifecycle_records
+    }
+
+    /// Restore a selected durable lifecycle sidecar without changing authority
+    /// revision. Sidecar selection and precedence belong to the repository.
+    pub fn restore_lifecycle_records(&mut self, records: BTreeMap<String, RuntimeLifecycleRecord>) {
+        self.lifecycle_records = records;
+    }
+
+    /// Project the legacy owner payload while lifecycle evidence is persisted
+    /// separately. This neither mutates the source nor advances its revision.
+    pub fn persistence_projection_without_lifecycle_records(&self) -> Self {
+        let mut registry = self.clone();
+        registry.lifecycle_records.clear();
+        registry
+    }
+
+    /// Replace registered capability custody in the established mutation order.
+    /// Removing an old binding advances revision even when no ready owner can
+    /// receive the replacement; a successful new binding advances it again.
+    pub fn rotate_registered_principal_authority(
+        &mut self,
+        profile_identity_digest: &str,
+        previous_capability_id: &str,
+        principal_id: &str,
+        profile_id: &str,
+        capability_id: &str,
+    ) -> Result<bool, RuntimeOwnerPrincipalRotationError> {
+        if let Some(existing) = self
+            .principal_bindings
+            .get(profile_identity_digest)
+            .cloned()
+        {
+            if existing.principal_id != principal_id
+                || existing.profile_id != profile_id
+                || existing.capability_id != previous_capability_id
+                || existing.provenance != ServicePrincipalProvenance::RegisteredCapability
+            {
+                return Err(RuntimeOwnerPrincipalRotationError::RotationMismatch);
+            }
+            self.principal_bindings.remove(profile_identity_digest);
+            self.revision = self.revision.saturating_add(1);
+        }
+        let Some(owner) = self.owners.get(profile_identity_digest).cloned() else {
+            return Ok(false);
+        };
+        if owner.state != ProfileOwnerState::Ready {
+            return Ok(false);
+        }
+        self.bind_principal_authority(RuntimeOwnerPrincipalBinding {
+            principal_id: principal_id.to_string(),
+            profile_id: profile_id.to_string(),
+            profile_identity_digest: profile_identity_digest.to_string(),
+            capability_id: capability_id.to_string(),
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+            owner_generation: owner.owner_generation,
+        })
+        .map_err(RuntimeOwnerPrincipalRotationError::BindingFailed)?;
+        Ok(true)
+    }
+
+    /// Terminalize the exact runtime reset target after the CLI has validated
+    /// both records and completed its filesystem and Service State effects.
+    /// Each application advances revision once and retains prior evidence.
+    pub fn apply_runtime_reset_terminalization(
+        &mut self,
+        profile_identity_digest: &str,
+        browser_id: &str,
+    ) {
+        let owner = self
+            .owners
+            .get_mut(profile_identity_digest)
+            .expect("runtime reset owner was validated before effects");
+        owner.state = ProfileOwnerState::Orphaned;
+        let lifecycle = self
+            .lifecycle_records
+            .get_mut(browser_id)
+            .expect("runtime reset lifecycle was validated before effects");
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Terminal;
+        lifecycle.cleanup_obligation_state = CleanupObligationState::Satisfied;
+        if !lifecycle
+            .terminal_evidence
+            .iter()
+            .any(|evidence| evidence == "profile_runtime_reset_applied")
+        {
+            lifecycle
+                .terminal_evidence
+                .push("profile_runtime_reset_applied".to_string());
+        }
+        self.revision = self.revision.saturating_add(1);
+    }
+
+    /// Apply one pure lifecycle intention, preserving ordered partial mutations.
+    /// Repository callers own transactional rollback by applying to a cloned registry.
+    pub fn apply_lifecycle_transition(
+        &mut self,
+        intent: RuntimeLifecycleIntent,
+    ) -> Result<RuntimeLifecycleTransition, String> {
+        let registry = self;
+        match intent {
+            RuntimeLifecycleIntent::RegisterCurrentOwner(owner) => {
+                let owner = registry
+                    .register_current_owner(owner)
+                    .map_err(owner_error)?;
+                let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+                lifecycle.owner_generation = owner.owner_generation;
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::OwnerRegistered(owner))
+            }
+            RuntimeLifecycleIntent::RegisterManagedLane {
+                owner,
+                process_group_id,
+                package_launch_identity_digest,
+                boot_epoch,
+            } => {
+                if !is_digest(&package_launch_identity_digest) {
+                    return Err("runtime_lifecycle_package_launch_identity_invalid".to_string());
+                }
+                let owner = registry
+                    .register_current_owner(owner)
+                    .map_err(owner_error)?;
+                let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+                lifecycle.owner_generation = owner.owner_generation;
+                lifecycle.process_group_id = process_group_id;
+                lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
+                lifecycle.boot_epoch = boot_epoch;
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::OwnerRegistered(owner))
+            }
+            RuntimeLifecycleIntent::ActivateTerminalReplacement {
+                owner,
+                process_group_id,
+                package_launch_identity_digest,
+                boot_epoch,
+            } => {
+                validate_profile_owner(&owner).map_err(owner_error)?;
+                if !is_digest(&package_launch_identity_digest) {
+                    return Err("runtime_lifecycle_package_launch_identity_invalid".to_string());
+                }
+                let current = registry
+                    .owner(&owner.profile_identity_digest)
+                    .cloned()
+                    .ok_or_else(|| "runtime_lifecycle_replacement_owner_missing".to_string())?;
+                let lifecycle = registry
+                    .lifecycle_records
+                    .get(&current.browser_id)
+                    .cloned()
+                    .ok_or_else(|| "runtime_lifecycle_replacement_record_missing".to_string())?;
+                if owner.owner_generation != current.owner_generation.saturating_add(1)
+                    || current.pending_transfer.is_some()
+                    || lifecycle.profile_identity_digest != owner.profile_identity_digest
+                    || lifecycle.owner_generation != current.owner_generation
+                    || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Terminal
+                    || lifecycle.cleanup_obligation_state != CleanupObligationState::Satisfied
+                    || registry
+                        .principal_bindings
+                        .get(&owner.profile_identity_digest)
+                        .is_some_and(|binding| binding.owner_generation > current.owner_generation)
+                    || registry
+                        .lifecycle_records
+                        .iter()
+                        .any(|(logical_id, record)| {
+                            logical_id != &current.browser_id
+                                && (logical_id == &owner.browser_id
+                                    || record.profile_identity_digest
+                                        == owner.profile_identity_digest)
+                        })
+                {
+                    return Err("runtime_lifecycle_terminal_replacement_rejected".to_string());
+                }
+                registry
+                    .owners
+                    .insert(owner.profile_identity_digest.clone(), owner.clone());
+                if let Some(binding) = registry
+                    .principal_bindings
+                    .get_mut(&owner.profile_identity_digest)
+                {
+                    binding.owner_generation = owner.owner_generation;
+                }
+                registry.revision = registry.revision.saturating_add(1);
+                let mut lifecycle = lifecycle;
+                if owner.browser_id != current.browser_id {
+                    registry.lifecycle_records.remove(&current.browser_id);
+                }
+                lifecycle.logical_browser_id = owner.browser_id.clone();
+                lifecycle.owner_generation = owner.owner_generation;
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+                lifecycle.process_group_id = process_group_id;
+                lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
+                lifecycle.boot_epoch = boot_epoch;
+                lifecycle.terminal_evidence.clear();
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::TerminalReplacementActivated(
+                    owner,
+                ))
+            }
+            RuntimeLifecycleIntent::MigrateTerminalProfileReplacement {
+                canonical_route_viewer_profile,
+                expected_owner,
+                owner,
+                process_group_id,
+                package_launch_identity_digest,
+                boot_epoch,
+            } => {
+                validate_profile_owner(&owner).map_err(owner_error)?;
+                let lifecycle = registry
+                    .lifecycle_records
+                    .get(&expected_owner.logical_browser_id)
+                    .cloned()
+                    .ok_or_else(|| {
+                        "runtime_lifecycle_profile_migration_record_missing".to_string()
+                    })?;
+                if !is_digest(&package_launch_identity_digest)
+                    || !registry.authorizes(&expected_owner)
+                    || owner.profile_identity_digest == expected_owner.profile_identity_digest
+                    || owner.owner_generation != expected_owner.owner_generation.saturating_add(1)
+                    || owner.browser_id != expected_owner.logical_browser_id
+                    || owner.daemon_session_route != expected_owner.daemon_session_route
+                    || !canonical_route_viewer_profile
+                    || registry.owner(&owner.profile_identity_digest).is_some()
+                    || lifecycle.profile_identity_digest != expected_owner.profile_identity_digest
+                    || lifecycle.owner_generation != expected_owner.owner_generation
+                    || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Terminal
+                    || lifecycle.cleanup_obligation_state != CleanupObligationState::Satisfied
+                    || !terminal_cleanup_evidence_complete(&lifecycle)
+                    || registry
+                        .principal_bindings
+                        .contains_key(&expected_owner.profile_identity_digest)
+                    || registry
+                        .principal_bindings
+                        .contains_key(&owner.profile_identity_digest)
+                    || registry
+                        .lifecycle_records
+                        .iter()
+                        .any(|(logical_id, record)| {
+                            logical_id != &expected_owner.logical_browser_id
+                                && (logical_id == &owner.browser_id
+                                    || record.profile_identity_digest
+                                        == owner.profile_identity_digest)
+                        })
+                {
+                    return Err("runtime_lifecycle_terminal_profile_migration_rejected".to_string());
+                }
+                registry
+                    .owners
+                    .remove(&expected_owner.profile_identity_digest);
+                registry
+                    .owners
+                    .insert(owner.profile_identity_digest.clone(), owner.clone());
+                registry.revision = registry.revision.saturating_add(1);
+                let mut lifecycle = lifecycle;
+                lifecycle.profile_identity_digest = owner.profile_identity_digest.clone();
+                lifecycle.owner_generation = owner.owner_generation;
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+                lifecycle.process_group_id = process_group_id;
+                lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
+                lifecycle.boot_epoch = boot_epoch;
+                lifecycle.terminal_evidence.clear();
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::TerminalReplacementActivated(
+                    owner,
+                ))
+            }
+            RuntimeLifecycleIntent::SupersedeObservedOwner {
+                expected_owner,
+                owner,
+                process_group_id,
+                package_launch_identity_digest,
+                boot_epoch,
+            } => {
+                validate_profile_owner(&owner).map_err(owner_error)?;
+                if !is_digest(&package_launch_identity_digest)
+                    || !registry.authorizes(&expected_owner)
+                    || owner.profile_identity_digest != expected_owner.profile_identity_digest
+                    || owner.owner_generation != expected_owner.owner_generation.saturating_add(1)
+                    || registry
+                        .principal_bindings
+                        .get(&owner.profile_identity_digest)
+                        .is_some_and(|binding| {
+                            binding.owner_generation > expected_owner.owner_generation
+                        })
+                {
+                    return Err("runtime_lifecycle_observed_supersession_rejected".to_string());
+                }
+                registry.lifecycle_records.retain(|logical_id, record| {
+                    logical_id == &owner.browser_id
+                        || record.profile_identity_digest != owner.profile_identity_digest
+                });
+                registry
+                    .owners
+                    .insert(owner.profile_identity_digest.clone(), owner.clone());
+                if let Some(binding) = registry
+                    .principal_bindings
+                    .get_mut(&owner.profile_identity_digest)
+                {
+                    binding.owner_generation = owner.owner_generation;
+                }
+                registry.revision = registry.revision.saturating_add(1);
+                let lifecycle = RuntimeLifecycleRecord {
+                    logical_browser_id: owner.browser_id.clone(),
+                    boot_epoch,
+                    profile_identity_digest: owner.profile_identity_digest.clone(),
+                    owner_generation: owner.owner_generation,
+                    lifecycle_state: RuntimeLaneLifecycleState::Ready,
+                    cleanup_obligation_state: CleanupObligationState::Owned,
+                    process_group_id,
+                    package_launch_identity_digest: Some(package_launch_identity_digest),
+                    terminal_evidence: Vec::new(),
+                };
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::ObservedOwnerSuperseded(owner))
+            }
+            RuntimeLifecycleIntent::RefreshCurrentOwnerEvidence {
+                claim,
+                cdp_endpoint_identity_digest,
+                target_set_digest,
+            } => {
+                if !registry.authorizes(&claim)
+                    || !is_digest(&cdp_endpoint_identity_digest)
+                    || !is_digest(&target_set_digest)
+                {
+                    return Err("runtime_lifecycle_owner_evidence_refresh_rejected".to_string());
+                }
+                let owner = registry
+                    .owners
+                    .get_mut(&claim.profile_identity_digest)
+                    .ok_or_else(|| "runtime_lifecycle_owner_missing".to_string())?;
+                if owner.cdp_endpoint_identity_digest != cdp_endpoint_identity_digest
+                    || owner.target_set_digest != target_set_digest
+                {
+                    owner.cdp_endpoint_identity_digest = cdp_endpoint_identity_digest;
+                    owner.target_set_digest = target_set_digest;
+                    registry.revision = registry.revision.saturating_add(1);
+                }
+                Ok(RuntimeLifecycleTransition::OwnerEvidenceRefreshed(
+                    owner.clone(),
+                ))
+            }
+            RuntimeLifecycleIntent::BeginTransfer(request) => {
+                let current_owner = registry
+                    .owner(&request.profile_identity_digest)
+                    .cloned()
+                    .ok_or_else(|| "runtime_lifecycle_owner_missing".to_string())?;
+                let proposal = registry.begin_transfer(request).map_err(owner_error)?;
+                let mut lifecycle = take_or_bootstrap_lifecycle(registry, &current_owner)?;
+                if lifecycle.owner_generation != proposal.previous_owner_generation {
+                    return Err("runtime_lifecycle_generation_mismatch".to_string());
+                }
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Transferring;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Transferring;
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::TransferPrepared(proposal))
+            }
+            RuntimeLifecycleIntent::CommitCandidate(attachment) => {
+                let profile_identity_digest = attachment.profile_identity_digest.clone();
+                let receipt = registry.commit_candidate(attachment).map_err(owner_error)?;
+                let owner = registry
+                    .owner(&profile_identity_digest)
+                    .cloned()
+                    .ok_or_else(|| "runtime_lifecycle_owner_missing_after_commit".to_string())?;
+                let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
+                lifecycle.owner_generation = owner.owner_generation;
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::CandidateCommitted(receipt))
+            }
+            RuntimeLifecycleIntent::AbortTransfer {
+                profile_identity_digest,
+                expected_owner_id,
+                expected_owner_generation,
+                transfer_nonce_digest,
+            } => {
+                let owner = registry
+                    .owner(&profile_identity_digest)
+                    .cloned()
+                    .ok_or_else(|| "runtime_lifecycle_owner_missing".to_string())?;
+                let aborted = registry
+                    .abort_pending_transfer(
+                        &profile_identity_digest,
+                        &expected_owner_id,
+                        expected_owner_generation,
+                        &transfer_nonce_digest,
+                    )
+                    .map_err(owner_error)?;
+                if aborted {
+                    let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
+                    lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+                    lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+                    lifecycle.owner_generation = owner.owner_generation;
+                    store_lifecycle(registry, lifecycle)?;
+                }
+                Ok(RuntimeLifecycleTransition::TransferAborted(aborted))
+            }
+            RuntimeLifecycleIntent::ReverseTransfer(request) => {
+                let profile_identity_digest = request.profile_identity_digest.clone();
+                let receipt = registry.reverse_transfer(request).map_err(owner_error)?;
+                let owner = registry
+                    .owner(&profile_identity_digest)
+                    .cloned()
+                    .ok_or_else(|| "runtime_lifecycle_owner_missing_after_reverse".to_string())?;
+                let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
+                lifecycle.owner_generation = owner.owner_generation;
+                lifecycle.lifecycle_state = match owner.state {
+                    ProfileOwnerState::Ready => RuntimeLaneLifecycleState::Ready,
+                    ProfileOwnerState::Orphaned => RuntimeLaneLifecycleState::Retained,
+                    _ => return Err("runtime_lifecycle_reverse_owner_state_invalid".to_string()),
+                };
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::TransferReversed(receipt))
+            }
+            RuntimeLifecycleIntent::RevokeLegacyOwner {
+                profile_identity_digest,
+                logical_browser_id,
+                expected_daemon_session_route,
+                expected_owner_id,
+                expected_owner_generation,
+            } => {
+                let owner = registry
+                    .revoke_legacy_daemon_owner(
+                        &profile_identity_digest,
+                        &logical_browser_id,
+                        &expected_daemon_session_route,
+                        &expected_owner_id,
+                        expected_owner_generation,
+                    )
+                    .map_err(owner_error)?;
+                let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
+                lifecycle.owner_generation = owner.owner_generation;
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Retained;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+                store_lifecycle(registry, lifecycle)?;
+                Ok(RuntimeLifecycleTransition::LegacyOwnerRevoked(owner))
+            }
+            RuntimeLifecycleIntent::PreserveRetained { claim } => update_effect_owned_lane(
+                registry,
+                &claim,
+                RuntimeLaneLifecycleState::Retained,
+                CleanupObligationState::Owned,
+            ),
+            RuntimeLifecycleIntent::BeginRecoveryClose { claim } => {
+                let owner = registry
+                    .owner(&claim.profile_identity_digest)
+                    .cloned()
+                    .ok_or_else(|| "runtime_lifecycle_recovery_owner_missing".to_string())?;
+                if owner.state != ProfileOwnerState::Orphaned
+                    || OwnerAuthorityClaim::from_owner(&owner) != claim
+                {
+                    return Err("runtime_lifecycle_recovery_owner_mismatch".to_string());
+                }
+                let lifecycle = registry
+                    .lifecycle_records
+                    .get_mut(&claim.logical_browser_id)
+                    .ok_or_else(|| "runtime_lifecycle_recovery_record_missing".to_string())?;
+                if lifecycle.profile_identity_digest != claim.profile_identity_digest
+                    || lifecycle.owner_generation != claim.owner_generation
+                    || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Retained
+                    || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
+                {
+                    return Err("runtime_lifecycle_recovery_compare_and_swap_mismatch".to_string());
+                }
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Closing;
+                let lifecycle = lifecycle.clone();
+                registry.revision = registry.revision.saturating_add(1);
+                Ok(RuntimeLifecycleTransition::LaneUpdated(lifecycle))
+            }
+            RuntimeLifecycleIntent::BeginClose { claim } => update_effect_owned_lane(
+                registry,
+                &claim,
+                RuntimeLaneLifecycleState::Closing,
+                CleanupObligationState::Owned,
+            ),
+            RuntimeLifecycleIntent::CompleteClose {
+                logical_browser_id,
+                profile_identity_digest,
+                expected_owner_generation,
+                terminal_evidence,
+            } => {
+                if terminal_evidence.is_empty()
+                    || terminal_evidence
+                        .iter()
+                        .any(|evidence| evidence.trim().is_empty())
+                {
+                    return Err("runtime_lifecycle_terminal_evidence_missing".to_string());
+                }
+                let lifecycle = registry
+                    .lifecycle_records
+                    .get_mut(&logical_browser_id)
+                    .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?;
+                if lifecycle.profile_identity_digest != profile_identity_digest
+                    || lifecycle.owner_generation != expected_owner_generation
+                    || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Closing
+                    || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
+                {
+                    return Err("runtime_lifecycle_close_compare_and_swap_mismatch".to_string());
+                }
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Terminal;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Satisfied;
+                lifecycle.terminal_evidence = terminal_evidence;
+                let lifecycle = lifecycle.clone();
+                registry.revision = registry.revision.saturating_add(1);
+                Ok(RuntimeLifecycleTransition::LaneUpdated(lifecycle))
+            }
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.owners.is_empty() && self.principal_bindings.is_empty()
     }
@@ -1145,6 +1768,120 @@ fn transfer_error(code: OwnerTransferFailureCode) -> OwnerTransferError {
     OwnerTransferError { code, message }
 }
 
+fn terminal_cleanup_evidence_complete(lifecycle: &RuntimeLifecycleRecord) -> bool {
+    let process_absence_proven = lifecycle.terminal_evidence.iter().any(|evidence| {
+        evidence == "exact_process_exited"
+            || evidence.starts_with("service_reconcile_process_group_absent:")
+    });
+    let profile_lock_release_proven = lifecycle.terminal_evidence.iter().any(|evidence| {
+        evidence == "profile_lock_released"
+            || evidence == "service_reconcile_profile_lock_absent"
+            || evidence.starts_with("service_reconcile_profile_lock_stale_pid_absent:")
+    });
+    process_absence_proven && profile_lock_release_proven
+}
+
+fn is_digest(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn update_effect_owned_lane(
+    registry: &mut RuntimeOwnerRegistry,
+    claim: &OwnerAuthorityClaim,
+    lifecycle_state: RuntimeLaneLifecycleState,
+    cleanup_obligation_state: CleanupObligationState,
+) -> Result<RuntimeLifecycleTransition, String> {
+    if !registry.authorizes(claim) {
+        return Err("runtime_lifecycle_owner_generation_stale".to_string());
+    }
+    let owner = registry
+        .owner(&claim.profile_identity_digest)
+        .cloned()
+        .ok_or_else(|| "runtime_lifecycle_owner_missing".to_string())?;
+    let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
+    lifecycle.owner_generation = owner.owner_generation;
+    lifecycle.lifecycle_state = lifecycle_state;
+    lifecycle.cleanup_obligation_state = cleanup_obligation_state;
+    store_lifecycle(registry, lifecycle.clone())?;
+    Ok(RuntimeLifecycleTransition::LaneUpdated(lifecycle))
+}
+
+fn take_or_bootstrap_lifecycle(
+    registry: &mut RuntimeOwnerRegistry,
+    owner: &ProfileOwner,
+) -> Result<RuntimeLifecycleRecord, String> {
+    let matching_keys = registry
+        .lifecycle_records
+        .iter()
+        .filter(|(_, lifecycle)| {
+            lifecycle.logical_browser_id == owner.browser_id
+                || lifecycle.profile_identity_digest == owner.profile_identity_digest
+        })
+        .map(|(key, _)| key.clone())
+        .collect::<Vec<_>>();
+    if matching_keys.len() > 1 {
+        return Err("runtime_lifecycle_record_ambiguous".to_string());
+    }
+    if let Some(key) = matching_keys.first() {
+        let mut lifecycle = if key == &owner.browser_id {
+            registry
+                .lifecycle_records
+                .get(key)
+                .cloned()
+                .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?
+        } else {
+            registry
+                .lifecycle_records
+                .remove(key)
+                .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?
+        };
+        if lifecycle.profile_identity_digest != owner.profile_identity_digest {
+            return Err("runtime_lifecycle_profile_identity_mismatch".to_string());
+        }
+        lifecycle.logical_browser_id = owner.browser_id.clone();
+        return Ok(lifecycle);
+    }
+    Ok(RuntimeLifecycleRecord {
+        logical_browser_id: owner.browser_id.clone(),
+        boot_epoch: None,
+        profile_identity_digest: owner.profile_identity_digest.clone(),
+        owner_generation: owner.owner_generation,
+        lifecycle_state: RuntimeLaneLifecycleState::Unknown,
+        cleanup_obligation_state: CleanupObligationState::Unknown,
+        process_group_id: None,
+        package_launch_identity_digest: None,
+        terminal_evidence: Vec::new(),
+    })
+}
+
+fn store_lifecycle(
+    registry: &mut RuntimeOwnerRegistry,
+    lifecycle: RuntimeLifecycleRecord,
+) -> Result<(), String> {
+    if lifecycle.logical_browser_id.trim().is_empty()
+        || lifecycle.profile_identity_digest.trim().is_empty()
+        || lifecycle.owner_generation == 0
+    {
+        return Err("runtime_lifecycle_record_invalid".to_string());
+    }
+    if registry
+        .lifecycle_records
+        .get(&lifecycle.logical_browser_id)
+        == Some(&lifecycle)
+    {
+        return Ok(());
+    }
+    registry
+        .lifecycle_records
+        .insert(lifecycle.logical_browser_id.clone(), lifecycle);
+    registry.revision = registry.revision.saturating_add(1);
+    Ok(())
+}
+
+fn owner_error(error: OwnerTransferError) -> String {
+    format!("runtime_owner_transfer_{:?}: {}", error.code, error.message)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1186,6 +1923,255 @@ mod tests {
             selected_target_identity_digest: digest("target"),
             transfer_nonce_digest: digest("transfer"),
         }
+    }
+
+    #[test]
+    fn registered_principal_rotation_preserves_removal_and_binding_revision_counts() {
+        let owner = owner();
+        let binding = RuntimeOwnerPrincipalBinding {
+            principal_id: "principal-a".to_string(),
+            profile_id: "profile-a".to_string(),
+            profile_identity_digest: owner.profile_identity_digest.clone(),
+            capability_id: "previous".to_string(),
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+            owner_generation: owner.owner_generation,
+        };
+        for owner_state in [
+            None,
+            Some(ProfileOwnerState::Orphaned),
+            Some(ProfileOwnerState::Ready),
+        ] {
+            for has_binding in [false, true] {
+                let mut registry = RuntimeOwnerRegistry::default();
+                if let Some(state) = owner_state {
+                    let mut owner = owner.clone();
+                    owner.state = state;
+                    registry
+                        .owners
+                        .insert(owner.profile_identity_digest.clone(), owner);
+                }
+                if has_binding {
+                    registry
+                        .principal_bindings
+                        .insert(binding.profile_identity_digest.clone(), binding.clone());
+                }
+                let ready = owner_state == Some(ProfileOwnerState::Ready);
+                assert_eq!(
+                    registry.rotate_registered_principal_authority(
+                        &owner.profile_identity_digest,
+                        "previous",
+                        "principal-a",
+                        "profile-a",
+                        "next",
+                    ),
+                    Ok(ready)
+                );
+                assert_eq!(
+                    registry.revision(),
+                    u64::from(has_binding) + u64::from(ready)
+                );
+                assert_eq!(registry.principal_bindings().len(), usize::from(ready));
+                if ready {
+                    assert_eq!(
+                        registry.principal_bindings()[&owner.profile_identity_digest].capability_id,
+                        "next"
+                    );
+                }
+            }
+        }
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner.clone());
+        registry
+            .principal_bindings
+            .insert(binding.profile_identity_digest.clone(), binding);
+        let original = registry.clone();
+        assert_eq!(
+            registry.rotate_registered_principal_authority(
+                &owner.profile_identity_digest,
+                "wrong",
+                "principal-a",
+                "profile-a",
+                "next",
+            ),
+            Err(RuntimeOwnerPrincipalRotationError::RotationMismatch)
+        );
+        assert_eq!(registry, original);
+        assert_eq!(
+            registry.rotate_registered_principal_authority(
+                &owner.profile_identity_digest,
+                "previous",
+                "principal-a",
+                "profile-a",
+                "",
+            ),
+            Err(RuntimeOwnerPrincipalRotationError::BindingFailed(
+                transfer_error(OwnerTransferFailureCode::InvalidEvidence)
+            ))
+        );
+        assert_eq!(registry.revision(), original.revision() + 1);
+        assert!(registry.principal_bindings().is_empty());
+    }
+
+    #[test]
+    fn runtime_reset_terminalization_preserves_evidence_and_bumps_once_per_application() {
+        let owner = owner();
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner.clone());
+        let original_record = RuntimeLifecycleRecord {
+            logical_browser_id: owner.browser_id.clone(),
+            profile_identity_digest: owner.profile_identity_digest.clone(),
+            owner_generation: owner.owner_generation,
+            boot_epoch: Some("retained-boot".to_string()),
+            process_group_id: Some(4100),
+            terminal_evidence: vec!["prior-evidence".to_string()],
+            ..RuntimeLifecycleRecord::default()
+        };
+        registry.restore_lifecycle_records(BTreeMap::from([(
+            owner.browser_id.clone(),
+            original_record.clone(),
+        )]));
+        for revision in [2, 3] {
+            registry.apply_runtime_reset_terminalization(
+                &owner.profile_identity_digest,
+                &owner.browser_id,
+            );
+            assert_eq!(registry.revision(), revision);
+            assert_eq!(
+                registry.owners()[&owner.profile_identity_digest],
+                ProfileOwner {
+                    state: ProfileOwnerState::Orphaned,
+                    ..owner.clone()
+                }
+            );
+            assert_eq!(
+                registry.lifecycle_records()[&owner.browser_id],
+                RuntimeLifecycleRecord {
+                    lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                    cleanup_obligation_state: CleanupObligationState::Satisfied,
+                    terminal_evidence: vec![
+                        "prior-evidence".to_string(),
+                        "profile_runtime_reset_applied".to_string()
+                    ],
+                    ..original_record.clone()
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn lifecycle_persistence_projection_and_restore_preserve_authority_revision() {
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        let records =
+            BTreeMap::from([("sidecar-key".to_string(), RuntimeLifecycleRecord::default())]);
+        registry.restore_lifecycle_records(records.clone());
+        assert_eq!(registry.revision(), 1);
+        let projected = registry.persistence_projection_without_lifecycle_records();
+        assert!(projected.lifecycle_records().is_empty());
+        assert_eq!(projected.revision(), registry.revision());
+        assert_eq!(projected.owners(), registry.owners());
+        assert_eq!(
+            projected.principal_bindings(),
+            registry.principal_bindings()
+        );
+        assert_eq!(registry.lifecycle_records(), &records);
+        registry.restore_lifecycle_records(BTreeMap::new());
+        assert!(registry.lifecycle_records().is_empty());
+        assert_eq!(registry, projected);
+    }
+
+    #[test]
+    fn lifecycle_managed_registration_preserves_revision_replay_and_boot_observation() {
+        let mut registry = RuntimeOwnerRegistry::default();
+        let current_owner = owner();
+        let intent = RuntimeLifecycleIntent::RegisterManagedLane {
+            owner: current_owner.clone(),
+            process_group_id: Some(4100),
+            package_launch_identity_digest: digest("launch"),
+            boot_epoch: Some("boot:injected".to_string()),
+        };
+        assert_eq!(
+            registry.apply_lifecycle_transition(intent.clone()).unwrap(),
+            RuntimeLifecycleTransition::OwnerRegistered(current_owner.clone())
+        );
+        assert_eq!(registry.revision(), 2);
+        assert_eq!(registry.owners().len(), 1);
+        assert!(registry.principal_bindings().is_empty());
+        assert_eq!(
+            registry.lifecycle_records()["browser-a"]
+                .boot_epoch
+                .as_deref(),
+            Some("boot:injected")
+        );
+        registry.apply_lifecycle_transition(intent).unwrap();
+        assert_eq!(registry.revision(), 2);
+        registry
+            .apply_lifecycle_transition(RuntimeLifecycleIntent::PreserveRetained {
+                claim: OwnerAuthorityClaim::from_owner(&current_owner),
+            })
+            .unwrap();
+        assert_eq!(registry.revision(), 3);
+        assert_eq!(
+            registry.lifecycle_records()["browser-a"]
+                .boot_epoch
+                .as_deref(),
+            Some("boot:injected")
+        );
+    }
+
+    #[test]
+    fn lifecycle_failed_transfer_preserves_prior_owner_mutation() {
+        let current_owner = owner();
+        let mut registry = RuntimeOwnerRegistry::from_owner(current_owner.clone());
+        registry.lifecycle_records.insert(
+            current_owner.browser_id.clone(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: current_owner.browser_id.clone(),
+                profile_identity_digest: current_owner.profile_identity_digest.clone(),
+                owner_generation: current_owner.owner_generation - 1,
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        let original_record = registry.lifecycle_records()["browser-a"].clone();
+        assert_eq!(
+            registry.apply_lifecycle_transition(RuntimeLifecycleIntent::BeginTransfer(
+                cooperative_request()
+            )),
+            Err("runtime_lifecycle_generation_mismatch".to_string())
+        );
+        assert_eq!(registry.revision(), 2);
+        assert!(registry.owners()[&current_owner.profile_identity_digest]
+            .pending_transfer
+            .is_some());
+        assert_eq!(registry.lifecycle_records()["browser-a"], original_record);
+    }
+
+    #[test]
+    fn lifecycle_launch_validation_keeps_variant_specific_first_error() {
+        let mut invalid_owner = owner();
+        invalid_owner.owner_generation = 0;
+        let mut registry = RuntimeOwnerRegistry::default();
+        assert_eq!(
+            registry.apply_lifecycle_transition(RuntimeLifecycleIntent::RegisterManagedLane {
+                owner: invalid_owner.clone(),
+                process_group_id: None,
+                package_launch_identity_digest: "invalid".to_string(),
+                boot_epoch: None,
+            }),
+            Err("runtime_lifecycle_package_launch_identity_invalid".to_string())
+        );
+        assert_eq!(
+            registry.apply_lifecycle_transition(
+                RuntimeLifecycleIntent::ActivateTerminalReplacement {
+                    owner: invalid_owner,
+                    process_group_id: None,
+                    package_launch_identity_digest: "invalid".to_string(),
+                    boot_epoch: None,
+                }
+            ),
+            Err(
+                "runtime_owner_transfer_InvalidEvidence: owner transfer evidence is invalid"
+                    .to_string()
+            )
+        );
+        assert_eq!(registry, RuntimeOwnerRegistry::default());
     }
 
     #[test]

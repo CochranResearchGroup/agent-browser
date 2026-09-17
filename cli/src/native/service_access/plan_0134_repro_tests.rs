@@ -2,7 +2,7 @@ use super::*;
 use crate::native::service_model::{DisplayAllocation, ViewerLease};
 use crate::runtime_owner_transfer::{
     CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-    RuntimeLifecycleRecord, RuntimeOwnerPrincipalBinding, RuntimeOwnerRegistry,
+    RuntimeLifecycleRecord, RuntimeOwnerPrincipalBinding,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -96,9 +96,9 @@ fn state_for_case(case: &AccessPlanCase) -> ServiceState {
                 &profile_path,
             ))
             .expect("fixture profile path must canonicalize");
-        state.runtime_owner_registry = RuntimeOwnerRegistry {
-            revision: 1,
-            owners: BTreeMap::from([(
+        state.runtime_owner_registry = crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+            registry_revision: 1,
+            owner_records: BTreeMap::from([(
                 profile_identity_digest.clone(),
                 ProfileOwner {
                     owner_id: format!("owner:{}", case.holder_principal_id),
@@ -115,8 +115,8 @@ fn state_for_case(case: &AccessPlanCase) -> ServiceState {
                     last_transition: None,
                 },
             )]),
-            principal_bindings: BTreeMap::new(),
-            lifecycle_records: BTreeMap::from([(
+            principal_records: BTreeMap::new(),
+            lifecycle_rows: BTreeMap::from([(
                 case.holder_browser_id.clone(),
                 RuntimeLifecycleRecord {
                     logical_browser_id: case.holder_browser_id.clone(),
@@ -127,7 +127,8 @@ fn state_for_case(case: &AccessPlanCase) -> ServiceState {
                     ..RuntimeLifecycleRecord::default()
                 },
             )]),
-        };
+        }
+        .into_registry();
     }
 
     state
@@ -254,7 +255,7 @@ fn p134_authenticated_consumer_matrix_reuses_each_principal_owned_profile() {
         .unwrap();
         let profile_identity_digest = state
             .runtime_owner_registry
-            .owners
+            .owners()
             .values()
             .next()
             .unwrap()

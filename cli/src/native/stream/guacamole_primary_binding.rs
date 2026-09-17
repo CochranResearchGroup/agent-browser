@@ -96,7 +96,7 @@ impl PrimaryBinding {
             .ok_or("guacamole_primary_browser_unavailable")?;
         let mut owners = snapshot
             .runtime_owner_registry
-            .owners
+            .owners()
             .values()
             .filter(|owner| owner.browser_id == browser.id);
         let owner = owners.next().ok_or("guacamole_primary_owner_unavailable")?;
@@ -496,14 +496,14 @@ mod tests {
                         .owner_browser_id = Some("peer".into())
                 }
                 "changed_owner" => {
-                    changed
-                        .0
-                        .runtime_owner_registry
-                        .owners
-                        .values_mut()
-                        .next()
-                        .unwrap()
-                        .owner_generation += 1
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut changed.0.runtime_owner_registry,
+                    )
+                    .owner_records
+                    .values_mut()
+                    .next()
+                    .unwrap()
+                    .owner_generation += 1
                 }
                 "released_route" => {
                     changed.0.remote_view_routes.get_mut("route").unwrap().state = "released".into()
@@ -760,17 +760,21 @@ mod tests {
             .owner_browser_id = Some("peer".into());
         assert!(!binding.is_current(&repository));
         repository.0 = original.clone();
-        repository
-            .0
-            .runtime_owner_registry
-            .lifecycle_records
-            .clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut repository.0.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .clear();
         assert_eq!(
             PrimaryBinding::resolve(&repository, "route", "1").err(),
             Some("guacamole_primary_owner_stale")
         );
         repository.0 = original.clone();
-        repository.0.runtime_owner_registry.owners.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut repository.0.runtime_owner_registry,
+        )
+        .owner_records
+        .clear();
         assert_eq!(
             PrimaryBinding::resolve(&repository, "route", "1").err(),
             Some("guacamole_primary_owner_unavailable")

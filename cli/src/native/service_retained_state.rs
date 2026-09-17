@@ -1383,7 +1383,7 @@ pub(crate) mod service_commands {
                 });
             let mut lifecycle_aliases = state
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .values()
                 .filter(|record| {
                     profile_identity_digest

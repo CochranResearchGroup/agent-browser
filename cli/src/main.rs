@@ -4206,21 +4206,23 @@ mod tests {
             last_transition: None,
         };
         let mut owner_registry = RuntimeOwnerRegistry::from_owner(owner);
-        owner_registry.lifecycle_records.insert(
-            browser_id.clone(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: browser_id,
-                profile_identity_digest: legacy_digest,
-                owner_generation: 1,
-                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
-                cleanup_obligation_state: CleanupObligationState::Satisfied,
-                terminal_evidence: vec![
-                    "exact_process_exited".to_string(),
-                    "profile_lock_released".to_string(),
-                ],
-                ..RuntimeLifecycleRecord::default()
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut owner_registry)
+            .lifecycle_rows
+            .insert(
+                browser_id.clone(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: browser_id,
+                    profile_identity_digest: legacy_digest,
+                    owner_generation: 1,
+                    lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                    cleanup_obligation_state: CleanupObligationState::Satisfied,
+                    terminal_evidence: vec![
+                        "exact_process_exited".to_string(),
+                        "profile_lock_released".to_string(),
+                    ],
+                    ..RuntimeLifecycleRecord::default()
+                },
+            );
         let state = native::service_model::ServiceState {
             profiles: std::collections::BTreeMap::from([(
                 profile_id.to_string(),

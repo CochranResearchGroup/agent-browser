@@ -91,7 +91,7 @@ impl<'a> RuntimeResourceReconciler<'a> {
         let Some(lifecycle) = self
             .state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(logical_browser_id)
         else {
             return protected("runtime_lifecycle_record_unproven");
@@ -393,20 +393,22 @@ mod tests {
                 .unwrap();
         let mut state = ServiceState::default();
         state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(owner.clone());
-        state.runtime_owner_registry.lifecycle_records.insert(
-            owner.browser_id.clone(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: owner.browser_id.clone(),
-                boot_epoch: None,
-                profile_identity_digest: profile_identity_digest.clone(),
-                owner_generation: owner.owner_generation,
-                lifecycle_state: RuntimeLaneLifecycleState::Closing,
-                cleanup_obligation_state: CleanupObligationState::Owned,
-                process_group_id: Some(4100),
-                package_launch_identity_digest: Some(package_launch_identity_digest.clone()),
-                terminal_evidence: Vec::new(),
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                owner.browser_id.clone(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: owner.browser_id.clone(),
+                    boot_epoch: None,
+                    profile_identity_digest: profile_identity_digest.clone(),
+                    owner_generation: owner.owner_generation,
+                    lifecycle_state: RuntimeLaneLifecycleState::Closing,
+                    cleanup_obligation_state: CleanupObligationState::Owned,
+                    process_group_id: Some(4100),
+                    package_launch_identity_digest: Some(package_launch_identity_digest.clone()),
+                    terminal_evidence: Vec::new(),
+                },
+            );
         state.browsers.insert(
             owner.browser_id.clone(),
             BrowserProcess {

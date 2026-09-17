@@ -707,7 +707,7 @@ fn retained_browser_reference_exists(state: &ServiceState, browser_id: &str) -> 
     retained_browser_projection_reference_exists(state, browser_id)
         || state
             .runtime_owner_registry
-            .owners
+            .owners()
             .values()
             .any(|owner| owner.browser_id == browser_id)
 }
@@ -753,7 +753,7 @@ fn retained_browser_projection_reference_exists(state: &ServiceState, browser_id
 fn materialize_inert_owner_only_process_placeholders(state: &mut ServiceState) {
     let missing_browsers = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .filter(|owner| !owner.browser_id.trim().is_empty())
         .filter(|owner| !state.browsers.contains_key(&owner.browser_id))
@@ -761,13 +761,13 @@ fn materialize_inert_owner_only_process_placeholders(state: &mut ServiceState) {
         .filter(|owner| {
             !state
                 .runtime_owner_registry
-                .principal_bindings
+                .principal_bindings()
                 .contains_key(&owner.profile_identity_digest)
         })
         .filter(|owner| {
             state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .values()
                 .filter(|candidate| candidate.browser_id == owner.browser_id)
                 .count()
@@ -834,7 +834,7 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
         .filter(|browser_id| {
             let owners = state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .values()
                 .filter(|owner| owner.browser_id == ***browser_id)
                 .collect::<Vec<_>>();
@@ -996,7 +996,7 @@ fn owner_principal_binding_is_migration_safe(
 ) -> bool {
     let Some(binding) = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .get(&owner.profile_identity_digest)
     else {
         return true;
@@ -1091,7 +1091,7 @@ fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
         .filter(|browser_id| {
             let owners = state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .values()
                 .filter(|owner| owner.browser_id == **browser_id)
                 .collect::<Vec<_>>();
@@ -1100,7 +1100,7 @@ fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
                     && owners[0].pending_transfer.is_none()
                     && state
                         .runtime_owner_registry
-                        .principal_bindings
+                        .principal_bindings()
                         .contains_key(&owners[0].profile_identity_digest)
                     && owner_principal_binding_is_migration_safe(state, owners[0]))
         })
@@ -1397,11 +1397,11 @@ pub(crate) fn validate_service_state_invariants(state: &ServiceState) -> Result<
             ));
         }
     }
-    for (profile_digest, binding) in &state.runtime_owner_registry.principal_bindings {
+    for (profile_digest, binding) in state.runtime_owner_registry.principal_bindings() {
         if profile_digest != &binding.profile_identity_digest
             || !state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .contains_key(profile_digest)
         {
             return Err(format!(
@@ -1819,16 +1819,15 @@ mod tests {
         let expected_error = "service_state_tab_browser_missing:target:tab-a:session:last30days";
 
         let mut unbound = state.clone();
-        unbound
-            .runtime_owner_registry
-            .principal_bindings
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut unbound.runtime_owner_registry)
+            .principal_records
             .remove(&profile_identity_digest);
         assert_eq!(
             stage_service_state_migration(&serde_json::to_string(&unbound).unwrap()).unwrap_err(),
             expected_error
         );
 
-        let capability_id = state.runtime_owner_registry.principal_bindings
+        let capability_id = state.runtime_owner_registry.principal_bindings()
             [&profile_identity_digest]
             .capability_id
             .clone();
@@ -1845,12 +1844,13 @@ mod tests {
         );
 
         let mut generation_ahead = state.clone();
-        generation_ahead
-            .runtime_owner_registry
-            .principal_bindings
-            .get_mut(&profile_identity_digest)
-            .unwrap()
-            .owner_generation += 1;
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut generation_ahead.runtime_owner_registry,
+        )
+        .principal_records
+        .get_mut(&profile_identity_digest)
+        .unwrap()
+        .owner_generation += 1;
         assert_eq!(
             stage_service_state_migration(&serde_json::to_string(&generation_ahead).unwrap())
                 .unwrap_err(),
@@ -2335,9 +2335,8 @@ mod tests {
                 },
             )
             .unwrap();
-        state
-            .runtime_owner_registry
-            .principal_bindings
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
             .get_mut(&profile_identity_digest)
             .unwrap()
             .owner_generation = 1;

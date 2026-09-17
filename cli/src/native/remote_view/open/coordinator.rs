@@ -1541,7 +1541,7 @@ pub(crate) async fn execute_durable_resolution<
     let presentation_owner_matches = presentation.as_ref().is_some_and(|receipt| {
         presentation_state
             .runtime_owner_registry
-            .owners
+            .owners()
             .values()
             .any(|owner| {
                 owner.state == ProfileOwnerState::Ready

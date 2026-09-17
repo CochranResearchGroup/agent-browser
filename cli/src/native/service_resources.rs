@@ -538,7 +538,7 @@ fn service_resources_response_from_samples_for_environment(
         "resources": snapshot.resources,
         "lanes": lanes,
         "workstation": workstation,
-        "runtimeLanes": state.runtime_owner_registry.lifecycle_records.values().collect::<Vec<_>>(),
+        "runtimeLanes": state.runtime_owner_registry.lifecycle_records().values().collect::<Vec<_>>(),
         "bootEpoch": current_boot_epoch,
         "bootEpochFindings": boot_epoch_findings,
         "warnings": snapshot.warnings,
@@ -942,7 +942,7 @@ pub(crate) fn classify_abandoned_browser_lane_with_profile_identity_at(
     };
     let Some(lifecycle) = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(browser_id)
     else {
         return lane_protected("runtime_lifecycle_record_unproven");
@@ -1390,7 +1390,7 @@ fn resource_lane_projections(
 ) -> Vec<ResourceLaneProjection> {
     state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .iter()
         .map(|(browser_id, lifecycle)| {
             let browser_pid = state
@@ -1655,7 +1655,7 @@ fn classify_process(
 }
 
 fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> ResourceSummary {
-    let lifecycle_records = state.runtime_owner_registry.lifecycle_records.values();
+    let lifecycle_records = state.runtime_owner_registry.lifecycle_records().values();
     ResourceSummary {
         total_processes: records.len(),
         correlated_processes: records
@@ -1694,7 +1694,7 @@ fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> Reso
             .filter_map(|record| record.rss_bytes)
             .sum(),
         total_rss_bytes: records.iter().filter_map(|record| record.rss_bytes).sum(),
-        managed_lane_count: state.runtime_owner_registry.lifecycle_records.len(),
+        managed_lane_count: state.runtime_owner_registry.lifecycle_records().len(),
         cleanup_obligations_owned: lifecycle_records
             .clone()
             .filter(|record| {
@@ -3422,21 +3422,24 @@ mod tests {
         let mut state = ServiceState::default();
         state.runtime_owner_registry =
             crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner.clone());
-        state.runtime_owner_registry.lifecycle_records.insert(
-            owner.browser_id.clone(),
-            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-                logical_browser_id: owner.browser_id.clone(),
-                boot_epoch: None,
-                profile_identity_digest,
-                owner_generation: owner.owner_generation,
-                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing,
-                cleanup_obligation_state:
-                    crate::runtime_owner_transfer::CleanupObligationState::Owned,
-                process_group_id: Some(pid),
-                package_launch_identity_digest: Some(package_launch_identity_digest),
-                terminal_evidence: Vec::new(),
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                owner.browser_id.clone(),
+                crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                    logical_browser_id: owner.browser_id.clone(),
+                    boot_epoch: None,
+                    profile_identity_digest,
+                    owner_generation: owner.owner_generation,
+                    lifecycle_state:
+                        crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing,
+                    cleanup_obligation_state:
+                        crate::runtime_owner_transfer::CleanupObligationState::Owned,
+                    process_group_id: Some(pid),
+                    package_launch_identity_digest: Some(package_launch_identity_digest),
+                    terminal_evidence: Vec::new(),
+                },
+            );
         state.browsers.insert(
             owner.browser_id.clone(),
             BrowserProcess {
@@ -3481,9 +3484,8 @@ mod tests {
         let display_id = "display:private_virtual_display:session-abandoned".to_string();
         let (mut state, candidate) = owned_closing_candidate(pid, profile_root);
 
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .get_mut(&browser_id)
             .unwrap()
             .lifecycle_state = crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained;
@@ -3539,13 +3541,13 @@ mod tests {
         let session_id = "session-matrix".to_string();
         let profile_digest = base
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(&browser_id)
             .unwrap()
             .profile_identity_digest
             .clone();
-        base.runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut base.runtime_owner_registry)
+            .lifecycle_rows
             .get_mut(&browser_id)
             .unwrap()
             .lifecycle_state = crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained;
@@ -3790,7 +3792,7 @@ mod tests {
         let mut replacement_state = reviewed_state;
         let mut replacement_root = reviewed_root;
         replacement_root.start_token = Some("linux:fixture:replacement".to_string());
-        let profile_identity_digest = replacement_state.runtime_owner_registry.lifecycle_records
+        let profile_identity_digest = replacement_state.runtime_owner_registry.lifecycle_records()
             [&browser_id]
             .profile_identity_digest
             .clone();
@@ -3801,21 +3803,25 @@ mod tests {
         recorded.process_identity.start_token = "linux:fixture:replacement".to_string();
         let process_instance_digest =
             crate::native::runtime_lifecycle::digest_json(&recorded.process_identity).unwrap();
-        let owner = replacement_state
-            .runtime_owner_registry
-            .owners
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut replacement_state.runtime_owner_registry,
+        );
+        let owner = registry_fixture
+            .owner_records
             .get_mut(&profile_identity_digest)
             .unwrap();
         owner.process_instance_digest = process_instance_digest;
         let package_launch_identity_digest =
             crate::native::runtime_lifecycle::package_launch_identity_digest(owner, Some(pid))
                 .unwrap();
-        replacement_state
-            .runtime_owner_registry
-            .lifecycle_records
-            .get_mut(&browser_id)
-            .unwrap()
-            .package_launch_identity_digest = Some(package_launch_identity_digest);
+        drop(registry_fixture);
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut replacement_state.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .get_mut(&browser_id)
+        .unwrap()
+        .package_launch_identity_digest = Some(package_launch_identity_digest);
         let replacement_response = service_resources_response_from_samples(
             &replacement_state,
             vec![replacement_root.clone(), reviewed_child.clone()],
@@ -3893,12 +3899,9 @@ mod tests {
             .unwrap()
             .process_identity;
         recorded.start_token = root.start_token.clone().unwrap();
-        let owner = state
-            .runtime_owner_registry
-            .owners
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.process_instance_digest =
             crate::native::runtime_lifecycle::digest_json(recorded).unwrap();
         let launch_digest = crate::native::runtime_lifecycle::package_launch_identity_digest(
@@ -3906,14 +3909,17 @@ mod tests {
             root.process_group_id,
         )
         .unwrap();
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
+        drop(registry_fixture);
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture
+            .lifecycle_rows
             .get_mut("browser-101")
             .unwrap();
         lifecycle.boot_epoch = Some(boot.clone());
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.package_launch_identity_digest = Some(launch_digest);
+        drop(registry_fixture);
         let child = ProcessSample {
             pid: 102,
             ppid: Some(101),
@@ -3957,9 +3963,11 @@ mod tests {
         for case in 0..12 {
             let mut changed_state = state.clone();
             let mut changed = samples.clone();
-            let lifecycle = changed_state
-                .runtime_owner_registry
-                .lifecycle_records
+            let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+                &mut changed_state.runtime_owner_registry,
+            );
+            let lifecycle = registry_fixture
+                .lifecycle_rows
                 .get_mut("browser-101")
                 .unwrap();
             match case {
@@ -3979,6 +3987,7 @@ mod tests {
                 11 => changed[1].ppid = Some(103),
                 _ => unreachable!(),
             }
+            drop(registry_fixture);
             let response = project(&changed_state, changed);
             assert_eq!(response["summary"]["candidateCount"], 0, "case {case}");
             let descendant = response["resources"]
@@ -4114,21 +4123,24 @@ mod tests {
     #[test]
     fn resources_project_lifecycle_cleanup_accountability() {
         let mut state = ServiceState::default();
-        state.runtime_owner_registry.lifecycle_records.insert(
-            "browser-owned".to_string(),
-            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-                logical_browser_id: "browser-owned".to_string(),
-                boot_epoch: None,
-                profile_identity_digest: "a".repeat(64),
-                owner_generation: 3,
-                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained,
-                cleanup_obligation_state:
-                    crate::runtime_owner_transfer::CleanupObligationState::Owned,
-                process_group_id: Some(4100),
-                package_launch_identity_digest: Some("b".repeat(64)),
-                terminal_evidence: Vec::new(),
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                "browser-owned".to_string(),
+                crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                    logical_browser_id: "browser-owned".to_string(),
+                    boot_epoch: None,
+                    profile_identity_digest: "a".repeat(64),
+                    owner_generation: 3,
+                    lifecycle_state:
+                        crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained,
+                    cleanup_obligation_state:
+                        crate::runtime_owner_transfer::CleanupObligationState::Owned,
+                    process_group_id: Some(4100),
+                    package_launch_identity_digest: Some("b".repeat(64)),
+                    terminal_evidence: Vec::new(),
+                },
+            );
 
         let response = service_resources_response_from_samples(&state, Vec::new(), Vec::new());
 

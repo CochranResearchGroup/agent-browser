@@ -21,6 +21,69 @@ pub(crate) use agent_browser_lease_authority::{
     RuntimeOwnerHandoffReceiptAttestation, RuntimeOwnerPrincipalBinding, RuntimeOwnerRegistry,
 };
 
+/// Wire-shaped fixture data for exercising legacy and deliberately invalid
+/// registry snapshots without exposing production mutation escape hatches.
+#[cfg(test)]
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct RuntimeOwnerRegistryFixture {
+    #[serde(rename = "revision")]
+    pub(crate) registry_revision: u64,
+    #[serde(rename = "owners")]
+    pub(crate) owner_records: std::collections::BTreeMap<String, ProfileOwner>,
+    #[serde(rename = "principalBindings")]
+    pub(crate) principal_records: std::collections::BTreeMap<String, RuntimeOwnerPrincipalBinding>,
+    #[serde(rename = "lifecycleRecords")]
+    pub(crate) lifecycle_rows: std::collections::BTreeMap<String, RuntimeLifecycleRecord>,
+}
+
+#[cfg(test)]
+impl RuntimeOwnerRegistryFixture {
+    pub(crate) fn into_registry(self) -> RuntimeOwnerRegistry {
+        serde_json::from_value(serde_json::to_value(self).unwrap()).unwrap()
+    }
+}
+
+/// A test-only editable wire snapshot that writes back through the production
+/// decoder when the fixture edit ends. It cannot escape into a normal build.
+#[cfg(test)]
+pub(crate) struct RuntimeOwnerRegistryFixtureEdit<'a> {
+    registry: &'a mut RuntimeOwnerRegistry,
+    fixture: RuntimeOwnerRegistryFixture,
+}
+
+#[cfg(test)]
+impl std::ops::Deref for RuntimeOwnerRegistryFixtureEdit<'_> {
+    type Target = RuntimeOwnerRegistryFixture;
+
+    fn deref(&self) -> &Self::Target {
+        &self.fixture
+    }
+}
+
+#[cfg(test)]
+impl std::ops::DerefMut for RuntimeOwnerRegistryFixtureEdit<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.fixture
+    }
+}
+
+#[cfg(test)]
+impl Drop for RuntimeOwnerRegistryFixtureEdit<'_> {
+    fn drop(&mut self) {
+        *self.registry =
+            serde_json::from_value(serde_json::to_value(&self.fixture).unwrap()).unwrap();
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn edit_registry_fixture(
+    registry: &mut RuntimeOwnerRegistry,
+) -> RuntimeOwnerRegistryFixtureEdit<'_> {
+    let fixture = serde_json::from_value(serde_json::to_value(&*registry).unwrap()).unwrap();
+    RuntimeOwnerRegistryFixtureEdit { registry, fixture }
+}
+
 pub(crate) fn owner_authority_is_current(
     repository: &impl ServiceStateRepository,
     claim: &OwnerAuthorityClaim,
@@ -262,7 +325,7 @@ mod tests {
             mismatch.code,
             OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
         );
-        assert!(registry.principal_bindings.is_empty());
+        assert!(registry.principal_bindings().is_empty());
 
         binding.owner_generation = 7;
         let committed = registry.bind_principal_authority(binding).unwrap();
@@ -276,7 +339,7 @@ mod tests {
             OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
         );
         assert_eq!(
-            registry.principal_bindings[&digest("profile")].principal_id,
+            registry.principal_bindings()[&digest("profile")].principal_id,
             "principal:odollo-fulfillment"
         );
     }
@@ -293,8 +356,8 @@ mod tests {
             owner_generation: 7,
         };
         registry.bind_principal_authority(binding.clone()).unwrap();
-        registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .owner_records
             .get_mut(&digest("profile"))
             .unwrap()
             .owner_generation = 8;
@@ -307,8 +370,8 @@ mod tests {
         assert_eq!(committed, refreshed);
         assert!(registry.principal_binding_is_current(Some(&committed)));
 
-        registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .owner_records
             .get_mut(&digest("profile"))
             .unwrap()
             .owner_generation = 9;
@@ -321,7 +384,7 @@ mod tests {
             OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
         );
         assert_eq!(
-            registry.principal_bindings[&digest("profile")].capability_id,
+            registry.principal_bindings()[&digest("profile")].capability_id,
             "profile-capability-v1:synthetic"
         );
     }
@@ -329,31 +392,33 @@ mod tests {
     #[test]
     fn lifecycle_and_cleanup_obligation_schema_round_trips_without_effects() {
         let mut registry = RuntimeOwnerRegistry::from_owner(owner());
-        registry.lifecycle_records.insert(
-            "browser-a".to_string(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: "browser-a".to_string(),
-                boot_epoch: None,
-                profile_identity_digest: digest("profile"),
-                owner_generation: 7,
-                lifecycle_state: RuntimeLaneLifecycleState::Retained,
-                cleanup_obligation_state: CleanupObligationState::Owned,
-                process_group_id: Some(4100),
-                package_launch_identity_digest: Some(digest("launch")),
-                terminal_evidence: Vec::new(),
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .lifecycle_rows
+            .insert(
+                "browser-a".to_string(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: "browser-a".to_string(),
+                    boot_epoch: None,
+                    profile_identity_digest: digest("profile"),
+                    owner_generation: 7,
+                    lifecycle_state: RuntimeLaneLifecycleState::Retained,
+                    cleanup_obligation_state: CleanupObligationState::Owned,
+                    process_group_id: Some(4100),
+                    package_launch_identity_digest: Some(digest("launch")),
+                    terminal_evidence: Vec::new(),
+                },
+            );
 
         let encoded = serde_json::to_string(&registry).unwrap();
         let decoded: RuntimeOwnerRegistry = serde_json::from_str(&encoded).unwrap();
 
         assert_eq!(decoded, registry);
         assert_eq!(
-            decoded.lifecycle_records["browser-a"].lifecycle_state,
+            decoded.lifecycle_records()["browser-a"].lifecycle_state,
             RuntimeLaneLifecycleState::Retained
         );
         assert_eq!(
-            decoded.lifecycle_records["browser-a"].cleanup_obligation_state,
+            decoded.lifecycle_records()["browser-a"].cleanup_obligation_state,
             CleanupObligationState::Owned
         );
     }
@@ -404,7 +469,7 @@ mod tests {
             registry.owner(&digest("profile")).unwrap().owner_generation,
             8
         );
-        let lifecycle = &registry.lifecycle_records["browser-a"];
+        let lifecycle = &registry.lifecycle_records()["browser-a"];
         assert_eq!(lifecycle.owner_generation, 8);
         assert_eq!(lifecycle.lifecycle_state, RuntimeLaneLifecycleState::Ready);
         assert_eq!(
@@ -430,8 +495,8 @@ mod tests {
         // Preserve compatibility with registries affected by the historical
         // transfer bug, where the principal authority lagged several otherwise
         // valid owner generations.
-        registry
-            .principal_bindings
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .principal_records
             .get_mut(&profile_digest)
             .unwrap()
             .owner_generation = 5;
@@ -469,12 +534,11 @@ mod tests {
             registry.owner(&request.profile_identity_digest).unwrap()
         )));
         assert_eq!(
-            registry.principal_bindings[&profile_digest].owner_generation,
+            registry.principal_bindings()[&profile_digest].owner_generation,
             8
         );
-        assert!(
-            registry.principal_binding_is_current(registry.principal_bindings.get(&profile_digest))
-        );
+        assert!(registry
+            .principal_binding_is_current(registry.principal_bindings().get(&profile_digest)));
     }
 
     #[test]
@@ -618,8 +682,8 @@ mod tests {
         let mut orphan = owner();
         orphan.state = ProfileOwnerState::Orphaned;
         orphan.browser_id = "browser-historical".to_string();
-        registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .owner_records
             .insert(orphan.profile_identity_digest.clone(), orphan.clone());
         let mut request = cooperative_request();
         request.mode = BrowserAdoptionMode::OrphanAdoption;
@@ -769,12 +833,11 @@ mod tests {
         assert_eq!(restored.owner_id, "owner-old");
         assert_eq!(restored.owner_generation, 9);
         assert_eq!(
-            registry.principal_bindings[&profile_digest].owner_generation,
+            registry.principal_bindings()[&profile_digest].owner_generation,
             9
         );
-        assert!(
-            registry.principal_binding_is_current(registry.principal_bindings.get(&profile_digest))
-        );
+        assert!(registry
+            .principal_binding_is_current(registry.principal_bindings().get(&profile_digest)));
     }
 
     #[test]
@@ -821,7 +884,11 @@ mod tests {
             .mutate(|state| {
                 let current = owner();
                 state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(current.clone());
-                state.runtime_owner_registry.lifecycle_records.insert(
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .lifecycle_rows
+                .insert(
                     current.browser_id.clone(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: current.browser_id,
@@ -928,21 +995,23 @@ mod tests {
     fn terminal_cleanup_satisfied_owner_is_history_not_a_rehydrated_effect_binding() {
         let current = owner();
         let mut registry = RuntimeOwnerRegistry::from_owner(current.clone());
-        registry.lifecycle_records.insert(
-            current.browser_id.clone(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: current.browser_id.clone(),
-                profile_identity_digest: current.profile_identity_digest.clone(),
-                owner_generation: current.owner_generation,
-                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
-                cleanup_obligation_state: CleanupObligationState::Satisfied,
-                terminal_evidence: vec![
-                    "exact_process_exited".to_string(),
-                    "profile_lock_released".to_string(),
-                ],
-                ..RuntimeLifecycleRecord::default()
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .lifecycle_rows
+            .insert(
+                current.browser_id.clone(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: current.browser_id.clone(),
+                    profile_identity_digest: current.profile_identity_digest.clone(),
+                    owner_generation: current.owner_generation,
+                    lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                    cleanup_obligation_state: CleanupObligationState::Satisfied,
+                    terminal_evidence: vec![
+                        "exact_process_exited".to_string(),
+                        "profile_lock_released".to_string(),
+                    ],
+                    ..RuntimeLifecycleRecord::default()
+                },
+            );
         assert!(registry
             .binding_for_session("session-old")
             .unwrap()
@@ -971,25 +1040,29 @@ mod tests {
         replacement.target_set_digest = digest("targets-current");
 
         let mut registry = RuntimeOwnerRegistry::from_owner(historical.clone());
-        registry.owners.insert(
-            replacement.profile_identity_digest.clone(),
-            replacement.clone(),
-        );
-        registry.lifecycle_records.insert(
-            historical.browser_id.clone(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: historical.browser_id,
-                profile_identity_digest: historical.profile_identity_digest,
-                owner_generation: historical.owner_generation,
-                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
-                cleanup_obligation_state: CleanupObligationState::Satisfied,
-                terminal_evidence: vec![
-                    "exact_process_exited".to_string(),
-                    "profile_lock_released".to_string(),
-                ],
-                ..RuntimeLifecycleRecord::default()
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .owner_records
+            .insert(
+                replacement.profile_identity_digest.clone(),
+                replacement.clone(),
+            );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .lifecycle_rows
+            .insert(
+                historical.browser_id.clone(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: historical.browser_id,
+                    profile_identity_digest: historical.profile_identity_digest,
+                    owner_generation: historical.owner_generation,
+                    lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                    cleanup_obligation_state: CleanupObligationState::Satisfied,
+                    terminal_evidence: vec![
+                        "exact_process_exited".to_string(),
+                        "profile_lock_released".to_string(),
+                    ],
+                    ..RuntimeLifecycleRecord::default()
+                },
+            );
 
         let binding = registry
             .binding_for_session("session-old")
@@ -1001,8 +1074,8 @@ mod tests {
         );
         assert!(binding.effect_capable);
 
-        registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .lifecycle_rows
             .get_mut("browser-a")
             .unwrap()
             .cleanup_obligation_state = CleanupObligationState::Owned;
@@ -1031,9 +1104,9 @@ mod tests {
         let persisted = repository.load_snapshot().unwrap();
 
         assert_eq!(receipt.candidate_owner_generation, 8);
-        assert_eq!(persisted.runtime_owner_registry.revision, 5);
+        assert_eq!(persisted.runtime_owner_registry.revision(), 5);
         assert_eq!(
-            persisted.runtime_owner_registry.lifecycle_records["browser-a"]
+            persisted.runtime_owner_registry.lifecycle_records()["browser-a"]
                 .cleanup_obligation_state,
             CleanupObligationState::Owned
         );
@@ -1060,7 +1133,7 @@ mod tests {
         assert!(authority.register_current_owner(conflict).is_err());
 
         let persisted = repository.load_snapshot().unwrap();
-        assert_eq!(persisted.runtime_owner_registry.revision, 2);
+        assert_eq!(persisted.runtime_owner_registry.revision(), 2);
         assert_eq!(
             persisted
                 .runtime_owner_registry

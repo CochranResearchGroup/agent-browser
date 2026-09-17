@@ -423,7 +423,7 @@ fn recheck_identity(
     }
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&plan.browser_id)
         .ok_or(RetirementRecourse::OwnerChanged)?;
     if lifecycle.logical_browser_id != plan.browser_id
@@ -487,7 +487,7 @@ pub(crate) fn reserve_abandoned_browser_retirement(
         &plan.expires_at,
     )?;
     compare_observation(plan, &fresh)?;
-    let lifecycle = &state.runtime_owner_registry.lifecycle_records[&plan.browser_id];
+    let lifecycle = &state.runtime_owner_registry.lifecycle_records()[&plan.browser_id];
     if !matches!(
         lifecycle.lifecycle_state,
         RuntimeLaneLifecycleState::Ready | RuntimeLaneLifecycleState::Retained
@@ -658,7 +658,7 @@ pub(crate) fn revalidate_abandoned_browser_retirement_reservation(
     if digest(&state.browsers[&plan.browser_id])? != transaction.reserved_browser_digest {
         return Err(RetirementRecourse::BrowserRecordChanged);
     }
-    let lifecycle = &state.runtime_owner_registry.lifecycle_records[&plan.browser_id];
+    let lifecycle = &state.runtime_owner_registry.lifecycle_records()[&plan.browser_id];
     if lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Closing
         || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
     {
@@ -942,19 +942,21 @@ mod tests {
             runtime_owner_registry: RuntimeOwnerRegistry::from_owner(owner),
             ..ServiceState::default()
         };
-        state.runtime_owner_registry.lifecycle_records.insert(
-            BROWSER.into(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: BROWSER.into(),
-                profile_identity_digest: profile_digest.clone(),
-                owner_generation: 4,
-                lifecycle_state: RuntimeLaneLifecycleState::Retained,
-                cleanup_obligation_state: CleanupObligationState::Owned,
-                process_group_id: Some(4100),
-                package_launch_identity_digest: Some(launch),
-                ..RuntimeLifecycleRecord::default()
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                BROWSER.into(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: BROWSER.into(),
+                    profile_identity_digest: profile_digest.clone(),
+                    owner_generation: 4,
+                    lifecycle_state: RuntimeLaneLifecycleState::Retained,
+                    cleanup_obligation_state: CleanupObligationState::Owned,
+                    process_group_id: Some(4100),
+                    package_launch_identity_digest: Some(launch),
+                    ..RuntimeLifecycleRecord::default()
+                },
+            );
         state.profiles.insert(
             "fixture-profile".into(),
             BrowserProfile {
@@ -1150,7 +1152,7 @@ mod tests {
         );
         reserve(&mut state, &plan, &observed);
         assert_eq!(
-            state.runtime_owner_registry.lifecycle_records[BROWSER].lifecycle_state,
+            state.runtime_owner_registry.lifecycle_records()[BROWSER].lifecycle_state,
             RuntimeLaneLifecycleState::Closing
         );
         revalidate_abandoned_browser_retirement(&state, &plan, &observed, NOW).unwrap();
@@ -1187,7 +1189,7 @@ mod tests {
             None
         );
         assert_eq!(
-            state.runtime_owner_registry.lifecycle_records[BROWSER].cleanup_obligation_state,
+            state.runtime_owner_registry.lifecycle_records()[BROWSER].cleanup_obligation_state,
             CleanupObligationState::Satisfied
         );
         assert_eq!(
@@ -1217,12 +1219,13 @@ mod tests {
         );
 
         let mut changed_owner = state;
-        changed_owner
-            .runtime_owner_registry
-            .lifecycle_records
-            .get_mut(BROWSER)
-            .unwrap()
-            .cleanup_obligation_state = CleanupObligationState::Reclaimable;
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut changed_owner.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .get_mut(BROWSER)
+        .unwrap()
+        .cleanup_obligation_state = CleanupObligationState::Reclaimable;
         assert_eq!(
             revalidate_abandoned_browser_retirement_reservation(&changed_owner, &plan),
             Err(RetirementRecourse::OwnerChanged)
@@ -1394,9 +1397,8 @@ mod tests {
     #[test]
     fn retirement_ready_lane_and_census_order_share_the_same_sealed_contract() {
         let (mut state, mut observed) = fixture();
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .get_mut(BROWSER)
             .unwrap()
             .lifecycle_state = RuntimeLaneLifecycleState::Ready;
@@ -1438,12 +1440,13 @@ mod tests {
                 1 => state.state_revision += 1,
                 2 => state.browsers.get_mut(BROWSER).unwrap().last_error = Some("changed".into()),
                 _ => {
-                    state
-                        .runtime_owner_registry
-                        .lifecycle_records
-                        .get_mut(BROWSER)
-                        .unwrap()
-                        .lifecycle_state = RuntimeLaneLifecycleState::Closing
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut state.runtime_owner_registry,
+                    )
+                    .lifecycle_rows
+                    .get_mut(BROWSER)
+                    .unwrap()
+                    .lifecycle_state = RuntimeLaneLifecycleState::Closing
                 }
             }
             let before = state.clone();
@@ -1488,13 +1491,14 @@ mod tests {
                     RetirementRecourse::ProfileChanged
                 }
                 6 => {
-                    state
-                        .runtime_owner_registry
-                        .owners
-                        .values_mut()
-                        .next()
-                        .unwrap()
-                        .owner_generation += 1;
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut state.runtime_owner_registry,
+                    )
+                    .owner_records
+                    .values_mut()
+                    .next()
+                    .unwrap()
+                    .owner_generation += 1;
                     RetirementRecourse::OwnerChanged
                 }
                 _ => {
@@ -1530,12 +1534,13 @@ mod tests {
                     slots[0].lease_request_id = Some("late-presentation-request".into());
                 }),
                 _ => {
-                    state
-                        .runtime_owner_registry
-                        .lifecycle_records
-                        .get_mut(BROWSER)
-                        .unwrap()
-                        .owner_generation += 1
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut state.runtime_owner_registry,
+                    )
+                    .lifecycle_rows
+                    .get_mut(BROWSER)
+                    .unwrap()
+                    .owner_generation += 1
                 }
             }
             let before = state.clone();
@@ -1615,7 +1620,7 @@ mod tests {
             assert_eq!(failure.evidence, evidence, "case {case}");
             assert_eq!(state, before, "case {case}");
             assert_eq!(
-                state.runtime_owner_registry.lifecycle_records[BROWSER].cleanup_obligation_state,
+                state.runtime_owner_registry.lifecycle_records()[BROWSER].cleanup_obligation_state,
                 CleanupObligationState::Owned,
                 "case {case}"
             );
