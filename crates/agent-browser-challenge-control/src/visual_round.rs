@@ -136,6 +136,8 @@ pub enum VisualRoundInterventionReason {
     CumulativeBudgetExceeded,
     UnexpectedRound,
     EffectMismatch,
+    ProviderRequestMismatch,
+    ProviderResponseMismatch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -734,7 +736,7 @@ fn terminal_receipt(
         .ok_or(VisualRoundError::InvalidTransition)
 }
 
-fn validate_policy(policy: &VisualRoundPolicy) -> Result<(), VisualRoundError> {
+pub(crate) fn validate_policy(policy: &VisualRoundPolicy) -> Result<(), VisualRoundError> {
     if !valid_digest(&policy.policy_digest)
         || !valid_digest(&policy.profile_digest)
         || !valid_capability(&policy.provider_capability)
@@ -894,7 +896,7 @@ fn valid_selection(
         && selection.planned_key_events <= policy.max_key_events_per_round
 }
 
-fn valid_evidence(evidence: &VisualRoundEvidence) -> bool {
+pub(crate) fn valid_evidence(evidence: &VisualRoundEvidence) -> bool {
     !evidence.task_id.trim().is_empty()
         && !evidence.attempt_id.trim().is_empty()
         && !evidence.round_id.trim().is_empty()
@@ -912,7 +914,7 @@ fn valid_evidence(evidence: &VisualRoundEvidence) -> bool {
         && valid_capability(&evidence.provider_capability)
 }
 
-fn digest_parts<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {
+pub(crate) fn digest_parts<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {
     let mut hasher = Sha256::new();
     for part in parts {
         hasher.update((part.len() as u64).to_be_bytes());
@@ -927,11 +929,11 @@ fn valid_capability(capability: &VisualProviderCapability) -> bool {
         && valid_digest(&capability.capability_digest)
 }
 
-fn valid_digest(value: &str) -> bool {
+pub(crate) fn valid_digest(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-fn nonempty_unique(values: &[String]) -> bool {
+pub(crate) fn nonempty_unique(values: &[String]) -> bool {
     !values.is_empty()
         && values.iter().all(|value| !value.trim().is_empty())
         && values.iter().collect::<BTreeSet<_>>().len() == values.len()

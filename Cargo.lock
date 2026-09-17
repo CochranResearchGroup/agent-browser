@@ -108,6 +108,7 @@ version = "0.1.0"
 dependencies = [
  "agent-browser-desktop-services",
  "serde",
+ "serde_json",
  "sha2",
 ]
 
