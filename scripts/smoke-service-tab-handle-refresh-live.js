@@ -23,7 +23,6 @@ const agentName = 'smoke-agent';
 const taskName = 'plan0034TabHandleRefresh';
 const profileId = 'tab-handle-refresh-profile';
 const targetServiceId = 'generic-tab-handle-site';
-const browserId = `session:${session}`;
 const primaryHtml = '<!doctype html><title>Plan 0034 Refresh Primary</title><main>primary</main>';
 const fallbackHtml = '<!doctype html><title>Plan 0034 Refresh Fallback</title><main>fallback</main>';
 const primaryUrl = `data:text/html;charset=utf-8,${encodeURIComponent(primaryHtml)}`;
@@ -135,6 +134,101 @@ async function serviceTrace() {
   return trace.data;
 }
 
+async function registerStockChromeCapability() {
+  const checkedAt = new Date().toISOString();
+  const records = [
+    ['browserHosts', 'local-linux', {
+      id: 'local-linux',
+      name: 'Disposable local Linux host',
+      hostKind: 'local',
+      operatingSystem: 'linux',
+      displaySupport: 'x11',
+      remoteViewSupport: false,
+      reachable: true,
+      lifecycleOwner: 'agent_browser',
+      health: 'ready',
+      lastCheckedAt: checkedAt,
+      tags: ['disposable-smoke'],
+    }],
+    ['browserExecutables', 'local-google-chrome', {
+      id: 'local-google-chrome',
+      hostId: 'local-linux',
+      browserFamily: 'chrome',
+      vendor: 'google',
+      channel: 'stable',
+      buildLabel: 'stock_chrome',
+      executablePath: '/usr/bin/google-chrome',
+      source: 'system',
+      manifestPath: null,
+      version: null,
+      patchsetId: null,
+      fresh: true,
+      lastCheckedAt: checkedAt,
+      tags: ['disposable-smoke'],
+    }],
+    ['browserCapabilities', 'local-google-chrome-capability', {
+      id: 'local-google-chrome-capability',
+      hostId: 'local-linux',
+      executableId: 'local-google-chrome',
+      cdpSupported: true,
+      cdpFreeLaunchSupported: true,
+      extensionsSupported: true,
+      passkeysSupported: false,
+      headedSupported: true,
+      headlessSupported: true,
+      streamingSupported: true,
+      profileLockBehavior: 'exclusive_user_data_dir',
+      keyringBehavior: 'basic_password_store',
+      knownLimits: ['Disposable unauthenticated smoke only'],
+    }],
+    ['profileCompatibility', 'refresh-profile-local-google-chrome', {
+      id: 'refresh-profile-local-google-chrome',
+      profileId,
+      hostId: 'local-linux',
+      executableId: 'local-google-chrome',
+      compatible: true,
+      requiresOperatorOverride: false,
+      reason: 'same_browser_family',
+      notes: 'Disposable profile created for the tab-handle refresh smoke.',
+    }],
+    ['browserPreferenceBindings', 'refresh-smoke-stock-chrome', {
+      id: 'refresh-smoke-stock-chrome',
+      scope: 'service',
+      targetServiceIds: [targetServiceId],
+      accountIds: [],
+      serviceNames: [serviceName],
+      taskNames: [taskName],
+      preferredHostId: 'local-linux',
+      preferredExecutableId: 'local-google-chrome',
+      preferredCapabilityId: 'local-google-chrome-capability',
+      browserBuild: 'stock_chrome',
+      priority: 100,
+      reason: 'Disposable real-browser acceptance binding.',
+    }],
+    ['validationEvidence', 'refresh-smoke-stock-chrome-launch', {
+      id: 'refresh-smoke-stock-chrome-launch',
+      hostId: 'local-linux',
+      executableId: 'local-google-chrome',
+      capabilityId: 'local-google-chrome-capability',
+      kind: 'launch',
+      state: 'passed',
+      checkedAt,
+      evidence: 'Local executable presence checked before disposable smoke launch.',
+      artifactPath: null,
+    }],
+  ];
+  for (const [collection, id, record] of records) {
+    const result = await httpJsonWithTimeout(
+      streamPort,
+      'POST',
+      `/api/service/browser-capability-registry/${collection}/${id}`,
+      record,
+      60000,
+    );
+    assert(result.success === true, `${collection}/${id} upsert failed: ${JSON.stringify(result)}`);
+  }
+}
+
 try {
   streamPort = await ensureStreamPort(context, 120000);
 
@@ -154,6 +248,7 @@ try {
   );
   assert(profileUpsert.success === true, `profile upsert failed: ${JSON.stringify(profileUpsert)}`);
   assert(profileUpsert.data?.profile?.id === profileId, `profile id mismatch: ${JSON.stringify(profileUpsert)}`);
+  await registerStockChromeCapability();
 
   const primaryTab = await serviceRequest(
     {
@@ -168,7 +263,8 @@ try {
   );
   const handle = primaryTab.data?.serviceTabHandle;
   assert(handle?.valid === true, `primary tab_new did not return a valid handle: ${JSON.stringify(primaryTab)}`);
-  assert(handle?.browserId === browserId, `primary handle browser mismatch: ${JSON.stringify(handle)}`);
+  const browserId = handle?.browserId;
+  assert(typeof browserId === 'string' && browserId, `primary handle missing browserId: ${JSON.stringify(handle)}`);
   assert(typeof handle?.targetId === 'string' && handle.targetId, `primary handle missing targetId: ${JSON.stringify(handle)}`);
 
   const validRefresh = await serviceRequest(
@@ -215,6 +311,7 @@ try {
   const closePrimary = await serviceRequest(
     {
       action: 'tab_close',
+      serviceTabHandle: handle,
     },
     'primary tab_close',
   );

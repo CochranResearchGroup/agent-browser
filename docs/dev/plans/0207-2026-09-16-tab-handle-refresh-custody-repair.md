@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 3
+Plan version: 4
 
-State: OPEN, SOURCE COMPLETE, BROWSER ACCEPTANCE BLOCKED PRE-LAUNCH
+State: OPEN, ACCEPTED, DRAFT PR
 
 Consolidation: required
 
@@ -268,15 +268,15 @@ model.
 | Cleanup proof | every handler response includes explicit duplicate and peer booleans plus the nested cleanup receipt | complete |
 | Public parity | generator, generated type, direct client fixture, MCP schema/help, README, skill, and docs agree; direct client, type, parity, and docs checks pass | complete |
 | Rust quality | format check, strict workspace Clippy, JavaScript syntax checks, focused tests, and diff hygiene pass | complete |
-| Browser acceptance | two disposable attempts stopped before Chrome launch with `stock_chrome_capability_selection_failed: no_matching_preference_binding`; cleanup completed | blocked pre-launch on missing isolated capability-registry binding |
+| Browser acceptance | disposable stock-Chrome smoke registered its isolated capability records, exercised exact close plus replacement refresh, proved peer survival, and cleaned up | complete |
 | External effect | no credential, provider, accounting, staging, production, or release effect | required none |
 
-The provider-free source and public contract are complete. Browser acceptance
-did not exercise the repaired path because the isolated test Service State had
-no reviewed stock-Chrome preference binding. No Chrome process was launched in
-either attempt, and both disposable homes were cleaned. This is an acceptance
-environment prerequisite, not evidence of a refresh-path failure. Full CI and
-further blind browser retries remain excluded.
+The provider-free source, public contract, and targeted browser acceptance are
+complete. The smoke now creates all six required stock-Chrome capability
+records inside its disposable Service State, follows the canonical browser ID,
+and supplies the exact owned handle when closing the stale target. It passed
+against the exact debug candidate and cleaned up its session. Full CI remains
+excluded.
 
 Completion requires every non-deferred row above to cite exact-head evidence.
 A passing helper test alone cannot prove caller binding, and a successful local
