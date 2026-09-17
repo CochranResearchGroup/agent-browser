@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -62,6 +62,13 @@ projections are explicit P211 reconciliation overlaps.
 
 GitHub CI is operator-disabled. P213 uses local provider-free validation and
 will not restore, dispatch, rerun or wait on a workflow.
+
+Source checkpoint `1bad68e3` implements the current-intent validator and pure
+visual-to-desktop adapter. All 58 challenge-control tests and all 12
+desktop-services tests pass with the strengthened challenge architecture
+guard, formatting, strict workspace Clippy, documentation links, planning
+audit, selector readback and diff hygiene. Publication and protected
+integration remain.
 
 ## Architecture Boundary
 
@@ -183,6 +190,42 @@ the exact P212 canonical baseline. GitHub CI is operator-disabled and is not
 part of this packet's validation path. P213 closes after its exact source
 enters canonical `main`; any input-capable executor or live fixture acceptance
 remains a separate later packet.
+
+## Source Acceptance | 2026-09-17
+
+Checkpoint `1bad68e3` adds `validate_visual_round_intent` and the pure
+`visual_desktop` module inside `agent-browser-challenge-control`. The validator
+reuses the full policy and restored-snapshot invariants, requires the exact
+`IntentAuthorized` phase and compares every public intent field with active
+evidence and selection. The adapter then requires exact ordered candidate
+identity, evidence, frame, context, geometry, observation-time and effective
+expiry binding before delegating the constructed intent to P212.
+
+The public tracer first failed on the absent P213 API, then returned one exact
+effect-free permit from a state-machine-produced intent. The consolidated
+mutation matrix proves typed rejection of changed phase, snapshot, intent,
+candidate order or membership, digests, observation time, expiry, capability,
+budget, geometry and controller authority. Review found that evidence could
+outlive the challenge policy deadline; a focused red regression added the
+effective expiry boundary. The accepted permit now expires at the earlier of
+evidence expiry and policy deadline, and admission at that boundary returns
+`StaleVisualIntent`.
+
+Local acceptance passes:
+
+- all 58 challenge-control tests, including six P213 adapter fixtures;
+- all 12 desktop-services tests;
+- the strengthened challenge-control architecture guard;
+- workspace formatting and strict workspace Clippy; and
+- documentation links, active planning audit, changed-surface selection,
+  selector self-check and diff hygiene.
+
+The selector expands to broad validation because the modified architecture
+guard is conservatively classified as an unknown repository-tooling surface.
+Its exact local recommendations all pass. P213 changes no manifest, lockfile,
+CLI, Service State, capture, transport, executor or public schema. No browser,
+provider, credential, CAPTCHA, route claim, desktop input, runtime, production
+or CI effect occurred.
 
 ## Stop Condition
 

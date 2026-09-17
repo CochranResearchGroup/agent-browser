@@ -31,16 +31,16 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: ddae1897
-    remote_ref: null
+    checkpoint: 1bad68e3
+    remote_ref: refs/remotes/origin/challenge/p213-visual-desktop-adapter
     integration_receipt: null
     integration: merge through the protected pull-request workflow after local provider-free validation without restoring or dispatching operator-disabled GitHub CI
-    validation_status: admitted from clean canonical main after P212 integration; baseline selector remains to run before source edits
-    validation_ref: ddae1897
+    validation_status: all 58 challenge-control tests, all 12 desktop-services tests, strengthened architecture guard, formatting, strict workspace Clippy, documentation links, planning audit, selection and diff hygiene pass locally
+    validation_ref: 1bad68e3
     work_items: [CochranResearchGroup/agent-browser#194]
     dependencies: []
     overlaps: [P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml]
     overlap_disposition: P211 owns CLI shutdown and workstation routing; P213 owns only challenge-control visual-desktop source and fixtures; shared planning projections reconcile at integration
-    blocker: source implementation and local acceptance remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, route-claim, desktop-input, runtime and production effects remain excluded
+    blocker: publication and protected integration remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, route-claim, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17

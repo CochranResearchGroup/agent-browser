@@ -337,7 +337,12 @@ the current state-machine-authorized intent, binds it to exact desktop
 observation geometry and current controller authority, and returns the P212
 effect-free permit. It adds no executor, browser, provider, CAPTCHA, route
 claim, input, runtime or production authority and avoids P205's Cargo manifest
-and lockfile surfaces. GitHub CI remains operator-disabled.
+and lockfile surfaces. Source checkpoint `1bad68e3` implements the exact
+state-machine, ordered-candidate, observation, effective-expiry and controller
+authority join. All 58 challenge-control tests, all 12 desktop-services tests,
+the strengthened architecture guard, workspace formatting and strict workspace
+Clippy pass locally. Publication and protected integration remain. GitHub CI
+remains operator-disabled.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

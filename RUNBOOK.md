@@ -18,9 +18,14 @@ removed. It owns only a pure challenge-control adapter that proves a visual
 intent is the current state-machine-authorized intent before mapping it to the
 P212 desktop permit. P205 retains the root Cargo manifest and lockfile; P213
 avoids both. P211's source remains disjoint and shared planning projections are
-an explicit reconciliation overlap. GitHub CI remains disabled. No browser,
-capture, provider, credential, CAPTCHA, route-claim, desktop-input, runtime or
-production effect is authorized.
+an explicit reconciliation overlap. Source checkpoint `1bad68e3` implements
+the exact join and bounds permit expiry by the earlier evidence or visual
+policy deadline. All 58 challenge-control tests, all 12 desktop-services tests,
+the strengthened architecture guard, workspace formatting, strict workspace
+Clippy, documentation links, planning audit, selection and diff hygiene pass
+locally. GitHub CI remains disabled and was not restored or run. Publication
+and protected integration remain. No browser, capture, provider, credential,
+CAPTCHA, route-claim, desktop-input, runtime or production effect occurred.
 
 ## Turn 384 | 2026-09-17
 
