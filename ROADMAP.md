@@ -243,6 +243,11 @@ tree change. Exact-head forge evaluation and protected P206 integration remain.
 Issue #66 retains the separately live-gated challenge acceptance leaf. This
 registration authorizes no challenge attempt, retry, browser effect, provider
 effect, credential use, runtime mutation, installation, or release.
+W7-B is locally admitted through
+[Plan 0209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md) on
+`challenge/p209-visual-provider-protocol`. It owns only a pure candidate-only
+provider protocol and fake serialized fixtures. Publication and CI remain held
+until issue #174 lands through merged PR #179.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

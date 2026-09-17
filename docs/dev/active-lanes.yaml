@@ -22,3 +22,24 @@ lanes:
     reconciled_overlaps: [P197]
     blocker: exact-head forge evaluation and protected integration remain; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-16
+  - id: P209
+    product_lane: PL-CHALLENGE
+    objective: Freeze and prove the provider-neutral visual-reasoning request and response protocol over P206 evidence
+    plan: docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md
+    plan_ref: refs/heads/challenge/p209-visual-provider-protocol
+    branch: challenge/p209-visual-provider-protocol
+    target: main
+    plan_state: OPEN
+    custody_state: LOCAL_CI_HOLD
+    checkpoint: 5da7d37d
+    remote_ref: null
+    integration_receipt: null
+    integration: publish only after PR 179 merges, P206 enters main, and P209 reconciles that canonical checkpoint
+    validation_status: provider-free implementation and focused local validation pending
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#127]
+    dependencies: [P206]
+    overlaps: [P206]
+    reconciled_overlaps: [P206]
+    blocker: publication and CI are explicitly held on merged PR 179; all model-provider, image, browser, CAPTCHA, desktop-input, runtime and production effects are excluded
+    updated_at: 2026-09-16
