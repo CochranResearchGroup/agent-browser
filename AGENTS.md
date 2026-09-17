@@ -211,6 +211,34 @@ Testing directly.
 - Follow the [RDP remote-view handoff guide](docs/src/app/remote-view/page.mdx)
   for the operator and software-client workflows.
 
+## Worktree Closeout
+
+- Before closing a registered worktree, run:
+
+  ```bash
+  pnpm run worktree:closeout inspect \
+    --worktree <path> \
+    --repository-root <path>
+  ```
+
+  The command is advisory and returns the exact worktree identity, candidate
+  obligations, and supported dispositions without applying an effect.
+- Record one explicit `retain`, `archive`, or `discard` disposition for every
+  pinned candidate in the inspection request, then use `begin` to create or
+  join the repository-scoped durable operation. A second process must join the
+  same request instead of copying or removing the checkout independently.
+- Run `apply` without `--apply` to inspect consequences. Use `apply --apply`
+  only for the reviewed operation. Interrupted archive or removal work resumes
+  the same operation with `--recover`; changed dispositions start no effect and
+  return a typed conflict.
+- Use `lookup-archive --candidate-id <id>` to resolve a completed archive from
+  a fresh process. The locator is separate from the preserved candidate bytes
+  and is verified before reuse.
+- Do not use the helper to take custody from another active lane, bypass an
+  active candidate build, or infer runtime, install, or production authority.
+  Raw `git worktree remove` remains an explicit bypass and does not create a
+  governed closeout receipt.
+
 ## Testing
 
 ### Unit Tests
@@ -290,8 +318,9 @@ workflow is retained as `.github/workflows/ci.yml.disabled`; there is no active
 Do not re-enable or dispatch CI without new maintainer direction.
 
 When re-enabled, pull requests use the versioned changed-surface classifier and
-only the selected Documentation, Version Sync, Dashboard, Service Client, Rust
-Quality, affected Rust compartments, and Workstation Fixtures jobs. The stable
+selected Documentation, Version Sync, Dashboard, Service Client, Repository
+Tooling, Rust Quality, affected Rust compartments, and Workstation Fixtures
+jobs. The stable
 `Presubmit` aggregate fails when a selected job is skipped, cancelled, or
 failed, and records the tier, exclusions, elapsed time, and observed runner
 minutes without describing the selected lane as comprehensive. Unknown paths
@@ -310,7 +339,9 @@ which check the draft browser capability registry sample, generated service
 client files, JavaScript type coverage, service request helper contracts,
 service observability helper contracts, managed-profile flow contracts, and
 the no-launch service-client example broker-first contract without launching
-Chrome. Dashboard action-surface changes should run
+Chrome. Repository Tooling runs `pnpm test:repository-tooling` for the
+provider-free candidate-build and worktree-closeout contracts without building
+Rust or launching Chrome. Dashboard action-surface changes should run
 `pnpm test:dashboard-inspector-actions` so the Service right-pane inspector
 keeps selected-record state separate from mutable incident and job actions.
 Rust Quality runs Linux format and clippy before selected Rust compartments, so

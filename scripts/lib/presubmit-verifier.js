@@ -7,6 +7,7 @@ export const PRESUBMIT_JOB_KEYS = Object.freeze([
   'rust',
   'dashboard',
   'serviceClient',
+  'repositoryTooling',
   'workstation',
 ]);
 

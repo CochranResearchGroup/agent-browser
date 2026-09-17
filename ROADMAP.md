@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-16
+Updated: 2026-09-17
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -24,6 +24,25 @@ checkpoints. They do not define permanent product ownership. New substantive
 plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
+
+## P208 | Worktree Closeout And Candidate Custody
+
+State: CLOSED
+
+Current state: [Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md),
+[closed issue #171](https://github.com/CochranResearchGroup/agent-browser/issues/171),
+and merged [PR #182](https://github.com/CochranResearchGroup/agent-browser/pull/182)
+record the completed `PL-PLATFORM` repair. The integrated source serializes one durable
+repository-scoped closeout operation, requires explicit retain, archive, or
+discard choices for pinned candidates, verifies external archives from a fresh
+process, and recovers interrupted archive and Git-removal effects. The merged
+P204 validation contract retains a lightweight `Repository Tooling` lane for
+these provider-free Node contracts in the dormant workflow. Exact-head
+`8a010264` passed run `35227459177` before CI was disabled. Rebased source
+`c2ce2b35` passed conflict-affected local checks and merged as `59928044`.
+No worktree outside disposable fixtures,
+candidate, browser, provider, installed runtime, Service State, production, or
+release effect occurred.
 
 ## P204 | CI Validation Economics And Tiering
 
@@ -256,10 +275,39 @@ The four public guidance surfaces are aligned. P202 merged through PR #168 and
 released its overlap; P197 joined canonical `main@2632e31c` at merge checkpoint
 `7dc8a860`. Combined provider-free source, contract, client, route-confusion,
 and documentation checks pass. P197 publication, exact-head forge evaluation,
-and protected integration remain. W7-A is selected but not admitted. Issue #66
-retains the separately live-gated challenge acceptance leaf.
-This registration authorizes no challenge attempt, retry, browser effect,
-provider effect, credential use, runtime mutation, installation, or release.
+and protected integration remain. W7-A is admitted through
+[Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
+on `challenge/p206-visual-round-contract` from exact published P197 head
+`cd22a39f` and is source-complete and acceptance-complete at `ac9f50a7`. Its
+pure provider-free round contract and 23-case synthetic matrix are green with the complete crate,
+architecture, formatting and strict Clippy gates. P197 merged through PR #157
+as `c855fc33`; P206 joined that canonical checkpoint at `5d6e3d57` without a
+tree change, then joined merged P204 and current `main@f5e3f31b` at
+`89bdfdbf`. Pre-merge review then found cumulative `u8` saturation could admit
+an over-budget restored total and could classify 256 selected candidates as a
+generic transition error. Repair checkpoint `4813d385` uses widened and checked
+budget arithmetic; all 41 challenge-control tests, including 25 visual-round
+cases, architecture, formatting, strict Clippy and diff hygiene pass. P206
+joined CI-disabled `main@f6d49f89` at `bb961c96`, P208's source integration at
+`db987e4e`, and current `main@692f77c6` at `1c9ee159`; none changes the accepted
+Rust source.
+Conflict-affected repository-control checks pass locally. GitHub CI remains
+operator-disabled and was not restored or run. Reconciled publication and
+protected P206 integration remain.
+Issue #66 retains the separately live-gated challenge acceptance leaf. This
+registration authorizes no challenge attempt, retry, browser effect, provider
+effect, credential use, runtime mutation, installation, or release.
+W7-B is locally admitted through
+[Plan 0209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md) on
+`challenge/p209-visual-provider-protocol`. It owns only a pure candidate-only
+provider protocol and fake serialized fixtures. P204 merged through PR #179;
+P206 exact head `82e25624` merged through PR #180 as `d3f923a1`; P209 joined
+that canonical result at `3ef2ad9e` without a Rust or Cargo dependency change.
+The reconciled head passes all 52 challenge-control tests. The crate
+architecture, formatting, strict Clippy and diff-hygiene evidence remains
+source-identical. P209 is ready for publication and normal protected
+integration while GitHub CI remains operator-disabled. It creates no provider,
+browser, credential, CAPTCHA, runtime or production authority.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

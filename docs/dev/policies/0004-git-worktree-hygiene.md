@@ -22,6 +22,16 @@
 - Do not call work merge-ready while the intended changes are still uncommitted.
 - Treat the worktree as a checkout, the branch or detached commit as local custody, and a verified remote or archive ref as shared custody. Removing a worktree does not preserve uncommitted changes and does not prove the commits remain discoverable.
 - Before removing a worktree, require a clean status, a named branch or explicitly preserved detached commit, an exact checkpoint SHA, and verified durable custody on the intended remote ref or on matching local and remote archive refs.
+- Treat worktree closeout as one repository-scoped transaction. Key it by the
+  common Git repository identity and the exact worktree incarnation, then bind
+  its request to the expected path, HEAD, ref, dirty-state digest, pinned
+  candidates, and selected dispositions. An identical request joins or replays
+  the existing operation; a changed request is a typed conflict.
+- Before removing a checkout that owns pinned candidate artifacts, select
+  retain, archive, or discard for every pin. Retain leaves the checkout and
+  candidate in place. Archive verifies byte-for-byte publication and a durable
+  locator outside the checkout. Discard removes only the digest-pinned files.
+  Missing selection is actionable evidence, not a generic denial.
 - Close a worktree promptly when its branch is integrated, its work is durably
   handed off without needing the checkout, or its preserved branch is paused or
   archived. Do not accumulate idle worktrees as informal reminders or confuse a
@@ -31,6 +41,10 @@
   inventory. Prune only stale administrative entries whose checkout absence and
   branch custody have been established; pruning is not a substitute for closing
   a live worktree deliberately.
+- Use the repository closeout helper for governed closure when available. Its
+  inspection and consequence preview are read-only, and effects require an
+  explicit apply choice. Raw Git remains available to the operator, but bypasses
+  the helper's candidate custody, serialization, recovery, and terminal receipt.
 - Do not delete an unmerged branch merely because its worktree is gone. Prove integration, archival, or explicit discard approval separately.
 - If overlapping dirty work exists across branches or worktrees, open a reconciliation step rather than calling it a normal merge.
 - Keep branch scope narrow and avoid mixing unrelated lanes unless the active slice requires it.

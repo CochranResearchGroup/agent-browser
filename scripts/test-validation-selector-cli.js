@@ -31,6 +31,7 @@ try {
   assert.equal(outputs.tier, 'none');
   assert.equal(outputs.version_sync, 'true');
   assert.equal(outputs.rust, 'false');
+  assert.equal(outputs.repository_tooling, 'false');
   assert.equal(outputs.service_smokes, 'false');
   assert.equal(Object.hasOwn(outputs, 'comprehensive'), false);
   assert.equal(outputs.rust_compartments, '[]');
