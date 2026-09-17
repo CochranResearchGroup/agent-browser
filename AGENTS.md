@@ -290,12 +290,13 @@ affected Rust compartments, and Workstation Fixtures jobs. The stable
 `Presubmit` aggregate fails when a selected job is skipped, cancelled, or
 failed, and records the tier, exclusions, elapsed time, and observed runner
 minutes without describing the selected lane as comprehensive. Unknown paths
-and changes to the classifier or workflow fail safe to the broad ordinary
-presubmit. Material dependency or toolchain changes, manual dispatches, the
-monthly selection-drift audit, and the temporary `main` fallback run the
-comprehensive Rust lane. Retain the `main` fallback until issue #164 proves the
-`Presubmit` check is enforced by live branch rules. Pull-request concurrency
-cancels an older run when a newer head for the same pull request starts.
+and changes to dependencies, toolchains, the classifier, or the workflow fail
+safe to the broad ordinary presubmit. The CI workflow runs only for pull
+requests. It has no `main` push trigger, schedule, manual dispatch, commit
+message escape hatch, comprehensive Rust job, or slow platform matrix.
+Pull-request concurrency cancels an older run when a newer head for the same
+pull request starts. Issue #164 owns live enforcement of `Presubmit`, but its
+state does not authorize duplicate post-merge CI.
 
 Documentation and governance-only changes run patch hygiene, policy and
 planning audits, changed-link validation, and the docs build without
@@ -317,9 +318,9 @@ lane so Cargo cannot replace a running shared `agent-browser` test executable;
 independent crate compartments run serially in the other lane. When a service-owned Rust surface
 is selected, the Rust job then builds one exact-head debug CLI and pins every
 command-based no-launch smoke to that binary. Unrelated focused Rust changes
-skip that service smoke bundle. Explicit comprehensive qualification uses `scripts/ci/rust-tests.sh`
-without a compartment and retains the two-lane provider-free suite plus the
-no-launch smoke bundle. Service request action changes
+skip that service smoke bundle. `scripts/ci/rust-tests.sh` without a
+compartment remains a local comprehensive provider-free command, not a GitHub
+CI route. Service request action changes
 must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`,
 `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
 HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
@@ -330,10 +331,7 @@ no-launch site-policy source smoke, and no-launch HTTP and MCP incident-summary
 smokes after the Rust suite, so the service contracts, MCP read resources,
 effective profile and site-policy provenance, and grouped incident summary
 contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci`
-when intentionally validating the optimized CI profile locally. The slow gates
-run when the CI workflow is started manually or when the pushed head commit
-message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E
-Tests, Windows Integration Test, and Global Install.
+when intentionally validating the optimized CI profile locally.
 
 Lease Authority changes also run the path-filtered
 `.github/workflows/lease-authority.yml` workflow. Its non-fail-fast matrix runs

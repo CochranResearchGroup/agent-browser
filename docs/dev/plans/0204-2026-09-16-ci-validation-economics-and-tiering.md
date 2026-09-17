@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -26,10 +26,11 @@ Source baseline: `2632e31cfdc1858336af5acbf6e07143ee7787e7`
 
 Make ordinary pull-request validation deterministic and proportional to changed
 surfaces while preserving one stable aggregate presubmit check and a fail-safe
-fallback for unknown impact. Reserve comprehensive Rust and platform validation
-for explicit qualification, material dependency or toolchain changes, and a
-low-frequency selection-drift audit. Preserve the current `main` fallback until
-issue #164 proves the aggregate check is enforced by live branch rules.
+fallback for unknown impact. Do not run full-suite CI: remove post-merge,
+scheduled, manually dispatched, commit-message-triggered, comprehensive Rust,
+and slow platform routes from the CI workflow. Keep comprehensive provider-free
+testing as a local command only. Issue #164 remains an independent enforcement
+item and does not gate elimination of duplicate CI.
 
 ## Current State
 
@@ -39,7 +40,7 @@ exact-head workflow routing, pull-request cancellation, fixed job outputs,
 hermetic fixtures, fail-closed `Presubmit` aggregate, focused Rust compartment
 selection, changed-document link validation, and bounded economics receipts.
 Classifier and workflow self-changes fail safe to every ordinary presubmit job
-without duplicating the comprehensive Rust lane.
+without invoking a full-suite lane.
 
 The first organic broad run exposed one remaining proportionality leak: every
 focused Rust change inherited the command-based no-launch service smoke bundle.
@@ -60,6 +61,16 @@ service smoke bundle, every other selected ordinary job, and the stable
 platform qualification remained excluded. The branch is reconciled with
 `main@c855fc33`; protected evaluation of that merge result remains pending.
 
+PR #179 merged the versioned selection control plane as `f5e3f31b` after exact
+head run `35175068416` passed Rust and the stable `Presubmit` aggregate. The
+subsequent automatic `main` run `35180824848` also passed, but consumed about 34
+minutes and demonstrated the remaining duplicate cost. Explicit operator
+direction on 2026-09-17 supersedes the earlier temporary-fallback decision:
+full-suite CI is not wanted. Version 5 therefore removes every full-suite route
+from `.github/workflows/ci.yml` and changes dependency and toolchain selection
+from comprehensive to broad ordinary presubmit. Candidate `d9fede9d` contains
+the executable workflow, selector, schema, and regression-contract change.
+
 The pre-implementation docs-only probe against merge `aa7b67b1` remains the red
 baseline. Local validation is green for the selector and aggregate suites,
 workflow syntax and semantics, policy wiring, planning audit, changed links,
@@ -68,7 +79,8 @@ Independent review found and the candidate corrected a fail-open shell pipeline,
 CLI adapter test omissions, omitted member manifests and installer fixtures,
 and missing in-CI execution of the classifier contract suite. Issue #164 remains
 open, and live readback reports no `main` branch protection or repository
-ruleset, so removing the post-merge fallback is not currently allowed.
+ruleset. That enforcement gap remains independent from the operator-directed
+removal of post-merge CI.
 
 Graphiti was healthy but returned no issue-specific prior decision. Current
 repository, issue, workflow, and run evidence therefore govern this plan.
@@ -79,17 +91,17 @@ repository, issue, workflow, and run evidence therefore govern this plan.
    CLI as its Git adapter for local recommendations and exact CI ranges.
 2. Add hermetic fixtures for docs/governance, dashboard, service client,
    workstation/release, focused Rust, classifier self-change, dependency or
-   toolchain qualification, and unknown-impact fallback.
+   toolchain broad fallback, and unknown-impact fallback.
 3. Add pull-request concurrency cancellation, a classifier job with fixed
    outputs, conditionally selected jobs, and one stable aggregate `Presubmit`
    check that fails closed on malformed or missing selected-job results.
 4. Replace ordinary comprehensive Rust execution with mapped compartments and
-   run the no-launch service smoke bundle only for service-owned Rust surfaces;
-   retain comprehensive execution only for the explicit qualification routes.
+   run the no-launch service smoke bundle only for service-owned Rust surfaces.
+   Remove comprehensive and slow-platform execution from GitHub CI entirely.
 5. Record selection tier, included and excluded lanes, elapsed time, and
    runner-time inputs without describing focused validation as comprehensive.
-6. Update the repository CI contract and preserve the `main` fallback until
-   issue #164 supplies live enforcement evidence.
+6. Update the repository CI contract so pull requests are the sole CI trigger;
+   retain issue #164 only as an independent enforcement improvement.
 
 ## Scope And Effect Boundary
 
@@ -103,9 +115,8 @@ same invariant into behavioral selector fixtures.
 This plan does not authorize branch-protection or ruleset mutation, workflow
 dispatch or retry, browser or provider access, credential use, installed-runtime
 or Service State mutation, production or staging mutation, release, or deletion
-of tests to improve timing. Organic GitHub runs and the deliberately authorized
-comprehensive dispatch remain external acceptance evidence, not effects granted
-by this plan.
+of tests to improve timing. The comprehensive provider-free test command remains
+available locally, but the CI workflow has no authority or route to execute it.
 
 ## Delivery Sequence And Budget
 
@@ -122,8 +133,8 @@ by this plan.
 - Maximum consecutive hardening checkpoints: 2.
 - Reassess after two checkpoints or 30 active minutes without outcome progress.
 - Overall effort ceiling: 240 active minutes through implementation, protected
-  integration, and the first available organic evidence. External waiting for
-  issue #164 does not authorize repeated synthetic runs.
+  integration, and the first available organic evidence. No external wait or
+  acceptance gap authorizes a synthetic full-suite run.
 - First outcome artifact: the already captured deterministic docs-only red
   probe, replaced by `pnpm test:validation-selection` before implementation.
 
@@ -164,15 +175,14 @@ Exit requires current evidence that:
 - documentation and governance-only changes run hygiene, policy, link, and
   documentation checks without application builds unless executable
   configuration changed;
-- workstation, dashboard, service-client, Rust quality, Rust compartments, and
-  comprehensive qualification run only for their mapped surfaces;
+- workstation, dashboard, service-client, Rust quality, and Rust compartments
+  run only for their mapped surfaces;
 - selection, exclusions, tier, elapsed time, and runner-time inputs are recorded;
 - one organic docs-only pull request and one organic narrow Rust pull request
   demonstrate the selected behavior;
-- one explicitly authorized comprehensive dispatch proves the retained complete
-  suite; and
-- removal of equivalent `main` validation occurs only after issue #164 provides
-  live branch-rule readback enforcing `Presubmit`.
+- CI has no push, schedule, manual dispatch, commit-message full-suite trigger,
+  comprehensive Rust job, or slow platform matrix; and
+- issue #164 remains separately tracked for live enforcement of `Presubmit`.
 
 | Requirement | Current evidence | State |
 | --- | --- | --- |
@@ -182,16 +192,16 @@ Exit requires current evidence that:
 | Proportional job routing | Exact-range readback selects broad ordinary validation for this classifier/workflow change and excludes comprehensive Rust | green locally |
 | Service smoke routing | Selector fixtures distinguish unrelated Rust from service-owned Rust; workflow contract gates the smoke bundle on `serviceSmokes` | green locally |
 | Rust lane isolation | Organic run `35171646162` exposed same-target CLI executable replacement; exact-head run `35172965793` passed the corrected serialized CLI lane plus independent crate lane | green organically |
-| Comprehensive qualification retained | Manual, monthly, material dependency, toolchain, and temporary `main` routes select comprehensive without duplicate focused Rust | green statically; authorized dispatch pending |
+| Full-suite CI absent | Candidate `d9fede9d` workflow contract rejects push, schedule, manual dispatch, commit-message activation, comprehensive Rust, and slow platform jobs | green locally; exact-head PR evidence pending |
 | Economics receipt | Fixture covers selected lanes, exclusions, bounded wall time, observed runner time, and explicit measurement limits | green locally; organic receipt pending |
 | Organic docs and narrow-Rust evidence | Existing runs prove the broad baseline only | pending candidate workflow |
-| Protected aggregate before removing `main` fallback | Live branch protection returns 404 and rulesets are empty | blocked on issue #164 |
+| Protected aggregate enforcement | Live branch protection returns 404 and rulesets are empty | independent issue #164 |
 
 ## Stop Condition
 
 Stop before branch-protection or ruleset mutation, workflow dispatch or retry,
 test deletion for timing, automatic retry, installed-runtime or browser effect,
 provider or credential access, production or staging mutation, or release.
-Retain the `main` fallback and keep the plan open if implementation is ready but
-issue #164, organic-run evidence, or explicit comprehensive-dispatch authority
-is still missing.
+Keep the plan open if implementation is ready but organic docs-only or
+narrow-Rust evidence is still missing. Do not restore a full-suite CI route as
+a substitute for missing evidence.
