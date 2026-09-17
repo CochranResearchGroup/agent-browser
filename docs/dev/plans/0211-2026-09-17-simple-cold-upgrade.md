@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -62,6 +62,15 @@ reconcile the final model location after P205 publishes a checkpoint.
 Graphiti discovery was healthy but returned no source-backed prior decision
 for a simple cold upgrade. Plan 0116 and the current hot-upgrade implementation
 are advisory history, not constraints on this replacement contract.
+
+Checkpoint `b0ea9cc8` establishes the provider-free cold-shutdown controller.
+Its external interface has six fixed phases and accepts no transaction,
+admission, census, rollback, hash, or token input. It always executes ownership
+release and final verification even when an earlier effect fails. Four focused
+tests prove fixed ordering, continuation after failure, foreign-process
+preservation, and owned-residue failure. Focused tests, workspace Clippy with
+warnings denied, and formatting pass. Platform effect adapters and the public
+command remain the next slice.
 
 ## Consolidated Batch
 
@@ -147,11 +156,11 @@ will rebase after those checkpoints before touching overlapping surfaces.
 | Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | not implemented |
 | Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | not implemented |
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | not implemented |
-| Metadata cannot veto | stale hashes, tokens, transaction revisions, drains, and missing prior processes become warnings rather than blockers | not implemented |
+| Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller green; adapters pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | not implemented |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | not implemented |
-| Legacy containment | hot transaction mutation is not reachable from the default install or upgrade path | not implemented |
+| Legacy containment | hot transaction mutation is not reachable from the default install or upgrade path | routing change pending |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | not implemented |
 
 Exit requires all rows green against one frozen source candidate. Provider-free

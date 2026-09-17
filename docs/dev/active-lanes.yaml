@@ -52,15 +52,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: fb616aee
+    checkpoint: b0ea9cc8
     remote_ref: null
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, and documentation validation
-    validation_status: planning baseline established; provider-free implementation and validation pending
-    validation_ref: null
+    validation_status: cold-shutdown controller has four passing focused tests; strict workspace Clippy and formatting pass; platform adapters and public routing remain
+    validation_ref: b0ea9cc8
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183]
     dependencies: [P205, P207]
     overlaps: [P205:Service-State-model, P207:cli-help-and-user-docs]
     reconciled_overlaps: [P211 owns cold-shutdown and workstation routing; P205 retains service-model extraction; P207 retains its current help and documentation writes until integration]
-    blocker: source implementation is pending; production shutdown and installation remain excluded
+    blocker: platform effect adapters and public shutdown and cold-install routing remain; production shutdown and installation remain excluded
     updated_at: 2026-09-17
