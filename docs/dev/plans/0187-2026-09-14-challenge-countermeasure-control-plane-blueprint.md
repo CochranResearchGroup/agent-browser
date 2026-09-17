@@ -42,10 +42,23 @@ The integrated batch contains the phase-bound freshness repair, extracted
 desktop-services and challenge-control crates, and Plan 0192's two-profile
 provider-free Service slice. W5 is also integrated through Plan 0193 and PR
 #142. Exact source head `709641e9` merged into `main` as `81de07cf`; source-head
-CI run 34993316164 and merge-commit CI run 34997057075 pass. W6 consumer
-integration is next but remains unstarted and not admitted. Issue #66 retains
-the separately live-gated challenge acceptance leaf. No live effect is
-authorized by this integration receipt.
+CI run 34993316164 and merge-commit CI run 34997057075 pass.
+
+W6 is source complete through Plan 0197 and draft PR #157. Authentication and
+navigation use one provider-neutral consumer-admission contract, preserve
+later consumer failure separately from challenge outcome, and have passed the
+combined provider-free changed-surface checks at local checkpoint `ca0f3447`.
+That checkpoint includes the locally joined P202 dependency. It is not yet a
+published or integrated W6 receipt: P202 protected integration, current-main
+reconciliation, P197 branch publication, and exact-head forge evaluation
+remain.
+
+W7-A is the selected next product packet but is not admitted. It will define
+and prove a provider-free visual and multi-round evidence contract against
+repository-owned synthetic fixtures. No W7 branch or worktree exists, and no
+solver, browser, model-provider, CAPTCHA, desktop-input, or runtime effect is
+authorized. Issue #66 retains the separately live-gated challenge acceptance
+leaf.
 
 ## Consolidation
 
@@ -455,9 +468,29 @@ logic or desktop details.
 - Require synthetic, provider-controlled fixtures and human-intervention
   boundaries.
 - Add explicit per-round and cumulative effect budgets.
+- Keep multiple rounds inside one policy-authorized attempt. A new round does
+  not renew attempt authority or any cumulative budget.
+- Bind every round to its challenge task, profile and policy revision, monotonic
+  round index, fresh frame and geometry, exact candidate set, provider
+  capability, and expiring evidence digest.
+- Accept provider output only as candidate identities from the bound evidence.
+  A provider cannot supply arbitrary coordinates, event sequences, retries, or
+  a replacement authority binding.
+- Require a fresh after-state classification after every round. Passed, denied,
+  next-round, ambiguous, stale, unsupported, partial, uncertain, or exhausted
+  are distinct outcomes; every non-safe continuation becomes typed human
+  intervention.
 
-Exit: a separate approved plan demonstrates a safe need beyond checkbox
-interaction. This workfront is optional and is not implied by W0 through W6.
+W7-A is limited to the pure challenge-control contract and synthetic replay
+fixtures. Its minimum matrix covers a two-round pass, ambiguous candidates,
+stale or changed geometry, unexpected extra rounds, per-round exhaustion,
+cumulative exhaustion, partial or uncertain effect, and exact zero-effect
+replay. It does not add a public ingress or call desktop services.
+
+Exit: a separately admitted plan demonstrates this safe need beyond checkbox
+interaction and proves the provider-free matrix. Any visual provider, desktop
+adapter, or installed fixture remains a later packet with its own capability
+and effect gate.
 
 ### W8 | Portability and optional external host
 
@@ -471,8 +504,11 @@ itself.
 
 ## Delivery Sequence And Budget
 
-W0 through W5 are integrated. W6 follows only through a separately admitted
-consumer packet. W7 and W8 are independent successor investments.
+W0 through W5 are integrated. W6 is source complete but awaits its dependency,
+publication, and protected integration. W7-A is the selected provider-free
+successor and remains unadmitted until this session can release or hand off the
+P197 primary worktree. W8 remains an independent platform investment and has
+no demonstrated second-adapter need yet.
 
 Estimated focused engineering effort:
 
@@ -509,8 +545,8 @@ does not authorize production or public-site use.
 
 ## Worker Assignments
 
-Until W0 establishes a parent work item and active implementation plan, this
-document has one coordinator and no implementation workers.
+The challenge lane has one primary owner and no implementation workers for the
+unadmitted W7-A packet.
 
 - Coordinator: owns ROADMAP, RUNBOOK, plan identity, dependency boundaries,
   integration sequence, and evidence reconciliation.
@@ -518,6 +554,8 @@ document has one coordinator and no implementation workers.
 - Challenge control worker: W3 after the desktop interface is frozen.
 - Vertical-slice worker: W4 after W2 and W3 expose reviewed interfaces.
 - Consumer worker: W5 and W6 after W4 acceptance.
+- Visual-contract worker: unassigned; W7-A may be admitted only after P197
+  custody is durably handed off or closed.
 
 Only one worker may edit a shared contract surface at a time. The provider
 contract lands before dependent adapters. Parallel work requires disjoint file
