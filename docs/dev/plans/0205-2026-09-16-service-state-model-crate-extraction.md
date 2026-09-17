@@ -1270,6 +1270,56 @@ owner boundary. Choose the canonical owner and adapter seam before moving
 another record family; do not start a bug-fix, runtime effect, provider action,
 or capability-registry promotion.
 
+## Checkpoint 22 | Current-Main Synchronization And Next Gate
+
+State transition: P205 is synchronized with `origin/main` at `fb616aee` by
+merge commit `67f672dd`. The branch is zero commits behind current main. The
+only path modified on both sides since the prior merge base was `Cargo.lock`,
+and it merged without a conflict. No bug-fix issue or validation lane moved
+into P205 custody; the architecture lane only consumes integrated main as its
+dependency baseline.
+
+Acceptance state and progress classification: Checkpoint 21 remains accepted
+after synchronization. This is blocker reduction for the next architecture
+packet. The post-merge model crate and presentation adapter tests pass, the
+architecture guard and fixtures pass, and strict workspace Clippy and
+formatting pass. The validation selector classifies the whole long-running
+branch as broad because it sees all P205 history; the bounded post-merge rerun
+uses the exact current packet plus workspace compilation and linting. GitHub CI
+remains explicitly skipped.
+
+The next gate is not another passive-record extraction by line count. The
+remaining aggregate dependencies need one ownership matrix with these ordered
+decisions:
+
+1. split the provider-free runtime-owner value and transition kernel from
+   Service State joins, repository custody, runtime adoption, and effects;
+2. decide whether that kernel belongs to Lease Authority because it owns pure
+   principal and profile-identity mechanics, or to the service-model crate
+   because `ServiceState` persists the registry wire record;
+3. classify abandoned-retirement and crash-regeneration transaction records
+   separately from their process and cleanup effects;
+4. reuse canonical authentication and challenge-control record owners rather
+   than copying their records into a second model;
+5. keep the advisory capability registry outside canonical authority until a
+   dedicated product decision admits it;
+6. move the `ServiceState` aggregate and persisted codec only after every
+   field has one downward canonical owner.
+
+Material blockers: runtime-owner records and pure transitions are currently
+interleaved with CLI-only `ServiceStateRepository`, runtime-adoption mode, and
+principal-provenance dependencies. That boundary must be frozen before code
+moves. Authentication and challenge records depend on their existing control-
+plane crates, while the effect transaction families still mix durable records
+with host observation and mutation sequencing.
+
+Next action: produce the runtime-owner ownership matrix and minimum interface
+freeze as the next bounded P205 packet. Use separate read-only architecture,
+minimal-interface, and compatibility-review workers if parallelism materially
+reduces the decision time; retain one primary writer and one review/rework
+cycle. Do not implement until the canonical owner, dependency direction,
+deletion test, and retained compatibility fixtures are explicit.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
