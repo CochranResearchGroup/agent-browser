@@ -35,9 +35,9 @@ record the bounded PL-BUGFIX repair. The current handler may select a foreign
 or unattributed `about:blank` target by URL alone, synthesize a handle with
 stale caller metadata, and omit explicit top-level cleanup-attempt proof. P207
 will first add a pure provider-free red regression, then require canonical
-caller custody for reuse and cleanup. Shared public contract files wait for the
-P197 checkpoint, and P207 will not edit P205 Service State model sources. Full
-CI, installed-runtime mutation, provider effects, credentials, production, and
+caller custody for reuse and cleanup. P197 has landed, so public contract parity
+is unblocked; P207 will not edit P205 Service State model sources. Full CI,
+installed-runtime mutation, provider effects, credentials, production, and
 release work are outside this plan.
 
 ## P203 | Runtime Host Admission Routing

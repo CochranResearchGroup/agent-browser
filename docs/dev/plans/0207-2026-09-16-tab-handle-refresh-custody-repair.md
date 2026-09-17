@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -20,7 +20,7 @@ Target: `main`
 
 Integration: merge through the protected pull-request workflow after provider-free custody regression, public response parity, and changed-surface local validation
 
-Source baseline: `2632e31ce34e62873598088d0c92c498357aafe2`
+Source baseline: `c855fc33af3129bede1947f55d5b7a49a9500fda`
 
 ## Objective
 
@@ -75,11 +75,10 @@ regression as red before changing policy.
 
 P204 owns the active CI-selection transition and PR #179. P205 owns Service
 State model extraction and currently edits model and profile-access files.
-P197 and its descendant P206 own challenge changes plus pending generated
-service-request, schema, client, help, and documentation changes in PR #157.
-P207 owns only this repair. It will not edit P205 model sources, and it will
-reconcile public contract files after the P197 checkpoint lands or is otherwise
-frozen.
+P197 and its descendant P206 landed their challenge changes through PR #157.
+The shared generated service-request, schema, client, help, and documentation
+surfaces are therefore available for P207 contract parity. P207 owns only this
+repair and will not edit P205 model sources.
 
 ## Consolidated Batch
 
@@ -146,7 +145,7 @@ In scope:
 - custody-safe use of existing Service State and profile-child validation;
 - exact provider-free Rust regression coverage;
 - generated response types, direct client tests, CLI help, README, agent skill,
-  and docs parity after the shared contract checkpoint;
+  and docs parity;
 - one narrowly targeted disposable local-browser acceptance when the
   provider-free repair is green and an isolated profile is available.
 
@@ -204,9 +203,8 @@ machine-checkable cleanup evidence.
 
 ### P3 | Public Parity And Acceptance
 
-- After P197's shared contract checkpoint, update the generator and generated
-  service-request client type, direct client fixtures, help, README, skill, and
-  docs.
+- Update the generator and generated service-request client type, direct client
+  fixtures, help, README, skill, and docs.
 - Run focused Rust refresh tests, direct service-request client tests, and the
   validation selector for the exact changed surface.
 - Run formatting and strict workspace Clippy once because Rust source changed.
@@ -272,7 +270,7 @@ model.
 | Peer preservation | switch and close spies remain zero for peer targets; replace cleanup receives only caller-owned IDs | planned |
 | Caller attribution | returned handle preserves service, agent, task, principal, profile, route, and child-access proof | planned |
 | Cleanup proof | explicit booleans plus compatible nested evidence on every success | planned |
-| Public parity | generated type, client fixture, help, README, skill, and docs agree | blocked on P197 shared checkpoint |
+| Public parity | generated type, client fixture, help, README, skill, and docs agree | planned |
 | Rust quality | focused tests, format check, strict workspace Clippy, and diff hygiene pass | planned |
 | Browser acceptance | at most one isolated disposable scenario proves target selection, peer survival, and residue cleanup | planned, local only |
 | External effect | no credential, provider, accounting, staging, production, or release effect | required none |

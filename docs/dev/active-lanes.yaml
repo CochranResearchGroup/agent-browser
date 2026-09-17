@@ -31,15 +31,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 2e1b1d4d798736b39d47a629859a37bfd4aadace
+    checkpoint: 0df31073
     remote_ref: refs/remotes/origin/fix/p207-tab-handle-refresh-custody
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free custody regression, public response parity, and changed-surface local validation
     validation_status: diagnosis complete; pure red regression and implementation pending
     validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#175]
-    dependencies: [P197]
-    overlaps: [P197:service-request-contract-and-docs, P204:docs/dev/active-lanes.yaml, P205:ServiceTabHandle-model-boundary]
-    reconciled_overlaps: [P197:service-request-contract-and-docs, P204:docs/dev/active-lanes.yaml, P205:ServiceTabHandle-model-boundary]
-    blocker: public contract parity waits for the P197 shared checkpoint; provider-free browser-lifecycle repair can proceed independently without Service-model edits
+    dependencies: []
+    overlaps: [P204:docs/dev/active-lanes.yaml, P205:ServiceTabHandle-model-boundary]
+    reconciled_overlaps: [P204:docs/dev/active-lanes.yaml, P205:ServiceTabHandle-model-boundary]
+    blocker: none; implementation remains bounded away from P205 Service State model edits
     updated_at: 2026-09-16

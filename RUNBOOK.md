@@ -16,8 +16,8 @@ is admitted from `main@2632e31c` for
 The bounded PL-BUGFIX packet will first prove that a stale caller-A refresh can
 adopt caller-B's blank target, then require canonical caller custody for target
 reuse and cleanup while returning explicit cleanup-attempt proof. P207 owns the
-browser-lifecycle repair and direct tests. Shared public contract files wait
-for P197's checkpoint, and P207 will not edit P205 Service State model sources.
+browser-lifecycle repair and direct tests. P197 is integrated, so public
+contract parity is unblocked; P207 will not edit P205 Service State model sources.
 No browser, provider, credential, installed-runtime, Service State, production,
 or release effect is authorized. Full CI and routine CI waiting are excluded.
 
