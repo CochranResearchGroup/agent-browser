@@ -38,6 +38,8 @@ mod windows_browser_doctor;
 mod windows_browser_setup;
 mod workstation_convergence;
 mod workstation_install;
+#[allow(dead_code)]
+mod workstation_shutdown;
 
 use serde_json::json;
 use std::env;
