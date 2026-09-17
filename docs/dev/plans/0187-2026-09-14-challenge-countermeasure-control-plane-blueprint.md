@@ -48,9 +48,9 @@ W6 is source complete through Plan 0197 and draft PR #157. Authentication and
 navigation use one provider-neutral consumer-admission contract, preserve
 later consumer failure separately from challenge outcome, and have passed the
 combined provider-free changed-surface checks at local checkpoint `ca0f3447`.
-That checkpoint includes the locally joined P202 dependency. It is not yet a
-published or integrated W6 receipt: P202 protected integration, current-main
-reconciliation, P197 branch publication, and exact-head forge evaluation
+P202 then merged through PR #168 and P197 joined canonical `main@2632e31c` at
+merge checkpoint `7dc8a860`. W6 is not yet an integrated receipt: final P197
+branch publication, exact-head forge evaluation, and protected integration
 remain.
 
 W7-A is the selected next product packet but is not admitted. It will define

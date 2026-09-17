@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 7
+Plan version: 8
 
 State: OPEN
 
@@ -57,10 +57,12 @@ shared public-documentation custody. P197 merged the resulting `main` through
 checkpoint `b9b8afc4`; its challenge-control, authentication, navigation,
 schema, and generated-client changes remain intact. At operator direction,
 P197 staged its bounded challenge-consumer guidance while P202 retained its
-overlapping source custody. P197 has now merged P202 reconciled dependency head
-`6f099292` locally as checkpoint `6f71ea0b`. The four public documents and the
-shared governance files auto-merged without conflict. P202 protected
-integration and P197 final governance reconciliation remain before publication.
+overlapping source custody. P202 has now merged through PR #168 as `528f2ef0`
+and closed through canonical `main@2632e31c`. P197 joined that exact mainline at
+merge checkpoint `7dc8a860`. The challenge implementation and four public
+guidance files remain intact; P202 is no longer a dependency or active overlap.
+Final branch publication, exact-head forge evaluation, and protected P197
+integration remain.
 
 ## Contract
 
@@ -190,6 +192,14 @@ transition; P197 will not publish or claim final integration until that source
 enters `main`, shared governance is reconciled, and the combined exact head
 passes its applicable checks.
 
+Plan version 8 records dependency completion. P202 merged through PR #168 and
+released the shared surfaces. P197 then joined canonical `main@2632e31c` at
+`7dc8a860`, resolving only the current runbook projection while preserving both
+histories. The remaining critical path is final publication, exact-head forge
+evaluation under the repository's current CI policy, and protected P197
+integration. No source expansion or runtime effect is introduced by this
+reconciliation.
+
 ## Implementation Checkpoint
 
 The pure challenge-control contract verifies terminal receipt consistency,
@@ -231,11 +241,11 @@ pass. The planned self-check additionally proved and repaired typed durable
 Authentication Run admission storage: the focused persistence test is red on
 the untyped field and green on `ChallengeConsumerAdmissionReceipt`; all nine
 Authentication Run tests, four Service challenge-task tests, the navigation
-bypass test, and the correctly stack-sized dispatch fixture pass. P197 locally
-merged P202 dependency head `6f099292` at `6f71ea0b`; the shared documentation
-and governance surfaces auto-merged without conflict, and both histories remain
-intact. P202 protected integration, final shared-governance reconciliation, the
-combined changed-surface gates, and P197 protected integration remain.
+bypass test, and the correctly stack-sized dispatch fixture pass. P197 joined
+canonical `main@2632e31c` after P202 integration at merge checkpoint
+`7dc8a860`; the shared documentation and governance histories remain intact.
+Final branch publication, exact-head forge evaluation, and protected P197
+integration remain.
 
 ## Validation And Exit
 

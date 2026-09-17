@@ -223,16 +223,17 @@ run 34993316164 and merge-commit CI run 34997057075 pass. W5 adds exact
 principal and retained-tab custody, digest-only replay, one composite terminal
 receipt, and bounded status and resource summaries.
 [Plan 0197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
-implements W6 at local combined checkpoint `ea519565` on
+implements W6 at local combined checkpoint `ca0f3447` on
 `challenge/p197-consumer-integration`. Authentication and navigation consume
 one provider-neutral admission contract through effective-site-policy and
 exact-tab adapters, retain typed admission beside later consumer failure, and
 deny challenged navigation before confirmation, recovery, launch, or dispatch.
-The four public guidance surfaces are aligned. P197 locally merged P202
-dependency head `6f099292` without conflicts; combined provider-free source,
-contract, client, route-confusion, and documentation checks pass. P202 protected
-integration, canonical-main reconciliation, P197 publication, and exact-head CI
-remain. Issue #66 retains the separately live-gated challenge acceptance leaf.
+The four public guidance surfaces are aligned. P202 merged through PR #168 and
+released its overlap; P197 joined canonical `main@2632e31c` at merge checkpoint
+`7dc8a860`. Combined provider-free source, contract, client, route-confusion,
+and documentation checks pass. P197 publication, exact-head forge evaluation,
+and protected integration remain. W7-A is selected but not admitted. Issue #66
+retains the separately live-gated challenge acceptance leaf.
 This registration authorizes no challenge attempt, retry, browser effect,
 provider effect, credential use, runtime mutation, installation, or release.
 
