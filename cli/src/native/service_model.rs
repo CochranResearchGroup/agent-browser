@@ -2186,7 +2186,7 @@ pub struct ServiceState {
     /// Replayable dependency-ordered crash recovery transactions.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) crash_regeneration_transactions:
-        BTreeMap<String, super::service_crash_regeneration::CrashRegenerationTransaction>,
+        BTreeMap<String, agent_browser_service_model::CrashRegenerationTransaction>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     /// Non-authoritative protected-owner observations keyed by Service State
     /// browser id. The root authority remains the only mutation gate.

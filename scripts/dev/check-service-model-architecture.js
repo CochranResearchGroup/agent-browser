@@ -16,6 +16,18 @@ const ABANDONED_RETIREMENT_RECORDS = [
   'ResourceRetirementPolicy',
 ];
 
+const CRASH_REGENERATION_DEFINITIONS = [
+  'CrashRegenerationPhase',
+  'CrashRegenerationState',
+  'CrashRegenerationStableIdentities',
+  'CrashRegenerationEvidence',
+  'CrashRegenerationTransaction',
+  'CrashRegenerationStatus',
+  'CrashRegenerationRequest',
+  'CrashRegenerationOperation',
+  'CrashRegenerationPhaseReceipt',
+];
+
 const FORBIDDEN_DEPENDENCIES = [
   'agent-browser',
   'agent-browser-cdp',
@@ -152,8 +164,58 @@ function check(root = repoRoot) {
 
   const retirement = withoutCommentsAndStrings(read(root,
     'crates/agent-browser-service-model/src/abandoned_browser_retirement.rs'));
+  const crashRegenerationPath = join(sourceRoot, 'crash_regeneration.rs');
+  const serviceModelLib = withoutCommentsAndStrings(read(root,
+    'crates/agent-browser-service-model/src/lib.rs'));
+  const crashRegenerationSource = read(root,
+    'crates/agent-browser-service-model/src/crash_regeneration.rs');
+  const crashRegeneration = withoutCommentsAndStrings(read(root,
+    'crates/agent-browser-service-model/src/crash_regeneration.rs'));
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
+  requireCondition(existsSync(crashRegenerationPath),
+    'service-model must own src/crash_regeneration.rs');
+  const crashRegenerationExport = serviceModelLib.match(
+    /\bpub\s+use\s+crash_regeneration\s*::\s*\{([\s\S]*?)\}\s*;/,
+  );
+  requireCondition(/\bmod\s+crash_regeneration\s*;/.test(serviceModelLib),
+    'service-model lib must declare the crash regeneration module');
+  requireCondition(Boolean(crashRegenerationExport),
+    'service-model lib must export the crash regeneration interface');
+  for (const name of CRASH_REGENERATION_DEFINITIONS) {
+    const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...crashRegenerationSource.matchAll(definition)].length === 1,
+      `service-model crash regeneration module must own exactly one definition: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(definition.source).test(source)),
+      `CLI must not duplicate crash regeneration definition: ${name}`,
+    );
+    requireCondition(
+      Boolean(crashRegenerationExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export crash regeneration definition: ${name}`,
+    );
+  }
+  requireCondition(
+    /\bpub\s+const\s+CRASH_REGENERATION_STATUS_SCHEMA_VERSION\b/.test(crashRegeneration),
+    'service-model must own the crash regeneration status schema constant',
+  );
+  requireCondition(
+    !cliSources.some((source) => /\b(?:pub\s*)?(?:\(?crate\)?\s*)?const\s+CRASH_REGENERATION_STATUS_SCHEMA_VERSION\b/.test(source)),
+    'CLI must not duplicate crash regeneration status schema constant',
+  );
+  requireCondition(
+    Boolean(crashRegenerationExport?.[1].match(/\bCRASH_REGENERATION_STATUS_SCHEMA_VERSION\b/)),
+    'service-model lib must export the crash regeneration status schema constant',
+  );
+  const cliServiceModel = withoutCommentsAndStrings(read(root,
+    'cli/src/native/service_model.rs'));
+  requireCondition(
+    /BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*CrashRegenerationTransaction\s*>/
+      .test(cliServiceModel),
+    'CLI ServiceState must use the canonical service-model crash regeneration transaction',
+  );
   for (const name of ABANDONED_RETIREMENT_RECORDS) {
     const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');
     requireCondition(

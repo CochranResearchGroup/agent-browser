@@ -1827,18 +1827,74 @@ algorithms. Next action: implement the separately frozen crash-regeneration
 model and phase-transition packet. Do not combine it with authentication,
 challenge, capability-registry, bug-fix, or runtime work.
 
+## Checkpoint 30 | Crash-Regeneration Model And Transition Kernel Accepted
+
+State transition: `agent-browser-service-model` now canonically owns the
+crash-regeneration phase and state enums, stable identities, private evidence,
+durable transaction, redacted status, request, operation, phase receipt,
+status schema constant, validation, phase ordering, status projection, and
+pure begin/resume, receipt, interruption, and ready-completion transitions.
+`ServiceState` stores the canonical transaction directly. The CLI retains the
+effect trait, repository lookup and compare-and-swap, persistence, effect
+sequencing, and user-facing error composition.
+
+Compatibility and invariant evidence:
+
+- all existing camelCase records, snake_case enums, phase order, operation
+  identifiers, redaction, error strings, identity comparisons, replay
+  behavior, and generic Service State persistence remain intact;
+- the model transition seam now validates requests and phase receipts itself,
+  so a non-CLI caller cannot create an empty-identity transaction or apply an
+  invalid receipt merely by bypassing coordinator prevalidation;
+- the CLI preserves the original no-op fast path after the final phase. A
+  mutation-count assertion proves entering `Ready` does not perform an extra
+  repository mutation;
+- all 118 Service Model unit tests and fourteen crate integration tests pass;
+  all six crash-regeneration CLI adapter tests and 41 focused `service_model`
+  CLI tests pass;
+- the Service Model architecture guard requires the canonical module, public
+  interface exports, direct aggregate type, unique definitions, schema
+  constant, and no upward or adapter imports. Its missing-module,
+  missing-export, indirect-type, forbidden-import, and duplicate-definition
+  mutation fixtures pass;
+- Service API/MCP parity, generated service client contract checks, JavaScript
+  client type checks, formatting, diff hygiene, and strict workspace Clippy
+  pass; and
+- GitHub CI remains skipped. No runtime, browser, profile, provider, install,
+  staging, production, or release effect occurred.
+
+Review and delegation receipt: `/root/p205_owner_projection_audit` was reused
+for the bounded implementation and guard packets with requested
+`gpt-5.6-luna` medium routing. `/root/p205_crash_standards_review` used requested
+`gpt-5.6-luna` medium routing and returned no hard or judgment-call findings.
+`/root/p205_crash_spec_review` used requested `gpt-5.6-sol` medium routing and
+identified two accepted partial findings: public transition validation and
+direct model transition coverage. The primary repaired both, independently
+found and repaired the extra final repository mutation, and reran the affected
+and final gates. The runtime did not expose independently verifiable effective
+model or effort metadata. This consumed the packet's one review/rework cycle.
+
+Acceptance state and progress classification: the crash-regeneration packet is
+accepted. This is outcome progress and removes the second frozen effect-
+transaction dependency without moving repository or host effects. Next action:
+review P211's cold shutdown and requalification contracts against the remaining
+P205 aggregate boundary, then freeze one consolidated ownership packet for the
+authentication-run, challenge-task, and advisory capability-registry fields.
+Do not begin bug-fix, CI, runtime, provider, browser, install, or production
+work in that packet.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | nineteen families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twenty families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | presentation-capacity kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | nineteen families plus capacity mutation closure accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | capacity closure accepted through Checkpoint 21 |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty families plus capacity mutation closure accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | crash-regeneration kernel accepted through Checkpoint 30 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
-| Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | available; local use pending |
+| Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
 
 Every material checkpoint records the transition, acceptance state, progress

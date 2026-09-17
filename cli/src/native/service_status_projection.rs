@@ -355,7 +355,7 @@ pub(crate) struct ServiceStatusResponse {
     pub(crate) runtime_lifecycle: Value,
     #[serde(rename = "crashRegenerationTransactions")]
     pub(crate) crash_regeneration_transactions:
-        Vec<super::service_crash_regeneration::CrashRegenerationStatus>,
+        Vec<agent_browser_service_model::CrashRegenerationStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -588,7 +588,7 @@ impl ServiceStatusProjector {
             service_state_lock_diagnostics: super::service_store::service_state_lock_diagnostics(),
             runtime_lifecycle: input.runtime_lifecycle,
             crash_regeneration_transactions:
-                super::service_crash_regeneration::crash_regeneration_statuses(
+                agent_browser_service_model::crash_regeneration_statuses(
                     &authority_state.crash_regeneration_transactions,
                 ),
         };

@@ -7,6 +7,7 @@ mod abandoned_browser_retirement;
 mod browser_process;
 mod browser_profile;
 mod browser_retirement;
+mod crash_regeneration;
 mod entity_source;
 mod failure_recourse;
 mod incident;
@@ -49,6 +50,13 @@ pub use browser_profile::{
 pub use browser_retirement::{
     BrowserContaminationReport, BrowserRetirementPlan, BrowserRetirementReceipt,
     BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
+};
+pub use crash_regeneration::{
+    apply_phase_receipt, begin_or_resume, crash_regeneration_statuses, finish_ready, interrupt,
+    next_phase, validate_receipt, CrashRegenerationEvidence, CrashRegenerationOperation,
+    CrashRegenerationPhase, CrashRegenerationPhaseReceipt, CrashRegenerationRequest,
+    CrashRegenerationStableIdentities, CrashRegenerationState, CrashRegenerationStatus,
+    CrashRegenerationTransaction, CRASH_REGENERATION_STATUS_SCHEMA_VERSION,
 };
 pub use entity_source::{ServiceEntitySource, ServiceEntitySources};
 pub use failure_recourse::{

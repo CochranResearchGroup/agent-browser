@@ -90,7 +90,7 @@ pub(super) fn project_closed_tabs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::service_crash_regeneration::CrashRegenerationTransaction;
+    use agent_browser_service_model::CrashRegenerationTransaction;
     use serde_json::json;
 
     fn state_with_private_crash_evidence() -> ServiceState {
