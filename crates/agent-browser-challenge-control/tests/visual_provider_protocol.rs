@@ -419,7 +419,7 @@ fn invalid_candidate_sets_and_budget_excess_fail_before_intent() {
 }
 
 #[test]
-fn execution_budget_is_bound_before_provider_adjudication() {
+fn request_preparation_rejects_invalid_authority_inputs_before_adjudication() {
     let policy = policy();
     let evidence = evidence();
     let mut over_budget = execution_plan();
@@ -434,6 +434,61 @@ fn execution_budget_is_bound_before_provider_adjudication() {
         ),
         Err(agent_browser_challenge_control::VisualProviderError::InvalidExecutionPlan)
     );
+
+    for artifact in [
+        PreparedVisualArtifact {
+            artifact_id: " ".to_string(),
+            artifact_digest: digest('d'),
+        },
+        PreparedVisualArtifact {
+            artifact_id: "artifact:prepared:1".to_string(),
+            artifact_digest: "not-a-digest".to_string(),
+        },
+    ] {
+        assert_eq!(
+            prepare_visual_provider_request(&policy, &evidence, artifact, execution_plan(), 1_100,),
+            Err(agent_browser_challenge_control::VisualProviderError::InvalidArtifact)
+        );
+    }
+
+    let mut invalid_policy = policy.clone();
+    invalid_policy.max_steps_per_round = 0;
+    assert_eq!(
+        prepare_visual_provider_request(
+            &invalid_policy,
+            &evidence,
+            prepared_artifact(),
+            execution_plan(),
+            1_100,
+        ),
+        Err(agent_browser_challenge_control::VisualProviderError::InvalidPolicy)
+    );
+
+    let mut invalid_evidence = evidence.clone();
+    invalid_evidence.frame_digest = digest('f');
+    assert_eq!(
+        prepare_visual_provider_request(
+            &policy,
+            &invalid_evidence,
+            prepared_artifact(),
+            execution_plan(),
+            1_100,
+        ),
+        Err(agent_browser_challenge_control::VisualProviderError::InvalidEvidence)
+    );
+
+    for now_ms in [evidence.observed_at_ms - 1, evidence.expires_at_ms] {
+        assert_eq!(
+            prepare_visual_provider_request(
+                &policy,
+                &evidence,
+                prepared_artifact(),
+                execution_plan(),
+                now_ms,
+            ),
+            Err(agent_browser_challenge_control::VisualProviderError::InvalidEvidence)
+        );
+    }
 }
 
 #[test]
