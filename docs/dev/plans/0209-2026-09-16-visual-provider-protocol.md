@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 9
+Plan version: 10
 
 State: SOURCE ACCEPTED | P206 INTEGRATION PENDING
 
@@ -22,11 +22,12 @@ Branch: `challenge/p209-visual-provider-protocol`
 Target: `main`
 
 Dependency: P206 published head
-`99793061591fb7a673de1ce899fba1f4374afb3f` through PR #180
+`72eeea031d323901bac289d433b2e8b7c09b5fd7` through PR #180
 
 Source baseline: `5da7d37d30ed15a1f7970e11e9581f3ad04e6599`
 
-Local reconciliation: merge `24aee872` joins published P206 head `99793061`
+Local reconciliation: merge `9df85b9b` joins corrected published P206 head
+`72eeea03`
 
 Publication gate: do not push or open a pull request until P206 PR #180 enters
 `main` and P209 reconciles that canonical checkpoint
@@ -46,11 +47,13 @@ browser, attempt a CAPTCHA or mutate any runtime.
 
 ## Current State
 
-P206 W7-A is source-complete and acceptance-complete at `ac9f50a7`, reconciled
-with current `main@f5e3f31b` at published head `99793061`, and undergoing
-exact-head evaluation in PR #180. It defines fresh evidence, exact
-candidate sets, provider capability identity, round selection, effect receipt,
-after-state continuity, cumulative budgets and zero-effect replay.
+P206 W7-A is source-complete and acceptance-complete, reconciled with current
+`main@f5e3f31b`, and published at corrected head `72eeea03` for exact-head
+evaluation in PR #180. Pre-merge review repaired cumulative budget saturation
+and typed classification for an unrepresentable selection count. P206 defines
+fresh evidence, exact candidate sets, provider capability identity, round
+selection, effect receipt, after-state continuity, checked cumulative budgets
+and zero-effect replay.
 
 No type yet defines what a visual provider is allowed to receive or return.
 Without that seam, each future adapter could invent its own request digest,
@@ -62,8 +65,8 @@ P204 owns CI validation tiering, P205 owns Service-model extraction, P207 owns
 tab-handle refresh custody and P208 owns worktree closeout. P209 edits only the
 challenge-control crate, its provider fixtures and the bounded challenge-lane
 planning projections. P204 merged through PR #179. P209 has locally joined the
-published P206 head at `24aee872` but remains unpushed until P206 enters
-canonical `main`.
+corrected published P206 head at `9df85b9b` but remains unpushed until P206
+enters canonical `main`.
 
 ## Contract
 
@@ -251,6 +254,17 @@ response digest changes for request, evidence, candidate-set, capability,
 selected-candidate order, production-time and expiry mutations. All 50
 challenge-control tests, formatting, strict workspace Clippy and diff hygiene
 pass.
+
+## Corrected P206 Reconciliation | 2026-09-17
+
+Local merge `9df85b9b` joins corrected published P206 head `72eeea03`, including
+its checked cumulative budget arithmetic and two boundary regressions. The
+combined dependency head passes all 52 challenge-control tests, including 25
+visual-round and 11 provider-protocol cases, the challenge-control architecture
+guard, workspace formatting, strict workspace Clippy and diff hygiene. The
+prior unaffected extracted-crate evidence remains reusable.
+
+P209 remains local and unpushed until corrected P206 enters canonical `main`.
 
 ## Stop Condition
 

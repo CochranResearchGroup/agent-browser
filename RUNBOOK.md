@@ -10,6 +10,27 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
 - [P209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md)
 
+## Turn 380 | 2026-09-17
+
+P209 merge `9df85b9b` joins corrected published P206 head `72eeea03`. The
+combined dependency head passes all 52 challenge-control tests, including 25
+visual-round and 11 provider-protocol cases, the crate architecture guard,
+strict workspace Clippy, formatting and diff hygiene. P209 remains local and
+unpushed until P206 PR #180 enters canonical `main`. No provider, browser,
+CAPTCHA, credential, runtime, production or CI-dispatch effect occurred.
+
+## Turn 379 | 2026-09-17
+
+P206 pre-merge review reproduced two budget-boundary defects: cumulative
+selection arithmetic could saturate and admit an actual total above 255, and a
+256-candidate selection returned a generic transition error rather than typed
+round-budget intervention. Repair checkpoint `4813d385` replaces saturation
+with widened and checked arithmetic. All 41 challenge-control tests, including
+25 visual-round cases, the crate architecture guard, strict workspace Clippy,
+formatting and diff hygiene pass. Corrected published head `72eeea03` requires
+protected exact-head evaluation. No provider, browser, CAPTCHA, credential,
+runtime or production effect occurred.
+
 ## Turn 378 | 2026-09-17
 
 P209 checkpoint `f9987721` proves the response digest binds request, evidence,
@@ -66,18 +87,6 @@ The branch has locally joined published P206 head `99793061` and remains
 unpushed until PR #180 enters `main` and the canonical checkpoint is reconciled.
 No browser, provider, CAPTCHA, credential, runtime or production effect
 occurred.
-
-## Turn 379 | 2026-09-17
-
-P206 pre-merge review reproduced two budget-boundary defects: cumulative
-selection arithmetic could saturate and admit an actual total above 255, and a
-256-candidate selection returned a generic transition error rather than typed
-round-budget intervention. Repair checkpoint `4813d385` replaces saturation
-with widened and checked arithmetic. All 41 challenge-control tests, including
-25 visual-round cases, the crate architecture guard, strict workspace Clippy,
-formatting and diff hygiene pass. The corrected head still requires protected
-exact-head evaluation. No provider, browser, CAPTCHA, credential, runtime or
-production effect occurred.
 
 ## Turn 373 | 2026-09-17
 
