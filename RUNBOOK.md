@@ -6,9 +6,10 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
-- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
+- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+- [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
 
-## Turn 371 | 2026-09-16
+## Turn 373 | 2026-09-17
 
 [Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
 is source-complete and acceptance-complete at `ac9f50a7` on
@@ -21,11 +22,54 @@ crate tests, including the complete 23-case visual-round matrix, the crate
 architecture guard, formatting, strict workspace Clippy and diff hygiene pass.
 P197 head `cd22a39f` passed all ordinary required checks and merged through PR
 #157 as `c855fc33`. P206 joined that canonical checkpoint at tree-preserving
-merge `5d6e3d57`; only exact-head forge evaluation and protected P206
-integration remain. No browser, model provider, CAPTCHA, desktop input,
-credential, installed runtime, production or CI-policy effect occurred.
+merge `5d6e3d57` and is reconciling merged P204 checkpoint `f5e3f31b` before
+exact-head forge evaluation and protected P206 integration. No browser, model
+provider, CAPTCHA, desktop input, credential, installed runtime, production or
+CI-policy effect occurred.
+
+## Turn 372 | 2026-09-16
+
+[Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+has published source checkpoint `b481ab01`. CI run `35172965793` passed every
+selected ordinary gate and the stable `Presubmit` aggregate; comprehensive and
+platform qualification remained excluded. Superseded run `35170641311`
+cancelled as designed. Failed run `35171646162` exposed same-target CLI test
+binary replacement, and the corrected two-lane runner then passed. P204 is
+reconciled with `main@c855fc33`; protected PR evaluation of the merge result
+remains. The plan stays open for post-merge docs-only and narrow-Rust evidence,
+an explicitly authorized comprehensive dispatch, and issue #164 branch-rule
+enforcement before the temporary `main` fallback can be removed.
+
+## Turn 371 | 2026-09-16
+
+[Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+has implementation checkpoint `7f6c7e2e`. The versioned classifier now drives
+exact-head conditional jobs and the stable fail-closed `Presubmit` aggregate;
+unknown and control-plane changes fail safe, while explicit comprehensive
+qualification avoids duplicate focused Rust. Selector, aggregate, economics,
+documentation-link, workflow, docs-build, policy, planning, and Challenge
+Control compartment validation is green locally. One independent review and
+bounded rework corrected every blocking finding. Organic PR receipts and an
+explicitly authorized comprehensive dispatch remain pending. The `main`
+fallback remains because issue #164 has not proved live required-check
+enforcement. No workflow dispatch, branch-rule, browser, provider, credential,
+installed-runtime, Service State, production, or release effect occurred.
 
 ## Turn 370 | 2026-09-16
+
+### P204 admission
+
+[Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+is admitted from `main@2632e31c` for issue #174. The current selector is
+advisory and has no versioned tier, fixed job outputs, unknown-impact fallback,
+or direct fixtures; CI does not consume it and has no PR cancellation or stable
+aggregate check. A docs-only probe is red on the missing contract. P204 owns the
+selector, CI workflow, aggregate verifier, and provider-free fixtures. The
+`main` fallback remains until issue #164 proves live `Presubmit` enforcement.
+No workflow dispatch, branch-rule mutation, browser, provider, credential,
+installed-runtime, Service State, production, or release effect is authorized.
+
+### P197 integration
 
 [Plan 0197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
 joins canonical `main@2632e31c` after P202 protected integration and closeout.
