@@ -140,6 +140,7 @@ dependencies = [
 name = "agent-browser-service-model"
 version = "0.1.0"
 dependencies = [
+ "agent-browser-lease-authority",
  "serde",
  "serde_json",
  "sha2",

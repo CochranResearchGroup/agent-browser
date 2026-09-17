@@ -8,6 +8,7 @@ mod entity_source;
 mod profile_access;
 mod profile_readiness;
 mod profile_seeding;
+mod session_tab;
 
 pub use browser_profile::{
     BrowserHost, BrowserProfile, BrowserProfileRegistration, ProfileClass, ProfileOrigin,
@@ -39,4 +40,11 @@ pub use profile_seeding::{
     profile_seeding_handoff_id, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
     ProfileSeedingMode, SERVICE_PROFILE_SEEDING_HANDOFF_STATE_VALUES,
     SERVICE_PROFILE_SEEDING_MODE_VALUES,
+};
+pub use session_tab::{
+    BrowserSession, BrowserTab, LeaseState, ProfileLeaseDisposition, ProfileSelectionReason,
+    ServiceActor, ServiceTabHandle, ServiceTabHandleTraceFilter, SessionCleanupPolicy,
+    TabLifecycle, SERVICE_LEASE_STATE_VALUES, SERVICE_PROFILE_LEASE_DISPOSITION_VALUES,
+    SERVICE_PROFILE_SELECTION_REASON_VALUES, SERVICE_SESSION_CLEANUP_VALUES,
+    SERVICE_TAB_LIFECYCLE_VALUES,
 };

@@ -40,29 +40,6 @@ pub const SERVICE_BROWSER_HEALTH_VALUES: [&str; 10] = [
     "closing",
     "faulted",
 ];
-pub const SERVICE_LEASE_STATE_VALUES: [&str; 5] = [
-    "shared",
-    "exclusive",
-    "human_takeover",
-    "released",
-    "expired",
-];
-pub const SERVICE_SESSION_CLEANUP_VALUES: [&str; 4] =
-    ["detach", "close_tabs", "close_browser", "release_only"];
-pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 7] = [
-    "explicit_profile",
-    "existing_owner",
-    "authenticated_target",
-    "account_match",
-    "target_match",
-    "service_allow_list",
-    "browser_build_default",
-];
-pub const SERVICE_PROFILE_LEASE_DISPOSITION_VALUES: [&str; 3] =
-    ["new_browser", "reused_browser", "active_lease_conflict"];
-pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
-    "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
-];
 pub const SERVICE_MONITOR_STATE_VALUES: [&str; 3] = ["active", "paused", "faulted"];
 pub const SERVICE_VIEW_STREAM_PROVIDER_VALUES: [&str; 6] = [
     "cdp_screencast",
@@ -4993,17 +4970,22 @@ pub struct ControlPlaneSnapshot {
 }
 
 pub use agent_browser_service_model::{
-    profile_seeding_handoff_id, BrowserBuild, BrowserHost, BrowserProfile, ProfileAllocationPolicy,
-    ProfileChildAccess, ProfileClass, ProfileConnectionState, ProfileKeyringPolicy, ProfileOrigin,
-    ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
-    ProfileSeedingMode, ProfileSourceRecord, ProfileTargetReadiness, ServiceEntitySource,
-    ServiceEntitySources, SitePolicySourceRecord,
+    profile_seeding_handoff_id, BrowserBuild, BrowserHost, BrowserProfile, BrowserSession,
+    BrowserTab, LeaseState, ProfileAllocationPolicy, ProfileClass, ProfileConnectionState,
+    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState,
+    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
+    ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness, ServiceActor,
+    ServiceEntitySource, ServiceEntitySources, ServiceTabHandle, ServiceTabHandleTraceFilter,
+    SessionCleanupPolicy, SitePolicySourceRecord, TabLifecycle,
 };
 #[cfg(test)]
 use agent_browser_service_model::{
-    SERVICE_BROWSER_BUILD_VALUES, SERVICE_BROWSER_HOST_VALUES, SERVICE_PROFILE_ALLOCATION_VALUES,
-    SERVICE_PROFILE_CLASS_VALUES, SERVICE_PROFILE_KEYRING_VALUES, SERVICE_PROFILE_READINESS_VALUES,
-    SERVICE_PROFILE_SEEDING_MODE_VALUES,
+    SERVICE_BROWSER_BUILD_VALUES, SERVICE_BROWSER_HOST_VALUES, SERVICE_LEASE_STATE_VALUES,
+    SERVICE_PROFILE_ALLOCATION_VALUES, SERVICE_PROFILE_CLASS_VALUES,
+    SERVICE_PROFILE_KEYRING_VALUES, SERVICE_PROFILE_LEASE_DISPOSITION_VALUES,
+    SERVICE_PROFILE_READINESS_VALUES, SERVICE_PROFILE_SEEDING_MODE_VALUES,
+    SERVICE_PROFILE_SELECTION_REASON_VALUES, SERVICE_SESSION_CLEANUP_VALUES,
+    SERVICE_TAB_LIFECYCLE_VALUES,
 };
 
 /// A supervised or attached browser process known to the service.
@@ -5708,204 +5690,6 @@ impl Default for BrowserHealthObservation {
     }
 }
 
-/// Logical lease for an agent, human, system task, or API client.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct BrowserSession {
-    pub id: String,
-    /// Host boot that authenticated the current work-lease observation.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub boot_epoch: Option<String>,
-    /// Calling service label supplied by MCP, CLI, HTTP, or API clients.
-    pub service_name: Option<String>,
-    /// Calling agent label supplied by MCP, CLI, HTTP, or API clients.
-    pub agent_name: Option<String>,
-    /// Calling task label supplied by MCP, CLI, HTTP, or API clients.
-    pub task_name: Option<String>,
-    /// Stable authenticated service principal. Caller labels never populate it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) principal_id: Option<String>,
-    /// Evidence class that established `principal_id`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) principal_provenance: Option<super::service_principal::ServicePrincipalProvenance>,
-    /// Task-scoped subordinate lease under the profile-owning principal.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) work_lease_id: Option<String>,
-    #[serde(default, skip_serializing_if = "is_zero_u64")]
-    pub(crate) work_lease_revision: u64,
-    pub owner: ServiceActor,
-    pub lease: LeaseState,
-    pub profile_id: Option<String>,
-    /// Why this session's profile was selected, when agent-browser can infer it.
-    pub profile_selection_reason: Option<ProfileSelectionReason>,
-    /// Whether the selected profile is new, reused, or already leased elsewhere.
-    pub profile_lease_disposition: Option<ProfileLeaseDisposition>,
-    /// Other sessions currently holding an exclusive lease on the same profile.
-    pub profile_lease_conflict_session_ids: Vec<String>,
-    /// Launch-time browser capability binding resolution for operator diagnostics.
-    pub browser_capability_launch: Option<serde_json::Value>,
-    pub cleanup: SessionCleanupPolicy,
-    pub browser_ids: Vec<String>,
-    pub tab_ids: Vec<String>,
-    pub created_at: Option<String>,
-    /// Last service-owned observation that this session lease was still current.
-    pub last_lease_observed_at: Option<String>,
-    pub expires_at: Option<String>,
-}
-
-impl Default for BrowserSession {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            boot_epoch: None,
-            service_name: None,
-            agent_name: None,
-            task_name: None,
-            principal_id: None,
-            principal_provenance: None,
-            work_lease_id: None,
-            work_lease_revision: 0,
-            owner: ServiceActor::System,
-            lease: LeaseState::Shared,
-            profile_id: None,
-            profile_selection_reason: None,
-            profile_lease_disposition: None,
-            profile_lease_conflict_session_ids: Vec::new(),
-            browser_capability_launch: None,
-            cleanup: SessionCleanupPolicy::Detach,
-            browser_ids: Vec::new(),
-            tab_ids: Vec::new(),
-            created_at: None,
-            last_lease_observed_at: None,
-            expires_at: None,
-        }
-    }
-}
-
-/// Explanation for a service session's chosen profile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProfileSelectionReason {
-    /// Caller explicitly supplied a profile or runtime profile override.
-    ExplicitProfile,
-    /// The exact current runtime owner proves this existing session's profile.
-    ExistingOwner,
-    /// Selected profile has authenticated state for a requested target service.
-    AuthenticatedTarget,
-    /// Selected profile matches a requested account identity.
-    AccountMatch,
-    /// Selected profile targets a requested site or identity provider.
-    TargetMatch,
-    /// Selected profile was chosen by caller service allow-list fallback.
-    ServiceAllowList,
-    /// Selected profile was a generic default for the requested browser build.
-    BrowserBuildDefault,
-}
-
-/// Current lease relationship between a session and its selected profile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProfileLeaseDisposition {
-    /// No retained browser or exclusive session was already using the profile.
-    NewBrowser,
-    /// This session already had a retained browser for the selected profile.
-    ReusedBrowser,
-    /// Another exclusive session already references the selected profile.
-    ActiveLeaseConflict,
-}
-
-/// Current service view of a CDP target or browser tab.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct BrowserTab {
-    pub id: String,
-    pub browser_id: String,
-    pub target_id: Option<String>,
-    pub session_id: Option<String>,
-    pub lifecycle: TabLifecycle,
-    pub url: Option<String>,
-    pub title: Option<String>,
-    pub owner_session_id: Option<String>,
-    /// Profile authority inherited when this tab was admitted.
-    pub profile_access: Option<ProfileChildAccess>,
-    /// Authenticated principal inherited from the owning session work lease.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) principal_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) principal_provenance: Option<super::service_principal::ServicePrincipalProvenance>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) work_lease_id: Option<String>,
-    #[serde(default, skip_serializing_if = "is_zero_u64")]
-    pub(crate) work_lease_revision: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) work_lease_expires_at: Option<String>,
-    pub service_tab_handle: Option<ServiceTabHandle>,
-    pub latest_snapshot_id: Option<String>,
-    pub latest_screenshot_id: Option<String>,
-    pub challenge_id: Option<String>,
-}
-
-impl Default for BrowserTab {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            browser_id: String::new(),
-            target_id: None,
-            session_id: None,
-            lifecycle: TabLifecycle::Unknown,
-            url: None,
-            title: None,
-            owner_session_id: None,
-            profile_access: None,
-            principal_id: None,
-            principal_provenance: None,
-            work_lease_id: None,
-            work_lease_revision: 0,
-            work_lease_expires_at: None,
-            service_tab_handle: None,
-            latest_snapshot_id: None,
-            latest_screenshot_id: None,
-            challenge_id: None,
-        }
-    }
-}
-
-/// Stable, service-owned binding for follow-on tab work.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ServiceTabHandle {
-    pub browser_id: String,
-    pub session_name: Option<String>,
-    pub tab_id: String,
-    pub target_id: Option<String>,
-    pub url: Option<String>,
-    pub title: Option<String>,
-    pub profile_id: Option<String>,
-    pub profile_origin: ProfileOrigin,
-    pub lease_id: Option<String>,
-    pub lease_state: Option<LeaseState>,
-    pub cleanup_policy: Option<SessionCleanupPolicy>,
-    pub lease_heartbeat_expected: bool,
-    pub owner_session_id: Option<String>,
-    pub profile_access: Option<ProfileChildAccess>,
-    pub job_id: Option<String>,
-    pub trace_filter: ServiceTabHandleTraceFilter,
-    pub valid: bool,
-    pub stale_reason: Option<String>,
-}
-
-/// Minimal trace query fields that identify a tab handle's evidence context.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ServiceTabHandleTraceFilter {
-    pub browser_id: Option<String>,
-    pub profile_id: Option<String>,
-    pub session_id: Option<String>,
-    pub service_name: Option<String>,
-    pub agent_name: Option<String>,
-    pub task_name: Option<String>,
-}
-
 /// Queued or completed service work item.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -6407,83 +6191,6 @@ pub enum ChallengePolicy {
     ProviderAllowed,
     ProviderPreferred,
     Deny,
-}
-
-/// Service-side actor category.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ServiceActor {
-    Agent(String),
-    Human(String),
-    ApiClient(String),
-    System,
-}
-
-impl ServiceActor {
-    /// Infer the most specific service actor available from caller labels.
-    pub fn from_caller_context(service_name: Option<&str>, agent_name: Option<&str>) -> Self {
-        if let Some(agent_name) = non_empty_label(agent_name) {
-            return ServiceActor::Agent(agent_name.to_string());
-        }
-        if let Some(service_name) = non_empty_label(service_name) {
-            return ServiceActor::ApiClient(service_name.to_string());
-        }
-        ServiceActor::System
-    }
-
-    pub fn is_system(&self) -> bool {
-        matches!(self, ServiceActor::System)
-    }
-}
-
-fn non_empty_label(value: Option<&str>) -> Option<&str> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed)
-        }
-    })
-}
-
-fn is_zero_u64(value: &u64) -> bool {
-    *value == 0
-}
-
-/// Lease semantics for a session or tab.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LeaseState {
-    Shared,
-    Exclusive,
-    HumanTakeover,
-    Released,
-    Expired,
-}
-
-/// What the service should do when a session lease ends.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SessionCleanupPolicy {
-    #[default]
-    Detach,
-    CloseTabs,
-    CloseBrowser,
-    ReleaseOnly,
-}
-
-/// Current tab lifecycle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TabLifecycle {
-    Unknown,
-    Opening,
-    Loading,
-    Ready,
-    Closing,
-    Closed,
-    Crashed,
 }
 
 /// Queue target for a service job.

@@ -385,16 +385,58 @@ browser, session, tab, job, route, event, and policy records.
 Next action: publish this checkpoint and reassess the next dependency cluster
 against the remaining delivery budget before expanding the move.
 
+## Checkpoint 5 | Session And Tab Model Family
+
+State transition: the crate now owns browser session, browser tab, stable tab
+handle, trace-filter, actor, lease, cleanup, profile-selection, profile-lease,
+and tab-lifecycle records and wire constants. The model depends directly on
+the provider-free Lease Authority principal provenance type. Session expiry,
+disconnect handling, profile selection, handle refresh, and Service State
+mutation remain CLI adapters.
+
+Acceptance state and progress classification: this P1 dependency-reduction
+packet is accepted locally. The compatibility module re-exports the canonical
+crate records, and the deletion scan finds no duplicate CLI definition. The
+former CLI-private principal and work-lease fields are public at the crate
+boundary because CLI authority adapters must inspect and mutate them; their
+serde attributes and wire behavior are unchanged.
+
+Evidence:
+
+- four focused crate tests pass for defaults, wire names and omission rules,
+  actor inference, and exact constant values;
+- the CLI collection wire-contract and nested Service State round-trip tests
+  pass through the compatibility facade;
+- focused handle refresh, stale-session expiry, and profile-child disconnect
+  isolation tests pass;
+- strict workspace Clippy passes with warnings denied after removal of one
+  unused transitional re-export;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no browser, provider, runtime, install, staging, production, release, or
+  GitHub CI effect was performed.
+
+Material blockers: the full Service State aggregate still depends on the
+browser-process family, which closes over health, process identity, view
+stream, and tab-handle records, plus the remaining job, remote-view, monitor,
+incident, challenge, provider, receipt, and transaction families. P204 still
+owns the shared validation and roadmap surfaces.
+
+Next action: publish this checkpoint. The next architecture packet should move
+the provider-free remote-view record family before the browser-process family,
+so `ViewStream` and route controller fencing have one canonical downward owner
+without pulling provider orchestration into the crate.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | first family accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | five families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | snapshot, transition, and projection interface tests plus deletion test | planned |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | first packet accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | first packet accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | five packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | five packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
