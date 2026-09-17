@@ -163,15 +163,12 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             {
                 return Err("runtime_lifecycle_profile_record_sync_rejected".to_string());
             }
-            let mut registry = state.runtime_owner_registry.clone();
-            let transition = apply_transition(&mut registry, intent.clone())?;
-            state
-                .profiles
-                .get_mut(profile_id)
-                .expect("validated profile remains present")
-                .user_data_dir = Some(user_data_dir.clone());
-            state.runtime_owner_registry = registry;
-            Ok(transition)
+            let prepared_intent = prepare_lifecycle_intent(intent.clone());
+            state.apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+                profile_id,
+                user_data_dir.clone(),
+                prepared_intent,
+            )
         })
     }
 
@@ -2122,9 +2119,65 @@ mod tests {
     }
 
     #[test]
+    fn terminal_profile_sync_cli_preflight_precedes_aggregate_mutation() {
+        let repository = MemoryRepository::default();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        let profile_root = std::env::temp_dir().join("agent-browser-lifecycle-preflight");
+
+        repository
+            .mutate(|state| {
+                state.profiles.insert(
+                    "ordinary-route".to_string(),
+                    crate::native::service_model::BrowserProfile {
+                        id: "ordinary-route".to_string(),
+                        ..crate::native::service_model::BrowserProfile::default()
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+        let before = repository.load_snapshot().unwrap();
+
+        assert_eq!(
+            authority
+                .transition_terminal_replacement_with_profile_sync(
+                    RuntimeLifecycleIntent::RegisterCurrentOwner(owner()),
+                    "ordinary-route",
+                    &profile_root,
+                )
+                .unwrap_err(),
+            "runtime_lifecycle_profile_record_sync_rejected"
+        );
+        assert_eq!(repository.load_snapshot().unwrap(), before);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+
+            let invalid_profile_root =
+                std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![0xff]));
+            assert_eq!(
+                authority
+                    .transition_terminal_replacement_with_profile_sync(
+                        RuntimeLifecycleIntent::RegisterCurrentOwner(owner()),
+                        "rdp-guac-missing-viewer",
+                        &invalid_profile_root,
+                    )
+                    .unwrap_err(),
+                "runtime_lifecycle_profile_path_invalid"
+            );
+            assert_eq!(repository.load_snapshot().unwrap(), before);
+        }
+    }
+
+    #[test]
     fn partial_kernel_failure_rolls_back_inside_the_aggregate() {
         let repository = MemoryRepository::default();
         let current_owner = owner();
+        let profile_id = "rdp-guac-route-a-viewer";
+        let original_profile_root = std::env::temp_dir().join("agent-browser-lifecycle-original");
+        let replacement_profile_root =
+            std::env::temp_dir().join("agent-browser-lifecycle-replacement");
         let record = RuntimeLifecycleRecord {
             logical_browser_id: current_owner.browser_id.clone(),
             profile_identity_digest: current_owner.profile_identity_digest.clone(),
@@ -2142,6 +2195,14 @@ mod tests {
                     (current_owner.browser_id.clone(), record.clone()),
                     ("historical-browser".to_string(), record.clone()),
                 ]);
+                state.profiles.insert(
+                    profile_id.to_string(),
+                    crate::native::service_model::BrowserProfile {
+                        id: profile_id.to_string(),
+                        user_data_dir: Some(original_profile_root.display().to_string()),
+                        ..crate::native::service_model::BrowserProfile::default()
+                    },
+                );
                 Ok(())
             })
             .unwrap();
@@ -2163,7 +2224,19 @@ mod tests {
 
         assert_eq!(
             RuntimeLifecycleAuthority::new(&repository)
-                .transition(intent)
+                .transition(intent.clone())
+                .unwrap_err(),
+            "runtime_lifecycle_record_ambiguous"
+        );
+        assert_eq!(repository.load_snapshot().unwrap(), before);
+
+        assert_eq!(
+            RuntimeLifecycleAuthority::new(&repository)
+                .transition_terminal_replacement_with_profile_sync(
+                    intent,
+                    profile_id,
+                    &replacement_profile_root,
+                )
                 .unwrap_err(),
             "runtime_lifecycle_record_ambiguous"
         );

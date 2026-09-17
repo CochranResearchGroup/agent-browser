@@ -3945,6 +3945,76 @@ candidate after acceptance is the two-access process-exit legacy revocation
 packet, which intentionally retains revocation when a later session lookup
 fails and therefore must not reuse this atomic join blindly.
 
+## Checkpoint 59 | Terminal Replacement Profile Sync Accepted
+
+State transition: Service Model now owns the terminal-replacement lifecycle
+and profile-path cross-field commit. The CLI retains UTF-8 path conversion,
+immutable profile lookup, canonical route policy, nonblank profile validation,
+current-boot observation, and route-policy intent preparation in their prior
+order, then delegates the prepared typed intent and owned path to the aggregate.
+The packet removes the two frozen direct registry expressions and the direct
+CLI profile-path assignment. The classified production registry debt is now
+173 expressions; seven remain in `runtime_lifecycle.rs` outside this helper.
+
+The aggregate repeats only provider-free profile existence and identity
+validation, stages the Lease Authority transition, updates the selected path
+only after kernel success, assigns the staged registry, and returns the exact
+transition. Missing profile and profile-identity failures preserve their exact
+strings and precede kernel validation. Kernel failures preserve both fields and
+the complete aggregate even when the staged kernel mutated before returning an
+error. Successful nonreplacement intents deliberately commit and return their
+actual transition variant, preserving the two callers' existing post-commit
+outcome-mismatch behavior.
+
+Acceptance evidence:
+
+- all 212 Service Model unit tests and fourteen integration tests pass,
+  including four new profile-sync tests covering the activation and migration,
+  boot `Some` and `None`, ordinary and maximum revision parity matrix; profile
+  presence and identity error precedence; ambiguity and historical-row-removal
+  rollback; unrelated owner, binding, profile, tab, unknown-field and envelope-
+  revision preservation; and successful nonreplacement behavior;
+- all twenty-one focused `runtime_lifecycle` CLI tests pass, including route-
+  policy and invalid-path preflight plus complete profile and registry rollback
+  through the non-rollback in-memory repository;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, expanded mutation fixtures, and
+  changed-surface selector readback pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+The first focused CLI run failed because the new rollback witness used a
+synthetic profile ID that the unchanged canonical route predicate correctly
+rejected before reaching the intended kernel ambiguity. The fixture was
+corrected to the existing canonical `rdp-guac-route-a-viewer` form. The exact
+affected witness and then the complete focused lifecycle group passed. This was
+a fixture attribution, not a product repair or retry of the failed semantics.
+
+The architecture contract now exact-matches the aggregate signature and
+ordered validation, stage, kernel, path, registry, and return body. Its CLI
+guard brace-extracts the one helper, requires path conversion before repository
+mutation, profile lookup then route and nonblank preflight before intent
+preparation, and aggregate delegation last. Negative fixtures reject callback,
+error mapping, result filtering, direct registry or path mutation, omitted
+nonblank validation, early intent preparation, and path conversion moved into
+the mutation. The primary inspected and reconciled the complete candidate;
+the cumulative independent review and rework allowance was already consumed
+at Checkpoint 57, so no second broad review or rework loop was opened.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route for the atomic cross-field method
+and four provider-free tests. `/root/p205_receipt_cli_audit` used the workhorse
+`gpt-5.6-sol` high route for the exact helper cutover and focused precedence
+and rollback witnesses. The primary implemented the architecture contract,
+diagnosed the one fixture failure, and ran all local acceptance gates.
+
+Acceptance state and progress classification: terminal replacement profile
+synchronization is accepted and is outcome progress toward P4 field privacy.
+The next bounded outcome is process-exit legacy revocation. That packet must
+preserve health recording before revocation and the intentional retained
+revocation when the later session lookup fails; it is not an all-or-nothing
+transition.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -3952,9 +4022,9 @@ fails and therefore must not reuse this atomic join blindly.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections, and ordinary atomic runtime lifecycle transition accepted; remaining cross-field and partial transition closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections, ordinary atomic runtime lifecycle transition, and terminal profile-sync cross-field transition accepted; remaining partial transition closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | atomic runtime lifecycle transition accepted through Checkpoint 57 |
+| Focused correctness | crate tests and affected CLI adapter tests | terminal replacement profile synchronization accepted through Checkpoint 59 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

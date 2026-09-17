@@ -803,6 +803,32 @@ impl ServiceState {
         Ok(transition)
     }
 
+    /// Commit one staged lifecycle transition together with the selected profile
+    /// path. Adapters validate path encoding and route policy before preparing
+    /// the intent; this join preserves profile identity and kernel error order.
+    pub fn apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+        &mut self,
+        profile_id: &str,
+        user_data_dir: String,
+        intent: agent_browser_lease_authority::RuntimeLifecycleIntent,
+    ) -> Result<agent_browser_lease_authority::RuntimeLifecycleTransition, String> {
+        let profile = self
+            .profiles
+            .get(profile_id)
+            .ok_or_else(|| "runtime_lifecycle_profile_record_missing".to_string())?;
+        if profile.id != profile_id || profile_id.trim().is_empty() {
+            return Err("runtime_lifecycle_profile_record_sync_rejected".to_string());
+        }
+        let mut staged = self.runtime_owner_registry.clone();
+        let transition = staged.apply_lifecycle_transition(intent)?;
+        self.profiles
+            .get_mut(profile_id)
+            .expect("validated profile remains present")
+            .user_data_dir = Some(user_data_dir);
+        self.runtime_owner_registry = staged;
+        Ok(transition)
+    }
+
     /// Summarize retained lifecycle evidence without observing the runtime.
     pub fn runtime_lifecycle_authority_summary(&self) -> RuntimeLifecycleAuthoritySummary {
         let mut lifecycle_state_counts = BTreeMap::new();
@@ -3755,6 +3781,297 @@ mod tests {
                 .unwrap()
                 .pending_transfer
                 .is_some());
+        }
+
+        const SYNC_PROFILE: &str = "rdp-guac-route-a-viewer";
+
+        fn sync_state() -> ServiceState {
+            let mut state = state();
+            state.profiles.insert(
+                SYNC_PROFILE.into(),
+                BrowserProfile {
+                    id: SYNC_PROFILE.into(),
+                    user_data_dir: Some("old-path".into()),
+                    ..BrowserProfile::default()
+                },
+            );
+            state
+        }
+
+        #[test]
+        fn profile_sync_activation_and_migration_match_kernel_plus_exact_path_delta() {
+            use agent_browser_lease_authority::{
+                CleanupObligationState, RuntimeLaneLifecycleState,
+            };
+
+            for migration in [false, true] {
+                for boot_epoch in [None, Some("explicit-boot".to_string())] {
+                    for revision in [19, u64::MAX] {
+                        let mut state = sync_state();
+                        let mut current = owner();
+                        current.daemon_session_route = SYNC_PROFILE.into();
+                        current.browser_id = format!("session:{SYNC_PROFILE}");
+                        state.runtime_owner_registry =
+                            RuntimeOwnerRegistry::from_owner(current.clone());
+                        let mut unrelated = owner();
+                        unrelated.owner_id = "unrelated-owner".into();
+                        unrelated.profile_identity_digest = digest("unrelated-profile");
+                        unrelated.browser_id = "unrelated-browser".into();
+                        state
+                            .runtime_owner_registry
+                            .register_current_owner(unrelated.clone())
+                            .unwrap();
+                        for bound in
+                            std::iter::once(&unrelated).chain((!migration).then_some(&current))
+                        {
+                            state
+                                .runtime_owner_registry
+                                .bind_principal_authority(RuntimeOwnerPrincipalBinding {
+                                    principal_id: "principal".into(),
+                                    profile_id: bound.daemon_session_route.clone(),
+                                    profile_identity_digest: bound.profile_identity_digest.clone(),
+                                    capability_id: "capability".into(),
+                                    provenance: ServicePrincipalProvenance::RegisteredCapability,
+                                    owner_generation: bound.owner_generation,
+                                })
+                                .unwrap();
+                        }
+                        state
+                            .runtime_owner_registry
+                            .restore_lifecycle_records(BTreeMap::from([(
+                                current.browser_id.clone(),
+                                RuntimeLifecycleRecord {
+                                    logical_browser_id: current.browser_id.clone(),
+                                    profile_identity_digest: current
+                                        .profile_identity_digest
+                                        .clone(),
+                                    owner_generation: current.owner_generation,
+                                    lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                                    cleanup_obligation_state: CleanupObligationState::Satisfied,
+                                    terminal_evidence: vec![
+                                        "exact_process_exited".into(),
+                                        "profile_lock_released".into(),
+                                    ],
+                                    ..RuntimeLifecycleRecord::default()
+                                },
+                            )]));
+                        let mut wire = serde_json::to_value(&state.runtime_owner_registry).unwrap();
+                        wire["revision"] = json!(revision);
+                        state.runtime_owner_registry = serde_json::from_value(wire).unwrap();
+                        let mut replacement = current.clone();
+                        replacement.owner_id = "replacement-owner".into();
+                        replacement.owner_generation += 1;
+                        let intent = if migration {
+                            replacement.profile_identity_digest = digest("replacement-profile");
+                            RuntimeLifecycleIntent::MigrateTerminalProfileReplacement {
+                                canonical_route_viewer_profile: true,
+                                expected_owner: OwnerAuthorityClaim::from_owner(&current),
+                                owner: replacement,
+                                process_group_id: Some(321),
+                                package_launch_identity_digest: digest("replacement-launch"),
+                                boot_epoch: boot_epoch.clone(),
+                            }
+                        } else {
+                            RuntimeLifecycleIntent::ActivateTerminalReplacement {
+                                owner: replacement,
+                                process_group_id: Some(321),
+                                package_launch_identity_digest: digest("replacement-launch"),
+                                boot_epoch: boot_epoch.clone(),
+                            }
+                        };
+                        let mut expected = state.clone();
+                        let expected_transition = expected
+                            .runtime_owner_registry
+                            .apply_lifecycle_transition(intent.clone())
+                            .unwrap();
+                        expected
+                            .profiles
+                            .get_mut(SYNC_PROFILE)
+                            .unwrap()
+                            .user_data_dir = Some("new-path".into());
+                        let actual = state
+                            .apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+                                SYNC_PROFILE,
+                                "new-path".into(),
+                                intent,
+                            )
+                            .unwrap();
+                        assert_eq!(actual, expected_transition);
+                        assert!(matches!(
+                            actual,
+                            RuntimeLifecycleTransition::TerminalReplacementActivated(_)
+                        ));
+                        assert_eq!(state, expected);
+                        assert_eq!(state.state_revision(), 43);
+                        let lifecycle =
+                            &state.runtime_owner_registry.lifecycle_records()[&current.browser_id];
+                        assert_eq!(lifecycle.boot_epoch, boot_epoch);
+                        assert!(lifecycle.terminal_evidence.is_empty());
+                        if revision == u64::MAX {
+                            assert_eq!(state.runtime_owner_registry.revision(), u64::MAX);
+                        }
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn profile_sync_identity_errors_precede_malformed_kernel_intent() {
+            let mut invalid_owner = owner();
+            invalid_owner.owner_generation = 0;
+            let intent = RuntimeLifecycleIntent::RegisterCurrentOwner(invalid_owner);
+            for (key, embedded_id, expected_error) in [
+                (
+                    SYNC_PROFILE,
+                    None,
+                    "runtime_lifecycle_profile_record_missing",
+                ),
+                (
+                    SYNC_PROFILE,
+                    Some("other-id"),
+                    "runtime_lifecycle_profile_record_sync_rejected",
+                ),
+                (
+                    SYNC_PROFILE,
+                    Some(""),
+                    "runtime_lifecycle_profile_record_sync_rejected",
+                ),
+                (
+                    "",
+                    Some(""),
+                    "runtime_lifecycle_profile_record_sync_rejected",
+                ),
+                (
+                    "  ",
+                    Some("  "),
+                    "runtime_lifecycle_profile_record_sync_rejected",
+                ),
+            ] {
+                let mut state = state();
+                if let Some(id) = embedded_id {
+                    state.profiles.insert(
+                        key.into(),
+                        BrowserProfile {
+                            id: id.into(),
+                            user_data_dir: Some("old-path".into()),
+                            ..BrowserProfile::default()
+                        },
+                    );
+                }
+                let before = state.clone();
+                assert_eq!(
+                    state
+                        .apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+                            key,
+                            "new-path".into(),
+                            intent.clone()
+                        )
+                        .unwrap_err(),
+                    expected_error
+                );
+                assert_eq!(state, before);
+            }
+            let mut state = sync_state();
+            let before = state.clone();
+            let kernel_error = state
+                .runtime_owner_registry
+                .clone()
+                .apply_lifecycle_transition(intent.clone())
+                .unwrap_err();
+            assert_eq!(
+                state
+                    .apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+                        SYNC_PROFILE,
+                        "new-path".into(),
+                        intent
+                    )
+                    .unwrap_err(),
+                kernel_error
+            );
+            assert_eq!(state, before);
+        }
+
+        #[test]
+        fn profile_sync_kernel_partial_failures_restore_registry_and_profile_path() {
+            for ambiguous in [false, true] {
+                let mut state = sync_state();
+                let current = owner();
+                let record = RuntimeLifecycleRecord {
+                    logical_browser_id: current.browser_id.clone(),
+                    profile_identity_digest: if ambiguous {
+                        current.profile_identity_digest.clone()
+                    } else {
+                        digest("other-profile")
+                    },
+                    terminal_evidence: vec!["retained-evidence".into()],
+                    ..RuntimeLifecycleRecord::default()
+                };
+                let mut records = BTreeMap::from([("historical-key".into(), record.clone())]);
+                if ambiguous {
+                    records.insert(current.browser_id.clone(), record);
+                }
+                state
+                    .runtime_owner_registry
+                    .restore_lifecycle_records(records);
+                let before = state.clone();
+                let intent = RuntimeLifecycleIntent::RegisterCurrentOwner(current.clone());
+                let mut raw = state.runtime_owner_registry.clone();
+                let error = raw.apply_lifecycle_transition(intent.clone()).unwrap_err();
+                assert_eq!(
+                    error,
+                    if ambiguous {
+                        "runtime_lifecycle_record_ambiguous"
+                    } else {
+                        "runtime_lifecycle_profile_identity_mismatch"
+                    }
+                );
+                assert_ne!(raw, before.runtime_owner_registry);
+                assert!(raw.owner(&current.profile_identity_digest).is_some());
+                if !ambiguous {
+                    assert!(!raw.lifecycle_records().contains_key("historical-key"));
+                }
+                assert_eq!(
+                    state
+                        .apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+                            SYNC_PROFILE,
+                            "new-path".into(),
+                            intent
+                        )
+                        .unwrap_err(),
+                    error
+                );
+                assert_eq!(state, before);
+            }
+        }
+
+        #[test]
+        fn profile_sync_commits_successful_nonreplacement_outcome_without_path_interpretation() {
+            let mut state = sync_state();
+            let intent = RuntimeLifecycleIntent::RegisterCurrentOwner(owner());
+            let mut expected = state.clone();
+            let expected_transition = expected
+                .runtime_owner_registry
+                .apply_lifecycle_transition(intent.clone())
+                .unwrap();
+            expected
+                .profiles
+                .get_mut(SYNC_PROFILE)
+                .unwrap()
+                .user_data_dir = Some(String::new());
+            let transition = state
+                .apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+                    SYNC_PROFILE,
+                    String::new(),
+                    intent,
+                )
+                .unwrap();
+            assert!(matches!(
+                transition,
+                RuntimeLifecycleTransition::OwnerRegistered(_)
+            ));
+            assert_eq!(transition, expected_transition);
+            assert_eq!(state, expected);
+            assert_eq!(state.state_revision(), 43);
         }
 
         #[test]

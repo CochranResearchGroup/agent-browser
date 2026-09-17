@@ -129,6 +129,28 @@ impl ServiceState {
     self.runtime_owner_registry = staged;
     Ok(transition)
   }
+  pub fn apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+    &mut self,
+    profile_id: &str,
+    user_data_dir: String,
+    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,
+  ) -> Result<agent_browser_lease_authority::RuntimeLifecycleTransition, String> {
+    let profile = self
+      .profiles
+      .get(profile_id)
+      .ok_or_else(|| "runtime_lifecycle_profile_record_missing".to_string())?;
+    if profile.id != profile_id || profile_id.trim().is_empty() {
+      return Err("runtime_lifecycle_profile_record_sync_rejected".to_string());
+    }
+    let mut staged = self.runtime_owner_registry.clone();
+    let transition = staged.apply_lifecycle_transition(intent)?;
+    self.profiles
+      .get_mut(profile_id)
+      .expect("validated profile remains present")
+      .user_data_dir = Some(user_data_dir);
+    self.runtime_owner_registry = staged;
+    Ok(transition)
+  }
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -333,7 +355,29 @@ impl Authority {
   pub(crate) fn transition(&self) {
     state.apply_runtime_lifecycle_transition_atomically(prepare_lifecycle_intent(intent));
   }
-  fn transition_terminal_replacement_with_profile_sync(&self) {}
+  fn transition_terminal_replacement_with_profile_sync(
+    &self,
+    intent: RuntimeLifecycleIntent,
+    profile_id: &str,
+    profile_root: &std::path::Path,
+  ) -> Result<RuntimeLifecycleTransition, String> {
+    let user_data_dir = profile_root.to_str().ok_or_else(error)?.to_string();
+    self.repository.mutate(|state| {
+      let profile = state.profiles.get(profile_id).ok_or_else(error)?;
+      if profile.id != profile_id
+        || !canonical_route_viewer_runtime_profile(profile_id)
+        || profile_id.trim().is_empty()
+      {
+        return Err(error);
+      }
+      let prepared_intent = prepare_lifecycle_intent(intent.clone());
+      state.apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+        profile_id,
+        user_data_dir.clone(),
+        prepared_intent,
+      )
+    })
+  }
 }
 `;
 
@@ -577,6 +621,45 @@ for (const [name, mutation] of [
   ['atomic runtime lifecycle misplaced structure', { serviceState: validServiceState.replace(
     '    let mut staged = self.runtime_owner_registry.clone();\n    let transition = staged.apply_lifecycle_transition(intent)?;\n    self.runtime_owner_registry = staged;\n    Ok(transition)\n',
     '    helper(self, intent)\n',
+  ) }],
+  ['missing atomic profile-sync lifecycle method', { serviceState: validServiceState.replace(
+    /  pub fn apply_runtime_lifecycle_transition_with_profile_sync_atomically\([\s\S]*?\n  \}\n/,
+    '',
+  ) }],
+  ['atomic profile-sync lifecycle callback argument', { serviceState: validServiceState.replace(
+    '    user_data_dir: String,\n    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,',
+    '    user_data_dir: String,\n    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,\n    callback: impl FnOnce(),',
+  ) }],
+  ['atomic profile-sync lifecycle error mapping', { serviceState: validServiceState.replace(
+    '    let mut staged = self.runtime_owner_registry.clone();\n    let transition = staged.apply_lifecycle_transition(intent)?;\n    self.profiles\n',
+    '    let mut staged = self.runtime_owner_registry.clone();\n    let transition = staged.apply_lifecycle_transition(intent).map_err(|error| error)?;\n    self.profiles\n',
+  ) }],
+  ['atomic profile-sync lifecycle result filtering', { serviceState: validServiceState.replace(
+    '    self.runtime_owner_registry = staged;\n    Ok(transition)\n  }\n  pub fn service_authentication_run',
+    '    self.runtime_owner_registry = staged;\n    match transition { _ => Err("filtered".into()) }\n  }\n  pub fn service_authentication_run',
+  ) }],
+  ['terminal profile-sync CLI direct registry access', { runtimeLifecycle: validRuntimeLifecycle.replace(
+    '      let profile = state.profiles.get(profile_id).ok_or_else(error)?;',
+    '      let registry = state.runtime_owner_registry.clone();\n      let profile = state.profiles.get(profile_id).ok_or_else(error)?;',
+  ) }],
+  ['terminal profile-sync CLI direct path mutation', { runtimeLifecycle: validRuntimeLifecycle.replace(
+    '      state.apply_runtime_lifecycle_transition_with_profile_sync_atomically(',
+    '      state.profiles.get_mut(profile_id).unwrap().user_data_dir = Some(user_data_dir.clone());\n      state.apply_runtime_lifecycle_transition_with_profile_sync_atomically(',
+  ) }],
+  ['terminal profile-sync CLI prepares intent before preflight', { runtimeLifecycle: validRuntimeLifecycle.replace(
+    '    self.repository.mutate(|state| {\n      let profile = state.profiles.get(profile_id).ok_or_else(error)?;',
+    '    self.repository.mutate(|state| {\n      let prepared_intent = prepare_lifecycle_intent(intent.clone());\n      let profile = state.profiles.get(profile_id).ok_or_else(error)?;',
+  ).replace(
+    '      let prepared_intent = prepare_lifecycle_intent(intent.clone());\n      state.apply_runtime_lifecycle_transition_with_profile_sync_atomically(',
+    '      state.apply_runtime_lifecycle_transition_with_profile_sync_atomically(',
+  ) }],
+  ['terminal profile-sync CLI omits nonblank preflight', { runtimeLifecycle: validRuntimeLifecycle.replace(
+    '        || profile_id.trim().is_empty()\n',
+    '',
+  ) }],
+  ['terminal profile-sync CLI moves path conversion into mutation', { runtimeLifecycle: validRuntimeLifecycle.replace(
+    '    let user_data_dir = profile_root.to_str().ok_or_else(error)?.to_string();\n    self.repository.mutate(|state| {',
+    '    self.repository.mutate(|state| {\n      let user_data_dir = profile_root.to_str().ok_or_else(error)?.to_string();',
   ) }],
   ['ordinary lifecycle transition direct field access', {
     runtimeLifecycle: `

@@ -199,6 +199,8 @@ const RUNTIME_OWNER_PROJECTION_METHODS = [
 ];
 
 const ATOMIC_RUNTIME_LIFECYCLE_METHOD = 'apply_runtime_lifecycle_transition_atomically';
+const ATOMIC_PROFILE_SYNC_LIFECYCLE_METHOD =
+  'apply_runtime_lifecycle_transition_with_profile_sync_atomically';
 
 const RUNTIME_OWNER_PROJECTION_CLI_FILES = [
   'cli/src/install.rs',
@@ -526,8 +528,27 @@ function rustPublicFunctionDefinition(source, name) {
   return depth === 0 ? source.slice(match.index, cursor) : '';
 }
 
+function rustNamedFunctionDefinition(source, name) {
+  const header = new RegExp(`\\bfn\\s+${name}\\b[^\\{]*\\{`);
+  const match = header.exec(source);
+  if (!match) return '';
+
+  let depth = 1;
+  let cursor = match.index + match[0].length;
+  while (cursor < source.length && depth > 0) {
+    if (source[cursor] === '{') depth += 1;
+    else if (source[cursor] === '}') depth -= 1;
+    cursor += 1;
+  }
+  return depth === 0 ? source.slice(match.index, cursor) : '';
+}
+
 function normalizeRust(source) {
   return source.replace(/\s+/g, ' ').trim();
+}
+
+function compactRust(source) {
+  return source.replace(/\s+/g, '');
 }
 
 function importedPaths(source) {
@@ -1066,6 +1087,37 @@ function check(root = repoRoot) {
     `),
     'atomic runtime lifecycle method must preserve its exact signature and clone, apply, commit, return body',
   );
+  const atomicProfileSyncLifecycleMethod = rustPublicFunctionDefinition(
+    serviceStateCode,
+    ATOMIC_PROFILE_SYNC_LIFECYCLE_METHOD,
+  );
+  requireCondition(
+    compactRust(atomicProfileSyncLifecycleMethod) === compactRust(`
+      pub fn apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+        &mut self,
+        profile_id: &str,
+        user_data_dir: String,
+        intent: agent_browser_lease_authority::RuntimeLifecycleIntent,
+      ) -> Result<agent_browser_lease_authority::RuntimeLifecycleTransition, String> {
+        let profile = self
+          .profiles
+          .get(profile_id)
+          .ok_or_else(|| "runtime_lifecycle_profile_record_missing".to_string())?;
+        if profile.id != profile_id || profile_id.trim().is_empty() {
+          return Err("runtime_lifecycle_profile_record_sync_rejected".to_string());
+        }
+        let mut staged = self.runtime_owner_registry.clone();
+        let transition = staged.apply_lifecycle_transition(intent)?;
+        self.profiles
+          .get_mut(profile_id)
+          .expect("validated profile remains present")
+          .user_data_dir = Some(user_data_dir);
+        self.runtime_owner_registry = staged;
+        Ok(transition)
+      }
+    `),
+    'profile-sync runtime lifecycle method must preserve its exact validation, stage, apply, cross-field commit, return body',
+  );
   const ordinaryTransition = cliRuntimeLifecycle.match(
     /pub\s*\(\s*crate\s*\)\s+fn\s+transition\b[\s\S]*?(?=\n\s*fn\s+transition_terminal_replacement_with_profile_sync\b)/,
   )?.[0] ?? '';
@@ -1076,6 +1128,49 @@ function check(root = repoRoot) {
   requireCondition(
     !/\.\s*runtime_owner_registry\b/.test(ordinaryTransition),
     'CLI ordinary runtime lifecycle transition must not clone or assign the aggregate registry field',
+  );
+  const terminalProfileSyncTransition = rustNamedFunctionDefinition(
+    cliRuntimeLifecycle,
+    'transition_terminal_replacement_with_profile_sync',
+  );
+  const compactTerminalProfileSyncTransition = compactRust(terminalProfileSyncTransition);
+  const pathConversionIndex = compactTerminalProfileSyncTransition.indexOf(
+    'profile_root.to_str()',
+  );
+  const repositoryMutationIndex = compactTerminalProfileSyncTransition.indexOf(
+    'self.repository.mutate',
+  );
+  const profileLookupIndex = compactTerminalProfileSyncTransition.indexOf(
+    '.profiles.get(profile_id)',
+  );
+  const routeValidationIndex = compactTerminalProfileSyncTransition.indexOf(
+    'canonical_route_viewer_runtime_profile(profile_id)',
+  );
+  const nonblankValidationIndex = compactTerminalProfileSyncTransition.indexOf(
+    'profile_id.trim().is_empty()',
+  );
+  const intentPreparationIndex = compactTerminalProfileSyncTransition.indexOf(
+    'prepare_lifecycle_intent',
+  );
+  const aggregateProfileSyncIndex = compactTerminalProfileSyncTransition.indexOf(
+    ATOMIC_PROFILE_SYNC_LIFECYCLE_METHOD,
+  );
+  requireCondition(
+    pathConversionIndex >= 0
+      && repositoryMutationIndex > pathConversionIndex
+      && profileLookupIndex > repositoryMutationIndex
+      && routeValidationIndex > profileLookupIndex
+      && nonblankValidationIndex > routeValidationIndex
+      && intentPreparationIndex > nonblankValidationIndex
+      && aggregateProfileSyncIndex > intentPreparationIndex,
+    'CLI terminal profile-sync transition must preserve path, profile, route, and nonblank preflight before intent preparation and aggregate mutation',
+  );
+  requireCondition(
+    !/\.\s*runtime_owner_registry\b/.test(terminalProfileSyncTransition)
+      && !/\.\s*profiles\s*\.\s*get_mut\b/.test(terminalProfileSyncTransition)
+      && !/\.\s*user_data_dir\s*=/.test(terminalProfileSyncTransition)
+      && !/\bapply_transition\s*\(/.test(terminalProfileSyncTransition),
+    'CLI terminal profile-sync transition must not retain direct registry or profile-path mutation',
   );
   requireCondition(
     !/\bRuntimeOwnerPersistenceSnapshot\b/.test(runtimeOwnerProjectionSource),
