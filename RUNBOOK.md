@@ -9,6 +9,18 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
 - [P209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md)
 
+## Turn 373 | 2026-09-16
+
+P209 source checkpoint `2148caad` is locally accepted. The pure protocol binds
+prepared visual artifacts and P206 evidence into deterministic provider
+requests, admits only candidate identities or typed abstention, derives its own
+action budget and rejects serialized coordinate, event, retry and instruction
+smuggling. All 47 challenge-control tests, strict workspace Clippy, formatting,
+four architecture guards and 114 selector-expanded extracted-crate tests pass.
+The branch remains local and unpushed; publication and CI remain held on merged
+PR #179. No browser, provider, CAPTCHA, credential, runtime or production
+effect occurred.
+
 ## Turn 372 | 2026-09-16
 
 [Plan 0209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md)

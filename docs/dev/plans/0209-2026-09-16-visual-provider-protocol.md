@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
-State: OPEN
+State: SOURCE ACCEPTED | PUBLICATION AND CI HELD
 
 Consolidation: required
 
@@ -165,6 +165,32 @@ guard, formatting, strict local Clippy and diff hygiene at one clean commit.
 Publication exit additionally requires merged PR #179, P206 integration into
 `main`, canonical reconciliation, a published branch and the then-current
 protected validation path.
+
+## Local Acceptance | 2026-09-16
+
+Source checkpoint `2148caad` implements the pure provider protocol and its
+eight-case fake serialized fixture matrix. The request digest binds every
+request field other than the digest itself, including exact candidate order
+and prepared-artifact identity. Response adjudication accepts only selected
+candidate identities or typed ambiguous, unsupported and inconclusive
+abstention. Request, response, evidence, capability, freshness and budget
+violations stop before selection or intent, while coordinate, event-sequence,
+retry and free-form instruction fields fail strict deserialization.
+
+Local acceptance passed:
+
+- all 47 challenge-control crate tests, including 8 provider-protocol and 23
+  visual-round cases;
+- strict workspace Clippy and workspace formatting;
+- challenge-control, CDP, Lease Authority and desktop-services architecture
+  guards;
+- 3 CDP, 108 Lease Authority and 3 desktop-services tests selected because
+  the dev-only JSON fixture dependency updated the shared lockfile; and
+- diff hygiene and changed-surface validation selection.
+
+No browser, image, provider, credential, CAPTCHA, desktop-input, runtime or
+production effect was performed. The branch remains local and unpushed. CI and
+publication remain held until issue #174 lands through merged PR #179.
 
 ## Stop Condition
 

@@ -8,7 +8,7 @@ lanes:
     plan_ref: refs/heads/challenge/p206-visual-round-contract
     branch: challenge/p206-visual-round-contract
     target: main
-    plan_state: OPEN
+    plan_state: SOURCE_ACCEPTED_PUBLICATION_HELD
     custody_state: PUBLISHED_INTEGRATION_READY
     checkpoint: 5d6e3d57
     remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
@@ -31,15 +31,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: LOCAL_CI_HOLD
-    checkpoint: 5da7d37d
+    checkpoint: 2148caad
     remote_ref: null
     integration_receipt: null
     integration: publish only after PR 179 merges, P206 enters main, and P209 reconciles that canonical checkpoint
-    validation_status: provider-free implementation and focused local validation pending
-    validation_ref: null
+    validation_status: 47 challenge-control tests, strict workspace Clippy, formatting, four architecture guards, 114 selector-expanded extracted-crate tests, and diff hygiene passed locally; no CI was started
+    validation_ref: 2148caad
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: [P206]
     overlaps: [P206]
     reconciled_overlaps: [P206]
-    blocker: publication and CI are explicitly held on merged PR 179; all model-provider, image, browser, CAPTCHA, desktop-input, runtime and production effects are excluded
+    blocker: source is accepted locally; publication and CI are explicitly held on merged PR 179, and all model-provider, image, browser, CAPTCHA, desktop-input, runtime and production effects are excluded
     updated_at: 2026-09-16

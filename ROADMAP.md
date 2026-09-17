@@ -248,6 +248,9 @@ W7-B is locally admitted through
 `challenge/p209-visual-provider-protocol`. It owns only a pure candidate-only
 provider protocol and fake serialized fixtures. Publication and CI remain held
 until issue #174 lands through merged PR #179.
+Source checkpoint `2148caad` is locally accepted with the complete provider-free
+matrix and selector-required local validation. It remains unpushed and creates
+no provider, browser, credential, CAPTCHA, runtime or production authority.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
