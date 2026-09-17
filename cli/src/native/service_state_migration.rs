@@ -879,9 +879,7 @@ fn owner_principal_binding_is_migration_safe(
         && binding.provenance
             == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
         && state
-            .service_principals
-            .principals
-            .get(&binding.principal_id)
+            .service_principal(&binding.principal_id)
             .is_some_and(|principal| {
                 principal.state
                     == crate::native::service_principal::ServicePrincipalState::Active
@@ -889,9 +887,7 @@ fn owner_principal_binding_is_migration_safe(
                         == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
             })
         && state
-            .service_principals
-            .profile_capabilities
-            .get(&binding.capability_id)
+            .profile_capability(&binding.capability_id)
             .is_some_and(|capability| {
                 capability.principal_id == binding.principal_id
                     && capability.profile_id == binding.profile_id

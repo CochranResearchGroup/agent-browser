@@ -764,6 +764,111 @@ impl ServiceState {
         self.profile_policy_migration.as_ref()
     }
 
+    /// Project the principal registry CAS revision without advancing it.
+    pub fn service_principal_registry_revision(&self) -> u64 {
+        self.service_principals.revision
+    }
+
+    /// Inspect one registration without filtering state or interpreting provenance.
+    pub fn service_principal(
+        &self,
+        principal_id: &str,
+    ) -> Option<&agent_browser_lease_authority::ServicePrincipalRegistration> {
+        self.service_principals.principals.get(principal_id)
+    }
+
+    /// Inspect one capability without granting mutable authority or filtering state.
+    pub fn profile_capability(
+        &self,
+        capability_id: &str,
+    ) -> Option<&agent_browser_lease_authority::ServiceProfileCapability> {
+        self.service_principals
+            .profile_capabilities
+            .get(capability_id)
+    }
+
+    /// Project all capabilities, including revoked records, in persisted map-key order.
+    pub fn profile_capabilities(
+        &self,
+    ) -> impl Iterator<Item = &agent_browser_lease_authority::ServiceProfileCapability> + '_ {
+        self.service_principals.profile_capabilities.values()
+    }
+
+    /// Authenticate against this snapshot using the kernel's existing error precedence.
+    pub fn authenticate_profile_capability(
+        &self,
+        raw_capability: &str,
+        expected_profile_id: Option<&str>,
+    ) -> Result<
+        agent_browser_lease_authority::AuthenticatedServicePrincipal,
+        agent_browser_lease_authority::ServicePrincipalError,
+    > {
+        agent_browser_lease_authority::authenticate_profile_capability(
+            &self.service_principals,
+            raw_capability,
+            expected_profile_id,
+        )
+    }
+
+    /// Check the stronger current-authority predicate, including exact revision
+    /// and registered provenance, without changing token-authentication semantics.
+    pub fn authenticated_authority_is_current(
+        &self,
+        authority: &agent_browser_lease_authority::AuthenticatedServicePrincipal,
+    ) -> bool {
+        agent_browser_lease_authority::authenticated_authority_is_current(
+            &self.service_principals,
+            authority,
+        )
+    }
+
+    /// Register through the staged principal kernel. Owner binding, capability
+    /// files, events, envelope revision, and persistence remain adapter concerns.
+    pub fn register_profile_capability(
+        &mut self,
+        request: agent_browser_lease_authority::ServicePrincipalRegistrationRequest,
+        raw_capability: &str,
+    ) -> Result<
+        agent_browser_lease_authority::RegisteredProfileCapability,
+        agent_browser_lease_authority::ServicePrincipalError,
+    > {
+        agent_browser_lease_authority::register_profile_capability(
+            &mut self.service_principals,
+            request,
+            raw_capability,
+        )
+    }
+
+    /// Rotate the exact capability under the existing registry CAS. The adapter
+    /// fences active work first and updates runtime-owner binding afterward.
+    pub fn rotate_profile_capability(
+        &mut self,
+        request: agent_browser_lease_authority::ServicePrincipalRegistrationRequest,
+        expected_capability_id: &str,
+        expected_registry_revision: u64,
+        raw_capability: &str,
+    ) -> Result<
+        agent_browser_lease_authority::RotatedProfileCapability,
+        agent_browser_lease_authority::ServicePrincipalError,
+    > {
+        agent_browser_lease_authority::rotate_profile_capability(
+            &mut self.service_principals,
+            request,
+            expected_capability_id,
+            expected_registry_revision,
+            raw_capability,
+        )
+    }
+
+    /// Join both authorities from this snapshot without loading signing keys or
+    /// performing effects. Authenticated operations remain adapter responsibilities.
+    pub fn lease_authority_view(&self) -> agent_browser_lease_authority::LeaseAuthorityView<'_> {
+        agent_browser_lease_authority::LeaseAuthorityView::new(
+            &self.lease_authority,
+            &self.service_principals,
+        )
+    }
+
     /// Returns the immutable canonical lease authority projection. Mutations
     /// stay behind the authority kernel so sibling subsystems cannot edit its
     /// active index, fencing counters, or history independently.
@@ -3123,6 +3228,333 @@ pub fn validate_service_state_invariants(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    mod principal_registry_boundary {
+        use super::*;
+        use agent_browser_lease_authority::{
+            AuthenticatedServicePrincipal, RegisteredProfileCapability,
+            ServicePrincipalFailureCode, ServicePrincipalProvenance,
+            ServicePrincipalRegistrationRequest, ServicePrincipalState,
+            ServiceProfileCapabilityState,
+        };
+
+        const TOKEN: &str = "synthetic-principal-capability-at-least-thirty-two-characters";
+        const REPLACEMENT: &str = "replacement-principal-capability-at-least-thirty-two-characters";
+        const NOW: &str = "2026-09-17T12:00:00Z";
+
+        fn request() -> ServicePrincipalRegistrationRequest {
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:test".to_string(),
+                display_name: Some("Synthetic principal".to_string()),
+                profile_id: "profile:test".to_string(),
+                registered_at: Some(NOW.to_string()),
+                registered_by: Some("test".to_string()),
+            }
+        }
+
+        fn registered() -> (ServiceState, RegisteredProfileCapability) {
+            let mut state = ServiceState::default();
+            let registration = state.register_profile_capability(request(), TOKEN).unwrap();
+            (state, registration)
+        }
+
+        fn authenticated(state: &ServiceState) -> AuthenticatedServicePrincipal {
+            state
+                .authenticate_profile_capability(TOKEN, Some("profile:test"))
+                .unwrap()
+        }
+
+        #[test]
+        fn projections_preserve_map_order_revocation_and_missing_records() {
+            let (mut state, registration) = registered();
+            assert_eq!(state.service_principal_registry_revision(), 1);
+            assert_eq!(
+                state.service_principal("principal:test"),
+                Some(&registration.principal)
+            );
+            assert_eq!(state.service_principal("missing"), None);
+            assert_eq!(state.profile_capability("missing"), None);
+            let mut revoked = registration.capability.clone();
+            revoked.capability_id = "z-embedded-id".to_string();
+            revoked.state = ServiceProfileCapabilityState::Revoked;
+            let mut active = registration.capability;
+            active.capability_id = "a-embedded-id".to_string();
+            state.service_principals.profile_capabilities = BTreeMap::from([
+                ("a-key".to_string(), revoked.clone()),
+                ("z-key".to_string(), active.clone()),
+            ]);
+            let before = state.clone();
+            assert_eq!(state.profile_capability("a-key"), Some(&revoked));
+            assert_eq!(
+                state.profile_capabilities().collect::<Vec<_>>(),
+                vec![&revoked, &active]
+            );
+            assert_eq!(state, before);
+        }
+
+        #[test]
+        fn authentication_and_current_authority_keep_distinct_provenance_rules() {
+            let (mut state, registration) = registered();
+            let authority = authenticated(&state);
+            assert!(state.authenticated_authority_is_current(&authority));
+            let mut stale = authority.clone();
+            stale.capability_revision += 1;
+            assert!(!state.authenticated_authority_is_current(&stale));
+            let mut unproven = authority.clone();
+            unproven.provenance = ServicePrincipalProvenance::UnprovenLegacy;
+            assert!(!state.authenticated_authority_is_current(&unproven));
+            state
+                .service_principals
+                .principals
+                .get_mut(&registration.principal.principal_id)
+                .unwrap()
+                .provenance = ServicePrincipalProvenance::UnprovenLegacy;
+            assert_eq!(authenticated(&state), authority);
+            assert!(!state.authenticated_authority_is_current(&authority));
+        }
+
+        #[test]
+        fn authentication_preserves_failure_precedence() {
+            let (mut state, registration) = registered();
+            assert_eq!(
+                state
+                    .authenticate_profile_capability(" ", None)
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::CapabilityMissing
+            );
+            assert_eq!(
+                state
+                    .authenticate_profile_capability("unknown", None)
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::CapabilityMismatch
+            );
+            assert_eq!(
+                state
+                    .authenticate_profile_capability(TOKEN, Some("other"))
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::ProfileMismatch
+            );
+            let mut duplicate = registration.capability.clone();
+            duplicate.capability_id = "duplicate".to_string();
+            state
+                .service_principals
+                .profile_capabilities
+                .insert("duplicate".to_string(), duplicate);
+            assert_eq!(
+                state
+                    .authenticate_profile_capability(TOKEN, None)
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::CapabilityMismatch
+            );
+            state
+                .service_principals
+                .profile_capabilities
+                .remove("duplicate");
+            state
+                .service_principals
+                .principals
+                .get_mut("principal:test")
+                .unwrap()
+                .state = ServicePrincipalState::Suspended;
+            assert_eq!(
+                state
+                    .authenticate_profile_capability(TOKEN, Some("other"))
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::ProfileMismatch
+            );
+            assert_eq!(
+                state
+                    .authenticate_profile_capability(TOKEN, None)
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::PrincipalUnavailable
+            );
+            state
+                .service_principals
+                .profile_capabilities
+                .get_mut(&registration.capability.capability_id)
+                .unwrap()
+                .state = ServiceProfileCapabilityState::Revoked;
+            assert_eq!(
+                state
+                    .authenticate_profile_capability(TOKEN, Some("other"))
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::CapabilityRevoked
+            );
+        }
+
+        #[test]
+        fn registration_replays_and_conflicts_without_partial_state_or_secrets() {
+            let (mut state, first) = registered();
+            let before = state.clone();
+            assert_eq!(
+                state.register_profile_capability(request(), TOKEN).unwrap(),
+                first
+            );
+            assert_eq!(state, before);
+            assert_eq!(
+                state
+                    .register_profile_capability(request(), REPLACEMENT)
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::RegistrationConflict
+            );
+            assert_eq!(state, before);
+            assert_eq!(
+                state
+                    .register_profile_capability(request(), "short")
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::InvalidRegistration
+            );
+            assert_eq!(state, before);
+            let wire = serde_json::to_string(&state).unwrap();
+            assert!(!wire.contains(TOKEN));
+            assert!(!wire.contains(REPLACEMENT));
+            assert!(wire.contains("sha256:"));
+            assert_eq!(state.state_revision(), 0);
+        }
+
+        #[test]
+        fn rotation_preserves_cas_rollback_revocation_and_revisions() {
+            let (mut state, registration) = registered();
+            let authority = authenticated(&state);
+            let revision = state.service_principal_registry_revision();
+            let before = state.clone();
+            let id = &registration.capability.capability_id;
+            assert_eq!(
+                state
+                    .rotate_profile_capability(request(), "wrong", revision + 1, "short")
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::RegistryRevisionMismatch
+            );
+            assert_eq!(state, before);
+            assert_eq!(
+                state
+                    .rotate_profile_capability(request(), "wrong", revision, REPLACEMENT)
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::CapabilityRotationConflict
+            );
+            assert_eq!(state, before);
+            assert_eq!(
+                state
+                    .rotate_profile_capability(request(), id, revision, "short")
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::InvalidRegistration
+            );
+            assert_eq!(state, before);
+            let rotated = state
+                .rotate_profile_capability(request(), id, revision, REPLACEMENT)
+                .unwrap();
+            assert_eq!(rotated.registry_revision, revision + 2);
+            assert_eq!(state.service_principal_registry_revision(), revision + 2);
+            assert_eq!(
+                rotated.previous_capability.revision,
+                registration.capability.revision + 1
+            );
+            assert_eq!(
+                state.profile_capability(id),
+                Some(&rotated.previous_capability)
+            );
+            assert_eq!(
+                rotated.previous_capability.state,
+                ServiceProfileCapabilityState::Revoked
+            );
+            assert!(!state.authenticated_authority_is_current(&authority));
+            assert_eq!(
+                state
+                    .authenticate_profile_capability(TOKEN, None)
+                    .unwrap_err()
+                    .code,
+                ServicePrincipalFailureCode::CapabilityRevoked
+            );
+            let replacement = state
+                .authenticate_profile_capability(REPLACEMENT, None)
+                .unwrap();
+            assert!(state.authenticated_authority_is_current(&replacement));
+            assert_eq!(
+                replacement.capability_id,
+                rotated.registered.capability.capability_id
+            );
+            assert_eq!(state.state_revision(), before.state_revision());
+            assert_eq!(state.runtime_owner_registry, before.runtime_owner_registry);
+        }
+
+        #[test]
+        fn authority_view_uses_current_snapshot_principal_without_loading_trust_keys() {
+            use agent_browser_lease_authority::{
+                issue_lease_effect_authorization, AcquireLeaseClaimRequest, LeaseClaimMode,
+                LeaseEffectIntent, LeaseResourceKey,
+            };
+            let (mut state, registration) = registered();
+            let authority = authenticated(&state);
+            let claim = state
+                .acquire_lease_claim(AcquireLeaseClaimRequest {
+                    resource: LeaseResourceKey::profile("profile:test"),
+                    parent_claim_id: None,
+                    principal_id: authority.principal_id.clone(),
+                    capability_id: authority.capability_id.clone(),
+                    capability_revision: authority.capability_revision,
+                    mode: LeaseClaimMode::Ephemeral,
+                    expected_claim_revision: 0,
+                    idempotency_key: "acquire:test".to_string(),
+                    now: NOW.to_string(),
+                    expires_at: "2026-09-17T12:05:00Z".to_string(),
+                    transition_deadline: None,
+                    recovery_controller_id: None,
+                    boot_epoch: Some("synthetic-boot".to_string()),
+                    owner_generation: None,
+                })
+                .unwrap();
+            let intent = LeaseEffectIntent {
+                action_class: "browser_launch".to_string(),
+                audience: "session:test".to_string(),
+                operation_idempotency_key: "launch:test".to_string(),
+                executor_identity_digest: None,
+                issued_at: NOW.to_string(),
+                authorization_expires_at: "2026-09-17T12:02:00Z".to_string(),
+            };
+            let before = state.clone();
+            // Rejection occurs during authentication, before the kernel loads keys.
+            assert_eq!(
+                issue_lease_effect_authorization(
+                    &state.lease_authority_view(),
+                    &claim,
+                    &intent,
+                    b"wrong"
+                )
+                .unwrap_err(),
+                "lease_authority_capability_mismatch"
+            );
+            assert_eq!(state, before);
+            state
+                .service_principals
+                .profile_capabilities
+                .get_mut(&registration.capability.capability_id)
+                .unwrap()
+                .state = ServiceProfileCapabilityState::Revoked;
+            assert!(!state.authenticated_authority_is_current(&authority));
+            assert_eq!(
+                issue_lease_effect_authorization(
+                    &state.lease_authority_view(),
+                    &claim,
+                    &intent,
+                    TOKEN.as_bytes()
+                )
+                .unwrap_err(),
+                "lease_authority_capability_revoked"
+            );
+        }
+    }
 
     fn reconcile_receipt_fixture() -> ProfileLeaseReconcileReceipt {
         ProfileLeaseReconcileReceipt {

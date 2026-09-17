@@ -142,6 +142,18 @@ const SERVICE_STATE_RECEIPT_FIELDS = [
   'profile_reset_receipts',
 ];
 
+const SERVICE_STATE_PRINCIPAL_METHODS = [
+  'service_principal_registry_revision',
+  'service_principal',
+  'profile_capability',
+  'profile_capabilities',
+  'authenticate_profile_capability',
+  'authenticated_authority_is_current',
+  'register_profile_capability',
+  'rotate_profile_capability',
+  'lease_authority_view',
+];
+
 const SERVICE_CHALLENGE_DEFINITIONS = [
   'ServiceChallengeTaskState',
   'ServiceChallengeTaskSummary',
@@ -322,6 +334,81 @@ function withoutComments(source) {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/\/\/.*$/gm, ' ');
+}
+
+// Remove items compiled only for tests while retaining production items that
+// follow an early cfg(test) import or helper in the same Rust source file.
+function withoutCfgTestItems(source) {
+  const attribute = /^\s*#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]/gm;
+  const ranges = [];
+  let match;
+  while ((match = attribute.exec(source)) !== null) {
+    let cursor = match.index + match[0].length;
+    while (cursor < source.length) {
+      while (/\s/.test(source[cursor])) cursor += 1;
+      if (source[cursor] !== '#' || source[cursor + 1] !== '[') break;
+      let bracketDepth = 1;
+      cursor += 2;
+      while (cursor < source.length && bracketDepth > 0) {
+        if (source[cursor] === '[') bracketDepth += 1;
+        else if (source[cursor] === ']') bracketDepth -= 1;
+        cursor += 1;
+      }
+    }
+
+    let state = 'code';
+    let depth = 0;
+    let itemEnd = cursor;
+    let itemState = state;
+    while (itemEnd < source.length) {
+      const character = source[itemEnd];
+      const next = source[itemEnd + 1];
+      if (itemState === 'line-comment') {
+        if (character === '\n') itemState = 'code';
+      } else if (itemState === 'block-comment') {
+        if (character === '*' && next === '/') {
+          itemState = 'code';
+          itemEnd += 1;
+        }
+      } else if (itemState === 'string') {
+        if (character === '\\') itemEnd += 1;
+        else if (character === '"') itemState = 'code';
+      } else if (itemState === 'character') {
+        if (character === '\\') itemEnd += 1;
+        else if (character === "'") itemState = 'code';
+      } else if (character === '/' && next === '/') {
+        itemState = 'line-comment';
+        itemEnd += 1;
+      } else if (character === '/' && next === '*') {
+        itemState = 'block-comment';
+        itemEnd += 1;
+      } else if (character === '"') {
+        itemState = 'string';
+      } else if (character === "'") {
+        itemState = 'character';
+      } else if (character === '{') {
+        depth += 1;
+      } else if (character === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          itemEnd += 1;
+          break;
+        }
+      } else if (character === ';' && depth === 0) {
+        itemEnd += 1;
+        break;
+      }
+      itemEnd += 1;
+    }
+    ranges.push([match.index, itemEnd]);
+    attribute.lastIndex = itemEnd;
+  }
+
+  let result = source;
+  for (const [start, end] of ranges.reverse()) {
+    result = `${result.slice(0, start)}${result.slice(start, end).replace(/[^\n]/g, ' ')}${result.slice(end)}`;
+  }
+  return result;
 }
 
 function rustStructDefinition(source, name) {
@@ -555,7 +642,8 @@ function check(root = repoRoot) {
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
   const cliProductionSources = rustFilesUnder(join(root, 'cli/src'))
-    .map((path) => readFileSync(path, 'utf8').split('#[cfg(test)]', 1)[0])
+    .filter((path) => !/(?:^|[/\\])(?:tests?[/\\]|(?:[^/\\]*_)?tests?\.rs$)/.test(path))
+    .map((path) => withoutCfgTestItems(readFileSync(path, 'utf8')))
     .map((source) => withoutCommentsAndStrings(source));
 
   const authenticationManifestPath = join(root,
@@ -795,6 +883,16 @@ function check(root = repoRoot) {
       `CLI production code must not access ServiceState.${field} directly`,
     );
   }
+  for (const name of SERVICE_STATE_PRINCIPAL_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own principal-authority method: ${name}`,
+    );
+  }
+  requireCondition(
+    !cliProductionSources.some((source) => /\.\s*service_principals\b/.test(source)),
+    'CLI production code must not access ServiceState.service_principals directly',
+  );
   const serviceStateExport = serviceModelLib.match(/\bpub\s+use\s+service_state\s*::\s*\{([\s\S]*?)\}\s*;/);
   requireCondition(/\bmod\s+service_state\s*;/.test(serviceModelLib),
     'service-model lib must declare the ServiceState aggregate module');

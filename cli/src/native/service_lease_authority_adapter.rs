@@ -78,12 +78,7 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
         .validate_schema()
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
     let state = repository.load_snapshot()?;
-    let claim = authorize_lease_effect(
-        &LeaseAuthorityView::new(state.lease_authority(), &state.service_principals),
-        authorization,
-        now,
-        context,
-    )?;
+    let claim = authorize_lease_effect(&state.lease_authority_view(), authorization, now, context)?;
     if claim.resource().kind == LeaseResourceKind::Profile {
         let profile = state
             .profiles
@@ -131,12 +126,7 @@ pub(crate) fn issue_lease_effect_authorization_for_state(
     intent: &LeaseEffectIntent,
     raw_capability: &[u8],
 ) -> Result<LeaseEffectAuthorization, String> {
-    issue_lease_effect_authorization(
-        &LeaseAuthorityView::new(state.lease_authority(), &state.service_principals),
-        claim,
-        intent,
-        raw_capability,
-    )
+    issue_lease_effect_authorization(&state.lease_authority_view(), claim, intent, raw_capability)
 }
 
 pub(crate) fn release_lease_claim_for_authenticated_state(

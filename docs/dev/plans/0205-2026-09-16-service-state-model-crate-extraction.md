@@ -2985,16 +2985,150 @@ runtime-owner and repository-sidecar authority boundary. P4 remains open for
 those authority surfaces, the lifecycle and presentation transitions,
 fixture migration, field privacy, facade deletion, and final measurement.
 
+## Checkpoint 48 | Service Principal Registry Interface Freeze
+
+State transition: the Service Principal registry boundary is frozen as nine
+typed `ServiceState` methods before implementation. Four immutable projections
+expose only the registry revision, one exact principal, one exact capability,
+and ordered capability records. Two snapshot-bound methods own capability
+authentication and current-authority validation. Two typed transitions
+delegate registration and revision-guarded rotation to the existing Lease
+Authority kernel. One pure projection constructs a read-only Lease Authority
+view from the aggregate's principal registry and lease state internally.
+
+The interface preserves the existing distinctions. Authentication retains its
+missing-token, unique-digest, active-capability, profile, and active-principal
+error order and does not add a provenance requirement. Current-authority
+validation remains stronger: it requires registered-capability provenance,
+exact capability revision, and exact principal and profile identity.
+Capability iteration retains `BTreeMap` value order and includes revoked
+records because existing status and migration consumers apply different
+filters. Registration and rotation retain staged all-or-nothing registry
+behavior, schema initialization, current metadata, exact replay and conflict
+rules, compare-and-swap precedence, and registry revision semantics.
+
+The CLI retains capability generation and private-file custody, repository
+mutation, event append, cleanup, process and boot observation, runtime-owner
+binding, profile-path resolution, HTTP and MCP transport mapping, and browser
+or daemon effects. Registration remains private capability file, registry
+transition, current-owner binding, event append, and persistence. Rotation
+remains private capability file, active-work fencing, registry compare-and-swap,
+owner-binding rotation, event append, and persistence. Lease authorization
+schema validation remains before repository loading, while exact physical
+profile and runtime-owner checks remain after the aggregate authorization join.
+Signing and verification remain CLI-invoked Lease Authority operations because
+their existing implementation loads trust-key filesystem state; Service Model
+must not acquire that effect merely to hide two fields.
+
+The caller audit found 42 production direct accesses across seven CLI files
+and no repository sidecar. This packet removes those accesses without adding a
+registry getter, mutable record reference, generic callback, registry
+replacement, serialized authority field, or envelope revision mutation. It
+does not claim extraction of the larger principal-continuity, subordinate work
+lease, legacy migration, or daemon recourse algorithms. Those pure decisions
+join sessions and runtime-owner state and remain a separately reviewable
+follow-up rather than being obscured behind this access closure.
+
+Hard stops are changed authentication or rotation precedence, provenance
+homogenization, uniqueness strengthening in legacy projections, moved secret
+or filesystem custody, moved process observation, combined registry and
+runtime-owner atomicity, changed error strings, or a broad principal-registry
+reference. Documented-hidden field visibility remains until external aggregate
+fixtures are migrated.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route for the authority
+boundary, corrected nine-method interface, and semantic hard stops. Its
+pre-edit review found and prevented the transitive trust-key filesystem edge.
+`/root/p205_receipt_cli_audit` used the requested workhorse `gpt-5.6-sol` high
+route for the 42-access production inventory, order and effect classification,
+test witnesses, and disjoint write plan. Both were read-only and had no build,
+test, Git, forge, CI, runtime, or child-agent custody. The primary selected
+registry access closure now and retained full continuity extraction as an
+explicit later outcome.
+
+Acceptance state and progress classification: this is an interface freeze,
+not implementation acceptance. It makes the authority boundary executable but
+does not by itself advance a P4 implementation criterion. Exit requires zero
+production direct `service_principals` access, provider-free kernel tests,
+affected CLI witnesses, strict local quality gates, and an architecture
+regression guard.
+
+## Checkpoint 49 | Service Principal Registry Closure Accepted
+
+State transition: Service Model now owns nine typed Service Principal registry
+operations: registry revision, exact principal and capability projections,
+ordered capability iteration, capability authentication, current-authority
+validation, registration, rotation, and construction of a read-only Lease
+Authority view from the current aggregate. The interface exposes no registry
+reference or mutable record and preserves the Lease Authority kernel's
+existing authentication, provenance, replay, conflict, compare-and-swap, and
+revision semantics.
+
+The CLI has zero production direct access to `ServiceState.service_principals`.
+Capability generation and private-file custody, repository mutation, event
+append, runtime-owner binding, physical profile checks, signing and
+verification, key loading, HTTP and MCP error mapping, and browser or daemon
+effects remain adapter responsibilities. The model-owned
+`lease_authority_view()` is a pure borrowed join and does not load trust keys
+or perform an effect.
+
+The initial caller inventory found 42 direct accesses in seven native CLI
+files. Independent review then found one additional production MCP access and
+a guard blind spot: the production-source scan discarded every file after its
+first early `#[cfg(test)]` item. The MCP caller now uses the aggregate
+authentication method. The guard now removes only test-gated items and
+test-only files, retains later production code, and has both a positive
+test-only-access fixture and a negative production-leak-after-test-item
+fixture. This closed the false-green path rather than recording the first
+passing guard as acceptance.
+
+Acceptance evidence:
+
+- all 184 Service Model unit tests and fourteen integration tests pass;
+- 82 focused provider-free CLI witnesses pass across principal continuity,
+  Lease Authority adapter joins, profile lease registration and rotation,
+  profile acquisition and recovery, HTTP bearer authority, MCP capability
+  authority, and migration safety;
+- all 116 Lease Authority tests and its architecture contract pass;
+- Service API and MCP parity, generated service-client contract and type
+  checks, and the service-collection no-launch smoke pass;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, its mutation fixtures, and the
+  changed-surface selector readback pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route for the corrected
+nine-method boundary and provider-free tests. `/root/p205_receipt_cli_audit`
+used the requested workhorse `gpt-5.6-sol` high route for the production
+cutover. `/root/p205_principal_guard_fixture` used the economical
+`gpt-5.6-luna` medium route for the positive guard fixture, and
+`/root/p205_principal_test_routes` used `gpt-5.6-luna` low for focused test
+selection. The primary integrated and corrected their work, added the residual
+MCP cutover and witness, fixed the production-source guard, and independently
+ran every acceptance gate. Independent privacy review found the MCP and guard
+defects; closed-world verification was limited to those accepted findings.
+
+Acceptance state and progress classification: Service Principal registry
+access closure is accepted and is outcome progress toward P4 field privacy.
+The next bounded outcome is the pure Principal Continuity kernel: state-bound
+session authority, subordinate work-lease transitions, continuity recourse,
+and legacy migration decisions with boot epoch supplied explicitly by the CLI.
+Runtime-owner mutation and repository-sidecar custody remain a later boundary
+rather than being exposed through a broad registry getter.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | aggregate and twenty-three prerequisite families accepted |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, and exact receipt-map closure accepted; remaining typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, and Service Principal registry closure accepted; remaining typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | exact receipt-map closure accepted through Checkpoint 47 |
+| Focused correctness | crate tests and affected CLI adapter tests | Service Principal registry closure accepted through Checkpoint 49 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

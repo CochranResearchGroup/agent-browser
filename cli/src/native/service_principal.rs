@@ -12,12 +12,16 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use super::service_model::{BrowserSession, LeaseState, ServiceState};
+#[cfg(test)]
 pub(crate) use agent_browser_lease_authority::{
     authenticate_profile_capability, authenticated_authority_is_current,
-    generate_profile_capability_token, register_profile_capability, rotate_profile_capability,
-    AuthenticatedServicePrincipal, RegisteredProfileCapability, ServicePrincipalError,
-    ServicePrincipalFailureCode, ServicePrincipalProvenance, ServicePrincipalRegistrationRequest,
-    ServicePrincipalState, ServiceProfileCapability, ServiceProfileCapabilityState,
+    register_profile_capability,
+};
+pub(crate) use agent_browser_lease_authority::{
+    generate_profile_capability_token, AuthenticatedServicePrincipal, RegisteredProfileCapability,
+    ServicePrincipalError, ServicePrincipalFailureCode, ServicePrincipalProvenance,
+    ServicePrincipalRegistrationRequest, ServicePrincipalState, ServiceProfileCapability,
+    ServiceProfileCapabilityState,
 };
 pub(crate) use agent_browser_service_model::PrincipalContinuityRecourse;
 
@@ -85,10 +89,7 @@ pub(crate) fn authenticated_session_work_authority(
     let [binding] = matching.as_slice() else {
         return None;
     };
-    let capability = state
-        .service_principals
-        .profile_capabilities
-        .get(&binding.capability_id)?;
+    let capability = state.profile_capability(&binding.capability_id)?;
     let authority = AuthenticatedServicePrincipal {
         principal_id: principal_id.to_string(),
         profile_id: profile_id.to_string(),
@@ -96,7 +97,9 @@ pub(crate) fn authenticated_session_work_authority(
         capability_revision: capability.revision,
         provenance: binding.provenance,
     };
-    authenticated_authority_is_current(&state.service_principals, &authority).then_some(authority)
+    state
+        .authenticated_authority_is_current(&authority)
+        .then_some(authority)
 }
 
 pub(crate) fn bind_session_work_lease(
@@ -105,7 +108,7 @@ pub(crate) fn bind_session_work_lease(
     authority: &AuthenticatedServicePrincipal,
     expires_at: String,
 ) -> Result<BrowserSession, ServicePrincipalError> {
-    if !authenticated_authority_is_current(&state.service_principals, authority) {
+    if !state.authenticated_authority_is_current(authority) {
         return Err(principal_error(
             ServicePrincipalFailureCode::CapabilityMismatch,
         ));
@@ -148,7 +151,7 @@ pub(crate) fn bind_tab_work_lease(
     authority: &AuthenticatedServicePrincipal,
     expires_at: String,
 ) -> Result<super::service_model::BrowserTab, ServicePrincipalError> {
-    if !authenticated_authority_is_current(&state.service_principals, authority) {
+    if !state.authenticated_authority_is_current(authority) {
         return Err(principal_error(
             ServicePrincipalFailureCode::CapabilityMismatch,
         ));
@@ -196,7 +199,7 @@ pub(crate) fn principal_continuity_decision(
     authority: &AuthenticatedServicePrincipal,
 ) -> PrincipalContinuityDecision {
     let mut reasons = Vec::new();
-    if !authenticated_authority_is_current(&state.service_principals, authority) {
+    if !state.authenticated_authority_is_current(authority) {
         reasons.push("principal_capability_not_current".to_string());
         return continuity_decision(
             authority,
@@ -437,18 +440,14 @@ fn verified_principal_owner_binding<'a>(
                     .runtime_owner_registry
                     .principal_binding_is_current(Some(binding))
                 && state
-                    .service_principals
-                    .principals
-                    .get(principal_id)
+                    .service_principal(principal_id)
                     .is_some_and(|principal| {
                         principal.state == ServicePrincipalState::Active
                             && principal.provenance
                                 == ServicePrincipalProvenance::RegisteredCapability
                     })
                 && state
-                    .service_principals
-                    .profile_capabilities
-                    .get(&binding.capability_id)
+                    .profile_capability(&binding.capability_id)
                     .is_some_and(|capability| {
                         capability.state == ServiceProfileCapabilityState::Active
                             && capability.principal_id == binding.principal_id

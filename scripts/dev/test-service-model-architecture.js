@@ -94,6 +94,15 @@ impl ServiceState {
   pub fn record_profile_recovery(&mut self) {}
   pub fn replay_profile_reset(&self) {}
   pub fn record_profile_reset(&mut self) {}
+  pub fn service_principal_registry_revision(&self) {}
+  pub fn service_principal(&self) {}
+  pub fn profile_capability(&self) {}
+  pub fn profile_capabilities(&self) {}
+  pub fn authenticate_profile_capability(&self) {}
+  pub fn authenticated_authority_is_current(&self) {}
+  pub fn register_profile_capability(&mut self) {}
+  pub fn rotate_profile_capability(&mut self) {}
+  pub fn lease_authority_view(&self) {}
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -268,6 +277,7 @@ const validAuthenticationFacade = 'pub(crate) use agent_browser_authentication_c
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
+  cliTest = '',
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
   authentication = validAuthenticationControl,
@@ -296,6 +306,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_state.rs'), serviceState);
   mkdirSync(join(root, 'cli/src/native'), { recursive: true });
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
+  writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
   return root;
@@ -356,6 +367,14 @@ for (const [name, mutation] of [
   ['direct CLI lease receipt access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.profile_lease_reconcile_receipts; }\n' }],
   ['direct CLI recovery receipt access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.profile_recovery_receipts; }\n' }],
   ['direct CLI reset receipt access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.profile_reset_receipts; }\n' }],
+  ['missing principal authority method', { serviceState: validServiceState.replace(
+    'pub fn authenticated_authority_is_current(&self) {}',
+    '',
+  ) }],
+  ['direct CLI principal registry access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.service_principals; }\n' }],
+  ['direct CLI principal registry access after test-only item', {
+    cli: '#[cfg(test)]\nuse crate::fixture;\nfn leak(state: &ServiceState) { let _ = &state.service_principals; }\n',
+  }],
   ['missing authentication aggregate method', { serviceState: validServiceState.replace(
     'pub fn observe_service_authentication_run(&mut self) {}',
     '',
@@ -411,6 +430,19 @@ try {
   doesNotThrow(() => ok(check(clean).length === 0, check(clean).join('\n')));
 } finally {
   rmSync(clean, { recursive: true, force: true });
+}
+
+const testOnlyPrincipalAccess = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authenticationManifest: validAuthenticationManifest,
+  cliTest: 'fn inspect(state: &ServiceState) { let _ = &state.service_principals; }\n',
+});
+try {
+  doesNotThrow(() => ok(check(testOnlyPrincipalAccess).length === 0,
+    check(testOnlyPrincipalAccess).join('\n')));
+} finally {
+  rmSync(testOnlyPrincipalAccess, { recursive: true, force: true });
 }
 
 const indirectAggregateOwner = fixture({

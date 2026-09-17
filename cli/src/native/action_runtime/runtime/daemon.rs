@@ -1028,10 +1028,7 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
         provenance:
             crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
     };
-    if !crate::native::service_principal::authenticated_authority_is_current(
-        &state.service_principals,
-        &authority,
-    ) {
+    if !state.authenticated_authority_is_current(&authority) {
         return Ok(false);
     }
     let Some(profile) = state.profiles.get(&profile_id) else {
@@ -1475,25 +1472,19 @@ fn apply_authenticated_orphaned_owner_recourse(
         return Ok(false);
     };
     let principal_active = state
-        .service_principals
-        .principals
-        .get(principal_id)
+        .service_principal(principal_id)
         .is_some_and(|principal| {
             principal.state
                 == crate::native::service_principal::ServicePrincipalState::Active
                 && principal.provenance
                     == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
         });
-    let capability = state
-        .service_principals
-        .profile_capabilities
-        .values()
-        .find(|capability| {
-            capability.principal_id == principal_id
-                && capability.profile_id == profile_id
-                && capability.state
-                    == crate::native::service_principal::ServiceProfileCapabilityState::Active
-        });
+    let capability = state.profile_capabilities().find(|capability| {
+        capability.principal_id == principal_id
+            && capability.profile_id == profile_id
+            && capability.state
+                == crate::native::service_principal::ServiceProfileCapabilityState::Active
+    });
     if !principal_active || capability.is_none() {
         return Ok(false);
     }

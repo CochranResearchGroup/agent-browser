@@ -28,9 +28,7 @@ use super::service_model::{
     ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
     ProfileSeedingMode, ServiceState,
 };
-use super::service_principal::{
-    authenticate_profile_capability, AuthenticatedServicePrincipal, ServicePrincipalProvenance,
-};
+use super::service_principal::{AuthenticatedServicePrincipal, ServicePrincipalProvenance};
 use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
@@ -384,12 +382,9 @@ pub(crate) fn profile_acquisition_daemon_route(command: &Value) -> Result<String
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let authority = authenticate_profile_capability(
-            &snapshot.service_principals,
-            &raw_capability,
-            Some(profile_id),
-        )
-        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+        let authority = snapshot
+            .authenticate_profile_capability(&raw_capability, Some(profile_id))
+            .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
         let profile = snapshot
             .profiles
             .get(&authority.profile_id)
@@ -451,12 +446,9 @@ pub(crate) fn profile_recovery_apply_daemon_route(command: &Value) -> Result<Str
     verify_plan_integrity(&plan, raw_capability.as_bytes())?;
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(&plan.identities.profile_id),
-    )
-    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let authority = snapshot
+        .authenticate_profile_capability(&raw_capability, Some(&plan.identities.profile_id))
+        .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
     if authority.principal_id != plan.identities.principal_id
         || authority.principal_id != plan.original_intent.principal_id
     {
@@ -991,12 +983,9 @@ fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
 ) -> Result<LeaseClaimAcquisitionOutcome, String> {
     let boot_epoch = crate::process_identity::current_boot_epoch();
     repository.mutate(|state| {
-        let authority = authenticate_profile_capability(
-            &state.service_principals,
-            raw_capability,
-            Some(&intent.profile_id),
-        )
-        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+        let authority = state
+            .authenticate_profile_capability(raw_capability, Some(&intent.profile_id))
+            .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
         if authority.principal_id != intent.principal_id {
             return Err("profile_acquisition_principal_mismatch".to_string());
         }
@@ -1068,12 +1057,9 @@ fn replay_profile_claim_for_intent<R: ServiceStateRepository>(
     idempotency_key: &str,
 ) -> Result<Option<LeaseClaimAcquisitionOutcome>, String> {
     let state = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &state.service_principals,
-        raw_capability,
-        Some(&intent.profile_id),
-    )
-    .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+    let authority = state
+        .authenticate_profile_capability(raw_capability, Some(&intent.profile_id))
+        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
     if authority.principal_id != intent.principal_id {
         return Err("profile_acquisition_principal_mismatch".to_string());
     }
@@ -1401,12 +1387,9 @@ async fn acquire_profile_command(
     let snapshot = repository.load_snapshot()?;
     let profile_id = required_command_string(command, "profileId")?;
     let raw_capability = profile_capability_from_command(command)?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(profile_id),
-    )
-    .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+    let authority = snapshot
+        .authenticate_profile_capability(&raw_capability, Some(profile_id))
+        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
     let retry_authority = authority.clone();
     let intent = ProfileAcquisitionIntent {
         principal_id: authority.principal_id,
@@ -1681,12 +1664,9 @@ fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
     let state = load_service_state_for_maintenance(command)?;
     let profile_id = required_command_string(command, "profileId")?;
     let raw_capability = profile_capability_from_command(command)?;
-    let authority = authenticate_profile_capability(
-        &state.service_principals,
-        &raw_capability,
-        Some(profile_id),
-    )
-    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let authority = state
+        .authenticate_profile_capability(&raw_capability, Some(profile_id))
+        .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
     let intent = ProfileAcquisitionIntent {
         principal_id: authority.principal_id,
         profile_id: authority.profile_id,
@@ -1736,12 +1716,9 @@ fn status_profile_recovery_command(command: &Value) -> Result<Value, String> {
             "receipt": null,
         }));
     };
-    let authority = authenticate_profile_capability(
-        &state.service_principals,
-        &raw_capability,
-        Some(&receipt.profile_id),
-    )
-    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let authority = state
+        .authenticate_profile_capability(&raw_capability, Some(&receipt.profile_id))
+        .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
     if authority.principal_id != receipt.principal_id {
         return Err("profile_recovery_principal_mismatch".to_string());
     }
@@ -1785,12 +1762,9 @@ async fn apply_profile_recovery_command(
     let raw_capability = profile_capability_from_command(command)?;
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(&plan.identities.profile_id),
-    )
-    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let authority = snapshot
+        .authenticate_profile_capability(&raw_capability, Some(&plan.identities.profile_id))
+        .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
     if authority.principal_id != plan.identities.principal_id
         || authority.principal_id != plan.original_intent.principal_id
     {
@@ -1854,12 +1828,9 @@ fn plan_profile_reset_command(command: &Value) -> Result<Value, String> {
     let state = load_service_state_for_maintenance(command)?;
     let profile_id = required_command_string(command, "profileId")?;
     let raw_capability = profile_capability_from_command(command)?;
-    let authority = authenticate_profile_capability(
-        &state.service_principals,
-        &raw_capability,
-        Some(profile_id),
-    )
-    .map_err(|error| format!("profile_reset_principal_{}", error.code.as_str()))?;
+    let authority = state
+        .authenticate_profile_capability(&raw_capability, Some(profile_id))
+        .map_err(|error| format!("profile_reset_principal_{}", error.code.as_str()))?;
     let scope = profile_reset_scope(command)?;
     if scope == ProfileResetScope::ProfileData {
         return Ok(json!({
@@ -1904,12 +1875,9 @@ fn apply_profile_reset_command(command: &Value) -> Result<Value, String> {
     let raw_capability = profile_capability_from_command(command)?;
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(&plan.profile_id),
-    )
-    .map_err(|error| format!("profile_reset_principal_{}", error.code.as_str()))?;
+    let authority = snapshot
+        .authenticate_profile_capability(&raw_capability, Some(&plan.profile_id))
+        .map_err(|error| format!("profile_reset_principal_{}", error.code.as_str()))?;
     if authority.principal_id != plan.principal_id {
         return Err("profile_reset_principal_mismatch".to_string());
     }

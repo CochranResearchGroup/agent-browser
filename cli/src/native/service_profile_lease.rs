@@ -25,11 +25,9 @@ use super::service_model::{
     LeaseState, ServiceEvent, ServiceEventKind, ServiceState, TabLifecycle,
 };
 use super::service_principal::{
-    authenticate_profile_capability, authenticated_authority_is_current, bind_session_work_lease,
-    bind_tab_work_lease, generate_profile_capability_token, register_profile_capability,
-    rotate_profile_capability, AuthenticatedServicePrincipal, PrincipalContinuityRecourse,
-    ServicePrincipalProvenance, ServicePrincipalRegistrationRequest, ServicePrincipalState,
-    ServiceProfileCapabilityState,
+    bind_session_work_lease, bind_tab_work_lease, generate_profile_capability_token,
+    AuthenticatedServicePrincipal, PrincipalContinuityRecourse, ServicePrincipalProvenance,
+    ServicePrincipalRegistrationRequest, ServicePrincipalState, ServiceProfileCapabilityState,
 };
 use super::service_profile_access_policy::ProfileAccessMode;
 use super::service_resources::load_service_state_for_maintenance;
@@ -110,9 +108,7 @@ pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<P
     }
 
     let unbound_capabilities = state
-        .service_principals
-        .profile_capabilities
-        .values()
+        .profile_capabilities()
         .filter(|capability| {
             capability.state == ServiceProfileCapabilityState::Active
                 && !bound_capability_ids.contains(&capability.capability_id)
@@ -247,9 +243,7 @@ fn profile_capability_status(command: &serde_json::Value) -> Result<serde_json::
     let profile_id = required_command_string(command, "profileId")?;
     let now = service_now_timestamp();
     let capabilities = state
-        .service_principals
-        .profile_capabilities
-        .values()
+        .profile_capabilities()
         .filter(|capability| {
             capability.principal_id == principal_id && capability.profile_id == profile_id
         })
@@ -270,7 +264,7 @@ fn profile_capability_status(command: &serde_json::Value) -> Result<serde_json::
     Ok(json!({
         "principalId": principal_id,
         "profileId": profile_id,
-        "registryRevision": state.service_principals.revision,
+        "registryRevision": state.service_principal_registry_revision(),
         "capabilities": capabilities,
         "activeCapabilityCount": active_capability_count,
         "rotationAllowed": active_capability_count == 1 && rotation_blockers.is_empty(),
@@ -332,20 +326,20 @@ fn rotate_profile_lease_capability(
                 blockers.join(",")
             ));
         }
-        let rotated = rotate_profile_capability(
-            &mut state.service_principals,
-            ServicePrincipalRegistrationRequest {
-                principal_id: principal_id.clone(),
-                display_name: display_name.clone(),
-                profile_id: profile_id.clone(),
-                registered_at: Some(now.clone()),
-                registered_by: registered_by.clone(),
-            },
-            &expected_capability_id,
-            expected_registry_revision,
-            &raw_capability,
-        )
-        .map_err(principal_error_string)?;
+        let rotated = state
+            .rotate_profile_capability(
+                ServicePrincipalRegistrationRequest {
+                    principal_id: principal_id.clone(),
+                    display_name: display_name.clone(),
+                    profile_id: profile_id.clone(),
+                    registered_at: Some(now.clone()),
+                    registered_by: registered_by.clone(),
+                },
+                &expected_capability_id,
+                expected_registry_revision,
+                &raw_capability,
+            )
+            .map_err(principal_error_string)?;
         let owner_binding = rotate_registered_principal_owner_binding(
             state,
             &rotated.previous_capability.capability_id,
@@ -398,9 +392,9 @@ fn plan_profile_lease_command(command: &serde_json::Value) -> Result<serde_json:
     let expected_revision = required_command_string(command, "leaseRevision")?;
     let expires_at = required_command_string(command, "expiresAt")?;
     let raw_capability = profile_capability_from_command(command)?;
-    let authority =
-        authenticate_profile_capability(&state.service_principals, raw_capability.as_str(), None)
-            .map_err(principal_error_string)?;
+    let authority = state
+        .authenticate_profile_capability(raw_capability.as_str(), None)
+        .map_err(principal_error_string)?;
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-lease-reconcile-{}", uuid::Uuid::new_v4()));
     let now = service_now_timestamp();
@@ -437,12 +431,9 @@ fn apply_profile_lease_command(command: &serde_json::Value) -> Result<serde_json
     let boot_epoch = crate::process_identity::current_boot_epoch();
     let repository = LockedServiceStateRepository::default_json()?;
     repository.mutate(|state| {
-        let authority = authenticate_profile_capability(
-            &state.service_principals,
-            raw_capability.as_str(),
-            None,
-        )
-        .map_err(principal_error_string)?;
+        let authority = state
+            .authenticate_profile_capability(raw_capability.as_str(), None)
+            .map_err(principal_error_string)?;
         let receipt = apply_profile_lease_reconciliation(
             state,
             &plan,
@@ -481,18 +472,18 @@ fn register_profile_lease_principal(
     let repository = LockedServiceStateRepository::default_json()?;
     write_private_capability_file(&capability_path, &raw_capability)?;
     let result = repository.mutate(|state| {
-        let registered = register_profile_capability(
-            &mut state.service_principals,
-            ServicePrincipalRegistrationRequest {
-                principal_id: principal_id.clone(),
-                display_name: display_name.clone(),
-                profile_id: profile_id.clone(),
-                registered_at: Some(now.clone()),
-                registered_by: registered_by.clone(),
-            },
-            &raw_capability,
-        )
-        .map_err(principal_error_string)?;
+        let registered = state
+            .register_profile_capability(
+                ServicePrincipalRegistrationRequest {
+                    principal_id: principal_id.clone(),
+                    display_name: display_name.clone(),
+                    profile_id: profile_id.clone(),
+                    registered_at: Some(now.clone()),
+                    registered_by: registered_by.clone(),
+                },
+                &raw_capability,
+            )
+            .map_err(principal_error_string)?;
 
         let owner_binding = bind_registered_principal_to_current_owner(state, &registered)?;
         append_profile_lease_event(
@@ -623,12 +614,9 @@ fn mutate_profile_lease(command: &serde_json::Value) -> Result<serde_json::Value
     let now = service_now_timestamp();
     let repository = LockedServiceStateRepository::default_json()?;
     repository.mutate(|state| {
-        let authority = authenticate_profile_capability(
-            &state.service_principals,
-            raw_capability.as_str(),
-            None,
-        )
-        .map_err(principal_error_string)?;
+        let authority = state
+            .authenticate_profile_capability(raw_capability.as_str(), None)
+            .map_err(principal_error_string)?;
         let release_idempotency_key = (operation == "release").then(|| {
             optional_command_string(command, "idempotencyKey")
                 .unwrap_or_else(|| format!("release:{lease_id}:{expected_revision}"))
@@ -1317,7 +1305,7 @@ pub(crate) fn apply_profile_lease_reconciliation(
     current_boot_epoch: Option<&str>,
     seal_key: &[u8],
 ) -> Result<ProfileLeaseReconcileReceipt, ProfileLeaseError> {
-    if !authenticated_authority_is_current(&state.service_principals, authority) {
+    if !state.authenticated_authority_is_current(authority) {
         return Err(lease_error(
             ProfileLeaseFailureCode::AuthorityMismatch,
             &plan.lease_id,
@@ -1487,17 +1475,13 @@ fn bound_profile_lease(
         .runtime_owner_registry
         .principal_binding_is_current(Some(binding));
     let capability_current = state
-        .service_principals
-        .profile_capabilities
-        .get(&binding.capability_id)
+        .profile_capability(&binding.capability_id)
         .is_some_and(|capability| {
             capability.state == ServiceProfileCapabilityState::Active
                 && capability.principal_id == binding.principal_id
                 && capability.profile_id == binding.profile_id
                 && state
-                    .service_principals
-                    .principals
-                    .get(&binding.principal_id)
+                    .service_principal(&binding.principal_id)
                     .is_some_and(|principal| principal.state == ServicePrincipalState::Active)
         });
     let sessions = sessions_for_profile(state, &binding.profile_id);
@@ -1739,15 +1723,14 @@ fn unbound_capability_profile_lease(
         capability_revision: capability.revision,
         provenance: ServicePrincipalProvenance::RegisteredCapability,
     };
-    let rejoin_repairable =
-        authenticated_authority_is_current(&state.service_principals, &authority)
-            && profile_identity_digest.as_deref().is_some_and(|digest| {
-                !state
-                    .runtime_owner_registry
-                    .principal_bindings()
-                    .contains_key(digest)
-                    && exact_rejoin_target_for_owner(state, &authority, digest, now).is_some()
-            });
+    let rejoin_repairable = state.authenticated_authority_is_current(&authority)
+        && profile_identity_digest.as_deref().is_some_and(|digest| {
+            !state
+                .runtime_owner_registry
+                .principal_bindings()
+                .contains_key(digest)
+                && exact_rejoin_target_for_owner(state, &authority, digest, now).is_some()
+        });
     let mut authorized_actions = READ_ACTIONS
         .iter()
         .chain([&"profile_acquire", &"reconcile_plan"])
@@ -1943,7 +1926,7 @@ fn authorized_lease(
     authority: &AuthenticatedServicePrincipal,
     now: &str,
 ) -> Result<ProfileLeaseRecord, ProfileLeaseError> {
-    if !authenticated_authority_is_current(&state.service_principals, authority) {
+    if !state.authenticated_authority_is_current(authority) {
         return Err(lease_error(
             ProfileLeaseFailureCode::AuthorityMismatch,
             lease_id,
@@ -1987,10 +1970,7 @@ fn authority_for_binding(
     state: &ServiceState,
     binding: &crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding,
 ) -> Option<AuthenticatedServicePrincipal> {
-    let capability = state
-        .service_principals
-        .profile_capabilities
-        .get(&binding.capability_id)?;
+    let capability = state.profile_capability(&binding.capability_id)?;
     Some(AuthenticatedServicePrincipal {
         principal_id: binding.principal_id.clone(),
         profile_id: binding.profile_id.clone(),
@@ -1998,7 +1978,7 @@ fn authority_for_binding(
         capability_revision: capability.revision,
         provenance: binding.provenance,
     })
-    .filter(|authority| authenticated_authority_is_current(&state.service_principals, authority))
+    .filter(|authority| state.authenticated_authority_is_current(authority))
 }
 
 fn active_subordinate_tabs<'a>(
@@ -2031,7 +2011,7 @@ fn exact_rejoin_target(
     authority: &AuthenticatedServicePrincipal,
     now: &str,
 ) -> Option<(String, Vec<String>)> {
-    if !authenticated_authority_is_current(&state.service_principals, authority) {
+    if !state.authenticated_authority_is_current(authority) {
         return None;
     }
     let binding = state
@@ -2062,7 +2042,7 @@ fn exact_rejoin_target_for_owner(
     profile_identity_digest: &str,
     now: &str,
 ) -> Option<(String, Vec<String>)> {
-    if !authenticated_authority_is_current(&state.service_principals, authority) {
+    if !state.authenticated_authority_is_current(authority) {
         return None;
     }
     let owner = state
