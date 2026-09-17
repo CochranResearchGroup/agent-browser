@@ -297,6 +297,17 @@ protected P206 integration remain.
 Issue #66 retains the separately live-gated challenge acceptance leaf. This
 registration authorizes no challenge attempt, retry, browser effect, provider
 effect, credential use, runtime mutation, installation, or release.
+W7-B is locally admitted through
+[Plan 0209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md) on
+`challenge/p209-visual-provider-protocol`. It owns only a pure candidate-only
+provider protocol and fake serialized fixtures. P204 merged through PR #179;
+P206 exact head `82e25624` merged through PR #180 as `d3f923a1`; P209 joined
+that canonical result at `3ef2ad9e` without a Rust or Cargo dependency change.
+The reconciled head passes all 52 challenge-control tests. The crate
+architecture, formatting, strict Clippy and diff-hygiene evidence remains
+source-identical. P209 is ready for publication and normal protected
+integration while GitHub CI remains operator-disabled. It creates no provider,
+browser, credential, CAPTCHA, runtime or production authority.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

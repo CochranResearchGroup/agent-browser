@@ -7,7 +7,28 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
-- [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
+- [P209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md)
+
+## Turn 381 | 2026-09-17
+
+P206 exact head `82e25624` merged through PR #180 as `d3f923a1`. P209 joined
+that canonical result at `3ef2ad9e`; the only conflict was the active-lane
+catalog, resolved by preserving the canonical CI-shutdown record and P209's
+bounded entry. No P209 Rust source or Cargo dependency changed. The reconciled
+challenge-control package passes all 52 tests, including 25 visual-round and
+11 provider-protocol cases. GitHub CI remains disabled and was not restored or
+run. P209 is ready for publication and protected integration. No provider,
+image, browser, credential, CAPTCHA, desktop-input, runtime or production
+effect occurred.
+
+## Turn 380 | 2026-09-17
+
+P209 merge `9df85b9b` joins corrected published P206 head `72eeea03`. The
+combined dependency head passes all 52 challenge-control tests, including 25
+visual-round and 11 provider-protocol cases, the crate architecture guard,
+strict workspace Clippy, formatting and diff hygiene. P209 remains local and
+unpushed until P206 PR #180 enters canonical `main`. No provider, browser,
+CAPTCHA, credential, runtime, production or CI-dispatch effect occurred.
 
 ## Turn 380 | 2026-09-17
 
@@ -32,9 +53,66 @@ selection arithmetic could saturate and admit an actual total above 255, and a
 round-budget intervention. Repair checkpoint `4813d385` replaces saturation
 with widened and checked arithmetic. All 41 challenge-control tests, including
 25 visual-round cases, the crate architecture guard, strict workspace Clippy,
-formatting and diff hygiene pass. The corrected head still requires protected
-exact-head evaluation. No provider, browser, CAPTCHA, credential, runtime or
-production effect occurred.
+formatting and diff hygiene pass. Corrected published head `72eeea03` requires
+protected exact-head evaluation. No provider, browser, CAPTCHA, credential,
+runtime or production effect occurred.
+
+## Turn 378 | 2026-09-17
+
+P209 checkpoint `f9987721` proves the response digest binds request, evidence,
+candidate-set, capability, selected-candidate order, production-time and expiry
+fields. All 50 challenge-control tests, strict workspace Clippy, formatting and
+diff hygiene pass. No provider, browser, CAPTCHA, credential, runtime,
+production or CI-dispatch effect occurred.
+
+## Turn 377 | 2026-09-17
+
+P209 checkpoint `89edafd5` proves request preparation rejects invalid policy,
+mutated evidence, malformed artifact identity or digest, pre-observation and
+expired preparation times, and over-budget execution plans before a provider
+request exists. The complete 49-test challenge-control crate, strict workspace
+Clippy, formatting and diff hygiene pass. No provider, browser, CAPTCHA,
+credential, runtime, production or CI-dispatch effect occurred.
+
+## Turn 376 | 2026-09-17
+
+P209 checkpoint `e7250217` completes the provider-response temporal fixture:
+pre-request, future-produced, produced-at-expiry, expired-at-adjudication,
+beyond-request-expiry and request-expiry cases all fail closed as stale. The
+complete 49-test challenge-control crate, strict workspace Clippy, formatting
+and diff hygiene pass. No provider, browser, CAPTCHA, credential, runtime,
+production or CI-dispatch effect occurred.
+
+## Turn 375 | 2026-09-17
+
+P209 review-hardening checkpoint `3aed9a4b` explicitly proves strict request
+deserialization rejects coordinate, event-sequence, retry and instruction
+smuggling plus nested artifact bytes and execution-plan repeat authority. All
+49 challenge-control tests, strict workspace Clippy, formatting and diff
+hygiene pass. The branch remains local and unpushed behind P206 PR #180; no
+provider, image, browser, credential, CAPTCHA, desktop-input, runtime,
+production or CI-dispatch effect occurred.
+
+[Plan 0210](docs/dev/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md)
+records the proposed W7-C artifact-custody and one-shot fake-provider adapter.
+It is `PLANNED | NOT ADMITTED`; no branch, worktree or implementation has
+started, and P209 canonical integration is its hard source-admission gate.
+
+## Turn 374 | 2026-09-17
+
+P209 local checkpoint `8ada33d5` is accepted. The pure protocol binds
+prepared visual artifacts and P206 evidence into deterministic provider
+requests, admits only candidate identities or typed abstention, and binds a
+caller-owned, policy-checked execution budget before provider adjudication. It
+rejects serialized coordinate, event, retry and instruction smuggling. All 48
+challenge-control tests, strict workspace Clippy, formatting,
+four architecture guards and 114 selector-expanded extracted-crate tests pass;
+the exact P206 dependency reconciliation also passes the 48-test
+challenge-control compartment, formatting and strict workspace Clippy.
+The branch has locally joined published P206 head `99793061` and remains
+unpushed until PR #180 enters `main` and the canonical checkpoint is reconciled.
+No browser, provider, CAPTCHA, credential, runtime or production effect
+occurred.
 
 ## Turn 373 | 2026-09-17
 

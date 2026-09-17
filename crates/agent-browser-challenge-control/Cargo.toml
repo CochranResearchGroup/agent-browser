@@ -11,3 +11,6 @@ publish = false
 agent-browser-desktop-services = { path = "../agent-browser-desktop-services" }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10"
+
+[dev-dependencies]
+serde_json = "1.0"

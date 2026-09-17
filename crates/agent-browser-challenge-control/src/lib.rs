@@ -7,9 +7,11 @@ use agent_browser_desktop_services::{HCAPTCHA_RECIPE_ID, TURNSTILE_RECIPE_ID};
 use serde::{Deserialize, Serialize};
 
 mod task;
+mod visual_provider;
 mod visual_round;
 
 pub use task::*;
+pub use visual_provider::*;
 pub use visual_round::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
