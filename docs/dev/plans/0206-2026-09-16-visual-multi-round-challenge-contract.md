@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -21,13 +21,13 @@ Branch: `challenge/p206-visual-round-contract`
 
 Target: `main`
 
-Dependency: P197 published head
-`cd22a39f989e29a27d6ec80283ae60667093fc9c`
+Integrated prerequisite: P197 published head
+`cd22a39f989e29a27d6ec80283ae60667093fc9c`, merged as `c855fc33`
 
 Source baseline: `cd22a39f989e29a27d6ec80283ae60667093fc9c`
 
-Integration: P197 must enter `main` before P206 rebases or merges current main
-and enters the protected integration path
+Integration: P206 joined canonical `main@c855fc33` at merge checkpoint
+`5d6e3d57`; exact-head forge evaluation and protected integration remain
 
 ## Objective
 
@@ -45,9 +45,10 @@ attempt a CAPTCHA.
 
 ## Current State
 
-Plan 0187 W0 through W5 are integrated. P197 W6 is source-complete and
-published at `cd22a39f` through draft PR #157, which remains open, draft and
-mergeable. P206 is source-complete and acceptance-complete at `ac9f50a7`. The pure
+Plan 0187 W0 through W6 are integrated. P197 head `cd22a39f` passed every
+ordinary required forge check and merged through PR #157 as `c855fc33`. P206
+joined that canonical checkpoint at tree-preserving merge `5d6e3d57` and is
+source-complete and acceptance-complete at `ac9f50a7`. The pure
 `agent-browser-challenge-control` crate now owns deterministic round identity,
 fresh visual evidence, exact candidate-set and intent binding, per-round plus
 cumulative budgets, acknowledged-effect custody, after-state continuity and
@@ -56,9 +57,10 @@ zero-effect terminal replay inside one attempt.
 P204 owns CI validation tiering and P205 owns Service-model extraction. P206 is
 source-disjoint from both: it owns only the pure challenge-control crate, its
 provider-free tests, this plan and the bounded challenge-lane projections.
-P206 depends on P197 because both touch the challenge-control crate; this branch
-starts from P197's exact published head rather than recreating or cherry-picking
-that contract.
+P206 started from P197's exact published head rather than recreating or
+cherry-picking that contract. The canonical reconciliation is tree-identical to
+the accepted P206 checkpoint, so its source validation remains current. Only
+exact-head forge evaluation and protected P206 integration remain.
 
 ## Source Checkpoint
 
@@ -88,9 +90,9 @@ Validation at that source checkpoint:
   crate source changed in this packet.
 
 No browser, CAPTCHA, model provider, credential, desktop input, Service State,
-installed runtime, production or CI-policy effect occurred. Integration remains
-blocked only on P197 entering `main`, followed by P206 reconciliation with that
-canonical checkpoint and protected exact-head evaluation.
+installed runtime, production or CI-policy effect occurred. P197 integration
+and canonical P206 reconciliation are complete; protected exact-head evaluation
+is the only remaining gate.
 
 ## Contract Boundary
 

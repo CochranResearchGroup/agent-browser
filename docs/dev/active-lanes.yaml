@@ -1,27 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P197
-    product_lane: PL-CHALLENGE
-    objective: Integrate authentication and navigation through one provider-neutral challenge consumer-admission contract
-    plan: docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md
-    plan_ref: refs/remotes/origin/challenge/p197-consumer-integration
-    branch: challenge/p197-consumer-integration
-    target: main
-    plan_state: OPEN
-    custody_state: PUBLISHED_INTEGRATION_READY
-    checkpoint: 4321961c6545c405a85578b84788e0db6112d10a
-    remote_ref: refs/remotes/origin/challenge/p197-consumer-integration
-    integration_receipt: null
-    integration: merge through the protected `main` workflow after provider-free W6 validation
-    validation_status: combined provider-free challenge-control, focused authentication and navigation, strict Clippy and formatting, Service API/MCP parity, service client, no-launch collections, route-confusion, docs build, and documentation contract checks green; dependency integrated and exact-head forge evaluation pending
-    validation_ref: ca0f3447b473a652710b2b5202f75cfa628f52bb
-    work_items: [CochranResearchGroup/agent-browser#127]
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: [P202]
-    blocker: exact-head forge evaluation and protected integration remain; every live challenge effect stays with issue #66
-    updated_at: 2026-09-16
   - id: P206
     product_lane: PL-CHALLENGE
     objective: Prove a provider-free visual and multi-round evidence contract inside one policy-authorized challenge attempt
@@ -30,16 +9,16 @@ lanes:
     branch: challenge/p206-visual-round-contract
     target: main
     plan_state: OPEN
-    custody_state: PUBLISHED_SOURCE_CHECKPOINT
-    checkpoint: ac9f50a7
+    custody_state: PUBLISHED_INTEGRATION_READY
+    checkpoint: 5d6e3d57
     remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
     integration_receipt: null
-    integration: integrate only after P197 enters main and P206 reconciles that canonical checkpoint
+    integration: merge through the protected main workflow after exact-head forge evaluation
     validation_status: 39 challenge-control tests including the complete 23-case visual-round matrix, challenge-control architecture guard, formatting, strict workspace Clippy, diff hygiene, and changed-surface selection passed at the source checkpoint
     validation_ref: ac9f50a7
     work_items: [CochranResearchGroup/agent-browser#127]
-    dependencies: [P197]
-    overlaps: [P197]
+    dependencies: []
+    overlaps: []
     reconciled_overlaps: [P197]
-    blocker: P197 must enter main before P206 reconciles the canonical checkpoint and enters protected exact-head evaluation; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    blocker: exact-head forge evaluation and protected integration remain; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-16

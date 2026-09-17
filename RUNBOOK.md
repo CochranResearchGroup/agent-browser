@@ -19,10 +19,11 @@ effect receipt to fresh evidence and exact candidate identities, preserves
 after-state continuity, and enforces per-round plus cumulative budgets. All 39
 crate tests, including the complete 23-case visual-round matrix, the crate
 architecture guard, formatting, strict workspace Clippy and diff hygiene pass.
-P197 PR #157 remains open, draft and mergeable; P206 must reconcile after it
-enters `main` before protected exact-head evaluation. No browser, model
-provider, CAPTCHA, desktop input, credential, installed runtime, production or
-CI-policy effect occurred.
+P197 head `cd22a39f` passed all ordinary required checks and merged through PR
+#157 as `c855fc33`. P206 joined that canonical checkpoint at tree-preserving
+merge `5d6e3d57`; only exact-head forge evaluation and protected P206
+integration remain. No browser, model provider, CAPTCHA, desktop input,
+credential, installed runtime, production or CI-policy effect occurred.
 
 ## Turn 370 | 2026-09-16
 
