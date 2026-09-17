@@ -329,6 +329,15 @@ ordered selection, physical-pixel geometry, authority and checked-budget
 binding. All 12 desktop-services tests, the strengthened architecture guard,
 workspace formatting and strict workspace Clippy pass locally. Publication and
 protected integration remain. GitHub CI remains operator-disabled.
+P212 exact head `dc20155e` merged through PR #193 as `ddae1897`. The
+challenge-side consumer is admitted through
+[Plan 0213](docs/dev/plans/0213-2026-09-17-visual-desktop-candidate-adapter.md)
+on `challenge/p213-visual-desktop-adapter`. P213 proves the visual intent is
+the current state-machine-authorized intent, binds it to exact desktop
+observation geometry and current controller authority, and returns the P212
+effect-free permit. It adds no executor, browser, provider, CAPTCHA, route
+claim, input, runtime or production authority and avoids P205's Cargo manifest
+and lockfile surfaces. GitHub CI remains operator-disabled.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
