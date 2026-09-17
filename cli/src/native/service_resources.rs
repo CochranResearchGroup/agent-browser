@@ -490,7 +490,14 @@ fn service_resources_response_from_samples_for_environment(
         &policy,
         &observed_at,
     );
-    let lanes = resource_lane_projections(state, &snapshot.resources, &policy, &observed_at);
+    let runtime_lanes = state.runtime_resource_lanes();
+    let lanes = resource_lane_projections(
+        state,
+        &runtime_lanes,
+        &snapshot.resources,
+        &policy,
+        &observed_at,
+    );
     let workstation = workstation_resource_projection(&snapshot.resources, &lanes, &policy);
     let current_boot_epoch = crate::process_identity::current_boot_epoch();
     let boot_epoch_findings = super::service_boot_epoch::service_boot_epoch_findings(
@@ -502,7 +509,7 @@ fn service_resources_response_from_samples_for_environment(
         "resources": snapshot.resources,
         "lanes": lanes,
         "workstation": workstation,
-        "runtimeLanes": state.runtime_owner_registry.lifecycle_records().values().collect::<Vec<_>>(),
+        "runtimeLanes": runtime_lanes.iter().map(|lane| lane.lifecycle).collect::<Vec<_>>(),
         "bootEpoch": current_boot_epoch,
         "bootEpochFindings": boot_epoch_findings,
         "warnings": snapshot.warnings,
@@ -901,14 +908,11 @@ pub(crate) fn classify_abandoned_browser_lane_with_profile_identity_at(
         return lane_protected("runtime_lifecycle_profile_identity_changed");
     }
     let profile_identity_digest = observed_profile_identity_digest.to_string();
-    let Some(owner) = state.runtime_owner_registry.owner(&profile_identity_digest) else {
+    let runtime_authority = state.runtime_lane_authority(&profile_identity_digest, browser_id);
+    let Some(owner) = runtime_authority.owner else {
         return lane_protected("runtime_lifecycle_owner_unproven");
     };
-    let Some(lifecycle) = state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .get(browser_id)
-    else {
+    let Some(lifecycle) = runtime_authority.lifecycle else {
         return lane_protected("runtime_lifecycle_record_unproven");
     };
     let Some(process_group_id) = root.process_group_id else {
@@ -1348,19 +1352,17 @@ fn apply_abandoned_lane_candidates(
 
 fn resource_lane_projections(
     state: &ServiceState,
+    runtime_lanes: &[agent_browser_service_model::RuntimeResourceLane<'_>],
     records: &[ResourceRecord],
     policy: &ResourceRetirementPolicy,
     observed_at: &str,
 ) -> Vec<ResourceLaneProjection> {
-    state
-        .runtime_owner_registry
-        .lifecycle_records()
+    runtime_lanes
         .iter()
-        .map(|(browser_id, lifecycle)| {
-            let browser_pid = state
-                .browsers
-                .get(browser_id)
-                .and_then(|browser| browser.pid);
+        .map(|lane| {
+            let browser_id = lane.browser_id;
+            let lifecycle = lane.lifecycle;
+            let browser_pid = lane.browser_pid;
             let lane_records = records
                 .iter()
                 .filter(|record| record.correlation.browser_id.as_deref() == Some(browser_id));
@@ -1370,11 +1372,7 @@ fn resource_lane_projections(
                 .filter(|record| Some(record.pid) == browser_pid)
                 .count();
             let descendant_count = lane_records.len().saturating_sub(browser_root_count);
-            let tab_count = state
-                .tabs
-                .values()
-                .filter(|tab| tab.browser_id == *browser_id)
-                .count();
+            let tab_count = lane.tab_count;
             let rss_bytes = lane_records
                 .iter()
                 .filter_map(|record| record.rss_bytes)
@@ -1399,7 +1397,7 @@ fn resource_lane_projections(
                 .unwrap_or_else(|| "observed".to_string());
             let current_activity = resource_lane_activity_at(state, browser_id, observed_at);
             ResourceLaneProjection {
-                browser_id: browser_id.clone(),
+                browser_id: browser_id.to_string(),
                 browser_root_count,
                 descendant_count,
                 tab_count,
@@ -1619,7 +1617,8 @@ fn classify_process(
 }
 
 fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> ResourceSummary {
-    let lifecycle_records = state.runtime_owner_registry.lifecycle_records().values();
+    let lifecycle_summary = state.runtime_lifecycle_authority_summary();
+    let cleanup_counts = &lifecycle_summary.cleanup_obligation_state_counts;
     ResourceSummary {
         total_processes: records.len(),
         correlated_processes: records
@@ -1658,34 +1657,11 @@ fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> Reso
             .filter_map(|record| record.rss_bytes)
             .sum(),
         total_rss_bytes: records.iter().filter_map(|record| record.rss_bytes).sum(),
-        managed_lane_count: state.runtime_owner_registry.lifecycle_records().len(),
-        cleanup_obligations_owned: lifecycle_records
-            .clone()
-            .filter(|record| {
-                record.cleanup_obligation_state
-                    == crate::runtime_owner_transfer::CleanupObligationState::Owned
-            })
-            .count(),
-        cleanup_obligations_transferring: lifecycle_records
-            .clone()
-            .filter(|record| {
-                record.cleanup_obligation_state
-                    == crate::runtime_owner_transfer::CleanupObligationState::Transferring
-            })
-            .count(),
-        cleanup_obligations_satisfied: lifecycle_records
-            .clone()
-            .filter(|record| {
-                record.cleanup_obligation_state
-                    == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
-            })
-            .count(),
-        cleanup_obligations_unknown: lifecycle_records
-            .filter(|record| {
-                record.cleanup_obligation_state
-                    == crate::runtime_owner_transfer::CleanupObligationState::Unknown
-            })
-            .count(),
+        managed_lane_count: lifecycle_summary.record_count,
+        cleanup_obligations_owned: cleanup_counts.get("owned").copied().unwrap_or(0),
+        cleanup_obligations_transferring: cleanup_counts.get("transferring").copied().unwrap_or(0),
+        cleanup_obligations_satisfied: cleanup_counts.get("satisfied").copied().unwrap_or(0),
+        cleanup_obligations_unknown: cleanup_counts.get("unknown").copied().unwrap_or(0),
         challenge_tasks: state.service_challenge_task_summary(),
     }
 }
@@ -4115,6 +4091,41 @@ mod tests {
             "browser-owned"
         );
         assert_eq!(response["runtimeLanes"][0]["lifecycleState"], "retained");
+    }
+
+    #[test]
+    fn runtime_lanes_preserve_registry_key_order_separately_from_embedded_ids() {
+        let mut state = ServiceState::default();
+        let mut registry =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        registry.lifecycle_rows.insert(
+            "z-map-key".to_string(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: "embedded-a".to_string(),
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
+        registry.lifecycle_rows.insert(
+            "a-map-key".to_string(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: "embedded-z".to_string(),
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
+        drop(registry);
+
+        let response = service_resources_response_from_samples(&state, Vec::new(), Vec::new());
+
+        assert_eq!(response["lanes"][0]["browserId"], "a-map-key");
+        assert_eq!(response["lanes"][1]["browserId"], "z-map-key");
+        assert_eq!(
+            response["runtimeLanes"][0]["logicalBrowserId"],
+            "embedded-z"
+        );
+        assert_eq!(
+            response["runtimeLanes"][1]["logicalBrowserId"],
+            "embedded-a"
+        );
     }
 
     #[test]

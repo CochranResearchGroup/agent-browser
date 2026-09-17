@@ -114,6 +114,12 @@ impl ServiceState {
   pub fn restore_runtime_owner_persistence(&mut self) {}
   pub fn runtime_owner_persistence_parts(&self) {}
   pub fn strip_runtime_lifecycle_for_persistence(&mut self) {}
+  pub fn runtime_lifecycle_authority_summary(&self) {}
+  pub fn runtime_lifecycle_boot_epoch_observations(&self) {}
+  pub fn profile_runtime_authority(&self) {}
+  pub fn runtime_control_plane_authority(&self) {}
+  pub fn runtime_lane_authority(&self) {}
+  pub fn runtime_resource_lanes(&self) {}
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -216,6 +222,18 @@ pub use principal_continuity::{
   LegacySessionPrincipalMigrationPlan,
 };
 `;
+const runtimeOwnerProjectionDefinitions = [
+  'RuntimeLifecycleAuthoritySummary', 'RuntimeLifecycleBootEpochObservation',
+  'ProfileRuntimeAuthority', 'RuntimeControlPlaneAuthority',
+  'RuntimeLaneAuthority', 'RuntimeResourceLane',
+];
+const validRuntimeOwnerProjection = runtimeOwnerProjectionDefinitions
+  .map((name) => `pub struct ${name};`).join('\n');
+const validRuntimeOwnerProjectionExport = `mod runtime_owner_projection;
+pub use runtime_owner_projection::{
+  ${runtimeOwnerProjectionDefinitions.join(',\n  ')},
+};
+`;
 const serviceAuthenticationDefinitions = [
   'ServiceAuthenticationRunRecord', 'PendingAuthenticationEffect',
   'ServiceAuthenticationRunStartInput', 'PreparedServiceAuthenticationRunStart',
@@ -305,6 +323,7 @@ const validAuthenticationFacade = 'pub(crate) use agent_browser_authentication_c
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
   cliTest = '', principalCli = '', serviceStore = '',
+  projectionCli = '', runtimeOwnerProjection = validRuntimeOwnerProjection,
   principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
@@ -329,6 +348,8 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/browser_capability_registry.rs'), capability);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/principal_continuity.rs'),
     principalContinuity);
+  writeFileSync(join(root, 'crates/agent-browser-service-model/src/runtime_owner_projection.rs'),
+    runtimeOwnerProjection);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_authentication_run.rs'),
     serviceAuthentication);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_challenge_task.rs'),
@@ -338,6 +359,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
   writeFileSync(join(root, 'cli/src/native/service_principal.rs'), principalCli);
   writeFileSync(join(root, 'cli/src/native/service_store.rs'), serviceStore);
+  writeFileSync(join(root, 'cli/src/install.rs'), projectionCli);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -349,6 +371,7 @@ const validAuthenticationManifest = '[package]\nname = "agent-browser-authentica
 const validSource = `${validCrashExport}
 ${validCapabilityExport}
 ${validPrincipalContinuityExport}
+${validRuntimeOwnerProjectionExport}
 ${validServiceAuthenticationExport}
 ${validServiceChallengeExport}
 ${validServiceStateExport}
@@ -455,6 +478,46 @@ for (const [name, mutation] of [
   }],
   ['runtime-owner persistence deref escape hatch', {
     serviceState: `${validServiceState}\nimpl Deref for RuntimeOwnerPersistenceSnapshot { type Target = (); fn deref(&self) -> &() { &() } }\n`,
+  }],
+  ['missing runtime-owner projection definition', {
+    runtimeOwnerProjection: validRuntimeOwnerProjection.replace(
+      'pub struct RuntimeLaneAuthority;',
+      '',
+    ),
+  }],
+  ['missing runtime-owner projection method', { serviceState: validServiceState.replace(
+    'pub fn runtime_lane_authority(&self) {}',
+    '',
+  ) }],
+  ['direct runtime-owner projection caller access', {
+    projectionCli: 'fn leak(state: &ServiceState) { let _ = &state.runtime_owner_registry; }\n',
+  }],
+  ['direct runtime-owner projection caller access after test-only item', {
+    projectionCli: '#[cfg(test)]\nfn fixture() {}\nfn leak(state: &ServiceState) { let _ = &state.runtime_owner_registry; }\n',
+  }],
+  ['raw runtime-owner registry projection parameter', {
+    projectionCli: 'fn leak(registry: &RuntimeOwnerRegistry) {}\n',
+  }],
+  ['runtime-owner projection registry return', { serviceState: validServiceState.replace(
+    'pub fn runtime_resource_lanes(&self) {}',
+    'pub fn runtime_resource_lanes(&self) -> &RuntimeOwnerRegistry {}',
+  ) }],
+  ['runtime-owner projection iterator return', { serviceState: validServiceState.replace(
+    'pub fn runtime_resource_lanes(&self) {}',
+    'pub fn runtime_resource_lanes(&self) -> impl Iterator<Item = ()> {}',
+  ) }],
+  ['runtime-owner projection mutable receiver', { serviceState: validServiceState.replace(
+    'pub fn profile_runtime_authority(&self) {}',
+    'pub fn profile_runtime_authority(&mut self) {}',
+  ) }],
+  ['runtime-owner projection persistence bypass', {
+    runtimeOwnerProjection: `${validRuntimeOwnerProjection}\npub fn bypass(_: RuntimeOwnerPersistenceSnapshot) {}\n`,
+  }],
+  ['runtime-owner projection free registry helper', {
+    runtimeOwnerProjection: `${validRuntimeOwnerProjection}\npub fn registry(_: &ServiceState) -> &RuntimeOwnerRegistry { todo!() }\n`,
+  }],
+  ['runtime-owner projection impl escape hatch', {
+    runtimeOwnerProjection: `${validRuntimeOwnerProjection}\nimpl RuntimeResourceLane { pub fn registry(&self) -> &RuntimeOwnerRegistry { todo!() } }\n`,
   }],
   ['missing authentication aggregate method', { serviceState: validServiceState.replace(
     'pub fn observe_service_authentication_run(&mut self) {}',

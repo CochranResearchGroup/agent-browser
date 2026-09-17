@@ -612,9 +612,7 @@ pub(crate) async fn project_status_with_launch_configuration(
     service_state_projection: ServiceStateProjectionMode,
 ) -> Result<ServiceStatusResponse, ServiceStatusProjectionError> {
     let launch_config = StatusLaunchConfiguration::try_from(launch_config)?;
-    let runtime_lifecycle = crate::install::runtime_lifecycle_status_json_for_registry(
-        &service_state.runtime_owner_registry,
-    );
+    let runtime_lifecycle = crate::install::runtime_lifecycle_status_json_for_state(&service_state);
     projector
         .project(StatusAuthorityInput {
             service_state,
@@ -1260,10 +1258,9 @@ pub(crate) mod action_commands {
             .cloned()
             .collect::<std::collections::BTreeSet<_>>();
         let managed = state
-            .runtime_owner_registry
-            .lifecycle_records()
-            .keys()
-            .cloned()
+            .runtime_resource_lanes()
+            .into_iter()
+            .map(|lane| lane.browser_id.to_string())
             .collect::<std::collections::BTreeSet<_>>();
         let session_references = state
             .sessions

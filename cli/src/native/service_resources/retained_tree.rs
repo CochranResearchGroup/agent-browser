@@ -100,11 +100,9 @@ fn verified_root(
     let profile_digest =
         agent_browser_lease_authority::canonical_profile_identity_digest(Path::new(profile_path))
             .ok()?;
-    let owner = state.runtime_owner_registry.owner(&profile_digest)?;
-    let lifecycle = state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .get(browser_id)?;
+    let runtime_authority = state.runtime_lane_authority(&profile_digest, browser_id);
+    let owner = runtime_authority.owner?;
+    let lifecycle = runtime_authority.lifecycle?;
     if owner.state != ProfileOwnerState::Ready
         || owner.pending_transfer.is_some()
         || owner.browser_id != browser_id

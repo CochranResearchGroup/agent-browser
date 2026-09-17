@@ -180,6 +180,34 @@ const RUNTIME_OWNER_PERSISTENCE_METHODS = [
   'strip_runtime_lifecycle_for_persistence',
 ];
 
+const RUNTIME_OWNER_PROJECTION_DEFINITIONS = [
+  'RuntimeLifecycleAuthoritySummary',
+  'RuntimeLifecycleBootEpochObservation',
+  'ProfileRuntimeAuthority',
+  'RuntimeControlPlaneAuthority',
+  'RuntimeLaneAuthority',
+  'RuntimeResourceLane',
+];
+
+const RUNTIME_OWNER_PROJECTION_METHODS = [
+  'runtime_lifecycle_authority_summary',
+  'runtime_lifecycle_boot_epoch_observations',
+  'profile_runtime_authority',
+  'runtime_control_plane_authority',
+  'runtime_lane_authority',
+  'runtime_resource_lanes',
+];
+
+const RUNTIME_OWNER_PROJECTION_CLI_FILES = [
+  'cli/src/install.rs',
+  'cli/src/native/service_boot_epoch.rs',
+  'cli/src/native/service_diagnostics.rs',
+  'cli/src/native/service_profile_diagnosis.rs',
+  'cli/src/native/service_status_projection.rs',
+  'cli/src/native/service_resources.rs',
+  'cli/src/native/service_resources/retained_tree.rs',
+];
+
 const SERVICE_CHALLENGE_DEFINITIONS = [
   'ServiceChallengeTaskState',
   'ServiceChallengeTaskSummary',
@@ -644,6 +672,12 @@ function check(root = repoRoot) {
   const crashRegenerationPath = join(sourceRoot, 'crash_regeneration.rs');
   const serviceModelLib = withoutCommentsAndStrings(read(root,
     'crates/agent-browser-service-model/src/lib.rs'));
+  const runtimeOwnerProjectionPath = join(sourceRoot, 'runtime_owner_projection.rs');
+  const runtimeOwnerProjectionSource = read(root,
+    'crates/agent-browser-service-model/src/runtime_owner_projection.rs');
+  const runtimeOwnerProjectionProduction = withoutCommentsAndStrings(
+    withoutCfgTestItems(runtimeOwnerProjectionSource),
+  );
   const crashRegenerationSource = read(root,
     'crates/agent-browser-service-model/src/crash_regeneration.rs');
   const crashRegeneration = withoutCommentsAndStrings(read(root,
@@ -696,6 +730,10 @@ function check(root = repoRoot) {
     'cli/src/native/service_principal.rs')));
   const cliServiceStore = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
     'cli/src/native/service_store.rs')));
+  const cliRuntimeOwnerProjectionSources = RUNTIME_OWNER_PROJECTION_CLI_FILES.map((path) => ({
+    path,
+    source: withoutCommentsAndStrings(withoutCfgTestItems(read(root, path))),
+  }));
 
   requireCondition(existsSync(authenticationManifestPath),
     'agent-browser-authentication-control Cargo manifest must exist');
@@ -960,6 +998,53 @@ function check(root = repoRoot) {
       `service-model must own exactly one runtime-owner persistence type: ${name}`,
     );
   }
+  requireCondition(existsSync(runtimeOwnerProjectionPath),
+    'service-model must own src/runtime_owner_projection.rs');
+  for (const name of RUNTIME_OWNER_PROJECTION_DEFINITIONS) {
+    const definition = new RegExp(`\\bpub\\s+struct\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...modelSource.matchAll(definition)].length === 1,
+      `service-model must own exactly one runtime-owner projection type: ${name}`,
+    );
+    const projection = rustStructDefinition(modelSource, name);
+    requireCondition(
+      !/\bRuntimeOwnerRegistry\b|&\s*mut\b|\b(?:Fn|FnMut|FnOnce)\s*[<(]/.test(projection),
+      `runtime-owner projection type must not expose registry, mutable, or callback access: ${name}`,
+    );
+  }
+  for (const name of RUNTIME_OWNER_PROJECTION_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own runtime-owner projection method: ${name}`,
+    );
+    const signature = serviceStateCode.match(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b[^\\{]*\\{`),
+    )?.[0] ?? '';
+    requireCondition(
+      !/\bRuntimeOwnerRegistry\b|&\s*mut\b|->\s*impl\s+Iterator\b|\b(?:Fn|FnMut|FnOnce)\s*[<(]/.test(signature),
+      `runtime-owner projection method must not expose registry, mutable, iterator, or callback access: ${name}`,
+    );
+  }
+  requireCondition(
+    !/\bRuntimeOwnerPersistenceSnapshot\b/.test(runtimeOwnerProjectionSource),
+    'runtime-owner projections must not reuse the persistence snapshot as an access path',
+  );
+  requireCondition(
+    !/\bRuntimeOwnerRegistry\b/.test(runtimeOwnerProjectionProduction)
+      && !/\bpub\s+fn\b/.test(runtimeOwnerProjectionProduction)
+      && !/\bimpl\b/.test(runtimeOwnerProjectionProduction),
+    'runtime-owner projection module must remain data-only without registry, function, or impl escape hatches',
+  );
+  for (const { path, source } of cliRuntimeOwnerProjectionSources) {
+    requireCondition(
+      !/\.\s*runtime_owner_registry\b/.test(source),
+      `CLI runtime-owner projection caller must not access ServiceState.runtime_owner_registry directly: ${path}`,
+    );
+    requireCondition(
+      !/\bfn\s+\w+\s*\([^)]*\bRuntimeOwnerRegistry\b/s.test(source),
+      `CLI runtime-owner projection caller must not accept a raw RuntimeOwnerRegistry: ${path}`,
+    );
+  }
   for (const name of RUNTIME_OWNER_PERSISTENCE_METHODS) {
     requireCondition(
       new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
@@ -1011,6 +1096,12 @@ function check(root = repoRoot) {
   for (const name of RUNTIME_OWNER_PERSISTENCE_DEFINITIONS) {
     requireCondition(Boolean(serviceStateExport?.[1].match(new RegExp(`\\b${name}\\b`))),
       `service-model lib must export runtime-owner persistence type: ${name}`);
+  }
+  for (const name of RUNTIME_OWNER_PROJECTION_DEFINITIONS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+use\\b[^;]*\\b${name}\\b[^;]*;`, 's').test(serviceModelLib),
+      `service-model lib must export runtime-owner projection type: ${name}`,
+    );
   }
   const principalContinuityExport = serviceModelLib.match(
     /\bpub\s+use\s+principal_continuity\s*::\s*\{([\s\S]*?)\}\s*;/,

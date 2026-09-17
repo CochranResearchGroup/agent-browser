@@ -1,6 +1,7 @@
 use crate::color;
 use crate::connection::{cleanup_stale_files, get_socket_dir};
 use crate::flags::{launch_config_status, Flags};
+use crate::native::service_model::ServiceState;
 #[cfg(not(test))]
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::stream::runtime_manifest_json;
@@ -2397,50 +2398,31 @@ fn runtime_monitor_status_for_environment(
     })
 }
 
-fn summarize_runtime_lifecycle_authority(
-    registry: &crate::runtime_owner_transfer::RuntimeOwnerRegistry,
-) -> Value {
-    let mut lifecycle_counts = BTreeMap::<String, usize>::new();
-    let mut cleanup_counts = BTreeMap::<String, usize>::new();
-    for record in registry.lifecycle_records().values() {
-        let lifecycle = serde_json::to_value(record.lifecycle_state)
-            .ok()
-            .and_then(|value| value.as_str().map(str::to_string))
-            .unwrap_or_else(|| "unknown".to_string());
-        let cleanup = serde_json::to_value(record.cleanup_obligation_state)
-            .ok()
-            .and_then(|value| value.as_str().map(str::to_string))
-            .unwrap_or_else(|| "unknown".to_string());
-        *lifecycle_counts.entry(lifecycle).or_default() += 1;
-        *cleanup_counts.entry(cleanup).or_default() += 1;
-    }
+fn summarize_runtime_lifecycle_authority(state: &ServiceState) -> Value {
+    let summary = state.runtime_lifecycle_authority_summary();
     json!({
         "available": true,
-        "registryRevision": registry.revision(),
-        "ownerCount": registry.owners().len(),
-        "recordCount": registry.lifecycle_records().len(),
-        "lifecycleStateCounts": lifecycle_counts,
-        "cleanupObligationStateCounts": cleanup_counts,
+        "registryRevision": summary.registry_revision,
+        "ownerCount": summary.owner_count,
+        "recordCount": summary.record_count,
+        "lifecycleStateCounts": summary.lifecycle_state_counts,
+        "cleanupObligationStateCounts": summary.cleanup_obligation_state_counts,
     })
 }
 
-fn runtime_lifecycle_authority_summary(
-    registry: Option<&crate::runtime_owner_transfer::RuntimeOwnerRegistry>,
-) -> Value {
-    if let Some(registry) = registry {
-        return summarize_runtime_lifecycle_authority(registry);
+fn runtime_lifecycle_authority_summary(state: Option<&ServiceState>) -> Value {
+    if let Some(state) = state {
+        return summarize_runtime_lifecycle_authority(state);
     }
     #[cfg(test)]
     {
-        return summarize_runtime_lifecycle_authority(
-            &crate::runtime_owner_transfer::RuntimeOwnerRegistry::default(),
-        );
+        return summarize_runtime_lifecycle_authority(&ServiceState::default());
     }
     #[cfg(not(test))]
     match LockedServiceStateRepository::default_json()
         .and_then(|repository| repository.load_snapshot())
     {
-        Ok(state) => summarize_runtime_lifecycle_authority(&state.runtime_owner_registry),
+        Ok(state) => summarize_runtime_lifecycle_authority(&state),
         Err(_error) => json!({
             "available": false,
             "state": "unavailable",
@@ -2499,14 +2481,9 @@ fn runtime_lifecycle_status_from_health(health: &Value, lifecycle: Value) -> Val
     })
 }
 
-pub(crate) fn runtime_lifecycle_status_json_for_registry(
-    registry: &crate::runtime_owner_transfer::RuntimeOwnerRegistry,
-) -> Value {
+pub(crate) fn runtime_lifecycle_status_json_for_state(state: &ServiceState) -> Value {
     let health = runtime_health_json();
-    runtime_lifecycle_status_from_health(
-        &health,
-        runtime_lifecycle_authority_summary(Some(registry)),
-    )
+    runtime_lifecycle_status_from_health(&health, runtime_lifecycle_authority_summary(Some(state)))
 }
 
 #[cfg(test)]
@@ -5732,7 +5709,11 @@ mod tests {
                 },
             );
 
-        let lifecycle = runtime_lifecycle_status_json_for_registry(&registry);
+        let state = ServiceState {
+            runtime_owner_registry: registry,
+            ..ServiceState::default()
+        };
+        let lifecycle = runtime_lifecycle_status_json_for_state(&state);
         assert_eq!(lifecycle["lifecycle"]["registryRevision"], 7);
         assert_eq!(lifecycle["lifecycle"]["recordCount"], 1);
     }

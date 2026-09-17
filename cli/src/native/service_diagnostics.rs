@@ -287,9 +287,11 @@ fn service_control_plane_attestation(
                     == Some(requested)
             })
     });
-    let owner = service_state
-        .runtime_owner_registry
-        .attestation_for_session(session_name)?;
+    let runtime_authority =
+        service_state.runtime_control_plane_authority(session_name, browser_id)?;
+    let owner = runtime_authority.attestation;
+    let current_owner = runtime_authority.current_owner;
+    let lifecycle = runtime_authority.lifecycle;
 
     let owner_authoritative = owner.as_ref().is_some_and(|owner| {
         owner.effect_capable
@@ -435,20 +437,6 @@ fn service_control_plane_attestation(
 
     // A fresh managed browser has no transfer receipt. Require positive launch
     // custody instead of treating missing transfer history as sufficient proof.
-    let current_owner = service_state
-        .runtime_owner_registry
-        .owners()
-        .values()
-        .find(|candidate| {
-            owner.as_ref().is_some_and(|attested| {
-                candidate.owner_id == attested.owner_id
-                    && candidate.owner_generation == attested.owner_generation
-            })
-        });
-    let lifecycle = service_state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .get(browser_id);
     let boot = crate::process_identity::current_boot_epoch();
     let launch_checks = current_owner.zip(lifecycle).map(|(current, lifecycle)| {
         json!({

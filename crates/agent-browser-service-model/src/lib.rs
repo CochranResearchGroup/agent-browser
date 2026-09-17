@@ -27,6 +27,7 @@ mod profile_recovery_receipt;
 mod profile_reset_receipt;
 mod profile_seeding;
 mod request_provenance;
+mod runtime_owner_projection;
 mod service_authentication_run;
 mod service_challenge_task;
 mod service_state;
@@ -154,6 +155,10 @@ pub use profile_seeding::{
 pub use request_provenance::{
     normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,
     SERVICE_REQUEST_PROVENANCE_SCHEMA_VERSION,
+};
+pub use runtime_owner_projection::{
+    ProfileRuntimeAuthority, RuntimeControlPlaneAuthority, RuntimeLaneAuthority,
+    RuntimeLifecycleAuthoritySummary, RuntimeLifecycleBootEpochObservation, RuntimeResourceLane,
 };
 pub use service_authentication_run::{
     authentication_run_map_is_empty, cancel_authentication_run,

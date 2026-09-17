@@ -3598,6 +3598,94 @@ production direct runtime-owner field access in all seven files, provider-free
 projection tests, affected adapter witnesses, and a guard that rejects every
 broad access route above.
 
+## Checkpoint 55 | Immutable Runtime Owner Projections Accepted
+
+State transition: Service Model now owns six purpose-specific immutable
+runtime-owner projections for lifecycle summary, boot evidence, profile
+authority, control-plane authority, lane custody, and resource rows. The seven
+selected CLI files have zero production direct access to the aggregate field
+and no production helper accepts a raw registry. The CLI retains repository
+loading, runtime-health observation, current boot and process observation,
+profile-path canonicalization, filesystem lock inspection, hashing, JSON
+assembly, resource policy, ancestry, GC classification, and all effects.
+
+Implementation corrected the frozen inventory from eighteen to nineteen
+production expressions. One status provenance helper appears after an early
+test-gated module and was missed by the first read-only count. The production-
+aware architecture scan retained that later item and forced its conversion to
+the resource-row projection. This is evidence for the guard's item-aware test
+removal rather than a broader scope expansion.
+
+Lifecycle summaries preserve exact registry revision, owner and record counts,
+serialized lifecycle and cleanup labels, sorted count maps, unknown fallback,
+and omitted zero-count categories. Boot projections preserve their inclusion
+predicate, lifecycle-map order, embedded logical ID, and absent or empty epoch.
+Profile projections retain independent exact owner and principal-binding
+lookups plus one same-snapshot revision. Control-plane projections delegate
+session attestation and its errors, then retain the first map-ordered owner
+matching both ID and generation and the independent browser-key lifecycle row.
+Lane custody retains separate missing states. Resource rows preserve the map
+key separately from the embedded ID and join only exact-key browser PID and tab
+count.
+
+Install and status now consume typed summaries rather than raw registries.
+Resource output still serializes only lifecycle records for `runtimeLanes`, in
+registry key order. Missing owner still precedes missing lifecycle in abandoned
+lane protection, and retained-tree verification retains its separate early
+returns. Diagnosis identity and trace use the same projected registry revision.
+No projection exposes a registry, mutable reference, callback, generic
+iterator, conversion, persistence snapshot, or model-side observation.
+
+Acceptance evidence:
+
+- all 203 Service Model unit tests and fourteen integration tests pass,
+  including seven new projection tests for every lifecycle and cleanup label,
+  maximum revision, boot filtering and order, independent missing and mismatch
+  states, exact attestation errors and selection, terminal-history delegation,
+  resource joins, map-key order, and aggregate nonmutation;
+- 25 focused CLI witnesses pass across boot evidence, all seven control-plane
+  diagnostics tests, install and status lifecycle summaries, four profile
+  diagnosis outcomes, resource summary and cleanup accountability, abandoned
+  and retained custody, and the two new embedded-ID and runtime-lane ordering
+  regressions;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, mutation fixtures, and changed-surface
+  selector readback pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+The selector conservatively classified this packet as broad because it changes
+`install.rs` and the repository guard scripts. The packet did not alter
+workstation provisioning, payloads, privileges, Guacamole assets, or runtime
+effects. Exact install and status lifecycle witnesses plus strict workspace
+quality gates were used instead of the unrelated comprehensive workstation
+lane, consistent with this plan's focused local validation boundary.
+
+Independent review found no projection-semantic, ordering, revision, caller,
+or effect-custody defect. It found one blocking guard omission: a free function
+or trait implementation inside the new projection module could expose the raw
+registry without changing a checked aggregate signature. The primary completed
+the single review repair by making production projection code data-only and
+rejecting any raw registry reference, public function, or implementation in
+that module. Free-function and impl escape fixtures now fail closed alongside
+direct-field, raw-parameter, mutable, iterator, persistence, and post-test-item
+fixtures.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route for six model records,
+six aggregate methods, and seven provider-free tests. `/root/p205_receipt_cli_audit`
+used the requested workhorse `gpt-5.6-sol` high route for the nineteen-access
+cutover across seven files and the two coverage-gap witnesses. The primary
+implemented and hardened the guard, ran all local acceptance gates, and
+reconciled the independent `/root/p205_privacy_audit` review finding.
+
+Acceptance state and progress classification: immutable runtime-owner
+projection closure is accepted and is outcome progress toward P4 field
+privacy. The next bounded outcome is rollback-sensitive runtime-owner
+transition classification and interface freeze. It must distinguish staged
+all-or-nothing transitions from intentionally retained partial mutations and
+must not move host observation or effects into the model.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -3605,9 +3693,9 @@ broad access route above.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, and runtime-owner persistence boundary accepted; remaining typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, and immutable runtime-owner projections accepted; remaining transition closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | runtime-owner persistence boundary accepted through Checkpoint 53 |
+| Focused correctness | crate tests and affected CLI adapter tests | immutable runtime-owner projections accepted through Checkpoint 55 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

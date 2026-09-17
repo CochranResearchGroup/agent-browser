@@ -115,15 +115,7 @@ pub(crate) fn service_boot_epoch_findings(
             current_boot_epoch,
         );
     }
-    for lifecycle in state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .values()
-        .filter(|lifecycle| {
-            lifecycle.process_group_id.is_some()
-                || lifecycle.package_launch_identity_digest.is_some()
-        })
-    {
+    for lifecycle in state.runtime_lifecycle_boot_epoch_observations() {
         push_finding(
             &mut findings,
             "runtime_lifecycle",
@@ -240,5 +232,54 @@ mod tests {
         assert_eq!(finding.status, BootEpochStatus::Missing);
         assert!(!finding.authorizes_effects);
         assert!(!finding.authorizes_cleanup);
+    }
+
+    #[test]
+    fn lifecycle_boot_evidence_is_included_and_sorted_by_embedded_browser_id() {
+        use crate::runtime_owner_transfer::RuntimeLifecycleRecord;
+
+        let mut state = ServiceState::default();
+        let mut registry =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        registry.lifecycle_rows.insert(
+            "z-map-key".to_string(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: "browser-b".to_string(),
+                boot_epoch: Some("boot:synthetic-previous".to_string()),
+                process_group_id: Some(4100),
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        registry.lifecycle_rows.insert(
+            "a-map-key".to_string(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: "browser-a".to_string(),
+                boot_epoch: Some("boot:synthetic-previous".to_string()),
+                package_launch_identity_digest: Some("a".repeat(64)),
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        registry.lifecycle_rows.insert(
+            "ignored".to_string(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: "browser-ignored".to_string(),
+                boot_epoch: Some("boot:synthetic-previous".to_string()),
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        drop(registry);
+
+        let lifecycle_findings =
+            service_boot_epoch_findings(&state, Some("boot:synthetic-current"))
+                .into_iter()
+                .filter(|finding| finding.resource_type == "runtime_lifecycle")
+                .collect::<Vec<_>>();
+
+        assert_eq!(lifecycle_findings.len(), 2);
+        assert_eq!(lifecycle_findings[0].resource_id, "browser-a");
+        assert_eq!(lifecycle_findings[1].resource_id, "browser-b");
+        assert!(lifecycle_findings
+            .iter()
+            .all(|finding| finding.status == BootEpochStatus::Prior));
     }
 }
