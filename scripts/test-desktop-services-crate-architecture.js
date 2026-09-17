@@ -53,6 +53,10 @@ requireCondition(
   'desktop-services crate must own the provider-neutral adapter contract',
 );
 requireCondition(
+  /\bpub\s+fn\s+admit_desktop_candidate_intent\b/.test(joinedCrateSources),
+  'desktop-services crate must own the effect-free candidate-intent admission contract',
+);
+requireCondition(
   !/\bfn\s+run_claimed_interaction\b/.test(cliDesktopInteraction),
   'CLI adapter must not retain the transaction kernel implementation',
 );
@@ -63,13 +67,27 @@ for (const forbidden of [
   'service_store',
   'desktop_locator',
   'controlled_x11',
+  'agent_browser_challenge_control',
+  'agent_browser_challenge_visual_adapter',
+  'std::fs',
+  'std::net',
+  'tokio::',
+  'reqwest::',
 ]) {
   requireCondition(
     !joinedCrateSources.includes(forbidden),
     `desktop-services crate must not import platform or Service State surface: ${forbidden}`,
   );
 }
-for (const dependency of ['agent-browser', 'agent-browser-cdp', 'tokio', 'reqwest', 'image']) {
+for (const dependency of [
+  'agent-browser',
+  'agent-browser-cdp',
+  'agent-browser-challenge-control',
+  'agent-browser-challenge-visual-adapter',
+  'tokio',
+  'reqwest',
+  'image',
+]) {
   requireCondition(
     !new RegExp(`^\\s*${dependency}\\s*=`, 'm').test(crateManifest),
     `desktop-services crate must not depend on ${dependency}`,
