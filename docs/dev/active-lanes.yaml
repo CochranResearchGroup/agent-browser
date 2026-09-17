@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: SOURCE_ACCEPTED_INTEGRATION_READY
     custody_state: PUBLISHED_INTEGRATION_READY
-    checkpoint: 4813d385
+    checkpoint: db987e4e
     remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
     integration_receipt: null
-    integration: merge through the protected main workflow after exact-head forge evaluation
-    validation_status: repaired exact-head local validation passed 41 challenge-control tests including cumulative-overflow boundaries, strict workspace Clippy, formatting, challenge-control architecture and diff hygiene; previously accepted unaffected extracted-crate gates remain reusable
-    validation_ref: 4813d385
+    integration: publish the reconciled branch and merge through the protected main workflow without restoring or dispatching operator-disabled GitHub CI
+    validation_status: repaired source validation passed 41 challenge-control tests including cumulative-overflow boundaries, strict workspace Clippy, formatting, challenge-control architecture and diff hygiene; main reconciliation changed no challenge or Cargo source, and conflict-affected policy, documentation, validation-selection, worktree-closeout, planning and diff-hygiene checks pass locally
+    validation_ref: db987e4e
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: []
-    reconciled_overlaps: [P197, P204]
-    blocker: corrected exact-head forge evaluation and protected integration remain; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    reconciled_overlaps: [P197, P204, P208]
+    blocker: reconciled branch publication and protected integration remain; GitHub CI is operator-disabled and all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17
   - id: P204
     product_lane: PL-PLATFORM

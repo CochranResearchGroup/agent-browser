@@ -9,6 +9,20 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md) and [P208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md)
 
+## Turn 380 | 2026-09-17
+
+P206 joined operator-disabled-CI `main@f6d49f89` at `bb961c96`, then joined
+P208's canonical `main@59928044` at `db987e4e`. The only conflict was the
+shared runbook projection, resolved by retaining both plans' records. Neither
+main slice changes challenge-control source or Cargo metadata, so the repaired
+41-test source evidence at published head `72eeea03` remains reusable.
+Conflict-affected policy wiring, documentation links, validation-selection,
+P208 closeout fixtures, active planning audit and diff hygiene pass locally.
+GitHub CI remains disabled by operator direction; no workflow was restored,
+dispatched, retried or run. Reconciled publication and protected integration
+remain. No browser, provider, CAPTCHA, credential, runtime or production
+effect occurred.
+
 ## Turn 379 | 2026-09-17
 
 P206 pre-merge review reproduced two budget-boundary defects: cumulative
