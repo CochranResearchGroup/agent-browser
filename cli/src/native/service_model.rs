@@ -29,56 +29,6 @@ pub const SERVICE_INCIDENT_ESCALATION_VALUES: [&str; 7] = [
     "os_degraded_possible",
 ];
 pub const SERVICE_MONITOR_STATE_VALUES: [&str; 3] = ["active", "paused", "faulted"];
-pub const SERVICE_INTERACTION_MODE_VALUES: [&str; 5] = [
-    "cdp_direct",
-    "dom_action",
-    "browser_input",
-    "human_like_input",
-    "manual",
-];
-pub const SERVICE_CHALLENGE_POLICY_VALUES: [&str; 5] = [
-    "avoid_first",
-    "manual_only",
-    "provider_allowed",
-    "provider_preferred",
-    "deny",
-];
-pub const SERVICE_PROVIDER_KIND_VALUES: [&str; 8] = [
-    "browser_credentials",
-    "password_manager",
-    "totp",
-    "sms",
-    "email",
-    "manual_approval",
-    "intelligence",
-    "captcha",
-];
-pub const SERVICE_PROVIDER_CAPABILITY_VALUES: [&str; 8] = [
-    "password_fill",
-    "passkey",
-    "totp_code",
-    "sms_code",
-    "email_code",
-    "visual_reasoning",
-    "captcha_solve",
-    "human_approval",
-];
-pub const SERVICE_CHALLENGE_KIND_VALUES: [&str; 6] = [
-    "unknown",
-    "captcha",
-    "two_factor",
-    "passkey",
-    "suspicious_login",
-    "blocked_flow",
-];
-pub const SERVICE_CHALLENGE_STATE_VALUES: [&str; 6] = [
-    "detected",
-    "waiting_for_provider",
-    "waiting_for_human",
-    "resolved",
-    "failed",
-    "denied",
-];
 pub const SERVICE_EVENT_KIND_VALUES: [&str; 20] = [
     "reconciliation",
     "browser_launch_recorded",
@@ -4891,29 +4841,35 @@ pub struct ControlPlaneSnapshot {
 }
 
 pub use agent_browser_service_model::{
-    profile_seeding_handoff_id, BrowserBuild, BrowserHealth, BrowserHealthObservation, BrowserHost,
-    BrowserProcess, BrowserProfile, BrowserRecordAuthoritySource,
-    BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,
-    BrowserSession, BrowserTab, ControlInputProvider, DisplayAllocation,
-    DurableHandoffPresentationReceipt, LeaseState, ProfileAllocationPolicy, ProfileClass,
-    ProfileConnectionState, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin,
-    ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
-    ProfileSeedingMode, ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness,
-    ProtectedBrowserOwnerObservation, RemoteViewAcquisitionLease, RemoteViewHandoff,
-    RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
-    ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEntitySources, ServiceTabHandle,
-    ServiceTabHandleTraceFilter, SessionCleanupPolicy, SitePolicySourceRecord, TabLifecycle,
-    ViewStream, ViewStreamProvider, ViewerLease,
+    interaction_decision, profile_seeding_handoff_id, provider_decision, BrowserBuild,
+    BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserProfile,
+    BrowserRecordAuthoritySource, BrowserRecordLifecycleClassification, BrowserRecordProvenance,
+    BrowserRecordSource, BrowserSession, BrowserTab, Challenge, ChallengePolicy, ChallengeState,
+    ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt, InteractionMode,
+    LeaseState, ProfileAllocationPolicy, ProfileClass, ProfileConnectionState,
+    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState,
+    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
+    ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness,
+    ProtectedBrowserOwnerObservation, RateLimitPolicy, RemoteViewAcquisitionLease,
+    RemoteViewHandoff, RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry,
+    ServiceActor, ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEntitySources,
+    ServiceProvider, ServiceTabHandle, ServiceTabHandleTraceFilter, SessionCleanupPolicy,
+    SitePolicy, SitePolicySourceRecord, TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
 };
+#[cfg(test)]
+pub use agent_browser_service_model::{ChallengeKind, ProviderCapability, ProviderKind};
 #[cfg(test)]
 use agent_browser_service_model::{
     ProfileChildAccess, SERVICE_BROWSER_BUILD_VALUES, SERVICE_BROWSER_HEALTH_VALUES,
-    SERVICE_BROWSER_HOST_VALUES, SERVICE_CONTROL_INPUT_PROVIDER_VALUES, SERVICE_LEASE_STATE_VALUES,
-    SERVICE_PROFILE_ALLOCATION_VALUES, SERVICE_PROFILE_CLASS_VALUES,
-    SERVICE_PROFILE_KEYRING_VALUES, SERVICE_PROFILE_LEASE_DISPOSITION_VALUES,
-    SERVICE_PROFILE_READINESS_VALUES, SERVICE_PROFILE_SEEDING_MODE_VALUES,
-    SERVICE_PROFILE_SELECTION_REASON_VALUES, SERVICE_SESSION_CLEANUP_VALUES,
-    SERVICE_TAB_LIFECYCLE_VALUES, SERVICE_VIEW_STREAM_PROVIDER_VALUES,
+    SERVICE_BROWSER_HOST_VALUES, SERVICE_CHALLENGE_KIND_VALUES, SERVICE_CHALLENGE_POLICY_VALUES,
+    SERVICE_CHALLENGE_STATE_VALUES, SERVICE_CONTROL_INPUT_PROVIDER_VALUES,
+    SERVICE_INTERACTION_MODE_VALUES, SERVICE_LEASE_STATE_VALUES, SERVICE_PROFILE_ALLOCATION_VALUES,
+    SERVICE_PROFILE_CLASS_VALUES, SERVICE_PROFILE_KEYRING_VALUES,
+    SERVICE_PROFILE_LEASE_DISPOSITION_VALUES, SERVICE_PROFILE_READINESS_VALUES,
+    SERVICE_PROFILE_SEEDING_MODE_VALUES, SERVICE_PROFILE_SELECTION_REASON_VALUES,
+    SERVICE_PROVIDER_CAPABILITY_VALUES, SERVICE_PROVIDER_KIND_VALUES,
+    SERVICE_SESSION_CLEANUP_VALUES, SERVICE_TAB_LIFECYCLE_VALUES,
+    SERVICE_VIEW_STREAM_PROVIDER_VALUES,
 };
 
 pub fn retained_display_allocation_candidates(
@@ -5302,163 +5258,6 @@ impl Default for SiteMonitor {
     }
 }
 
-/// Per-site access reliability and interaction policy.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct SitePolicy {
-    pub id: String,
-    /// Human-readable catalog name for this website or login surface.
-    pub name: String,
-    /// Safe catalog description shown during discovery.
-    pub description: Option<String>,
-    /// Alternate names used by deterministic site and profile discovery.
-    pub aliases: Vec<String>,
-    pub origin_pattern: String,
-    /// Additional canonical origins for this site.
-    pub origins: Vec<String>,
-    /// Login identity labels served by this site.
-    pub login_ids: Vec<String>,
-    /// Safe account labels supported by this site policy.
-    pub account_labels: Vec<String>,
-    /// Preferred registered profile for operator launch workflows.
-    pub recommended_profile_id: Option<String>,
-    /// Service or adapter clients known to consume this login.
-    pub adapter_service_ids: Vec<String>,
-    /// Searchable catalog tags.
-    pub tags: Vec<String>,
-    /// Bounded probe or freshness contract identifier.
-    pub freshness_contract: Option<String>,
-    /// Safe bounded troubleshooting guidance.
-    pub troubleshooting: Vec<String>,
-    pub browser_host: Option<BrowserHost>,
-    /// Optional browser build or engine variant preference for this site.
-    pub browser_build: Option<BrowserBuild>,
-    pub view_stream: Option<ViewStreamProvider>,
-    pub control_input: Option<ControlInputProvider>,
-    /// True when this site should launch without a DevTools/CDP attachment.
-    pub requires_cdp_free: bool,
-    pub interaction_mode: InteractionMode,
-    pub rate_limit: RateLimitPolicy,
-    pub manual_login_preferred: bool,
-    pub profile_required: bool,
-    pub auth_providers: Vec<String>,
-    pub challenge_policy: ChallengePolicy,
-    pub allowed_challenge_providers: Vec<String>,
-    pub notes: Option<String>,
-}
-
-impl Default for SitePolicy {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            name: String::new(),
-            description: None,
-            aliases: Vec::new(),
-            origin_pattern: String::new(),
-            origins: Vec::new(),
-            login_ids: Vec::new(),
-            account_labels: Vec::new(),
-            recommended_profile_id: None,
-            adapter_service_ids: Vec::new(),
-            tags: Vec::new(),
-            freshness_contract: None,
-            troubleshooting: Vec::new(),
-            browser_host: None,
-            browser_build: None,
-            view_stream: None,
-            control_input: None,
-            requires_cdp_free: false,
-            interaction_mode: InteractionMode::CdpDirect,
-            rate_limit: RateLimitPolicy::default(),
-            manual_login_preferred: false,
-            profile_required: false,
-            auth_providers: Vec::new(),
-            challenge_policy: ChallengePolicy::AvoidFirst,
-            allowed_challenge_providers: Vec::new(),
-            notes: None,
-        }
-    }
-}
-
-/// Pacing and concurrency limits for a site policy.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct RateLimitPolicy {
-    pub min_action_delay_ms: Option<u64>,
-    pub jitter_ms: Option<u64>,
-    pub cooldown_ms: Option<u64>,
-    pub max_parallel_sessions: Option<u32>,
-    pub retry_budget: Option<u32>,
-}
-
-impl Default for RateLimitPolicy {
-    fn default() -> Self {
-        Self {
-            min_action_delay_ms: Some(0),
-            jitter_ms: Some(0),
-            cooldown_ms: None,
-            max_parallel_sessions: None,
-            retry_budget: None,
-        }
-    }
-}
-
-/// External or built-in integration available to service workflows.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ServiceProvider {
-    pub id: String,
-    pub kind: ProviderKind,
-    pub display_name: String,
-    pub enabled: bool,
-    pub config_ref: Option<String>,
-    pub capabilities: Vec<ProviderCapability>,
-}
-
-impl Default for ServiceProvider {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            kind: ProviderKind::ManualApproval,
-            display_name: String::new(),
-            enabled: true,
-            config_ref: None,
-            capabilities: Vec::new(),
-        }
-    }
-}
-
-/// Detected auth, 2FA, captcha, passkey, or blocked-flow challenge.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct Challenge {
-    pub id: String,
-    pub tab_id: Option<String>,
-    pub kind: ChallengeKind,
-    pub state: ChallengeState,
-    pub detected_at: Option<String>,
-    pub provider_id: Option<String>,
-    pub policy_decision: Option<String>,
-    pub human_approved: bool,
-    pub result: Option<String>,
-}
-
-impl Default for Challenge {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            tab_id: None,
-            kind: ChallengeKind::Unknown,
-            state: ChallengeState::Detected,
-            detected_at: None,
-            provider_id: None,
-            policy_decision: None,
-            human_approved: false,
-            result: None,
-        }
-    }
-}
-
 /// Change the primary controller once, advance its ABA fencing epoch, and
 /// project that exact authority into every stream bound to the route.
 pub(crate) fn advance_route_controller_authority(
@@ -5508,28 +5307,6 @@ pub(crate) fn controller_authority_fence_matches(
                 && stream.controller_epoch == controller_epoch
         })
     })
-}
-
-/// Policy-selected action backend.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InteractionMode {
-    CdpDirect,
-    DomAction,
-    BrowserInput,
-    HumanLikeInput,
-    Manual,
-}
-
-/// Challenge resolution posture for a site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChallengePolicy {
-    AvoidFirst,
-    ManualOnly,
-    ProviderAllowed,
-    ProviderPreferred,
-    Deny,
 }
 
 /// Queue target for a service job.
@@ -5594,58 +5371,6 @@ pub enum MonitorState {
     Active,
     Paused,
     Faulted,
-}
-
-/// Provider family.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProviderKind {
-    BrowserCredentials,
-    PasswordManager,
-    Totp,
-    Sms,
-    Email,
-    ManualApproval,
-    Intelligence,
-    Captcha,
-}
-
-/// Capability advertised by a provider.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProviderCapability {
-    PasswordFill,
-    Passkey,
-    TotpCode,
-    SmsCode,
-    EmailCode,
-    VisualReasoning,
-    CaptchaSolve,
-    HumanApproval,
-}
-
-/// Challenge category.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChallengeKind {
-    Unknown,
-    Captcha,
-    TwoFactor,
-    Passkey,
-    SuspiciousLogin,
-    BlockedFlow,
-}
-
-/// Challenge lifecycle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChallengeState {
-    Detected,
-    WaitingForProvider,
-    WaitingForHuman,
-    Resolved,
-    Failed,
-    Denied,
 }
 
 #[cfg(test)]

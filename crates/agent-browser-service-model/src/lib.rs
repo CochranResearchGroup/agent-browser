@@ -11,6 +11,7 @@ mod profile_access;
 mod profile_readiness;
 mod profile_seeding;
 mod session_tab;
+mod site_policy;
 
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
@@ -61,4 +62,13 @@ pub use session_tab::{
     TabLifecycle, SERVICE_LEASE_STATE_VALUES, SERVICE_PROFILE_LEASE_DISPOSITION_VALUES,
     SERVICE_PROFILE_SELECTION_REASON_VALUES, SERVICE_SESSION_CLEANUP_VALUES,
     SERVICE_TAB_LIFECYCLE_VALUES,
+};
+pub use site_policy::{
+    challenge_required_capabilities, interaction_decision, provider_allowed_for_challenge,
+    provider_capability_wire_name, provider_decision, Challenge, ChallengeKind, ChallengePolicy,
+    ChallengeState, InteractionDecision, InteractionMode, ProviderCapability, ProviderDecision,
+    ProviderKind, RateLimitPolicy, ServiceProvider, SitePolicy, SERVICE_CHALLENGE_KIND_VALUES,
+    SERVICE_CHALLENGE_POLICY_VALUES, SERVICE_CHALLENGE_STATE_VALUES,
+    SERVICE_INTERACTION_MODE_VALUES, SERVICE_PROVIDER_CAPABILITY_VALUES,
+    SERVICE_PROVIDER_KIND_VALUES,
 };

@@ -510,16 +510,62 @@ Next action: publish this checkpoint and reassess aggregate dependency depth.
 Prefer another cohesive durable family over introducing an incomplete second
 Service State aggregate.
 
+## Checkpoint 8 | Site, Challenge, And Provider Policy Kernel
+
+State transition: the crate now owns site policy, pacing, provider inventory,
+and challenge records and enums, plus the deterministic interaction and
+provider-decision kernel. One small interface now computes interaction risk,
+pacing projection, provider selection, capability gaps, and challenge strategy
+without Service State, persistence, provider execution, or runtime access.
+
+Acceptance state and progress classification: this P1 deep-module packet is
+accepted locally. The CLI access planner selects profiles, policies,
+challenges, and providers from Service State, then calls the crate kernel.
+Built-in named-site catalogs, URL matching, configuration precedence,
+persistence, monitoring, HTTP and MCP projection, and provider or challenge
+effects remain CLI adapters.
+
+Evidence:
+
+- five focused crate tests pass for record defaults and wire names, exact enum
+  constants, standard/manual/hardened interaction decisions, sorted and
+  deduplicated allow-list-aware provider selection, capability-gap ordering,
+  and deny precedence;
+- CLI collection wire-contract, stable site-policy serialization, and
+  provider/challenge model tests pass through the compatibility facade;
+- access-plan provider-fit, missing-capability, and pacing/risk tests pass
+  against the extracted kernel;
+- configured-entity overlay, built-in site-policy precedence, site-policy
+  upsert defaults, and provider body-ID rejection adapter tests pass;
+- strict workspace Clippy passes with warnings denied after production and
+  test-only facade imports were separated;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no provider execution, credential, browser, runtime, install, staging,
+  production, release, or GitHub CI effect was performed.
+
+Material blockers: `ServiceJob` and `ServiceEvent` still depend on CLI-owned
+request provenance, terminal outcome, and failure-recourse records.
+`ServiceIncident` can move only after those dependencies are neutral or its
+aggregate derivation seam is deliberately split. Receipt and transaction
+families remain distributed across their owning CLI adapters. P204 still owns
+the shared validation and roadmap surfaces.
+
+Next action: publish this checkpoint. Extract request provenance, terminal
+outcome, and failure-recourse records as the prerequisites for a cohesive
+job, event, and incident model packet; keep request handling, failure
+classification, and incident derivation in CLI adapters.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | seven families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | eight families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
-| Deep module interface | snapshot, transition, and projection interface tests plus deletion test | planned |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | seven packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | seven packets accepted |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | eight packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | eight packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
