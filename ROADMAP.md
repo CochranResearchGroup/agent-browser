@@ -25,6 +25,23 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P207 | Tab Handle Refresh Custody Repair
+
+State: OPEN, ACCEPTED, DRAFT PR
+
+Current state: [Plan 0207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)
+and [issue #175](https://github.com/CochranResearchGroup/agent-browser/issues/175)
+record the bounded PL-BUGFIX repair. Source checkpoint `c3d69f3e` now requires
+canonical same-caller Service State custody for compatible reuse and duplicate
+cleanup, persists canonical replacements, preserves peer targets, and returns
+explicit cleanup-attempt proof. All 8 focused refresh tests, required Rust
+quality checks, direct client and parity checks, and the docs build pass. The
+disposable stock-Chrome smoke now creates an isolated capability binding and
+passes the exact refresh, replacement, peer-survival, and cleanup scenario.
+P207 remains open only for review and protected integration of draft PR #184.
+Full CI, installed-runtime mutation, provider effects,
+credentials, production, and release work remain outside this plan.
+
 ## P203 | Runtime Host Admission Routing
 
 State: CLOSED

@@ -204,6 +204,26 @@ pub(crate) mod action_commands {
                 .ok_or_else(|| "persisted service tab handle is unavailable".to_string())
         })
     }
+    pub(crate) fn persist_tab_handle_refresh_replacement(
+        cmd: &Value,
+        session_id: &str,
+        target_id: &str,
+        url: &str,
+        title: &str,
+        provisional_handle: &Value,
+    ) -> Result<Value, String> {
+        let canonical = persist_service_owned_tab_new(
+            cmd,
+            session_id,
+            Some(target_id),
+            Some(url),
+            Some(title),
+            provisional_handle,
+        )?
+        .ok_or_else(|| "persisted replacement service tab handle is unavailable".to_string())?;
+        serde_json::to_value(canonical)
+            .map_err(|error| format!("Invalid persisted replacement service tab handle: {error}"))
+    }
 
     pub(crate) fn profile_child_access_from_command(cmd: &Value) -> Value {
         cmd.get("profileChildAccess")
@@ -543,9 +563,13 @@ pub(crate) mod action_commands {
                 "decision" : "rejected_inactive_lease", "repairPolicy" : repair_policy,
                 "observedAt" : observed_at, "browserId" : browser_id, "staleReason" :
                 stale_reason, "serviceTabHandle" : cmd.get("serviceTabHandle").cloned()
-                .unwrap_or(Value::Null), "candidates" : candidates, }
+                .unwrap_or(Value::Null), "duplicateCleanupAttempted" : false,
+                "peerCleanupAttempted" : false, "duplicateTargetCleanup" :
+                no_duplicate_target_cleanup(), "candidates" : candidates, }
             ));
         }
+        let mut refresh_snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+        refresh_snapshot.refresh_service_tab_handles();
         let mgr = state.browser.as_mut().ok_or_else(|| {
             "Cannot refresh service tab handle: routed browser session is not running".to_string()
         })?;
@@ -586,22 +610,25 @@ pub(crate) mod action_commands {
                     let duplicate_target_cleanup = if repair_policy == "replace_duplicates" {
                         close_compatible_duplicate_targets(
                             mgr,
+                            &refresh_snapshot,
+                            handle,
                             target_id,
-                            Some(target_id),
                             desired_origin.as_deref(),
                         )
                         .await
                     } else {
                         no_duplicate_target_cleanup()
                     };
-                    return Ok(json!(
-                        { "ok" : true, "action" : "tab_handle_refresh", "refreshed" :
-                        true, "decision" : "exact_handle_still_valid", "repairPolicy"
-                        : repair_policy, "observedAt" : observed_at, "browserId" :
-                        browser_id, "targetId" : target_id, "url" : url, "title" :
-                        title, "tabSwitch" : switched, "serviceTabHandle" :
-                        refreshed_handle, "duplicateTargetCleanup" :
-                        duplicate_target_cleanup, "candidates" : candidates, }
+                    return Ok(tab_handle_refresh_success_with_cleanup(
+                        json!(
+                            { "ok" : true, "action" : "tab_handle_refresh", "refreshed" :
+                            true, "decision" : "exact_handle_still_valid", "repairPolicy"
+                            : repair_policy, "observedAt" : observed_at, "browserId" :
+                            browser_id, "targetId" : target_id, "url" : url, "title" :
+                            title, "tabSwitch" : switched, "serviceTabHandle" :
+                            refreshed_handle, "candidates" : candidates, }
+                        ),
+                        duplicate_target_cleanup,
                     ));
                 }
             }
@@ -622,33 +649,35 @@ pub(crate) mod action_commands {
                 "staleReason" : handle.get("staleReason").cloned()
                 .unwrap_or(Value::Null), "serviceTabHandle" : cmd
                 .get("serviceTabHandle").cloned().unwrap_or(Value::Null),
-                "candidates" : candidates, }
+                "duplicateCleanupAttempted" : false, "peerCleanupAttempted" : false,
+                "duplicateTargetCleanup" : no_duplicate_target_cleanup(), "candidates" :
+                candidates, }
             ));
         }
         if repair_policy == "reuse_compatible"
             || repair_policy == "open_if_missing"
             || repair_policy == "replace_duplicates"
         {
-            if let Some(page) = mgr.pages_list().into_iter().find(|page| {
-                classify_live_page_candidate(
-                    &page.target_id,
-                    page.url.as_str(),
-                    target_id,
-                    desired_origin.as_deref(),
-                )
-                .starts_with("compatible_")
-            }) {
-                let mut switched = mgr.tab_switch_target_id(&page.target_id).await?;
+            let refresh_plan = plan_tab_handle_refresh(
+                &refresh_snapshot,
+                handle,
+                &mgr.pages_list(),
+                desired_origin.as_deref(),
+                &repair_policy,
+            );
+            if let TabHandleRefreshPlan::ReuseCallerBound {
+                target_id: selected_target_id,
+                canonical_handle,
+            } = refresh_plan
+            {
+                let mut switched = mgr.tab_switch_target_id(&selected_target_id).await?;
                 let url = mgr.get_url().await.unwrap_or_default();
                 let title = mgr.get_title().await.unwrap_or_default();
                 switched["refreshDecision"] = json!("reused_compatible_target");
-                let refreshed_handle = service_tab_handle_from_parts(
-                    handle,
-                    &state.session_id,
-                    &page.target_id,
-                    url.as_str(),
-                    title.as_str(),
-                );
+                let mut refreshed_handle = serde_json::to_value(canonical_handle)
+                    .map_err(|error| format!("Invalid canonical service tab handle: {error}"))?;
+                refreshed_handle["url"] = json!(url.clone());
+                refreshed_handle["title"] = json!(title.clone());
                 persist_tab_handle_refresh_event(
                     cmd,
                     &browser_id,
@@ -660,22 +689,25 @@ pub(crate) mod action_commands {
                 let duplicate_target_cleanup = if repair_policy == "replace_duplicates" {
                     close_compatible_duplicate_targets(
                         mgr,
-                        &page.target_id,
-                        target_id,
+                        &refresh_snapshot,
+                        handle,
+                        &selected_target_id,
                         desired_origin.as_deref(),
                     )
                     .await
                 } else {
                     no_duplicate_target_cleanup()
                 };
-                return Ok(json!(
-                    { "ok" : true, "action" : "tab_handle_refresh", "refreshed" :
-                    true, "decision" : "reused_compatible_target", "repairPolicy" :
-                    repair_policy, "observedAt" : observed_at, "browserId" :
-                    browser_id, "targetId" : page.target_id, "url" : url, "title" :
-                    title, "tabSwitch" : switched, "serviceTabHandle" :
-                    refreshed_handle, "duplicateTargetCleanup" :
-                    duplicate_target_cleanup, "candidates" : candidates, }
+                return Ok(tab_handle_refresh_success_with_cleanup(
+                    json!(
+                        { "ok" : true, "action" : "tab_handle_refresh", "refreshed" :
+                        true, "decision" : "reused_compatible_target", "repairPolicy" :
+                        repair_policy, "observedAt" : observed_at, "browserId" :
+                        browser_id, "targetId" : selected_target_id, "url" : url, "title" :
+                        title, "tabSwitch" : switched, "serviceTabHandle" :
+                        refreshed_handle, "candidates" : candidates, }
+                    ),
+                    duplicate_target_cleanup,
                 ));
             }
         }
@@ -690,13 +722,21 @@ pub(crate) mod action_commands {
             let url = mgr.get_url().await.unwrap_or_else(|_| open_url.to_string());
             let title = mgr.get_title().await.unwrap_or_default();
             opened["refreshDecision"] = json!("opened_replacement_target");
-            let refreshed_handle = service_tab_handle_from_parts(
+            let provisional_handle = service_tab_handle_from_parts(
                 handle,
                 &state.session_id,
                 &new_target_id,
                 &url,
                 &title,
             );
+            let refreshed_handle = persist_tab_handle_refresh_replacement(
+                cmd,
+                &state.session_id,
+                &new_target_id,
+                &url,
+                &title,
+                &provisional_handle,
+            )?;
             persist_tab_handle_refresh_event(
                 cmd,
                 &browser_id,
@@ -708,22 +748,24 @@ pub(crate) mod action_commands {
             let duplicate_target_cleanup = if repair_policy == "replace_duplicates" {
                 close_compatible_duplicate_targets(
                     mgr,
+                    &refresh_snapshot,
+                    handle,
                     &new_target_id,
-                    target_id,
                     desired_origin.as_deref(),
                 )
                 .await
             } else {
                 no_duplicate_target_cleanup()
             };
-            return Ok(json!(
-                { "ok" : true, "action" : "tab_handle_refresh", "refreshed" : true,
-                "decision" : "opened_replacement_target", "repairPolicy" :
-                repair_policy, "observedAt" : observed_at, "browserId" : browser_id,
-                "targetId" : new_target_id, "url" : url, "title" : title, "tabNew" :
-                opened, "serviceTabHandle" : refreshed_handle,
-                "duplicateTargetCleanup" : duplicate_target_cleanup, "candidates" :
-                candidates, }
+            return Ok(tab_handle_refresh_success_with_cleanup(
+                json!(
+                    { "ok" : true, "action" : "tab_handle_refresh", "refreshed" : true,
+                    "decision" : "opened_replacement_target", "repairPolicy" :
+                    repair_policy, "observedAt" : observed_at, "browserId" : browser_id,
+                    "targetId" : new_target_id, "url" : url, "title" : title, "tabNew" :
+                    opened, "serviceTabHandle" : refreshed_handle, "candidates" : candidates, }
+                ),
+                duplicate_target_cleanup,
             ));
         }
         persist_tab_handle_refresh_event(
@@ -739,7 +781,9 @@ pub(crate) mod action_commands {
             "decision" : "no_compatible_target", "repairPolicy" : repair_policy,
             "observedAt" : observed_at, "browserId" : browser_id, "serviceTabHandle"
             : cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
-            "candidates" : candidates, }
+            "duplicateCleanupAttempted" : false, "peerCleanupAttempted" : false,
+            "duplicateTargetCleanup" : no_duplicate_target_cleanup(), "candidates" :
+            candidates, }
         ))
     }
     pub(crate) async fn handle_tab_handle_release(
@@ -1130,6 +1174,114 @@ pub(crate) mod action_commands {
         }
         "incompatible_tab"
     }
+    /// Pure refresh decision. URL compatibility is only a discovery hint;
+    /// reusable targets must carry canonical Service State custody for the
+    /// stale handle's caller.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) enum TabHandleRefreshPlan {
+        ExactTarget {
+            target_id: String,
+        },
+        ReuseCallerBound {
+            target_id: String,
+            canonical_handle: Box<ServiceTabHandle>,
+        },
+        OpenReplacement,
+        Reject,
+    }
+    pub(crate) fn plan_tab_handle_refresh(
+        service_state: &ServiceState,
+        handle: &Map<String, Value>,
+        pages: &[PageInfo],
+        desired_origin: Option<&str>,
+        repair_policy: &str,
+    ) -> TabHandleRefreshPlan {
+        let handle_target_id = handle.get("targetId").and_then(Value::as_str);
+        if let Some(page) = pages
+            .iter()
+            .find(|page| Some(page.target_id.as_str()) == handle_target_id)
+        {
+            return TabHandleRefreshPlan::ExactTarget {
+                target_id: page.target_id.clone(),
+            };
+        }
+        if repair_policy == "reject_only" {
+            return TabHandleRefreshPlan::Reject;
+        }
+        if let Some((page, canonical_handle)) = pages.iter().find_map(|page| {
+            let compatible = classify_live_page_candidate(
+                &page.target_id,
+                page.url.as_str(),
+                handle_target_id,
+                desired_origin,
+            )
+            .starts_with("compatible_");
+            compatible
+                .then(|| caller_bound_refresh_handle(service_state, handle, &page.target_id))
+                .flatten()
+                .map(|canonical_handle| (page, canonical_handle))
+        }) {
+            return TabHandleRefreshPlan::ReuseCallerBound {
+                target_id: page.target_id.clone(),
+                canonical_handle: Box::new(canonical_handle),
+            };
+        }
+        if matches!(repair_policy, "open_if_missing" | "replace_duplicates") {
+            TabHandleRefreshPlan::OpenReplacement
+        } else {
+            TabHandleRefreshPlan::Reject
+        }
+    }
+    /// Return the canonical handle only when both tabs share exact retained
+    /// caller custody. Missing or mixed evidence fails closed.
+    pub(crate) fn caller_bound_refresh_handle(
+        service_state: &ServiceState,
+        stale_handle: &Map<String, Value>,
+        candidate_target_id: &str,
+    ) -> Option<ServiceTabHandle> {
+        let source_tab = stale_handle
+            .get("tabId")
+            .and_then(Value::as_str)
+            .and_then(|tab_id| service_state.tabs.get(tab_id))?;
+        let candidate_tab = service_state.tabs.values().find(|tab| {
+            tab.target_id.as_deref() == Some(candidate_target_id)
+                && tab.lifecycle == TabLifecycle::Ready
+        })?;
+        let candidate_browser = service_state.browsers.get(&candidate_tab.browser_id)?;
+        if candidate_browser.health != ServiceBrowserHealth::Ready
+            || source_tab.browser_id != candidate_tab.browser_id
+        {
+            return None;
+        }
+        let source_owner = source_tab
+            .owner_session_id
+            .as_deref()
+            .or(source_tab.session_id.as_deref())?;
+        let candidate_owner = candidate_tab
+            .owner_session_id
+            .as_deref()
+            .or(candidate_tab.session_id.as_deref())?;
+        if source_owner != candidate_owner
+            || source_tab.principal_id != candidate_tab.principal_id
+            || source_tab.principal_provenance != candidate_tab.principal_provenance
+            || source_tab.work_lease_id != candidate_tab.work_lease_id
+            || source_tab.work_lease_revision != candidate_tab.work_lease_revision
+        {
+            return None;
+        }
+        match (&source_tab.profile_access, &candidate_tab.profile_access) {
+            (None, None) => {}
+            (Some(source), Some(candidate))
+                if source.subject_id == candidate.subject_id
+                    && source.identity_assurance == candidate.identity_assurance
+                    && source.parent_policy_revision == candidate.parent_policy_revision
+                    && source.access_decision_id == candidate.access_decision_id => {}
+            _ => return None,
+        }
+        service_state
+            .service_tab_handle(&candidate_tab.id)
+            .filter(|handle| handle.valid)
+    }
     pub(crate) fn compatible_duplicate_live_pages(
         pages: &[PageInfo],
         selected_target_id: &str,
@@ -1158,22 +1310,70 @@ pub(crate) mod action_commands {
             })
             .collect()
     }
+    pub(crate) fn caller_bound_compatible_duplicate_live_pages(
+        service_state: &ServiceState,
+        stale_handle: &Map<String, Value>,
+        pages: &[PageInfo],
+        selected_target_id: &str,
+        desired_origin: Option<&str>,
+    ) -> Vec<Value> {
+        let handle_target_id = stale_handle.get("targetId").and_then(Value::as_str);
+        pages
+            .iter()
+            .filter_map(|page| {
+                if page.target_id == selected_target_id {
+                    return None;
+                }
+                let classification = classify_live_page_candidate(
+                    &page.target_id,
+                    page.url.as_str(),
+                    handle_target_id,
+                    desired_origin,
+                );
+                if !classification.starts_with("compatible_")
+                    || caller_bound_refresh_handle(service_state, stale_handle, &page.target_id)
+                        .is_none()
+                {
+                    return None;
+                }
+                Some(json!(
+                    { "targetId" : page.target_id, "url" : page.url, "title" : page
+                    .title, "classification" : classification, }
+                ))
+            })
+            .collect()
+    }
     pub(crate) fn no_duplicate_target_cleanup() -> Value {
         json!(
             { "policy" : "preserve", "attempted" : false, "closedCount" : 0,
             "closedTargets" : [], "failedTargets" : [], }
         )
     }
+    pub(crate) fn tab_handle_refresh_success_with_cleanup(
+        mut response: Value,
+        duplicate_target_cleanup: Value,
+    ) -> Value {
+        let duplicate_cleanup_attempted = duplicate_target_cleanup
+            .get("attempted")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        response["duplicateCleanupAttempted"] = json!(duplicate_cleanup_attempted);
+        response["peerCleanupAttempted"] = json!(false);
+        response["duplicateTargetCleanup"] = duplicate_target_cleanup;
+        response
+    }
     pub(crate) async fn close_compatible_duplicate_targets(
         mgr: &mut BrowserManager,
+        service_state: &ServiceState,
+        stale_handle: &Map<String, Value>,
         selected_target_id: &str,
-        handle_target_id: Option<&str>,
         desired_origin: Option<&str>,
     ) -> Value {
-        let duplicates = compatible_duplicate_live_pages(
+        let duplicates = caller_bound_compatible_duplicate_live_pages(
+            service_state,
+            stale_handle,
             &mgr.pages_list(),
             selected_target_id,
-            handle_target_id,
             desired_origin,
         );
         if duplicates.is_empty() {

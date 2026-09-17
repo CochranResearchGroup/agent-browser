@@ -21,8 +21,8 @@ const { session } = context;
 const serviceName = 'ServiceTabHandleRefreshSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'plan0034TabHandleRefresh';
+const profileId = 'tab-handle-refresh-profile';
 const targetServiceId = 'generic-tab-handle-site';
-const browserId = `session:${session}`;
 const primaryHtml = '<!doctype html><title>Plan 0034 Refresh Primary</title><main>primary</main>';
 const fallbackHtml = '<!doctype html><title>Plan 0034 Refresh Fallback</title><main>fallback</main>';
 const primaryUrl = `data:text/html;charset=utf-8,${encodeURIComponent(primaryHtml)}`;
@@ -98,6 +98,7 @@ async function serviceRequest(body, label) {
       agentName,
       taskName,
       targetServiceId,
+      runtimeProfile: profileId,
       jobTimeoutMs: 60000,
       ...body,
     }, 90000);
@@ -133,8 +134,121 @@ async function serviceTrace() {
   return trace.data;
 }
 
+async function registerStockChromeCapability() {
+  const checkedAt = new Date().toISOString();
+  const records = [
+    ['browserHosts', 'local-linux', {
+      id: 'local-linux',
+      name: 'Disposable local Linux host',
+      hostKind: 'local',
+      operatingSystem: 'linux',
+      displaySupport: 'x11',
+      remoteViewSupport: false,
+      reachable: true,
+      lifecycleOwner: 'agent_browser',
+      health: 'ready',
+      lastCheckedAt: checkedAt,
+      tags: ['disposable-smoke'],
+    }],
+    ['browserExecutables', 'local-google-chrome', {
+      id: 'local-google-chrome',
+      hostId: 'local-linux',
+      browserFamily: 'chrome',
+      vendor: 'google',
+      channel: 'stable',
+      buildLabel: 'stock_chrome',
+      executablePath: '/usr/bin/google-chrome',
+      source: 'system',
+      manifestPath: null,
+      version: null,
+      patchsetId: null,
+      fresh: true,
+      lastCheckedAt: checkedAt,
+      tags: ['disposable-smoke'],
+    }],
+    ['browserCapabilities', 'local-google-chrome-capability', {
+      id: 'local-google-chrome-capability',
+      hostId: 'local-linux',
+      executableId: 'local-google-chrome',
+      cdpSupported: true,
+      cdpFreeLaunchSupported: true,
+      extensionsSupported: true,
+      passkeysSupported: false,
+      headedSupported: true,
+      headlessSupported: true,
+      streamingSupported: true,
+      profileLockBehavior: 'exclusive_user_data_dir',
+      keyringBehavior: 'basic_password_store',
+      knownLimits: ['Disposable unauthenticated smoke only'],
+    }],
+    ['profileCompatibility', 'refresh-profile-local-google-chrome', {
+      id: 'refresh-profile-local-google-chrome',
+      profileId,
+      hostId: 'local-linux',
+      executableId: 'local-google-chrome',
+      compatible: true,
+      requiresOperatorOverride: false,
+      reason: 'same_browser_family',
+      notes: 'Disposable profile created for the tab-handle refresh smoke.',
+    }],
+    ['browserPreferenceBindings', 'refresh-smoke-stock-chrome', {
+      id: 'refresh-smoke-stock-chrome',
+      scope: 'service',
+      targetServiceIds: [targetServiceId],
+      accountIds: [],
+      serviceNames: [serviceName],
+      taskNames: [taskName],
+      preferredHostId: 'local-linux',
+      preferredExecutableId: 'local-google-chrome',
+      preferredCapabilityId: 'local-google-chrome-capability',
+      browserBuild: 'stock_chrome',
+      priority: 100,
+      reason: 'Disposable real-browser acceptance binding.',
+    }],
+    ['validationEvidence', 'refresh-smoke-stock-chrome-launch', {
+      id: 'refresh-smoke-stock-chrome-launch',
+      hostId: 'local-linux',
+      executableId: 'local-google-chrome',
+      capabilityId: 'local-google-chrome-capability',
+      kind: 'launch',
+      state: 'passed',
+      checkedAt,
+      evidence: 'Local executable presence checked before disposable smoke launch.',
+      artifactPath: null,
+    }],
+  ];
+  for (const [collection, id, record] of records) {
+    const result = await httpJsonWithTimeout(
+      streamPort,
+      'POST',
+      `/api/service/browser-capability-registry/${collection}/${id}`,
+      record,
+      60000,
+    );
+    assert(result.success === true, `${collection}/${id} upsert failed: ${JSON.stringify(result)}`);
+  }
+}
+
 try {
   streamPort = await ensureStreamPort(context, 120000);
+
+  const profileUpsert = await httpJsonWithTimeout(
+    streamPort,
+    'POST',
+    `/api/service/profiles/${encodeURIComponent(profileId)}`,
+    {
+      name: 'Tab Handle Refresh Profile',
+      allocation: 'per_service',
+      keyring: 'basic_password_store',
+      persistent: true,
+      targetServiceIds: [targetServiceId],
+      sharedServiceIds: [serviceName],
+    },
+    60000,
+  );
+  assert(profileUpsert.success === true, `profile upsert failed: ${JSON.stringify(profileUpsert)}`);
+  assert(profileUpsert.data?.profile?.id === profileId, `profile id mismatch: ${JSON.stringify(profileUpsert)}`);
+  await registerStockChromeCapability();
 
   const primaryTab = await serviceRequest(
     {
@@ -149,7 +263,8 @@ try {
   );
   const handle = primaryTab.data?.serviceTabHandle;
   assert(handle?.valid === true, `primary tab_new did not return a valid handle: ${JSON.stringify(primaryTab)}`);
-  assert(handle?.browserId === browserId, `primary handle browser mismatch: ${JSON.stringify(handle)}`);
+  const browserId = handle?.browserId;
+  assert(typeof browserId === 'string' && browserId, `primary handle missing browserId: ${JSON.stringify(handle)}`);
   assert(typeof handle?.targetId === 'string' && handle.targetId, `primary handle missing targetId: ${JSON.stringify(handle)}`);
 
   const validRefresh = await serviceRequest(
@@ -164,6 +279,8 @@ try {
   assert(validRefresh.data?.ok === true, `valid refresh was not ok: ${JSON.stringify(validRefresh)}`);
   assert(validRefresh.data?.decision === 'exact_handle_still_valid', `valid refresh decision mismatch: ${JSON.stringify(validRefresh.data)}`);
   assert(validRefresh.data?.serviceTabHandle?.targetId === handle.targetId, `valid refresh changed target: ${JSON.stringify(validRefresh.data)}`);
+  assert(validRefresh.data?.duplicateCleanupAttempted === false, `valid refresh attempted duplicate cleanup: ${JSON.stringify(validRefresh.data)}`);
+  assert(validRefresh.data?.peerCleanupAttempted === false, `valid refresh attempted peer cleanup: ${JSON.stringify(validRefresh.data)}`);
 
   const fallbackTab = await serviceRequest(
     {
@@ -194,6 +311,7 @@ try {
   const closePrimary = await serviceRequest(
     {
       action: 'tab_close',
+      serviceTabHandle: handle,
     },
     'primary tab_close',
   );
@@ -212,6 +330,8 @@ try {
   assert(rejectRefresh.data?.ok === false, `reject refresh unexpectedly succeeded: ${JSON.stringify(rejectRefresh)}`);
   assert(rejectRefresh.data?.decision === 'rejected_stale_or_missing_target', `reject refresh decision mismatch: ${JSON.stringify(rejectRefresh.data)}`);
   assert(Array.isArray(rejectRefresh.data?.candidates), `reject refresh missing candidates: ${JSON.stringify(rejectRefresh.data)}`);
+  assert(rejectRefresh.data?.duplicateCleanupAttempted === false, `reject refresh attempted duplicate cleanup: ${JSON.stringify(rejectRefresh.data)}`);
+  assert(rejectRefresh.data?.peerCleanupAttempted === false, `reject refresh attempted peer cleanup: ${JSON.stringify(rejectRefresh.data)}`);
 
   const openRefresh = await serviceRequest(
     {
@@ -223,13 +343,28 @@ try {
     'open stale tab_handle_refresh',
   );
   assert(openRefresh.data?.ok === true, `open refresh was not ok: ${JSON.stringify(openRefresh)}`);
-  assert(
-    ['opened_replacement_target', 'reused_compatible_target'].includes(openRefresh.data?.decision),
-    `open refresh decision mismatch: ${JSON.stringify(openRefresh.data)}`,
-  );
+  assert(openRefresh.data?.decision === 'opened_replacement_target', `open refresh decision mismatch: ${JSON.stringify(openRefresh.data)}`);
   assert(openRefresh.data?.serviceTabHandle?.valid === true, `open refresh did not return valid handle: ${JSON.stringify(openRefresh.data)}`);
   assert(openRefresh.data?.serviceTabHandle?.targetId !== handle.targetId, `open refresh reused stale target: ${JSON.stringify(openRefresh.data)}`);
   assert(openRefresh.data?.serviceTabHandle?.browserId === browserId, `open refresh browser mismatch: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.serviceTabHandle?.traceFilter?.serviceName === serviceName, `open refresh lost service attribution: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.serviceTabHandle?.traceFilter?.agentName === agentName, `open refresh lost agent attribution: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.serviceTabHandle?.traceFilter?.taskName === taskName, `open refresh lost task attribution: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.duplicateCleanupAttempted === false, `open refresh attempted duplicate cleanup: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.peerCleanupAttempted === false, `open refresh attempted peer cleanup: ${JSON.stringify(openRefresh.data)}`);
+  assert(openRefresh.data?.duplicateTargetCleanup?.attempted === false, `open refresh nested cleanup evidence mismatch: ${JSON.stringify(openRefresh.data)}`);
+
+  const preservedFallback = await serviceRequest(
+    {
+      action: 'tab_handle_refresh',
+      serviceTabHandle: fallbackHandle,
+      repairPolicy: 'reject_only',
+      desiredUrl: fallbackUrl,
+    },
+    'preserved fallback tab_handle_refresh',
+  );
+  assert(preservedFallback.data?.ok === true, `fallback peer was not preserved: ${JSON.stringify(preservedFallback)}`);
+  assert(preservedFallback.data?.serviceTabHandle?.targetId === fallbackHandle.targetId, `fallback peer target changed: ${JSON.stringify(preservedFallback.data)}`);
 
   const trace = await serviceTrace();
   const refreshJobs = (trace?.jobs ?? []).filter((job) => job.action === 'tab_handle_refresh');

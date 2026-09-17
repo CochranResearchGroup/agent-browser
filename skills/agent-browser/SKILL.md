@@ -1438,10 +1438,12 @@ If a follow-on service tab handle may be stale, use
 instead of inspecting raw CDP targets. Refresh accepts the old
 `serviceTabHandle`, optional `desiredUrl`, and a generic repair policy:
 `reject_only` for evidence-only rejection, `reuse_compatible` to bind a
-compatible same-origin or blank tab, or `open_if_missing` to create a
-replacement in the routed service session. Use `replace_duplicates` when the
-client wants one compatible target and best-effort cleanup of other compatible
-live targets before follow-on work.
+compatible same-origin or blank tab only when canonical Service State proves
+the same caller owns it, or `open_if_missing` to persist a canonical replacement
+in the routed service session. Use `replace_duplicates` only for same-caller
+compatible targets; foreign and unattributed peers are preserved. Check
+`duplicateCleanupAttempted`, `peerCleanupAttempted`, and
+`duplicateTargetCleanup` before follow-on work.
 Dashboard workspace viewport URLs that carry a stale `tab=target:*` selection
 are replaced with the current live service tab before control mode queues
 `view_focus`; do not treat that recovery as browser failure.

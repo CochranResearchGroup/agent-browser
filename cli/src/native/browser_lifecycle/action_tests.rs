@@ -362,6 +362,84 @@ fn tab_persistence_uses_service_handle_browser_identity() {
 }
 
 #[test]
+fn test_tab_handle_refresh_opened_replacement_is_canonical_and_durable() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("tab-handle-refresh-replacement");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-shared".to_string(),
+                BrowserProcess {
+                    id: "browser-shared".to_string(),
+                    health: ServiceBrowserHealth::Ready,
+                    profile_id: Some("profile-shared".to_string()),
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "caller-a".to_string(),
+                BrowserSession {
+                    id: "caller-a".to_string(),
+                    service_name: Some("books-receipts".to_string()),
+                    agent_name: Some("receipt-agent".to_string()),
+                    task_name: Some("collect-receipts".to_string()),
+                    profile_id: Some("profile-shared".to_string()),
+                    browser_ids: vec!["browser-shared".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .unwrap();
+    let stale_handle = serde_json::Map::from_iter([
+        ("browserId".to_string(), json!("browser-shared")),
+        ("sessionName".to_string(), json!("caller-a")),
+        ("tabId".to_string(), json!("target:closed")),
+        ("targetId".to_string(), json!("closed")),
+        ("profileId".to_string(), json!("profile-shared")),
+        ("leaseState".to_string(), json!("shared")),
+    ]);
+    let provisional = service_tab_handle_from_parts(
+        &stale_handle,
+        "caller-a",
+        "replacement",
+        "https://books.example/receipts",
+        "Receipts",
+    );
+
+    let returned = persist_tab_handle_refresh_replacement(
+        &json!({
+            "action": "tab_handle_refresh",
+            "serviceName": "books-receipts",
+            "agentName": "receipt-agent",
+            "taskName": "collect-receipts"
+        }),
+        "caller-a",
+        "replacement",
+        "https://books.example/receipts",
+        "Receipts",
+        &provisional,
+    )
+    .unwrap();
+
+    assert_eq!(returned["tabId"], "target:replacement");
+    assert_eq!(returned["targetId"], "replacement");
+    assert_eq!(returned["traceFilter"]["serviceName"], "books-receipts");
+    assert_eq!(returned["traceFilter"]["agentName"], "receipt-agent");
+    assert_eq!(returned["traceFilter"]["taskName"], "collect-receipts");
+    let current = store.load().unwrap();
+    assert_eq!(
+        current.tabs["target:replacement"]
+            .owner_session_id
+            .as_deref(),
+        Some("caller-a")
+    );
+}
+
+#[test]
 fn test_tab_handle_refresh_classifies_retained_candidates() {
     let ready_browser = BrowserProcess {
         id: "browser-ready".to_string(),
@@ -810,6 +888,220 @@ fn test_tab_handle_refresh_classifies_live_pages_by_origin() {
         ),
         "incompatible_tab"
     );
+}
+#[test]
+fn test_tab_handle_refresh_open_if_missing_does_not_adopt_peer_blank_and_reports_no_cleanup() {
+    let mut service_state = ServiceState::default();
+    service_state.browsers.insert(
+        "browser-shared".to_string(),
+        BrowserProcess {
+            id: "browser-shared".to_string(),
+            health: ServiceBrowserHealth::Ready,
+            profile_id: Some("profile-shared".to_string()),
+            ..BrowserProcess::default()
+        },
+    );
+    for (session_id, service_name) in [
+        ("caller-a", "books-receipts"),
+        ("caller-b", "unrelated-service"),
+    ] {
+        service_state.sessions.insert(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                service_name: Some(service_name.to_string()),
+                profile_id: Some("profile-shared".to_string()),
+                ..BrowserSession::default()
+            },
+        );
+    }
+    service_state.tabs.insert(
+        "target:caller-a-closed".to_string(),
+        BrowserTab {
+            id: "target:caller-a-closed".to_string(),
+            browser_id: "browser-shared".to_string(),
+            target_id: Some("caller-a-closed".to_string()),
+            session_id: Some("caller-a".to_string()),
+            owner_session_id: Some("caller-a".to_string()),
+            lifecycle: TabLifecycle::Closed,
+            url: Some("https://books.example/receipts".to_string()),
+            ..BrowserTab::default()
+        },
+    );
+    service_state.tabs.insert(
+        "target:caller-b-blank".to_string(),
+        BrowserTab {
+            id: "target:caller-b-blank".to_string(),
+            browser_id: "browser-shared".to_string(),
+            target_id: Some("caller-b-blank".to_string()),
+            session_id: Some("caller-b".to_string()),
+            owner_session_id: Some("caller-b".to_string()),
+            lifecycle: TabLifecycle::Ready,
+            url: Some("about:blank".to_string()),
+            ..BrowserTab::default()
+        },
+    );
+    let stale_handle = serde_json::to_value(
+        service_state
+            .service_tab_handle("target:caller-a-closed")
+            .expect("caller A handle should remain projected"),
+    )
+    .unwrap();
+    let pages = vec![PageInfo {
+        target_id: "caller-b-blank".to_string(),
+        session_id: "cdp-caller-b".to_string(),
+        url: "about:blank".to_string(),
+        title: String::new(),
+        target_type: "page".to_string(),
+    }];
+
+    let plan = plan_tab_handle_refresh(
+        &service_state,
+        stale_handle.as_object().unwrap(),
+        &pages,
+        Some("https://books.example"),
+        "open_if_missing",
+    );
+
+    assert_eq!(plan, TabHandleRefreshPlan::OpenReplacement);
+    let response = tab_handle_refresh_success_with_cleanup(
+        json!({"ok": true, "action": "tab_handle_refresh"}),
+        no_duplicate_target_cleanup(),
+    );
+    assert_eq!(response["duplicateCleanupAttempted"], false);
+    assert_eq!(response["peerCleanupAttempted"], false);
+    assert_eq!(response["duplicateTargetCleanup"]["attempted"], false);
+}
+#[test]
+fn test_tab_handle_refresh_replace_duplicates_preserves_peer_targets() {
+    let mut service_state = ServiceState::default();
+    service_state.browsers.insert(
+        "browser-shared".to_string(),
+        BrowserProcess {
+            id: "browser-shared".to_string(),
+            health: ServiceBrowserHealth::Ready,
+            profile_id: Some("profile-shared".to_string()),
+            ..BrowserProcess::default()
+        },
+    );
+    for (session_id, service_name) in [
+        ("caller-a", "books-receipts"),
+        ("caller-b", "unrelated-service"),
+    ] {
+        service_state.sessions.insert(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                service_name: Some(service_name.to_string()),
+                agent_name: Some(format!("{session_id}-agent")),
+                task_name: Some(format!("{session_id}-task")),
+                profile_id: Some("profile-shared".to_string()),
+                ..BrowserSession::default()
+            },
+        );
+    }
+    for (target_id, owner, lifecycle, url) in [
+        (
+            "caller-a-closed",
+            "caller-a",
+            TabLifecycle::Closed,
+            "https://books.example/closed",
+        ),
+        (
+            "caller-a-selected",
+            "caller-a",
+            TabLifecycle::Ready,
+            "https://books.example/current",
+        ),
+        (
+            "caller-a-duplicate",
+            "caller-a",
+            TabLifecycle::Ready,
+            "about:blank",
+        ),
+        (
+            "caller-b-peer",
+            "caller-b",
+            TabLifecycle::Ready,
+            "about:blank",
+        ),
+    ] {
+        service_state.tabs.insert(
+            format!("target:{target_id}"),
+            BrowserTab {
+                id: format!("target:{target_id}"),
+                browser_id: "browser-shared".to_string(),
+                target_id: Some(target_id.to_string()),
+                session_id: Some(owner.to_string()),
+                owner_session_id: Some(owner.to_string()),
+                lifecycle,
+                url: Some(url.to_string()),
+                ..BrowserTab::default()
+            },
+        );
+    }
+    let stale_handle = serde_json::to_value(
+        service_state
+            .service_tab_handle("target:caller-a-closed")
+            .expect("caller A handle should remain projected"),
+    )
+    .unwrap();
+    let pages = [
+        ("caller-a-selected", "https://books.example/current"),
+        ("caller-a-duplicate", "about:blank"),
+        ("caller-b-peer", "about:blank"),
+    ]
+    .into_iter()
+    .map(|(target_id, url)| PageInfo {
+        target_id: target_id.to_string(),
+        session_id: format!("cdp-{target_id}"),
+        url: url.to_string(),
+        title: String::new(),
+        target_type: "page".to_string(),
+    })
+    .collect::<Vec<_>>();
+
+    let plan = plan_tab_handle_refresh(
+        &service_state,
+        stale_handle.as_object().unwrap(),
+        &pages,
+        Some("https://books.example"),
+        "replace_duplicates",
+    );
+    let selected_target_id = match plan {
+        TabHandleRefreshPlan::ReuseCallerBound {
+            target_id,
+            canonical_handle,
+        } => {
+            assert_eq!(
+                canonical_handle.trace_filter.service_name.as_deref(),
+                Some("books-receipts")
+            );
+            assert_eq!(
+                canonical_handle.trace_filter.agent_name.as_deref(),
+                Some("caller-a-agent")
+            );
+            assert_eq!(
+                canonical_handle.trace_filter.task_name.as_deref(),
+                Some("caller-a-task")
+            );
+            target_id
+        }
+        other => panic!("expected caller-bound reuse, got {other:?}"),
+    };
+    let duplicates = caller_bound_compatible_duplicate_live_pages(
+        &service_state,
+        stale_handle.as_object().unwrap(),
+        &pages,
+        &selected_target_id,
+        Some("https://books.example"),
+    );
+
+    assert_eq!(duplicates.len(), 1);
+    assert_eq!(duplicates[0]["targetId"], "caller-a-duplicate");
+    assert!(duplicates
+        .iter()
+        .all(|candidate| candidate["targetId"] != "caller-b-peer"));
 }
 #[test]
 fn test_tab_handle_refresh_selects_compatible_duplicate_live_pages() {

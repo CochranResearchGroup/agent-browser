@@ -1505,7 +1505,7 @@ fn service_mcp_tools() -> Vec<Value> {
                     "repairPolicy": {
                         "type": "string",
                         "enum": ["reject_only", "reuse_compatible", "open_if_missing", "replace_duplicates"],
-                        "description": "Repair policy for action=tab_handle_refresh."
+                        "description": "Repair policy for action=tab_handle_refresh. Reuse and duplicate cleanup are limited to canonical targets owned by the same caller; responses include explicit duplicate and peer cleanup-attempt evidence."
                     },
                     "includeScreenshot": {
                         "type": "boolean",

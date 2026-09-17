@@ -6,7 +6,46 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
-- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
+- [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)
+
+## Turn 373 | 2026-09-16
+
+P207 targeted stock-Chrome acceptance now passes. The disposable smoke creates
+the exact isolated host, executable, capability, profile-compatibility,
+preference-binding, and validation-evidence records required by launch
+admission. It follows the returned canonical browser ID, closes the exact owned
+stale target by handle, opens and persists a canonical replacement, proves the
+peer target survives, and cleans up its session. Draft PR #184 is accepted for
+review; protected integration remains. Full CI remains excluded.
+
+## Turn 372 | 2026-09-16
+
+[Plan 0207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)
+is source-complete at `c3d69f3e`. Refresh now joins compatible pages to
+canonical same-caller Service State custody, persists a replacement rather
+than adopting a foreign blank target, restricts duplicate cleanup to the
+caller's targets, and returns explicit cleanup-attempt evidence. All 8 focused
+refresh tests, formatting, strict workspace Clippy, direct client and contract
+parity checks, JavaScript syntax, docs build, and diff hygiene pass. Two
+disposable real-browser attempts stopped before Chrome launch with
+`stock_chrome_capability_selection_failed: no_matching_preference_binding`
+because the isolated registry lacked a reviewed stock-Chrome binding; cleanup
+completed after each attempt. No browser, provider, credential,
+installed-runtime, production, release, or full-CI effect occurred. P207 stays
+open for that exact acceptance prerequisite and protected integration.
+
+## Turn 371 | 2026-09-16
+
+[Plan 0207](docs/dev/plans/0207-2026-09-16-tab-handle-refresh-custody-repair.md)
+is admitted from `main@2632e31c` for
+[issue #175](https://github.com/CochranResearchGroup/agent-browser/issues/175).
+The bounded PL-BUGFIX packet will first prove that a stale caller-A refresh can
+adopt caller-B's blank target, then require canonical caller custody for target
+reuse and cleanup while returning explicit cleanup-attempt proof. P207 owns the
+browser-lifecycle repair and direct tests. P197 is integrated, so public
+contract parity is unblocked; P207 will not edit P205 Service State model sources.
+No browser, provider, credential, installed-runtime, Service State, production,
+or release effect is authorized. Full CI and routine CI waiting are excluded.
 
 ## Turn 370 | 2026-09-16
 
