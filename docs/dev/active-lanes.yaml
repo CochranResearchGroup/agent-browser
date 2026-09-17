@@ -10,12 +10,12 @@ lanes:
     target: main
     plan_state: SOURCE_ACCEPTED_INTEGRATION_READY
     custody_state: PUBLISHED_INTEGRATION_READY
-    checkpoint: db987e4e
+    checkpoint: 1c9ee159
     remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
     integration_receipt: null
     integration: publish the reconciled branch and merge through the protected main workflow without restoring or dispatching operator-disabled GitHub CI
     validation_status: repaired source validation passed 41 challenge-control tests including cumulative-overflow boundaries, strict workspace Clippy, formatting, challenge-control architecture and diff hygiene; main reconciliation changed no challenge or Cargo source, and conflict-affected policy, documentation, validation-selection, worktree-closeout, planning and diff-hygiene checks pass locally
-    validation_ref: db987e4e
+    validation_ref: 1c9ee159
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: []

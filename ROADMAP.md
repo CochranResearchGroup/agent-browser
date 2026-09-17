@@ -288,8 +288,9 @@ an over-budget restored total and could classify 256 selected candidates as a
 generic transition error. Repair checkpoint `4813d385` uses widened and checked
 budget arithmetic; all 41 challenge-control tests, including 25 visual-round
 cases, architecture, formatting, strict Clippy and diff hygiene pass. P206
-joined CI-disabled `main@f6d49f89` at `bb961c96` and P208's canonical
-`main@59928044` at `db987e4e`; neither slice changes the accepted Rust source.
+joined CI-disabled `main@f6d49f89` at `bb961c96`, P208's source integration at
+`db987e4e`, and current `main@692f77c6` at `1c9ee159`; none changes the accepted
+Rust source.
 Conflict-affected repository-control checks pass locally. GitHub CI remains
 operator-disabled and was not restored or run. Reconciled publication and
 protected P206 integration remain.

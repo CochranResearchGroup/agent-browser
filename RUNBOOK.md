@@ -11,10 +11,11 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 
 ## Turn 380 | 2026-09-17
 
-P206 joined operator-disabled-CI `main@f6d49f89` at `bb961c96`, then joined
-P208's canonical `main@59928044` at `db987e4e`. The only conflict was the
-shared runbook projection, resolved by retaining both plans' records. Neither
-main slice changes challenge-control source or Cargo metadata, so the repaired
+P206 joined operator-disabled-CI `main@f6d49f89` at `bb961c96`, P208's source
+integration at `db987e4e`, and canonical `main@692f77c6` at `1c9ee159` after
+P208 closed. The only conflicts were shared runbook projections, resolved by
+retaining both plans' records. None of these main slices changes
+challenge-control source or Cargo metadata, so the repaired
 41-test source evidence at published head `72eeea03` remains reusable.
 Conflict-affected policy wiring, documentation links, validation-selection,
 P208 closeout fixtures, active planning audit and diff hygiene pass locally.

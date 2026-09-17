@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 7
+Plan version: 8
 
 State: SOURCE ACCEPTED | INTEGRATION READY
 
@@ -26,8 +26,8 @@ Integrated prerequisite: P197 published head
 
 Source baseline: `cd22a39f989e29a27d6ec80283ae60667093fc9c`
 
-Integration: P206 joined canonical `main@59928044` at merge checkpoint
-`db987e4e`; publication and protected integration remain. GitHub CI is
+Integration: P206 joined canonical `main@692f77c6` at merge checkpoint
+`1c9ee159`; publication and protected integration remain. GitHub CI is
 operator-disabled and must not be restored or dispatched for this packet.
 
 ## Objective
@@ -58,8 +58,9 @@ zero-effect terminal replay inside one attempt.
 P204 CI validation tiering merged through PR #179 as `f5e3f31b`. Operator
 direction subsequently disabled the GitHub CI and Lease Authority workflows
 through PRs #185 and #186. P208 then merged through PR #182 as canonical
-`main@59928044`. P206 joined those checkpoints at `bb961c96` and `db987e4e`,
-resolving only the shared runbook projection. P205 owns Service-model
+`main@59928044`, and its closeout record merged at `main@692f77c6`. P206 joined
+those checkpoints at `bb961c96`, `db987e4e` and `1c9ee159`, resolving only the
+shared runbook projection. P205 owns Service-model
 extraction and remains source-disjoint.
 P206 owns only the pure challenge-control crate, its provider-free tests, this
 plan and the bounded challenge-lane projections. P206 started from P197's exact
@@ -146,8 +147,8 @@ and no replacement run is expected or authorized.
 
 ## Current-Main Reconciliation | 2026-09-17
 
-Merge checkpoint `db987e4e` joins `main@59928044`, including the CI shutdown
-and P208 worktree-closeout transaction. Neither canonical slice changes the
+Merge checkpoint `1c9ee159` joins `main@692f77c6`, including the CI shutdown,
+P208 worktree-closeout transaction and its canonical closeout. None changes the
 challenge-control crate, workspace Cargo metadata, or the repaired P206
 fixtures. The exact repaired Rust source therefore retains the accepted 41-test
 package, architecture, formatting, strict Clippy and diff-hygiene evidence.
