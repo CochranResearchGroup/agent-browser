@@ -1124,6 +1124,84 @@ inventory, lifecycle, and retirement operations, then make authority fields
 private behind immutable accessors. Do not broaden that packet into provider
 effects or the canonical aggregate move.
 
+## Checkpoint 20 | Capacity Mutation Closure Interface Freeze
+
+State transition: the remaining public capacity-authority mutation surface is
+classified and the closure interface is frozen before implementation. This
+checkpoint changes no runtime behavior. `PresentationSlot` remains a public
+durable record; the five `PresentationCapacityAuthority` fields become private
+after every production mutator and fixture has crossed the typed seam.
+
+Acceptance state and progress classification: this is blocker reduction for
+the second capacity deepening packet. The selected interface exposes five
+immutable accessors for config, slots, queued requests, queue clock, and the
+admission error. It adds two separate inventory reconstruction operations, one
+inventory-failure fence, six lifecycle operations, and one atomic browser-
+retirement operation. It rejects a generic command enum, public mutable slice,
+arbitrary mutation closure, unchecked parts constructor, and one generic
+inventory replacement that would hide distinct error ordering.
+
+The development inventory operation preserves this sequence: validate fresh
+qualified inventory, inherit queue and clock, restore exact slot, route, and
+display matches, append only explicitly observed retained acquisitions, sort,
+then validate again. The production operation preserves a different sequence:
+reconcile every prior slot in prior-vector order with explicit joined custody
+observations, emit the existing exact binding or browser drift error, validate
+the resulting inventory, then inherit queue and clock. Successful
+requalification clears an old admission error and never truncates an inherited
+queue merely because a new configured bound is smaller.
+
+The lifecycle operations preserve current semantics without importing provider
+effects: begin provisioning with provisioning, hard-maximum, then pressure
+gate order; complete provisioning; quarantine failed provisioning with its
+unconditionally appended obligation; begin cooldown; complete reclamation by
+removing every matching slot; and quarantine failed reclamation with
+deduplication but no sorting. Existing `quarantine_slot` and `transition_slot`
+cannot substitute because their ordering and lease rules differ.
+
+Browser retirement becomes one model operation that first rejects when any
+matching slot has a lease and otherwise resets every matching browser slot to
+warm idle while preserving route, display, scene generation, cleanup
+obligations, queue, and clock. The CLI will run it on a cloned optional
+authority at the current pre-mutation fence, then commit that prepared
+authority only at the existing capacity-mutation point so later registry
+validation cannot create a partial retirement.
+
+Delegation and model-choice receipt:
+
+- `/root/p205_capacity_mutation_minimal`, requested `gpt-6-astra` at high
+  effort, produced the selected explicit interface and found the development
+  versus production inventory error-order difference;
+- `/root/p205_capacity_privacy_audit`, requested `gpt-5.6-luna` at medium
+  effort, enumerated every production and fixture field access and confirmed
+  serde can construct private authority fields without an unchecked API;
+- `/root/p205_capacity_mutation_lifecycle`, requested `gpt-5.6-sol` at high
+  effort, did not return a bounded result and was interrupted; no claim from
+  that worker is accepted;
+- the primary compared the proposals against current source and retained the
+  smallest interface that closes every known production mutation.
+
+Implementation slices:
+
+1. add provider-free observation records, typed operations, exact behavior
+   tests, and immutable accessors while fields remain transitional;
+2. cut development and production inventory, lifecycle, store failure, and
+   retirement mutation owners over without moving service or provider joins;
+3. convert read-only production consumers and fixtures to accessors and valid
+   constructors, then privatize all five authority fields in the same slice;
+4. run focused model, inventory, lifecycle, retirement, retained-state,
+   configured desktop, health, and route-switch tests plus strict local gates.
+
+Hard stops: preserve byte-for-byte production custody errors, `None == None`
+pending-binding behavior, constructor error order, lifecycle obligation order,
+retirement atomicity, permissive serde decoding, and current panic behavior for
+an internally missing provisioning slot. Do not move provider calls, resource
+cleanup, clocks, cooldown selection, Service State joins, or runtime effects
+into the model crate.
+
+Next action: implement the model-owned operations and tests as one isolated
+write surface, then cut CLI mutation owners over in non-overlapping slices.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
