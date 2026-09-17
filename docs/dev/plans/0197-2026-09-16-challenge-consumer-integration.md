@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 6
+Plan version: 7
 
 State: OPEN
 
@@ -55,12 +55,12 @@ to bypass the preflight.
 P190 integrated through PR #152 as merge commit `38e4cb9d` and released its
 shared public-documentation custody. P197 merged the resulting `main` through
 checkpoint `b9b8afc4`; its challenge-control, authentication, navigation,
-schema, and generated-client changes remain intact. P202 is now the primary
-writer for `README.md`, `cli/src/output.rs`, `skills/agent-browser/SKILL.md`,
-and `docs/src/app/commands/page.mdx` through PR #168. P197 continues source and
-validation work independently. At operator direction, P197 has now staged its
-bounded challenge-consumer guidance on those four surfaces and will reconcile
-the files after P202 integrates rather than leaving the product lane idle.
+schema, and generated-client changes remain intact. At operator direction,
+P197 staged its bounded challenge-consumer guidance while P202 retained its
+overlapping source custody. P197 has now merged P202 reconciled dependency head
+`6f099292` locally as checkpoint `6f71ea0b`. The four public documents and the
+shared governance files auto-merged without conflict. P202 protected
+integration and P197 final governance reconciliation remain before publication.
 
 ## Contract
 
@@ -182,6 +182,14 @@ P202 resolves its own current-main coordination conflict, then reconciles the
 two branches after P202 integrates. This changes sequencing only. It does not
 transfer P202 source custody, broaden W6, or authorize runtime effects.
 
+Plan version 7 records the local dependency integration. P202 dependency head
+`6f099292` includes current `main` through the closed P203 repair and joins P197
+through merge checkpoint `6f71ea0b`. The merge is conflict-free and preserves
+both four-file documentation deltas. P202 still owns its protected PR
+transition; P197 will not publish or claim final integration until that source
+enters `main`, shared governance is reconciled, and the combined exact head
+passes its applicable checks.
+
 ## Implementation Checkpoint
 
 The pure challenge-control contract verifies terminal receipt consistency,
@@ -223,11 +231,11 @@ pass. The planned self-check additionally proved and repaired typed durable
 Authentication Run admission storage: the focused persistence test is red on
 the untyped field and green on `ChallengeConsumerAdmissionReceipt`; all nine
 Authentication Run tests, four Service challenge-task tests, the navigation
-bypass test, and the correctly stack-sized dispatch fixture pass. P202 retains
-primary-writer custody of the four shared user-facing documentation surfaces
-through PR #168. P197 has staged only its bounded challenge-consumer guidance on
-those files and will merge P202's integrated baseline, reconcile the overlap,
-then complete the final changed-surface and protected integration gates.
+bypass test, and the correctly stack-sized dispatch fixture pass. P197 locally
+merged P202 dependency head `6f099292` at `6f71ea0b`; the shared documentation
+and governance surfaces auto-merged without conflict, and both histories remain
+intact. P202 protected integration, final shared-governance reconciliation, the
+combined changed-surface gates, and P197 protected integration remain.
 
 ## Validation And Exit
 
