@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -46,11 +46,12 @@ attempt a CAPTCHA.
 ## Current State
 
 Plan 0187 W0 through W5 are integrated. P197 W6 is source-complete and
-published at `cd22a39f` through draft PR #157. The existing pure
-`agent-browser-challenge-control` crate owns one attempt, step and event
-budgets, cooldown, deadline, verification, intervention and zero-effect replay.
-It does not yet represent round identity, fresh visual evidence, candidate-set
-binding, per-round budgets or cumulative multi-round accounting.
+published at `cd22a39f` through draft PR #157, which remains open, draft and
+mergeable. P206 is source-complete at `5a98dbfc`. The pure
+`agent-browser-challenge-control` crate now owns deterministic round identity,
+fresh visual evidence, exact candidate-set and intent binding, per-round plus
+cumulative budgets, acknowledged-effect custody, after-state continuity and
+zero-effect terminal replay inside one attempt.
 
 P204 owns CI validation tiering and P205 owns Service-model extraction. P206 is
 source-disjoint from both: it owns only the pure challenge-control crate, its
@@ -58,6 +59,35 @@ provider-free tests, this plan and the bounded challenge-lane projections.
 P206 depends on P197 because both touch the challenge-control crate; this branch
 starts from P197's exact published head rather than recreating or cherry-picking
 that contract.
+
+## Source Checkpoint
+
+Source commit `5a98dbfc` adds the provider-free `visual_round` contract and a
+20-case synthetic integration matrix. Review hardening closed two persisted
+state defects before checkpointing: an after-state can no longer be classified
+without a recorded effect receipt, and a restored selection cannot escape its
+evidence-bound candidate set even if its intent digest is recomputed.
+
+Validation at that source checkpoint:
+
+- `scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml -p
+  agent-browser-challenge-control -- --nocapture`: 36 passed;
+- `node scripts/test-challenge-control-crate-architecture.js`: passed;
+- `scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check`:
+  passed;
+- `AGENT_BROWSER_CARGO_BUILD_JOBS=4 AGENT_BROWSER_CARGO_CACHE=off
+  scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D
+  warnings`: passed after one host-process-pressure retry that did not reach
+  project linting;
+- `git diff --check`: passed; and
+- `pnpm validation:select -- --base 46412f43`: read back the Rust quality gate
+  plus shared-lockfile-triggered extracted-crate suggestions. No extracted
+  crate source changed in this packet.
+
+No browser, CAPTCHA, model provider, credential, desktop input, Service State,
+installed runtime, production or CI-policy effect occurred. Integration remains
+blocked only on P197 entering `main`, followed by P206 reconciliation with that
+canonical checkpoint and protected exact-head evaluation.
 
 ## Contract Boundary
 

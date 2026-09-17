@@ -30,16 +30,16 @@ lanes:
     branch: challenge/p206-visual-round-contract
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: cd22a39f989e29a27d6ec80283ae60667093fc9c
-    remote_ref: null
+    custody_state: PUBLISHED_SOURCE_CHECKPOINT
+    checkpoint: 5a98dbfc
+    remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
     integration_receipt: null
     integration: integrate only after P197 enters main and P206 reconciles that canonical checkpoint
-    validation_status: provider-free implementation and validation pending
-    validation_ref: null
+    validation_status: 36 challenge-control tests, challenge-control architecture guard, formatting, strict workspace Clippy, diff hygiene, and changed-surface selection passed at the source checkpoint
+    validation_ref: 5a98dbfc
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: [P197]
     overlaps: [P197]
     reconciled_overlaps: [P197]
-    blocker: pure round contract and synthetic matrix remain; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects are excluded
+    blocker: P197 must enter main before P206 reconciles the canonical checkpoint and enters protected exact-head evaluation; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-16

@@ -11,14 +11,16 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 ## Turn 371 | 2026-09-16
 
 [Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
-admits W7-A on `challenge/p206-visual-round-contract` from exact published P197
-head `cd22a39f`. The provider-free packet owns only the pure challenge-control
-round contract and synthetic fixtures. It keeps multiple rounds inside one
-attempt, binds provider selections to fresh evidence and candidate identities,
-and enforces per-round plus cumulative budgets. P204 CI tiering and P205
-Service-model extraction are source-disjoint. No browser, model provider,
-CAPTCHA, desktop input, credential, installed runtime, production or CI-policy
-effect is authorized.
+is source-complete at `5a98dbfc` on `challenge/p206-visual-round-contract`,
+based on exact published P197 head `cd22a39f`. The pure challenge-control
+contract keeps visual rounds inside one attempt, binds each selection and
+effect receipt to fresh evidence and exact candidate identities, preserves
+after-state continuity, and enforces per-round plus cumulative budgets. All 36
+crate tests, the crate architecture guard, formatting, strict workspace Clippy
+and diff hygiene pass. P197 PR #157 remains open, draft and mergeable; P206
+must reconcile after it enters `main` before protected exact-head evaluation.
+No browser, model provider, CAPTCHA, desktop input, credential, installed
+runtime, production or CI-policy effect occurred.
 
 ## Turn 370 | 2026-09-16
 

@@ -235,10 +235,13 @@ and documentation checks pass. P197 publication, exact-head forge evaluation,
 and protected integration remain. W7-A is admitted through
 [Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
 on `challenge/p206-visual-round-contract` from exact published P197 head
-`cd22a39f`. It owns only the pure provider-free round contract and synthetic
-fixtures. Issue #66 retains the separately live-gated challenge acceptance leaf.
-This registration authorizes no challenge attempt, retry, browser effect,
-provider effect, credential use, runtime mutation, installation, or release.
+`cd22a39f` and is source-complete at `5a98dbfc`. Its pure provider-free round
+contract and 20-case synthetic matrix are green with the complete crate,
+architecture, formatting and strict Clippy gates. P197 must integrate before
+P206 reconciles canonical `main` and enters protected exact-head evaluation.
+Issue #66 retains the separately live-gated challenge acceptance leaf. This
+registration authorizes no challenge attempt, retry, browser effect, provider
+effect, credential use, runtime mutation, installation, or release.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
