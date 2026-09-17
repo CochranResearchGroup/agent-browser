@@ -2394,6 +2394,149 @@ observation, and effect custody in CLI adapters. The upward retirement
 predicate moves with lease admission; `service_state_migration.rs` must be
 split rather than moved wholesale.
 
+## Checkpoint 39 | Canonical Aggregate And Persisted Codec Interface Freeze
+
+State transition: the aggregate cutover is frozen as one atomic ownership
+packet. Rust does not permit the existing 19 inherent methods to remain in the
+CLI after `ServiceState` becomes a foreign crate type. A re-export therefore
+cannot precede method disposition, and a second wrapper, newtype aggregate, or
+permanent extension trait would fail the one-aggregate rule and deletion test.
+
+The Service Model crate will add one `service_state` module that owns the exact
+44-field `ServiceState` declaration, its 19 existing inherent methods, their
+pure helper closure, ordinary persisted compatibility decoding, deterministic
+prepared-state encoding, version stamping, revision decisions, and flattened
+unknown top-level field bag. The CLI will remove its aggregate definition and
+inherent implementation in the same packet and temporarily re-export the
+crate-owned type from `native::service_model` so caller paths do not obscure
+the ownership move.
+
+Frozen crate interface:
+
+- `SERVICE_STATE_SCHEMA_VERSION` and
+  `LEGACY_SERVICE_STATE_SCHEMA_VERSION`;
+- `ServiceState` with exact field order, serde names, defaults, omission
+  predicates, flattened unknown fields, and skipped entity-source projection;
+- a typed `ServiceStateCodecError` that preserves the exact unsupported-state,
+  unsupported-profile-lease, JSON, invariant, and revision-exhaustion
+  identities at the CLI adapter;
+- `decode_persisted_service_state_json`, which alone performs persisted
+  version validation, legacy profile-policy materialization, and current
+  version stamping;
+- `prepare_service_state_for_persistence`, which performs the same pure
+  materialization and stamping without observation or I/O;
+- `encode_prepared_service_state_pretty`, which serializes exactly one
+  prepared state deterministically and appends exactly one newline;
+- `validate_service_state_invariants`, which remains an explicitly invoked
+  pure check and is not silently added to ordinary reads or writes; and
+- revision operations that return the current revision, prepare a cloned
+  checked successor before the mutator runs, and compare payload equality
+  while ignoring only the revision. A public generic mutation closure or
+  revision setter is forbidden.
+
+All 19 current inherent methods move with the aggregate. Their helper closure
+includes profile-freshness overlay, built-in policies, readiness derivation,
+incident derivation and ordering, stale-session classification, tab-handle
+derivation, source projections, and job ordering. The lease-admission methods
+will consume a model-owned pure abandoned-retirement claim predicate. The
+derived-view closure will consume model-owned `route_pool_target_string` and
+`route_pool_entry_matches_display` helpers, with existing CLI remote-view
+callers redirected to the same canonical helpers. The terminal-state check
+will name the Service Model owner directly. No upward `super::` edge may remain
+in the moved module.
+
+Compatibility access is explicitly temporary. The fields that are currently
+public remain public. These current CLI-private fields become documented-hidden
+public fields only for the recorded cutover ledger:
+
+`schema_version`, `state_revision`, `profile_lease_schema_version`,
+`presentation_capacity`, `profile_policy_migration`, `service_principals`,
+`lease_authority`, `profile_lease_reconcile_receipts`,
+`profile_recovery_receipts`, `profile_reset_receipts`,
+`profile_lifecycle_authorizations`, `profile_lifecycle_effect_receipts`,
+`browser_retirement_receipts`, `abandoned_browser_retirements`,
+`crash_regeneration_transactions`, `protected_browser_owner_observations`,
+`runtime_owner_registry`, `authentication_runs`, `challenge_tasks`, and
+`unknown_fields`.
+
+The architecture contract must recognize exactly that migration-only list,
+reject any new documented-hidden aggregate field, and retain a final P4 gate
+that requires the list to be empty before field privacy is accepted. This is
+not a permanent public interface.
+
+Repository ordering is frozen independently of the codec. The CLI repository
+still loads the baseline, prepares the checked successor revision before
+calling the mutator, evaluates no-op equality before derived-view refresh,
+revalidates even a no-op against the durable current revision, replays a stale
+candidate under exclusive custody, prepares sidecar and primary payloads once,
+and commits those exact prepared bytes without reserialization. Filesystem and
+process locks, bounded-stack threads, transaction journals, recovery, stale
+replay, sidecar extraction and replacement, and effect custody remain CLI
+adapter implementation.
+
+The following surfaces remain distinct:
+
+- persisted decode uses the Service Model compatibility codec;
+- transport `Value` decode remains a raw bounded-stack CLI adapter and does
+  not materialize persisted legacy policy;
+- staged migration remains CLI orchestration around model-owned pure helpers,
+  process and boot observation, placeholder construction, contamination
+  evidence, backup and recovery artifacts, and explicit application; and
+- ordinary encode does not run staged-migration invariants or host
+  observation.
+
+The staged migration's manually maintained known-key list is already missing
+canonical fields and can overwrite newly derived values through its successor
+preservation branch. This packet freezes, rather than silently repairs, that
+baseline. P205 will not claim universal staged unknown-field fidelity from the
+ordinary aggregate flatten. Any correction requires its own witness and
+coordination with the bugfix lane; it is not part of this mechanical ownership
+cutover.
+
+Acceptance requires exactly one `struct ServiceState` and one inherent
+`impl ServiceState`, both in Service Model; zero CLI aggregate or inherent-impl
+definitions; no model import of CLI, filesystem, process, runtime, provider,
+HTTP, MCP, dashboard, or clock acquisition; unchanged ordinary legacy and v2
+decode; exact schema-rejection identities; deterministic pretty bytes with one
+newline; top-level unknown scalar, object, array, and null round trips;
+unchanged populated aggregate wire output; unchanged source-provenance
+omission; unchanged derived views; unchanged retirement admission; unchanged
+route matching; and unchanged repository no-op, overflow, stale replay,
+prepared-payload, and sidecar behavior.
+
+Hard stops are a duplicate aggregate, foreign inherent implementation,
+generic JSON or callback mutation surface, unledgered public field, host
+observation in the codec, changed revision or replay ordering, automatic
+cross-record validation on normal writes, altered lifecycle sidecar
+projection, staged unknown-field semantic change, or an unbounded CLI facade.
+
+Delegation and model-choice receipt: `/root/p205_aggregate_interface` used
+requested `gpt-5.6-terra` high routing to design the minimum aggregate, codec,
+visibility, and retained-adapter interface. `/root/p205_method_disposition`
+used requested `gpt-5.6-sol` high routing to inventory all 19 methods, their
+relative caller risk, helper closure, and ordered test witnesses.
+`/root/p205_aggregate_challenge` used requested `gpt-6-astra` high routing for
+an adversarial review and found three blocking corrections to the initial
+sequence: the foreign inherent-impl rule, the remote-view route-matcher upward
+edge, and the exact repository revision/no-op/replay ordering. All workers were
+read-only and performed no build, test, runtime, CI, forge, or publication
+effect. The runtime did not independently expose effective model metadata.
+
+The primary accepted the challenge corrections and the exact method/helper
+inventory. It retained one atomic aggregate ownership packet rather than the
+method worker's proposed post-aggregate method packets because a foreign
+inherent implementation cannot provide an intermediate compiling state. The
+existing methods and fields are explicitly migration compatibility surface,
+not the final interface; typed transition and projection replacement plus
+field privacy remain mandatory P4 closure. The primary also rejected the
+interface worker's proposed staged known-key repair from this packet because
+it would combine a behavior correction with the mechanical ownership move.
+
+Progress classification: this packet completes P2 aggregate ownership and a
+substantial P3 pure-decision closure together because the language ownership
+rule makes that the smallest compilable deep-module move. Facade deletion and
+private-field closure remain separate P4 outcomes.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
