@@ -169,6 +169,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "operationId",
   "authenticationRunId",
   "challengeTaskId",
+  "sitePolicyId",
   "sitePolicyDigest",
   "downstreamIntentId",
   "fixtureScenarioId",

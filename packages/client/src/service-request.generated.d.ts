@@ -165,6 +165,7 @@ export interface ServiceRequest {
   operationId?: string;
   authenticationRunId?: string;
   challengeTaskId?: string;
+  sitePolicyId?: string;
   sitePolicyDigest?: string;
   downstreamIntentId?: string;
   fixtureScenarioId?: string;
@@ -242,9 +243,24 @@ export interface ServiceRequestHttpOptions<TRequest extends ServiceRequest = Ser
   signal?: AbortSignal;
 }
 
+export interface ChallengeConsumerAdmissionReceipt {
+  schemaVersion: "challenge-consumer-admission-receipt.v1" | string;
+  challengeTaskId: string;
+  consumer: "authentication" | "navigation" | string;
+  consumerOperationId: string;
+  sitePolicyDigest: string;
+  downstreamIntentId: string;
+  challengeOutcome: "not_present" | "passed" | string;
+  challengeAdmission: "admitted" | string;
+  challengeCooldown: "active" | "not_required" | string;
+  challengeEmittedEffects: boolean;
+  consumerAdmission: "admitted" | string;
+}
+
 export interface ServiceNavigateData {
   url: string;
   title?: string;
+  challengeConsumerAdmission?: ChallengeConsumerAdmissionReceipt | null;
 }
 
 export interface ServiceCdpFreeLaunchData {
@@ -1578,6 +1594,7 @@ export interface ServiceAuthenticationRunData {
   transitionCount: number;
   actionReceiptCount: number;
   observationReceiptCount: number;
+  challengeConsumerAdmission?: ChallengeConsumerAdmissionReceipt | null;
   replayed: boolean;
 }
 

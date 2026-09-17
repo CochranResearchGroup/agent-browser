@@ -54,6 +54,12 @@ executable, yielding nine deterministic `No such file or directory` failures.
 Version 4 serializes CLI compartments in one lane while retaining overlap with
 one independent-crate lane.
 
+Exact-head run `35172965793` passed the corrected Rust compartments, the gated
+service smoke bundle, every other selected ordinary job, and the stable
+`Presubmit` aggregate at published source `b481ab01`. Comprehensive and slow
+platform qualification remained excluded. The branch is reconciled with
+`main@c855fc33`; protected evaluation of that merge result remains pending.
+
 The pre-implementation docs-only probe against merge `aa7b67b1` remains the red
 baseline. Local validation is green for the selector and aggregate suites,
 workflow syntax and semantics, policy wiring, planning audit, changed links,
@@ -175,7 +181,7 @@ Exit requires current evidence that:
 | PR cancellation and stable aggregate | Run `35170641311` cancelled when replacement `35171646162` started; its Rust failure propagated through `Presubmit` | green organically |
 | Proportional job routing | Exact-range readback selects broad ordinary validation for this classifier/workflow change and excludes comprehensive Rust | green locally |
 | Service smoke routing | Selector fixtures distinguish unrelated Rust from service-owned Rust; workflow contract gates the smoke bundle on `serviceSmokes` | green locally |
-| Rust lane isolation | Organic run `35171646162` exposed same-target CLI executable replacement; version 4 serializes CLI compartments while overlapping only the independent crate lane | pending validation |
+| Rust lane isolation | Organic run `35171646162` exposed same-target CLI executable replacement; exact-head run `35172965793` passed the corrected serialized CLI lane plus independent crate lane | green organically |
 | Comprehensive qualification retained | Manual, monthly, material dependency, toolchain, and temporary `main` routes select comprehensive without duplicate focused Rust | green statically; authorized dispatch pending |
 | Economics receipt | Fixture covers selected lanes, exclusions, bounded wall time, observed runner time, and explicit measurement limits | green locally; organic receipt pending |
 | Organic docs and narrow-Rust evidence | Existing runs prove the broad baseline only | pending candidate workflow |

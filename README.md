@@ -1248,6 +1248,18 @@ returns the persisted terminal receipt. These W5 actions never launch a
 browser, emit input, contact a provider, use credentials, or prove live CAPTCHA
 acceptance.
 
+Challenge-aware Authentication Run start accepts `challengeTaskId` and
+`sitePolicyId` only as a pair. Challenge-aware `navigate` additionally requires
+the authenticated `clientSubjectId`, or `callerId` on the direct native path, a
+unique `operationId`, and the exact current `serviceTabHandle`. The Service
+resolves and hashes the effective site policy,
+then verifies the principal, downstream intent, and tab before confirmation,
+recovery, browser launch, or dispatch. Successful admission and any later
+consumer failure expose the typed `challengeConsumerAdmission` receipt; a later
+failure does not rewrite the retained challenge outcome or admission decision.
+This consumer gate grants no CAPTCHA, provider, credential, retry, or production
+authority.
+
 Receipts contain authority, hashed input, cleanup, and verification metadata.
 They do not contain frame pixels, plaintext typed content, or the full motion
 path. A partial input effect returns an explicit uncertain receipt and is never

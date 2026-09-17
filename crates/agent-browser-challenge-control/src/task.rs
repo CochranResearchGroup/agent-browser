@@ -105,6 +105,182 @@ pub struct ChallengeTaskReceipt {
     pub emitted_effects: bool,
 }
 
+/// Registered downstream consumer of a completed challenge task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChallengeConsumerKind {
+    Authentication,
+    Navigation,
+}
+
+/// Stable, deserializable projection of the challenge receipt fields required
+/// for a downstream admission decision.
+///
+/// The projection intentionally ignores provider and desktop details. Service
+/// adapters may deserialize it from a durable full task receipt without
+/// granting this pure crate persistence or runtime authority.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChallengeConsumerEvidence {
+    pub schema_version: String,
+    pub task_id: String,
+    pub site_policy_digest: String,
+    pub downstream_intent_id: String,
+    pub phases: Vec<ChallengeTaskPhase>,
+    pub outcome: ChallengeTaskOutcome,
+    pub delivery: Option<ChallengeTaskDelivery>,
+    pub verification: Option<ChallengeTaskVerification>,
+    pub admission: ChallengeTaskAdmission,
+    pub intervention: Option<ChallengeTaskIntervention>,
+    pub cooldown: ChallengeTaskCooldown,
+    pub attempts_started: u8,
+    pub emitted_effects: bool,
+}
+
+impl From<&ChallengeTaskReceipt> for ChallengeConsumerEvidence {
+    fn from(receipt: &ChallengeTaskReceipt) -> Self {
+        Self {
+            schema_version: receipt.schema_version.to_string(),
+            task_id: receipt.task_id.clone(),
+            site_policy_digest: receipt.site_policy_digest.clone(),
+            downstream_intent_id: receipt.downstream_intent_id.clone(),
+            phases: receipt.phases.clone(),
+            outcome: receipt.outcome,
+            delivery: receipt.delivery,
+            verification: receipt.verification,
+            admission: receipt.admission,
+            intervention: receipt.intervention,
+            cooldown: receipt.cooldown,
+            attempts_started: receipt.attempts_started,
+            emitted_effects: receipt.emitted_effects,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChallengeConsumerAdmissionRequest {
+    pub consumer: ChallengeConsumerKind,
+    pub consumer_operation_id: String,
+    pub expected_site_policy_digest: String,
+    pub expected_downstream_intent_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChallengeConsumerAdmission {
+    Admitted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChallengeConsumerAdmissionReceipt {
+    pub schema_version: String,
+    pub challenge_task_id: String,
+    pub consumer: ChallengeConsumerKind,
+    pub consumer_operation_id: String,
+    pub site_policy_digest: String,
+    pub downstream_intent_id: String,
+    pub challenge_outcome: ChallengeTaskOutcome,
+    pub challenge_admission: ChallengeTaskAdmission,
+    pub challenge_cooldown: ChallengeTaskCooldown,
+    pub challenge_emitted_effects: bool,
+    pub consumer_admission: ChallengeConsumerAdmission,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChallengeConsumerAdmissionError {
+    InvalidRequest,
+    InvalidReceipt,
+    SitePolicyMismatch,
+    DownstreamIntentMismatch,
+    ChallengeWithheld,
+}
+
+/// Decide whether one registered consumer may continue from a completed
+/// challenge task receipt.
+///
+/// This function is deterministic and emits no consumer effect. A successful
+/// decision does not imply that authentication or navigation later succeeded.
+pub fn admit_challenge_consumer(
+    evidence: &ChallengeConsumerEvidence,
+    request: ChallengeConsumerAdmissionRequest,
+) -> Result<ChallengeConsumerAdmissionReceipt, ChallengeConsumerAdmissionError> {
+    let valid_digest =
+        |value: &str| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit());
+    if request.consumer_operation_id.trim().is_empty()
+        || request.expected_downstream_intent_id.trim().is_empty()
+        || !valid_digest(&request.expected_site_policy_digest)
+    {
+        return Err(ChallengeConsumerAdmissionError::InvalidRequest);
+    }
+    if evidence.schema_version != "challenge-task-receipt.v1"
+        || evidence.task_id.trim().is_empty()
+        || evidence.downstream_intent_id.trim().is_empty()
+        || !valid_digest(&evidence.site_policy_digest)
+    {
+        return Err(ChallengeConsumerAdmissionError::InvalidReceipt);
+    }
+    let terminal_phase_matches = match evidence.admission {
+        ChallengeTaskAdmission::Admitted => {
+            evidence.phases.last() == Some(&ChallengeTaskPhase::Admitted)
+        }
+        ChallengeTaskAdmission::Withheld => matches!(
+            evidence.phases.last(),
+            Some(ChallengeTaskPhase::NotAdmitted | ChallengeTaskPhase::InterventionRequired)
+        ),
+    };
+    if !terminal_phase_matches {
+        return Err(ChallengeConsumerAdmissionError::InvalidReceipt);
+    }
+    if !evidence
+        .site_policy_digest
+        .eq_ignore_ascii_case(&request.expected_site_policy_digest)
+    {
+        return Err(ChallengeConsumerAdmissionError::SitePolicyMismatch);
+    }
+    if evidence.downstream_intent_id != request.expected_downstream_intent_id {
+        return Err(ChallengeConsumerAdmissionError::DownstreamIntentMismatch);
+    }
+    if evidence.admission != ChallengeTaskAdmission::Admitted
+        || evidence.intervention.is_some()
+        || !matches!(
+            evidence.outcome,
+            ChallengeTaskOutcome::NotPresent | ChallengeTaskOutcome::Passed
+        )
+    {
+        return Err(ChallengeConsumerAdmissionError::ChallengeWithheld);
+    }
+    let outcome_is_valid = match evidence.outcome {
+        ChallengeTaskOutcome::NotPresent => {
+            evidence.attempts_started == 0
+                && evidence.delivery.is_none()
+                && evidence.verification.is_none()
+        }
+        ChallengeTaskOutcome::Passed => {
+            evidence.attempts_started == 1
+                && evidence.delivery == Some(ChallengeTaskDelivery::Acknowledged)
+                && evidence.verification == Some(ChallengeTaskVerification::Passed)
+        }
+        ChallengeTaskOutcome::Denied | ChallengeTaskOutcome::InterventionRequired => false,
+    };
+    if !outcome_is_valid {
+        return Err(ChallengeConsumerAdmissionError::InvalidReceipt);
+    }
+    Ok(ChallengeConsumerAdmissionReceipt {
+        schema_version: "challenge-consumer-admission-receipt.v1".to_string(),
+        challenge_task_id: evidence.task_id.clone(),
+        consumer: request.consumer,
+        consumer_operation_id: request.consumer_operation_id,
+        site_policy_digest: evidence.site_policy_digest.to_ascii_lowercase(),
+        downstream_intent_id: evidence.downstream_intent_id.clone(),
+        challenge_outcome: evidence.outcome,
+        challenge_admission: evidence.admission,
+        challenge_cooldown: evidence.cooldown,
+        challenge_emitted_effects: evidence.emitted_effects,
+        consumer_admission: ChallengeConsumerAdmission::Admitted,
+    })
+}
+
 /// Execute one repository-owned provider-free challenge task end to end.
 ///
 /// The task owns phase ordering. Callers receive one receipt and cannot emit
