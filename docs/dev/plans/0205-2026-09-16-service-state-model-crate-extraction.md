@@ -808,16 +808,67 @@ Next action: publish this checkpoint, then reassess the remaining aggregate
 edges and select one closed provider-free family. Do not move the draft browser
 capability registry or any runtime transaction merely to reduce line count.
 
+## Checkpoint 15 | Browser Retirement Records
+
+State transition: the crate now owns the passive inert-browser retirement
+plan, terminal receipt, contamination report, and exact plan and receipt schema
+constants. Planning against current browser state, process and runtime-owner
+checks, evidence hashing, clocks, compare-and-swap application, repository
+mutation, and command transport remain in the CLI adapter.
+
+Acceptance state and progress classification: this small P1 dependency-
+reduction packet is accepted locally. It removes another CLI-owned type from
+the canonical aggregate without treating process observation or record
+retirement as model authority.
+
+Evidence:
+
+- all 83 service-model crate unit and integration tests pass, including four
+  new retirement wire, schema, camel-case, round-trip, and unknown-field tests;
+- all 17 focused CLI tests containing `browser_retirement` pass, including the
+  three exact inert-record retirement tests and the adjacent abandoned-browser
+  effect-boundary tests selected by the filter;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- the first crate attempt found one test-only `&&str` map-lookup error; the
+  bounded fixture correction passed on the single rerun;
+- no browser retirement, process signal, profile, runtime, install, staging,
+  production, release, or GitHub CI effect was performed.
+
+Delegation receipt:
+
+- `/root/p205_remaining_family_audit`, requested `gpt-5.6-luna` at medium
+  effort, ranked the remaining record families and approved the passive
+  browser-retirement boundary while deferring its runtime checks;
+- `/root/p205_aggregate_blockers`, requested `gpt-5.6-sol` at high effort,
+  classified 29 of 44 aggregate fields as already downward-owned and 15 as
+  remaining blockers, and rejected a partial or value-typed aggregate;
+- `/root/p205_browser_retirement_model`, requested `gpt-5.6-luna` at medium
+  effort, implemented only the isolated model record file and wire tests; the
+  primary reviewed, corrected one fixture, and integrated it.
+
+Material blockers: the aggregate still cannot move. The next smallest closed
+record family is profile-policy migration, while recovery/reset receipts and
+presentation capacity need slightly wider supporting closures. Runtime-owner,
+abandoned-retirement, crash-regeneration, authentication, and challenge task
+state require explicit separation from effect custody. The draft capability
+registry must not be promoted into canonical model authority.
+
+Next action: publish this checkpoint, then extract only the passive profile-
+policy migration entry and report records. Keep legacy materialization, schema
+stamping, aggregate mutation, and all migration I/O in the CLI.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | fourteen families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | fifteen families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | fourteen packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | fourteen packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | fifteen packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | fifteen packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

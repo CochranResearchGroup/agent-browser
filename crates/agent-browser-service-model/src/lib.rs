@@ -5,6 +5,7 @@
 
 mod browser_process;
 mod browser_profile;
+mod browser_retirement;
 mod entity_source;
 mod failure_recourse;
 mod incident;
@@ -33,6 +34,10 @@ pub use browser_profile::{
     BrowserHost, BrowserProfile, BrowserProfileRegistration, ProfileClass, ProfileOrigin,
     ProfileSourceRecord, SitePolicySourceRecord, SERVICE_BROWSER_HOST_VALUES,
     SERVICE_PROFILE_CLASS_VALUES,
+};
+pub use browser_retirement::{
+    BrowserContaminationReport, BrowserRetirementPlan, BrowserRetirementReceipt,
+    BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
 };
 pub use entity_source::{ServiceEntitySource, ServiceEntitySources};
 pub use failure_recourse::{
