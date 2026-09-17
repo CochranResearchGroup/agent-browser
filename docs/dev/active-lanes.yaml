@@ -22,3 +22,24 @@ lanes:
     reconciled_overlaps: [P202]
     blocker: exact-head forge evaluation and protected integration remain; every live challenge effect stays with issue #66
     updated_at: 2026-09-16
+  - id: P206
+    product_lane: PL-CHALLENGE
+    objective: Prove a provider-free visual and multi-round evidence contract inside one policy-authorized challenge attempt
+    plan: docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md
+    plan_ref: refs/heads/challenge/p206-visual-round-contract
+    branch: challenge/p206-visual-round-contract
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: cd22a39f989e29a27d6ec80283ae60667093fc9c
+    remote_ref: null
+    integration_receipt: null
+    integration: integrate only after P197 enters main and P206 reconciles that canonical checkpoint
+    validation_status: provider-free implementation and validation pending
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#127]
+    dependencies: [P197]
+    overlaps: [P197]
+    reconciled_overlaps: [P197]
+    blocker: pure round contract and synthetic matrix remain; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects are excluded
+    updated_at: 2026-09-16

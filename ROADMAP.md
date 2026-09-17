@@ -232,8 +232,11 @@ The four public guidance surfaces are aligned. P202 merged through PR #168 and
 released its overlap; P197 joined canonical `main@2632e31c` at merge checkpoint
 `7dc8a860`. Combined provider-free source, contract, client, route-confusion,
 and documentation checks pass. P197 publication, exact-head forge evaluation,
-and protected integration remain. W7-A is selected but not admitted. Issue #66
-retains the separately live-gated challenge acceptance leaf.
+and protected integration remain. W7-A is admitted through
+[Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
+on `challenge/p206-visual-round-contract` from exact published P197 head
+`cd22a39f`. It owns only the pure provider-free round contract and synthetic
+fixtures. Issue #66 retains the separately live-gated challenge acceptance leaf.
 This registration authorizes no challenge attempt, retry, browser effect,
 provider effect, credential use, runtime mutation, installation, or release.
 
