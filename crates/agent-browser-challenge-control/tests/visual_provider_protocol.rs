@@ -244,6 +244,52 @@ fn request_digest_is_deterministic_and_binds_candidate_order_and_artifact() {
 }
 
 #[test]
+fn response_digest_is_deterministic_and_binds_every_field() {
+    let evidence = evidence();
+    let request = prepare_request(&policy(), &evidence);
+    let first = selected_response(
+        &request.request_digest,
+        &evidence,
+        vec!["candidate:1".to_string(), "candidate:2".to_string()],
+    );
+    let second = first.clone();
+    assert_eq!(
+        visual_provider_response_digest(&first),
+        visual_provider_response_digest(&second)
+    );
+
+    let mut mutations = Vec::new();
+    for index in 0..7 {
+        let mut changed = first.clone();
+        match index {
+            0 => changed.request_digest = digest('1'),
+            1 => changed.evidence_digest = digest('2'),
+            2 => changed.candidate_set_digest = digest('3'),
+            3 => changed.provider_capability.capability_version = "v2".to_string(),
+            4 => {
+                changed.disposition = VisualProviderDisposition::Selected {
+                    selected_candidate_ids: vec![
+                        "candidate:2".to_string(),
+                        "candidate:1".to_string(),
+                    ],
+                }
+            }
+            5 => changed.produced_at_ms += 1,
+            6 => changed.expires_at_ms -= 1,
+            _ => unreachable!(),
+        }
+        mutations.push(changed);
+    }
+
+    for changed in mutations {
+        assert_ne!(
+            first.response_digest,
+            visual_provider_response_digest(&changed)
+        );
+    }
+}
+
+#[test]
 fn request_and_response_mutations_fail_before_selection() {
     let policy = policy();
     let evidence = evidence();
