@@ -42,4 +42,25 @@ lanes:
     overlaps: [P197:ROADMAP.md, P197:RUNBOOK.md, P197:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204 writes only its own bounded planning sections and catalog entry; P197 retains its own records]
     blocker: integration of the CI-disable correction remains; organic CI evidence is intentionally unavailable while disabled
+    updated_at: 2026-09-17
+  - id: P208
+    product_lane: PL-PLATFORM
+    objective: Serialize worktree closeout and preserve or dispose pinned candidates through one recoverable advisory transaction
+    plan: docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md
+    plan_ref: refs/heads/platform/p208-worktree-closeout
+    branch: platform/p208-worktree-closeout
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 2632e31ce34e62873598088d0c92c498357aafe2
+    remote_ref: null
+    integration_receipt: null
+    integration: merge through the protected `main` workflow after provider-free concurrency, crash-recovery, candidate-custody, and changed-surface validation
+    validation_status: pending red-capable two-process fixture
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#171]
+    dependencies: [P204]
+    overlaps: [P204]
+    reconciled_overlaps: []
+    blocker: P204 retains current shared-writer custody for package, validation, AGENTS, roadmap, runbook, and active-lane transitions; P208 source begins on disjoint new modules and tests
     updated_at: 2026-09-16
