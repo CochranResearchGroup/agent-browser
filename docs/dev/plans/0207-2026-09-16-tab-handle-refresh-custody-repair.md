@@ -18,9 +18,7 @@ Branch: `fix/p207-tab-handle-refresh-custody`
 
 Target: `main`
 
-Integration: merge through the protected pull-request workflow after the
-provider-free custody regression, public response parity, and changed-surface
-local validation pass
+Integration: merge through the protected pull-request workflow after provider-free custody regression, public response parity, and changed-surface local validation
 
 Source baseline: `2632e31ce34e62873598088d0c92c498357aafe2`
 
