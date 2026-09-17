@@ -10,6 +10,16 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
 - [P209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md)
 
+## Turn 375 | 2026-09-17
+
+P209 review-hardening checkpoint `3aed9a4b` explicitly proves strict request
+deserialization rejects coordinate, event-sequence, retry and instruction
+smuggling plus nested artifact bytes and execution-plan repeat authority. All
+49 challenge-control tests, strict workspace Clippy, formatting and diff
+hygiene pass. The branch remains local and unpushed behind P206 PR #180; no
+provider, image, browser, credential, CAPTCHA, desktop-input, runtime,
+production or CI-dispatch effect occurred.
+
 ## Turn 374 | 2026-09-17
 
 P209 local checkpoint `8ada33d5` is accepted. The pure protocol binds

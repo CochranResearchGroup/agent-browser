@@ -52,12 +52,12 @@ lanes:
     target: main
     plan_state: SOURCE_ACCEPTED_DEPENDENCY_PENDING
     custody_state: LOCAL_DEPENDENCY_HOLD
-    checkpoint: 8ada33d5
+    checkpoint: 3aed9a4b
     remote_ref: null
     integration_receipt: null
     integration: publish only after P206 PR 180 enters main and P209 reconciles that canonical checkpoint
-    validation_status: exact local P206 dependency reconciliation passed 48 challenge-control tests, strict workspace Clippy, formatting, policy wiring, documentation links, and diff hygiene; previously accepted unaffected extracted-crate gates remain reusable
-    validation_ref: 8ada33d5
+    validation_status: exact local P206 dependency reconciliation and request-smuggling hardening pass all 49 challenge-control tests, strict workspace Clippy, formatting, policy wiring, documentation links, and diff hygiene; previously accepted unaffected extracted-crate gates remain reusable
+    validation_ref: 3aed9a4b
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: [P206]
     overlaps: [P206]

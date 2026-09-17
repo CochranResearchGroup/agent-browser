@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 5
+Plan version: 6
 
 State: SOURCE ACCEPTED | P206 INTEGRATION PENDING
 
@@ -214,6 +214,19 @@ source or dependency closure.
 
 The branch remains local and unpushed until PR #180 enters `main`. That is an
 integration-order boundary, not a stop on local development or validation.
+
+## Review Hardening | 2026-09-17
+
+Source review found no protocol defect. Checkpoint `3aed9a4b` closes one
+explicit coverage gap by proving that serialized requests reject top-level
+coordinate, event-sequence, retry and instruction fields as well as nested
+artifact bytes and execution-plan repeat authority. This complements the
+existing response-smuggling matrix and makes strict request and response
+deserialization independently visible in the fixture suite.
+
+All 49 challenge-control tests, workspace formatting, strict workspace Clippy
+and diff hygiene pass at this checkpoint. No provider, image, browser,
+credential, CAPTCHA, desktop-input, runtime or production effect occurred.
 
 ## Stop Condition
 
