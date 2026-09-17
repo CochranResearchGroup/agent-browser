@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cli",
+    "crates/agent-browser-authentication-control",
     "crates/agent-browser-cdp",
     "crates/agent-browser-candidate",
     "crates/agent-browser-challenge-control",

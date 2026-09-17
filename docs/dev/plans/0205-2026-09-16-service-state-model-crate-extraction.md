@@ -2033,6 +2033,63 @@ combine that packet with the Service authentication envelope, challenge task,
 aggregate, bug-fix, CI, runtime, provider, browser, install, or production
 work.
 
+## Checkpoint 33 | Authentication Control Domain Accepted
+
+State transition: the provider-free authentication-run control domain now has
+one canonical owner in the new `agent-browser-authentication-control` workspace
+crate. The CLI `authentication_run` module contains only a crate-local wildcard
+re-export. Service authentication custody, command parsing, current-state joins,
+repository mutation, browser and credential effects, provider observation, and
+response composition remain CLI adapters and were not changed in this packet.
+
+Compatibility and boundary evidence:
+
+- the complete former 1,834-line CLI domain, including all seventeen unit
+  tests, moved unchanged after normalizing only cross-crate visibility from
+  `pub(crate)` to `pub`; an exact normalized source diff is empty;
+- schema and field names, serde casing and unknown-field policy, redaction,
+  receipt validation, replay and error ordering, transition budgets,
+  cancellation, and exact-target verification therefore remain identical;
+- the new crate has only `serde` as a product dependency and `serde_json` as a
+  test dependency. Its architecture guard uses a positive allowlist and rejects
+  ordinary, table-form, build, target-qualified, and aliased dependencies;
+- the same guard requires every canonical record, enum, trait, and schema
+  constant exactly once, rejects CLI duplicates, forbids upward and effectful
+  imports, and requires the CLI facade to contain only the exact compatibility
+  re-export. Mutation fixtures cover missing owners, missing schema, unknown or
+  aliased dependencies, process imports, missing facade, duplicate ownership,
+  and extra facade logic;
+- all seventeen authentication-control crate tests and ten focused CLI
+  authentication-run tests pass, with 3,233 unrelated CLI tests filtered;
+  formatting, diff hygiene, the architecture guard and its mutation fixtures,
+  and strict workspace Clippy also pass; and
+- no Service authentication envelope, Service State aggregate, challenge,
+  bug-fix, GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_auth_control_extract` used the
+requested balanced `gpt-5.6-terra` high route for the bounded six-file Rust and
+manifest extraction, returned passing focused and strict checks, and made no
+commit. The primary owned the disjoint architecture-guard and plan surfaces,
+verified exact normalized source equivalence, and integrated the result. A
+fresh `/root/p205_auth_control_review` pass used requested `gpt-5.6-sol` medium
+routing and found two P2 guard gaps: a dependency denylist and a facade check
+that permitted extra logic. Both findings were accepted, repaired with positive
+constraints and mutation fixtures, and passed the reviewer's closed-world
+rechecks. Runtime-reported effective model metadata was not independently
+exposed.
+
+Acceptance state and progress classification: the authentication-control
+packet is accepted as outcome progress. It removes the largest remaining
+provider-free domain from the CLI and unblocks the separately bounded Service
+authentication envelope. Next action: move only the durable Service
+authentication record and its pure start, reservation, completion,
+cancellation, replay, and redacted projection decisions into Service Model.
+Keep command parsing, current principal/tab/policy joins, clocks, repository
+custody, credentials, browser input, provider watches, and effect sequencing in
+the CLI; do not combine this packet with challenge, aggregate, bug-fix, CI,
+runtime, provider, browser, install, or production work.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -2041,8 +2098,8 @@ work.
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | presentation-capacity kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one families plus capacity mutation closure accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | capability registry accepted through Checkpoint 32 |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | authentication-control accepted through Checkpoint 33 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

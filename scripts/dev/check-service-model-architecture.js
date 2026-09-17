@@ -32,6 +32,36 @@ const CAPABILITY_REGISTRY_DEFINITIONS = [
   'BrowserCapabilityRegistry',
 ];
 
+const AUTHENTICATION_CONTROL_DEFINITIONS = [
+  'AuthenticationRunBinding',
+  'AuthenticationRunState',
+  'AuthenticationChallengeChannel',
+  'AuthenticationActionKind',
+  'SiteLoginState',
+  'PasswordPersistencePolicy',
+  'SiteLoginObservationReceipt',
+  'SiteLoginActionReceipt',
+  'SiteLoginActionContext',
+  'ProviderWatchReceipt',
+  'SameProfileNewTabProof',
+  'AuthenticationActionReceipt',
+  'AuthenticationActionContext',
+  'AuthenticationActionFailure',
+  'AuthenticationVerifierReceipt',
+  'AuthenticationVerificationContext',
+  'AuthenticationVerifierFailure',
+  'AuthenticationTransitionReceipt',
+  'ActiveAuthenticationChallenge',
+  'AuthenticationRun',
+  'AuthenticationRunError',
+];
+
+const AUTHENTICATION_CONTROL_TRAITS = [
+  'ResponseOnlySiteLoginAction',
+  'ResponseOnlyAuthenticationAction',
+  'AuthenticationVerifier',
+];
+
 const FORBIDDEN_DEPENDENCIES = [
   'agent-browser',
   'agent-browser-cdp',
@@ -111,6 +141,40 @@ function importedPaths(source) {
   return paths;
 }
 
+function cargoDependencyDeclarations(manifest) {
+  let section = '';
+  let tableDeclaration = null;
+  const declarations = [];
+  for (const rawLine of manifest.split('\n')) {
+    const line = rawLine.replace(/#.*/, '').trim();
+    const header = line.match(/^\[([^\]]+)\]$/);
+    if (header) {
+      section = header[1];
+      tableDeclaration = null;
+      const table = section.match(
+        /^(.*(?:^|\.)(?:dev-|build-)?dependencies)\.([A-Za-z0-9_-]+)$/,
+      );
+      if (table) {
+        tableDeclaration = {
+          section: table[1], name: table[2], value: '',
+        };
+        declarations.push(tableDeclaration);
+      }
+      continue;
+    }
+    if (tableDeclaration) {
+      if (/^package\s*=/.test(line)) tableDeclaration.value += ` ${line}`;
+      continue;
+    }
+    if (!/(?:^|\.)(?:dev-|build-)?dependencies$/.test(section)) continue;
+    const declaration = line.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/);
+    if (declaration) {
+      declarations.push({ section, name: declaration[1], value: declaration[2] });
+    }
+  }
+  return declarations;
+}
+
 function check(root = repoRoot) {
   const failures = [];
   const requireCondition = (condition, message) => {
@@ -181,6 +245,112 @@ function check(root = repoRoot) {
   const capabilityRegistry = withoutCommentsAndStrings(capabilityRegistrySource);
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
+
+  const authenticationManifestPath = join(root,
+    'crates/agent-browser-authentication-control/Cargo.toml');
+  const authenticationSourceRoot = join(root,
+    'crates/agent-browser-authentication-control/src');
+  const authenticationManifest = read(root,
+    'crates/agent-browser-authentication-control/Cargo.toml');
+  const authenticationSourceFiles = rustFilesUnder(authenticationSourceRoot);
+  const authenticationSources = authenticationSourceFiles
+    .map((path) => readFileSync(path, 'utf8'));
+  const authenticationSource = authenticationSources.join('\n');
+  const authenticationClean = withoutCommentsAndStrings(authenticationSource);
+  const cliAuthentication = withoutCommentsAndStrings(read(root,
+    'cli/src/native/authentication_run.rs'));
+
+  requireCondition(existsSync(authenticationManifestPath),
+    'agent-browser-authentication-control Cargo manifest must exist');
+  requireCondition(existsSync(join(authenticationSourceRoot, 'lib.rs')),
+    'agent-browser-authentication-control must own src/lib.rs');
+  requireCondition(
+    workspace.includes('crates/agent-browser-authentication-control'),
+    'root Cargo workspace must include agent-browser-authentication-control',
+  );
+  requireCondition(
+    /\bname\s*=\s*"agent-browser-authentication-control"/.test(authenticationManifest),
+    'agent-browser-authentication-control manifest must declare the expected package name',
+  );
+  const authenticationDependencies = cargoDependencyDeclarations(authenticationManifest);
+  for (const dependency of authenticationDependencies) {
+    const allowed = (dependency.section === 'dependencies' && dependency.name === 'serde')
+      || (dependency.section === 'dev-dependencies' && dependency.name === 'serde_json');
+    requireCondition(
+      allowed,
+      `authentication-control crate dependency is outside the provider-free allowlist: ${dependency.section}.${dependency.name}`,
+    );
+    requireCondition(
+      !/\bpackage\s*=/.test(dependency.value),
+      `authentication-control crate must not alias an allowed dependency: ${dependency.name}`,
+    );
+  }
+  requireCondition(
+    !/\bpath\s*=\s*["'][^"']*(?:^|[/\\])cli(?:[/\\]|["'])/m.test(authenticationManifest),
+    'authentication-control crate must not path-depend on the CLI crate',
+  );
+  for (const source of authenticationSources) {
+    const clean = withoutCommentsAndStrings(source);
+    for (const forbidden of FORBIDDEN_IMPORT_PATHS) {
+      requireCondition(
+        !new RegExp(`\\b${forbidden.replaceAll(':', '\\s*:\\s*')}`).test(clean),
+        `authentication-control Rust source must not reference forbidden boundary: ${forbidden}`,
+      );
+    }
+    for (const path of importedPaths(source)) {
+      const segments = path.trim().split(/\s*::\s*/);
+      requireCondition(
+        !segments.some((segment) => FORBIDDEN_ADAPTER_MODULES.has(segment)),
+        `authentication-control Rust source must not import runtime/provider/platform adapter module: ${path.trim()}`,
+      );
+    }
+  }
+  for (const name of AUTHENTICATION_CONTROL_DEFINITIONS) {
+    const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...authenticationSource.matchAll(definition)].length === 1,
+      `authentication-control crate must own exactly one definition: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(definition.source).test(source)),
+      `CLI must not duplicate authentication-control definition: ${name}`,
+    );
+  }
+  for (const name of AUTHENTICATION_CONTROL_TRAITS) {
+    const definition = new RegExp(`\\btrait\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...authenticationSource.matchAll(definition)].length === 1,
+      `authentication-control crate must own exactly one trait: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(definition.source).test(source)),
+      `CLI must not duplicate authentication-control trait: ${name}`,
+    );
+  }
+  requireCondition(
+    /\bpub\s+const\s+AUTHENTICATION_RUN_SCHEMA_VERSION\b/.test(authenticationClean),
+    'authentication-control crate must own the authentication run schema constant',
+  );
+  requireCondition(
+    !cliSources.some((source) =>
+      /\b(?:pub\s*)?(?:\(?crate\)?\s*)?const\s+AUTHENTICATION_RUN_SCHEMA_VERSION\b/.test(source)),
+    'CLI must not duplicate the authentication run schema constant',
+  );
+  requireCondition(
+    /^\s*pub\s*\(\s*crate\s*\)\s+use\s+agent_browser_authentication_control\s*::\s*\*\s*;\s*$/.test(
+      cliAuthentication,
+    ),
+    'CLI authentication_run module must contain only the authentication-control compatibility re-export',
+  );
+  for (const adapter of [
+    'ServiceState', 'ServiceStateRepository', 'ServiceAuthenticationRunRecord',
+    'BrowserManager', 'CredentialResolver', 'ProviderClient', 'from_environment',
+  ]) {
+    requireCondition(!new RegExp(`\\b${adapter}\\b`).test(authenticationClean),
+      `authentication-control model must not absorb CLI adapter: ${adapter}`);
+  }
+  requireCondition(!/\bstd\s*::\s*(?:env|fs|net|process)\b/.test(authenticationClean),
+    'authentication-control model must not access environment, filesystem, network, or processes');
   requireCondition(existsSync(crashRegenerationPath),
     'service-model must own src/crash_regeneration.rs');
   const crashRegenerationExport = serviceModelLib.match(

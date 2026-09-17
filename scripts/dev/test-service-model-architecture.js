@@ -49,24 +49,57 @@ pub use browser_capability_registry::{
 };
 `;
 
+const authenticationControlRecords = [
+  'AuthenticationRunBinding', 'AuthenticationRunState',
+  'AuthenticationChallengeChannel', 'AuthenticationActionKind', 'SiteLoginState',
+  'PasswordPersistencePolicy', 'SiteLoginObservationReceipt',
+  'SiteLoginActionReceipt', 'SiteLoginActionContext', 'ProviderWatchReceipt',
+  'SameProfileNewTabProof', 'AuthenticationActionReceipt',
+  'AuthenticationActionContext', 'AuthenticationActionFailure',
+  'AuthenticationVerifierReceipt', 'AuthenticationVerificationContext',
+  'AuthenticationVerifierFailure', 'AuthenticationTransitionReceipt',
+  'ActiveAuthenticationChallenge', 'AuthenticationRun', 'AuthenticationRunError',
+];
+const authenticationControlTraits = [
+  'ResponseOnlySiteLoginAction', 'ResponseOnlyAuthenticationAction',
+  'AuthenticationVerifier',
+];
+const validAuthenticationControl = `${authenticationControlRecords
+  .map((name) => `pub struct ${name};`).join('\n')}
+${authenticationControlTraits.map((name) => `pub trait ${name} {}`).join('\n')}
+pub const AUTHENTICATION_RUN_SCHEMA_VERSION: &str = "schema";
+`;
+const validAuthenticationFacade = 'pub(crate) use agent_browser_authentication_control::*;\n';
+
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
-  serviceModel = validCrashStateUse } = {}) {
+  serviceModel = validCrashStateUse, authenticationManifest = validAuthenticationManifest,
+  authentication = validAuthenticationControl,
+  authenticationFacade = validAuthenticationFacade } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'agent-browser-service-model-architecture-'));
   mkdirSync(join(root, 'crates/agent-browser-service-model/src'), { recursive: true });
-  writeFileSync(join(root, 'Cargo.toml'), workspace ? '[workspace]\nmembers = ["crates/agent-browser-service-model"]\n' : 'workspace = false\n');
+  mkdirSync(join(root, 'crates/agent-browser-authentication-control/src'), { recursive: true });
+  writeFileSync(join(root, 'Cargo.toml'), workspace
+    ? '[workspace]\nmembers = ["crates/agent-browser-service-model", "crates/agent-browser-authentication-control"]\n'
+    : 'workspace = false\n');
   writeFileSync(join(root, 'crates/agent-browser-service-model/Cargo.toml'), manifest);
+  writeFileSync(join(root, 'crates/agent-browser-authentication-control/Cargo.toml'),
+    authenticationManifest);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/lib.rs'), source);
+  writeFileSync(join(root, 'crates/agent-browser-authentication-control/src/lib.rs'),
+    authentication);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/abandoned_browser_retirement.rs'), retirement);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/crash_regeneration.rs'), crash);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/browser_capability_registry.rs'), capability);
   mkdirSync(join(root, 'cli/src/native'), { recursive: true });
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
+  writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
   return root;
 }
 
 const validManifest = '[package]\nname = "agent-browser-service-model"\nversion = "0.1.0"\n[dependencies]\nserde = "1"\n';
+const validAuthenticationManifest = '[package]\nname = "agent-browser-authentication-control"\nversion = "0.1.0"\n[dependencies]\nserde = "1"\n';
 const validSource = `${validCrashExport}
 ${validCapabilityExport}
 // std::fs and provider are allowed in prose.
@@ -81,7 +114,8 @@ try {
   rmSync(missing, { recursive: true, force: true });
 }
 
-const missingCrashModule = fixture({ manifest: validManifest, source: validSource });
+const missingCrashModule = fixture({ manifest: validManifest, source: validSource,
+  authenticationManifest: validAuthenticationManifest });
 try {
   rmSync(join(missingCrashModule, 'crates/agent-browser-service-model/src/crash_regeneration.rs'));
   ok(check(missingCrashModule).some((failure) => failure.includes('crash_regeneration.rs')),
@@ -90,7 +124,8 @@ try {
   rmSync(missingCrashModule, { recursive: true, force: true });
 }
 
-const missingCapabilityModule = fixture({ manifest: validManifest, source: validSource });
+const missingCapabilityModule = fixture({ manifest: validManifest, source: validSource,
+  authenticationManifest: validAuthenticationManifest });
 try {
   rmSync(join(missingCapabilityModule,
     'crates/agent-browser-service-model/src/browser_capability_registry.rs'));
@@ -101,11 +136,181 @@ try {
   rmSync(missingCapabilityModule, { recursive: true, force: true });
 }
 
-const clean = fixture({ manifest: validManifest, source: validSource });
+const clean = fixture({ manifest: validManifest, source: validSource,
+  authenticationManifest: validAuthenticationManifest });
 try {
   doesNotThrow(() => ok(check(clean).length === 0, check(clean).join('\n')));
 } finally {
   rmSync(clean, { recursive: true, force: true });
+}
+
+const missingAuthenticationModule = fixture({ manifest: validManifest, source: validSource });
+try {
+  rmSync(join(missingAuthenticationModule,
+    'crates/agent-browser-authentication-control/src/lib.rs'));
+  ok(check(missingAuthenticationModule).some((failure) =>
+    failure.includes('authentication-control must own src/lib.rs')),
+  'missing authentication-control module was accepted');
+} finally {
+  rmSync(missingAuthenticationModule, { recursive: true, force: true });
+}
+
+const duplicateAuthenticationDefinition = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authenticationFacade: `${validAuthenticationFacade}\npub(crate) struct AuthenticationRun;\n`,
+});
+try {
+  ok(check(duplicateAuthenticationDefinition).some((failure) =>
+    failure.includes('AuthenticationRun')),
+  'duplicate CLI authentication-control definition was accepted');
+} finally {
+  rmSync(duplicateAuthenticationDefinition, { recursive: true, force: true });
+}
+
+const missingAuthenticationFacade = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authenticationFacade: '',
+});
+try {
+  ok(check(missingAuthenticationFacade).some((failure) =>
+    failure.includes('only the authentication-control compatibility re-export')),
+  'missing CLI authentication-control compatibility facade was accepted');
+} finally {
+  rmSync(missingAuthenticationFacade, { recursive: true, force: true });
+}
+
+const forbiddenAuthenticationDependency = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authenticationManifest: `${validAuthenticationManifest}agent-browser-service-model = { path = "../agent-browser-service-model" }\n`,
+});
+try {
+  ok(check(forbiddenAuthenticationDependency).some((failure) =>
+    failure.includes('agent-browser-service-model')),
+  'authentication-control upward Cargo dependency was accepted');
+} finally {
+  rmSync(forbiddenAuthenticationDependency, { recursive: true, force: true });
+}
+
+const unknownAuthenticationDependency = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authenticationManifest: `${validAuthenticationManifest}keyring = "3"\n`,
+});
+try {
+  ok(check(unknownAuthenticationDependency).some((failure) =>
+    failure.includes('provider-free allowlist')),
+  'unknown authentication-control dependency was accepted');
+} finally {
+  rmSync(unknownAuthenticationDependency, { recursive: true, force: true });
+}
+
+const aliasedAuthenticationDependency = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authenticationManifest: validAuthenticationManifest.replace(
+    'serde = "1"',
+    'serde = { package = "keyring", version = "3" }',
+  ),
+});
+try {
+  ok(check(aliasedAuthenticationDependency).some((failure) =>
+    failure.includes('must not alias')),
+  'aliased authentication-control dependency was accepted');
+} finally {
+  rmSync(aliasedAuthenticationDependency, { recursive: true, force: true });
+}
+
+for (const authenticationManifest of [
+  `${validAuthenticationManifest}\n[dependencies.keyring]\nversion = "3"\n`,
+  `${validAuthenticationManifest}\n[build-dependencies.codegen]\nversion = "1"\n`,
+  `${validAuthenticationManifest}\n[target.'cfg(unix)'.dependencies.keyring]\nversion = "3"\n`,
+  `${validAuthenticationManifest}\n[dependencies.serde]\npackage = "keyring"\nversion = "3"\n`,
+]) {
+  const root = fixture({
+    manifest: validManifest,
+    source: validSource,
+    authenticationManifest,
+  });
+  try {
+    ok(check(root).some((failure) =>
+      failure.includes('provider-free allowlist') || failure.includes('must not alias')),
+    `authentication-control dependency table bypass was accepted: ${authenticationManifest}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const authenticationFacadeWithLogic = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authenticationFacade: `${validAuthenticationFacade}\npub(crate) fn adapter_logic() {}\n`,
+});
+try {
+  ok(check(authenticationFacadeWithLogic).some((failure) =>
+    failure.includes('only the authentication-control compatibility re-export')),
+  'CLI authentication-control facade accepted extra logic');
+} finally {
+  rmSync(authenticationFacadeWithLogic, { recursive: true, force: true });
+}
+
+const forbiddenAuthenticationImport = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authentication: `${validAuthenticationControl}\nuse std::process::Command;\n`,
+});
+try {
+  ok(check(forbiddenAuthenticationImport).some((failure) =>
+    failure.includes('std::process')),
+  'authentication-control process import was accepted');
+} finally {
+  rmSync(forbiddenAuthenticationImport, { recursive: true, force: true });
+}
+
+for (const name of authenticationControlRecords) {
+  const root = fixture({
+    manifest: validManifest,
+    source: validSource,
+    authentication: validAuthenticationControl.replace(`pub struct ${name};`, ''),
+  });
+  try {
+    ok(check(root).some((failure) => failure.includes(name)),
+      `missing authentication-control definition was accepted: ${name}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+for (const name of authenticationControlTraits) {
+  const root = fixture({
+    manifest: validManifest,
+    source: validSource,
+    authentication: validAuthenticationControl.replace(`pub trait ${name} {}`, ''),
+  });
+  try {
+    ok(check(root).some((failure) => failure.includes(name)),
+      `missing authentication-control trait was accepted: ${name}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const missingAuthenticationSchema = fixture({
+  manifest: validManifest,
+  source: validSource,
+  authentication: validAuthenticationControl.replace(
+    'pub const AUTHENTICATION_RUN_SCHEMA_VERSION',
+    'const OTHER_SCHEMA_VERSION',
+  ),
+});
+try {
+  ok(check(missingAuthenticationSchema).some((failure) =>
+    failure.includes('authentication run schema constant')),
+  'missing authentication-control schema constant was accepted');
+} finally {
+  rmSync(missingAuthenticationSchema, { recursive: true, force: true });
 }
 
 for (const manifest of [
