@@ -43,24 +43,3 @@ lanes:
     reconciled_overlaps: [P204 writes only its own bounded planning sections and catalog entry; P197 retains its own records]
     blocker: integration of the CI-disable correction remains; organic CI evidence is intentionally unavailable while disabled
     updated_at: 2026-09-17
-  - id: P208
-    product_lane: PL-PLATFORM
-    objective: Serialize worktree closeout and preserve or dispose pinned candidates through one recoverable advisory transaction
-    plan: docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md
-    plan_ref: refs/heads/platform/p208-worktree-closeout
-    branch: platform/p208-worktree-closeout
-    target: main
-    plan_state: OPEN
-    custody_state: PUBLISHED_INTEGRATION_READY
-    checkpoint: 8c5137890c0224d60965104d964a789fda9b9396
-    remote_ref: refs/remotes/origin/platform/p208-worktree-closeout
-    integration_receipt: null
-    integration: merge through PR #182 after provider-free validation; GitHub CI remains disabled by separate operator direction
-    validation_status: pre-rebase exact head 8a010264 passed run 35227459177 including Repository Tooling and Presubmit; rebased conflict surfaces pass repository-tooling, selector, dormant-workflow, policy, planning, documentation-link, and docs-build checks locally
-    validation_ref: 8c5137890c0224d60965104d964a789fda9b9396
-    work_items: [CochranResearchGroup/agent-browser#171]
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: [P204 CI shutdown integrated through PRs #185 and #186; P208 rebased onto f6d49f89 and preserves the disabled-workflow contract]
-    blocker: PR #182 integration remains; automatic exact-head forge evaluation is intentionally unavailable while CI is disabled
-    updated_at: 2026-09-17

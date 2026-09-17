@@ -27,20 +27,20 @@ field evidence and acceptance records into the same model.
 
 ## P208 | Worktree Closeout And Candidate Custody
 
-State: OPEN
+State: CLOSED
 
 Current state: [Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md),
-[issue #171](https://github.com/CochranResearchGroup/agent-browser/issues/171),
-and ready [PR #182](https://github.com/CochranResearchGroup/agent-browser/pull/182)
-own the `PL-PLATFORM` repair. The rebased source serializes one durable
+[closed issue #171](https://github.com/CochranResearchGroup/agent-browser/issues/171),
+and merged [PR #182](https://github.com/CochranResearchGroup/agent-browser/pull/182)
+record the completed `PL-PLATFORM` repair. The integrated source serializes one durable
 repository-scoped closeout operation, requires explicit retain, archive, or
 discard choices for pinned candidates, verifies external archives from a fresh
 process, and recovers interrupted archive and Git-removal effects. The merged
 P204 validation contract retains a lightweight `Repository Tooling` lane for
 these provider-free Node contracts in the dormant workflow. Exact-head
-`8a010264` passed run `35227459177` before CI was disabled. The branch is
-rebased onto `main@f6d49f89`, conflict-affected local checks pass, and PR
-integration remains. No worktree outside disposable fixtures,
+`8a010264` passed run `35227459177` before CI was disabled. Rebased source
+`c2ce2b35` passed conflict-affected local checks and merged as `59928044`.
+No worktree outside disposable fixtures,
 candidate, browser, provider, installed runtime, Service State, production, or
 release effect occurred.
 
