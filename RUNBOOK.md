@@ -18,8 +18,14 @@ was created or removed. It owns only an effect-free desktop-services planner
 that accounts every raw pointer move, down and up against the P212 permit
 budget. P205 retains the root Cargo manifest and lockfile, P211 source remains
 disjoint, and shared planning projections are an explicit reconciliation
-overlap. GitHub CI remains disabled. No browser, capture, provider, credential,
-CAPTCHA, route claim, desktop input, runtime or production effect is authorized.
+overlap. Source checkpoint `f90ef7a7` implements canonical permit validation,
+exact-budget interpolation, monotonic checked scheduling and deterministic
+plan digests. All 18 desktop-services tests, all 58 challenge-control tests,
+the strengthened architecture guard, workspace formatting, strict workspace
+Clippy, documentation links, planning audit, selection and diff hygiene pass
+locally. GitHub CI remains disabled and was not restored or run. Publication
+and protected integration remain. No browser, capture, provider, credential,
+CAPTCHA, route claim, desktop input, runtime or production effect occurred.
 
 ## Turn 385 | 2026-09-17
 

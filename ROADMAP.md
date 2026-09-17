@@ -351,7 +351,11 @@ budget semantics and a deterministic effect-free plan before any executor is
 introduced. Every move, down and up consumes the permit budget; key semantics,
 provider calls, route claims and event emission remain excluded. P214 avoids
 P205's Cargo manifest and lockfile surfaces. GitHub CI remains
-operator-disabled.
+operator-disabled. Source checkpoint `f90ef7a7` now produces exact-budget,
+checked, deterministic raw pointer plans without an executor. All 18
+desktop-services tests, all 58 challenge-control tests, the strengthened
+architecture guard, workspace formatting and strict workspace Clippy pass
+locally. Publication and protected integration remain.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

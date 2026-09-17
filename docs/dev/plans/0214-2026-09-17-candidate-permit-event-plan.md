@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -61,6 +61,13 @@ runbook and active-lane projections remain explicit P211 overlaps.
 
 GitHub CI is operator-disabled. P214 uses local provider-free validation and
 will not restore, dispatch, rerun or wait on a workflow.
+
+Source checkpoint `f90ef7a7` implements canonical permit validation and the
+effect-free exact-budget planner. All 18 desktop-services tests and all 58
+challenge-control tests pass with the strengthened file-local architecture
+guard, formatting, strict workspace Clippy, documentation links, planning
+audit, selector readback and diff hygiene. Publication and protected
+integration remain.
 
 ## Architecture Boundary
 
@@ -184,6 +191,43 @@ the exact P213 canonical baseline. GitHub CI is operator-disabled and is not
 part of this packet's validation path. P214 closes after its exact source
 enters canonical `main`; an executor, provider adapter or live fixture remains
 a separate later packet.
+
+## Source Acceptance | 2026-09-17
+
+Checkpoint `f90ef7a7` adds `validate_desktop_candidate_effect_permit` and the
+pure `candidate_event_plan` module. One admitted candidate with a four-event
+budget produces exactly two checked interpolated moves, one left-down and one
+left-up. Multi-target plans reserve button pairs first, distribute the
+remaining move quotient and remainder in candidate order, end each segment at
+the exact candidate center and schedule every event monotonically inside one
+checked duration and permit expiry.
+
+The first tracer failed on the absent planner API and then returned the exact
+four-event inert plan. The consolidated matrix covers multi-target remainder,
+canonical and structural permit mutation, invalid geometry, insufficient and
+key budgets, out-of-surface starts, short and overflowing schedules, stale
+expiry and deterministic replay. Review clarified that changing an opaque
+authority or capability digest while recomputing the permit digest represents
+a different self-consistent permit, while changing it without recomputing is
+tampering; the tests preserve that distinction. Review also hardened the
+public plan digest to bind every field of all `InputEvent` variants even though
+this slice generates pointer events only.
+
+Local acceptance passes:
+
+- all 18 desktop-services tests, including six P214 planner fixtures;
+- all 58 challenge-control tests;
+- the strengthened file-local desktop-services architecture guard;
+- workspace formatting and strict workspace Clippy; and
+- documentation links, active planning audit, changed-surface selection,
+  selector self-check and diff hygiene.
+
+The selector expands to broad validation because the modified architecture
+guard is conservatively classified as an unknown repository-tooling surface.
+Its exact local recommendations all pass. P214 changes no manifest, lockfile,
+CLI, Service State, provider or public schema. No browser, capture, provider,
+credential, CAPTCHA, route claim, desktop input, runtime, production or CI
+effect occurred.
 
 ## Stop Condition
 
