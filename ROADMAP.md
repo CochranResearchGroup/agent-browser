@@ -42,6 +42,9 @@ platform matrix remains in candidate `d9fede9d`. Follow-up operator direction
 also disables focused CI for now: the workflow is retained only as
 `.github/workflows/ci.yml.disabled` in candidate `ca077d9e`, and active run
 `35228725370` was cancelled.
+The separate automatic Lease Authority matrix is likewise retained under a
+`.disabled` suffix in candidate `ea254ecd`, so no active workflow has a push or
+pull-request trigger.
 Issue #164 remains an independent enforcement improvement for any future CI
 resumption. Organic docs-only and narrow-Rust evidence are deferred while CI is
 disabled.

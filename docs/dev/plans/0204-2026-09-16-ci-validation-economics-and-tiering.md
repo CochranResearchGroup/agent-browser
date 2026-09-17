@@ -74,7 +74,10 @@ the executable workflow, selector, schema, and regression-contract change.
 The operator then clarified that focused CI should also be disabled for now.
 Run `35228725370` was cancelled, `.github/workflows/ci.yml` was removed, and the
 reviewed workflow was retained as `.github/workflows/ci.yml.disabled` in
-candidate `ca077d9e`.
+candidate `ca077d9e`. A final scope audit found the separate path-filtered Lease
+Authority CI matrix; it is also retained under a `.disabled` suffix so no
+active workflow has a push or pull-request trigger. Candidate `ea254ecd`
+contains that final automatic-trigger removal.
 
 The pre-implementation docs-only probe against merge `aa7b67b1` remains the red
 baseline. Local validation is green for the selector and aggregate suites,
@@ -199,7 +202,7 @@ Exit requires current evidence that:
 | Proportional job routing | Exact-range readback selects broad ordinary validation for this classifier/workflow change and excludes comprehensive Rust | green locally |
 | Service smoke routing | Selector fixtures distinguish unrelated Rust from service-owned Rust; workflow contract gates the smoke bundle on `serviceSmokes` | green locally |
 | Rust lane isolation | Organic run `35171646162` exposed same-target CLI executable replacement; exact-head run `35172965793` passed the corrected serialized CLI lane plus independent crate lane | green organically |
-| GitHub CI disabled | Candidate `ca077d9e` removes the active workflow path, retains reviewed configuration as `.github/workflows/ci.yml.disabled`, and records cancellation of run `35228725370` | green locally; provider cancellation confirmed |
+| GitHub CI disabled | Main and Lease Authority workflows are retained under `.disabled` suffixes; active workflows have no push or pull-request triggers; run `35228725370` was cancelled | green locally; provider cancellation confirmed |
 | Economics receipt | Fixture covers selected lanes, exclusions, bounded wall time, observed runner time, and explicit measurement limits | green locally; organic receipt pending |
 | Organic docs and narrow-Rust evidence | Existing runs prove the broad baseline only | deferred while CI is disabled |
 | Protected aggregate enforcement | Live branch protection returns 404 and rulesets are empty | independent issue #164 if CI resumes |
