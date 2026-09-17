@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 2
+Plan version: 3
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -58,6 +58,10 @@ matrix. All 12 desktop-services tests, the strengthened architecture guard,
 formatting, strict workspace Clippy, documentation links and diff hygiene pass
 locally. GitHub CI is operator-disabled and was not restored or dispatched.
 Publication and protected integration remain.
+
+P212 exact head `dc20155e` merged through PR #193 as canonical
+`main@ddae1897`. No GitHub Actions branch or merge-head run started. P212 is
+closed; P213 owns the challenge-side consumer adapter under issue #194.
 
 ## Architecture Boundary
 

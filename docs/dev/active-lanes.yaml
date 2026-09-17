@@ -22,25 +22,25 @@ lanes:
     reconciled_overlaps: [P204 writes only its own bounded planning sections and catalog entry; P197 retains its own records]
     blocker: integration of the CI-disable correction remains; organic CI evidence is intentionally unavailable while disabled
     updated_at: 2026-09-17
-  - id: P212
-    product_lane: PL-PLATFORM
-    objective: Freeze and prove provider-neutral desktop candidate geometry and controller-authority admission before input
-    plan: docs/dev/plans/0212-2026-09-17-desktop-candidate-intent-contract.md
-    plan_ref: refs/heads/platform/p212-desktop-candidate-intent-contract
-    branch: platform/p212-desktop-candidate-intent-contract
+  - id: P213
+    product_lane: PL-CHALLENGE
+    objective: Bind one current authorized visual intent to exact desktop candidate geometry and controller authority without emitting input
+    plan: docs/dev/plans/0213-2026-09-17-visual-desktop-candidate-adapter.md
+    plan_ref: refs/heads/challenge/p213-visual-desktop-adapter
+    branch: challenge/p213-visual-desktop-adapter
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 00f41715
-    remote_ref: null
+    checkpoint: 1bad68e3
+    remote_ref: refs/remotes/origin/challenge/p213-visual-desktop-adapter
     integration_receipt: null
-    integration: implement and validate the platform contract locally, then publish and merge normally without restoring or dispatching operator-disabled GitHub CI
-    validation_status: all 12 desktop-services tests, strengthened architecture guard, formatting, strict workspace Clippy, documentation links, changed-surface selection and diff hygiene pass locally
-    validation_ref: 00f41715
-    work_items: [CochranResearchGroup/agent-browser#127]
+    integration: merge through the protected pull-request workflow after local provider-free validation without restoring or dispatching operator-disabled GitHub CI
+    validation_status: all 58 challenge-control tests, all 12 desktop-services tests, strengthened architecture guard, formatting, strict workspace Clippy, documentation links, planning audit, selection and diff hygiene pass locally
+    validation_ref: 1bad68e3
+    work_items: [CochranResearchGroup/agent-browser#194]
     dependencies: []
     overlaps: [P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml]
-    overlap_disposition: P211 owns CLI shutdown and workstation routing; P212 owns only desktop-services candidate-intent source and fixtures; shared planning projections reconcile at integration
-    blocker: publication and protected integration remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    overlap_disposition: P211 owns CLI shutdown and workstation routing; P213 owns only challenge-control visual-desktop source and fixtures; shared planning projections reconcile at integration
+    blocker: publication and protected integration remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, route-claim, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17
