@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -23,9 +23,11 @@ concurrency, crash-recovery, candidate-custody, and changed-surface validation
 
 Source baseline: `2632e31ce34e62873598088d0c92c498357aafe2`
 
-Implementation checkpoint: `785a20d88b4409714bf147f632f3e2d8eef3635c`
+Implementation checkpoint: `907ae9f2fe669478b73f152f84d9e25a59cfb7db`
 
-Pull request: `CochranResearchGroup/agent-browser#182` (draft)
+Validation-wiring checkpoint: `9d34365d302baa7725b3d4689a7b079dea4258a5`
+
+Pull request: `CochranResearchGroup/agent-browser#182` (draft pending exact-head validation)
 
 ## Objective
 
@@ -54,11 +56,11 @@ was reconciled into this P208 branch. This is evidence for serializing the
 inventory-to-transition boundary, not a substitute for the required
 provider-free regression.
 
-The current portfolio also contains P204, P205, P206, and P207. P204 owns
-`package.json`, `AGENTS.md`, validation selection, and current shared planning
-transitions. P208 will keep its first source packet in new closeout modules and
-tests, then reconcile those shared surfaces only after the provider checkpoint
-or an explicit handoff.
+P204 merged through PR #179 as `f5e3f31b` after its exact-head CI passed. P208
+is rebased onto that integration point and now owns its bounded shared-surface
+transition while preserving P204's still-open issue #164 records. The merged
+selector and aggregate now include a dedicated provider-free `Repository
+Tooling` lane for candidate-build and worktree-closeout contracts.
 
 ## Consolidated Batch
 
@@ -143,20 +145,20 @@ reasoning for the specialist tier.
 
 | Requirement | Evidence required | Current state |
 | --- | --- | --- |
-| One closeout writer | Deterministic two-process barrier fixture; one committed removal and one joined/observed receipt | proven at `785a20d8` |
-| Replay and conflict safety | Same request is idempotent; changed disposition is a typed request conflict | proven at `785a20d8` |
-| Exact worktree identity | Common-Git identity, worktree incarnation, HEAD/ref, path, and dirty-state drift are revalidated before commit | proven at `785a20d8` |
-| Candidate choice | Pinned candidate without selection reports retain/archive/discard consequences and performs no removal | proven at `785a20d8` |
-| Retain | Checkout and candidate remain; receipt truthfully reports no removal | proven, including explicit retained-operation succession, at `785a20d8` |
-| Archive and reuse | Exact bytes and digests survive outside the checkout; a fresh process resolves the archive through a verified locator | proven at `785a20d8` |
-| Discard isolation | Only the selected candidate is removed; unrelated candidates, archives, branches, and Git custody remain | proven at `785a20d8` |
-| Interrupted preservation | Fault points before, during, and after publication resume the same fenced operation; partial archives never become complete | proven by interrupted archive publication and fresh terminal verification at `785a20d8` |
-| Interrupted removal | Recovery reconciles filesystem and Git registration after intent or effect without a second removal | proven by post-removal recovery and CLI replay at `785a20d8` |
-| Advisory authority | Status and plan remain read-only; explicit operator choices are supported and typed rather than reduced to generic denial | proven at `785a20d8` |
-| Policy and documentation | Policies and command guidance describe the implemented boundary and raw-Git limitation | policy and internal command complete; package and validation registration await P204 shared-writer reconciliation |
-| Integration | Final published head passes selected gates and enters `main` through the linked PR | draft PR #182; pending P204 reconciliation and final selected gates |
+| One closeout writer | Deterministic two-process barrier fixture; one committed removal and one joined/observed receipt | proven on rebased implementation `907ae9f2` |
+| Replay and conflict safety | Same request is idempotent; changed disposition is a typed request conflict | proven on rebased implementation `907ae9f2` |
+| Exact worktree identity | Common-Git identity, worktree incarnation, HEAD/ref, path, and dirty-state drift are revalidated before commit | proven on rebased implementation `907ae9f2` |
+| Candidate choice | Pinned candidate without selection reports retain/archive/discard consequences and performs no removal | proven on rebased implementation `907ae9f2` |
+| Retain | Checkout and candidate remain; receipt truthfully reports no removal | proven, including explicit retained-operation succession, on `907ae9f2` |
+| Archive and reuse | Exact bytes and digests survive outside the checkout; a fresh process resolves the archive through a verified locator | proven on rebased implementation `907ae9f2` |
+| Discard isolation | Only the selected candidate is removed; unrelated candidates, archives, branches, and Git custody remain | proven on rebased implementation `907ae9f2` |
+| Interrupted preservation | Fault points before, during, and after publication resume the same fenced operation; partial archives never become complete | proven by interrupted archive publication and fresh terminal verification on `907ae9f2` |
+| Interrupted removal | Recovery reconciles filesystem and Git registration after intent or effect without a second removal | proven by post-removal recovery and CLI replay on `907ae9f2` |
+| Advisory authority | Status and plan remain read-only; explicit operator choices are supported and typed rather than reduced to generic denial | proven on rebased implementation `907ae9f2` |
+| Policy and documentation | Policies and command guidance describe the implemented boundary and raw-Git limitation | complete through policies, AGENTS guidance, package invocation, and repository-tooling validation at `9d34365d` |
+| Integration | Final published head passes selected gates and enters `main` through the linked PR | draft PR #182; final exact-head gates and protected integration pending |
 
-## Version 2 Checkpoint
+## Version 3 Checkpoint
 
 The source-qualified packet uses immutable per-generation effect claims rather
 than reclaimable lock files. It binds coordination and archives to the verified
@@ -168,11 +170,14 @@ archive corruption detection, discard with branch custody, malformed operation
 and effect rejection, detached worktree inspection, and fresh-process archive
 lookup are covered without using a real repository candidate or runtime.
 
-The final adversarial review of `785a20d8` found no remaining P1 blocker. PR
-#182 remains draft because P204 / PR #179 still owns the shared package,
-validation-selection, roadmap, runbook, AGENTS, and active-lane surfaces. P208
-has recorded that dependency on PR #179 and will reconcile those files only
-after P204 integrates or explicitly hands off custody.
+The final adversarial review of pre-rebase checkpoint `785a20d8` found no
+remaining P1 blocker. Its patch-equivalent rebased implementation is
+`907ae9f2`. P204 / PR #179 is integrated, and checkpoint `9d34365d` registers
+the helper as `pnpm run worktree:closeout`, adds the provider-free repository
+tooling test command, and extends the versioned selector plus stable Presubmit
+aggregate with a dedicated `Repository Tooling` job. Local focused checks are
+green. PR #182 remains draft only until the reconciled final head is published
+and exact-head forge evaluation completes.
 
 Exit requires every row complete or an explicit separately tracked deferral that
 does not weaken the issue's promised outcome. A clean worktree, copied archive,

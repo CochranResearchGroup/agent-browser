@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-16
+Updated: 2026-09-17
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -24,6 +24,24 @@ checkpoints. They do not define permanent product ownership. New substantive
 plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
+
+## P208 | Worktree Closeout And Candidate Custody
+
+State: OPEN
+
+Current state: [Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md),
+[issue #171](https://github.com/CochranResearchGroup/agent-browser/issues/171),
+and draft [PR #182](https://github.com/CochranResearchGroup/agent-browser/pull/182)
+own the `PL-PLATFORM` repair. The rebased source serializes one durable
+repository-scoped closeout operation, requires explicit retain, archive, or
+discard choices for pinned candidates, verifies external archives from a fresh
+process, and recovers interrupted archive and Git-removal effects. The merged
+P204 validation contract now includes a lightweight `Repository Tooling` lane
+for these provider-free Node contracts. Local source, concurrency, crash,
+policy, selector, and workflow checks are green; exact-head forge evaluation
+and protected integration remain. No worktree outside disposable fixtures,
+candidate, browser, provider, installed runtime, Service State, production, or
+release effect occurred.
 
 ## P204 | CI Validation Economics And Tiering
 
