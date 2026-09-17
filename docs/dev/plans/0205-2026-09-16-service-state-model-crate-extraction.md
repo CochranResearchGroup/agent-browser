@@ -1883,6 +1883,106 @@ authentication-run, challenge-task, and advisory capability-registry fields.
 Do not begin bug-fix, CI, runtime, provider, browser, install, or production
 work in that packet.
 
+## Checkpoint 31 | Final Embedded-Owner And P211 Compatibility Freeze
+
+State transition: the remaining aggregate dependencies now have one ordered
+ownership decision. P211's cold shutdown, cold install, and current-boot
+presentation requalification introduce no new Service State field, codec case,
+transition, or projection. Their provider-neutral controllers accept effects or
+explicit observation inputs and return ephemeral receipts. P211 retains those
+contracts and their adapters; P205 must preserve the existing aggregate wire,
+Lease Authority records, presentation records, and unknown-field round trip,
+but must not invent a speculative bulk-shutdown transition or P211 field.
+
+Final embedded-owner decisions:
+
+1. `BrowserCapabilityRegistry` and the exact profile-compatibility row matcher
+   move to Service Model as passive advisory data and a pure helper. Existing
+   JSON-shaped rows, permissive decoding, camelCase field names, defaults,
+   `generatedAt`, and `is_empty` behavior remain exact. CLI keeps path/body
+   validation, clocks, collection mutation, access planning, launch selection,
+   preflight, and every routing or effect decision. Canonical storage does not
+   promote the registry into operational authority.
+2. A focused new `agent-browser-authentication-control` crate becomes the
+   canonical owner of the current provider-free authentication-run domain from
+   `cli/src/native/authentication_run.rs`: stable binding, state and action
+   enums, redacted observations and receipts, response-only effect traits,
+   deterministic transition budget, replay fencing, receipt validation,
+   cancellation, and exact-target verification. It has no Service State,
+   repository, browser, credential, network, provider, transport, or platform
+   dependency.
+3. Service Model owns the durable Service authentication envelope and its pure
+   start, reservation, completion, cancellation, replay, and redacted status
+   transitions. It embeds the canonical authentication-control run and the
+   canonical challenge-consumer admission receipt. CLI retains command parsing,
+   forbidden-field checks, current principal/tab/policy joins, timestamps,
+   repository custody, credential retrieval, browser input, provider watches,
+   and effect sequencing.
+4. `agent-browser-challenge-control` remains the canonical owner of challenge
+   task requests, phases, outcomes, receipts, consumer evidence, and consumer
+   admission. Service Model owns only the durable Service challenge envelope
+   and pure envelope transitions. The existing full provider-free receipt stays
+   byte/value-compatible as opaque JSON inside that envelope because its
+   canonical receipt currently contains static profile vocabulary and is
+   serialize-only. Any authority decision must first decode the existing
+   `ChallengeConsumerEvidence` type and fail closed on malformed evidence;
+   generic JSON never grants authority. A typed full-receipt migration is not
+   admitted by P205.
+5. Lease Authority remains the direct owner of `ServicePrincipalRegistry`,
+   `LeaseAuthorityState`, and `RuntimeOwnerRegistry`. Existing CLI modules may
+   re-export those types during cutover, but the final aggregate imports their
+   canonical owners directly.
+
+Dependency direction after the remaining packets:
+
+```text
+agent-browser-authentication-control    agent-browser-challenge-control
+                 \                         /
+                  agent-browser-service-model
+                              ^
+                              |
+                         CLI adapters
+```
+
+Service Model's dependency allowance expands only for the two provider-free
+control crates. Neither control crate may import Service Model or the CLI.
+Challenge Control's existing downward dependency on Desktop Services remains
+unchanged and does not grant Service Model any desktop effect authority.
+
+Compatibility and deletion gates:
+
+- require exactly one canonical definition for every moved record, enum,
+  constant, and transition; reject retained CLI definitions after each packet;
+- require direct canonical types in `ServiceState` and forbid CLI, repository,
+  filesystem, process, clock, browser, provider, credential, network, and
+  transport imports from model/control modules;
+- retain representative old Service State JSON for empty and populated
+  capability, authentication-run, and challenge-task maps, including unknown
+  top-level field round trips and absent-empty serialization;
+- retain exact schema strings, enum casing, field casing and order where hashed,
+  unknown-field policy, defaults, stable IDs and hashes, replay/error ordering,
+  redaction, transition budgets, and consumer-admission failure semantics; and
+- after P211 rebases onto the integrated P205 result, compile its three pure
+  controller modules unchanged and retain the stale-owner shutdown-close
+  regression. P205 adds no P211-specific model surface.
+
+Delegation and model-choice receipt: `/root/p205_p211_compatibility` used
+requested `gpt-5.6-sol` high routing for the cross-plan compatibility audit and
+found no P205 blocker. `/root/p205_auth_challenge_ownership` used requested
+`gpt-5.6-terra` high routing for the canonical-owner and dependency decision.
+The primary performed the deterministic capability and remaining-field
+inventory locally after the runtime rejected a third worker thread. Effective
+runtime model and effort metadata were not independently exposed.
+
+Progress classification: this is blocker reduction and closes the last
+ownership ambiguity before the aggregate move. Implementation order is the
+advisory capability record, authentication-control domain, Service
+authentication envelope, Service challenge envelope, then the canonical
+aggregate/codec and remaining pure decisions. The next packet is only the
+capability record and matcher. Do not combine it with authentication,
+challenge, aggregate, bug-fix, CI, runtime, provider, browser, install, or
+production work.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
