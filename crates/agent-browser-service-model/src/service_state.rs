@@ -829,6 +829,41 @@ impl ServiceState {
         Ok(transition)
     }
 
+    /// Revoke the effect-capable session owner after the adapter's process-exit
+    /// and authentication checks. Errors become absence, but ordered kernel
+    /// mutations remain retained, including a revocation preceding lifecycle failure.
+    pub fn revoke_process_exited_session_owner(
+        &mut self,
+        session_id: &str,
+    ) -> Option<agent_browser_lease_authority::ProfileOwner> {
+        let binding = self
+            .runtime_owner_registry
+            .binding_for_session(session_id)
+            .ok()
+            .flatten()?;
+        if !binding.effect_capable {
+            return None;
+        }
+        let transition = self
+            .runtime_owner_registry
+            .apply_lifecycle_transition(
+                agent_browser_lease_authority::RuntimeLifecycleIntent::RevokeLegacyOwner {
+                    profile_identity_digest: binding.claim.profile_identity_digest,
+                    logical_browser_id: binding.claim.logical_browser_id,
+                    expected_daemon_session_route: binding.claim.daemon_session_route,
+                    expected_owner_id: binding.claim.owner_id,
+                    expected_owner_generation: binding.claim.owner_generation,
+                },
+            )
+            .ok()?;
+        let agent_browser_lease_authority::RuntimeLifecycleTransition::LegacyOwnerRevoked(owner) =
+            transition
+        else {
+            return None;
+        };
+        Some(owner)
+    }
+
     /// Summarize retained lifecycle evidence without observing the runtime.
     pub fn runtime_lifecycle_authority_summary(&self) -> RuntimeLifecycleAuthoritySummary {
         let mut lifecycle_state_counts = BTreeMap::new();
@@ -4099,6 +4134,262 @@ mod tests {
                     Some(digest("package-launch"))
                 );
                 assert_eq!(state.state_revision(), 43);
+            }
+        }
+    }
+
+    mod process_exit_owner_revocation {
+        use super::*;
+        use agent_browser_lease_authority::{
+            BrowserAdoptionMode, CleanupObligationState, OwnerTransferRequest, ProfileOwner,
+            ProfileOwnerState, RuntimeLaneLifecycleState, RuntimeLifecycleIntent,
+            RuntimeLifecycleRecord, RuntimeLifecycleTransition,
+        };
+
+        fn owner() -> ProfileOwner {
+            ProfileOwner {
+                owner_id: "process-exit-owner".into(),
+                profile_identity_digest: "a".repeat(64),
+                state: ProfileOwnerState::Ready,
+                owner_generation: 7,
+                browser_id: "session:alias".into(),
+                daemon_session_route: "current-route".into(),
+                process_instance_digest: "b".repeat(64),
+                browser_family: "chrome".into(),
+                cdp_endpoint_identity_digest: "c".repeat(64),
+                target_set_digest: "d".repeat(64),
+                pending_transfer: None,
+                last_transition: None,
+            }
+        }
+
+        fn fixture(
+            owner: ProfileOwner,
+            records: BTreeMap<String, RuntimeLifecycleRecord>,
+            revision: u64,
+        ) -> ServiceState {
+            let digest = owner.profile_identity_digest.clone();
+            let generation = owner.owner_generation;
+            // Retained malformed evidence is deliberately accepted by the wire
+            // fixture so failure-path mutation semantics can be witnessed.
+            serde_json::from_value(json!({
+                "stateRevision": 43,
+                "futureProcessExitEvidence": {"retain": true},
+                "profiles": {"unrelated": {"id": "unrelated", "userDataDir": "untouched"}},
+                "tabs": {"unrelated-tab": {"id": "unrelated-tab"}},
+                "runtimeOwnerRegistry": {
+                    "revision": revision,
+                    "owners": BTreeMap::from([(digest.clone(), owner)]),
+                    "principalBindings": BTreeMap::from([(digest.clone(), json!({
+                        "principalId": "principal", "profileId": "profile",
+                        "profileIdentityDigest": digest, "capabilityId": "capability",
+                        "provenance": "registered_capability", "ownerGeneration": generation
+                    }))]),
+                    "lifecycleRecords": records
+                }
+            }))
+            .unwrap()
+        }
+
+        fn revoke_intent(owner: &ProfileOwner) -> RuntimeLifecycleIntent {
+            RuntimeLifecycleIntent::RevokeLegacyOwner {
+                profile_identity_digest: owner.profile_identity_digest.clone(),
+                logical_browser_id: owner.browser_id.clone(),
+                expected_daemon_session_route: owner.daemon_session_route.clone(),
+                expected_owner_id: owner.owner_id.clone(),
+                expected_owner_generation: owner.owner_generation,
+            }
+        }
+
+        #[test]
+        fn success_matches_raw_kernel_without_session_and_repeat_is_inert() {
+            for revision in [19, u64::MAX] {
+                let owner = owner();
+                let mut state = fixture(owner.clone(), BTreeMap::new(), revision);
+                let mut expected = state.clone();
+                let bindings = state.runtime_owner_registry.principal_bindings().clone();
+                let RuntimeLifecycleTransition::LegacyOwnerRevoked(expected_owner) = expected
+                    .runtime_owner_registry
+                    .apply_lifecycle_transition(revoke_intent(&owner))
+                    .unwrap()
+                else {
+                    panic!("exact revocation outcome expected")
+                };
+                assert!(!state.sessions.contains_key("current-route"));
+                assert_eq!(
+                    state.revoke_process_exited_session_owner("current-route"),
+                    Some(expected_owner)
+                );
+                // A caller's subsequent missing-session join must not undo revocation.
+                assert!(!state.sessions.contains_key("current-route"));
+                assert_eq!(state, expected);
+                assert_eq!(state.state_revision(), 43);
+                assert_eq!(
+                    state.runtime_owner_registry.revision(),
+                    revision.saturating_add(2)
+                );
+                assert_eq!(state.runtime_owner_registry.principal_bindings(), &bindings);
+                let lifecycle =
+                    &state.runtime_owner_registry.lifecycle_records()[&owner.browser_id];
+                assert_eq!(
+                    lifecycle.lifecycle_state,
+                    RuntimeLaneLifecycleState::Retained
+                );
+                assert_eq!(
+                    lifecycle.cleanup_obligation_state,
+                    CleanupObligationState::Owned
+                );
+                assert_eq!(lifecycle.owner_generation, 8);
+                assert!(state
+                    .revoke_process_exited_session_owner("current-route")
+                    .is_none());
+                assert_eq!(state, expected);
+            }
+        }
+
+        #[test]
+        fn missing_ambiguous_and_observation_only_bindings_are_inert() {
+            let owner = owner();
+            let mut state = fixture(owner.clone(), BTreeMap::new(), 19);
+            for route in ["absent-route", "alias"] {
+                let before = state.clone();
+                assert!(state.revoke_process_exited_session_owner(route).is_none());
+                assert_eq!(state, before);
+            }
+            let mut other = owner;
+            other.owner_id = "second-owner".into();
+            other.profile_identity_digest = "e".repeat(64);
+            other.browser_id = "second-browser".into();
+            state
+                .runtime_owner_registry
+                .register_current_owner(other)
+                .unwrap();
+            assert!(state
+                .runtime_owner_registry
+                .binding_for_session("current-route")
+                .is_err());
+            let before = state.clone();
+            assert!(state
+                .revoke_process_exited_session_owner("current-route")
+                .is_none());
+            assert_eq!(state, before);
+        }
+
+        #[test]
+        fn invalid_evidence_exhausted_generation_and_pending_transfer_are_inert() {
+            for invalid in [true, false] {
+                let mut owner = owner();
+                if invalid {
+                    owner.profile_identity_digest = "malformed-retained-digest".into();
+                } else {
+                    owner.owner_generation = u64::MAX;
+                }
+                let mut state = fixture(owner.clone(), BTreeMap::new(), 19);
+                let before = state.clone();
+                let mut raw = state.runtime_owner_registry.clone();
+                assert!(raw
+                    .apply_lifecycle_transition(revoke_intent(&owner))
+                    .is_err());
+                assert_eq!(raw, state.runtime_owner_registry);
+                assert!(state
+                    .revoke_process_exited_session_owner("current-route")
+                    .is_none());
+                assert_eq!(state, before);
+            }
+            let owner = owner();
+            let mut state = fixture(owner.clone(), BTreeMap::new(), 19);
+            state
+                .runtime_owner_registry
+                .begin_transfer(OwnerTransferRequest {
+                    mode: BrowserAdoptionMode::CooperativeTransfer,
+                    logical_browser_id: owner.browser_id.clone(),
+                    profile_identity_digest: owner.profile_identity_digest.clone(),
+                    expected_owner_id: Some(owner.owner_id.clone()),
+                    expected_owner_generation: owner.owner_generation,
+                    candidate_owner_id: "candidate".into(),
+                    candidate_daemon_session_route: "candidate-route".into(),
+                    process_instance_digest: owner.process_instance_digest.clone(),
+                    browser_family: owner.browser_family.clone(),
+                    cdp_endpoint_identity_digest: owner.cdp_endpoint_identity_digest.clone(),
+                    target_set_digest: owner.target_set_digest.clone(),
+                    selected_target_identity_digest: "e".repeat(64),
+                    transfer_nonce_digest: "f".repeat(64),
+                })
+                .unwrap();
+            let before = state.clone();
+            assert!(state
+                .revoke_process_exited_session_owner("current-route")
+                .is_none());
+            assert_eq!(state, before);
+        }
+
+        #[test]
+        fn lifecycle_failure_retains_revocation_and_historical_row_removal() {
+            for ambiguous in [false, true] {
+                for revision in [19, u64::MAX] {
+                    let owner = owner();
+                    let record = RuntimeLifecycleRecord {
+                        logical_browser_id: owner.browser_id.clone(),
+                        profile_identity_digest: if ambiguous {
+                            owner.profile_identity_digest.clone()
+                        } else {
+                            "e".repeat(64)
+                        },
+                        owner_generation: owner.owner_generation,
+                        terminal_evidence: vec!["retained-evidence".into()],
+                        ..RuntimeLifecycleRecord::default()
+                    };
+                    let mut records = BTreeMap::from([("historical-key".into(), record.clone())]);
+                    if ambiguous {
+                        records.insert(owner.browser_id.clone(), record);
+                    }
+                    let mut state = fixture(owner.clone(), records, revision);
+                    let before = state.clone();
+                    let mut expected = state.clone();
+                    let error = expected
+                        .runtime_owner_registry
+                        .apply_lifecycle_transition(revoke_intent(&owner))
+                        .unwrap_err();
+                    assert_eq!(
+                        error,
+                        if ambiguous {
+                            "runtime_lifecycle_record_ambiguous"
+                        } else {
+                            "runtime_lifecycle_profile_identity_mismatch"
+                        }
+                    );
+                    assert!(state
+                        .revoke_process_exited_session_owner("current-route")
+                        .is_none());
+                    assert_eq!(state, expected);
+                    assert_ne!(state.runtime_owner_registry, before.runtime_owner_registry);
+                    let revoked = state
+                        .runtime_owner_registry
+                        .owner(&owner.profile_identity_digest)
+                        .unwrap();
+                    assert_eq!(revoked.state, ProfileOwnerState::Orphaned);
+                    assert_eq!(revoked.owner_generation, 8);
+                    assert_eq!(
+                        state.runtime_owner_registry.revision(),
+                        revision.saturating_add(1)
+                    );
+                    assert_eq!(
+                        state
+                            .runtime_owner_registry
+                            .lifecycle_records()
+                            .contains_key("historical-key"),
+                        ambiguous
+                    );
+                    assert_eq!(
+                        state.runtime_owner_registry.principal_bindings(),
+                        before.runtime_owner_registry.principal_bindings()
+                    );
+                    assert_eq!(state.state_revision(), 43);
+                    assert!(state
+                        .revoke_process_exited_session_owner("current-route")
+                        .is_none());
+                    assert_eq!(state, expected);
+                }
             }
         }
     }

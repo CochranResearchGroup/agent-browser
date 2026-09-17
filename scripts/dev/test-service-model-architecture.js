@@ -151,6 +151,37 @@ impl ServiceState {
     self.runtime_owner_registry = staged;
     Ok(transition)
   }
+  pub fn revoke_process_exited_session_owner(
+    &mut self,
+    session_id: &str,
+  ) -> Option<agent_browser_lease_authority::ProfileOwner> {
+    let binding = self
+      .runtime_owner_registry
+      .binding_for_session(session_id)
+      .ok()
+      .flatten()?;
+    if !binding.effect_capable {
+      return None;
+    }
+    let transition = self
+      .runtime_owner_registry
+      .apply_lifecycle_transition(
+        agent_browser_lease_authority::RuntimeLifecycleIntent::RevokeLegacyOwner {
+          profile_identity_digest: binding.claim.profile_identity_digest,
+          logical_browser_id: binding.claim.logical_browser_id,
+          expected_daemon_session_route: binding.claim.daemon_session_route,
+          expected_owner_id: binding.claim.owner_id,
+          expected_owner_generation: binding.claim.owner_generation,
+        },
+      )
+      .ok()?;
+    let agent_browser_lease_authority::RuntimeLifecycleTransition::LegacyOwnerRevoked(owner) =
+      transition
+    else {
+      return None;
+    };
+    Some(owner)
+  }
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -380,12 +411,25 @@ impl Authority {
   }
 }
 `;
+const validControlPlane = `
+fn persist_process_exited_browser_health_in_repository() {
+  record_browser_health_changed_event(service_state, id, previous, browser);
+  let revoked_owner_and_session = authenticated_session_work_authority()
+    .and_then(|_| {
+      let revoked_owner = service_state.revoke_process_exited_session_owner(&state.session_id)?;
+      let session = service_state.sessions.get(&state.session_id).cloned()?;
+      Some((revoked_owner, session))
+    });
+  remove_browser_operational_record(service_state, id, session_id);
+}
+`;
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
   cliTest = '', principalCli = '', serviceStore = '',
   projectionCli = '', runtimeOwnerProjection = validRuntimeOwnerProjection,
   runtimeLifecycle = validRuntimeLifecycle,
+  controlPlane = validControlPlane,
   principalContinuity = validPrincipalContinuity,
   serviceModel = 'pub use agent_browser_service_model::{ServiceState};\n',
   serviceState = validServiceState, authenticationManifest = validAuthenticationManifest,
@@ -423,6 +467,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'cli/src/native/service_store.rs'), serviceStore);
   writeFileSync(join(root, 'cli/src/install.rs'), projectionCli);
   writeFileSync(join(root, 'cli/src/native/runtime_lifecycle.rs'), runtimeLifecycle);
+  writeFileSync(join(root, 'cli/src/native/control_plane.rs'), controlPlane);
   writeFileSync(join(root, 'cli/src/native/service_model_tests.rs'), cliTest);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -635,8 +680,8 @@ for (const [name, mutation] of [
     '    let mut staged = self.runtime_owner_registry.clone();\n    let transition = staged.apply_lifecycle_transition(intent).map_err(|error| error)?;\n    self.profiles\n',
   ) }],
   ['atomic profile-sync lifecycle result filtering', { serviceState: validServiceState.replace(
-    '    self.runtime_owner_registry = staged;\n    Ok(transition)\n  }\n  pub fn service_authentication_run',
-    '    self.runtime_owner_registry = staged;\n    match transition { _ => Err("filtered".into()) }\n  }\n  pub fn service_authentication_run',
+    '    self.runtime_owner_registry = staged;\n    Ok(transition)\n  }\n  pub fn revoke_process_exited_session_owner',
+    '    self.runtime_owner_registry = staged;\n    match transition { _ => Err("filtered".into()) }\n  }\n  pub fn revoke_process_exited_session_owner',
   ) }],
   ['terminal profile-sync CLI direct registry access', { runtimeLifecycle: validRuntimeLifecycle.replace(
     '      let profile = state.profiles.get(profile_id).ok_or_else(error)?;',
@@ -661,6 +706,36 @@ for (const [name, mutation] of [
     '    let user_data_dir = profile_root.to_str().ok_or_else(error)?.to_string();\n    self.repository.mutate(|state| {',
     '    self.repository.mutate(|state| {\n      let user_data_dir = profile_root.to_str().ok_or_else(error)?.to_string();',
   ) }],
+  ['missing process-exit owner revocation method', { serviceState: validServiceState.replace(
+    /  pub fn revoke_process_exited_session_owner\([\s\S]*?\n  \}\n/,
+    '',
+  ) }],
+  ['process-exit owner revocation stages registry', { serviceState: validServiceState.replace(
+    '    let binding = self\n      .runtime_owner_registry\n      .binding_for_session(session_id)',
+    '    let mut staged = self.runtime_owner_registry.clone();\n    let binding = staged\n      .binding_for_session(session_id)',
+  ) }],
+  ['process-exit owner revocation accepts generic intent', { serviceState: validServiceState.replace(
+    '    session_id: &str,\n  ) -> Option<agent_browser_lease_authority::ProfileOwner> {',
+    '    session_id: &str,\n    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,\n  ) -> Option<agent_browser_lease_authority::ProfileOwner> {',
+  ) }],
+  ['process-exit CLI direct registry access', { controlPlane: validControlPlane.replace(
+    '      let revoked_owner = service_state.revoke_process_exited_session_owner(&state.session_id)?;',
+    '      let _ = service_state.runtime_owner_registry.binding_for_session(&state.session_id);\n      let revoked_owner = service_state.revoke_process_exited_session_owner(&state.session_id)?;',
+  ) }],
+  ['process-exit CLI session lookup before revocation', { controlPlane: validControlPlane.replace(
+    '      let revoked_owner = service_state.revoke_process_exited_session_owner(&state.session_id)?;\n      let session = service_state.sessions.get(&state.session_id).cloned()?;',
+    '      let session = service_state.sessions.get(&state.session_id).cloned()?;\n      let revoked_owner = service_state.revoke_process_exited_session_owner(&state.session_id)?;',
+  ) }],
+  ['process-exit CLI health event after revocation', { controlPlane: validControlPlane.replace(
+    '  record_browser_health_changed_event(service_state, id, previous, browser);\n',
+    '',
+  ).replace(
+    '  remove_browser_operational_record(service_state, id, session_id);',
+    '  record_browser_health_changed_event(service_state, id, previous, browser);\n  remove_browser_operational_record(service_state, id, session_id);',
+  ) }],
+  ['superseded CLI legacy owner revocation wrapper', { runtimeLifecycle: `${validRuntimeLifecycle}
+pub(crate) fn revoke_legacy_owner_in_registry() {}
+` }],
   ['ordinary lifecycle transition direct field access', {
     runtimeLifecycle: `
 impl Authority {

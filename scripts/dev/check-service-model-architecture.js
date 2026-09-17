@@ -201,6 +201,7 @@ const RUNTIME_OWNER_PROJECTION_METHODS = [
 const ATOMIC_RUNTIME_LIFECYCLE_METHOD = 'apply_runtime_lifecycle_transition_atomically';
 const ATOMIC_PROFILE_SYNC_LIFECYCLE_METHOD =
   'apply_runtime_lifecycle_transition_with_profile_sync_atomically';
+const PROCESS_EXIT_OWNER_REVOCATION_METHOD = 'revoke_process_exited_session_owner';
 
 const RUNTIME_OWNER_PROJECTION_CLI_FILES = [
   'cli/src/install.rs',
@@ -774,6 +775,8 @@ function check(root = repoRoot) {
     'cli/src/native/service_store.rs')));
   const cliRuntimeLifecycle = withoutCommentsAndStrings(withoutCfgTestItems(read(root,
     'cli/src/native/runtime_lifecycle.rs')));
+  const cliControlPlaneSource = withoutCfgTestItems(read(root,
+    'cli/src/native/control_plane.rs'));
   const cliRuntimeOwnerProjectionSources = RUNTIME_OWNER_PROJECTION_CLI_FILES.map((path) => ({
     path,
     source: withoutCommentsAndStrings(withoutCfgTestItems(read(root, path))),
@@ -1171,6 +1174,84 @@ function check(root = repoRoot) {
       && !/\.\s*user_data_dir\s*=/.test(terminalProfileSyncTransition)
       && !/\bapply_transition\s*\(/.test(terminalProfileSyncTransition),
     'CLI terminal profile-sync transition must not retain direct registry or profile-path mutation',
+  );
+  const processExitOwnerRevocationMethod = rustPublicFunctionDefinition(
+    serviceStateCode,
+    PROCESS_EXIT_OWNER_REVOCATION_METHOD,
+  );
+  requireCondition(
+    compactRust(processExitOwnerRevocationMethod) === compactRust(`
+      pub fn revoke_process_exited_session_owner(
+        &mut self,
+        session_id: &str,
+      ) -> Option<agent_browser_lease_authority::ProfileOwner> {
+        let binding = self
+          .runtime_owner_registry
+          .binding_for_session(session_id)
+          .ok()
+          .flatten()?;
+        if !binding.effect_capable {
+          return None;
+        }
+        let transition = self
+          .runtime_owner_registry
+          .apply_lifecycle_transition(
+            agent_browser_lease_authority::RuntimeLifecycleIntent::RevokeLegacyOwner {
+              profile_identity_digest: binding.claim.profile_identity_digest,
+              logical_browser_id: binding.claim.logical_browser_id,
+              expected_daemon_session_route: binding.claim.daemon_session_route,
+              expected_owner_id: binding.claim.owner_id,
+              expected_owner_generation: binding.claim.owner_generation,
+            },
+          )
+          .ok()?;
+        let agent_browser_lease_authority::RuntimeLifecycleTransition::LegacyOwnerRevoked(owner) =
+          transition
+        else {
+          return None;
+        };
+        Some(owner)
+      }
+    `),
+    'process-exit owner revocation must preserve its exact direct partial-mutation contract',
+  );
+  const processExitPersistence = withoutCommentsAndStrings(
+    rustNamedFunctionDefinition(
+      cliControlPlaneSource,
+      'persist_process_exited_browser_health_in_repository',
+    ),
+  );
+  const compactProcessExitPersistence = compactRust(processExitPersistence);
+  const healthEventIndex = compactProcessExitPersistence.indexOf(
+    'record_browser_health_changed_event',
+  );
+  const authenticationIndex = compactProcessExitPersistence.indexOf(
+    'authenticated_session_work_authority',
+  );
+  const revocationIndex = compactProcessExitPersistence.indexOf(
+    PROCESS_EXIT_OWNER_REVOCATION_METHOD,
+  );
+  const sessionLookupIndex = compactProcessExitPersistence.indexOf(
+    '.sessions.get(&state.session_id)',
+  );
+  const cleanupIndex = compactProcessExitPersistence.indexOf(
+    'remove_browser_operational_record',
+  );
+  requireCondition(
+    healthEventIndex >= 0
+      && authenticationIndex > healthEventIndex
+      && revocationIndex > authenticationIndex
+      && sessionLookupIndex > revocationIndex
+      && cleanupIndex > sessionLookupIndex,
+    'CLI process-exit persistence must preserve health, authentication, revocation, session lookup, cleanup order',
+  );
+  requireCondition(
+    !/\.\s*runtime_owner_registry\b/.test(processExitPersistence),
+    'CLI process-exit persistence must not access ServiceState.runtime_owner_registry directly',
+  );
+  requireCondition(
+    !/\bfn\s+revoke_legacy_owner_in_registry\b/.test(cliRuntimeLifecycle),
+    'CLI must not retain the superseded legacy owner revocation wrapper',
   );
   requireCondition(
     !/\bRuntimeOwnerPersistenceSnapshot\b/.test(runtimeOwnerProjectionSource),

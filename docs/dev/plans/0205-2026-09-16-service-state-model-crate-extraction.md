@@ -4113,6 +4113,70 @@ does not itself advance a P4 implementation criterion. Exit requires exact
 retained partial-mutation behavior, the one-function CLI cutover, the malformed-
 lifecycle cleanup witness, and a targeted architecture guard.
 
+## Checkpoint 61 | Process-Exit Legacy Revocation Accepted
+
+State transition: Service Model now owns the purpose-specific process-exit
+session-owner revocation. The method resolves the exact effect-capable session
+binding and applies `RevokeLegacyOwner` directly to the retained registry.
+Binding and kernel errors become absence without rollback, and only the exact
+legacy-owner transition returns an owner. The control-plane adapter no longer
+reads or mutates the registry directly. The two frozen production expressions
+are removed, leaving 171 classified production expressions.
+
+Health event construction and recording, authentication, later session lookup,
+display orphaning, operational browser/tab/session cleanup, optional registered-
+session restoration, observations, repository custody, and derived-view
+refresh remain CLI responsibilities in their prior order. A lifecycle error
+after owner revocation still retains the orphaned owner, advanced generation,
+and registry revision while returning absence; cleanup still commits. A later
+missing-session join likewise cannot undo revocation. The now-unused CLI
+`revoke_legacy_owner_in_registry` wrapper had no remaining caller and was
+deleted rather than retained as a second transition path.
+
+Acceptance evidence:
+
+- all 216 Service Model unit tests and fourteen integration tests pass,
+  including four new revocation tests covering raw-kernel success parity,
+  session-record independence, inert repeat, missing and ambiguous bindings,
+  observation-only authority, invalid evidence, pending transfer, generation
+  exhaustion, ordinary and maximum registry revision, retained ambiguity and
+  historical-row-removal failures, principal bindings, unrelated aggregate
+  state, and envelope revision;
+- all sixteen focused `process_exit` CLI tests pass, including the three prior
+  process-exited health witnesses and the new malformed-lifecycle case proving
+  retained owner revocation plus committed health, browser, tab, and session
+  cleanup;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, expanded mutation fixtures, and
+  changed-surface selector readback pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+The architecture contract exact-matches the nontransactional aggregate method,
+including direct retained-registry mutation and absence mapping. It brace-
+extracts the process-exit adapter before string stripping so unrelated Rust
+lifetime syntax cannot hide the target function, requires health event,
+authentication, aggregate revocation, later session lookup, and cleanup order,
+rejects direct registry access, and rejects reintroduction of the superseded
+CLI wrapper. Mutation fixtures cover staging, generic intent expansion, direct
+CLI registry access, early session lookup, late health event, and wrapper
+reintroduction. The primary inspected and reconciled the complete candidate;
+no second broad review or rework loop was opened after the cumulative allowance
+used at Checkpoint 57.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route for the nontransactional aggregate
+method and four provider-free tests. `/root/p205_receipt_cli_audit` used the
+workhorse `gpt-5.6-sol` high route for the two-access adapter cutover, shared
+registered-session fixture, and malformed-lifecycle witness. The primary
+removed the superseded wrapper, implemented the architecture contract, and ran
+all local acceptance gates.
+
+Acceptance state and progress classification: process-exit legacy revocation
+closure is accepted and is outcome progress toward P4 field privacy. The next
+bounded outcome must come from the remaining classified surface without
+combining atomic, retained-partial, sequential, and effect-separated semantics.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -4120,9 +4184,9 @@ lifecycle cleanup witness, and a targeted architecture guard.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | canonical aggregate and Service Principal registry boundary accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections, ordinary atomic runtime lifecycle transition, and terminal profile-sync cross-field transition accepted; remaining partial transition closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, exact receipt-map closure, Service Principal registry closure, Principal Continuity kernel, runtime-owner persistence boundary, immutable runtime-owner projections, ordinary atomic runtime lifecycle transition, terminal profile-sync cross-field transition, and process-exit partial legacy revocation accepted; remaining transition closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | terminal replacement profile synchronization accepted through Checkpoint 59 |
+| Focused correctness | crate tests and affected CLI adapter tests | process-exit legacy revocation accepted through Checkpoint 61 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

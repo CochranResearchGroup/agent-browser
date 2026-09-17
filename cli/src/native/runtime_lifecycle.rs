@@ -988,32 +988,6 @@ pub(crate) fn complete_reconciled_abandoned_transfer_lane(
     )
 }
 
-/// Revoke one exact ready owner inside an already locked Service State
-/// mutation while retaining lifecycle cleanup accountability.
-pub(crate) fn revoke_legacy_owner_in_registry(
-    registry: &mut RuntimeOwnerRegistry,
-    profile_identity_digest: String,
-    logical_browser_id: String,
-    expected_daemon_session_route: String,
-    expected_owner_id: String,
-    expected_owner_generation: u64,
-) -> Result<ProfileOwner, String> {
-    let transition = apply_transition(
-        registry,
-        RuntimeLifecycleIntent::RevokeLegacyOwner {
-            profile_identity_digest,
-            logical_browser_id,
-            expected_daemon_session_route,
-            expected_owner_id,
-            expected_owner_generation,
-        },
-    )?;
-    let RuntimeLifecycleTransition::LegacyOwnerRevoked(owner) = transition else {
-        return Err("runtime_lifecycle_legacy_revoke_outcome_mismatch".to_string());
-    };
-    Ok(owner)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
