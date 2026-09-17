@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 4
+Plan version: 5
 
-State: SOURCE ACCEPTED | INTEGRATION READY
+State: CLOSED
 
 Consolidation: required
 
@@ -47,9 +47,9 @@ merged through PR #188 as canonical `main@fb616aee`. The existing clean
 challenge worktree is assigned to P210 at that exact baseline, the proposed
 adapter-crate path has no competing writer, and the baseline selector reports
 no changed files. Source checkpoint `0729b63d` implements the provider-free
-adapter and complete fixture matrix. GitHub CI is operator-disabled and no
-workflow will be restored or dispatched for this packet. Branch publication
-and normal protected integration remain.
+adapter and complete fixture matrix. Exact head `343a61b9` merged through PR
+#192 as `06972a5e`. GitHub CI remained operator-disabled and no workflow was
+restored or dispatched. P210 is closed; P212 owns the next platform dependency.
 
 ## Dependency And Admission Gate
 

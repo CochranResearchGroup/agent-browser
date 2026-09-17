@@ -317,6 +317,18 @@ fixtures. All 52 challenge-control tests, both architecture guards, workspace
 formatting and strict workspace Clippy pass. Review repaired exact
 artifact/request expiry binding and delayed provider receipt-time
 adjudication. Publication and protected integration remain.
+P210 exact head `343a61b9` merged through PR #192 as `06972a5e`. The next
+platform dependency is admitted through
+[Plan 0212](docs/dev/plans/0212-2026-09-17-desktop-candidate-intent-contract.md)
+on `platform/p212-desktop-candidate-intent-contract`. P212 freezes an
+effect-free candidate geometry and controller-authority admission contract in
+desktop services without importing challenge types or emitting input. P211's
+active cold-upgrade source is disjoint; shared planning projections reconcile
+at integration. Source checkpoint `00f41715` implements exact observation,
+ordered selection, physical-pixel geometry, authority and checked-budget
+binding. All 12 desktop-services tests, the strengthened architecture guard,
+workspace formatting and strict workspace Clippy pass locally. Publication and
+protected integration remain. GitHub CI remains operator-disabled.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
