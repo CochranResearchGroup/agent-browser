@@ -552,7 +552,7 @@ impl ServiceStatusProjector {
                     super::presentation_capacity::projection_with_service_state(
                         capacity,
                         super::presentation_capacity::PressureAdmission::admit(
-                            capacity.config.hard_maximum,
+                            capacity.config().hard_maximum,
                         ),
                         Some(&authority_state),
                     )

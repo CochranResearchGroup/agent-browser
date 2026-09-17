@@ -426,7 +426,7 @@ impl ServiceStateStore for JsonServiceStateStore {
             state
                 .presentation_capacity
                 .get_or_insert_with(Default::default)
-                .admission_error = Some(error);
+                .record_inventory_failure(error);
         }
         state.refresh_derived_views();
         Ok(state)
@@ -2272,8 +2272,8 @@ mod tests {
     #[test]
     fn unavailable_production_inventory_preserves_readable_state_and_fences_capacity() {
         use crate::native::presentation_capacity::{
-            CapacityLimitingResource, PresentationCapacityAuthority, PresentationRequest,
-            PresentationSlot, PresentationSlotState, PressureAdmission,
+            CapacityLimitingResource, PresentationCapacityAuthority, PresentationCapacityConfig,
+            PresentationRequest, PresentationSlot, PresentationSlotState, PressureAdmission,
         };
         let guard = EnvGuard::new(&[
             "AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH",
@@ -2292,10 +2292,19 @@ mod tests {
         slot.state = PresentationSlotState::Active;
         slot.browser_id = Some("incumbent".into());
         let mut initial = ServiceState::default();
-        initial.presentation_capacity = Some(PresentationCapacityAuthority {
-            slots: vec![slot.clone()],
-            ..Default::default()
-        });
+        initial.presentation_capacity = Some(
+            PresentationCapacityAuthority::new(
+                PresentationCapacityConfig {
+                    warm_minimum: 0,
+                    hard_maximum: 1,
+                    human_priority_reserve: 0,
+                    recovery_reserve: 0,
+                    max_queue_depth: 64,
+                },
+                vec![slot.clone()],
+            )
+            .unwrap(),
+        );
         let bytes = serde_json::to_vec(&initial).unwrap();
         fs::write(&path, &bytes).unwrap();
         let store = JsonServiceStateStore::new(&path);
@@ -2308,8 +2317,8 @@ mod tests {
             "read must not write custody"
         );
         let mut capacity = state.presentation_capacity.clone().unwrap();
-        assert!(capacity.admission_error.is_some());
-        assert_eq!(capacity.slots, vec![slot]);
+        assert!(capacity.admission_error().is_some());
+        assert_eq!(capacity.slots(), [slot]);
         assert_eq!(
             crate::native::presentation_capacity::reconcile_authoritative_bindings(
                 &mut capacity,

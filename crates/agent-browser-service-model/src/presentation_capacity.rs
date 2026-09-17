@@ -328,11 +328,11 @@ pub struct PresentationCapacityProjection {
 pub struct PresentationCapacityAuthority {
     /// Failed inventory admission disables new presentation effects, not state reads.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub admission_error: Option<String>,
-    pub config: PresentationCapacityConfig,
-    pub slots: Vec<PresentationSlot>,
-    pub queued_requests: Vec<PresentationRequest>,
-    pub queue_clock: u64,
+    admission_error: Option<String>,
+    config: PresentationCapacityConfig,
+    slots: Vec<PresentationSlot>,
+    queued_requests: Vec<PresentationRequest>,
+    queue_clock: u64,
 }
 
 impl Default for PresentationCapacityAuthority {

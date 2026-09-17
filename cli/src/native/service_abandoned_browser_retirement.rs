@@ -737,18 +737,18 @@ pub(crate) fn finalize_abandoned_browser_retirement(
             },
         )));
     }
-    if state
-        .presentation_capacity
-        .as_ref()
-        .is_some_and(|capacity| {
-            capacity.slots.iter().any(|slot| {
-                slot.browser_id.as_deref() == Some(plan.browser_id.as_str())
-                    && slot.lease_request_id.is_some()
-            })
-        })
-    {
-        return Err(RetirementRecourse::TerminalCompareAndSwapFailed);
-    }
+    let prepared_presentation_capacity = match state.presentation_capacity.as_ref() {
+        Some(capacity) => {
+            let mut prepared = capacity.clone();
+            match prepared.retire_browser(&plan.browser_id) {
+                Ok(()) => Some(prepared),
+                Err(
+                    agent_browser_service_model::PresentationRetirementConflict::ActivePresentationLease,
+                ) => return Err(RetirementRecourse::TerminalCompareAndSwapFailed),
+            }
+        }
+        None => None,
+    };
     let mut registry = state.runtime_owner_registry.clone();
     super::runtime_lifecycle::complete_reconciled_close(
         &mut registry,
@@ -843,16 +843,7 @@ pub(crate) fn finalize_abandoned_browser_retirement(
             entry.state = "ready".to_string();
         }
     }
-    if let Some(capacity) = state.presentation_capacity.as_mut() {
-        for slot in &mut capacity.slots {
-            if slot.browser_id.as_deref() == Some(plan.browser_id.as_str()) {
-                slot.browser_id = None;
-                slot.state = super::presentation_capacity::PresentationSlotState::WarmIdle;
-                slot.lease_priority = None;
-                slot.restoration_pending = false;
-            }
-        }
-    }
+    state.presentation_capacity = prepared_presentation_capacity;
     state
         .abandoned_browser_retirements
         .get_mut(&plan.plan_id)
@@ -890,7 +881,8 @@ mod tests {
     };
     use super::*;
     use crate::native::presentation_capacity::{
-        PresentationCapacityAuthority, PresentationSlot, PresentationSlotState,
+        PresentationCapacityAuthority, PresentationCapacityConfig, PresentationSlot,
+        PresentationSlotState,
     };
     use crate::runtime_owner_transfer::{
         ProfileOwner, ProfileOwnerState, RuntimeLifecycleRecord, RuntimeOwnerRegistry,
@@ -899,6 +891,23 @@ mod tests {
     const NOW: &str = "2026-09-16T12:00:00Z";
     const EXPIRES: &str = "2026-09-16T12:05:00Z";
     const BROWSER: &str = "retirement-fixture";
+
+    fn mutate_capacity_slots(
+        state: &mut ServiceState,
+        mutate: impl FnOnce(&mut Vec<PresentationSlot>),
+    ) {
+        let capacity = state
+            .presentation_capacity
+            .as_ref()
+            .expect("retirement fixture must retain presentation capacity");
+        let config = *capacity.config();
+        let mut slots = capacity.slots().to_vec();
+        mutate(&mut slots);
+        state.presentation_capacity = Some(
+            PresentationCapacityAuthority::new(config, slots)
+                .expect("retirement fixture capacity must remain valid"),
+        );
+    }
 
     fn fixture() -> (ServiceState, RetirementObservation) {
         let profile_digest = agent_browser_lease_authority::canonical_profile_identity_digest(
@@ -1026,10 +1035,19 @@ mod tests {
         slot.route_id = Some("fixture-route".into());
         slot.display_allocation_id = Some("fixture-display".into());
         slot.browser_id = Some(BROWSER.into());
-        state.presentation_capacity = Some(PresentationCapacityAuthority {
-            slots: vec![slot],
-            ..PresentationCapacityAuthority::default()
-        });
+        state.presentation_capacity = Some(
+            PresentationCapacityAuthority::new(
+                PresentationCapacityConfig {
+                    warm_minimum: 0,
+                    hard_maximum: 1,
+                    human_priority_reserve: 0,
+                    recovery_reserve: 0,
+                    max_queue_depth: 64,
+                },
+                vec![slot],
+            )
+            .unwrap(),
+        );
         state.browser_process_identities.insert(
             BROWSER.into(),
             ServiceBrowserProcessIdentity {
@@ -1161,11 +1179,11 @@ mod tests {
         );
         assert_eq!(state.route_pool["fixture-pool"].state, "ready");
         assert_eq!(
-            state.presentation_capacity.as_ref().unwrap().slots[0].state,
+            state.presentation_capacity.as_ref().unwrap().slots()[0].state,
             PresentationSlotState::WarmIdle
         );
         assert_eq!(
-            state.presentation_capacity.as_ref().unwrap().slots[0].browser_id,
+            state.presentation_capacity.as_ref().unwrap().slots()[0].browser_id,
             None
         );
         assert_eq!(
@@ -1252,8 +1270,9 @@ mod tests {
         ));
 
         let mut occupied_slot = state;
-        occupied_slot.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
-            Some("active-presentation-request".into());
+        mutate_capacity_slots(&mut occupied_slot, |slots| {
+            slots[0].lease_request_id = Some("active-presentation-request".into());
+        });
         assert!(matches!(
             plan_abandoned_browser_retirement(
                 &occupied_slot,
@@ -1317,8 +1336,9 @@ mod tests {
         let (mut state, observed) = fixture();
         let plan = plan(&state, &observed);
         state.state_revision += 1;
-        state.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
-            Some("late-presentation-request".into());
+        mutate_capacity_slots(&mut state, |slots| {
+            slots[0].lease_request_id = Some("late-presentation-request".into());
+        });
         let before = state.clone();
         assert!(matches!(
             reserve_abandoned_browser_retirement(&mut state, &plan, &observed, NOW),
@@ -1496,7 +1516,7 @@ mod tests {
         let (mut state, observed) = fixture();
         let plan = plan(&state, &observed);
         reserve(&mut state, &plan, &observed);
-        for case in 0..6 {
+        for case in 0..7 {
             let mut state = state.clone();
             let mut evidence = exit(&plan);
             state.state_revision += 1;
@@ -1506,6 +1526,9 @@ mod tests {
                 2 => evidence.descendants_exited = false,
                 3 => evidence.process_group_empty = false,
                 4 => evidence.profile_lock_released = false,
+                5 => mutate_capacity_slots(&mut state, |slots| {
+                    slots[0].lease_request_id = Some("late-presentation-request".into());
+                }),
                 _ => {
                     state
                         .runtime_owner_registry
@@ -1516,9 +1539,11 @@ mod tests {
                 }
             }
             let before = state.clone();
-            assert!(
-                finalize_abandoned_browser_retirement(&mut state, &plan, &evidence, NOW).is_err()
-            );
+            let error = finalize_abandoned_browser_retirement(&mut state, &plan, &evidence, NOW)
+                .expect_err("terminal drift must fail without mutation");
+            if case == 5 {
+                assert_eq!(error, RetirementRecourse::TerminalCompareAndSwapFailed);
+            }
             assert_eq!(state, before);
         }
     }
@@ -1691,8 +1716,9 @@ mod tests {
         let (mut state, observed) = fixture();
         let plan = plan(&state, &observed);
         reserve(&mut state, &plan, &observed);
-        state.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
-            Some("late-presentation-request".into());
+        mutate_capacity_slots(&mut state, |slots| {
+            slots[0].lease_request_id = Some("late-presentation-request".into());
+        });
         let mut runtime = FakeRuntime {
             state,
             observed,

@@ -1059,7 +1059,7 @@ fn resolve_reserved_scene_authority(
         .as_ref()
         .ok_or_else(|| "presentation capacity is missing".to_string())?;
     let slot = capacity
-        .slots
+        .slots()
         .iter()
         .find(|slot| slot.lease_request_id.as_deref() == Some(request_id))
         .ok_or_else(|| "episode presentation-slot lease is missing".to_string())?;
@@ -1240,7 +1240,7 @@ where
             let Some(mut capacity) = state.presentation_capacity.take() else {
                 return Err("presentation_capacity_unavailable".to_string());
             };
-            if !capacity.slots.iter().any(|slot| slot.id == slot_id) {
+            if !capacity.slots().iter().any(|slot| slot.id == slot_id) {
                 state.presentation_capacity = Some(capacity);
                 return Err("presentation_reserved_slot_missing".to_string());
             }
@@ -1566,14 +1566,16 @@ mod tests {
         let admission = adapter.reserve("browser-1").unwrap();
         assert_eq!(admission, "presentation-admission:episode-1:slot-0");
         let snapshot = adapter.repository.load_snapshot().unwrap();
-        let slot = &snapshot.presentation_capacity.unwrap().slots[0];
+        let capacity = snapshot.presentation_capacity.unwrap();
+        let slot = &capacity.slots()[0];
         assert_eq!(slot.state, PresentationSlotState::Reserved);
         assert_eq!(slot.browser_id.as_deref(), Some("browser-1"));
 
         let release = adapter.release("browser-1").unwrap();
         assert_eq!(release, "presentation-release:episode-1:slot-0");
         let snapshot = adapter.repository.load_snapshot().unwrap();
-        let slot = &snapshot.presentation_capacity.unwrap().slots[0];
+        let capacity = snapshot.presentation_capacity.unwrap();
+        let slot = &capacity.slots()[0];
         assert_eq!(slot.state, PresentationSlotState::WarmIdle);
         assert_eq!(slot.browser_id, None);
     }
@@ -1639,9 +1641,9 @@ mod tests {
         );
         let snapshot = adapter.repository.load_snapshot().unwrap();
         let capacity = snapshot.presentation_capacity.unwrap();
-        assert!(capacity.queued_requests.is_empty());
+        assert!(capacity.queued_requests().is_empty());
         assert!(capacity
-            .slots
+            .slots()
             .iter()
             .all(|slot| slot.state == PresentationSlotState::WarmIdle));
     }
@@ -1649,10 +1651,14 @@ mod tests {
     #[test]
     fn configured_adapter_leases_and_releases_active_presentation_without_parking_browser() {
         let mut state = configured_scene_state(true, false);
-        let slot = &mut state.presentation_capacity.as_mut().unwrap().slots[0];
+        let capacity = state.presentation_capacity.as_ref().unwrap();
+        let config = *capacity.config();
+        let mut slot = capacity.slots()[0].clone();
         slot.state = PresentationSlotState::Active;
         slot.lease_request_id = None;
         slot.lease_priority = None;
+        state.presentation_capacity =
+            Some(PresentationCapacityAuthority::new(config, vec![slot]).unwrap());
         let repository = MemoryRepository::new(state);
         let mut adapter =
             ConfiguredPresentationSlotAdapter::new(repository.clone(), "episode-active", 1);
@@ -1660,7 +1666,8 @@ mod tests {
         let admission = adapter.reserve("browser-1").unwrap();
         assert_eq!(admission, "presentation-admission:episode-active:slot-1");
         let snapshot = repository.load_snapshot().unwrap();
-        let slot = &snapshot.presentation_capacity.unwrap().slots[0];
+        let capacity = snapshot.presentation_capacity.unwrap();
+        let slot = &capacity.slots()[0];
         assert_eq!(slot.state, PresentationSlotState::Active);
         assert_eq!(slot.browser_id.as_deref(), Some("browser-1"));
         assert_eq!(slot.lease_request_id.as_deref(), Some("episode-active"));
@@ -1668,7 +1675,8 @@ mod tests {
         let release = adapter.release("browser-1").unwrap();
         assert_eq!(release, "presentation-release:episode-active:slot-1");
         let snapshot = repository.load_snapshot().unwrap();
-        let slot = &snapshot.presentation_capacity.unwrap().slots[0];
+        let capacity = snapshot.presentation_capacity.unwrap();
+        let slot = &capacity.slots()[0];
         assert_eq!(slot.state, PresentationSlotState::Active);
         assert_eq!(slot.browser_id.as_deref(), Some("browser-1"));
         assert_eq!(slot.lease_request_id, None);
@@ -1739,8 +1747,12 @@ mod tests {
     #[test]
     fn configured_capture_ready_rejects_a_slot_bound_to_another_route() {
         let mut state = configured_scene_state(false, false);
-        state.presentation_capacity.as_mut().unwrap().slots[0].route_id =
-            Some("route-other".to_string());
+        let capacity = state.presentation_capacity.as_ref().unwrap();
+        let config = *capacity.config();
+        let mut slot = capacity.slots()[0].clone();
+        slot.route_id = Some("route-other".to_string());
+        state.presentation_capacity =
+            Some(PresentationCapacityAuthority::new(config, vec![slot]).unwrap());
         let repository = MemoryRepository::new(state);
         let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
             repository,
@@ -1829,7 +1841,7 @@ mod tests {
         );
         let snapshot = repository.load_snapshot().unwrap();
         assert_eq!(
-            snapshot.presentation_capacity.unwrap().slots[0].state,
+            snapshot.presentation_capacity.unwrap().slots()[0].state,
             PresentationSlotState::Reserved
         );
     }
@@ -1849,7 +1861,8 @@ mod tests {
         assert_eq!(recorded, current);
         assert_eq!(stage_receipt, "scene-stage:episode-1");
         let staged = repository.load_snapshot().unwrap();
-        let slot = &staged.presentation_capacity.unwrap().slots[0];
+        let capacity = staged.presentation_capacity.unwrap();
+        let slot = &capacity.slots()[0];
         assert_eq!(slot.state, PresentationSlotState::Staging);
         assert_eq!(slot.scene_generation, 8);
         assert!(slot.restoration_pending);
@@ -1859,7 +1872,8 @@ mod tests {
             "scene-restoration:episode-1"
         );
         let restored = repository.load_snapshot().unwrap();
-        let slot = &restored.presentation_capacity.unwrap().slots[0];
+        let capacity = restored.presentation_capacity.unwrap();
+        let slot = &capacity.slots()[0];
         assert_eq!(slot.state, PresentationSlotState::Reserved);
         assert_eq!(slot.scene_generation, 8);
         assert!(!slot.restoration_pending);
@@ -1913,7 +1927,8 @@ mod tests {
 
         assert_eq!(failure.code, "desktop_scene_native_restoration_failed");
         let state = repository.load_snapshot().unwrap();
-        let slot = &state.presentation_capacity.unwrap().slots[0];
+        let capacity = state.presentation_capacity.unwrap();
+        let slot = &capacity.slots()[0];
         assert_eq!(slot.state, PresentationSlotState::Quarantined);
         assert_eq!(
             slot.cleanup_obligation_ids,

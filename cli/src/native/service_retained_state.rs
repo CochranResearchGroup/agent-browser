@@ -758,7 +758,7 @@ pub(crate) mod service_commands {
             .presentation_capacity
             .as_ref()
             .is_some_and(|capacity| {
-                capacity.slots.iter().any(|slot| {
+                capacity.slots().iter().any(|slot| {
                     slot.browser_id.as_deref() == Some(lease.browser_id.as_str())
                         || (slot.browser_id.is_none()
                             && ((route_belongs_to_lease
@@ -913,7 +913,7 @@ pub(crate) mod service_commands {
             .presentation_capacity
             .as_ref()
             .is_some_and(|capacity| {
-                capacity.slots.iter().any(|slot| {
+                capacity.slots().iter().any(|slot| {
                     slot.route_id.as_deref() == Some(lease.route_id.as_str())
                         || slot.display_allocation_id.as_deref()
                             == Some(lease.display_allocation_id.as_str())
@@ -1203,7 +1203,7 @@ pub(crate) mod service_commands {
             .presentation_capacity
             .as_ref()
             .is_some_and(|capacity| {
-                capacity.slots.iter().any(|slot| {
+                capacity.slots().iter().any(|slot| {
                     slot.route_id.as_deref() == Some(lease.route_id.as_str())
                         || slot.display_allocation_id.as_deref()
                             == Some(lease.display_allocation_id.as_str())

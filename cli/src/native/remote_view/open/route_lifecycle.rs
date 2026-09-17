@@ -47,7 +47,7 @@ where
         let Some(mut capacity) = state.presentation_capacity.take() else {
             return Ok(None);
         };
-        let pressure = PressureAdmission::admit(capacity.config.hard_maximum);
+        let pressure = PressureAdmission::admit(capacity.config().hard_maximum);
         let request = PresentationRequest::recovery(request_id.clone()).for_browser(browser_id);
         let decision = if route_switch {
             crate::native::presentation_capacity::request_bound_route_switch_recovery(

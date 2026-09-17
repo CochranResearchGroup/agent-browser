@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
+use agent_browser_service_model::PresentationAcquisitionRetention;
+
 mod production;
 
 use super::presentation_capacity::{PresentationCapacityAuthority, PresentationCapacityConfig};
@@ -417,52 +419,30 @@ impl PresentationProviderInventory {
                 .insert(provider_route.slot_id.clone(), slot);
         }
         let previous = state.presentation_capacity.take();
-        let mut capacity = super::presentation_capacity::from_service_state(config, state)?;
-        if let Some(previous) = previous {
-            capacity.queued_requests = previous.queued_requests;
-            capacity.queue_clock = previous.queue_clock;
-            for slot in &mut capacity.slots {
-                if let Some(previous_slot) = previous.slots.iter().find(|candidate| {
-                    candidate.id == slot.id
-                        && candidate.route_id == slot.route_id
-                        && candidate.display_allocation_id == slot.display_allocation_id
-                }) {
-                    *slot = previous_slot.clone();
-                }
-            }
-            // Pending rows are deliberately excluded from new capacity
-            // derivation. Preserve an already owned slot across its exact
-            // acquisition, so route checkout can reactivate that same slot.
-            for slot in previous.slots {
-                if capacity.slots.iter().any(|current| current.id == slot.id) {
-                    continue;
-                }
-                let retained = self.routes.iter().any(|provider| {
-                    provider.state == "ready"
-                        && slot.id == format!("slot:{}", provider.slot_id)
-                        && slot.route_id.as_ref() == Some(&provider.route_id)
-                        && slot.display_allocation_id.as_ref()
-                            == Some(&provider.display_reservation_id)
-                        && state
-                            .remote_view_routes
-                            .get(&provider.route_id)
-                            .is_some_and(|route| {
-                                has_current_acquisition_reservation(state, route)
-                                    && slot.browser_id.is_some()
-                                    && slot.browser_id == route.browser_id
-                            })
-                });
-                if retained {
-                    capacity.slots.push(slot);
-                }
-            }
-            capacity.slots.sort_by(|left, right| left.id.cmp(&right.id));
-            capacity.slots = PresentationCapacityAuthority::new(
-                capacity.config,
-                std::mem::take(&mut capacity.slots),
-            )?
-            .slots;
-        }
+        let qualified = super::presentation_capacity::from_service_state(config, state)?;
+        let retained_acquisitions = self
+            .routes
+            .iter()
+            .filter(|provider| provider.state == "ready")
+            .filter_map(|provider| {
+                let route = state.remote_view_routes.get(&provider.route_id)?;
+                let browser_id = route.browser_id.clone()?;
+                has_current_acquisition_reservation(state, route).then(|| {
+                    PresentationAcquisitionRetention {
+                        slot_id: format!("slot:{}", provider.slot_id),
+                        route_id: provider.route_id.clone(),
+                        display_allocation_id: provider.display_reservation_id.clone(),
+                        browser_id,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        let capacity = PresentationCapacityAuthority::from_refreshed_inventory(
+            config,
+            qualified.slots().to_vec(),
+            previous.as_ref(),
+            &retained_acquisitions,
+        )?;
         state.presentation_capacity = Some(capacity);
         Ok(())
     }
@@ -923,9 +903,9 @@ mod tests {
             "private_virtual_display"
         );
         let capacity = state.presentation_capacity.as_ref().unwrap();
-        assert_eq!(capacity.slots.len(), 1);
-        assert_eq!(capacity.config.hard_maximum, 2);
-        assert_eq!(capacity.slots[0].id, "slot:development-slot-1");
+        assert_eq!(capacity.slots().len(), 1);
+        assert_eq!(capacity.config().hard_maximum, 2);
+        assert_eq!(capacity.slots()[0].id, "slot:development-slot-1");
     }
 
     #[test]

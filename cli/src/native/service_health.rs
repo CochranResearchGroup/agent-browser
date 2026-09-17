@@ -5661,25 +5661,27 @@ mod tests {
         assert!(target.remote_view_routes[route_id]
             .viewer_lease_ids
             .is_empty());
-        let slot = &target.presentation_capacity.as_ref().unwrap().slots[0];
+        let slot = &target.presentation_capacity.as_ref().unwrap().slots()[0];
         assert_eq!(slot.state, PresentationSlotState::WarmIdle);
         assert_eq!(slot.browser_id, None);
 
         let mut concurrently_leased = before.clone();
-        let slot = &mut concurrently_leased
-            .presentation_capacity
-            .as_mut()
-            .unwrap()
-            .slots[0];
-        slot.lease_request_id = Some("recovery-started-concurrently".to_string());
-        slot.lease_priority =
+        let capacity = concurrently_leased.presentation_capacity.as_ref().unwrap();
+        let config = *capacity.config();
+        let mut slots = capacity.slots().to_vec();
+        slots[0].lease_request_id = Some("recovery-started-concurrently".to_string());
+        slots[0].lease_priority =
             Some(crate::native::presentation_capacity::PresentationPriority::Recovery);
+        concurrently_leased.presentation_capacity = Some(
+            crate::native::presentation_capacity::PresentationCapacityAuthority::new(config, slots)
+                .unwrap(),
+        );
         merge_reconciled_service_state(&mut concurrently_leased, &before, &reconciled);
         let slot = &concurrently_leased
             .presentation_capacity
             .as_ref()
             .unwrap()
-            .slots[0];
+            .slots()[0];
         assert_eq!(slot.state, PresentationSlotState::Active);
         assert_eq!(
             slot.lease_request_id.as_deref(),

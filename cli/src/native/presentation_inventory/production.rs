@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::native::presentation_capacity::{PresentationSlot, PresentationSlotState};
+use agent_browser_service_model::PresentationInventoryCustodyObservation;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -294,82 +295,50 @@ impl ProductionInventory {
             slots.push(slot);
         }
         slots.sort_by(|a, b| a.id.cmp(&b.id));
-        if let Some(previous) = state.presentation_capacity.as_ref() {
-            for old in &previous.slots {
-                let Some(slot) = slots.iter_mut().find(|s| {
-                    s.id == old.id
-                        && s.route_id == old.route_id
-                        && s.display_allocation_id == old.display_allocation_id
-                }) else {
-                    return Err(format!(
-                        "production_presentation_inventory_capacity_custody_changed:{}",
-                        json!({"reason":"binding_changed","previousSlot":old})
-                    ));
-                };
-                let exact_pending_binding = slot.route_id.as_deref().is_some_and(|route_id| {
-                    state.remote_view_routes.get(route_id).is_some_and(|route| {
-                        (has_current_acquisition_binding(state, route)
-                            || has_current_acquisition_custody(state, route))
-                            && route.browser_id == slot.browser_id
-                    })
+        let observations = slots
+            .iter()
+            .map(|slot| {
+                let route = slot
+                    .route_id
+                    .as_deref()
+                    .and_then(|route_id| state.remote_view_routes.get(route_id));
+                let exact_pending_binding = route.is_some_and(|route| {
+                    (has_current_acquisition_binding(state, route)
+                        || has_current_acquisition_custody(state, route))
+                        && route.browser_id == slot.browser_id
                 });
-                let exact_pending_browser_acquisition = old.state
-                    == PresentationSlotState::WarmIdle
-                    && old.browser_id.is_none()
-                    && old.lease_request_id.is_none()
-                    && old.cleanup_obligation_ids.is_empty()
-                    && slot.browser_id.is_some()
-                    && exact_pending_binding;
-                let exact_completed_inert_owner = old.state == PresentationSlotState::Active
-                    && old.browser_id.is_some()
-                    && slot.browser_id.is_none()
-                    && slot.route_id.as_deref().is_some_and(|route_id| {
-                        state.remote_view_routes.get(route_id).is_some_and(|route| {
-                            let Some(display_id) = route.display_allocation_id.as_deref() else {
-                                return false;
-                            };
-                            let Some(display) = state.display_allocations.get(display_id) else {
-                                return false;
-                            };
-                            let Some(entry) = state
-                                .route_pool
-                                .values()
-                                .find(|entry| entry.route_id == route.id)
-                            else {
-                                return false;
-                            };
-                            matches!(route.state.as_str(), "released" | "orphaned")
-                                && matches!(display.state.as_str(), "released" | "orphaned")
-                                && route.state == display.state
-                                && entry.state == "available"
-                                && entry.current_route_allocation_id.is_none()
-                                && route.browser_id == old.browser_id
-                                && display.owner_browser_id == old.browser_id
-                        })
-                    });
-                if exact_pending_browser_acquisition || exact_completed_inert_owner {
-                    continue;
+                let completed_inert_owner_browser_id = route.and_then(|route| {
+                    let display_id = route.display_allocation_id.as_deref()?;
+                    let display = state.display_allocations.get(display_id)?;
+                    let entry = state
+                        .route_pool
+                        .values()
+                        .find(|entry| entry.route_id == route.id)?;
+                    (matches!(route.state.as_str(), "released" | "orphaned")
+                        && matches!(display.state.as_str(), "released" | "orphaned")
+                        && route.state == display.state
+                        && entry.state == "available"
+                        && entry.current_route_allocation_id.is_none()
+                        && route.browser_id.is_some()
+                        && route.browser_id == display.owner_browser_id)
+                        .then(|| route.browser_id.clone())
+                        .flatten()
+                });
+                PresentationInventoryCustodyObservation {
+                    slot_id: slot.id.clone(),
+                    route_id: slot.route_id.clone(),
+                    display_allocation_id: slot.display_allocation_id.clone(),
+                    exact_pending_binding,
+                    completed_inert_owner_browser_id,
                 }
-                if slot.browser_id != old.browser_id {
-                    return Err(format!(
-                        "production_presentation_inventory_capacity_custody_changed:{}",
-                        json!({
-                            "reason":"browser_changed",
-                            "exactPendingBinding":exact_pending_binding,
-                            "previousSlot":old,
-                            "qualifiedSlot":slot,
-                        })
-                    ));
-                }
-                *slot = old.clone();
-            }
-        }
-        let mut capacity = PresentationCapacityAuthority::new(config, slots)?;
-        if let Some(previous) = state.presentation_capacity.as_ref() {
-            capacity.queued_requests = previous.queued_requests.clone();
-            capacity.queue_clock = previous.queue_clock;
-        }
-        Ok(capacity)
+            })
+            .collect::<Vec<_>>();
+        PresentationCapacityAuthority::from_revalidated_inventory(
+            config,
+            slots,
+            state.presentation_capacity.as_ref(),
+            &observations,
+        )
     }
 }
 
@@ -467,7 +436,7 @@ mod tests {
             ),
             0
         );
-        assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("browser"));
+        assert_eq!(capacity.slots()[0].browser_id.as_deref(), Some("browser"));
         let mut foreign_capacity = capacity.clone();
         assert!(
             !crate::native::presentation_capacity::request_bound_recovery(
@@ -495,10 +464,10 @@ mod tests {
             1
         );
         assert_eq!(
-            released_capacity.slots[0].state,
+            released_capacity.slots()[0].state,
             PresentationSlotState::WarmIdle
         );
-        assert!(released_capacity.slots[0].browser_id.is_none());
+        assert!(released_capacity.slots()[0].browser_id.is_none());
         assert!(
             crate::native::presentation_capacity::request_bound_recovery(
                 &mut capacity,
@@ -511,14 +480,15 @@ mod tests {
             .is_granted()
         );
         let mut unavailable = capacity.clone();
-        unavailable.admission_error =
-            Some("production_presentation_inventory_owner_unproven:route".into());
+        unavailable.record_inventory_failure(
+            "production_presentation_inventory_owner_unproven:route".into(),
+        );
         state.presentation_capacity = Some(unavailable);
         let refreshed = inventory
             .qualify(&state, config, "production", "boot-test", |_, _| true)
             .unwrap();
-        assert_eq!(refreshed.slots, capacity.slots);
-        assert!(refreshed.admission_error.is_none());
+        assert_eq!(refreshed.slots(), capacity.slots());
+        assert!(refreshed.admission_error().is_none());
         assert_eq!(state.remote_view_routes["route"].state, "orphaned");
         assert_eq!(state.display_allocations["display"].state, "orphaned");
     }
@@ -557,8 +527,8 @@ mod tests {
             .qualify(&state, config, "production", "boot-test", |_, _| true)
             .unwrap();
 
-        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
-        assert!(capacity.slots[0].browser_id.is_none());
+        assert_eq!(capacity.slots()[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots()[0].browser_id.is_none());
         assert_eq!(serde_json::to_value(&state).unwrap(), before);
     }
 
@@ -571,7 +541,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            active_capacity.slots[0].state,
+            active_capacity.slots()[0].state,
             PresentationSlotState::Active
         );
         state.presentation_capacity = Some(active_capacity);
@@ -590,8 +560,8 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
-        assert!(capacity.slots[0].browser_id.is_none());
+        assert_eq!(capacity.slots()[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots()[0].browser_id.is_none());
     }
 
     #[test]
@@ -603,7 +573,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            active_capacity.slots[0].state,
+            active_capacity.slots()[0].state,
             PresentationSlotState::Active
         );
         state.presentation_capacity = Some(active_capacity);
@@ -619,8 +589,8 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
-        assert!(capacity.slots[0].browser_id.is_none());
+        assert_eq!(capacity.slots()[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots()[0].browser_id.is_none());
         assert_eq!(serde_json::to_value(&state).unwrap(), before);
     }
 
@@ -687,8 +657,8 @@ mod tests {
         let capacity = inventory
             .qualify(&state, config, "production", &boot, |_, _| true)
             .unwrap();
-        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
-        assert!(capacity.slots[0].browser_id.is_none());
+        assert_eq!(capacity.slots()[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots()[0].browser_id.is_none());
 
         state.presentation_capacity = Some(capacity);
         state.browsers.insert(
@@ -715,8 +685,11 @@ mod tests {
         let capacity = inventory
             .qualify(&state, config, "production", &boot, |_, _| true)
             .unwrap();
-        assert_eq!(capacity.slots[0].state, PresentationSlotState::Active);
-        assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("new-browser"));
+        assert_eq!(capacity.slots()[0].state, PresentationSlotState::Active);
+        assert_eq!(
+            capacity.slots()[0].browser_id.as_deref(),
+            Some("new-browser")
+        );
     }
 
     #[test]
@@ -807,7 +780,7 @@ mod tests {
             ),
             0
         );
-        assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("browser"));
+        assert_eq!(capacity.slots()[0].browser_id.as_deref(), Some("browser"));
         capacity
             .activate_bound_browser("route", "display", "browser")
             .unwrap();

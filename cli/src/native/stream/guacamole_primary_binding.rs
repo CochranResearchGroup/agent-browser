@@ -404,10 +404,17 @@ mod tests {
         capacity_slot.scene_generation = 13;
         capacity_slot.lease_request_id = Some("retained-recovery".into());
         initial.presentation_capacity = Some(
-            crate::native::presentation_capacity::PresentationCapacityAuthority {
-                slots: vec![capacity_slot],
-                ..Default::default()
-            },
+            crate::native::presentation_capacity::PresentationCapacityAuthority::new(
+                crate::native::presentation_capacity::PresentationCapacityConfig {
+                    warm_minimum: 0,
+                    hard_maximum: 1,
+                    human_priority_reserve: 0,
+                    recovery_reserve: 0,
+                    max_queue_depth: 64,
+                },
+                vec![capacity_slot],
+            )
+            .unwrap(),
         );
         initial.route_pool.insert(
             "slot".into(),
@@ -547,7 +554,7 @@ mod tests {
             .unwrap()
             .activate_bound_browser("route", "display", "browser")
             .expect("inventory refresh lost the slot needed by route checkout");
-        let retained_slot = &overlaid.0.presentation_capacity.as_ref().unwrap().slots[0];
+        let retained_slot = &overlaid.0.presentation_capacity.as_ref().unwrap().slots()[0];
         assert_eq!(retained_slot.scene_generation, 13);
         assert_eq!(
             retained_slot.lease_request_id.as_deref(),
@@ -561,20 +568,29 @@ mod tests {
             "foreign_slot",
         ] {
             let mut changed = pending.clone();
-            let capacity = changed.presentation_capacity.as_mut().unwrap();
+            let capacity = changed.presentation_capacity.as_ref().unwrap();
+            let capacity_config = *capacity.config();
+            let mut slots = capacity.slots().to_vec();
             match case {
-                "missing_capacity" => capacity.slots.clear(),
-                "foreign_browser" => capacity.slots[0].browser_id = Some("peer".into()),
-                "foreign_display" => capacity.slots[0].display_allocation_id = Some("peer".into()),
-                "foreign_route" => capacity.slots[0].route_id = Some("peer".into()),
-                "foreign_slot" => capacity.slots[0].id = "peer".into(),
+                "missing_capacity" => slots.clear(),
+                "foreign_browser" => slots[0].browser_id = Some("peer".into()),
+                "foreign_display" => slots[0].display_allocation_id = Some("peer".into()),
+                "foreign_route" => slots[0].route_id = Some("peer".into()),
+                "foreign_slot" => slots[0].id = "peer".into(),
                 _ => unreachable!(),
             }
+            changed.presentation_capacity = Some(
+                crate::native::presentation_capacity::PresentationCapacityAuthority::new(
+                    capacity_config,
+                    slots,
+                )
+                .unwrap(),
+            );
             inventory
                 .overlay_service_state(&mut changed, config.clone())
                 .unwrap();
             assert!(
-                changed.presentation_capacity.unwrap().slots.is_empty(),
+                changed.presentation_capacity.unwrap().slots().is_empty(),
                 "overlay manufactured or borrowed {case}"
             );
         }

@@ -57,7 +57,7 @@ pub(crate) fn observe_presentation_capacity(
 ) -> PresentationCapacityObservations {
     PresentationCapacityObservations {
         slots: capacity
-            .slots
+            .slots()
             .iter()
             .map(|slot| observe_slot(state, slot))
             .collect(),
@@ -163,7 +163,7 @@ fn binding_warning_facts(
     capacity: &PresentationCapacityAuthority,
 ) -> Vec<String> {
     let mut warnings = BTreeSet::new();
-    for slot in &capacity.slots {
+    for slot in capacity.slots() {
         if let Some(route_id) = slot.route_id.as_deref() {
             if !state.remote_view_routes.contains_key(route_id)
                 && !state
@@ -383,8 +383,11 @@ mod tests {
         let mut authority = one_slot_authority();
 
         assert_eq!(reconcile_authoritative_bindings(&mut authority, &state), 1);
-        assert_eq!(authority.slots[0].state, PresentationSlotState::Active);
-        assert_eq!(authority.slots[0].browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(authority.slots()[0].state, PresentationSlotState::Active);
+        assert_eq!(
+            authority.slots()[0].browser_id.as_deref(),
+            Some("browser-1")
+        );
     }
 
     #[test]
@@ -535,8 +538,8 @@ mod tests {
             &state,
         )
         .unwrap();
-        assert_eq!(authority.slots.len(), 1);
-        assert_eq!(authority.slots[0].id, "slot:one");
+        assert_eq!(authority.slots().len(), 1);
+        assert_eq!(authority.slots()[0].id, "slot:one");
     }
 
     #[test]
@@ -567,7 +570,7 @@ mod tests {
             .unwrap_err(),
             "presentation_slot_staging_blocked:human_controller"
         );
-        assert_eq!(authority.slots[0].state, PresentationSlotState::Reserved);
-        assert_eq!(authority.slots[0].scene_generation, 0);
+        assert_eq!(authority.slots()[0].state, PresentationSlotState::Reserved);
+        assert_eq!(authority.slots()[0].scene_generation, 0);
     }
 }

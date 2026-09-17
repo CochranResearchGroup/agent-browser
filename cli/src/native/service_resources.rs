@@ -1083,7 +1083,7 @@ fn resource_lane_activity_at(
     }
     if let Some(capacity) = state.presentation_capacity.as_ref() {
         for slot in capacity
-            .slots
+            .slots()
             .iter()
             .filter(|slot| slot.browser_id.as_deref() == Some(browser_id))
         {
