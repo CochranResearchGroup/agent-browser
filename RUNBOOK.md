@@ -8,6 +8,29 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 
+## Turn 374 | 2026-09-17
+
+The operator clarified that CI itself should be disabled for now, not merely
+the full-suite routes. Run `35228725370` was cancelled. The active
+`.github/workflows/ci.yml` is removed and the reviewed path-selected workflow
+is retained as `.github/workflows/ci.yml.disabled` at candidate `ca077d9e`,
+which GitHub does not load.
+There are no automatic or manual CI triggers. Re-enablement requires new
+maintainer direction.
+
+## Turn 373 | 2026-09-17
+
+P204 initially interpreted operator direction as removing full CI while keeping
+focused PR CI. The
+bounded correction removes `main` push, scheduled, manual CI dispatch, and
+commit-message qualification routes together with the comprehensive Rust and
+slow platform jobs. Pull requests retain path-selected jobs, broad ordinary
+fail-safe coverage, superseded-head cancellation, and the stable `Presubmit`
+aggregate. Candidate `d9fede9d` passes the selector and workflow contract suite
+and `actionlint`. The local comprehensive Rust command remains available outside
+GitHub CI. Issue #164 remains useful for enforcing `Presubmit`, but it is no
+longer a dependency for removing duplicate post-merge CI.
+
 ## Turn 372 | 2026-09-16
 
 [Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)

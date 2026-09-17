@@ -6,7 +6,7 @@ import { PRESUBMIT_JOB_KEYS, verifyPresubmit } from './lib/presubmit-verifier.js
 
 function selection(overrides = {}) {
   return {
-    schemaVersion: 'agent-browser.validation-selection.v1',
+    schemaVersion: 'agent-browser.validation-selection.v2',
     tier: 'docs',
     jobs: Object.fromEntries(PRESUBMIT_JOB_KEYS.map((key) => [key, key === 'docs'])),
     unknownFiles: [],

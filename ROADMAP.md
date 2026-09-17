@@ -31,16 +31,20 @@ State: OPEN
 
 Current state: [Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 and [issue #174](https://github.com/CochranResearchGroup/agent-browser/issues/174)
-own the `PL-PLATFORM` repair. Published source `b481ab01` adds the versioned classifier,
+own the `PL-PLATFORM` repair. Merged PR #179 added the versioned classifier,
 surface fixtures, exact-head conditional jobs, pull-request cancellation,
 focused Rust compartments, bounded economics, and the stable fail-closed
-`Presubmit` aggregate. Exact-head CI run `35172965793` passed every selected
-ordinary gate and the stable aggregate; it also proved the corrected isolation
-between serialized CLI compartments and the independent crate lane. Post-merge
-organic docs-only and narrow-Rust evidence and an explicitly authorized
-comprehensive dispatch remain pending. The post-merge `main` fallback remains
-until issue #164 proves live enforcement; workflow dispatch, branch-rule
-mutation, installed-runtime effects, and release are outside this lane.
+`Presubmit` aggregate. Exact-head CI run `35175068416` passed every selected
+ordinary gate and the stable aggregate before merge commit `f5e3f31b`. Operator
+direction now removes every full-suite CI route: no `main` push, schedule,
+manual CI dispatch, commit-message trigger, comprehensive Rust job, or slow
+platform matrix remains in candidate `d9fede9d`. Follow-up operator direction
+also disables focused CI for now: the workflow is retained only as
+`.github/workflows/ci.yml.disabled` in candidate `ca077d9e`, and active run
+`35228725370` was cancelled.
+Issue #164 remains an independent enforcement improvement for any future CI
+resumption. Organic docs-only and narrow-Rust evidence are deferred while CI is
+disabled.
 
 ## P203 | Runtime Host Admission Routing
 
