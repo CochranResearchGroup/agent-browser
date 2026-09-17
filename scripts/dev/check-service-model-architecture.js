@@ -120,6 +120,28 @@ const SERVICE_STATE_LEASE_AUTHORITY_METHODS = [
   'revoke_lease_claim',
 ];
 
+const SERVICE_STATE_RECEIPT_TYPES = [
+  'ProfileRecoveryReceiptIdentity',
+  'ProfileResetReceiptIdentity',
+  'ProfileReceiptReplayError',
+];
+
+const SERVICE_STATE_RECEIPT_METHODS = [
+  'replay_profile_lease_reconciliation',
+  'record_profile_lease_reconciliation',
+  'profile_recovery_receipt',
+  'replay_profile_recovery',
+  'record_profile_recovery',
+  'replay_profile_reset',
+  'record_profile_reset',
+];
+
+const SERVICE_STATE_RECEIPT_FIELDS = [
+  'profile_lease_reconcile_receipts',
+  'profile_recovery_receipts',
+  'profile_reset_receipts',
+];
+
 const SERVICE_CHALLENGE_DEFINITIONS = [
   'ServiceChallengeTaskState',
   'ServiceChallengeTaskSummary',
@@ -755,6 +777,24 @@ function check(root = repoRoot) {
     !cliProductionSources.some((source) => /\.\s*lease_authority\b(?!\s*\()/.test(source)),
     'CLI production code must not access ServiceState.lease_authority directly',
   );
+  for (const name of SERVICE_STATE_RECEIPT_TYPES) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+(?:struct|enum)\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own receipt interface type: ${name}`,
+    );
+  }
+  for (const name of SERVICE_STATE_RECEIPT_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own receipt method: ${name}`,
+    );
+  }
+  for (const field of SERVICE_STATE_RECEIPT_FIELDS) {
+    requireCondition(
+      !cliProductionSources.some((source) => new RegExp(`\\.\\s*${field}\\b`).test(source)),
+      `CLI production code must not access ServiceState.${field} directly`,
+    );
+  }
   const serviceStateExport = serviceModelLib.match(/\bpub\s+use\s+service_state\s*::\s*\{([\s\S]*?)\}\s*;/);
   requireCondition(/\bmod\s+service_state\s*;/.test(serviceModelLib),
     'service-model lib must declare the ServiceState aggregate module');
@@ -763,6 +803,10 @@ function check(root = repoRoot) {
   for (const name of SERVICE_STATE_CODEC_EXPORTS) {
     requireCondition(Boolean(serviceStateExport?.[1].match(new RegExp(`\\b${name}\\b`))),
       `service-model lib must export ServiceState aggregate interface: ${name}`);
+  }
+  for (const name of SERVICE_STATE_RECEIPT_TYPES) {
+    requireCondition(Boolean(serviceStateExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export ServiceState receipt interface: ${name}`);
   }
   requireCondition(/\bpub\s+use\s+agent_browser_service_model\s*::\s*(?:ServiceState\s*;|\{[^}]*\bServiceState\b[^}]*\}\s*;)/s.test(cliServiceModelSource)
     && !/\b(?:struct|enum|type)\s+ServiceState\b/.test(cliServiceModel)

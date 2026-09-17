@@ -52,6 +52,9 @@ pub(crate) use agent_browser_service_model::{
     ProfileAcquisitionState, ProfileResetReceipt, ProfileResetScope, RecoveryReceipt,
     PROFILE_RECOVERY_RECEIPT_SCHEMA_V1, PROFILE_RESET_RECEIPT_SCHEMA_V1,
 };
+use agent_browser_service_model::{
+    ProfileReceiptReplayError, ProfileRecoveryReceiptIdentity, ProfileResetReceiptIdentity,
+};
 
 pub(crate) const PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1: &str =
     "agent-browser.profile-acquisition-outcome.v1";
@@ -1725,7 +1728,7 @@ fn status_profile_recovery_command(command: &Value) -> Result<Value, String> {
     let raw_capability = profile_capability_from_command(command)?;
     let repository = LockedServiceStateRepository::default_json()?;
     let state = repository.load_snapshot()?;
-    let receipt = state.profile_recovery_receipts.get(recovery_id).cloned();
+    let receipt = state.profile_recovery_receipt(recovery_id).cloned();
     let Some(receipt) = receipt else {
         return Ok(json!({
             "recoveryId": recovery_id,
@@ -2142,13 +2145,19 @@ fn apply_profile_reset(
 ) -> Result<(ProfileResetReceipt, bool), String> {
     verify_profile_reset_plan(plan, seal_key)?;
     let snapshot = repository.load_snapshot()?;
-    if let Some(receipt) = snapshot.profile_reset_receipts.get(&plan.reset_id) {
-        return profile_reset_replay(plan, receipt);
+    if let Some(receipt) = snapshot
+        .replay_profile_reset(profile_reset_receipt_identity(plan))
+        .map_err(profile_reset_receipt_replay_error)?
+    {
+        return Ok((receipt, true));
     }
     validate_profile_reset_preconditions(&snapshot, plan, now)?;
     repository.mutate(|state| {
-        if let Some(receipt) = state.profile_reset_receipts.get(&plan.reset_id) {
-            return profile_reset_replay(plan, receipt);
+        if let Some(receipt) = state
+            .replay_profile_reset(profile_reset_receipt_identity(plan))
+            .map_err(profile_reset_receipt_replay_error)?
+        {
+            return Ok((receipt, true));
         }
         validate_profile_reset_preconditions(state, plan, now)?;
         let seeding_handoff = match plan.scope {
@@ -2178,9 +2187,7 @@ fn apply_profile_reset(
             browser_cookies_erased: false,
             seeding_handoff,
         };
-        state
-            .profile_reset_receipts
-            .insert(plan.reset_id.clone(), receipt.clone());
+        state.record_profile_reset(receipt.clone());
         Ok((receipt, false))
     })
 }
@@ -2427,22 +2434,16 @@ fn seal_profile_reset_plan(plan: &ProfileResetPlan, seal_key: &[u8]) -> Result<S
     Ok(format!("sha256:{:x}", hasher.finalize()))
 }
 
-fn profile_reset_replay(
-    plan: &ProfileResetPlan,
-    receipt: &ProfileResetReceipt,
-) -> Result<(ProfileResetReceipt, bool), String> {
-    if receipt.plan_id != plan.plan_id
-        || receipt.reset_id != plan.reset_id
-        || receipt.principal_id != plan.principal_id
-        || receipt.profile_id != plan.profile_id
-        || receipt.producer_build_identity != plan.producer_build_identity
-        || receipt.scope != plan.scope
-        || receipt.target_service_id != plan.target_service_id
-        || receipt.terminal_result != "applied"
-    {
-        return Err("profile_reset_receipt_conflict".to_string());
+fn profile_reset_receipt_identity(plan: &ProfileResetPlan) -> ProfileResetReceiptIdentity<'_> {
+    ProfileResetReceiptIdentity {
+        reset_id: &plan.reset_id,
+        plan_id: &plan.plan_id,
+        principal_id: &plan.principal_id,
+        profile_id: &plan.profile_id,
+        producer_build_identity: &plan.producer_build_identity,
+        scope: plan.scope,
+        target_service_id: plan.target_service_id.as_deref(),
     }
-    Ok((receipt.clone(), true))
 }
 
 fn profile_reset_plan_from_command(command: &Value) -> Result<ProfileResetPlan, String> {
@@ -2882,15 +2883,21 @@ where
 {
     verify_plan_integrity(plan, seal_key)?;
     let snapshot = repository.load_snapshot()?;
-    if let Some(receipt) = snapshot.profile_recovery_receipts.get(&plan.recovery_id) {
-        return replay_outcome(plan, receipt);
+    if let Some(receipt) = snapshot
+        .replay_profile_recovery(profile_recovery_receipt_identity(plan))
+        .map_err(profile_recovery_receipt_replay_error)?
+    {
+        return Ok(replay_outcome(receipt));
     }
     validate_plan_preconditions(&snapshot, plan, now)?;
 
     let acquired = retry_acquisition(plan.original_intent.clone()).await?;
     repository.mutate(|state| {
-        if let Some(receipt) = state.profile_recovery_receipts.get(&plan.recovery_id) {
-            return replay_outcome(plan, receipt);
+        if let Some(receipt) = state
+            .replay_profile_recovery(profile_recovery_receipt_identity(plan))
+            .map_err(profile_recovery_receipt_replay_error)?
+        {
+            return Ok(replay_outcome(receipt));
         }
         let owner = state
             .runtime_owner_registry
@@ -2953,9 +2960,7 @@ where
             browser_id: acquired.browser_id.clone(),
             daemon_session_route: acquired.daemon_session_route.clone(),
         };
-        state
-            .profile_recovery_receipts
-            .insert(plan.recovery_id.clone(), receipt.clone());
+        state.record_profile_recovery(receipt.clone());
         Ok(RecoveryApplyOutcome {
             acquisition: acquired_outcome(&receipt),
             receipt,
@@ -3239,24 +3244,46 @@ fn seal_recovery_plan(plan: &RecoveryPlan, seal_key: &[u8]) -> Result<String, St
     Ok(format!("sha256:{:x}", hasher.finalize()))
 }
 
-fn replay_outcome(
-    plan: &RecoveryPlan,
-    receipt: &RecoveryReceipt,
-) -> Result<RecoveryApplyOutcome, String> {
-    if receipt.plan_id != plan.plan_id
-        || receipt.recovery_id != plan.recovery_id
-        || receipt.principal_id != plan.identities.principal_id
-        || receipt.profile_id != plan.identities.profile_id
-        || receipt.producer_build_identity.as_ref() != Some(&plan.producer_build_identity)
-        || receipt.terminal_result != "applied"
-    {
-        return Err("profile_recovery_receipt_conflict".to_string());
+fn profile_recovery_receipt_identity(plan: &RecoveryPlan) -> ProfileRecoveryReceiptIdentity<'_> {
+    ProfileRecoveryReceiptIdentity {
+        recovery_id: &plan.recovery_id,
+        plan_id: &plan.plan_id,
+        principal_id: &plan.identities.principal_id,
+        profile_id: &plan.identities.profile_id,
+        producer_build_identity: &plan.producer_build_identity,
     }
-    Ok(RecoveryApplyOutcome {
-        acquisition: acquired_outcome(receipt),
-        receipt: receipt.clone(),
+}
+
+fn profile_recovery_receipt_replay_error(error: ProfileReceiptReplayError) -> String {
+    match error {
+        ProfileReceiptReplayError::RecoveryReceiptConflict => {
+            "profile_recovery_receipt_conflict".to_string()
+        }
+        ProfileReceiptReplayError::LeaseAuthorityMismatch
+        | ProfileReceiptReplayError::ResetReceiptConflict => {
+            unreachable!("recovery replay returned an unrelated receipt error")
+        }
+    }
+}
+
+fn profile_reset_receipt_replay_error(error: ProfileReceiptReplayError) -> String {
+    match error {
+        ProfileReceiptReplayError::ResetReceiptConflict => {
+            "profile_reset_receipt_conflict".to_string()
+        }
+        ProfileReceiptReplayError::LeaseAuthorityMismatch
+        | ProfileReceiptReplayError::RecoveryReceiptConflict => {
+            unreachable!("reset replay returned an unrelated receipt error")
+        }
+    }
+}
+
+fn replay_outcome(receipt: RecoveryReceipt) -> RecoveryApplyOutcome {
+    RecoveryApplyOutcome {
+        acquisition: acquired_outcome(&receipt),
+        receipt,
         replayed: true,
-    })
+    }
 }
 
 fn acquired_outcome(receipt: &RecoveryReceipt) -> ProfileAcquisitionOutcome {

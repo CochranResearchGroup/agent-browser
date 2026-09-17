@@ -62,6 +62,9 @@ const serviceStateFieldAttributes = {
 };
 const validServiceState = `
 pub struct ConfiguredServiceStateInput;
+pub struct ProfileRecoveryReceiptIdentity;
+pub struct ProfileResetReceiptIdentity;
+pub enum ProfileReceiptReplayError {}
 pub struct ServiceState {
 ${serviceStateMigrationFields.map((field) => `  ${serviceStateFieldAttributes[field] || ''}#[doc(hidden)]\n  pub ${field}: ${serviceStateFieldTypes[field] || 'String'},`).join('\n')}
   #[serde(skip_serializing_if = "agent_browser_lease_authority::ServicePrincipalRegistry::is_empty")]
@@ -84,6 +87,13 @@ impl ServiceState {
   pub fn release_lease_claim(&mut self) {}
   pub fn recover_lease_claim(&mut self) {}
   pub fn revoke_lease_claim(&mut self) {}
+  pub fn replay_profile_lease_reconciliation(&self) {}
+  pub fn record_profile_lease_reconciliation(&mut self) {}
+  pub fn profile_recovery_receipt(&self) {}
+  pub fn replay_profile_recovery(&self) {}
+  pub fn record_profile_recovery(&mut self) {}
+  pub fn replay_profile_reset(&self) {}
+  pub fn record_profile_reset(&mut self) {}
   pub fn service_authentication_run(&self) {}
   pub fn prepare_service_authentication_run_start(&self) {}
   pub fn complete_service_authentication_run_start(&mut self) {}
@@ -122,7 +132,8 @@ pub use service_state::{
   encode_prepared_service_state_pretty, prepare_service_state_for_persistence,
   service_profile_sources, service_site_policy_sources,
   validate_service_state_invariants, ConfiguredServiceStateInput, ServiceState,
-  ServiceStateCodecError,
+  ProfileReceiptReplayError, ProfileRecoveryReceiptIdentity,
+  ProfileResetReceiptIdentity, ServiceStateCodecError,
   LEGACY_SERVICE_STATE_SCHEMA_VERSION, SERVICE_STATE_SCHEMA_VERSION,
 };
 `;
@@ -334,6 +345,17 @@ for (const [name, mutation] of [
     '',
   ) }],
   ['direct CLI lease authority access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.lease_authority; }\n' }],
+  ['missing receipt interface type', { serviceState: validServiceState.replace(
+    'pub struct ProfileResetReceiptIdentity;',
+    '',
+  ) }],
+  ['missing receipt aggregate method', { serviceState: validServiceState.replace(
+    'pub fn replay_profile_recovery(&self) {}',
+    '',
+  ) }],
+  ['direct CLI lease receipt access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.profile_lease_reconcile_receipts; }\n' }],
+  ['direct CLI recovery receipt access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.profile_recovery_receipts; }\n' }],
+  ['direct CLI reset receipt access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.profile_reset_receipts; }\n' }],
   ['missing authentication aggregate method', { serviceState: validServiceState.replace(
     'pub fn observe_service_authentication_run(&mut self) {}',
     '',

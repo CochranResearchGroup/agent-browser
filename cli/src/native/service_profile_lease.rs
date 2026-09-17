@@ -36,6 +36,7 @@ use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
 use agent_browser_lease_authority::{ActiveLeaseClaim, LeaseClaimMode, LeaseClaimTerminalReceipt};
+use agent_browser_service_model::ProfileReceiptReplayError;
 pub(crate) use agent_browser_service_model::{
     ProfileLeaseDoctorReport, ProfileLeaseFinding, ProfileLeaseReconcilePlan,
     ProfileLeaseReconcileReceipt, ProfileLeaseRecord, ProfileLeaseTransition,
@@ -1323,18 +1324,18 @@ pub(crate) fn apply_profile_lease_reconciliation(
         ));
     }
     if let Some(receipt) = state
-        .profile_lease_reconcile_receipts
-        .get(&plan.idempotency_key)
+        .replay_profile_lease_reconciliation(&plan.idempotency_key, &authority.principal_id)
+        .map_err(|error| match error {
+            ProfileReceiptReplayError::LeaseAuthorityMismatch => {
+                lease_error(ProfileLeaseFailureCode::AuthorityMismatch, &plan.lease_id)
+            }
+            ProfileReceiptReplayError::RecoveryReceiptConflict
+            | ProfileReceiptReplayError::ResetReceiptConflict => {
+                unreachable!("lease reconciliation returned an unrelated receipt error")
+            }
+        })?
     {
-        if receipt.principal_id != authority.principal_id {
-            return Err(lease_error(
-                ProfileLeaseFailureCode::AuthorityMismatch,
-                &plan.lease_id,
-            ));
-        }
-        let mut replay = receipt.clone();
-        replay.replayed = true;
-        return Ok(replay);
+        return Ok(receipt);
     }
     if seal_key.len() < 32
         || plan.seal != seal_reconcile_plan(plan, seal_key)
@@ -1469,9 +1470,7 @@ pub(crate) fn apply_profile_lease_reconciliation(
         transition_count: plan.proposed_transitions.len(),
         resulting_lease_revision: resulting.lease_revision,
     };
-    state
-        .profile_lease_reconcile_receipts
-        .insert(receipt.idempotency_key.clone(), receipt.clone());
+    state.record_profile_lease_reconciliation(receipt.clone());
     Ok(receipt)
 }
 

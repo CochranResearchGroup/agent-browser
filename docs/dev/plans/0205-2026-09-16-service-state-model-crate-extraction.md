@@ -2874,6 +2874,117 @@ profile recovery, and profile reset. P4 remains open for those receipts and
 the remaining principal, lifecycle, repository-sidecar, presentation,
 fixture-migration, privacy, facade-deletion, and final measurement gates.
 
+## Checkpoint 46 | Exact Receipt-Map Interface Freeze
+
+State transition: the three remaining exact receipt maps are frozen as one
+receipt-access packet before implementation. Service Model will own typed
+lookup, replay matching, and terminal receipt recording for profile lease
+reconciliation, profile recovery, and profile reset. The packet removes all
+production direct access to those maps without moving repository custody,
+effect orchestration, process or boot observation, filesystem cleanup, or
+response assembly into the provider-free crate.
+
+The frozen interface contains family-specific replay identities rather than a
+generic map accessor or callback mutator. Lease reconciliation replay matches
+the idempotency key and authenticated principal only, returns a clone with
+`replayed` set, and leaves the stored receipt unchanged. Recovery replay
+matches recovery ID, plan ID, principal, profile, producer build identity, and
+the applied terminal result. Reset replay additionally matches scope and the
+optional target service. Missing keys return no receipt; exact mismatches
+retain the existing lease authority-mismatch, recovery-conflict, and
+reset-conflict identities. Record methods derive their map key from the typed
+receipt and preserve the current replacement behavior without adding a new
+failure point or revision change.
+
+The CLI retains the existing order and effect boundaries:
+
+- lease reconciliation keeps current-principal validation before replay, then
+  seal, expiry, boot-epoch, and lease compare-and-swap validation before its
+  ordered state transitions and receipt recording;
+- recovery keeps plan verification and snapshot replay before its external
+  acquisition retry, then repeats replay under repository custody before
+  postcondition validation, stale-reference repair, and receipt recording; and
+- reset keeps plan verification and snapshot replay before preconditions, then
+  repeats replay and preconditions under repository custody before its scoped
+  mutation and receipt recording.
+
+Hard stops are a generic receipt-map interface, mutable receipt reference,
+new conflict after partial mutation, changed revision source, moved acquisition
+retry, moved lock deletion, model-side boot acquisition, compensation or retry
+change, or a claim that receipt access alone completes the later multi-record
+lifecycle extraction. The three fields remain documented-hidden until the
+approximately 350 external aggregate fixtures are migrated; eliminating their
+production callers is necessary but not sufficient for final field privacy.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route for the consequential
+boundary and replay semantics. `/root/p205_receipt_cli_audit` used the
+requested workhorse `gpt-5.6-sol` high route for the production-call and test
+witness inventory. Both workers were read-only, received no Git, build, test,
+forge, CI, or runtime custody, and could not spawn children. The primary owns
+the frozen interface, integration, guards, validation, and acceptance.
+
+Acceptance state and progress classification: this is an interface freeze,
+not implementation acceptance. It removes ambiguity from the next bounded
+packet but does not itself advance a P4 implementation criterion. The packet
+exits only when all production direct accesses to the three receipt maps are
+gone, provider-free replay tests and affected CLI witnesses pass, and the
+architecture guard rejects regression.
+
+## Checkpoint 47 | Exact Receipt-Map Closure Accepted
+
+State transition: Service Model now owns exact replay and terminal-record
+custody for profile lease reconciliation, profile recovery, and profile reset.
+The new borrowed identity inputs preserve each family's deliberately different
+matching contract. The typed replay error keeps Lease Authority mismatch,
+recovery receipt conflict, and reset receipt conflict distinct while the CLI
+retains their established contextual messages.
+
+All three record methods derive the map key from the typed receipt and retain
+the previous replacement behavior. They do not increment Service State or
+runtime-owner revisions, add a late conflict after partial mutation, or perform
+serialization or effects. Lease replay marks only its returned clone. Recovery
+status obtains one immutable receipt while preserving the unauthenticated
+`not_found` response on a miss.
+
+The CLI has zero production direct access to
+`profile_lease_reconcile_receipts`, `profile_recovery_receipts`, or
+`profile_reset_receipts`. Lease authority validation and replay order, recovery
+plan verification and two-stage replay around acquisition, reset verification
+and two-stage replay, postcondition checks, stale-reference repair, lock-file
+handling, event append, response assembly, and both revision sources remain
+unchanged. Direct accesses below test modules remain fixture debt for the final
+aggregate privacy packet.
+
+Acceptance evidence:
+
+- all 178 Service Model unit tests and fourteen integration tests pass;
+- five focused lease-reconciliation tests pass;
+- all 37 profile recovery and reset module tests pass;
+- the receipt codec round trip and prepared no-op revision witnesses pass;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  Service Model architecture contract, and all architecture mutation fixtures
+  pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route first for the frozen
+boundary and then for the two-file model implementation and provider-free
+tests. `/root/p205_receipt_cli_audit` used the requested workhorse
+`gpt-5.6-sol` high route first for the exact caller and ordering inventory and
+then for the two-file CLI cutover. The primary froze the interface, implemented
+the architecture guard and negative fixtures, reviewed the combined replay
+ordering, and ran the complete acceptance batch. Runtime-reported effective
+model metadata was not independently exposed.
+
+Acceptance state and progress classification: exact receipt-map closure is
+accepted and is outcome progress toward P4 field privacy. The next bounded
+outcome is Service Principal registry closure, followed by the larger
+runtime-owner and repository-sidecar authority boundary. P4 remains open for
+those authority surfaces, the lifecycle and presentation transitions,
+fixture migration, field privacy, facade deletion, and final measurement.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -2881,9 +2992,9 @@ fixture-migration, privacy, facade-deletion, and final measurement gates.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | aggregate and twenty-three prerequisite families accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, and Lease Authority mutation closure accepted; remaining typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, Service challenge and authentication map kernels, crash-regeneration transaction kernel, Lease Authority mutation closure, and exact receipt-map closure accepted; remaining typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | Lease Authority mutation closure accepted through Checkpoint 45 |
+| Focused correctness | crate tests and affected CLI adapter tests | exact receipt-map closure accepted through Checkpoint 47 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

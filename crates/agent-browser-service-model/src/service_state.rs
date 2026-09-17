@@ -46,6 +46,36 @@ impl std::fmt::Display for ServiceStateCodecError {
 
 impl std::error::Error for ServiceStateCodecError {}
 
+/// Exact sealed recovery identity used to match a retained terminal receipt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProfileRecoveryReceiptIdentity<'a> {
+    pub recovery_id: &'a str,
+    pub plan_id: &'a str,
+    pub principal_id: &'a str,
+    pub profile_id: &'a str,
+    pub producer_build_identity: &'a Value,
+}
+
+/// Exact sealed reset identity used to match a retained terminal receipt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProfileResetReceiptIdentity<'a> {
+    pub reset_id: &'a str,
+    pub plan_id: &'a str,
+    pub principal_id: &'a str,
+    pub profile_id: &'a str,
+    pub producer_build_identity: &'a Value,
+    pub scope: ProfileResetScope,
+    pub target_service_id: Option<&'a str>,
+}
+
+/// Receipt matching failures; adapters retain their contextual error formatting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileReceiptReplayError {
+    LeaseAuthorityMismatch,
+    RecoveryReceiptConflict,
+    ResetReceiptConflict,
+}
+
 /// Explicit configuration input for constructing the configured Service State
 /// overlay. Durable compatibility metadata and runtime-owned records are not
 /// accepted through this interface.
@@ -314,6 +344,98 @@ fn overlay_persisted_profile_freshness(
 }
 
 impl ServiceState {
+    /// Replay by idempotency key and principal only. The adapter checks current
+    /// authority before this lookup; seal, expiry, and CAS checks follow a miss.
+    /// Only the returned clone receives the replay marker.
+    pub fn replay_profile_lease_reconciliation(
+        &self,
+        idempotency_key: &str,
+        principal_id: &str,
+    ) -> Result<Option<ProfileLeaseReconcileReceipt>, ProfileReceiptReplayError> {
+        let Some(receipt) = self.profile_lease_reconcile_receipts.get(idempotency_key) else {
+            return Ok(None);
+        };
+        if receipt.principal_id != principal_id {
+            return Err(ProfileReceiptReplayError::LeaseAuthorityMismatch);
+        }
+        let mut replay = receipt.clone();
+        replay.replayed = true;
+        Ok(Some(replay))
+    }
+
+    /// Record after the adapter's guarded transitions, deriving the map key
+    /// from the receipt and preserving replacement semantics. This does not
+    /// advance a revision or perform replay, authority, or persistence checks.
+    pub fn record_profile_lease_reconciliation(&mut self, receipt: ProfileLeaseReconcileReceipt) {
+        self.profile_lease_reconcile_receipts
+            .insert(receipt.idempotency_key.clone(), receipt);
+    }
+
+    /// Inspect one recovery receipt; status authentication remains in the adapter.
+    pub fn profile_recovery_receipt(&self, recovery_id: &str) -> Option<&RecoveryReceipt> {
+        self.profile_recovery_receipts.get(recovery_id)
+    }
+
+    /// Match the existing recovery replay identity without checking current
+    /// owner state, plan expiry, or authority. Adapters verify the seal first.
+    pub fn replay_profile_recovery(
+        &self,
+        expected: ProfileRecoveryReceiptIdentity<'_>,
+    ) -> Result<Option<RecoveryReceipt>, ProfileReceiptReplayError> {
+        let Some(receipt) = self.profile_recovery_receipts.get(expected.recovery_id) else {
+            return Ok(None);
+        };
+        if receipt.plan_id != expected.plan_id
+            || receipt.recovery_id != expected.recovery_id
+            || receipt.principal_id != expected.principal_id
+            || receipt.profile_id != expected.profile_id
+            || receipt.producer_build_identity.as_ref() != Some(expected.producer_build_identity)
+            || receipt.terminal_result != "applied"
+        {
+            return Err(ProfileReceiptReplayError::RecoveryReceiptConflict);
+        }
+        Ok(Some(receipt.clone()))
+    }
+
+    /// Record after recovery postconditions and reference repair, deriving the
+    /// key from the receipt and preserving replacement semantics. Replay checks,
+    /// revision selection, acquisition effects, and persistence remain in adapters.
+    pub fn record_profile_recovery(&mut self, receipt: RecoveryReceipt) {
+        self.profile_recovery_receipts
+            .insert(receipt.recovery_id.clone(), receipt);
+    }
+
+    /// Match the existing reset replay identity without checking current
+    /// owner state, plan expiry, or authority. Adapters verify the seal first.
+    pub fn replay_profile_reset(
+        &self,
+        expected: ProfileResetReceiptIdentity<'_>,
+    ) -> Result<Option<ProfileResetReceipt>, ProfileReceiptReplayError> {
+        let Some(receipt) = self.profile_reset_receipts.get(expected.reset_id) else {
+            return Ok(None);
+        };
+        if receipt.plan_id != expected.plan_id
+            || receipt.reset_id != expected.reset_id
+            || receipt.principal_id != expected.principal_id
+            || receipt.profile_id != expected.profile_id
+            || &receipt.producer_build_identity != expected.producer_build_identity
+            || receipt.scope != expected.scope
+            || receipt.target_service_id.as_deref() != expected.target_service_id
+            || receipt.terminal_result != "applied"
+        {
+            return Err(ProfileReceiptReplayError::ResetReceiptConflict);
+        }
+        Ok(Some(receipt.clone()))
+    }
+
+    /// Record after the adapter's scoped reset mutations, deriving the key from
+    /// the receipt and preserving replacement semantics. This does not perform
+    /// effects, validate replay identity, or change the supplied revision.
+    pub fn record_profile_reset(&mut self, receipt: ProfileResetReceipt) {
+        self.profile_reset_receipts
+            .insert(receipt.reset_id.clone(), receipt);
+    }
+
     /// Inspect one crash transaction without granting mutable record access.
     pub fn crash_regeneration_transaction(
         &self,
@@ -3001,6 +3123,268 @@ pub fn validate_service_state_invariants(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn reconcile_receipt_fixture() -> ProfileLeaseReconcileReceipt {
+        ProfileLeaseReconcileReceipt {
+            schema_version: PROFILE_LEASE_RECONCILE_RECEIPT_SCHEMA_VERSION.to_string(),
+            idempotency_key: "reconcile-key".to_string(),
+            plan_id: "plan".to_string(),
+            lease_id: "lease".to_string(),
+            principal_id: "principal".to_string(),
+            applied_at: "2026-09-17T12:00:00Z".to_string(),
+            replayed: false,
+            transition_count: 2,
+            resulting_lease_revision: "lease-revision".to_string(),
+        }
+    }
+
+    fn recovery_receipt_fixture() -> RecoveryReceipt {
+        RecoveryReceipt {
+            schema_version: PROFILE_RECOVERY_RECEIPT_SCHEMA_V1.to_string(),
+            recovery_id: "recovery".to_string(),
+            plan_id: "plan".to_string(),
+            principal_id: "principal".to_string(),
+            profile_id: "profile".to_string(),
+            producer_build_identity: Some(json!({"sourceRevision": "build"})),
+            terminal_result: "applied".to_string(),
+            precondition_comparison: "matched".to_string(),
+            attempted_operation_ids: vec!["operation".to_string()],
+            compensation_result: "not_required".to_string(),
+            final_state_revision: 12,
+            acquisition_retry_state: ProfileAcquisitionState::Acquired,
+            browser_id: "browser".to_string(),
+            daemon_session_route: "route".to_string(),
+        }
+    }
+
+    fn recovery_receipt_identity(receipt: &RecoveryReceipt) -> ProfileRecoveryReceiptIdentity<'_> {
+        ProfileRecoveryReceiptIdentity {
+            recovery_id: &receipt.recovery_id,
+            plan_id: &receipt.plan_id,
+            principal_id: &receipt.principal_id,
+            profile_id: &receipt.profile_id,
+            producer_build_identity: receipt.producer_build_identity.as_ref().unwrap(),
+        }
+    }
+
+    fn reset_receipt_fixture() -> ProfileResetReceipt {
+        ProfileResetReceipt {
+            schema_version: PROFILE_RESET_RECEIPT_SCHEMA_V1.to_string(),
+            reset_id: "reset".to_string(),
+            plan_id: "plan".to_string(),
+            principal_id: "principal".to_string(),
+            profile_id: "profile".to_string(),
+            producer_build_identity: json!({"sourceRevision": "build"}),
+            scope: ProfileResetScope::Authentication,
+            target_service_id: Some("target".to_string()),
+            terminal_result: "applied".to_string(),
+            applied_at: "2026-09-17T12:00:00Z".to_string(),
+            final_state_revision: 42,
+            browser_cookies_erased: false,
+            seeding_handoff: None,
+        }
+    }
+
+    fn reset_receipt_identity(receipt: &ProfileResetReceipt) -> ProfileResetReceiptIdentity<'_> {
+        ProfileResetReceiptIdentity {
+            reset_id: &receipt.reset_id,
+            plan_id: &receipt.plan_id,
+            principal_id: &receipt.principal_id,
+            profile_id: &receipt.profile_id,
+            producer_build_identity: &receipt.producer_build_identity,
+            scope: receipt.scope,
+            target_service_id: receipt.target_service_id.as_deref(),
+        }
+    }
+
+    #[test]
+    fn profile_receipt_lookup_misses_do_not_change_state() {
+        let state = ServiceState::default();
+        let original = state.clone();
+        assert_eq!(
+            state.replay_profile_lease_reconciliation("missing", "principal"),
+            Ok(None)
+        );
+        assert_eq!(state.profile_recovery_receipt("missing"), None);
+        assert_eq!(
+            state.replay_profile_recovery(recovery_receipt_identity(&recovery_receipt_fixture())),
+            Ok(None)
+        );
+        assert_eq!(
+            state.replay_profile_reset(reset_receipt_identity(&reset_receipt_fixture())),
+            Ok(None)
+        );
+        assert_eq!(state, original);
+    }
+
+    #[test]
+    fn profile_reconciliation_replay_matches_only_principal_and_marks_only_clone() {
+        let mut state = ServiceState::default();
+        let receipt = reconcile_receipt_fixture();
+        state.record_profile_lease_reconciliation(receipt.clone());
+        let original = state.clone();
+        assert_eq!(
+            state.replay_profile_lease_reconciliation(&receipt.idempotency_key, "foreign"),
+            Err(ProfileReceiptReplayError::LeaseAuthorityMismatch)
+        );
+        let mut expected = receipt.clone();
+        expected.replayed = true;
+        assert_eq!(
+            state.replay_profile_lease_reconciliation(
+                &receipt.idempotency_key,
+                &receipt.principal_id
+            ),
+            Ok(Some(expected))
+        );
+        assert_eq!(state, original);
+        assert!(!state.profile_lease_reconcile_receipts[&receipt.idempotency_key].replayed);
+
+        // A persisted map key, rather than receipt metadata, selects replay.
+        let mut legacy = receipt.clone();
+        legacy.idempotency_key = "different-embedded-key".to_string();
+        legacy.plan_id.clear();
+        legacy.lease_id.clear();
+        state
+            .profile_lease_reconcile_receipts
+            .insert(receipt.idempotency_key.clone(), legacy.clone());
+        legacy.replayed = true;
+        assert_eq!(
+            state.replay_profile_lease_reconciliation(
+                &receipt.idempotency_key,
+                &receipt.principal_id
+            ),
+            Ok(Some(legacy))
+        );
+    }
+
+    #[test]
+    fn profile_recovery_receipt_replay_preserves_exact_identity_predicates() {
+        let mut state = ServiceState::default();
+        let receipt = recovery_receipt_fixture();
+        state.record_profile_recovery(receipt.clone());
+        assert_eq!(
+            state.profile_recovery_receipt(&receipt.recovery_id),
+            Some(&receipt)
+        );
+        let original = state.clone();
+        assert_eq!(
+            state.replay_profile_recovery(recovery_receipt_identity(&receipt)),
+            Ok(Some(receipt.clone()))
+        );
+        assert_eq!(state, original);
+        for (field, value) in [
+            ("planId", json!("other")),
+            ("recoveryId", json!("other")),
+            ("principalId", json!("other")),
+            ("profileId", json!("other")),
+            ("producerBuildIdentity", json!({"sourceRevision": "other"})),
+            ("terminalResult", json!("failed")),
+        ] {
+            let mut wire = serde_json::to_value(&receipt).unwrap();
+            wire[field] = value;
+            state.profile_recovery_receipts.insert(
+                receipt.recovery_id.clone(),
+                serde_json::from_value(wire).unwrap(),
+            );
+            let before = state.clone();
+            assert_eq!(
+                state.replay_profile_recovery(recovery_receipt_identity(&receipt)),
+                Err(ProfileReceiptReplayError::RecoveryReceiptConflict),
+                "{field} must match"
+            );
+            assert_eq!(state, before);
+        }
+        let mut legacy = serde_json::to_value(&receipt).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("producerBuildIdentity");
+        state.record_profile_recovery(serde_json::from_value(legacy).unwrap());
+        assert_eq!(
+            state.replay_profile_recovery(recovery_receipt_identity(&receipt)),
+            Err(ProfileReceiptReplayError::RecoveryReceiptConflict)
+        );
+    }
+
+    #[test]
+    fn profile_reset_receipt_replay_preserves_exact_identity_predicates() {
+        let mut state = ServiceState::default();
+        let receipt = reset_receipt_fixture();
+        state.record_profile_reset(receipt.clone());
+        let original = state.clone();
+        assert_eq!(
+            state.replay_profile_reset(reset_receipt_identity(&receipt)),
+            Ok(Some(receipt.clone()))
+        );
+        assert_eq!(state, original);
+        for (field, value) in [
+            ("planId", json!("other")),
+            ("resetId", json!("other")),
+            ("principalId", json!("other")),
+            ("profileId", json!("other")),
+            ("producerBuildIdentity", json!({"sourceRevision": "other"})),
+            ("scope", json!("runtime")),
+            ("targetServiceId", json!("other")),
+            ("targetServiceId", Value::Null),
+            ("terminalResult", json!("failed")),
+        ] {
+            let mut wire = serde_json::to_value(&receipt).unwrap();
+            wire[field] = value;
+            state.profile_reset_receipts.insert(
+                receipt.reset_id.clone(),
+                serde_json::from_value(wire).unwrap(),
+            );
+            let before = state.clone();
+            assert_eq!(
+                state.replay_profile_reset(reset_receipt_identity(&receipt)),
+                Err(ProfileReceiptReplayError::ResetReceiptConflict),
+                "{field} must match"
+            );
+            assert_eq!(state, before);
+        }
+        let mut untargeted = receipt;
+        untargeted.scope = ProfileResetScope::Runtime;
+        untargeted.target_service_id = None;
+        state.record_profile_reset(untargeted.clone());
+        assert_eq!(
+            state.replay_profile_reset(reset_receipt_identity(&untargeted)),
+            Ok(Some(untargeted.clone()))
+        );
+    }
+
+    #[test]
+    fn profile_receipt_recording_derives_keys_and_replaces_without_revision_changes() {
+        let mut state = ServiceState::default();
+        let revision = state.state_revision();
+        let owner_revision = state.runtime_owner_registry.revision();
+        let mut lease = reconcile_receipt_fixture();
+        let mut recovery = recovery_receipt_fixture();
+        let mut reset = reset_receipt_fixture();
+        state.record_profile_lease_reconciliation(lease.clone());
+        state.record_profile_recovery(recovery.clone());
+        state.record_profile_reset(reset.clone());
+        // Changed identity still replaces: insertion does not add a conflict gate.
+        lease.principal_id = "replacement".to_string();
+        recovery.principal_id = "replacement".to_string();
+        reset.principal_id = "replacement".to_string();
+        state.record_profile_lease_reconciliation(lease.clone());
+        state.record_profile_recovery(recovery.clone());
+        state.record_profile_reset(reset.clone());
+        assert_eq!(
+            state.profile_lease_reconcile_receipts,
+            BTreeMap::from([(lease.idempotency_key.clone(), lease)])
+        );
+        assert_eq!(
+            state.profile_recovery_receipts,
+            BTreeMap::from([(recovery.recovery_id.clone(), recovery)])
+        );
+        assert_eq!(
+            state.profile_reset_receipts,
+            BTreeMap::from([(reset.reset_id.clone(), reset)])
+        );
+        assert_eq!(state.state_revision(), revision);
+        assert_eq!(state.runtime_owner_registry.revision(), owner_revision);
+    }
 
     #[test]
     fn current_lease_claim_requires_the_exact_resource_and_unexpired_claim() {
