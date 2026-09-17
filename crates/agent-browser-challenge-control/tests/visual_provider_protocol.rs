@@ -314,25 +314,66 @@ fn stale_request_or_response_fails_before_selection() {
     let policy = policy();
     let evidence = evidence();
     let request = prepare_request(&policy, &evidence);
-    let response = selected_response(
+    let valid_response = selected_response(
         &request.request_digest,
         &evidence,
         vec!["candidate:1".to_string()],
     );
     assert_intervention(
-        adjudicate_visual_provider_response(&policy, &evidence, &request, &response, 2_000)
+        adjudicate_visual_provider_response(&policy, &evidence, &request, &valid_response, 2_000)
             .unwrap(),
         VisualRoundInterventionReason::StaleEvidence,
     );
 
-    let mut expired_response = response;
-    expired_response.expires_at_ms = 1_250;
-    expired_response.response_digest = visual_provider_response_digest(&expired_response);
-    assert_intervention(
-        adjudicate_visual_provider_response(&policy, &evidence, &request, &expired_response, 1_300)
-            .unwrap(),
-        VisualRoundInterventionReason::StaleEvidence,
-    );
+    for (mut response, now_ms) in [
+        (
+            {
+                let mut response = valid_response.clone();
+                response.expires_at_ms = 1_250;
+                response
+            },
+            1_300,
+        ),
+        (
+            {
+                let mut response = valid_response.clone();
+                response.produced_at_ms = request.requested_at_ms - 1;
+                response
+            },
+            1_300,
+        ),
+        (
+            {
+                let mut response = valid_response.clone();
+                response.produced_at_ms = 1_301;
+                response
+            },
+            1_300,
+        ),
+        (
+            {
+                let mut response = valid_response.clone();
+                response.produced_at_ms = response.expires_at_ms;
+                response
+            },
+            1_300,
+        ),
+        (
+            {
+                let mut response = valid_response.clone();
+                response.expires_at_ms = request.expires_at_ms + 1;
+                response
+            },
+            1_300,
+        ),
+    ] {
+        response.response_digest = visual_provider_response_digest(&response);
+        assert_intervention(
+            adjudicate_visual_provider_response(&policy, &evidence, &request, &response, now_ms)
+                .unwrap(),
+            VisualRoundInterventionReason::StaleEvidence,
+        );
+    }
 }
 
 #[test]
