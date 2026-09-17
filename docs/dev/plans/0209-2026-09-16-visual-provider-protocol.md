@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 8
+Plan version: 9
 
 State: SOURCE ACCEPTED | P206 INTEGRATION PENDING
 
@@ -245,6 +245,12 @@ artifact identity or digest, pre-observation preparation, expired evidence and
 over-budget execution plans all fail before a provider request exists. The
 complete 49-test crate, formatting, strict workspace Clippy and diff hygiene
 remain green.
+
+Checkpoint `f9987721` adds the distinct response-integrity invariant. The
+response digest changes for request, evidence, candidate-set, capability,
+selected-candidate order, production-time and expiry mutations. All 50
+challenge-control tests, formatting, strict workspace Clippy and diff hygiene
+pass.
 
 ## Stop Condition
 

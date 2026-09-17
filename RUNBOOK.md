@@ -10,6 +10,14 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
 - [P209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md)
 
+## Turn 378 | 2026-09-17
+
+P209 checkpoint `f9987721` proves the response digest binds request, evidence,
+candidate-set, capability, selected-candidate order, production-time and expiry
+fields. All 50 challenge-control tests, strict workspace Clippy, formatting and
+diff hygiene pass. No provider, browser, CAPTCHA, credential, runtime,
+production or CI-dispatch effect occurred.
+
 ## Turn 377 | 2026-09-17
 
 P209 checkpoint `89edafd5` proves request preparation rejects invalid policy,
