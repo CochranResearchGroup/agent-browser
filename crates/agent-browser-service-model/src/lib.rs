@@ -3,11 +3,17 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod browser_profile;
 mod entity_source;
 mod profile_access;
 mod profile_readiness;
 mod profile_seeding;
 
+pub use browser_profile::{
+    BrowserHost, BrowserProfile, BrowserProfileRegistration, ProfileClass, ProfileOrigin,
+    ProfileSourceRecord, SitePolicySourceRecord, SERVICE_BROWSER_HOST_VALUES,
+    SERVICE_PROFILE_CLASS_VALUES,
+};
 pub use entity_source::{ServiceEntitySource, ServiceEntitySources};
 pub use profile_access::{
     effective_profile_permissions, evaluate_profile_access, evaluate_profile_child_access,

@@ -353,6 +353,38 @@ Next action: publish this deep-module checkpoint, then move the neutral profile
 record family and `BrowserProfile` without moving its CLI derivation or
 persistence adapters.
 
+## Checkpoint 4 | Browser Profile Aggregate
+
+State transition: the crate now owns `BrowserProfile`, browser host, profile
+origin and class, registration, and profile and site-policy source projection
+records. Readiness derivation, source joins, overlay precedence, persistence,
+profile selection, launch parsing, and runtime decisions remain CLI adapters.
+
+Acceptance state and progress classification: this P1 record packet is accepted
+locally. The deletion scan finds each moved profile symbol exactly once under
+the crate and no duplicate CLI definitions. The high-fan-out CLI import seam is
+a re-export only.
+
+Evidence:
+
+- 25 crate tests pass in 0.67 seconds on the final warm packet candidate;
+- the representative external-profile test round-trips nested access policy,
+  readiness, registration, compatibility evidence, host, class, and origin;
+- aggregate defaults and exact host, class, and origin wire labels are frozen;
+- the nested Service State round-trip and collection wire-contract tests pass
+  after cutover; the warning-free nested round-trip rerun passes after narrowing
+  unused facade imports;
+- formatting, architecture guard, and duplicate-definition checks pass.
+
+Material blockers: the crate still does not own the full Service State
+aggregate. Remaining dependencies include presentation capacity, migration,
+lease and lifecycle receipts, browser retirement and recovery transactions,
+runtime ownership, authentication, challenge tasks, and the remaining core
+browser, session, tab, job, route, event, and policy records.
+
+Next action: publish this checkpoint and reassess the next dependency cluster
+against the remaining delivery budget before expanding the move.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
