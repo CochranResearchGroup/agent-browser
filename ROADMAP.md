@@ -25,6 +25,23 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P204 | CI Validation Economics And Tiering
+
+State: OPEN
+
+Current state: [Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+and [issue #174](https://github.com/CochranResearchGroup/agent-browser/issues/174)
+own the `PL-PLATFORM` repair. Published source `b481ab01` adds the versioned classifier,
+surface fixtures, exact-head conditional jobs, pull-request cancellation,
+focused Rust compartments, bounded economics, and the stable fail-closed
+`Presubmit` aggregate. Exact-head CI run `35172965793` passed every selected
+ordinary gate and the stable aggregate; it also proved the corrected isolation
+between serialized CLI compartments and the independent crate lane. Post-merge
+organic docs-only and narrow-Rust evidence and an explicitly authorized
+comprehensive dispatch remain pending. The post-merge `main` fallback remains
+until issue #164 proves live enforcement; workflow dispatch, branch-rule
+mutation, installed-runtime effects, and release are outside this lane.
+
 ## P203 | Runtime Host Admission Routing
 
 State: CLOSED
@@ -239,7 +256,9 @@ on `challenge/p206-visual-round-contract` from exact published P197 head
 pure provider-free round contract and 23-case synthetic matrix are green with the complete crate,
 architecture, formatting and strict Clippy gates. P197 merged through PR #157
 as `c855fc33`; P206 joined that canonical checkpoint at `5d6e3d57` without a
-tree change. Exact-head forge evaluation and protected P206 integration remain.
+tree change, then joined merged P204 and current `main@f5e3f31b` at
+`89bdfdbf`. Reconciled local path-selected validation passes. Exact-head forge
+evaluation and protected P206 integration remain.
 Issue #66 retains the separately live-gated challenge acceptance leaf. This
 registration authorizes no challenge attempt, retry, browser effect, provider
 effect, credential use, runtime mutation, installation, or release.

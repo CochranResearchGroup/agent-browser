@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 4
+Plan version: 5
 
-State: OPEN
+State: SOURCE ACCEPTED | INTEGRATION READY
 
 Consolidation: required
 
@@ -26,8 +26,8 @@ Integrated prerequisite: P197 published head
 
 Source baseline: `cd22a39f989e29a27d6ec80283ae60667093fc9c`
 
-Integration: P206 joined canonical `main@c855fc33` at merge checkpoint
-`5d6e3d57`; exact-head forge evaluation and protected integration remain
+Integration: P206 joined canonical `main@f5e3f31b` at merge checkpoint
+`89bdfdbf`; exact-head forge evaluation and protected integration remain
 
 ## Objective
 
@@ -54,13 +54,14 @@ fresh visual evidence, exact candidate-set and intent binding, per-round plus
 cumulative budgets, acknowledged-effect custody, after-state continuity and
 zero-effect terminal replay inside one attempt.
 
-P204 owns CI validation tiering and P205 owns Service-model extraction. P206 is
-source-disjoint from both: it owns only the pure challenge-control crate, its
-provider-free tests, this plan and the bounded challenge-lane projections.
-P206 started from P197's exact published head rather than recreating or
-cherry-picking that contract. The canonical reconciliation is tree-identical to
-the accepted P206 checkpoint, so its source validation remains current. Only
-exact-head forge evaluation and protected P206 integration remain.
+P204 CI validation tiering merged through PR #179 as `f5e3f31b`. P206 joined
+that canonical checkpoint at `89bdfdbf` after resolving only the shared runbook
+projection. P205 owns Service-model extraction and remains source-disjoint.
+P206 owns only the pure challenge-control crate, its provider-free tests, this
+plan and the bounded challenge-lane projections. P206 started from P197's exact
+published head rather than recreating or cherry-picking that contract. The
+canonical reconciliation does not alter the accepted challenge-control source.
+Only exact-head forge evaluation and protected P206 integration remain.
 
 ## Source Checkpoint
 
@@ -93,6 +94,26 @@ No browser, CAPTCHA, model provider, credential, desktop input, Service State,
 installed runtime, production or CI-policy effect occurred. P197 integration
 and canonical P206 reconciliation are complete; protected exact-head evaluation
 is the only remaining gate.
+
+## Canonical Reconciliation | 2026-09-17
+
+Merge checkpoint `89bdfdbf` joins `main@f5e3f31b`, including the merged P204
+path-selected validation machinery. The reconciled exact-head local gate set
+passed:
+
+- all 39 challenge-control tests, including the 23-case visual-round matrix;
+- strict workspace Clippy and workspace formatting;
+- challenge-control, CDP, Lease Authority and desktop-services architecture
+  guards;
+- all 3 CDP and 3 desktop-services tests; and
+- all 108 Lease Authority tests on the authoritative isolated rerun.
+
+The first selector-expanded Lease Authority run observed one stale-process
+result in `browser_launch_completion_derives_an_exact_direct_child_process_identity`
+while running alongside another Cargo claim. The exact test then passed 20 of
+20 isolated executions and the complete 108-test package rerun passed. No P206
+source or Lease Authority source changed in response; the failed sample remains
+diagnostic evidence rather than P206 invalidation.
 
 ## Contract Boundary
 

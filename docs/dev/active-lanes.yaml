@@ -8,19 +8,40 @@ lanes:
     plan_ref: refs/heads/challenge/p206-visual-round-contract
     branch: challenge/p206-visual-round-contract
     target: main
-    plan_state: SOURCE_ACCEPTED_PUBLICATION_HELD
+    plan_state: SOURCE_ACCEPTED_INTEGRATION_READY
     custody_state: PUBLISHED_INTEGRATION_READY
-    checkpoint: 5d6e3d57
+    checkpoint: 89bdfdbf
     remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
     integration_receipt: null
     integration: merge through the protected main workflow after exact-head forge evaluation
-    validation_status: 39 challenge-control tests including the complete 23-case visual-round matrix, challenge-control architecture guard, formatting, strict workspace Clippy, diff hygiene, and changed-surface selection passed at the source checkpoint
-    validation_ref: ac9f50a7
+    validation_status: reconciled exact-head local validation passed 39 challenge-control tests, strict workspace Clippy, formatting, four architecture guards, 114 selector-expanded extracted-crate tests, and diff hygiene
+    validation_ref: 89bdfdbf
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: []
-    reconciled_overlaps: [P197]
+    reconciled_overlaps: [P197, P204]
     blocker: exact-head forge evaluation and protected integration remain; all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    updated_at: 2026-09-17
+  - id: P204
+    product_lane: PL-PLATFORM
+    objective: Make ordinary CI path-selected with a stable aggregate presubmit while retaining fail-safe comprehensive qualification
+    plan: docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md
+    plan_ref: refs/heads/platform/p204-ci-validation-tiering
+    branch: platform/p204-ci-validation-tiering
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: b481ab01056dfd3e2b7615ea9bc483398d57a87b
+    remote_ref: refs/remotes/origin/platform/p204-ci-validation-tiering
+    integration_receipt: null
+    integration: merge through the protected pull-request workflow after selector fixtures, workflow validation, and changed-surface validation
+    validation_status: exact-head CI run 35172965793 passed every selected ordinary job and Presubmit; post-merge organic docs-only and narrow-Rust evidence plus authorized comprehensive qualification remain
+    validation_ref: b481ab01056dfd3e2b7615ea9bc483398d57a87b
+    work_items: [CochranResearchGroup/agent-browser#174]
+    dependencies: [CochranResearchGroup/agent-browser#164]
+    overlaps: [P197:ROADMAP.md, P197:RUNBOOK.md, P197:docs/dev/active-lanes.yaml]
+    reconciled_overlaps: [P204 writes only its own bounded planning sections and catalog entry; P197 retains its own records]
+    blocker: main-fallback removal remains blocked until issue #164 proves live Presubmit enforcement; implementation can proceed independently
     updated_at: 2026-09-16
   - id: P209
     product_lane: PL-CHALLENGE
@@ -29,8 +50,8 @@ lanes:
     plan_ref: refs/heads/challenge/p209-visual-provider-protocol
     branch: challenge/p209-visual-provider-protocol
     target: main
-    plan_state: OPEN
-    custody_state: LOCAL_CI_HOLD
+    plan_state: SOURCE_ACCEPTED_DEPENDENCY_PENDING
+    custody_state: LOCAL_DEPENDENCY_HOLD
     checkpoint: 4be65f06
     remote_ref: null
     integration_receipt: null
@@ -41,5 +62,5 @@ lanes:
     dependencies: [P206]
     overlaps: [P206]
     reconciled_overlaps: [P206]
-    blocker: source is accepted locally; publication and CI are explicitly held on merged PR 179, and all model-provider, image, browser, CAPTCHA, desktop-input, runtime and production effects are excluded
-    updated_at: 2026-09-16
+    blocker: source is accepted locally and has joined published P206 head 99793061; publication waits for PR 180 to enter main and canonical reconciliation, while all model-provider, image, browser, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    updated_at: 2026-09-17
