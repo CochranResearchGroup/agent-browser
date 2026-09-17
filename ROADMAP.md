@@ -275,10 +275,28 @@ The four public guidance surfaces are aligned. P202 merged through PR #168 and
 released its overlap; P197 joined canonical `main@2632e31c` at merge checkpoint
 `7dc8a860`. Combined provider-free source, contract, client, route-confusion,
 and documentation checks pass. P197 publication, exact-head forge evaluation,
-and protected integration remain. W7-A is selected but not admitted. Issue #66
-retains the separately live-gated challenge acceptance leaf.
-This registration authorizes no challenge attempt, retry, browser effect,
-provider effect, credential use, runtime mutation, installation, or release.
+and protected integration remain. W7-A is admitted through
+[Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
+on `challenge/p206-visual-round-contract` from exact published P197 head
+`cd22a39f` and is source-complete and acceptance-complete at `ac9f50a7`. Its
+pure provider-free round contract and 23-case synthetic matrix are green with the complete crate,
+architecture, formatting and strict Clippy gates. P197 merged through PR #157
+as `c855fc33`; P206 joined that canonical checkpoint at `5d6e3d57` without a
+tree change, then joined merged P204 and current `main@f5e3f31b` at
+`89bdfdbf`. Pre-merge review then found cumulative `u8` saturation could admit
+an over-budget restored total and could classify 256 selected candidates as a
+generic transition error. Repair checkpoint `4813d385` uses widened and checked
+budget arithmetic; all 41 challenge-control tests, including 25 visual-round
+cases, architecture, formatting, strict Clippy and diff hygiene pass. P206
+joined CI-disabled `main@f6d49f89` at `bb961c96`, P208's source integration at
+`db987e4e`, and current `main@692f77c6` at `1c9ee159`; none changes the accepted
+Rust source.
+Conflict-affected repository-control checks pass locally. GitHub CI remains
+operator-disabled and was not restored or run. Reconciled publication and
+protected P206 integration remain.
+Issue #66 retains the separately live-gated challenge acceptance leaf. This
+registration authorizes no challenge attempt, retry, browser effect, provider
+effect, credential use, runtime mutation, installation, or release.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

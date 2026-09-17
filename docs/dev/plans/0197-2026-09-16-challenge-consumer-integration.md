@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 9
+Plan version: 10
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -21,8 +21,7 @@ Branch: `challenge/p197-consumer-integration`
 
 Target: `main`
 
-Integration: merge through the protected `main` workflow after provider-free
-W6 validation
+Integration: merged through PR #157 as canonical merge commit `c855fc33`
 
 Source baseline: `faee8887fb420e8e46bd5a165ce6c44fa10059d2`
 
@@ -61,9 +60,10 @@ overlapping source custody. P202 has now merged through PR #168 as `528f2ef0`
 and closed through canonical `main@2632e31c`. P197 joined that exact mainline at
 merge checkpoint `7dc8a860`. The challenge implementation and four public
 guidance files remain intact; P202 is no longer a dependency or active overlap.
-Exact branch head `4321961c` is published to the PR. Exact-head forge evaluation
-and protected P197 integration remain; the clean primary checkout can now be
-released without closing the plan or claiming integration.
+Exact branch head `cd22a39f` passed every ordinary required forge check and
+merged through PR #157 as canonical `main@c855fc33`. P197 is closed and removed
+from the active-lane catalog. Its source branch remains preserved because P206
+was built directly on that published ancestry.
 
 ## Contract
 
@@ -206,6 +206,12 @@ the branch and draft PR #157, the issue and PR projections identify the current
 scope and remaining gates, and the clean checkout no longer needs to retain
 primary custody while forge evaluation and protected integration proceed.
 
+Plan version 10 records protected integration. Exact published head
+`cd22a39f` passed Version Sync, Rust Quality, Dashboard, Service Client,
+Workstation Fixtures and comprehensive Rust in run `35170777014`, then merged
+through PR #157 as `c855fc33`. No browser, provider, credential, installed
+runtime or production effect occurred during integration.
+
 ## Implementation Checkpoint
 
 The pure challenge-control contract verifies terminal receipt consistency,
@@ -250,8 +256,8 @@ Authentication Run tests, four Service challenge-task tests, the navigation
 bypass test, and the correctly stack-sized dispatch fixture pass. P197 joined
 canonical `main@2632e31c` after P202 integration at merge checkpoint
 `7dc8a860`; the shared documentation and governance histories remain intact.
-Exact branch head `4321961c` is published. Exact-head forge evaluation and
-protected P197 integration remain.
+Exact branch head `cd22a39f` passed all ordinary required checks and entered
+canonical `main` through PR #157 as merge commit `c855fc33`.
 
 ## Validation And Exit
 

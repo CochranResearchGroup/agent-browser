@@ -7,6 +7,54 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+- [P206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
+
+## Turn 380 | 2026-09-17
+
+P206 joined operator-disabled-CI `main@f6d49f89` at `bb961c96`, P208's source
+integration at `db987e4e`, and canonical `main@692f77c6` at `1c9ee159` after
+P208 closed. The only conflicts were shared runbook projections, resolved by
+retaining both plans' records. None of these main slices changes
+challenge-control source or Cargo metadata, so the repaired
+41-test source evidence at published head `72eeea03` remains reusable.
+Conflict-affected policy wiring, documentation links, validation-selection,
+P208 closeout fixtures, active planning audit and diff hygiene pass locally.
+GitHub CI remains disabled by operator direction; no workflow was restored,
+dispatched, retried or run. Reconciled publication and protected integration
+remain. No browser, provider, CAPTCHA, credential, runtime or production
+effect occurred.
+
+## Turn 379 | 2026-09-17
+
+P206 pre-merge review reproduced two budget-boundary defects: cumulative
+selection arithmetic could saturate and admit an actual total above 255, and a
+256-candidate selection returned a generic transition error rather than typed
+round-budget intervention. Repair checkpoint `4813d385` replaces saturation
+with widened and checked arithmetic. All 41 challenge-control tests, including
+25 visual-round cases, the crate architecture guard, strict workspace Clippy,
+formatting and diff hygiene pass. The corrected head still requires protected
+exact-head evaluation. No provider, browser, CAPTCHA, credential, runtime or
+production effect occurred.
+
+## Turn 373 | 2026-09-17
+
+[Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
+is source-complete and acceptance-complete at `ac9f50a7` on
+`challenge/p206-visual-round-contract`,
+based on exact published P197 head `cd22a39f`. The pure challenge-control
+contract keeps visual rounds inside one attempt, binds each selection and
+effect receipt to fresh evidence and exact candidate identities, preserves
+after-state continuity, and enforces per-round plus cumulative budgets. All 39
+crate tests, including the complete 23-case visual-round matrix, the crate
+architecture guard, formatting, strict workspace Clippy and diff hygiene pass.
+P197 head `cd22a39f` passed all ordinary required checks and merged through PR
+#157 as `c855fc33`. P206 joined that canonical checkpoint at tree-preserving
+merge `5d6e3d57`, then joined merged P204 and current `main@f5e3f31b` at
+`89bdfdbf`. Reconciled local validation passes the 39-test challenge-control
+compartment, strict workspace Clippy and formatting, four architecture guards,
+and 114 selector-expanded extracted-crate tests. Exact-head forge evaluation
+and protected P206 integration remain. No browser, model provider, CAPTCHA,
+desktop input, credential, installed runtime or production effect occurred.
 
 ## Turn 376 | 2026-09-17
 

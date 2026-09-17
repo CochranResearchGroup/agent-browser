@@ -1,27 +1,27 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P197
+  - id: P206
     product_lane: PL-CHALLENGE
-    objective: Integrate authentication and navigation through one provider-neutral challenge consumer-admission contract
-    plan: docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md
-    plan_ref: refs/remotes/origin/challenge/p197-consumer-integration
-    branch: challenge/p197-consumer-integration
+    objective: Prove a provider-free visual and multi-round evidence contract inside one policy-authorized challenge attempt
+    plan: docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md
+    plan_ref: refs/heads/challenge/p206-visual-round-contract
+    branch: challenge/p206-visual-round-contract
     target: main
-    plan_state: OPEN
+    plan_state: SOURCE_ACCEPTED_INTEGRATION_READY
     custody_state: PUBLISHED_INTEGRATION_READY
-    checkpoint: 4321961c6545c405a85578b84788e0db6112d10a
-    remote_ref: refs/remotes/origin/challenge/p197-consumer-integration
+    checkpoint: 1c9ee159
+    remote_ref: refs/remotes/origin/challenge/p206-visual-round-contract
     integration_receipt: null
-    integration: merge through the protected `main` workflow after provider-free W6 validation
-    validation_status: combined provider-free challenge-control, focused authentication and navigation, strict Clippy and formatting, Service API/MCP parity, service client, no-launch collections, route-confusion, docs build, and documentation contract checks green; dependency integrated and exact-head forge evaluation pending
-    validation_ref: ca0f3447b473a652710b2b5202f75cfa628f52bb
+    integration: publish the reconciled branch and merge through the protected main workflow without restoring or dispatching operator-disabled GitHub CI
+    validation_status: repaired source validation passed 41 challenge-control tests including cumulative-overflow boundaries, strict workspace Clippy, formatting, challenge-control architecture and diff hygiene; main reconciliation changed no challenge or Cargo source, and conflict-affected policy, documentation, validation-selection, worktree-closeout, planning and diff-hygiene checks pass locally
+    validation_ref: 1c9ee159
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: []
-    reconciled_overlaps: [P202]
-    blocker: exact-head forge evaluation and protected integration remain; every live challenge effect stays with issue #66
-    updated_at: 2026-09-16
+    reconciled_overlaps: [P197, P204, P208]
+    blocker: reconciled branch publication and protected integration remain; GitHub CI is operator-disabled and all browser, model-provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    updated_at: 2026-09-17
   - id: P204
     product_lane: PL-PLATFORM
     objective: Disable GitHub CI while retaining a reviewed path-selected workflow for explicit future re-enablement
