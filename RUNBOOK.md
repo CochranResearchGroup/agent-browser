@@ -17,8 +17,13 @@ worktree was created. It owns only an effect-free desktop-services candidate
 geometry and controller-authority contract plus provider-free fixtures. P211's
 active cold-upgrade branch touches CLI shutdown and workstation routing, not
 the P212 source surface; shared planning files are an explicit reconciliation
-overlap. GitHub CI remains disabled. No browser, capture, provider, CAPTCHA,
-desktop-input, runtime or production effect is authorized.
+overlap. Source checkpoint `00f41715` now binds exact observation and ordered
+candidate geometry to current controller authority and checked effect budgets.
+All 12 desktop-services tests, the strengthened architecture guard, workspace
+formatting, strict workspace Clippy, documentation links and diff hygiene pass
+locally. GitHub CI remains disabled and was not restored or run. Publication
+and protected integration remain. No browser, capture, provider, CAPTCHA,
+desktop-input, runtime or production effect occurred.
 
 ## Turn 383 | 2026-09-17
 

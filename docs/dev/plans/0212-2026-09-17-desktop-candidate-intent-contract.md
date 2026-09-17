@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 1
+Plan version: 2
 
-State: OPEN
+State: SOURCE_ACCEPTED
 
 Consolidation: required
 
@@ -53,8 +53,11 @@ primary writer only for the candidate-intent module and fixtures. Both branches
 will reconcile their shared roadmap, runbook and lane-catalog projections at
 integration.
 
-GitHub CI is operator-disabled. P212 will use local provider-free validation
-and will not restore or dispatch a workflow.
+Source checkpoint `00f41715` implements the effect-free contract and fixture
+matrix. All 12 desktop-services tests, the strengthened architecture guard,
+formatting, strict workspace Clippy, documentation links and diff hygiene pass
+locally. GitHub CI is operator-disabled and was not restored or dispatched.
+Publication and protected integration remain.
 
 ## Architecture Boundary
 
@@ -70,9 +73,10 @@ P212 adds these pure contracts:
 - `DesktopCandidateObservation`: exact browser, display, stream, route,
   coordinate-space and geometry-epoch binding plus frame, context, geometry
   and ordered candidate-set digests, capture time, expiry and candidate list;
-- `DesktopCandidateIntent`: one source-intent digest, exact evidence and
-  candidate-set binding, selected candidate identities, controller lease,
-  provider capability digest, expiry and fixed step, pointer and key budgets;
+- `DesktopCandidateIntent`: one source-intent digest, exact observation,
+  evidence and candidate-set binding, selected candidate identities,
+  controller lease, provider capability digest, expiry and fixed step, pointer
+  and key budgets;
 - `DesktopCandidateEffectPermit`: selected candidate geometry, exact desktop
   binding, current authority digest, bounded counts and a deterministic permit
   digest; and
@@ -183,6 +187,39 @@ Publication requires a branch based on `main@06972a5e`, durable remote custody
 and a normal protected merge. GitHub CI is operator-disabled and is not part of
 this packet's validation path. P212 closes after its exact source enters
 canonical `main`; the later challenge consumer remains a separate packet.
+
+## Source Acceptance | 2026-09-17
+
+Checkpoint `00f41715` adds the pure `candidate_intent` module to
+`agent-browser-desktop-services`. It binds one ordered candidate set and
+selected ordered subset to canonical observation, evidence, frame, context,
+geometry and candidate-set digests. Physical-pixel bounds and centers are
+validated before current controller authority, exact route and stream
+membership, matching non-manual machine-input provider and checked effect
+budgets produce one deterministic permit. Permit construction claims no route
+and emits no event.
+
+The initial tracer moved from a missing public API to one exact effect-free
+permit. The fail-closed matrix then exposed and repaired admission of reordered
+selection and inconsistent or oversized budgets. Review exposed a further
+binding gap: component digests alone did not prove the geometry epoch belonged
+to the observation used by the intent. The accepted contract therefore binds
+the exact observation digest, requires canonical lowercase SHA-256 text and
+rejects blank optional profile and machine-input provider identities.
+
+Local acceptance passes:
+
+- all 12 desktop-services tests, including nine candidate-intent fixtures;
+- the strengthened desktop-services architecture guard;
+- workspace formatting and strict workspace Clippy;
+- documentation links, changed-surface selection and diff hygiene; and
+- the active planning and catalog audits.
+
+The selector expands to broad validation because the modified architecture
+guard is conservatively classified as an unknown repository-tooling surface.
+The source change remains limited to desktop services and its provider-free
+guard; no CLI, Service State, challenge crate, browser, capture, provider,
+credential, CAPTCHA, desktop-input, runtime, production or CI effect occurred.
 
 ## Stop Condition
 

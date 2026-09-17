@@ -324,7 +324,11 @@ on `platform/p212-desktop-candidate-intent-contract`. P212 freezes an
 effect-free candidate geometry and controller-authority admission contract in
 desktop services without importing challenge types or emitting input. P211's
 active cold-upgrade source is disjoint; shared planning projections reconcile
-at integration. GitHub CI remains operator-disabled.
+at integration. Source checkpoint `00f41715` implements exact observation,
+ordered selection, physical-pixel geometry, authority and checked-budget
+binding. All 12 desktop-services tests, the strengthened architecture guard,
+workspace formatting and strict workspace Clippy pass locally. Publication and
+protected integration remain. GitHub CI remains operator-disabled.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

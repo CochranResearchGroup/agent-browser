@@ -29,17 +29,17 @@ lanes:
     plan_ref: refs/heads/platform/p212-desktop-candidate-intent-contract
     branch: platform/p212-desktop-candidate-intent-contract
     target: main
-    plan_state: OPEN
+    plan_state: SOURCE_ACCEPTED
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 06972a5e
+    checkpoint: 00f41715
     remote_ref: null
     integration_receipt: null
     integration: implement and validate the platform contract locally, then publish and merge normally without restoring or dispatching operator-disabled GitHub CI
-    validation_status: admitted from clean canonical main after baseline selector reported no changed files and only diff hygiene
-    validation_ref: 06972a5e
+    validation_status: all 12 desktop-services tests, strengthened architecture guard, formatting, strict workspace Clippy, documentation links, changed-surface selection and diff hygiene pass locally
+    validation_ref: 00f41715
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: [P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P211 owns CLI shutdown and workstation routing; P212 owns only desktop-services candidate-intent source and fixtures; shared planning projections reconcile at integration]
-    blocker: source implementation and local acceptance remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    blocker: publication and protected integration remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17
