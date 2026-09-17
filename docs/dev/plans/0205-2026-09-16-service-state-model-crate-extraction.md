@@ -1202,16 +1202,84 @@ into the model crate.
 Next action: implement the model-owned operations and tests as one isolated
 write surface, then cut CLI mutation owners over in non-overlapping slices.
 
+## Checkpoint 21 | Capacity Mutation Closure Accepted
+
+State transition: the presentation-capacity authority is now sealed behind its
+model interface. All five authority fields are private. Development and
+production inventory reconstruction, inventory-failure fencing, elastic
+lifecycle changes, and abandoned-browser retirement use typed model
+operations. Read-only CLI consumers use immutable accessors, and test fixtures
+construct valid authorities rather than reopening a mutable production seam.
+
+Acceptance state and progress classification: the second presentation-
+capacity deepening packet is accepted locally. This is outcome progress. The
+CLI retains provider inventory interpretation, Service State joins, lifecycle
+effect adapters, repository custody, and retirement commit ordering. The model
+owns the previously duplicated deterministic mutation rules. Retirement is
+prepared on a cloned authority and installed only at the existing commit point,
+so a later registry failure cannot partially park capacity.
+
+Evidence:
+
+- all 125 service-model unit and integration tests pass, including the eight
+  capacity reconstruction, lifecycle, failure-fence, and atomic-retirement
+  tests added in this packet;
+- all 57 presentation-focused, 36 configured-adapter-focused, 99 service-
+  health-focused, 14 abandoned-browser-retirement, 13 retained-state, and
+  three route-switch CLI tests pass;
+- the exact production-inventory outage fence and retained-primary
+  revalidation tests pass;
+- the complete CLI test target compiles, strict workspace Clippy passes with
+  warnings denied, formatting and diff checks pass, and the architecture guard
+  plus its fixture suite pass;
+- duplicate capacity definitions and forbidden upward model references remain
+  absent;
+- no GitHub CI, browser, profile, provider, install, staging, production,
+  release, or shared-runtime effect was performed.
+
+Delegation and model-choice receipt:
+
+- `/root/p205_capacity_mutation_minimal`, requested `gpt-6-astra` at high
+  effort, implemented the selected model operations and focused tests;
+- `/root/p205_capacity_privacy_audit`, requested `gpt-5.6-luna` at medium
+  effort, converted the bounded read-only caller and fixture set to accessors
+  and valid constructors;
+- `/root/p205_capacity_mutation_lifecycle`, requested `gpt-5.6-sol` at high
+  effort, returned no accepted result during the initial interface-design
+  attempt, then completed the later bounded lifecycle and retirement caller
+  cutover after the interface was frozen; the primary accepted only that later
+  implementation and reran its affected tests;
+- the primary completed inventory and store cutover, private-field fixture
+  repair, integration review, and all acceptance gates.
+
+Material blockers: the canonical `ServiceState` aggregate and codec remain in
+the CLI. Its unresolved downward ownership edges are runtime-owner authority,
+abandoned-retirement and crash-regeneration transactions, authentication and
+challenge records, and the advisory capability registry. The runtime-owner
+edge needs an explicit ownership decision because pure profile-identity
+mechanics belong in Lease Authority while Service State joins and runtime-owner
+orchestration remain CLI adapters. Authentication and challenge records still
+depend on their control-plane crates and must not be copied into a second
+canonical model. The capability registry remains advisory and must not be
+promoted merely to make the aggregate movable.
+
+Next action: publish this accepted checkpoint, synchronize the branch with
+current `origin/main`, and rerun changed-surface validation. Then freeze one
+remaining aggregate-dependency ownership matrix, beginning with the runtime-
+owner boundary. Choose the canonical owner and adapter seam before moving
+another record family; do not start a bug-fix, runtime effect, provider action,
+or capability-registry promotion.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | eighteen families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | nineteen families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | presentation-capacity kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | nineteen checkpoints and nineteen families accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | nineteen checkpoints accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | nineteen families plus capacity mutation closure accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | capacity closure accepted through Checkpoint 21 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | available; local use pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
