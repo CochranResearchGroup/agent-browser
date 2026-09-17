@@ -2090,16 +2090,78 @@ custody, credentials, browser input, provider watches, and effect sequencing in
 the CLI; do not combine this packet with challenge, aggregate, bug-fix, CI,
 runtime, provider, browser, install, or production work.
 
+## Checkpoint 34 | Service Authentication Envelope Accepted
+
+State transition: Service Model now owns the canonical durable
+`ServiceAuthenticationRunRecord`, its private pending-effect fence, typed start
+input and decision, completion and error vocabulary, redacted projection, and
+the pure start, liveness, reservation, completion, cancellation, and empty-map
+decisions. `ServiceState.authentication_runs` uses that record directly and its
+serde omission predicate calls the crate-owned decision. The CLI no longer
+defines any of those records or decisions.
+
+Compatibility and boundary evidence:
+
+- start remains a two-phase pure decision so an exact idempotent replay is
+  returned before challenge admission, preserving the previous error and
+  effect ordering while the CLI retains challenge authority;
+- current principal, tab-handle, policy, and lease joins, clocks, repository
+  custody, credentials, browser input, provider watches, network work, and
+  effect sequencing remain CLI adapters. The model accepts explicit timestamps
+  and a typed challenge-consumer admission receipt only;
+- successful and failed authentication transitions persist through the same
+  pending-effect fence, cancellation still uses the canonical authentication
+  transition, and the projection exposes only redacted identifiers and state;
+- the architecture contract requires every canonical definition, decision,
+  schema constant, aggregate field type, export, and active serde predicate
+  exactly once. Its positive dependency parser rejects ordinary, quoted,
+  table-form, build, target-qualified, and aliased dependencies, including
+  quoted alias keys. Mutation fixtures also prove that commented or earlier
+  field attributes cannot satisfy the `authentication_runs` predicate check;
+- all 127 Service Model unit tests, fourteen Service Model integration tests,
+  nine focused Service authentication CLI tests, and 41 focused Service Model
+  CLI tests pass. The architecture guard and mutation fixtures, Service API and
+  MCP parity, generated-client contract and type checks, formatting, diff
+  hygiene, and strict workspace Clippy pass; and
+- the changed-surface selector was run from Checkpoint 33. Its Lease Authority
+  and desktop-services architecture recommendations pass. Its unrelated CDP
+  architecture check cannot start because this repository currently contains
+  `.github/workflows/ci.yml.disabled` rather than the check's expected
+  `.github/workflows/ci.yml`; this packet did not change CDP or workflow files
+  and did not rewrite that separately owned state.
+
+Delegation and model-choice receipt: `/root/p205_service_auth_envelope` used the
+requested `gpt-5.6-sol` high route for the bounded model API design. The worker
+was interrupted after it had not produced timely edits, but its first two-phase
+API patch arrived at interruption and was preserved; the primary completed the
+CLI cutover, tests, guard, and validation. A fresh
+`/root/p205_service_auth_review` pass used requested `gpt-6-astra` high routing
+and found four P2 guard bypasses across its initial and closed-world readback:
+quoted dependency names, quoted alias keys, commented serde attributes, and an
+attribute borrowed from an earlier field. All four were repaired with
+discriminating negative fixtures inside the same bounded review cycle. Strict
+Clippy additionally required both large start-decision payloads to be boxed;
+the focused tests prove that indirection does not change replay or creation
+semantics. Runtime-reported effective model metadata was not independently
+exposed.
+
+Acceptance state and progress classification: the Service authentication
+envelope is accepted as outcome progress and removes another direct durable
+owner and pure decision cluster from the CLI. No bug-fix, GitHub CI, runtime,
+browser, profile, provider, credential, install, staging, production, or
+release effect occurred. Next action: freeze and extract only the Service
+challenge envelope. Do not combine it with aggregate and codec closure.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twenty-one families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twenty-two families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | presentation-capacity kernel accepted; aggregate interface pending |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | authentication-control accepted through Checkpoint 33 |
+| Focused correctness | crate tests and affected CLI adapter tests | Service authentication envelope accepted through Checkpoint 34 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

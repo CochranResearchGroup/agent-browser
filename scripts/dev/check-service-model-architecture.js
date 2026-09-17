@@ -62,18 +62,39 @@ const AUTHENTICATION_CONTROL_TRAITS = [
   'AuthenticationVerifier',
 ];
 
-const FORBIDDEN_DEPENDENCIES = [
-  'agent-browser',
-  'agent-browser-cdp',
-  'agent-browser-challenge-control',
-  'agent-browser-desktop-services',
-  'tokio',
-  'reqwest',
-  'image',
-  'rust-embed',
-  'axum',
-  'hyper',
+const SERVICE_AUTHENTICATION_DEFINITIONS = [
+  'ServiceAuthenticationRunRecord',
+  'PendingAuthenticationEffect',
+  'ServiceAuthenticationRunStartInput',
+  'PreparedServiceAuthenticationRunStart',
+  'ServiceAuthenticationRunStartDecision',
+  'ServiceAuthenticationRunCompletion',
+  'ServiceAuthenticationRunError',
+  'ServiceAuthenticationRunProjection',
 ];
+
+const SERVICE_AUTHENTICATION_DECISIONS = [
+  'prepare_service_authentication_run_start',
+  'complete_service_authentication_run_start',
+  'project_service_authentication_run',
+  'require_live_authentication_run',
+  'reserve_authentication_effect',
+  'complete_site_authentication_action',
+  'complete_credential_delivery_action',
+  'complete_challenge_authentication_action',
+  'cancel_authentication_run',
+  'authentication_run_map_is_empty',
+];
+
+const SERVICE_MODEL_ALLOWED_DEPENDENCIES = new Set([
+  'agent-browser-authentication-control',
+  'agent-browser-challenge-control',
+  'agent-browser-lease-authority',
+  'chrono',
+  'serde',
+  'serde_json',
+  'sha2',
+]);
 
 const FORBIDDEN_IMPORT_PATHS = [
   'crate::native',
@@ -131,6 +152,12 @@ function withoutCommentsAndStrings(source) {
     .replace(/'(?:\\.|[^'\\])*'/g, "''");
 }
 
+function withoutComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/.*$/gm, ' ');
+}
+
 function importedPaths(source) {
   const clean = withoutCommentsAndStrings(source);
   const paths = [];
@@ -141,35 +168,92 @@ function importedPaths(source) {
   return paths;
 }
 
+function tomlDottedKey(key) {
+  const segments = [];
+  let cursor = 0;
+  while (cursor < key.length) {
+    while (/\s/.test(key[cursor])) cursor += 1;
+    if (cursor >= key.length) return null;
+    const quote = key[cursor] === '"' || key[cursor] === "'" ? key[cursor] : null;
+    let segment = '';
+    if (quote) {
+      cursor += 1;
+      let closed = false;
+      while (cursor < key.length) {
+        const character = key[cursor];
+        if (character === quote) {
+          cursor += 1;
+          closed = true;
+          break;
+        }
+        if (quote === '"' && character === '\\') {
+          // Dependency names never require escapes. Retain them as an invalid
+          // name so the positive allowlist fails closed rather than aliasing
+          // an escaped spelling to an allowed crate.
+          segment += character;
+          cursor += 1;
+          if (cursor < key.length) segment += key[cursor];
+          cursor += 1;
+          continue;
+        }
+        segment += character;
+        cursor += 1;
+      }
+      if (!closed) return null;
+    } else {
+      const match = key.slice(cursor).match(/^[A-Za-z0-9_-]+/);
+      if (!match) return null;
+      segment = match[0];
+      cursor += segment.length;
+    }
+    segments.push(segment);
+    while (/\s/.test(key[cursor])) cursor += 1;
+    if (cursor >= key.length) break;
+    if (key[cursor] !== '.') return null;
+    cursor += 1;
+  }
+  return segments;
+}
+
 function cargoDependencyDeclarations(manifest) {
   let section = '';
+  let sectionSegments = [];
   let tableDeclaration = null;
   const declarations = [];
   for (const rawLine of manifest.split('\n')) {
     const line = rawLine.replace(/#.*/, '').trim();
     const header = line.match(/^\[([^\]]+)\]$/);
     if (header) {
-      section = header[1];
+      sectionSegments = tomlDottedKey(header[1]) ?? [];
+      section = sectionSegments.join('.');
       tableDeclaration = null;
-      const table = section.match(
-        /^(.*(?:^|\.)(?:dev-|build-)?dependencies)\.([A-Za-z0-9_-]+)$/,
-      );
-      if (table) {
+      const dependencyIndex = sectionSegments.length - 2;
+      if (dependencyIndex >= 0
+          && /^(?:dev-|build-)?dependencies$/.test(sectionSegments[dependencyIndex])) {
         tableDeclaration = {
-          section: table[1], name: table[2], value: '',
+          section: sectionSegments.slice(0, -1).join('.'),
+          name: sectionSegments.at(-1),
+          value: '',
         };
         declarations.push(tableDeclaration);
       }
       continue;
     }
     if (tableDeclaration) {
-      if (/^package\s*=/.test(line)) tableDeclaration.value += ` ${line}`;
+      const assignment = line.match(/^(.+?)\s*=\s*(.+)$/);
+      const key = assignment ? tomlDottedKey(assignment[1]) : null;
+      if (key?.length === 1 && key[0] === 'package') {
+        tableDeclaration.value += ` package = ${assignment[2]}`;
+      }
       continue;
     }
-    if (!/(?:^|\.)(?:dev-|build-)?dependencies$/.test(section)) continue;
-    const declaration = line.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/);
-    if (declaration) {
-      declarations.push({ section, name: declaration[1], value: declaration[2] });
+    if (!/^(?:dev-|build-)?dependencies$/.test(sectionSegments.at(-1) ?? '')) continue;
+    const declaration = line.match(/^(.+?)\s*=\s*(.+)$/);
+    const key = declaration ? tomlDottedKey(declaration[1]) : null;
+    if (key?.length === 1) {
+      declarations.push({ section, name: key[0], value: declaration[2] });
+    } else if (line) {
+      declarations.push({ section, name: '<unparsed>', value: line });
     }
   }
   return declarations;
@@ -198,14 +282,15 @@ function check(root = repoRoot) {
     'agent-browser-service-model manifest must declare the expected package name',
   );
 
-  const dependencyLines = manifest
-    .split('\n')
-    .map((line) => line.replace(/#.*/, ''))
-    .filter((line) => /^\s*[A-Za-z0-9_-]+\s*=/.test(line));
-  for (const dependency of FORBIDDEN_DEPENDENCIES) {
+  for (const dependency of cargoDependencyDeclarations(manifest)) {
     requireCondition(
-      !dependencyLines.some((line) => new RegExp(`^\\s*${dependency.replaceAll('-', '[\\-]')}\\s*=`).test(line)),
-      `service-model crate must not depend on effect/runtime/provider crate: ${dependency}`,
+      dependency.section === 'dependencies'
+        && SERVICE_MODEL_ALLOWED_DEPENDENCIES.has(dependency.name),
+      `service-model crate dependency is outside the provider-free allowlist: ${dependency.section}.${dependency.name}`,
+    );
+    requireCondition(
+      !/(?:\bpackage\b|["']package["'])\s*=/.test(dependency.value),
+      `service-model crate must not alias an allowed dependency: ${dependency.name}`,
     );
   }
   requireCondition(
@@ -243,6 +328,10 @@ function check(root = repoRoot) {
   const capabilityRegistrySource = read(root,
     'crates/agent-browser-service-model/src/browser_capability_registry.rs');
   const capabilityRegistry = withoutCommentsAndStrings(capabilityRegistrySource);
+  const serviceAuthenticationPath = join(sourceRoot, 'service_authentication_run.rs');
+  const serviceAuthenticationSource = read(root,
+    'crates/agent-browser-service-model/src/service_authentication_run.rs');
+  const serviceAuthentication = withoutCommentsAndStrings(serviceAuthenticationSource);
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
 
@@ -281,7 +370,7 @@ function check(root = repoRoot) {
       `authentication-control crate dependency is outside the provider-free allowlist: ${dependency.section}.${dependency.name}`,
     );
     requireCondition(
-      !/\bpackage\s*=/.test(dependency.value),
+      !/(?:\bpackage\b|["']package["'])\s*=/.test(dependency.value),
       `authentication-control crate must not alias an allowed dependency: ${dependency.name}`,
     );
   }
@@ -387,8 +476,8 @@ function check(root = repoRoot) {
     Boolean(crashRegenerationExport?.[1].match(/\bCRASH_REGENERATION_STATUS_SCHEMA_VERSION\b/)),
     'service-model lib must export the crash regeneration status schema constant',
   );
-  const cliServiceModel = withoutCommentsAndStrings(read(root,
-    'cli/src/native/service_model.rs'));
+  const cliServiceModelSource = read(root, 'cli/src/native/service_model.rs');
+  const cliServiceModel = withoutCommentsAndStrings(cliServiceModelSource);
   requireCondition(
     /BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*CrashRegenerationTransaction\s*>/
       .test(cliServiceModel),
@@ -435,6 +524,73 @@ function check(root = repoRoot) {
     /browser_capability_registry\s*:\s*agent_browser_service_model\s*::\s*BrowserCapabilityRegistry/
       .test(cliServiceModel),
     'CLI ServiceState must use the canonical service-model browser capability registry',
+  );
+  requireCondition(existsSync(serviceAuthenticationPath),
+    'service-model must own src/service_authentication_run.rs');
+  const serviceAuthenticationExport = serviceModelLib.match(
+    /\bpub\s+use\s+service_authentication_run\s*::\s*\{([\s\S]*?)\}\s*;/,
+  );
+  requireCondition(/\bmod\s+service_authentication_run\s*;/.test(serviceModelLib),
+    'service-model lib must declare the Service authentication module');
+  requireCondition(Boolean(serviceAuthenticationExport),
+    'service-model lib must export the Service authentication interface');
+  for (const name of SERVICE_AUTHENTICATION_DEFINITIONS) {
+    const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...serviceAuthenticationSource.matchAll(definition)].length === 1,
+      `service-model Service authentication module must own exactly one definition: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(definition.source).test(source)),
+      `CLI must not duplicate Service authentication definition: ${name}`,
+    );
+    requireCondition(
+      Boolean(serviceAuthenticationExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export Service authentication definition: ${name}`,
+    );
+  }
+  for (const name of SERVICE_AUTHENTICATION_DECISIONS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceAuthentication),
+      `service-model must own Service authentication decision: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(`\\bfn\\s+${name}\\b`).test(source)),
+      `CLI must not duplicate Service authentication decision: ${name}`,
+    );
+    requireCondition(
+      Boolean(serviceAuthenticationExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export Service authentication decision: ${name}`,
+    );
+  }
+  requireCondition(
+    /\bpub\s+const\s+SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION\b/.test(serviceAuthentication),
+    'service-model must own the Service authentication schema constant',
+  );
+  requireCondition(
+    !cliSources.some((source) =>
+      /\b(?:pub\s*)?(?:\(?crate\)?\s*)?const\s+SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION\b/
+        .test(source)),
+    'CLI must not duplicate the Service authentication schema constant',
+  );
+  requireCondition(
+    Boolean(serviceAuthenticationExport?.[1]
+      .match(/\bSERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION\b/)),
+    'service-model lib must export the Service authentication schema constant',
+  );
+  requireCondition(
+    /authentication_runs\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*ServiceAuthenticationRunRecord\s*>/
+      .test(cliServiceModel),
+    'CLI ServiceState must use the canonical service-model Service authentication record',
+  );
+  const serviceAuthenticationField = withoutComments(cliServiceModelSource).match(
+    /((?:#\s*\[[^\]]*\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?authentication_runs\s*:/,
+  );
+  requireCondition(
+    Boolean(serviceAuthenticationField?.[1].match(
+      /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_service_model\s*::\s*authentication_run_map_is_empty["'][^\]]*\)\s*\]/,
+    )),
+    'CLI ServiceState must use the canonical Service authentication empty-map decision',
   );
   for (const name of ABANDONED_RETIREMENT_RECORDS) {
     const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');

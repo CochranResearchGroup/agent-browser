@@ -27,6 +27,7 @@ mod profile_recovery_receipt;
 mod profile_reset_receipt;
 mod profile_seeding;
 mod request_provenance;
+mod service_authentication_run;
 mod session_tab;
 mod site_policy;
 mod terminal_outcome;
@@ -147,6 +148,17 @@ pub use profile_seeding::{
 pub use request_provenance::{
     normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,
     SERVICE_REQUEST_PROVENANCE_SCHEMA_VERSION,
+};
+pub use service_authentication_run::{
+    authentication_run_map_is_empty, cancel_authentication_run,
+    complete_challenge_authentication_action, complete_credential_delivery_action,
+    complete_service_authentication_run_start, complete_site_authentication_action,
+    prepare_service_authentication_run_start, project_service_authentication_run,
+    require_live_authentication_run, reserve_authentication_effect, PendingAuthenticationEffect,
+    PreparedServiceAuthenticationRunStart, ServiceAuthenticationRunCompletion,
+    ServiceAuthenticationRunError, ServiceAuthenticationRunProjection,
+    ServiceAuthenticationRunRecord, ServiceAuthenticationRunStartDecision,
+    ServiceAuthenticationRunStartInput, SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION,
 };
 pub use session_tab::{
     BrowserSession, BrowserTab, LeaseState, ProfileLeaseDisposition, ProfileSelectionReason,

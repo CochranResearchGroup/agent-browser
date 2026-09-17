@@ -2178,10 +2178,10 @@ pub struct ServiceState {
     /// material.
     #[serde(
         default,
-        skip_serializing_if = "super::service_authentication_run::authentication_run_map_is_empty"
+        skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty"
     )]
     pub(crate) authentication_runs:
-        BTreeMap<String, super::service_authentication_run::ServiceAuthenticationRunRecord>,
+        BTreeMap<String, agent_browser_service_model::ServiceAuthenticationRunRecord>,
     /// Durable provider-free challenge tasks. Records retain exact authority
     /// bindings and redacted receipts, never credentials or captured evidence.
     #[serde(

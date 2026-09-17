@@ -36,6 +36,9 @@ pub struct ServiceState {
     BTreeMap<String, agent_browser_service_model::CrashRegenerationTransaction>,
   browser_capability_registry:
     agent_browser_service_model::BrowserCapabilityRegistry,
+  #[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]
+  authentication_runs:
+    BTreeMap<String, agent_browser_service_model::ServiceAuthenticationRunRecord>,
 }
 `;
 const validCapabilityRegistry = `
@@ -46,6 +49,32 @@ const validCapabilityExport = `mod browser_capability_registry;
 pub use browser_capability_registry::{
   browser_profile_compatibility_matches,
   BrowserCapabilityRegistry,
+};
+`;
+const serviceAuthenticationDefinitions = [
+  'ServiceAuthenticationRunRecord', 'PendingAuthenticationEffect',
+  'ServiceAuthenticationRunStartInput', 'PreparedServiceAuthenticationRunStart',
+  'ServiceAuthenticationRunStartDecision', 'ServiceAuthenticationRunCompletion',
+  'ServiceAuthenticationRunError', 'ServiceAuthenticationRunProjection',
+];
+const serviceAuthenticationDecisions = [
+  'prepare_service_authentication_run_start',
+  'complete_service_authentication_run_start', 'project_service_authentication_run',
+  'require_live_authentication_run', 'reserve_authentication_effect',
+  'complete_site_authentication_action', 'complete_credential_delivery_action',
+  'complete_challenge_authentication_action', 'cancel_authentication_run',
+  'authentication_run_map_is_empty',
+];
+const validServiceAuthentication = `${serviceAuthenticationDefinitions
+  .map((name) => `pub struct ${name};`).join('\n')}
+${serviceAuthenticationDecisions.map((name) => `pub fn ${name}() {}`).join('\n')}
+pub const SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION: &str = "schema";
+`;
+const validServiceAuthenticationExport = `mod service_authentication_run;
+pub use service_authentication_run::{
+  ${serviceAuthenticationDefinitions.join(',\n  ')},
+  ${serviceAuthenticationDecisions.join(',\n  ')},
+  SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION,
 };
 `;
 
@@ -75,7 +104,8 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
   serviceModel = validCrashStateUse, authenticationManifest = validAuthenticationManifest,
   authentication = validAuthenticationControl,
-  authenticationFacade = validAuthenticationFacade } = {}) {
+  authenticationFacade = validAuthenticationFacade,
+  serviceAuthentication = validServiceAuthentication } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'agent-browser-service-model-architecture-'));
   mkdirSync(join(root, 'crates/agent-browser-service-model/src'), { recursive: true });
   mkdirSync(join(root, 'crates/agent-browser-authentication-control/src'), { recursive: true });
@@ -91,6 +121,8 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/abandoned_browser_retirement.rs'), retirement);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/crash_regeneration.rs'), crash);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/browser_capability_registry.rs'), capability);
+  writeFileSync(join(root, 'crates/agent-browser-service-model/src/service_authentication_run.rs'),
+    serviceAuthentication);
   mkdirSync(join(root, 'cli/src/native'), { recursive: true });
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
   writeFileSync(join(root, 'cli/src/native/authentication_run.rs'), authenticationFacade);
@@ -102,6 +134,7 @@ const validManifest = '[package]\nname = "agent-browser-service-model"\nversion 
 const validAuthenticationManifest = '[package]\nname = "agent-browser-authentication-control"\nversion = "0.1.0"\n[dependencies]\nserde = "1"\n';
 const validSource = `${validCrashExport}
 ${validCapabilityExport}
+${validServiceAuthenticationExport}
 // std::fs and provider are allowed in prose.
 pub struct BrowserProfile { pub id: String }
 pub fn profile(id: String) -> BrowserProfile { BrowserProfile { id } }
@@ -153,6 +186,106 @@ try {
   'missing authentication-control module was accepted');
 } finally {
   rmSync(missingAuthenticationModule, { recursive: true, force: true });
+}
+
+const missingServiceAuthenticationModule = fixture({ manifest: validManifest, source: validSource });
+try {
+  rmSync(join(missingServiceAuthenticationModule,
+    'crates/agent-browser-service-model/src/service_authentication_run.rs'));
+  ok(check(missingServiceAuthenticationModule).some((failure) =>
+    failure.includes('service_authentication_run.rs')),
+  'missing Service authentication module was accepted');
+} finally {
+  rmSync(missingServiceAuthenticationModule, { recursive: true, force: true });
+}
+
+const duplicateServiceAuthenticationDefinition = fixture({
+  manifest: validManifest,
+  source: validSource,
+  cli: 'pub(crate) struct ServiceAuthenticationRunRecord;\n',
+});
+try {
+  ok(check(duplicateServiceAuthenticationDefinition).some((failure) =>
+    failure.includes('ServiceAuthenticationRunRecord')),
+  'duplicate CLI Service authentication definition was accepted');
+} finally {
+  rmSync(duplicateServiceAuthenticationDefinition, { recursive: true, force: true });
+}
+
+const missingServiceAuthenticationExport = fixture({
+  manifest: validManifest,
+  source: validSource.replace(validServiceAuthenticationExport, ''),
+});
+try {
+  ok(check(missingServiceAuthenticationExport).some((failure) =>
+    failure.includes('export the Service authentication')),
+  'missing Service authentication export was accepted');
+} finally {
+  rmSync(missingServiceAuthenticationExport, { recursive: true, force: true });
+}
+
+const indirectServiceAuthenticationStateType = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    'agent_browser_service_model::ServiceAuthenticationRunRecord',
+    'super::service_authentication_run::ServiceAuthenticationRunRecord',
+  ),
+});
+try {
+  ok(check(indirectServiceAuthenticationStateType).some((failure) =>
+    failure.includes('canonical service-model Service authentication record')),
+  'indirect Service authentication aggregate type was accepted');
+} finally {
+  rmSync(indirectServiceAuthenticationStateType, { recursive: true, force: true });
+}
+
+const duplicateServiceAuthenticationDecision = fixture({
+  manifest: validManifest,
+  source: validSource,
+  cli: 'pub(crate) fn reserve_authentication_effect() {}\n',
+});
+try {
+  ok(check(duplicateServiceAuthenticationDecision).some((failure) =>
+    failure.includes('reserve_authentication_effect')),
+  'duplicate CLI Service authentication decision was accepted');
+} finally {
+  rmSync(duplicateServiceAuthenticationDecision, { recursive: true, force: true });
+}
+
+const commentedServiceAuthenticationSkipPredicate = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    '#[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]',
+    '// #[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]',
+  ),
+});
+try {
+  ok(check(commentedServiceAuthenticationSkipPredicate).some((failure) =>
+    failure.includes('empty-map decision')),
+  'commented Service authentication empty-map predicate was accepted');
+} finally {
+  rmSync(commentedServiceAuthenticationSkipPredicate, { recursive: true, force: true });
+}
+
+const predicateOnEarlierFieldOnly = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    '#[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]\n  authentication_runs:',
+    `#[serde(skip_serializing_if = "agent_browser_service_model::authentication_run_map_is_empty")]
+  unrelated_runs: BTreeMap<String, String>,
+  #[serde(default)]
+  authentication_runs:`,
+  ),
+});
+try {
+  ok(check(predicateOnEarlierFieldOnly).some((failure) =>
+    failure.includes('empty-map decision')),
+  'Service authentication guard borrowed a skip predicate from an earlier field');
+} finally {
+  rmSync(predicateOnEarlierFieldOnly, { recursive: true, force: true });
 }
 
 const duplicateAuthenticationDefinition = fixture({
@@ -316,6 +449,13 @@ try {
 for (const manifest of [
   `${validManifest}agent-browser = { path = "../../cli" }\n`,
   `${validManifest}tokio = "1"\n`,
+  `${validManifest}"tokio" = "1"\n`,
+  `${validManifest}\n[dependencies."tokio"]\nversion = "1"\n`,
+  validManifest.replace(
+    'serde = "1"',
+    '"serde" = { "package" = "tokio", version = "1" }',
+  ),
+  validManifest.replace('serde = "1"', 'serde = { package = "tokio", version = "1" }'),
 ]) {
   const root = fixture({ manifest, source: validSource });
   try {

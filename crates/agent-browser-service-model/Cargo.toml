@@ -5,7 +5,10 @@ edition = "2021"
 publish = false
 
 [dependencies]
+agent-browser-authentication-control = { path = "../agent-browser-authentication-control" }
+agent-browser-challenge-control = { path = "../agent-browser-challenge-control" }
 agent-browser-lease-authority = { path = "../agent-browser-lease-authority" }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"

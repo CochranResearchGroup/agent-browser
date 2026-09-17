@@ -7,11 +7,10 @@
 use super::action_runtime::runtime::{validate_service_tab_handle_route_for_daemon, DaemonState};
 use super::authentication_run::{
     AuthenticationActionFailure, AuthenticationActionKind, AuthenticationActionReceipt,
-    AuthenticationChallengeChannel, AuthenticationRun, AuthenticationRunBinding,
-    AuthenticationRunState, AuthenticationVerificationContext, AuthenticationVerifier,
-    AuthenticationVerifierFailure, AuthenticationVerifierReceipt, ProviderWatchReceipt,
-    ResponseOnlyAuthenticationAction, ResponseOnlySiteLoginAction, SiteLoginActionContext,
-    SiteLoginActionReceipt, SiteLoginObservationReceipt, SiteLoginState,
+    AuthenticationChallengeChannel, AuthenticationRunBinding, AuthenticationRunState,
+    AuthenticationVerificationContext, AuthenticationVerifier, AuthenticationVerifierFailure,
+    AuthenticationVerifierReceipt, ProviderWatchReceipt, SiteLoginActionReceipt,
+    SiteLoginObservationReceipt, SiteLoginState,
 };
 use super::browser::WaitUntil;
 use super::service_challenge_task::{admit_challenge_consumer, AUTHENTICATION_CHALLENGE_INTENT_ID};
@@ -25,43 +24,22 @@ use super::site_login_recipe::{
     PasswordValueSource, SiteLoginRecipe, SitePageEvidence,
 };
 use super::{auth, interaction};
-use agent_browser_challenge_control::{ChallengeConsumerAdmissionReceipt, ChallengeConsumerKind};
-use chrono::{DateTime, Duration, Utc};
-use serde::{Deserialize, Serialize};
+use agent_browser_challenge_control::ChallengeConsumerKind;
+use agent_browser_service_model::{
+    cancel_authentication_run, complete_challenge_authentication_action,
+    complete_credential_delivery_action, complete_service_authentication_run_start,
+    complete_site_authentication_action, prepare_service_authentication_run_start,
+    project_service_authentication_run, require_live_authentication_run,
+    reserve_authentication_effect, ServiceAuthenticationRunCompletion,
+    ServiceAuthenticationRunRecord, ServiceAuthenticationRunStartDecision,
+    ServiceAuthenticationRunStartInput,
+};
+use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
 use std::env;
 use std::time::Duration as StdDuration;
 use url::Url;
-
-pub(crate) const SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION: &str =
-    "agent-browser.service-authentication-run.v2";
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ServiceAuthenticationRunRecord {
-    pub(crate) schema_version: String,
-    pub(crate) request_sha256: String,
-    pub(crate) idempotency_key_sha256: String,
-    pub(crate) created_at: String,
-    pub(crate) deadline_at: String,
-    pub(crate) service_tab_handle: ServiceTabHandle,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) challenge_consumer_admission: Option<ChallengeConsumerAdmissionReceipt>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pending_effect: Option<PendingAuthenticationEffect>,
-    pub(crate) run: AuthenticationRun,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct PendingAuthenticationEffect {
-    operation_id: String,
-    action: AuthenticationActionKind,
-    state_instance_id: String,
-    reserved_at: String,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct AuthenticationRunStartIntent {
@@ -316,25 +294,26 @@ fn start_run_in_state(
         .service_tab_handle(&intent.supplied_handle.tab_id)
         .ok_or_else(|| "authentication_run_service_tab_handle_missing".to_string())?;
     let binding = exact_handle_binding(&intent, &current)?;
-    let idempotency_key_sha256 = canonical_sha256(&intent.idempotency_key)?;
-    let request_sha256 = canonical_sha256(&(
-        &binding,
-        &idempotency_key_sha256,
-        &intent.challenge_task_id,
-        &intent.site_policy_id,
-        intent.deadline_ms,
-        intent.max_transitions,
-    ))?;
-    if let Some(existing) = state
-        .authentication_runs
-        .values()
-        .find(|record| record.idempotency_key_sha256 == idempotency_key_sha256)
-    {
-        if existing.request_sha256 != request_sha256 {
-            return Err("authentication_run_idempotency_conflict".to_string());
+    let decision = prepare_service_authentication_run_start(
+        &state.authentication_runs,
+        ServiceAuthenticationRunStartInput {
+            binding,
+            idempotency_key: intent.idempotency_key.clone(),
+            challenge_task_id: intent.challenge_task_id.clone(),
+            site_policy_id: intent.site_policy_id.clone(),
+            deadline_ms: intent.deadline_ms,
+            max_transitions: intent.max_transitions,
+            current_service_tab_handle: current.clone(),
+            created_at: created_at.to_string(),
+        },
+    )
+    .map_err(|error| error.cli_message())?;
+    let prepared = match decision {
+        ServiceAuthenticationRunStartDecision::Replayed(existing) => {
+            return Ok((*existing, true));
         }
-        return Ok((existing.clone(), true));
-    }
+        ServiceAuthenticationRunStartDecision::Create(prepared) => *prepared,
+    };
     let challenge_consumer_admission = match (
         intent.challenge_task_id.as_deref(),
         intent.site_policy_id.as_deref(),
@@ -346,32 +325,17 @@ fn start_run_in_state(
             &current,
             site_policy_id,
             AUTHENTICATION_CHALLENGE_INTENT_ID,
-            &idempotency_key_sha256,
+            &prepared.idempotency_key_sha256,
             ChallengeConsumerKind::Authentication,
         )?),
         (None, None) => None,
         _ => return Err("authentication_run_challenge_admission_incomplete".to_string()),
     };
-    let run_id = format!("authrun-{}", &request_sha256[..24]);
-    let created = DateTime::parse_from_rfc3339(created_at)
-        .map_err(|_| "authentication_run_created_at_invalid".to_string())?
-        .with_timezone(&Utc);
-    let deadline_delta = i64::try_from(intent.deadline_ms)
-        .map_err(|_| "authentication_run_deadline_invalid".to_string())?;
-    let deadline_at = (created + Duration::milliseconds(deadline_delta)).to_rfc3339();
-    let record = ServiceAuthenticationRunRecord {
-        schema_version: SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION.to_string(),
-        request_sha256,
-        idempotency_key_sha256,
-        created_at: created.to_rfc3339(),
-        deadline_at,
-        service_tab_handle: current,
-        challenge_consumer_admission,
-        pending_effect: None,
-        run: AuthenticationRun::new(run_id.clone(), binding, intent.max_transitions)
-            .map_err(|error| format!("authentication_run_invalid:{error:?}"))?,
-    };
-    state.authentication_runs.insert(run_id, record.clone());
+    let record = complete_service_authentication_run_start(prepared, challenge_consumer_admission)
+        .map_err(|error| error.cli_message())?;
+    state
+        .authentication_runs
+        .insert(record.run.run_id.clone(), record.clone());
     Ok((record, false))
 }
 
@@ -389,43 +353,13 @@ fn caller_owns_run(command: &Value, record: &ServiceAuthenticationRunRecord) -> 
 }
 
 fn run_projection(record: &ServiceAuthenticationRunRecord, replayed: bool) -> Value {
-    json!({
-        "schemaVersion": record.schema_version,
-        "runId": record.run.run_id,
-        "state": record.run.state,
-        "createdAt": record.created_at,
-        "deadlineAt": record.deadline_at,
-        "requestSha256": record.request_sha256,
-        "accountRefSha256": canonical_sha256(&record.run.binding.target_account_ref).ok(),
-        "organizationRefSha256": canonical_sha256(&record.run.binding.target_organization_ref).ok(),
-        "challengeProviderId": record.run.binding.challenge_provider_id,
-        "challengeProviderTenantRefSha256": canonical_sha256(&record.run.binding.challenge_provider_tenant_ref).ok(),
-        "challengeProviderAccountRefSha256": canonical_sha256(&record.run.binding.challenge_provider_account_ref).ok(),
-        "targetServiceId": record.run.binding.target_service_id,
-        "profileId": record.run.binding.profile_id,
-        "browserId": record.run.binding.browser_id,
-        "sessionName": record.run.binding.session_name,
-        "tabId": record.run.binding.login_tab_id,
-        "transitionCount": record.run.transition_count,
-        "actionReceiptCount": record.run.action_receipts.len() + record.run.site_action_receipts.len(),
-        "observationReceiptCount": record.run.site_observation_receipts.len(),
-        "challengeConsumerAdmission": record.challenge_consumer_admission,
-        "effectPending": record.pending_effect.is_some(),
-        "replayed": replayed,
-    })
+    serde_json::to_value(project_service_authentication_run(record, replayed))
+        .expect("service authentication projection must serialize")
 }
 
 fn require_live_run(record: &ServiceAuthenticationRunRecord) -> Result<(), String> {
-    let deadline = DateTime::parse_from_rfc3339(&record.deadline_at)
-        .map_err(|_| "authentication_run_deadline_invalid".to_string())?
-        .with_timezone(&Utc);
-    if Utc::now() > deadline {
-        return Err("authentication_run_deadline_expired".to_string());
-    }
-    if record.pending_effect.is_some() {
-        return Err("authentication_run_effect_outcome_unknown".to_string());
-    }
-    Ok(())
+    require_live_authentication_run(record, &service_now_timestamp())
+        .map_err(|error| error.cli_message())
 }
 
 fn exact_current_handle(
@@ -683,34 +617,6 @@ fn password_submission_source(
     }
 }
 
-struct OneShotSiteAction(Result<SiteLoginActionReceipt, AuthenticationActionFailure>);
-impl ResponseOnlySiteLoginAction for OneShotSiteAction {
-    fn execute(
-        &mut self,
-        _context: &SiteLoginActionContext<'_>,
-    ) -> Result<SiteLoginActionReceipt, AuthenticationActionFailure> {
-        std::mem::replace(
-            &mut self.0,
-            Err(AuthenticationActionFailure::EffectRejected),
-        )
-    }
-}
-
-struct OneShotAuthenticationAction(
-    Result<AuthenticationActionReceipt, AuthenticationActionFailure>,
-);
-impl ResponseOnlyAuthenticationAction for OneShotAuthenticationAction {
-    fn execute(
-        &mut self,
-        _context: &super::authentication_run::AuthenticationActionContext<'_>,
-    ) -> Result<AuthenticationActionReceipt, AuthenticationActionFailure> {
-        std::mem::replace(
-            &mut self.0,
-            Err(AuthenticationActionFailure::EffectRejected),
-        )
-    }
-}
-
 struct OneShotVerifier(Result<AuthenticationVerifierReceipt, AuthenticationVerifierFailure>);
 impl AuthenticationVerifier for OneShotVerifier {
     fn verify(
@@ -929,17 +835,15 @@ fn reserve_effect(
             .get_mut(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, record)?;
-        require_live_run(record)?;
-        if record.run.used_operation_ids.contains(operation_id) {
-            return Err("authentication_run_operation_replay".to_string());
-        }
-        record.pending_effect = Some(PendingAuthenticationEffect {
-            operation_id: operation_id.to_string(),
+        reserve_authentication_effect(
+            record,
+            operation_id,
             action,
-            state_instance_id: state_instance_id.to_string(),
-            reserved_at: reserved_at.clone(),
-        });
-        Ok(())
+            state_instance_id,
+            &reserved_at,
+            &service_now_timestamp(),
+        )
+        .map_err(|error| error.cli_message())
     })
 }
 
@@ -1343,26 +1247,22 @@ fn complete_site_action(
     outcome: Result<SiteLoginActionReceipt, String>,
 ) -> Result<Value, String> {
     let adapter_outcome = outcome.map_err(|_| AuthenticationActionFailure::EffectUnproven);
-    let (updated, transition_error) = repository.mutate(|state| {
+    let (updated, completion) = repository.mutate(|state| {
         let current = state
             .authentication_runs
             .get_mut(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, current)?;
-        let pending = current
-            .pending_effect
-            .take()
-            .ok_or_else(|| "authentication_run_pending_effect_missing".to_string())?;
-        if pending.operation_id != operation_id || pending.action != expected_action {
-            return Err("authentication_run_pending_effect_mismatch".to_string());
-        }
-        let mut adapter = OneShotSiteAction(adapter_outcome.clone());
-        let result = current
-            .run
-            .submit_account_identifier(operation_id, &mut adapter);
-        Ok((current.clone(), result.err()))
+        let completion = complete_site_authentication_action(
+            current,
+            operation_id,
+            expected_action,
+            adapter_outcome.clone(),
+        )
+        .map_err(|error| error.cli_message())?;
+        Ok((current.clone(), completion))
     })?;
-    if let Some(error) = transition_error {
+    if let ServiceAuthenticationRunCompletion::TransitionFailed(error) = completion {
         return Err(format!("authentication_run_site_action_failed:{error:?}"));
     }
     Ok(run_projection(&updated, false))
@@ -1377,30 +1277,22 @@ fn complete_delivery_trigger_action(
     outcome: Result<AuthenticationActionReceipt, String>,
 ) -> Result<Value, String> {
     let adapter_outcome = outcome.map_err(|_| AuthenticationActionFailure::EffectUnproven);
-    let (updated, transition_error) = repository.mutate(|state| {
+    let (updated, completion) = repository.mutate(|state| {
         let current = state
             .authentication_runs
             .get_mut(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, current)?;
-        let pending = current
-            .pending_effect
-            .take()
-            .ok_or_else(|| "authentication_run_pending_effect_missing".to_string())?;
-        if pending.operation_id != operation_id
-            || pending.action != AuthenticationActionKind::SubmitNativeStoredCredentials
-        {
-            return Err("authentication_run_pending_effect_mismatch".to_string());
-        }
-        let mut adapter = OneShotAuthenticationAction(adapter_outcome.clone());
-        let result = current.run.submit_credentials_and_trigger_delivery(
+        let completion = complete_credential_delivery_action(
+            current,
             operation_id,
             challenge_id,
-            &mut adapter,
-        );
-        Ok((current.clone(), result.err()))
+            adapter_outcome.clone(),
+        )
+        .map_err(|error| error.cli_message())?;
+        Ok((current.clone(), completion))
     })?;
-    if let Some(error) = transition_error {
+    if let ServiceAuthenticationRunCompletion::TransitionFailed(error) = completion {
         return Err(format!(
             "authentication_run_credential_action_failed:{error:?}"
         ));
@@ -1417,28 +1309,22 @@ fn complete_challenge_action(
     outcome: Result<AuthenticationActionReceipt, String>,
 ) -> Result<Value, String> {
     let adapter_outcome = outcome.map_err(|_| AuthenticationActionFailure::EffectUnproven);
-    let (updated, transition_error) = repository.mutate(|state| {
+    let (updated, completion) = repository.mutate(|state| {
         let current = state
             .authentication_runs
             .get_mut(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, current)?;
-        let pending = current
-            .pending_effect
-            .take()
-            .ok_or_else(|| "authentication_run_pending_effect_missing".to_string())?;
-        if pending.operation_id != operation_id
-            || pending.action != AuthenticationActionKind::SubmitSmsOtp
-        {
-            return Err("authentication_run_pending_effect_mismatch".to_string());
-        }
-        let mut adapter = OneShotAuthenticationAction(adapter_outcome.clone());
-        let result = current
-            .run
-            .consume_challenge(operation_id, challenge_id, 1, &mut adapter);
-        Ok((current.clone(), result.err()))
+        let completion = complete_challenge_authentication_action(
+            current,
+            operation_id,
+            challenge_id,
+            adapter_outcome.clone(),
+        )
+        .map_err(|error| error.cli_message())?;
+        Ok((current.clone(), completion))
     })?;
-    if let Some(error) = transition_error {
+    if let ServiceAuthenticationRunCompletion::TransitionFailed(error) = completion {
         return Err(format!(
             "authentication_run_challenge_action_failed:{error:?}"
         ));
@@ -1482,10 +1368,8 @@ pub(crate) async fn handle_service_authentication_run(
                     .get_mut(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, record)?;
-                record
-                    .run
-                    .cancel(&operation_id)
-                    .map_err(|error| format!("authentication_run_cancel_failed:{error:?}"))?;
+                cancel_authentication_run(record, &operation_id)
+                    .map_err(|error| error.cli_message())?;
                 Ok(record.clone())
             })?;
             Ok(run_projection(&record, false))
@@ -1860,10 +1744,4 @@ mod tests {
             "agent-browser.bill-login-v1.vault+im-receipts"
         );
     }
-}
-
-pub(crate) fn authentication_run_map_is_empty(
-    value: &BTreeMap<String, ServiceAuthenticationRunRecord>,
-) -> bool {
-    value.is_empty()
 }
