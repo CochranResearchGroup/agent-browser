@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 2
+Plan version: 4
 
-State: PLANNED | NOT ADMITTED
+State: SOURCE ACCEPTED | INTEGRATION READY
 
 Consolidation: required
 
@@ -17,11 +17,14 @@ Parent plan: Plan 0187 W7-C
 Work item: `CochranResearchGroup/agent-browser#127`; issue #66 retains every
 browser, provider-backed, Turnstile or hCaptcha acceptance effect
 
-Proposed branch: `challenge/p210-visual-artifact-adapter`
+Branch: `challenge/p210-visual-artifact-adapter`
 
 Target: `main`
 
-Dependency: P209 must enter canonical `main` before P210 source admission
+Integrated dependency: P209 exact head `27cd5342`, merged through PR #188 as
+`fb616aeed2233aca06b4379d61af5d34609a804d`
+
+Source baseline: `fb616aeed2233aca06b4379d61af5d34609a804d`
 
 ## Objective
 
@@ -36,6 +39,17 @@ a real model, opening a network connection, loading credentials, capturing a
 browser frame, persisting pixels, translating candidates to coordinates,
 emitting desktop input, exposing a public Service action, or attempting a
 challenge.
+
+## Current State
+
+P206 and P209 are integrated in dependency order. P209 exact head `27cd5342`
+merged through PR #188 as canonical `main@fb616aee`. The existing clean
+challenge worktree is assigned to P210 at that exact baseline, the proposed
+adapter-crate path has no competing writer, and the baseline selector reports
+no changed files. Source checkpoint `0729b63d` implements the provider-free
+adapter and complete fixture matrix. GitHub CI is operator-disabled and no
+workflow will be restored or dispatched for this packet. Branch publication
+and normal protected integration remain.
 
 ## Dependency And Admission Gate
 
@@ -52,9 +66,11 @@ ref. Admission requires:
 5. The changed-surface selector is run from the admitted baseline before the
    first source edit.
 
-Until those gates pass, this document is planning evidence only. It grants no
-branch, worktree, provider, browser, credential, runtime, CI or effect
-authority.
+All admission gates passed on 2026-09-17. The existing clean challenge
+worktree was reassigned to P210 at canonical `main@fb616aee`; no new worktree
+was created. The baseline selector reports no changed files and only diff
+hygiene. Admission grants source work in the bounded write surface only. It
+grants no provider, browser, credential, runtime, CI or effect authority.
 
 ## Fixture Relationship
 
@@ -99,7 +115,8 @@ The proposed contract contains:
 - `VisualProviderInvocation`: the exact P209 request plus the matching prepared
   payload, with one canonical invocation digest;
 - `VisualProviderTransport`: one injected call that accepts the invocation and
-  returns serialized response bytes or a typed transport failure; and
+  returns serialized response bytes with a receipt timestamp, or a typed
+  transport failure; and
 - one orchestration function that validates the payload, prepares the P209
   request, calls the injected transport at most once, strictly parses the
   response and delegates semantic adjudication back to P209.
@@ -234,8 +251,43 @@ strict workspace Clippy, changed-surface selection and diff hygiene at one
 clean commit.
 
 Publication requires P209's canonical integration receipt, a branch based on
-that exact `main`, durable remote custody and the protected validation path in
-effect at admission time.
+that exact `main`, durable remote custody and a normal protected merge. GitHub
+CI is operator-disabled and is not part of this packet's publication path.
+
+## Source Acceptance | 2026-09-17
+
+Checkpoint `0729b63d` adds the pure
+`agent-browser-challenge-visual-adapter` crate. It validates an exact
+repository-owned payload envelope, enforces media, dimension and byte
+ceilings, binds deterministic artifact and invocation digests, prepares the
+P209 request, calls one injected transport at most once, strictly parses its
+bounded response and delegates semantic adjudication back to P209. Payload and
+provider-response bytes are redacted from `Debug` output and are absent from
+typed errors.
+
+The first tracer moved from missing public contracts to one bound selection
+after exactly one fake call. A policy-ambiguity regression then proved
+duplicate media allowlist entries fail before transport. Review found two
+temporal boundary defects before checkpointing: artifact expiry originally
+matched evidence expiry even when the exact request deadline was earlier, and
+adjudication originally reused request time after transport. The repaired
+contract binds artifact expiry to the exact request boundary and requires the
+transport to return a redacted receipt timestamp for response adjudication.
+
+Local acceptance passes:
+
+- all 52 challenge-control tests and all 10 adapter tests;
+- the challenge-control and new adapter architecture guards;
+- workspace formatting and strict workspace Clippy;
+- diff hygiene, documentation links and the active planning audit; and
+- changed-surface selection from `main@fb616aee`.
+
+The selector expands to broad validation because the new workspace member
+updates the shared lockfile. CDP, Lease Authority and desktop-services source
+and dependency closures are unchanged, so their previously accepted evidence
+remains reusable under the current validation policy. No browser, image
+capture, provider, credential, CAPTCHA, desktop-input, runtime, production or
+CI effect occurred.
 
 ## Stop Condition
 

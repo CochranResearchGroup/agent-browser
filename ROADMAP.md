@@ -305,9 +305,18 @@ P206 exact head `82e25624` merged through PR #180 as `d3f923a1`; P209 joined
 that canonical result at `3ef2ad9e` without a Rust or Cargo dependency change.
 The reconciled head passes all 52 challenge-control tests. The crate
 architecture, formatting, strict Clippy and diff-hygiene evidence remains
-source-identical. P209 is ready for publication and normal protected
-integration while GitHub CI remains operator-disabled. It creates no provider,
-browser, credential, CAPTCHA, runtime or production authority.
+source-identical. P209 exact head `27cd5342` merged through PR #188 as
+`fb616aee`. W7-C is admitted through
+[Plan 0210](docs/dev/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md)
+on `challenge/p210-visual-artifact-adapter` from that exact canonical baseline.
+It owns only a pure artifact-custody and one-shot injected fake-provider
+adapter. GitHub CI remains operator-disabled. The packet creates no real
+provider, browser, credential, CAPTCHA, runtime or production authority. P210
+source checkpoint `0729b63d` now implements that boundary with 10 adapter
+fixtures. All 52 challenge-control tests, both architecture guards, workspace
+formatting and strict workspace Clippy pass. Review repaired exact
+artifact/request expiry binding and delayed provider receipt-time
+adjudication. Publication and protected integration remain.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
