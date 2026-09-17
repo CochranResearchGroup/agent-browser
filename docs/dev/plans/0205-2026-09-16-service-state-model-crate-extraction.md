@@ -3848,6 +3848,103 @@ profile synchronization join. It must preserve CLI path and canonical-route
 preflight before intent preparation, aggregate profile validation before the
 kernel, cross-field rollback, and post-commit caller outcome checks.
 
+## Checkpoint 58 | Terminal Replacement Profile Sync Interface Freeze
+
+State transition: the next cross-field runtime-owner packet is frozen to
+`RuntimeLifecycleAuthority::transition_terminal_replacement_with_profile_sync`.
+It contains two production registry expressions and one direct profile-path
+mutation in a single repository closure. No other one of the 175 remaining
+production registry expressions belongs to this packet. Acceptance will leave
+173 production expressions across the same classified runtime-owner surface.
+
+The aggregate interface is:
+
+```rust
+pub fn apply_runtime_lifecycle_transition_with_profile_sync_atomically(
+    &mut self,
+    profile_id: &str,
+    user_data_dir: String,
+    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,
+) -> Result<
+    agent_browser_lease_authority::RuntimeLifecycleTransition,
+    String,
+>;
+```
+
+The CLI retains UTF-8 path conversion before repository mutation. Inside each
+mutation invocation it retains immutable profile lookup plus embedded-ID,
+canonical route-profile, and nonblank-ID validation before preparing the
+kernel intent. This preserves the current error precedence:
+
+1. `runtime_lifecycle_profile_path_invalid`;
+2. `runtime_lifecycle_profile_record_missing`;
+3. `runtime_lifecycle_profile_record_sync_rejected`; and
+4. the exact Lease Authority kernel error.
+
+Only after those adapter preflights may the CLI prepare the kernel intent,
+including current-boot observation and canonical route policy, and call the
+aggregate. The aggregate independently requires profile existence and rejects
+a mismatched or blank embedded profile ID, then clones the registry and applies
+the exact kernel intent. On success it updates only the selected profile's
+`user_data_dir`, assigns the staged registry, and returns the exact transition.
+On any error it preserves the complete aggregate. It does not interpret paths
+or route names, observe the host, restrict intent or result variants, update
+the envelope revision, map errors, retry, persist, or expose a registry.
+
+The two callers retain their transition-variant checks after repository
+mutation. A profile-migration or same-profile replacement outcome mismatch is
+therefore still post-commit and must not become aggregate rollback. The packet
+must not call the ordinary atomic transition before its fallible profile join.
+
+Model witnesses must prove same-profile activation and cross-profile migration
+match the raw kernel plus exactly one path update; missing, mismatched, and
+blank profiles precede malformed kernel errors; kernel rejection and a
+mutation-before-error kernel path roll back both fields; boot `Some` and
+`None`, principal bindings, unrelated profiles, unknown fields, maximum
+registry revision, and envelope revision remain exact; and a successful
+nonreplacement intent returns its real variant and commits, preserving the
+caller's post-commit mismatch contract.
+
+Focused CLI witnesses retain terminal activation, canonical profile migration,
+noncanonical or incomplete evidence rejection, collision rejection, and path
+plus lifecycle assertions. New precedence witnesses must prove invalid paths
+fail before repository mutation where the platform supports that input,
+missing, mismatched, and noncanonical profiles fail before intent preparation,
+a valid profile plus rejected lifecycle intent retains its old path, and the
+two existing caller outcome checks remain outside the repository mutation.
+
+The architecture guard must require the exact aggregate signature and ordered
+profile validation, staged registry, exact kernel call, profile update,
+registry assignment, and transition return. It must reject callbacks, registry
+or persistence handles, mutable references, iterators, error mapping, model
+observation or path interpretation, result-variant filtering, direct registry
+clone or assignment in the CLI helper, and direct profile-path assignment
+there. It must require CLI preflight before intent preparation while allowing
+the immutable preflight reads.
+
+Hard stops are changed path, missing-profile, or sync-rejection precedence;
+intent preparation before CLI preflight; moved boot or route observation;
+changed kernel order or error; registry-only commit; result-variant rollback;
+envelope revision ownership; or inclusion of reconciliation, principal
+rotation, legacy revocation, reset, filesystem, process, or runtime effects.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route to derive the cross-field atomic
+contract, current ordering, interface, witnesses, and hard stops.
+`/root/p205_receipt_cli_audit` used the workhorse `gpt-5.6-sol` high route to
+refresh the item-aware inventory at 175 production and 288 test-only
+expressions and identify this two-access helper as the smallest coherent next
+packet. Both audits were read-only and performed no edit, build, test, Git,
+forge, CI, runtime, or child-agent action.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. Exit requires exact
+cross-field success parity and rollback, the one-helper CLI cutover, focused
+precedence witnesses, and a targeted architecture guard. The next independent
+candidate after acceptance is the two-access process-exit legacy revocation
+packet, which intentionally retains revocation when a later session lookup
+fails and therefore must not reuse this atomic join blindly.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
