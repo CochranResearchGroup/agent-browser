@@ -672,16 +672,53 @@ and reconciliation snapshot records next, then the profile-lifecycle
 authorization record closure. Defer the capability registry until its schema
 or ownership graduates from advisory draft status.
 
+## Checkpoint 12 | Operational Snapshot Records
+
+State transition: the crate now owns the durable reconciliation and
+control-plane snapshot records. The records remain deliberately passive:
+status computation, health observation, timestamps, queue and browser counts,
+capacity validation, Service State mutation, persistence, and transport stay
+in CLI adapters.
+
+Acceptance state and progress classification: this small P1 aggregate-
+unblocking packet is accepted locally. No new semantic API was invented; the
+only existing queue-capacity invariant belongs to the typed status projection
+adapter and remains there.
+
+Evidence:
+
+- all 65 service-model crate unit and integration tests pass, including empty
+  legacy decode and populated camel-case snapshot fixtures;
+- nested Service State round-trip, status and collection response contract,
+  reconciliation response contract, and runtime-census revision-isolation
+  tests pass;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no reconciliation, health observation, browser, runtime, install, staging,
+  production, release, or GitHub CI effect was performed.
+
+Material blockers: the aggregate still stores multiple effect receipts and
+transactions, focused-crate authority state, draft capability data, and
+authentication or challenge execution state. The next lifecycle packet must
+keep logical authorization separate from fresh physical proof and effect
+settlement.
+
+Next action: publish this checkpoint. Extract the profile-lifecycle
+authorization record closure and its deterministic registration kernel only;
+leave physical observations, proof construction, effect settlement, runtime
+commands, and state mutation in CLI adapters.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | eleven families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twelve families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | eleven packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | eleven packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twelve packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | twelve packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

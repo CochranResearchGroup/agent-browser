@@ -4651,51 +4651,26 @@ fn classify_job_incident_state(has_browser: bool) -> ServiceIncidentState {
     }
 }
 
-/// Latest persisted service reconciliation result.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ServiceReconciliationSnapshot {
-    pub last_reconciled_at: Option<String>,
-    pub last_error: Option<String>,
-    pub browser_count: usize,
-    pub changed_browsers: usize,
-}
-
-/// Latest persisted control-plane status snapshot.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ControlPlaneSnapshot {
-    pub worker_state: String,
-    pub browser_health: String,
-    pub queue_depth: usize,
-    pub queue_capacity: usize,
-    /// Number of retained jobs currently delayed by profile lease contention.
-    pub waiting_profile_lease_job_count: usize,
-    pub service_job_timeout_ms: Option<u64>,
-    pub service_monitor_interval_ms: Option<u64>,
-    pub updated_at: Option<String>,
-}
-
 pub use agent_browser_service_model::{
     interaction_decision, profile_seeding_handoff_id, provider_decision, BrowserBuild,
     BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserProfile,
     BrowserRecordAuthoritySource, BrowserRecordLifecycleClassification, BrowserRecordProvenance,
     BrowserRecordSource, BrowserSession, BrowserTab, Challenge, ChallengePolicy, ChallengeState,
-    ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt, InteractionMode,
-    JobControlPlaneMode, JobPriority, JobState, JobTarget, LeaseState, MonitorState, MonitorTarget,
-    ProfileAllocationPolicy, ProfileClass, ProfileConnectionState, ProfileKeyringPolicy,
-    ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState, ProfileSeedingHandoffRecord,
-    ProfileSeedingHandoffState, ProfileSeedingMode, ProfileSelectionReason, ProfileSourceRecord,
-    ProfileTargetReadiness, ProtectedBrowserOwnerObservation, RateLimitPolicy,
-    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
-    RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
-    ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEntitySources, ServiceEvent,
-    ServiceEventKind, ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity,
-    ServiceIncidentState, ServiceJob, ServiceProvider, ServiceTabHandle,
-    ServiceTabHandleTraceFilter, SessionCleanupPolicy, SiteMonitor, SitePolicy,
-    SitePolicySourceRecord, TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
-    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    ControlInputProvider, ControlPlaneSnapshot, DisplayAllocation,
+    DurableHandoffPresentationReceipt, InteractionMode, JobControlPlaneMode, JobPriority, JobState,
+    JobTarget, LeaseState, MonitorState, MonitorTarget, ProfileAllocationPolicy, ProfileClass,
+    ProfileConnectionState, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin,
+    ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
+    ProfileSeedingMode, ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness,
+    ProtectedBrowserOwnerObservation, RateLimitPolicy, RemoteViewAcquisitionLease,
+    RemoteViewHandoff, RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry,
+    ServiceActor, ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEntitySources,
+    ServiceEvent, ServiceEventKind, ServiceIncident, ServiceIncidentEscalation,
+    ServiceIncidentSeverity, ServiceIncidentState, ServiceJob, ServiceProvider,
+    ServiceReconciliationSnapshot, ServiceTabHandle, ServiceTabHandleTraceFilter,
+    SessionCleanupPolicy, SiteMonitor, SitePolicy, SitePolicySourceRecord, TabLifecycle,
+    ViewStream, ViewStreamProvider, ViewerLease, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 #[cfg(test)]
 pub use agent_browser_service_model::{
