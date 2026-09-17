@@ -36,10 +36,16 @@ mod upgrade;
 mod validation;
 mod windows_browser_doctor;
 mod windows_browser_setup;
+#[allow(dead_code)]
+mod workstation_cold_install;
+#[cfg(test)]
+mod workstation_cold_install_contract_tests;
 mod workstation_convergence;
 mod workstation_install;
 #[allow(dead_code)]
 mod workstation_shutdown;
+#[cfg(test)]
+mod workstation_shutdown_contract_tests;
 
 use serde_json::json;
 use std::env;

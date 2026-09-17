@@ -6,6 +6,7 @@
 //! operator request to stop Agent Browser-owned machinery.
 
 use serde::Serialize;
+use std::time::Duration;
 
 pub(crate) const SHUTDOWN_SCHEMA_VERSION: &str = "agent-browser.workstation-shutdown.v1";
 
@@ -24,6 +25,7 @@ pub(crate) enum ShutdownPhase {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ShutdownStepReceipt {
     pub(crate) phase: ShutdownPhase,
+    pub(crate) deadline_ms: u64,
     pub(crate) changed: bool,
     pub(crate) escalated: bool,
     pub(crate) warnings: Vec<String>,
@@ -35,6 +37,7 @@ impl ShutdownStepReceipt {
     pub(crate) fn unchanged(phase: ShutdownPhase) -> Self {
         Self {
             phase,
+            deadline_ms: 0,
             changed: false,
             escalated: false,
             warnings: Vec::new(),
@@ -57,6 +60,28 @@ impl ShutdownStepReceipt {
             phase,
             error: Some(error.to_string()),
             ..Self::unchanged(phase)
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ShutdownPhaseResult {
+    pub(crate) step: ShutdownStepReceipt,
+    pub(crate) residue: Option<ShutdownResidue>,
+}
+
+impl ShutdownPhaseResult {
+    pub(crate) fn step(step: ShutdownStepReceipt) -> Self {
+        Self {
+            step,
+            residue: None,
+        }
+    }
+
+    pub(crate) fn verification(step: ShutdownStepReceipt, residue: ShutdownResidue) -> Self {
+        Self {
+            step,
+            residue: Some(residue),
         }
     }
 }
@@ -99,12 +124,17 @@ pub(crate) struct WorkstationShutdownReceipt {
 /// bounded polite-close and escalation, and platform-specific commands. Every
 /// method returns a receipt instead of withholding later cleanup phases.
 pub(crate) trait WorkstationShutdownEffects {
-    fn stop_owned_browsers(&mut self) -> ShutdownStepReceipt;
-    fn stop_owned_user_units(&mut self) -> ShutdownStepReceipt;
-    fn stop_owned_containers(&mut self) -> ShutdownStepReceipt;
-    fn release_runtime_ownership(&mut self) -> ShutdownStepReceipt;
-    fn clear_transient_metadata(&mut self) -> ShutdownStepReceipt;
-    fn verify_shutdown(&mut self) -> (ShutdownStepReceipt, ShutdownResidue);
+    fn execute_phase(&mut self, phase: ShutdownPhase, deadline: Duration) -> ShutdownPhaseResult;
+}
+
+fn shutdown_phase_deadline(phase: ShutdownPhase) -> Duration {
+    Duration::from_millis(match phase {
+        ShutdownPhase::Browsers | ShutdownPhase::UserUnits => 5_000,
+        ShutdownPhase::Containers => 10_000,
+        ShutdownPhase::Ownership | ShutdownPhase::TransientMetadata | ShutdownPhase::Verify => {
+            2_000
+        }
+    })
 }
 
 /// Execute every cold-shutdown phase exactly once and always perform final
@@ -112,15 +142,30 @@ pub(crate) trait WorkstationShutdownEffects {
 pub(crate) fn execute_workstation_shutdown(
     effects: &mut impl WorkstationShutdownEffects,
 ) -> WorkstationShutdownReceipt {
-    let mut steps = vec![
-        effects.stop_owned_browsers(),
-        effects.stop_owned_user_units(),
-        effects.stop_owned_containers(),
-        effects.release_runtime_ownership(),
-        effects.clear_transient_metadata(),
+    let phases = [
+        ShutdownPhase::Browsers,
+        ShutdownPhase::UserUnits,
+        ShutdownPhase::Containers,
+        ShutdownPhase::Ownership,
+        ShutdownPhase::TransientMetadata,
+        ShutdownPhase::Verify,
     ];
-    let (verification, residue) = effects.verify_shutdown();
-    steps.push(verification);
+    let mut steps = Vec::with_capacity(phases.len());
+    let mut residue = None;
+    for phase in phases {
+        let deadline = shutdown_phase_deadline(phase);
+        let mut result = effects.execute_phase(phase, deadline);
+        result.step.phase = phase;
+        result.step.deadline_ms = deadline.as_millis() as u64;
+        if phase == ShutdownPhase::Verify {
+            residue = result.residue;
+            if residue.is_none() && result.step.error.is_none() {
+                result.step.error = Some("shutdown_verification_residue_missing".to_string());
+            }
+        }
+        steps.push(result.step);
+    }
+    let residue = residue.unwrap_or_default();
 
     let success =
         steps.iter().all(|step| step.error.is_none()) && residue.owned_residue_count() == 0;
@@ -153,37 +198,26 @@ mod tests {
     }
 
     impl WorkstationShutdownEffects for FakeEffects {
-        fn stop_owned_browsers(&mut self) -> ShutdownStepReceipt {
-            self.calls.push(ShutdownPhase::Browsers);
-            if self.fail_browser_close {
-                ShutdownStepReceipt::failed(ShutdownPhase::Browsers, "browser_close_failed")
-            } else {
-                ShutdownStepReceipt::changed(ShutdownPhase::Browsers)
+        fn execute_phase(
+            &mut self,
+            phase: ShutdownPhase,
+            _deadline: Duration,
+        ) -> ShutdownPhaseResult {
+            if phase == ShutdownPhase::Verify {
+                self.calls.push(phase);
+                return ShutdownPhaseResult::verification(
+                    ShutdownStepReceipt::unchanged(phase),
+                    self.residue.clone(),
+                );
             }
-        }
-
-        fn stop_owned_user_units(&mut self) -> ShutdownStepReceipt {
-            self.step(ShutdownPhase::UserUnits)
-        }
-
-        fn stop_owned_containers(&mut self) -> ShutdownStepReceipt {
-            self.step(ShutdownPhase::Containers)
-        }
-
-        fn release_runtime_ownership(&mut self) -> ShutdownStepReceipt {
-            self.step(ShutdownPhase::Ownership)
-        }
-
-        fn clear_transient_metadata(&mut self) -> ShutdownStepReceipt {
-            self.step(ShutdownPhase::TransientMetadata)
-        }
-
-        fn verify_shutdown(&mut self) -> (ShutdownStepReceipt, ShutdownResidue) {
-            self.calls.push(ShutdownPhase::Verify);
-            (
-                ShutdownStepReceipt::unchanged(ShutdownPhase::Verify),
-                self.residue.clone(),
-            )
+            if phase == ShutdownPhase::Browsers && self.fail_browser_close {
+                self.calls.push(phase);
+                return ShutdownPhaseResult::step(ShutdownStepReceipt::failed(
+                    phase,
+                    "browser_close_failed",
+                ));
+            }
+            ShutdownPhaseResult::step(self.step(phase))
         }
     }
 
@@ -205,6 +239,22 @@ mod tests {
                 ShutdownPhase::TransientMetadata,
                 ShutdownPhase::Verify,
             ]
+        );
+    }
+
+    #[test]
+    fn shutdown_records_the_fixed_deadline_for_every_phase() {
+        let mut effects = FakeEffects::default();
+
+        let receipt = execute_workstation_shutdown(&mut effects);
+
+        assert_eq!(
+            receipt
+                .steps
+                .iter()
+                .map(|step| step.deadline_ms)
+                .collect::<Vec<_>>(),
+            vec![5_000, 5_000, 10_000, 2_000, 2_000, 2_000]
         );
     }
 

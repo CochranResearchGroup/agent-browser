@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -91,6 +91,92 @@ Checkpoint `b36bf40b` removes the prior daemon-shutdown exception that detached
 a live browser when owner-authority metadata was stale. Daemon termination now
 always selects browser close. Its focused stale-owner regression, the four
 controller tests, strict workspace Clippy, and formatting pass.
+
+The fresh-context startup readback on 2026-09-17 found the P211 worktree clean
+and synchronized with `origin/platform/p211-simple-cold-upgrade@4b9edcca`.
+Current `origin/main` is 17 commits ahead and P211 is 6 commits ahead of its
+merge base. P205 remains active and modifies the installer, Service State,
+presentation inventory, profile acquisition, and remote-view coordination.
+P207 remains open in pull request #184 and retains help and documentation
+custody. P211 therefore keeps this packet in new lane-owned modules and the
+small command adapter until those dependencies integrate. Graphiti was healthy
+but returned only older remote-view history. CodeGraph was unavailable because
+this worktree has no local index, so current source and Git evidence remain the
+authority.
+
+## Frozen Interface Packet
+
+The shutdown module exposes one operation that receives one effects adapter.
+The controller owns the fixed phase order and short deadline for each phase;
+the adapter receives only the selected phase and its deadline. The operation
+accepts no transaction, drain, census, revision, rollback, hash, capability,
+or repair-token input. Every phase returns a typed step receipt. Verification
+returns independently attributable Agent Browser-owned residue plus separately
+reported foreign-process observations. A failed phase does not suppress later
+ownership release, transient cleanup, or final verification.
+
+The cold-install module exposes one operation with the fixed sequence `stop`,
+`replace`, `start`, and `readiness`. Stop must return a successful shutdown
+receipt before replacement begins. Any replace, start, or readiness failure
+executes one bounded rollback phase and reports both the original failure and
+rollback integrity. A successful result requires all four phases and a ready
+probe from the newly selected generation. Legacy hot-upgrade transaction state
+is not an input to this interface.
+
+The post-boot presentation module accepts stable configured route and display
+descriptors, prior transient claims, the current boot epoch, and one observation
+adapter. It returns admitted current-boot bindings and typed exclusions.
+Prior-boot claims are historical evidence only. A route is admitted only when
+the current observation proves its configured route, display, and ownership
+relationship; quarantined, orphaned, or mismatched inventory is excluded.
+
+Trusted single-user acquisition keeps the existing named-profile request seam.
+A stable self-declared subject is sufficient in shared-local mode. One healthy
+retained browser is reused; otherwise one browser is launched. Failure releases
+tentative ownership so the profile and browser are immediately reusable.
+Remote-view success requires both `operatorVisible.state=ready` and a resolving
+opaque `/remote-view/<handoff-id>`. A normal same-site authentication redirect
+retains that durable handoff and returns a typed authentication-required state.
+Raw provider, route-binding, embed, dashboard, or health URLs are never the
+operator result.
+
+This packet declares the following disjoint write scopes before fan-out:
+
+- Primary: `cli/src/workstation_shutdown.rs`,
+  `cli/src/workstation_cold_install.rs`, and the smallest command adapter in
+  `cli/src/main.rs`; `cli/src/workstation_install.rs` remains deferred until
+  P205 reconciliation.
+- Provider-free fixture worker:
+  `cli/src/workstation_shutdown_contract_tests.rs` and
+  `cli/src/workstation_cold_install_contract_tests.rs` only. The primary owns
+  module declarations and production logic.
+- Remote-view implementation worker:
+  `cli/src/native/presentation_requalification.rs` only, including its local
+  unit tests. The primary owns module registration and later integration with
+  presentation inventory and route selection.
+- P207-controlled help and documentation files and P205-controlled Service
+  State files remain excluded from this packet.
+
+The first packet completed its bounded fan-out. Fixture worker
+`/root/p211_fixture_contracts` added only the two declared contract-test files.
+Remote-view worker `/root/p211_presentation_requalification` added only the
+declared requalification module and its local tests. The primary reconciled the
+boot-epoch type with the repository's string identity, registered the modules,
+and implemented the shutdown-deadline and cold-install controllers. The
+shutdown deadline tracer failed first because `deadline_ms` was absent, then
+passed after the controller owned and normalized every deadline. The
+cold-install tracer failed first because its module was absent, then all four
+contract cases passed after the fixed sequence and rollback result landed.
+
+Focused primary validation is green for five shutdown-controller tests, four
+shutdown-contract tests, four cold-install contract tests, and eight
+presentation-requalification tests. Strict workspace Clippy with warnings
+denied, workspace formatting, and `git diff --check` pass. The validation
+selector also named broad workstation and Guacamole lanes, but those remain
+deferred because this checkpoint changes no platform adapter, installer route,
+embedded asset, or live runtime. Production shutdown routing, platform effects,
+cold installer integration, profile release, and remote-view integration remain
+open.
 
 ## Consolidated Batch
 
