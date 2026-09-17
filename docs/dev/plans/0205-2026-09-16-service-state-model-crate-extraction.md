@@ -4517,6 +4517,96 @@ closure is accepted and is outcome progress toward P4 field privacy. The next
 bounded outcome must again come from the classified runtime-owner surface and
 must not combine read-only authority with mutation or effect custody.
 
+## Checkpoint 68 | Runtime Session Binding Projection Freeze
+
+State transition: the next packet is frozen to one exact Service Model
+projection, five direct `binding_for_session` caller cutovers, and two paired
+owner lookups. Acceptance removes seven classified production expressions
+across `main.rs`, `action_runtime/runtime/daemon.rs`,
+`browser_lifecycle.rs`, `action_runtime/runtime/profile_lease.rs`, and
+`stream/guacamole_primary_binding.rs`, leaving 155 production expressions.
+
+The model interface is one direct immutable delegate using the existing owned
+Lease Authority binding type:
+
+```rust
+pub fn runtime_owner_binding_for_session(
+    &self,
+    session_id: &str,
+) -> Result<
+    Option<agent_browser_lease_authority::RuntimeOwnerBinding>,
+    String,
+>;
+```
+
+Its implementation calls only
+`self.runtime_owner_registry.binding_for_session(session_id)`. It adds no
+error mapping, filtering, session-record lookup, principal check, owner-state
+check, currentness predicate, pending-transfer rule, persistence, observation,
+or effect admission. Exact daemon-route matches remain effect-capable; browser
+and previous-route aliases remain observation-only. A sole terminal owner
+remains observable, a nonterminal replacement displaces matching terminal
+history, multiple selected owners retain the existing ambiguity error, and
+absence remains `Ok(None)`.
+
+Every caller preserves its current mapping. Main treats error or absence as
+false. Daemon profile selection maps binding errors to its existing ambiguous-
+identity error. Browser navigation collapses error or absence to its existing
+identity conflict and still compares `OwnerAuthorityClaim::from_owner(owner)`
+to the binding claim. Configured-profile alias matching retains false for error
+or absence and its explicit effect-capable gate. Guacamole retains its distinct
+unavailable mapping and subsequent lifecycle authorization. Browser navigation
+and configured-profile matching replace their exact owner-by-digest reads with
+`profile_runtime_authority(...).owner`; all later route, PID, CDP, directory,
+and digest checks remain unchanged.
+
+`runtime_owner_transfer::owner_binding_for_session` and cold native acquisition
+remain outside this packet. They use `owner_binding_in_registry`, which
+additionally suppresses an exact terminal-cleanup-satisfied historical owner;
+substituting the new raw delegate would incorrectly rehydrate terminal history.
+Guacamole's preceding all-owner uniqueness scan and daemon's later principal-
+binding work also remain explicit debt rather than being hidden behind this
+projection.
+
+Model witnesses must compare raw-kernel parity and aggregate nonmutation for
+absence, exact effect-capable route, observation-only browser and previous-
+route aliases, sole terminal history, terminal history plus a current
+replacement, and current and terminal-only ambiguity. They must preserve exact
+map-key, profile-digest, generation, terminal-and-satisfied filtering and show
+that pending transfer or absent Service sessions and principals do not add new
+predicates. Existing caller witnesses remain required; add only a missing case
+needed to prove browser-navigation observation-only handling or configured-
+profile rejection of observation-only bindings.
+
+The architecture contract must require the exact aggregate signature and
+direct delegate, reject registry or mutable handles, callbacks, generic
+iterators, persistence workarounds, attestation substitution, error suppression,
+and `owner_binding_in_registry` reuse. It must require all five callers to use
+the projection, require the two exact owner joins to use
+`profile_runtime_authority`, and reject direct binding calls in the scoped
+functions without falsely declaring the remaining daemon or Guacamole registry
+reads closed.
+
+Hard stops are changed terminal-history selection, claim contents, ambiguity
+identity, caller error precedence, alias effect capability, owner-claim equality,
+or movement of authentication, repository loading, process/CDP/path observation,
+or effect admission.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route for the exact delegate semantics,
+terminal-history traps, witness matrix, and hard stops.
+`/root/p205_receipt_cli_audit` used the workhorse `gpt-5.6-sol` high route for
+the five-call inventory, two owner joins, excluded non-equivalent wrapper,
+existing witnesses, and post-packet count. Model implementation and provider-
+free tests are assigned to the strong kernel worker; the five CLI cutovers are
+assigned to the workhorse audit worker with disjoint file custody. The primary
+owns the plan, guard, integration, validation, acceptance, Git, and publication.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. Exit requires raw-kernel
+parity, the terminal-history matrix, exact caller behavior, all seven cutovers,
+and the scoped architecture contract.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
