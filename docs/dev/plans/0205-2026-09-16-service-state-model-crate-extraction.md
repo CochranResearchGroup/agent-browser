@@ -4304,6 +4304,53 @@ projection cutover. It must derive tracked and missing lifecycle counts from
 the `runtime_resource_lanes` map-key projection, not from the embedded lifecycle
 browser ID, and must add the focused join witness before removing those reads.
 
+## Checkpoint 64 | Workstation Cleanup-Obligation Projection Freeze
+
+State transition: the next packet is frozen to the two production lifecycle-
+map reads inside `reconcile_runtime_maintenance`. No new Service Model API is
+required. A private workstation helper will consume the existing
+`runtime_resource_lanes` projection once, report its row count as
+`trackedCount`, and derive `missingCount` from process-backed Service browser
+keys absent from the projected lifecycle map-key set. Acceptance leaves 165
+classified production runtime-owner expressions.
+
+The projection's `RuntimeResourceLane.browser_id` is the lifecycle map key and
+is authoritative for this join. The helper must not substitute
+`lane.lifecycle.logical_browser_id`, because retained compatibility state can
+preserve a different embedded identifier. It must count lifecycle-only rows as
+tracked, ignore browsers without durable process identity when computing
+missing obligations, count a process-backed browser with no lifecycle map key,
+and retain an ordinary process-backed tracked browser as non-missing. A single
+focused pure witness will cover all five cases, including a map key that differs
+from the embedded lifecycle browser ID.
+
+Process lifecycle reconciliation, Service State repository retry and mutation
+custody, process garbage collection, retained-state pruning, resource response,
+JSON names and values, install generation collection, backoff, receipts,
+filesystem operations, units, and runtime effects remain unchanged. The
+architecture guard must require the purpose-specific projection and reject
+production direct registry access in `workstation_install.rs` after item-aware
+test exclusion. It must not reject fixture-only registry setup.
+
+Hard stops are a new model API, embedded-ID membership, changed count semantics,
+movement of process observation or install effects into Service Model, reuse of
+a persistence snapshot or whole-registry handle, or expansion into the other
+workstation owner-selection and mutation paths.
+
+Delegation and model-choice receipt: the mechanical single-file implementation
+is assigned to `/root/p205_reconciliation_cutover` on its existing requested
+fast `gpt-5.6-luna` medium route. The worker may edit only
+`cli/src/workstation_install.rs`, add the one pure helper and focused witness,
+and run targeted formatting without builds, Git, forge, CI, runtime, or child-
+agent actions. The primary owns the architecture guard, integration, local
+acceptance, checkpoint disposition, commit, and publication.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. Exit requires zero
+production direct runtime-owner registry access in the frozen maintenance
+function, exact map-key count behavior, the focused witness, and the targeted
+architecture contract.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
