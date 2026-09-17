@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 1
+Plan version: 2
 
 State: PLANNED | NOT ADMITTED
 
@@ -184,6 +184,32 @@ The minimum matrix includes:
 - Reassess after two checkpoints or 30 active minutes without outcome
   progress.
 - Overall source effort ceiling: 180 active minutes.
+
+## Worker Assignments And Write Surface
+
+- Primary: one challenge-lane owner implements the adapter contracts, recording
+  fake, provider-free fixtures, architecture guard and validation receipt.
+- No subagent, model-provider worker, browser worker, runtime operator,
+  benchmark checkout or live-acceptance worker is assigned.
+- P209 remains the sole owner of the provider protocol. P210 consumes its
+  integrated contract and does not rewrite `visual_provider.rs` unless a
+  separately recorded blocking contract defect requires dependency repair.
+- PL-PLATFORM remains the owner of desktop capture, desktop services, provider
+  admission and runtime surfaces. P210 neither edits nor shadows them.
+
+Expected source writes are limited to:
+
+- root `Cargo.toml` and the resulting shared `Cargo.lock` workspace entry;
+- `crates/agent-browser-challenge-visual-adapter/` contracts and tests;
+- one `scripts/test-challenge-visual-adapter-architecture.js` dependency guard;
+- the corresponding package script in `package.json`; and
+- this plan plus the bounded challenge-lane roadmap, runbook and active-lane
+  projections at admission and checkpoint time.
+
+The shared lockfile makes the initial changed-surface selection potentially
+comprehensive. Run the selector at admission and reuse unaffected extracted
+crate evidence only when its dependency closure is unchanged and the current
+validation policy permits reuse.
 
 ## Deferred Successors
 
