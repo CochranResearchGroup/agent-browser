@@ -31,6 +31,37 @@ pub struct PresentationSlotObservation {
     pub authoritative_browser_id: Option<String>,
 }
 
+/// A ready provider binding retained by a current acquisition reservation.
+/// The adapter qualifies provider readiness and acquisition custody; the model
+/// matches the old slot's exact identities and non-null browser.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PresentationAcquisitionRetention {
+    pub slot_id: String,
+    pub route_id: String,
+    pub display_allocation_id: String,
+    pub browser_id: String,
+}
+
+/// Service joins for one exact old slot binding during inventory revalidation.
+/// These transient facts do not select a capacity transition. A pending binding
+/// includes equality of the route and qualified browser, including two absent
+/// browsers. An inert owner requires matching released/orphaned route and
+/// display states, an available unchecked-out pool entry, and matching owners.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PresentationInventoryCustodyObservation {
+    pub slot_id: String,
+    pub route_id: Option<String>,
+    pub display_allocation_id: Option<String>,
+    pub exact_pending_binding: bool,
+    pub completed_inert_owner_browser_id: Option<String>,
+}
+
+/// Retirement cannot reset browser presentation while an episode owns a lease.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PresentationRetirementConflict {
+    ActivePresentationLease,
+}
+
 impl PresentationSlotObservation {
     fn matches(&self, slot: &PresentationSlot) -> bool {
         self.slot_id == slot.id
@@ -323,6 +354,256 @@ impl Default for PresentationCapacityAuthority {
 }
 
 impl PresentationCapacityAuthority {
+    pub fn config(&self) -> &PresentationCapacityConfig {
+        &self.config
+    }
+
+    pub fn slots(&self) -> &[PresentationSlot] {
+        &self.slots
+    }
+
+    pub fn queued_requests(&self) -> &[PresentationRequest] {
+        &self.queued_requests
+    }
+
+    pub fn queue_clock(&self) -> u64 {
+        self.queue_clock
+    }
+
+    pub fn admission_error(&self) -> Option<&str> {
+        self.admission_error.as_deref()
+    }
+
+    /// Refresh qualified inventory while retaining exact slot and acquisition
+    /// custody. Fresh inventory is validated before restoration, then the merged
+    /// slots are validated again. Queue history survives unchanged.
+    pub fn from_refreshed_inventory(
+        config: PresentationCapacityConfig,
+        mut qualified_slots: Vec<PresentationSlot>,
+        previous: Option<&Self>,
+        retained_acquisitions: &[PresentationAcquisitionRetention],
+    ) -> Result<Self, String> {
+        qualified_slots.sort_by(|left, right| left.id.cmp(&right.id));
+        let mut capacity = Self::new(config, qualified_slots)?;
+        if let Some(previous) = previous {
+            capacity.queued_requests = previous.queued_requests.clone();
+            capacity.queue_clock = previous.queue_clock;
+            for slot in &mut capacity.slots {
+                if let Some(old) = previous.slots.iter().find(|old| {
+                    old.id == slot.id
+                        && old.route_id == slot.route_id
+                        && old.display_allocation_id == slot.display_allocation_id
+                }) {
+                    *slot = old.clone();
+                }
+            }
+            for old in &previous.slots {
+                if capacity.slots.iter().any(|slot| slot.id == old.id) {
+                    continue;
+                }
+                if retained_acquisitions.iter().any(|fact| {
+                    old.id == fact.slot_id
+                        && old.route_id.as_deref() == Some(fact.route_id.as_str())
+                        && old.display_allocation_id.as_deref()
+                            == Some(fact.display_allocation_id.as_str())
+                        && old.browser_id.as_deref() == Some(fact.browser_id.as_str())
+                }) {
+                    capacity.slots.push(old.clone());
+                }
+            }
+            capacity.slots.sort_by(|left, right| left.id.cmp(&right.id));
+            capacity.slots = Self::new(config, std::mem::take(&mut capacity.slots))?.slots;
+        }
+        Ok(capacity)
+    }
+
+    /// Revalidate inventory without silently changing prior slot custody.
+    /// Custody errors precede constructor validation; only exact pending
+    /// acquisition and completed inert-owner facts permit browser changes.
+    pub fn from_revalidated_inventory(
+        config: PresentationCapacityConfig,
+        mut qualified_slots: Vec<PresentationSlot>,
+        previous: Option<&Self>,
+        observations: &[PresentationInventoryCustodyObservation],
+    ) -> Result<Self, String> {
+        qualified_slots.sort_by(|left, right| left.id.cmp(&right.id));
+        if let Some(previous) = previous {
+            for old in &previous.slots {
+                let Some(slot) = qualified_slots.iter_mut().find(|slot| {
+                    slot.id == old.id
+                        && slot.route_id == old.route_id
+                        && slot.display_allocation_id == old.display_allocation_id
+                }) else {
+                    return Err(format!(
+                        "production_presentation_inventory_capacity_custody_changed:{}",
+                        serde_json::json!({"reason":"binding_changed","previousSlot":old})
+                    ));
+                };
+                let facts = observations.iter().find(|fact| {
+                    fact.slot_id == old.id
+                        && fact.route_id == old.route_id
+                        && fact.display_allocation_id == old.display_allocation_id
+                });
+                let exact_pending_binding = facts.is_some_and(|fact| fact.exact_pending_binding);
+                let exact_pending_browser_acquisition = old.state
+                    == PresentationSlotState::WarmIdle
+                    && old.browser_id.is_none()
+                    && old.lease_request_id.is_none()
+                    && old.cleanup_obligation_ids.is_empty()
+                    && slot.browser_id.is_some()
+                    && exact_pending_binding;
+                let exact_completed_inert_owner = old.state == PresentationSlotState::Active
+                    && old.browser_id.is_some()
+                    && slot.browser_id.is_none()
+                    && facts.is_some_and(|fact| {
+                        fact.completed_inert_owner_browser_id == old.browser_id
+                    });
+                if exact_pending_browser_acquisition || exact_completed_inert_owner {
+                    continue;
+                }
+                if slot.browser_id != old.browser_id {
+                    return Err(format!(
+                        "production_presentation_inventory_capacity_custody_changed:{}",
+                        serde_json::json!({
+                            "reason":"browser_changed",
+                            "exactPendingBinding":exact_pending_binding,
+                            "previousSlot":old,
+                            "qualifiedSlot":slot,
+                        })
+                    ));
+                }
+                *slot = old.clone();
+            }
+        }
+        let mut capacity = Self::new(config, qualified_slots)?;
+        if let Some(previous) = previous {
+            capacity.queued_requests = previous.queued_requests.clone();
+            capacity.queue_clock = previous.queue_clock;
+        }
+        Ok(capacity)
+    }
+
+    /// Fence new admission after inventory failure while preserving all custody.
+    pub fn record_inventory_failure(&mut self, error: String) {
+        self.admission_error = Some(error);
+    }
+
+    /// Admit and append one provisioning slot, preserving gate precedence.
+    /// Lifecycle generation and provider effects remain adapter responsibilities.
+    pub fn begin_provisioning(
+        &mut self,
+        slot_id: &str,
+        pressure: PressureAdmission,
+    ) -> Result<(), &'static str> {
+        if self
+            .slots
+            .iter()
+            .any(|slot| slot.state == PresentationSlotState::Provisioning)
+        {
+            return Err("provisioning_in_flight");
+        }
+        if self.slots.len() >= self.config.hard_maximum {
+            return Err("configured_hard_maximum");
+        }
+        if self.slots.len() >= pressure.admitted_maximum() {
+            return Err("pressure_admission");
+        }
+        let mut slot = PresentationSlot::warm_idle(slot_id);
+        slot.state = PresentationSlotState::Provisioning;
+        self.slots.push(slot);
+        Ok(())
+    }
+
+    /// Reflect an adapter-validated provisioning result in its first exact slot.
+    /// Panics if the adapter lost the admitted slot across its provider call.
+    pub fn complete_provisioning(
+        &mut self,
+        slot_id: &str,
+        route_id: String,
+        display_allocation_id: String,
+    ) {
+        let slot = self
+            .slots
+            .iter_mut()
+            .find(|slot| slot.id == slot_id)
+            .expect("provisioning slot must remain present");
+        slot.route_id = Some(route_id);
+        slot.display_allocation_id = Some(display_allocation_id);
+        slot.state = PresentationSlotState::WarmIdle;
+    }
+
+    /// Retain failed provisioning custody and append its exact cleanup obligation.
+    /// Unlike episode quarantine, this preserves insertion order and duplicates.
+    pub fn quarantine_failed_provisioning(
+        &mut self,
+        slot_id: &str,
+        lifecycle_generation: &str,
+    ) -> String {
+        let obligation = format!("cleanup:{slot_id}:{lifecycle_generation}");
+        let slot = self
+            .slots
+            .iter_mut()
+            .find(|slot| slot.id == slot_id)
+            .expect("failed provisioning slot must remain present");
+        slot.state = PresentationSlotState::Quarantined;
+        slot.cleanup_obligation_ids.push(obligation.clone());
+        obligation
+    }
+
+    /// Begin cooldown after the adapter verifies elastic-resource ownership.
+    pub fn begin_cooldown(&mut self, slot_id: &str) -> Result<(), String> {
+        let slot = self
+            .slots
+            .iter_mut()
+            .find(|slot| slot.id == slot_id)
+            .ok_or_else(|| "presentation_slot_not_found".to_string())?;
+        if slot.state != PresentationSlotState::WarmIdle {
+            return Err("presentation_slot_not_idle".to_string());
+        }
+        slot.state = PresentationSlotState::Cooling;
+        Ok(())
+    }
+
+    /// Remove every matching slot after the adapter proves resource reclamation.
+    pub fn complete_reclamation(&mut self, slot_id: &str) {
+        self.slots.retain(|slot| slot.id != slot_id);
+    }
+
+    /// Retain failed reclamation custody, deduplicating without reordering.
+    /// A missing slot is deliberately a no-op, matching the lifecycle adapter.
+    pub fn quarantine_failed_reclamation(&mut self, slot_id: &str) {
+        if let Some(slot) = self.slots.iter_mut().find(|slot| slot.id == slot_id) {
+            slot.state = PresentationSlotState::Quarantined;
+            let obligation = format!("cleanup:{slot_id}:scale-in");
+            if !slot.cleanup_obligation_ids.contains(&obligation) {
+                slot.cleanup_obligation_ids.push(obligation);
+            }
+        }
+    }
+
+    /// Atomically park every slot of a retired browser, regardless of slot state.
+    /// Any matching active lease rejects the whole operation before mutation.
+    /// Route identities, scene history and cleanup obligations remain intact.
+    pub fn retire_browser(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<(), PresentationRetirementConflict> {
+        if self.slots.iter().any(|slot| {
+            slot.browser_id.as_deref() == Some(browser_id) && slot.lease_request_id.is_some()
+        }) {
+            return Err(PresentationRetirementConflict::ActivePresentationLease);
+        }
+        for slot in &mut self.slots {
+            if slot.browser_id.as_deref() == Some(browser_id) {
+                slot.browser_id = None;
+                slot.state = PresentationSlotState::WarmIdle;
+                slot.lease_priority = None;
+                slot.restoration_pending = false;
+            }
+        }
+        Ok(())
+    }
+
     fn browser_is_excluded(&self, request: &PresentationRequest) -> bool {
         request.browser_id.as_ref().is_some_and(|browser_id| {
             self.slots.iter().any(|slot| {
@@ -1258,6 +1539,416 @@ fn limiting_resource_name(resource: CapacityLimitingResource) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refreshed_inventory_retains_exact_custody_and_queue_without_retaining_failure() {
+        let mut previous = one_slot_authority(8);
+        previous.config.hard_maximum = 3;
+        previous.slots[0].state = PresentationSlotState::Quarantined;
+        previous.slots[0].scene_generation = 17;
+        previous.slots[0].cleanup_obligation_ids = vec!["z".into(), "a".into()];
+        let mut pending =
+            PresentationSlot::warm_idle("slot-0").with_binding("route-0", "display-0");
+        pending.browser_id = Some("browser".into());
+        pending.state = PresentationSlotState::Active;
+        previous.slots.push(pending.clone());
+        previous.slots.push(PresentationSlot::warm_idle("dropped"));
+        previous.queue_clock = 29;
+        previous.queued_requests = vec![PresentationRequest::observation("queued")];
+        previous.record_inventory_failure("outage".into());
+        let facts = vec![PresentationAcquisitionRetention {
+            slot_id: pending.id.clone(),
+            route_id: "route-0".into(),
+            display_allocation_id: "display-0".into(),
+            browser_id: "browser".into(),
+        }];
+        let config = PresentationCapacityConfig {
+            max_queue_depth: 0,
+            ..previous.config
+        };
+        let fresh =
+            vec![PresentationSlot::warm_idle("slot-1").with_binding("route-1", "display-1")];
+        let refreshed = PresentationCapacityAuthority::from_refreshed_inventory(
+            config,
+            fresh.clone(),
+            Some(&previous),
+            &facts,
+        )
+        .unwrap();
+        assert_eq!(refreshed.slots(), &[pending, previous.slots[0].clone()]);
+        assert_eq!(refreshed.config(), &config);
+        assert_eq!(refreshed.queued_requests(), previous.queued_requests());
+        assert_eq!(refreshed.queue_clock(), 29);
+        assert_eq!(refreshed.admission_error(), None);
+        for field in 0..4 {
+            let mut wrong = facts.clone();
+            match field {
+                0 => wrong[0].slot_id.push('x'),
+                1 => wrong[0].route_id.push('x'),
+                2 => wrong[0].display_allocation_id.push('x'),
+                _ => wrong[0].browser_id.push('x'),
+            }
+            let refreshed = PresentationCapacityAuthority::from_refreshed_inventory(
+                config,
+                fresh.clone(),
+                Some(&previous),
+                &wrong,
+            )
+            .unwrap();
+            assert_eq!(refreshed.slots(), &previous.slots[..1]);
+        }
+        let replaced_binding =
+            PresentationSlot::warm_idle("slot-0").with_binding("new-route", "new-display");
+        let refreshed = PresentationCapacityAuthority::from_refreshed_inventory(
+            config,
+            vec![replaced_binding.clone()],
+            Some(&previous),
+            &facts,
+        )
+        .unwrap();
+        assert_eq!(refreshed.slots(), &[replaced_binding]);
+    }
+
+    #[test]
+    fn inventory_constructors_preserve_distinct_validation_order_and_second_refresh_validation() {
+        let mut previous = one_slot_authority(8);
+        previous.slots[0].browser_id = Some("browser".into());
+        let invalid = PresentationCapacityConfig {
+            warm_minimum: 2,
+            ..previous.config
+        };
+        assert_eq!(
+            PresentationCapacityAuthority::from_refreshed_inventory(
+                invalid,
+                Vec::new(),
+                Some(&previous),
+                &[],
+            )
+            .unwrap_err(),
+            "presentation_warm_minimum_exceeds_hard_maximum"
+        );
+        assert_eq!(
+            PresentationCapacityAuthority::from_revalidated_inventory(
+                invalid,
+                Vec::new(),
+                Some(&previous),
+                &[],
+            )
+            .unwrap_err(),
+            format!(
+                "production_presentation_inventory_capacity_custody_changed:{}",
+                serde_json::json!({"reason":"binding_changed","previousSlot":previous.slots[0]})
+            )
+        );
+        let facts = [PresentationAcquisitionRetention {
+            slot_id: "slot-1".into(),
+            route_id: "route-1".into(),
+            display_allocation_id: "display-1".into(),
+            browser_id: "browser".into(),
+        }];
+        assert_eq!(
+            PresentationCapacityAuthority::from_refreshed_inventory(
+                previous.config,
+                vec![PresentationSlot::warm_idle("other")],
+                Some(&previous),
+                &facts,
+            )
+            .unwrap_err(),
+            "presentation_inventory_exceeds_hard_maximum"
+        );
+        let config = PresentationCapacityConfig {
+            hard_maximum: 2,
+            ..previous.config
+        };
+        assert_eq!(
+            PresentationCapacityAuthority::from_refreshed_inventory(
+                config,
+                vec![PresentationSlot::warm_idle("other").with_binding("route-1", "other-display")],
+                Some(&previous),
+                &facts,
+            )
+            .unwrap_err(),
+            "presentation_slot_route_identity_duplicate"
+        );
+        previous.slots[0].browser_id = None;
+        assert!(PresentationCapacityAuthority::from_refreshed_inventory(
+            config,
+            Vec::new(),
+            Some(&previous),
+            &facts,
+        )
+        .unwrap()
+        .slots()
+        .is_empty());
+    }
+
+    #[test]
+    fn revalidated_inventory_preserves_exact_custody_error_and_pending_exception_fences() {
+        let previous = one_slot_authority(8);
+        let mut qualified = previous.slots[0].clone();
+        qualified.browser_id = Some("acquiring".into());
+        qualified.state = PresentationSlotState::Active;
+        let fact = PresentationInventoryCustodyObservation {
+            slot_id: "slot-1".into(),
+            route_id: Some("route-1".into()),
+            display_allocation_id: Some("display-1".into()),
+            exact_pending_binding: true,
+            completed_inert_owner_browser_id: None,
+        };
+        assert_eq!(
+            PresentationCapacityAuthority::from_revalidated_inventory(
+                previous.config,
+                vec![qualified.clone()],
+                Some(&previous),
+                &[],
+            )
+            .unwrap_err(),
+            format!(
+                "production_presentation_inventory_capacity_custody_changed:{}",
+                serde_json::json!({"reason":"browser_changed","exactPendingBinding":false,
+                "previousSlot":previous.slots[0],"qualifiedSlot":qualified})
+            )
+        );
+        let result = PresentationCapacityAuthority::from_revalidated_inventory(
+            previous.config,
+            vec![qualified.clone()],
+            Some(&previous),
+            std::slice::from_ref(&fact),
+        )
+        .unwrap();
+        assert_eq!(result.slots(), &[qualified.clone()]);
+        for fence in 0..6 {
+            let mut old = previous.clone();
+            let mut observed = fact.clone();
+            match fence {
+                0 => old.slots[0].state = PresentationSlotState::Active,
+                1 => old.slots[0].lease_request_id = Some("lease".into()),
+                2 => old.slots[0].cleanup_obligation_ids.push("cleanup".into()),
+                3 => observed.slot_id.push('x'),
+                4 => observed.route_id = None,
+                _ => observed.display_allocation_id = None,
+            }
+            assert!(PresentationCapacityAuthority::from_revalidated_inventory(
+                old.config,
+                vec![qualified.clone()],
+                Some(&old),
+                &[observed],
+            )
+            .unwrap_err()
+            .contains("browser_changed"));
+        }
+        // Metadata not fenced by the existing pending-acquisition exception is
+        // deliberately discarded together with the old warm slot.
+        let mut old = previous.clone();
+        old.slots[0].lease_priority = Some(PresentationPriority::Recovery);
+        old.slots[0].restoration_pending = true;
+        old.slots[0].scene_generation = 9;
+        assert_eq!(
+            PresentationCapacityAuthority::from_revalidated_inventory(
+                old.config,
+                vec![qualified.clone()],
+                Some(&old),
+                &[fact],
+            )
+            .unwrap()
+            .slots(),
+            &[qualified]
+        );
+    }
+
+    #[test]
+    fn revalidated_inventory_inert_exception_and_unchanged_custody_preserve_queue() {
+        let mut previous = one_slot_authority(8);
+        previous.slots[0].state = PresentationSlotState::Active;
+        previous.slots[0].browser_id = Some("retired".into());
+        previous.slots[0].lease_request_id = Some("lease".into());
+        previous.slots[0].cleanup_obligation_ids = vec!["cleanup".into()];
+        previous.queue_clock = 41;
+        previous.queued_requests = vec![PresentationRequest::human("queued")];
+        previous.record_inventory_failure("outage".into());
+        let fresh = PresentationSlot::warm_idle("slot-1").with_binding("route-1", "display-1");
+        let mut fact = PresentationInventoryCustodyObservation {
+            slot_id: "slot-1".into(),
+            route_id: Some("route-1".into()),
+            display_allocation_id: Some("display-1".into()),
+            exact_pending_binding: false,
+            completed_inert_owner_browser_id: Some("retired".into()),
+        };
+        let recovered = PresentationCapacityAuthority::from_revalidated_inventory(
+            previous.config,
+            vec![fresh.clone()],
+            Some(&previous),
+            std::slice::from_ref(&fact),
+        )
+        .unwrap();
+        assert_eq!(recovered.slots(), &[fresh.clone()]);
+        assert_eq!(recovered.queue_clock(), 41);
+        assert_eq!(recovered.queued_requests(), previous.queued_requests());
+        assert_eq!(recovered.admission_error(), None);
+        fact.completed_inert_owner_browser_id = Some("foreign".into());
+        assert!(PresentationCapacityAuthority::from_revalidated_inventory(
+            previous.config,
+            vec![fresh.clone()],
+            Some(&previous),
+            &[fact],
+        )
+        .unwrap_err()
+        .contains("browser_changed"));
+        let mut same_browser = fresh;
+        same_browser.browser_id = Some("retired".into());
+        let restored = PresentationCapacityAuthority::from_revalidated_inventory(
+            previous.config,
+            vec![same_browser],
+            Some(&previous),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(restored.slots(), previous.slots());
+    }
+
+    #[test]
+    fn lifecycle_mutations_preserve_admission_order_and_exact_cleanup_semantics() {
+        let mut capacity = one_slot_authority(8);
+        let before = capacity.clone();
+        assert_eq!(
+            capacity.begin_provisioning("new", PressureAdmission::admit(0)),
+            Err("configured_hard_maximum")
+        );
+        assert_eq!(capacity, before);
+        capacity.config.hard_maximum = 3;
+        let before = capacity.clone();
+        assert_eq!(
+            capacity.begin_provisioning("new", PressureAdmission::admit(1)),
+            Err("pressure_admission")
+        );
+        assert_eq!(capacity, before);
+        capacity.record_inventory_failure("outage".into());
+        // Inventory fencing was not a scale-out gate and must not become one.
+        capacity
+            .begin_provisioning("new", PressureAdmission::admit(3))
+            .unwrap();
+        assert_eq!(
+            capacity.begin_provisioning("another", PressureAdmission::admit(0)),
+            Err("provisioning_in_flight")
+        );
+        capacity.complete_provisioning("new", "route-new".into(), "display-new".into());
+        assert_eq!(
+            capacity.slots()[1],
+            PresentationSlot::warm_idle("new").with_binding("route-new", "display-new")
+        );
+        assert_eq!(
+            capacity.begin_cooldown("missing").unwrap_err(),
+            "presentation_slot_not_found"
+        );
+        capacity.begin_cooldown("new").unwrap();
+        assert_eq!(
+            capacity.begin_cooldown("new").unwrap_err(),
+            "presentation_slot_not_idle"
+        );
+        capacity.slots[1].cleanup_obligation_ids.push("z".into());
+        for _ in 0..2 {
+            assert_eq!(
+                capacity.quarantine_failed_provisioning("new", "g"),
+                "cleanup:new:g"
+            );
+            capacity.quarantine_failed_reclamation("new");
+        }
+        assert_eq!(
+            capacity.slots()[1].cleanup_obligation_ids,
+            [
+                "z",
+                "cleanup:new:g",
+                "cleanup:new:scale-in",
+                "cleanup:new:g"
+            ]
+        );
+        let before = capacity.clone();
+        capacity.quarantine_failed_reclamation("missing");
+        assert_eq!(capacity, before);
+        capacity.slots.push(capacity.slots[1].clone());
+        capacity.complete_reclamation("new");
+        assert_eq!(capacity.slots(), &before.slots[..1]);
+        // Permissive decoded duplicate identities keep the original first-match
+        // completion and all-match reclamation semantics.
+        capacity
+            .begin_provisioning("slot-1", PressureAdmission::admit(3))
+            .unwrap();
+        capacity.complete_provisioning("slot-1", "first".into(), "first".into());
+        assert_eq!(capacity.slots()[0].route_id.as_deref(), Some("first"));
+        assert_eq!(
+            capacity.slots()[1].state,
+            PresentationSlotState::Provisioning
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "provisioning slot must remain present")]
+    fn provisioning_completion_preserves_missing_slot_panic() {
+        one_slot_authority(8).complete_provisioning("missing", "route".into(), "display".into());
+    }
+
+    #[test]
+    #[should_panic(expected = "failed provisioning slot must remain present")]
+    fn provisioning_quarantine_preserves_missing_slot_panic() {
+        one_slot_authority(8).quarantine_failed_provisioning("missing", "generation");
+    }
+
+    #[test]
+    fn retirement_is_atomic_across_all_states_and_preserves_unrelated_custody() {
+        let mut capacity = one_slot_authority(8);
+        let states = [
+            PresentationSlotState::Absent,
+            PresentationSlotState::Provisioning,
+            PresentationSlotState::WarmIdle,
+            PresentationSlotState::Reserved,
+            PresentationSlotState::Staging,
+            PresentationSlotState::CaptureReady,
+            PresentationSlotState::Active,
+            PresentationSlotState::Restoring,
+            PresentationSlotState::Cooling,
+            PresentationSlotState::Reclaiming,
+            PresentationSlotState::Quarantined,
+        ];
+        for (index, state) in states.into_iter().enumerate() {
+            let mut slot = PresentationSlot::warm_idle(format!("retired-{index}"))
+                .with_binding(format!("route-{index}"), format!("display-{index}"));
+            slot.state = state;
+            slot.browser_id = Some("browser".into());
+            slot.scene_generation = 12;
+            slot.restoration_pending = true;
+            slot.cleanup_obligation_ids = vec!["z".into(), "a".into()];
+            slot.lease_priority = Some(PresentationPriority::Recovery);
+            capacity.slots.push(slot);
+        }
+        capacity.slots.last_mut().unwrap().lease_request_id = Some("lease".into());
+        capacity.queue_clock = 19;
+        capacity
+            .queued_requests
+            .push(PresentationRequest::observation("queued"));
+        let before_failure = capacity.clone();
+        capacity.record_inventory_failure("outage".into());
+        let mut expected_failure = before_failure;
+        expected_failure.admission_error = Some("outage".into());
+        assert_eq!(capacity, expected_failure);
+        assert_eq!(
+            capacity.retire_browser("browser"),
+            Err(PresentationRetirementConflict::ActivePresentationLease)
+        );
+        assert_eq!(capacity, expected_failure);
+        capacity.slots.last_mut().unwrap().lease_request_id = None;
+        let mut expected = capacity.clone();
+        for slot in &mut expected.slots[1..] {
+            slot.browser_id = None;
+            slot.state = PresentationSlotState::WarmIdle;
+            slot.lease_priority = None;
+            slot.restoration_pending = false;
+        }
+        capacity.retire_browser("browser").unwrap();
+        assert_eq!(capacity, expected);
+        capacity.retire_browser("missing").unwrap();
+        assert_eq!(capacity, expected);
+    }
+
     #[test]
     fn projection_preserves_zero_one_two_four_six_and_eight_slots() {
         for count in [0, 1, 2, 4, 6, 8] {

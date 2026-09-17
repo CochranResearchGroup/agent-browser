@@ -71,9 +71,11 @@ pub use presentation::{
 };
 pub use presentation_capacity::{
     CapacityDecision, CapacityLimitingResource, CapacityNextSafeAction,
-    PresentationCapacityAuthority, PresentationCapacityConfig, PresentationCapacityObservations,
-    PresentationCapacityProjection, PresentationPriority, PresentationRequest, PresentationSlot,
-    PresentationSlotObservation, PresentationSlotState, PressureAdmission, SlotTransitionReceipt,
+    PresentationAcquisitionRetention, PresentationCapacityAuthority, PresentationCapacityConfig,
+    PresentationCapacityObservations, PresentationCapacityProjection,
+    PresentationInventoryCustodyObservation, PresentationPriority, PresentationRequest,
+    PresentationRetirementConflict, PresentationSlot, PresentationSlotObservation,
+    PresentationSlotState, PressureAdmission, SlotTransitionReceipt,
 };
 pub use principal_continuity::PrincipalContinuityRecourse;
 pub use profile_access::{
