@@ -3232,6 +3232,139 @@ separate pure owner projections and transitions from filesystem sidecar
 restoration, transaction ordering, process observation, and runtime effects
 before any implementation begins.
 
+## Checkpoint 52 | Runtime Owner Persistence And Authority Interface Freeze
+
+State transition: the remaining runtime-owner surface is classified into three
+separate contracts before implementation. Repository persistence projection
+and restoration is the first packet. Purpose-specific immutable authority
+projections follow as a second packet. Rollback-sensitive lifecycle and
+principal-binding transitions remain a third packet that requires its own
+freeze after every caller's partial-mutation behavior is classified. P205 will
+not make the aggregate field private or expose a whole-registry escape hatch
+until those contracts replace their production callers.
+
+The closed-world inventory found 202 production direct runtime-owner field
+dereferences across 35 CLI files, plus 286 test-only dereferences. Only six
+production dereferences belong to repository serialization and restoration,
+all in `service_store.rs`. The rest join runtime authority with diagnostics,
+status, profiles, principals, boot and process observations, lifecycle
+transactions, reconciliation, browser actions, or external effects. Treating
+that mixed surface as one cutover would obscure authority ordering and make a
+passing build weaker evidence than the current behavioral contracts.
+
+The first implementation packet freezes these provider-free model types and
+aggregate methods:
+
+```rust
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RuntimeOwnerPersistenceSnapshot {
+    registry: agent_browser_lease_authority::RuntimeOwnerRegistry,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RuntimeOwnerPersistenceRestore {
+    pub owner_registry: Option<RuntimeOwnerPersistenceSnapshot>,
+    pub lifecycle_records: Option<BTreeMap<String, RuntimeLifecycleRecord>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnerPersistenceParts {
+    pub owner_registry: RuntimeOwnerPersistenceSnapshot,
+    pub lifecycle_registry_revision: u64,
+    pub lifecycle_records: BTreeMap<String, RuntimeLifecycleRecord>,
+}
+
+impl ServiceState {
+    pub fn restore_runtime_owner_persistence(
+        &mut self,
+        input: RuntimeOwnerPersistenceRestore,
+    );
+
+    pub fn runtime_owner_persistence_parts(
+        &self,
+    ) -> RuntimeOwnerPersistenceParts;
+
+    pub fn strip_runtime_lifecycle_for_persistence(&mut self);
+}
+```
+
+The transparent snapshot has exactly the existing registry wire shape but no
+registry getter, `Deref`, mutable projection, callback, or transition method.
+Repository envelopes retain their schema strings and parse behavior. The CLI
+selects an owner or lifecycle sidecar exactly when its current schema string is
+nonempty; the model receives that selection as `Some`. A present empty owner
+snapshot replaces embedded authority, and present empty lifecycle records
+clear embedded lifecycle evidence. Restoration applies the selected owner
+snapshot first and selected lifecycle records second. The historical lifecycle
+sidecar revision remains ignored and cannot advance owner authority.
+
+The persistence projection returns owned copies of the owner registry without
+lifecycle records, the original registry revision, and the original lifecycle
+records. It leaves the source aggregate unchanged. Stripping changes only the
+lifecycle records on the prepared clone and preserves owners, principal
+bindings, registry revision, Service State revision, and unknown fields. The
+repository must preserve this preparation order:
+
+```text
+clone, migrate, refresh derived views, remove builtins,
+project persistence parts, serialize lifecycle payload,
+strip lifecycle records from the prepared clone,
+serialize primary state, handoff payload, and owner payload
+```
+
+Filesystem paths, sidecar envelopes, reads, absent-file behavior, parse and
+serialization errors, bounded-stack workers, repository locks and
+compare-and-swap, transaction recovery, temporary files, replacement order,
+rollback, and transaction-marker custody remain CLI responsibilities. The
+owner sidecar still replaces the embedded registry before the lifecycle
+sidecar replaces lifecycle records. Commit visibility remains handoff, owner,
+lifecycle, then primary, with the transaction marker cleared last.
+
+First-packet witnesses are the no-sidecar, owner-only, lifecycle-only, both,
+and explicit-empty restoration matrix; conflicting lifecycle replacement
+without authority revision change; source-preserving projection; exact strip
+delta; and transparent existing-wire round trip. The focused CLI witnesses are
+`durable_runtime_owner_registry_survives_a_legacy_state_writer`,
+`lifecycle_sidecar_preserves_new_evidence_without_breaking_legacy_registry_readers`,
+and `four_file_service_state_commit_is_atomic_at_every_write_and_rename_boundary`,
+plus the existing transaction-recovery and stale-revision tests touched by the
+cutover. The architecture guard must reject production repository field access,
+snapshot getters or mutable escape hatches, and copied lifecycle strip or
+restore logic.
+
+The second packet may expose exact owner, binding, lifecycle, revision,
+authority-currentness, and session-binding projections, but no whole-registry
+getter or general iterator is admitted by this checkpoint. The third packet
+must preserve each caller's existing transaction semantics. In particular,
+staged lifecycle transitions discard kernel failures, reconciliation sometimes
+retains ordered partial transitions, capability rotation may retain removal of
+the former binding, reset terminalization follows filesystem effects, and CLI
+intent conversion supplies current boot and route-policy observations at the
+existing boundary.
+
+Hard stops are changed sidecar precedence, schema admission, historical
+revision handling, serialization or commit error order, partial-mutation
+behavior, observation placement, filesystem custody, runtime effects, a broad
+registry accessor, or a claim of global field privacy after only the six
+repository accesses close.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route for the persistence,
+projection, transition, and effect boundary. `/root/p205_receipt_cli_audit`
+used the requested workhorse `gpt-5.6-sol` high route for the production-only
+202-access inventory, test separation, repository ordering, focused witnesses,
+and hidden-coupling audit. Both were read-only and had no build, test, Git,
+forge, CI, runtime, or child-agent custody. The primary reconciled their
+sequencing recommendations by selecting the six-access repository seam first,
+then immutable projections, then transition closure.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. The first packet exits
+only when `service_store.rs` has zero production direct access to the field,
+the model and repository witnesses pass, and the architecture guard rejects
+both copied persistence logic and an authority escape hatch.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
