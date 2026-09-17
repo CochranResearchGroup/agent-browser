@@ -12,6 +12,10 @@ use super::service_profile_access_policy::{
     ProfileAccessGrant, ProfileAccessMode, ProfileAccessPreset, ProfileIdentityAssurance,
     ServiceProfileAccessPolicy,
 };
+pub(crate) use agent_browser_service_model::{
+    ProfilePolicyMigrationEntry, ProfilePolicyMigrationReport,
+    PROFILE_POLICY_MIGRATION_SCHEMA_VERSION,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -21,30 +25,6 @@ use std::path::Path;
 pub(crate) const SERVICE_STATE_SCHEMA_VERSION: &str = "agent-browser.service-state.v2";
 pub(crate) const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str =
     "agent-browser.service-state.unversioned";
-const PROFILE_POLICY_MIGRATION_SCHEMA_VERSION: &str = "agent-browser.profile-policy-migration.v1";
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfilePolicyMigrationEntry {
-    pub(crate) profile_id: String,
-    pub(crate) classification: String,
-    pub(crate) target_mode: ProfileAccessMode,
-    pub(crate) ambiguity: bool,
-    pub(crate) blocking: bool,
-    pub(crate) reason: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfilePolicyMigrationReport {
-    pub(crate) schema_version: String,
-    pub(crate) migration_id: String,
-    pub(crate) source_revision: u64,
-    pub(crate) target_revision: u64,
-    pub(crate) entries: Vec<ProfilePolicyMigrationEntry>,
-    pub(crate) blocking_issue_count: usize,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ServiceStateMigrationStatus {

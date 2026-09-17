@@ -17,6 +17,7 @@ mod principal_continuity;
 mod profile_access;
 mod profile_lease;
 mod profile_lifecycle;
+mod profile_policy_migration;
 mod profile_readiness;
 mod profile_seeding;
 mod request_provenance;
@@ -91,6 +92,10 @@ pub use profile_lifecycle::{
     ProfileLifecycleAuthorizationState, ProfileLifecycleEffectReceipt, ProfileLifecycleProof,
     PROFILE_LIFECYCLE_AUTHORIZATION_SCHEMA_V1, PROFILE_LIFECYCLE_PROOF_SCHEMA_V1,
     PROFILE_LIFECYCLE_RECEIPT_SCHEMA_V1,
+};
+pub use profile_policy_migration::{
+    ProfilePolicyMigrationEntry, ProfilePolicyMigrationReport,
+    PROFILE_POLICY_MIGRATION_SCHEMA_VERSION,
 };
 pub use profile_readiness::{
     BrowserBuild, BrowserProfileCompatibilityEvidence, ProfileAllocationPolicy,

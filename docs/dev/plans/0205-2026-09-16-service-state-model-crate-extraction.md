@@ -859,16 +859,63 @@ Next action: publish this checkpoint, then extract only the passive profile-
 policy migration entry and report records. Keep legacy materialization, schema
 stamping, aggregate mutation, and all migration I/O in the CLI.
 
+## Checkpoint 16 | Profile Policy Migration Records
+
+State transition: the crate now owns the passive profile-policy migration entry
+and report records plus their schema constant. The records directly reuse the
+crate-owned profile access mode. Legacy classification and materialization,
+migration identifier hashing, report attachment, schema stamping, aggregate
+mutation, compatibility decoding, staging, persistence, and filesystem I/O
+remain in the CLI.
+
+Acceptance state and progress classification: this small P1 aggregate-
+unblocking packet is accepted locally. The compatibility facade preserves the
+existing Service State path and downstream JSON consumers without moving codec
+or migration authority into a record module.
+
+Evidence:
+
+- all 88 service-model crate unit and integration tests pass, including five
+  profile-policy migration wire, schema, mode, round-trip, and unknown-field
+  tests; the unknown-field fixture covers both the report and its nested entry;
+- all 26 CLI Service State migration tests pass;
+- the nested Service State round-trip and workstation access-axis migration
+  tests pass through the compatibility facade;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no migration application, repository write, profile, browser, runtime,
+  install, staging, production, release, or GitHub CI effect was performed.
+
+Delegation receipt:
+
+- `/root/p205_policy_migration_model`, requested `gpt-5.6-luna` at medium
+  effort, implemented only the isolated passive record file and focused tests;
+- `/root/p205_policy_migration_review`, requested `gpt-5.6-sol` at medium
+  effort, found no blocking dependency, inventoried direct and downstream wire
+  consumers, and identified the nested-entry unknown-field coverage added by
+  the primary before integration.
+
+Material blockers: the canonical aggregate still depends on presentation
+capacity authority, recovery/reset receipts, runtime-owner authority, several
+effect transaction families, authentication and challenge records, codec and
+migration behavior, and the advisory capability registry.
+
+Next action: publish this checkpoint. Review recovery and reset terminal
+receipts as separate passive closures, then evaluate the presentation-capacity
+kernel. Do not pull recovery execution or environment-derived capacity joins
+into the model crate.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | fifteen families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | sixteen families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | fifteen packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | fifteen packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | sixteen packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | sixteen packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |
