@@ -1717,6 +1717,73 @@ gate remains the ownership matrix for abandoned-retirement and crash-
 regeneration durable transaction records. Their host process, cleanup,
 repository, and provider effects remain CLI adapters.
 
+## Checkpoint 28 | Effect-Transaction Record Ownership Freeze
+
+State transition: the abandoned-browser-retirement and crash-regeneration
+durable families are assigned to `agent-browser-service-model`. They are
+provider-free Service State transaction records, not Lease Authority custody
+records. The CLI retains aggregate joins, repository compare-and-swap,
+process and clock observation, provider operations, cleanup, and effect
+sequencing.
+
+Abandoned-retirement first packet:
+
+- move the plan, terminal projection, transaction, receipt, exit evidence,
+  exit failure, recourse, plan-schema constant, and resource-retirement policy
+  data/defaults to Service Model;
+- reuse Service Model's canonical process identity and browser health plus
+  Lease Authority's lifecycle enums;
+- keep observations, reservations, aggregate planning, identity rechecks,
+  profile-claim fences, reservation/finalization, and live effects in CLI;
+- replace the policy's inherent environment loader with a CLI free function,
+  preserving all variable names, bounds, and fallbacks; and
+- preserve field declaration order because the sealed plan identifier hashes
+  serialized plan bytes with `plan_id` cleared.
+
+Compatibility freeze: the six retirement wire records remain camelCase with
+unknown fields denied. The policy remains camelCase, defaulted, and permissive
+to unknown fields. Preserve optional fields, integer widths, adjacent-tagged
+recourse encoding, error precedence, PID-sorted descendant closure,
+census-order-independent seals, revision expectations, and replay ordering.
+Reservation validates seal and expiry before replay. Finalization returns an
+existing receipt before checking fresh evidence and does not gain an expiry
+check. No sidecar, migration, or new schema is admitted.
+
+Crash-regeneration second packet:
+
+- move phase/state, stable identities, evidence, transaction, redacted status,
+  request, operation, phase receipt, status-schema constant, validation,
+  phase ordering, receipt application, and pure begin/resume, receipt,
+  interruption, and ready-completion transitions to Service Model;
+- retain the effect trait, coordinator, Service State map lookup/CAS, receipt
+  persistence, process/display/Guacamole/browser operations, and error
+  rendering in the CLI; and
+- preserve camelCase and deny-unknown-field records, snake_case enums, status
+  redaction and schema fields, exact errors, phase order, identity comparisons,
+  interruption replay, and generic Service State persistence.
+
+Deletion gates for both packets require exactly one canonical definition,
+direct Service Model types in `ServiceState`, re-export-only compatibility
+where temporarily needed, and no repository, native, filesystem, process,
+clock, environment, provider, or runtime imports in their model modules. The
+retirement packet must retain all fourteen focused CLI tests and add model
+serde/hash fixtures. The crash packet must add model phase/receipt/transition
+tests and retain CLI repository interruption, replay, and effect-order tests.
+
+Delegation and model-choice receipt:
+
+- `/root/p205_owner_mutation_api` used `gpt-6-astra` at high effort to audit
+  the retirement family, sealing/replay compatibility, storage boundary, and
+  smallest record-only extraction; and
+- `/root/p205_owner_projection_audit` used `gpt-5.6-luna` at medium effort to
+  audit crash regeneration, status/schema callers, pure phase transitions,
+  and the repository/effect adapter boundary.
+
+Progress classification: this is blocker reduction and freezes two ordered
+implementation packets. The next action is the abandoned-retirement record
+and policy extraction only. Do not combine it with crash regeneration,
+authentication, challenge, capability-registry, bug-fix, or runtime work.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
