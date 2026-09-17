@@ -4177,6 +4177,81 @@ closure is accepted and is outcome progress toward P4 field privacy. The next
 bounded outcome must come from the remaining classified surface without
 combining atomic, retained-partial, sequential, and effect-separated semantics.
 
+## Checkpoint 62 | Existing Immutable Authority Projection Cutover Freeze
+
+State transition: the next packet is frozen to four production direct registry
+reads across two immutable adapter decisions. No new Service Model API is
+required. `RuntimeResourceReconciler::classify` will replace owner and lifecycle
+map reads with one `runtime_lane_authority` projection.
+`authorize_lease_effect_in_repository` will replace owner and principal-binding
+map reads with one `profile_runtime_authority` projection. Acceptance leaves
+167 classified production expressions.
+
+Runtime reconciliation must destructure the projected owner before lifecycle
+so missing owner retains `runtime_lifecycle_owner_unproven` precedence over
+`runtime_lifecycle_record_unproven`. Every earlier browser, process identity,
+profile path, and canonical digest check and every later process-group, launch
+digest, owner readiness, browser, process, generation, lifecycle, and cleanup
+check remains unchanged. The projection returns the exact two independent map
+selections and deliberately does not validate or zip them.
+
+Lease-effect authorization retains schema validation, repository load, Lease
+Authority authorization, profile lookup, profile resolution, and canonical
+digest computation before projection. Its match semantics remain exact:
+
+- absent claim generation plus absent owner passes this owner check even if an
+  orphan binding exists;
+- present generation plus present owner requires matching generation, ready
+  owner, and binding generation, profile, principal, and capability identity;
+  and
+- every other presence combination returns
+  `lease_authority_owner_generation_stale`.
+
+The packet must not add provenance, pending-transfer, or current-binding
+predicates and must not move signing, trust-key, repository, profile resolution,
+or error presentation into the model. The projection's additional immutable
+revision read is ignored and has no behavior or effect.
+
+Existing provider tests already prove independent owner, binding, and lifecycle
+options plus unvalidated mismatch preservation. Focused adapter witnesses retain
+the exact closing package-browser ownership case and diverged owner/principal-
+binding rejection. New narrow cases must prove reconciliation missing-owner
+precedence when both are absent, lifecycle-missing after an owner is present,
+and the lease owner-generation presence matrix, especially absent owner and
+generation with an otherwise present binding.
+
+The architecture guard must reject production direct registry access in both
+files after item-aware test exclusion while allowing fixture-only access. It
+must require the purpose-specific projection calls and reject a raw registry
+parameter, getter, persistence snapshot, generic iterator, zipped missing
+states, or additional authority predicate.
+
+The two workstation maintenance reads remain outside this packet. The primary
+adjudicated the audit disagreement as follows: `runtime_resource_lanes` does
+enumerate every lifecycle map key, so its `browser_id` map keys can derive both
+tracked count and missing-key membership without a new model API. However that
+cutover needs a focused missing-count join witness and must use the map key, not
+the embedded lifecycle browser ID. It will be frozen separately rather than
+piggybacked onto this adapter packet.
+
+Hard stops are changed error precedence, stronger authority checks, owner or
+lifecycle option collapse, embedded-ID substitution, new model API, observation
+or effect movement, or expansion into other reconciliation, lease mutation, or
+workstation owner-selection paths.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route to verify exact projection parity,
+semantic traps, and the zero-new-API boundary. `/root/p205_receipt_cli_audit`
+used the workhorse `gpt-5.6-sol` high route for the exact four-read inventory,
+ordering, witness audit, and safe split from workstation maintenance. Both were
+read-only and performed no edit, build, test, Git, forge, CI, runtime, or child-
+agent action.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. Exit requires both
+adapter cutovers, exact missing-state and generation-presence witnesses, and
+zero production direct registry access in the two target files.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
