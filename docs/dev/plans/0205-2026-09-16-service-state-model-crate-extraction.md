@@ -4015,6 +4015,104 @@ preserve health recording before revocation and the intentional retained
 revocation when the later session lookup fails; it is not an all-or-nothing
 transition.
 
+## Checkpoint 60 | Process-Exit Legacy Revocation Interface Freeze
+
+State transition: the next partial-mutation packet is frozen to the two direct
+registry expressions in
+`persist_process_exited_browser_health_in_repository`. Acceptance removes the
+session-binding lookup and mutable legacy-revocation call from
+`control_plane.rs`, leaving 171 classified production expressions. This packet
+must preserve direct retained-registry mutation. Reusing either atomic helper
+would be a correctness defect because the Lease Authority kernel may revoke an
+owner before a later lifecycle join fails.
+
+The aggregate interface is purpose-specific and nontransactional:
+
+```rust
+pub fn revoke_process_exited_session_owner(
+    &mut self,
+    session_id: &str,
+) -> Option<agent_browser_lease_authority::ProfileOwner>;
+```
+
+The method resolves `binding_for_session(session_id)`, converts binding errors
+or absence to `None`, rejects observation-only bindings, and applies the exact
+`RevokeLegacyOwner` intent directly to the retained registry with all five
+claim identities. Kernel failure becomes `None` without rollback. Only the
+exact `LegacyOwnerRevoked` transition returns its owner; an unexpected variant
+also returns `None` after retaining any kernel mutation. The method adds no
+session lookup, authentication, health policy, cleanup, observation,
+persistence, callback, generic intent, registry handle, principal mutation, or
+envelope revision update.
+
+The CLI retains its exact order:
+
+1. observe timestamp and boot epoch before repository mutation;
+2. read prior browser and live daemon PID/CDP state;
+3. construct and annotate process-exited browser health;
+4. append the health-change event;
+5. authenticate retained session work at the observed time;
+6. call the aggregate revocation method;
+7. clone the registered session after revocation;
+8. orphan any display allocation and remove browser, identity, observation,
+   tab, and session edges regardless of revocation result; and
+9. only when both owner and session exist, reinsert the cleared registered
+   session, refresh derived views, and return the owner.
+
+Authentication failure, missing or ambiguous binding, observation-only
+binding, and every revocation-domain failure remain absence, not caller-visible
+errors. Repository construction, load, save, or mutation failures remain the
+only errors from the inner function, and its outer convenience wrapper still
+suppresses those to `None`. A successful revocation followed by missing session
+capture retains the revocation and continues cleanup. Current authentication
+makes that branch effectively unreachable in this synchronous path, but its
+ordering and defensive semantics remain frozen.
+
+Model witnesses must prove exact success parity; missing, ambiguous, and
+observation-only bindings without mutation; pending transfer, invalid retained
+evidence, and exhausted generation failure behavior; lifecycle ambiguity after
+revocation retains the orphaned owner, incremented generation, and revision;
+historical-row removal followed by profile mismatch remains retained;
+principal bindings, unrelated aggregate fields, maximum registry revision, and
+envelope revision remain exact; repeated invocation is inert; and revocation
+does not depend on a Service State session record.
+
+The three existing process-exited health witnesses remain required. A new CLI
+witness must introduce ambiguous matching lifecycle rows into the registered-
+session fixture, prove the owner mutation occurred before the swallowed
+lifecycle failure, and prove the health event plus browser, tab, and session
+cleanup still commit without restoring the session. Repository-error behavior
+must remain covered at its existing adapter seam.
+
+The architecture guard must require the exact aggregate signature and direct
+binding, effect-capable gate, direct retained-registry kernel call, exact result
+selection, and absence mapping. It must reject staging, cloning, atomic-helper
+reuse, callbacks, generic intents, registry or persistence handles, session or
+authentication preconditions, error exposure, and principal cleanup. In the
+CLI function it must require health event before authentication, aggregate
+revocation before session lookup, and operational cleanup afterward, while
+rejecting both direct registry expressions even after test-gated source items.
+
+Hard stops are rollback after kernel failure or session absence, stronger or
+different binding selection, principal-binding cleanup, health-event movement,
+changed absence/error mapping, session lookup before revocation, envelope
+revision mutation, or movement of clock, boot, PID/CDP, event, repository,
+display, browser, tab, session, or derived-view custody into the model.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the high-capability `gpt-6-astra` high route to derive the intentional partial-
+mutation contract, minimal interface, witnesses, and hard stops.
+`/root/p205_receipt_cli_audit` used the workhorse `gpt-5.6-sol` high route to
+audit the two exact accesses, ordering, swallowed error families, existing and
+missing witnesses, CLI-owned effects, and post-packet count. Both were
+read-only and performed no edit, build, test, Git, forge, CI, runtime, or child-
+agent action.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. Exit requires exact
+retained partial-mutation behavior, the one-function CLI cutover, the malformed-
+lifecycle cleanup witness, and a targeted architecture guard.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
