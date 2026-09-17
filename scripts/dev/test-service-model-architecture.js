@@ -70,6 +70,17 @@ ${serviceStateMigrationFields.map((field) => `  ${serviceStateFieldAttributes[fi
 impl ServiceState {
   pub fn from_configured_entities() -> Self { Self {} }
   pub fn state_revision(&self) -> u64 { 0 }
+  pub fn service_authentication_run(&self) {}
+  pub fn prepare_service_authentication_run_start(&self) {}
+  pub fn complete_service_authentication_run_start(&mut self) {}
+  pub fn reserve_service_authentication_effect(&mut self) {}
+  pub fn observe_service_authentication_run(&mut self) {}
+  pub fn prepare_service_authentication_watch(&mut self) {}
+  pub fn verify_service_authentication_run(&mut self) {}
+  pub fn complete_service_authentication_site_action(&mut self) {}
+  pub fn complete_service_authentication_delivery_action(&mut self) {}
+  pub fn complete_service_authentication_challenge_action(&mut self) {}
+  pub fn cancel_service_authentication_run(&mut self) {}
   pub fn service_challenge_task(&self) {}
   pub fn service_challenge_task_summary(&self) {}
   pub fn start_service_challenge_task(&mut self) {}
@@ -281,6 +292,7 @@ for (const [name, mutation] of [
   ['missing aggregate module', { serviceState: '' }],
   ['duplicate CLI aggregate', { serviceModel: 'pub use agent_browser_service_model::ServiceState;\npub struct ServiceState {}\n' }],
   ['foreign CLI aggregate impl', { serviceModel: 'pub use agent_browser_service_model::ServiceState;\nimpl ServiceState {}\n' }],
+  ['second model aggregate impl', { serviceAuthentication: `${validServiceAuthentication}\nimpl ServiceState {}\n` }],
   ['missing CLI aggregate reexport', { serviceModel: '' }],
   ['extra hidden migration field', { serviceState: validServiceState.replace(
     'pub browser_capability_registry:',
@@ -298,6 +310,11 @@ for (const [name, mutation] of [
     'pub fn from_configured_entities() -> Self { Self {} }',
     '',
   ) }],
+  ['missing authentication aggregate method', { serviceState: validServiceState.replace(
+    'pub fn observe_service_authentication_run(&mut self) {}',
+    '',
+  ) }],
+  ['direct CLI authentication map access', { cli: 'fn leak(state: &ServiceState) { let _ = &state.authentication_runs; }\n' }],
   ['missing challenge aggregate method', { serviceState: validServiceState.replace(
     'pub fn resume_service_challenge_task(&mut self) {}',
     '',

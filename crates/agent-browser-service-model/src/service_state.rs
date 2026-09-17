@@ -5,6 +5,12 @@
 //! compatibility decoding, deterministic encoding, and pure transitions.
 
 use crate::*;
+use agent_browser_authentication_control::{
+    AuthenticationActionFailure, AuthenticationActionKind, AuthenticationActionReceipt,
+    AuthenticationChallengeChannel, AuthenticationRunError, AuthenticationVerifier,
+    ProviderWatchReceipt, SiteLoginActionReceipt, SiteLoginObservationReceipt,
+};
+use agent_browser_challenge_control::ChallengeConsumerAdmissionReceipt;
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -308,6 +314,185 @@ fn overlay_persisted_profile_freshness(
 }
 
 impl ServiceState {
+    /// Inspect an authentication run without granting mutable record access.
+    pub fn service_authentication_run(&self, id: &str) -> Option<&ServiceAuthenticationRunRecord> {
+        self.authentication_runs.get(id)
+    }
+
+    /// Resolve replay before the adapter performs external challenge admission.
+    pub fn prepare_service_authentication_run_start(
+        &self,
+        input: ServiceAuthenticationRunStartInput,
+    ) -> Result<ServiceAuthenticationRunStartDecision, ServiceAuthenticationRunError> {
+        prepare_service_authentication_run_start(&self.authentication_runs, input)
+    }
+
+    /// Insert only after all existing start-completion checks have succeeded.
+    pub fn complete_service_authentication_run_start(
+        &mut self,
+        prepared: PreparedServiceAuthenticationRunStart,
+        challenge_admission: Option<ChallengeConsumerAdmissionReceipt>,
+    ) -> Result<ServiceAuthenticationRunRecord, ServiceAuthenticationRunError> {
+        let record = complete_service_authentication_run_start(prepared, challenge_admission)?;
+        self.authentication_runs
+            .insert(record.run.run_id.clone(), record.clone());
+        Ok(record)
+    }
+
+    /// Reserve the exact effect using adapter-supplied identity and timestamps.
+    pub fn reserve_service_authentication_effect(
+        &mut self,
+        run_id: &str,
+        operation_id: &str,
+        action: AuthenticationActionKind,
+        state_instance_id: &str,
+        reserved_at: &str,
+        observed_at: &str,
+    ) -> Result<ServiceAuthenticationRunRecord, ServiceAuthenticationRunStateError> {
+        let record = self.authentication_run_for_transition(run_id)?;
+        reserve_authentication_effect(
+            record,
+            operation_id,
+            action,
+            state_instance_id,
+            reserved_at,
+            observed_at,
+        )?;
+        Ok(record.clone())
+    }
+
+    /// Check liveness before applying the observation; retain any failed
+    /// transition's mutations in the aggregate.
+    pub fn observe_service_authentication_run(
+        &mut self,
+        run_id: &str,
+        operation_id: &str,
+        receipt: SiteLoginObservationReceipt,
+        observed_at: &str,
+    ) -> Result<ServiceAuthenticationRunRecord, ServiceAuthenticationRunStateError> {
+        let record = self.authentication_run_for_transition(run_id)?;
+        require_live_authentication_run(record, observed_at)?;
+        record.run.observe_site_login_state(operation_id, receipt)?;
+        Ok(record.clone())
+    }
+
+    /// Check liveness before accepting an already-observed provider watch.
+    pub fn prepare_service_authentication_watch(
+        &mut self,
+        run_id: &str,
+        operation_id: &str,
+        challenge_id: &str,
+        channel: AuthenticationChallengeChannel,
+        watch: ProviderWatchReceipt,
+        observed_at: &str,
+    ) -> Result<ServiceAuthenticationRunRecord, ServiceAuthenticationRunStateError> {
+        let record = self.authentication_run_for_transition(run_id)?;
+        require_live_authentication_run(record, observed_at)?;
+        record
+            .run
+            .prepare_watch(operation_id, challenge_id, channel, watch)?;
+        Ok(record.clone())
+    }
+
+    /// Return the post-transition record even when verification failed, allowing
+    /// the adapter to persist that outcome before reporting its contextual error.
+    pub fn verify_service_authentication_run(
+        &mut self,
+        run_id: &str,
+        operation_id: &str,
+        verifier: &mut impl AuthenticationVerifier,
+    ) -> Result<
+        (
+            ServiceAuthenticationRunRecord,
+            Option<AuthenticationRunError>,
+        ),
+        ServiceAuthenticationRunStateError,
+    > {
+        let record = self.authentication_run_for_transition(run_id)?;
+        let result = record.run.verify_exact_target(operation_id, verifier);
+        Ok((record.clone(), result.err()))
+    }
+
+    /// Consume the matching pending fence and retain the site transition outcome.
+    pub fn complete_service_authentication_site_action(
+        &mut self,
+        run_id: &str,
+        operation_id: &str,
+        expected_action: AuthenticationActionKind,
+        outcome: Result<SiteLoginActionReceipt, AuthenticationActionFailure>,
+    ) -> Result<
+        (
+            ServiceAuthenticationRunRecord,
+            ServiceAuthenticationRunCompletion,
+        ),
+        ServiceAuthenticationRunStateError,
+    > {
+        let record = self.authentication_run_for_transition(run_id)?;
+        let completion =
+            complete_site_authentication_action(record, operation_id, expected_action, outcome)?;
+        Ok((record.clone(), completion))
+    }
+
+    /// Consume the matching credential-delivery fence and retain transition failures.
+    pub fn complete_service_authentication_delivery_action(
+        &mut self,
+        run_id: &str,
+        operation_id: &str,
+        challenge_id: &str,
+        outcome: Result<AuthenticationActionReceipt, AuthenticationActionFailure>,
+    ) -> Result<
+        (
+            ServiceAuthenticationRunRecord,
+            ServiceAuthenticationRunCompletion,
+        ),
+        ServiceAuthenticationRunStateError,
+    > {
+        let record = self.authentication_run_for_transition(run_id)?;
+        let completion =
+            complete_credential_delivery_action(record, operation_id, challenge_id, outcome)?;
+        Ok((record.clone(), completion))
+    }
+
+    /// Consume the matching challenge fence and retain transition failures.
+    pub fn complete_service_authentication_challenge_action(
+        &mut self,
+        run_id: &str,
+        operation_id: &str,
+        challenge_id: &str,
+        outcome: Result<AuthenticationActionReceipt, AuthenticationActionFailure>,
+    ) -> Result<
+        (
+            ServiceAuthenticationRunRecord,
+            ServiceAuthenticationRunCompletion,
+        ),
+        ServiceAuthenticationRunStateError,
+    > {
+        let record = self.authentication_run_for_transition(run_id)?;
+        let completion =
+            complete_challenge_authentication_action(record, operation_id, challenge_id, outcome)?;
+        Ok((record.clone(), completion))
+    }
+
+    /// Cancel through the canonical transition without introducing a liveness check.
+    pub fn cancel_service_authentication_run(
+        &mut self,
+        run_id: &str,
+        operation_id: &str,
+    ) -> Result<ServiceAuthenticationRunRecord, ServiceAuthenticationRunStateError> {
+        let record = self.authentication_run_for_transition(run_id)?;
+        cancel_authentication_run(record, operation_id)?;
+        Ok(record.clone())
+    }
+
+    fn authentication_run_for_transition(
+        &mut self,
+        run_id: &str,
+    ) -> Result<&mut ServiceAuthenticationRunRecord, ServiceAuthenticationRunStateError> {
+        self.authentication_runs
+            .get_mut(run_id)
+            .ok_or(ServiceAuthenticationRunStateError::NotFound)
+    }
+
     pub fn from_configured_entities(input: ConfiguredServiceStateInput) -> Self {
         let mut state = Self {
             profiles: input.profiles,

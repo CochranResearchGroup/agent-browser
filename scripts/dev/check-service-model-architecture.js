@@ -86,6 +86,20 @@ const SERVICE_AUTHENTICATION_DECISIONS = [
   'authentication_run_map_is_empty',
 ];
 
+const SERVICE_STATE_AUTHENTICATION_METHODS = [
+  'service_authentication_run',
+  'prepare_service_authentication_run_start',
+  'complete_service_authentication_run_start',
+  'reserve_service_authentication_effect',
+  'observe_service_authentication_run',
+  'prepare_service_authentication_watch',
+  'verify_service_authentication_run',
+  'complete_service_authentication_site_action',
+  'complete_service_authentication_delivery_action',
+  'complete_service_authentication_challenge_action',
+  'cancel_service_authentication_run',
+];
+
 const SERVICE_CHALLENGE_DEFINITIONS = [
   'ServiceChallengeTaskState',
   'ServiceChallengeTaskSummary',
@@ -651,6 +665,11 @@ function check(root = repoRoot) {
     'service-model aggregate module must own exactly one ServiceState struct');
   requireCondition([...serviceStateCode.matchAll(/\bimpl\s+ServiceState\b/g)].length === 1,
     'service-model aggregate module must own exactly one inherent ServiceState impl');
+  requireCondition(
+    sources.reduce((count, source) => count
+      + [...withoutComments(source).matchAll(/^\s*impl\s+ServiceState\b/gm)].length, 0) === 1,
+    'service-model crate must own exactly one inherent ServiceState impl globally',
+  );
   requireCondition(!/\bsuper\s*::/.test(serviceStateCode),
     'service-model aggregate must not use super:: imports');
   requireCondition(!/\b(?:crate|agent_browser_service_model)\s*::\s*native\b/.test(serviceState),
@@ -817,6 +836,16 @@ function check(root = repoRoot) {
       /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_service_model\s*::\s*authentication_run_map_is_empty["'][^\]]*\)\s*\]/,
     )),
     'service-model ServiceState must use the canonical Service authentication empty-map decision',
+  );
+  for (const name of SERVICE_STATE_AUTHENTICATION_METHODS) {
+    requireCondition(
+      new RegExp(`\\bpub\\s+fn\\s+${name}\\b`).test(serviceStateCode),
+      `service-model ServiceState must own Service authentication aggregate method: ${name}`,
+    );
+  }
+  requireCondition(
+    !cliProductionSources.some((source) => /\.\s*authentication_runs\b/.test(source)),
+    'CLI production code must not access ServiceState.authentication_runs directly',
   );
   requireCondition(existsSync(serviceChallengePath),
     'service-model must own src/service_challenge_task.rs');

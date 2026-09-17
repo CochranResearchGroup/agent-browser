@@ -2716,6 +2716,66 @@ for that kernel and the crash, lease, authority, lifecycle, repository-sidecar,
 presentation, fixture-migration, privacy, facade-deletion, and final
 measurement gates.
 
+## Checkpoint 43 | Service Authentication Run Map Kernel Accepted
+
+State transition: the canonical `ServiceState` aggregate now owns immutable
+authentication-run lookup, two-stage start replay and insertion, effect
+reservation, site observation, provider-watch preparation, verification,
+site-action completion, credential-delivery completion, challenge completion,
+and cancellation. A narrow `ServiceAuthenticationRunStateError` preserves
+not-found, envelope, and underlying authentication-transition domains so the
+adapter retains every existing context-specific error identity.
+
+The two-stage start boundary preserves the required authority order: the
+adapter proves the current Service tab and exact binding, the aggregate resolves
+replay, the adapter performs challenge-consumer admission only for a new run,
+and the aggregate inserts only a successfully completed record. All other
+production mutations preserve caller ownership before the typed transition.
+Observation and watch preparation retain their liveness ordering, verification
+does not gain a liveness check, and transition failures that previously
+produced a persistable record still return that post-transition record.
+
+Production CLI code now has zero direct access to
+`ServiceState.authentication_runs`. Four remaining direct accesses are test
+fixtures and remain part of the final fixture/privacy packet. The architecture
+contract requires all eleven aggregate methods, rejects production CLI direct
+map access, and now proves that the Service Model crate has exactly one inherent
+`ServiceState` implementation globally.
+
+Acceptance evidence:
+
+- all 164 Service Model unit tests and fourteen integration tests pass;
+- the focused Service authentication adapter lane passes nine tests, and the
+  broader authentication-run filter passes ten tests including the closed,
+  secret-free request contract;
+- formatting, strict workspace Clippy with `-D warnings`, diff hygiene, the
+  changed-surface selector readback, the architecture contract, and all
+  architecture mutation fixtures pass; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_auth_state_kernel` used the
+requested high-capability `gpt-6-astra` high route for the multi-transition
+aggregate API and model tests. `/root/p205_auth_cli_cutover` used the requested
+workhorse `gpt-5.6-sol` high route for the single-module adapter cutover.
+`/root/p205_auth_kernel_review` used the requested balanced `gpt-5.6-terra`
+high route for an independent semantic review. The reviewer found no behavior
+regression and identified the still-public compatibility field as a high-risk
+encapsulation gap. That finding is accepted into the existing final P4
+fixture/privacy gate rather than misclassified as closed here: approximately
+350 external aggregate fixtures still prevent the field from becoming private
+in this packet. The primary corrected the initially proposed second inherent
+implementation boundary, strengthened the global guard, reconciled the review,
+and independently ran every acceptance gate. Runtime-reported effective model
+metadata was not independently exposed.
+
+Acceptance state and progress classification: the Service authentication run
+map kernel is accepted and is outcome progress toward P4 field privacy. The
+next bounded outcome is the crash-regeneration transaction map kernel. P4
+remains open for that kernel and the lease, authority, lifecycle,
+repository-sidecar, presentation, fixture-migration, privacy, facade-deletion,
+and final measurement gates.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
@@ -2723,9 +2783,9 @@ measurement gates.
 | One provider-free model crate | workspace manifest, crate manifest, architecture guard | aggregate and twenty-three prerequisite families accepted |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | ordinary persisted codec and current aggregate wire accepted; staged known-key correction remains outside this packet |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | accepted at Checkpoint 40; field-privacy ledger remains open |
-| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, and Service challenge task map kernel accepted; remaining typed mutation/projection closure remains open |
+| Deep module interface | pure policy decisions and record contracts through one crate seam | aggregate methods, helper closure, configured input, revision and migration projections, and Service challenge and authentication map kernels accepted; remaining typed mutation/projection closure remains open |
 | CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one model families, capacity mutation closure, and authentication-control boundary accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | Service challenge task map kernel accepted through Checkpoint 42 |
+| Focused correctness | crate tests and affected CLI adapter tests | Service authentication run map kernel accepted through Checkpoint 43 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

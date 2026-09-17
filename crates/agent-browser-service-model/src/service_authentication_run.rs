@@ -119,6 +119,37 @@ impl ServiceAuthenticationRunError {
     }
 }
 
+/// Aggregate lookup and transition failures retain their original domain so
+/// adapters can preserve operation-specific error messages.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServiceAuthenticationRunStateError {
+    NotFound,
+    Envelope(ServiceAuthenticationRunError),
+    Transition(AuthenticationRunError),
+}
+
+impl ServiceAuthenticationRunStateError {
+    pub fn cli_message(&self, transition_error_prefix: &str) -> String {
+        match self {
+            Self::NotFound => "authentication_run_not_found".to_string(),
+            Self::Envelope(error) => error.cli_message(),
+            Self::Transition(error) => format!("{transition_error_prefix}:{error:?}"),
+        }
+    }
+}
+
+impl From<ServiceAuthenticationRunError> for ServiceAuthenticationRunStateError {
+    fn from(error: ServiceAuthenticationRunError) -> Self {
+        Self::Envelope(error)
+    }
+}
+
+impl From<AuthenticationRunError> for ServiceAuthenticationRunStateError {
+    fn from(error: AuthenticationRunError) -> Self {
+        Self::Transition(error)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceAuthenticationRunProjection {
@@ -435,8 +466,11 @@ pub fn authentication_run_map_is_empty(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ServiceState;
     use agent_browser_authentication_control::{
-        AuthenticationRunState, SiteLoginObservationReceipt, SiteLoginState,
+        AuthenticationChallengeChannel, AuthenticationRunState, AuthenticationVerificationContext,
+        AuthenticationVerifier, AuthenticationVerifierFailure, AuthenticationVerifierReceipt,
+        ProviderWatchReceipt, SiteLoginObservationReceipt, SiteLoginState,
     };
     use agent_browser_challenge_control::{
         ChallengeConsumerAdmission, ChallengeTaskAdmission, ChallengeTaskCooldown,
@@ -682,5 +716,420 @@ mod tests {
             cancel_authentication_run(&mut record, "cancel-2").unwrap_err(),
             ServiceAuthenticationRunError::CancelFailed(AuthenticationRunError::UnexpectedState)
         );
+    }
+
+    fn aggregate_with_record(record: ServiceAuthenticationRunRecord) -> (ServiceState, String) {
+        let run_id = record.run.run_id.clone();
+        let state = ServiceState {
+            authentication_runs: BTreeMap::from([(run_id.clone(), record)]),
+            ..ServiceState::default()
+        };
+        (state, run_id)
+    }
+
+    fn watch_receipt() -> ProviderWatchReceipt {
+        ProviderWatchReceipt {
+            provider_id: "provider-1".to_string(),
+            watch_id: "watch-1".to_string(),
+            delivery_fence_id: "fence-1".to_string(),
+            ready_before_delivery: true,
+        }
+    }
+
+    #[test]
+    fn aggregate_start_inserts_only_completed_records_and_replays_without_mutation() {
+        let mut state = ServiceState::default();
+        let mut input = start_input("aggregate-start");
+        input.challenge_task_id = Some("challenge-1".to_string());
+        let ServiceAuthenticationRunStartDecision::Create(prepared) = state
+            .prepare_service_authentication_run_start(input)
+            .unwrap()
+        else {
+            panic!("new input unexpectedly replayed");
+        };
+        assert_eq!(
+            state.complete_service_authentication_run_start(*prepared, None),
+            Err(ServiceAuthenticationRunError::ChallengeAdmissionIncomplete)
+        );
+        assert_eq!(state, ServiceState::default());
+
+        let input = start_input("aggregate-start");
+        let ServiceAuthenticationRunStartDecision::Create(prepared) = state
+            .prepare_service_authentication_run_start(input.clone())
+            .unwrap()
+        else {
+            panic!("failed completion must not insert a replay record");
+        };
+        let record = state
+            .complete_service_authentication_run_start(*prepared, None)
+            .unwrap();
+        assert_eq!(
+            state.service_authentication_run(&record.run.run_id),
+            Some(&record)
+        );
+        let before = state.clone();
+        assert_eq!(
+            state
+                .prepare_service_authentication_run_start(input.clone())
+                .unwrap(),
+            ServiceAuthenticationRunStartDecision::Replayed(Box::new(record))
+        );
+        let mut changed = input;
+        changed.deadline_ms += 1;
+        assert_eq!(
+            state.prepare_service_authentication_run_start(changed),
+            Err(ServiceAuthenticationRunError::IdempotencyConflict)
+        );
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn aggregate_lookup_errors_preserve_adapter_error_domains() {
+        let mut state = ServiceState::default();
+        assert!(state.service_authentication_run("missing").is_none());
+        let error = state
+            .cancel_service_authentication_run("missing", "cancel")
+            .unwrap_err();
+        assert_eq!(error, ServiceAuthenticationRunStateError::NotFound);
+        assert_eq!(error.cli_message("unused"), "authentication_run_not_found");
+        assert_eq!(
+            ServiceAuthenticationRunStateError::from(
+                ServiceAuthenticationRunError::DeadlineExpired
+            )
+            .cli_message("unused"),
+            "authentication_run_deadline_expired"
+        );
+        assert_eq!(
+            ServiceAuthenticationRunStateError::from(AuthenticationRunError::UnexpectedState)
+                .cli_message("authentication_run_observe_failed"),
+            "authentication_run_observe_failed:UnexpectedState"
+        );
+        assert_eq!(state, ServiceState::default());
+    }
+
+    #[test]
+    fn aggregate_observe_and_watch_check_liveness_before_transition_validation() {
+        let record = create_record("aggregate-live");
+        let receipt = identifier_ready_record("observation")
+            .run
+            .site_observation_receipts[0]
+            .clone();
+        let (mut state, run_id) = aggregate_with_record(record);
+        for (observed_at, expected) in [
+            ("invalid", ServiceAuthenticationRunError::ObservedAtInvalid),
+            (
+                "2026-09-17T12:03:00Z",
+                ServiceAuthenticationRunError::DeadlineExpired,
+            ),
+        ] {
+            let before = state.clone();
+            assert_eq!(
+                state.observe_service_authentication_run(&run_id, "", receipt.clone(), observed_at),
+                Err(ServiceAuthenticationRunStateError::Envelope(
+                    expected.clone()
+                ))
+            );
+            assert_eq!(
+                state.prepare_service_authentication_watch(
+                    &run_id,
+                    "",
+                    "",
+                    AuthenticationChallengeChannel::SmsOtp,
+                    watch_receipt(),
+                    observed_at
+                ),
+                Err(ServiceAuthenticationRunStateError::Envelope(expected))
+            );
+            assert_eq!(state, before);
+        }
+        let observed_at = "2026-09-17T12:01:00Z";
+        assert_eq!(
+            state.observe_service_authentication_run(&run_id, "", receipt.clone(), observed_at),
+            Err(ServiceAuthenticationRunStateError::Transition(
+                AuthenticationRunError::OperationIdMissing
+            ))
+        );
+        assert_eq!(
+            state.prepare_service_authentication_watch(
+                &run_id,
+                "",
+                "",
+                AuthenticationChallengeChannel::SmsOtp,
+                watch_receipt(),
+                observed_at
+            ),
+            Err(ServiceAuthenticationRunStateError::Transition(
+                AuthenticationRunError::OperationIdMissing
+            ))
+        );
+        let updated = state
+            .observe_service_authentication_run(&run_id, "observe", receipt.clone(), observed_at)
+            .unwrap();
+        assert_eq!(
+            updated.run.state,
+            AuthenticationRunState::AwaitingIdentifier
+        );
+        state
+            .reserve_service_authentication_effect(
+                &run_id,
+                "effect",
+                AuthenticationActionKind::SubmitAccountIdentifier,
+                "state-1",
+                observed_at,
+                observed_at,
+            )
+            .unwrap();
+        let before = state.clone();
+        assert_eq!(
+            state.observe_service_authentication_run(&run_id, "", receipt, observed_at),
+            Err(ServiceAuthenticationRunStateError::Envelope(
+                ServiceAuthenticationRunError::EffectOutcomeUnknown
+            ))
+        );
+        assert_eq!(
+            state.prepare_service_authentication_watch(
+                &run_id,
+                "",
+                "",
+                AuthenticationChallengeChannel::SmsOtp,
+                watch_receipt(),
+                observed_at
+            ),
+            Err(ServiceAuthenticationRunStateError::Envelope(
+                ServiceAuthenticationRunError::EffectOutcomeUnknown
+            ))
+        );
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn aggregate_site_completion_retains_pending_fences_and_failed_transition_state() {
+        for outcome in [
+            Ok(identifier_receipt()),
+            Err(AuthenticationActionFailure::EffectUnproven),
+        ] {
+            let (mut state, run_id) =
+                aggregate_with_record(identifier_ready_record("aggregate-site"));
+            let reserved = state
+                .reserve_service_authentication_effect(
+                    &run_id,
+                    "submit",
+                    AuthenticationActionKind::SubmitAccountIdentifier,
+                    "state-1",
+                    "2026-09-17T12:01:00Z",
+                    "2026-09-17T12:01:00Z",
+                )
+                .unwrap();
+            assert!(reserved.pending_effect.is_some());
+            let before = state.clone();
+            assert_eq!(
+                state.complete_service_authentication_site_action(
+                    &run_id,
+                    "different",
+                    AuthenticationActionKind::SubmitAccountIdentifier,
+                    outcome.clone()
+                ),
+                Err(ServiceAuthenticationRunStateError::Envelope(
+                    ServiceAuthenticationRunError::PendingEffectMismatch
+                ))
+            );
+            assert_eq!(state, before);
+            let (updated, completion) = state
+                .complete_service_authentication_site_action(
+                    &run_id,
+                    "submit",
+                    AuthenticationActionKind::SubmitAccountIdentifier,
+                    outcome.clone(),
+                )
+                .unwrap();
+            assert_eq!(state.service_authentication_run(&run_id), Some(&updated));
+            assert!(updated.pending_effect.is_none());
+            assert!(updated.run.used_operation_ids.contains("submit"));
+            if outcome.is_ok() {
+                assert_eq!(completion, ServiceAuthenticationRunCompletion::Completed);
+                assert_eq!(updated.run.state, AuthenticationRunState::Ready);
+            } else {
+                assert_eq!(
+                    completion,
+                    ServiceAuthenticationRunCompletion::TransitionFailed(
+                        AuthenticationRunError::ActionFailed
+                    )
+                );
+                assert_eq!(updated.run.state, AuthenticationRunState::Blocked);
+            }
+        }
+    }
+
+    #[test]
+    fn aggregate_delivery_and_challenge_completion_preserve_failed_action_mutations() {
+        for challenge_action in [false, true] {
+            let (mut state, run_id) = aggregate_with_record(create_record("aggregate-challenge"));
+            let observed_at = "2026-09-17T12:01:00Z";
+            let prepared = state
+                .prepare_service_authentication_watch(
+                    &run_id,
+                    "watch",
+                    "challenge-1",
+                    AuthenticationChallengeChannel::SmsOtp,
+                    watch_receipt(),
+                    observed_at,
+                )
+                .unwrap();
+            assert_eq!(state.service_authentication_run(&run_id), Some(&prepared));
+            assert_eq!(
+                prepared.run.state,
+                AuthenticationRunState::ObservingDelivery
+            );
+            let action = if challenge_action {
+                state
+                    .authentication_runs
+                    .get_mut(&run_id)
+                    .unwrap()
+                    .run
+                    .mark_delivery_triggered("trigger", "challenge-1")
+                    .unwrap();
+                AuthenticationActionKind::SubmitSmsOtp
+            } else {
+                AuthenticationActionKind::SubmitNativeStoredCredentials
+            };
+            state
+                .reserve_service_authentication_effect(
+                    &run_id,
+                    "effect",
+                    action,
+                    "state-1",
+                    observed_at,
+                    observed_at,
+                )
+                .unwrap();
+            let failure = Err(AuthenticationActionFailure::EffectUnproven);
+            let (updated, completion) = if challenge_action {
+                state
+                    .complete_service_authentication_challenge_action(
+                        &run_id,
+                        "effect",
+                        "challenge-1",
+                        failure,
+                    )
+                    .unwrap()
+            } else {
+                state
+                    .complete_service_authentication_delivery_action(
+                        &run_id,
+                        "effect",
+                        "challenge-1",
+                        failure,
+                    )
+                    .unwrap()
+            };
+            assert_eq!(
+                completion,
+                ServiceAuthenticationRunCompletion::TransitionFailed(
+                    AuthenticationRunError::ActionFailed
+                )
+            );
+            assert_eq!(updated.run.state, AuthenticationRunState::Blocked);
+            assert!(updated.run.used_operation_ids.contains("effect"));
+            assert!(updated.pending_effect.is_none());
+            assert_eq!(state.service_authentication_run(&run_id), Some(&updated));
+        }
+    }
+
+    struct TestVerifier(Result<AuthenticationVerifierReceipt, AuthenticationVerifierFailure>);
+
+    impl AuthenticationVerifier for TestVerifier {
+        fn verify(
+            &mut self,
+            _context: &AuthenticationVerificationContext<'_>,
+        ) -> Result<AuthenticationVerifierReceipt, AuthenticationVerifierFailure> {
+            self.0.clone()
+        }
+    }
+
+    #[test]
+    fn aggregate_verify_returns_post_transition_record_with_optional_error() {
+        let receipt = AuthenticationVerifierReceipt {
+            verifier_id: "verifier-1".to_string(),
+            target_service_id: "target-1".to_string(),
+            target_account_ref: "opaque-account-canary".to_string(),
+            profile_id: "profile-1".to_string(),
+            browser_id: "browser-1".to_string(),
+            session_name: "session-1".to_string(),
+            exact_target_authenticated: true,
+        };
+        for (outcome, expected_error, expected_state) in [
+            (
+                Ok(receipt.clone()),
+                None,
+                AuthenticationRunState::Authenticated,
+            ),
+            (
+                Err(AuthenticationVerifierFailure::ObservationFailed),
+                Some(AuthenticationRunError::VerifierFailed),
+                AuthenticationRunState::OperatorInterventionRequired,
+            ),
+            (
+                Ok(AuthenticationVerifierReceipt {
+                    exact_target_authenticated: false,
+                    ..receipt
+                }),
+                Some(AuthenticationRunError::ExactTargetNotAuthenticated),
+                AuthenticationRunState::OperatorInterventionRequired,
+            ),
+        ] {
+            let (mut state, run_id) = aggregate_with_record(create_record("aggregate-verify"));
+            let mut observation = identifier_ready_record("observation")
+                .run
+                .site_observation_receipts[0]
+                .clone();
+            observation.site_state = SiteLoginState::Authenticated;
+            observation.exact_account_authenticated = true;
+            state
+                .observe_service_authentication_run(
+                    &run_id,
+                    "observe",
+                    observation,
+                    "2026-09-17T12:01:00Z",
+                )
+                .unwrap();
+            let (updated, error) = state
+                .verify_service_authentication_run(&run_id, "verify", &mut TestVerifier(outcome))
+                .unwrap();
+            assert_eq!(error, expected_error);
+            assert_eq!(updated.run.state, expected_state);
+            assert!(updated.run.used_operation_ids.contains("verify"));
+            assert_eq!(updated.run.transition_count, 2);
+            assert_eq!(state.service_authentication_run(&run_id), Some(&updated));
+        }
+    }
+
+    #[test]
+    fn aggregate_cancellation_returns_stored_record_and_preserves_pending_effect() {
+        let (mut state, run_id) = aggregate_with_record(create_record("aggregate-cancel"));
+        state
+            .reserve_service_authentication_effect(
+                &run_id,
+                "effect",
+                AuthenticationActionKind::SubmitAccountIdentifier,
+                "state-1",
+                "2026-09-17T12:01:00Z",
+                "2026-09-17T12:01:00Z",
+            )
+            .unwrap();
+        let updated = state
+            .cancel_service_authentication_run(&run_id, "cancel")
+            .unwrap();
+        assert_eq!(updated.run.state, AuthenticationRunState::Cancelled);
+        assert!(updated.pending_effect.is_some());
+        assert_eq!(state.service_authentication_run(&run_id), Some(&updated));
+        assert_eq!(
+            state.cancel_service_authentication_run(&run_id, "cancel-again"),
+            Err(ServiceAuthenticationRunStateError::Envelope(
+                ServiceAuthenticationRunError::CancelFailed(
+                    AuthenticationRunError::UnexpectedState
+                )
+            ))
+        );
+        assert_eq!(state.service_authentication_run(&run_id), Some(&updated));
     }
 }

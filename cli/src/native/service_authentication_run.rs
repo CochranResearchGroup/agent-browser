@@ -26,13 +26,9 @@ use super::site_login_recipe::{
 use super::{auth, interaction};
 use agent_browser_challenge_control::ChallengeConsumerKind;
 use agent_browser_service_model::{
-    cancel_authentication_run, complete_challenge_authentication_action,
-    complete_credential_delivery_action, complete_service_authentication_run_start,
-    complete_site_authentication_action, prepare_service_authentication_run_start,
     project_service_authentication_run, require_live_authentication_run,
-    reserve_authentication_effect, ServiceAuthenticationRunCompletion,
-    ServiceAuthenticationRunRecord, ServiceAuthenticationRunStartDecision,
-    ServiceAuthenticationRunStartInput,
+    ServiceAuthenticationRunCompletion, ServiceAuthenticationRunRecord,
+    ServiceAuthenticationRunStartDecision, ServiceAuthenticationRunStartInput,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -294,9 +290,8 @@ fn start_run_in_state(
         .service_tab_handle(&intent.supplied_handle.tab_id)
         .ok_or_else(|| "authentication_run_service_tab_handle_missing".to_string())?;
     let binding = exact_handle_binding(&intent, &current)?;
-    let decision = prepare_service_authentication_run_start(
-        &state.authentication_runs,
-        ServiceAuthenticationRunStartInput {
+    let decision = state
+        .prepare_service_authentication_run_start(ServiceAuthenticationRunStartInput {
             binding,
             idempotency_key: intent.idempotency_key.clone(),
             challenge_task_id: intent.challenge_task_id.clone(),
@@ -305,9 +300,8 @@ fn start_run_in_state(
             max_transitions: intent.max_transitions,
             current_service_tab_handle: current.clone(),
             created_at: created_at.to_string(),
-        },
-    )
-    .map_err(|error| error.cli_message())?;
+        })
+        .map_err(|error| error.cli_message())?;
     let prepared = match decision {
         ServiceAuthenticationRunStartDecision::Replayed(existing) => {
             return Ok((*existing, true));
@@ -331,11 +325,9 @@ fn start_run_in_state(
         (None, None) => None,
         _ => return Err("authentication_run_challenge_admission_incomplete".to_string()),
     };
-    let record = complete_service_authentication_run_start(prepared, challenge_consumer_admission)
+    let record = state
+        .complete_service_authentication_run_start(prepared, challenge_consumer_admission)
         .map_err(|error| error.cli_message())?;
-    state
-        .authentication_runs
-        .insert(record.run.run_id.clone(), record.clone());
     Ok((record, false))
 }
 
@@ -831,19 +823,20 @@ fn reserve_effect(
     let reserved_at = service_now_timestamp();
     repository.mutate(|state| {
         let record = state
-            .authentication_runs
-            .get_mut(run_id)
+            .service_authentication_run(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, record)?;
-        reserve_authentication_effect(
-            record,
-            operation_id,
-            action,
-            state_instance_id,
-            &reserved_at,
-            &service_now_timestamp(),
-        )
-        .map_err(|error| error.cli_message())
+        state
+            .reserve_service_authentication_effect(
+                run_id,
+                operation_id,
+                action,
+                state_instance_id,
+                &reserved_at,
+                &service_now_timestamp(),
+            )
+            .map(|_| ())
+            .map_err(|error| error.cli_message(""))
     })
 }
 
@@ -856,8 +849,7 @@ async fn resume_authentication_run(
     let operation_id = required_string(command, "operationId")?;
     let snapshot = repository.load_snapshot()?;
     let record = snapshot
-        .authentication_runs
-        .get(&run_id)
+        .service_authentication_run(&run_id)
         .cloned()
         .ok_or_else(|| "authentication_run_not_found".to_string())?;
     caller_owns_run(command, &record)?;
@@ -910,16 +902,17 @@ async fn resume_authentication_run(
             };
             let updated = repository.mutate(|state| {
                 let current = state
-                    .authentication_runs
-                    .get_mut(&run_id)
+                    .service_authentication_run(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, current)?;
-                require_live_run(current)?;
-                current
-                    .run
-                    .observe_site_login_state(&operation_id, receipt.clone())
-                    .map_err(|error| format!("authentication_run_observe_failed:{error:?}"))?;
-                Ok(current.clone())
+                state
+                    .observe_service_authentication_run(
+                        &run_id,
+                        &operation_id,
+                        receipt.clone(),
+                        &service_now_timestamp(),
+                    )
+                    .map_err(|error| error.cli_message("authentication_run_observe_failed"))
             })?;
             Ok(run_projection(&updated, false))
         }
@@ -1003,23 +996,19 @@ async fn resume_authentication_run(
             let challenge_id = format!("sms:{}", watch.watch_id);
             let updated = repository.mutate(|state| {
                 let current = state
-                    .authentication_runs
-                    .get_mut(&run_id)
+                    .service_authentication_run(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, current)?;
-                require_live_run(current)?;
-                current
-                    .run
-                    .prepare_watch(
+                state
+                    .prepare_service_authentication_watch(
+                        &run_id,
                         &operation_id,
                         &challenge_id,
                         AuthenticationChallengeChannel::SmsOtp,
                         watch.clone(),
+                        &service_now_timestamp(),
                     )
-                    .map_err(|error| {
-                        format!("authentication_run_watch_prepare_failed:{error:?}")
-                    })?;
-                Ok(current.clone())
+                    .map_err(|error| error.cli_message("authentication_run_watch_prepare_failed"))
             })?;
             Ok(run_projection(&updated, false))
         }
@@ -1212,15 +1201,13 @@ async fn resume_authentication_run(
             });
             let (updated, transition_error) = repository.mutate(|state| {
                 let current = state
-                    .authentication_runs
-                    .get_mut(&run_id)
+                    .service_authentication_run(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, current)?;
                 let mut verifier = OneShotVerifier(receipt.clone());
-                let result = current
-                    .run
-                    .verify_exact_target(&operation_id, &mut verifier);
-                Ok((current.clone(), result.err()))
+                state
+                    .verify_service_authentication_run(&run_id, &operation_id, &mut verifier)
+                    .map_err(|error| error.cli_message("authentication_run_verify_failed"))
             })?;
             if let Some(error) = transition_error {
                 return Err(format!("authentication_run_verify_failed:{error:?}"));
@@ -1249,18 +1236,17 @@ fn complete_site_action(
     let adapter_outcome = outcome.map_err(|_| AuthenticationActionFailure::EffectUnproven);
     let (updated, completion) = repository.mutate(|state| {
         let current = state
-            .authentication_runs
-            .get_mut(run_id)
+            .service_authentication_run(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, current)?;
-        let completion = complete_site_authentication_action(
-            current,
-            operation_id,
-            expected_action,
-            adapter_outcome.clone(),
-        )
-        .map_err(|error| error.cli_message())?;
-        Ok((current.clone(), completion))
+        state
+            .complete_service_authentication_site_action(
+                run_id,
+                operation_id,
+                expected_action,
+                adapter_outcome.clone(),
+            )
+            .map_err(|error| error.cli_message("authentication_run_site_action_failed"))
     })?;
     if let ServiceAuthenticationRunCompletion::TransitionFailed(error) = completion {
         return Err(format!("authentication_run_site_action_failed:{error:?}"));
@@ -1279,18 +1265,17 @@ fn complete_delivery_trigger_action(
     let adapter_outcome = outcome.map_err(|_| AuthenticationActionFailure::EffectUnproven);
     let (updated, completion) = repository.mutate(|state| {
         let current = state
-            .authentication_runs
-            .get_mut(run_id)
+            .service_authentication_run(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, current)?;
-        let completion = complete_credential_delivery_action(
-            current,
-            operation_id,
-            challenge_id,
-            adapter_outcome.clone(),
-        )
-        .map_err(|error| error.cli_message())?;
-        Ok((current.clone(), completion))
+        state
+            .complete_service_authentication_delivery_action(
+                run_id,
+                operation_id,
+                challenge_id,
+                adapter_outcome.clone(),
+            )
+            .map_err(|error| error.cli_message("authentication_run_credential_action_failed"))
     })?;
     if let ServiceAuthenticationRunCompletion::TransitionFailed(error) = completion {
         return Err(format!(
@@ -1311,18 +1296,17 @@ fn complete_challenge_action(
     let adapter_outcome = outcome.map_err(|_| AuthenticationActionFailure::EffectUnproven);
     let (updated, completion) = repository.mutate(|state| {
         let current = state
-            .authentication_runs
-            .get_mut(run_id)
+            .service_authentication_run(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, current)?;
-        let completion = complete_challenge_authentication_action(
-            current,
-            operation_id,
-            challenge_id,
-            adapter_outcome.clone(),
-        )
-        .map_err(|error| error.cli_message())?;
-        Ok((current.clone(), completion))
+        state
+            .complete_service_authentication_challenge_action(
+                run_id,
+                operation_id,
+                challenge_id,
+                adapter_outcome.clone(),
+            )
+            .map_err(|error| error.cli_message("authentication_run_challenge_action_failed"))
     })?;
     if let ServiceAuthenticationRunCompletion::TransitionFailed(error) = completion {
         return Err(format!(
@@ -1353,8 +1337,7 @@ pub(crate) async fn handle_service_authentication_run(
             let run_id = required_string(command, "authenticationRunId")?;
             let state = repository.load_snapshot()?;
             let record = state
-                .authentication_runs
-                .get(&run_id)
+                .service_authentication_run(&run_id)
                 .ok_or_else(|| "authentication_run_not_found".to_string())?;
             caller_owns_run(command, record)?;
             Ok(run_projection(record, false))
@@ -1364,13 +1347,12 @@ pub(crate) async fn handle_service_authentication_run(
             let operation_id = required_string(command, "operationId")?;
             let record = repository.mutate(|state| {
                 let record = state
-                    .authentication_runs
-                    .get_mut(&run_id)
+                    .service_authentication_run(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, record)?;
-                cancel_authentication_run(record, &operation_id)
-                    .map_err(|error| error.cli_message())?;
-                Ok(record.clone())
+                state
+                    .cancel_service_authentication_run(&run_id, &operation_id)
+                    .map_err(|error| error.cli_message("authentication_run_cancel_failed"))
             })?;
             Ok(run_projection(&record, false))
         }

@@ -161,7 +161,8 @@ pub use service_authentication_run::{
     PreparedServiceAuthenticationRunStart, ServiceAuthenticationRunCompletion,
     ServiceAuthenticationRunError, ServiceAuthenticationRunProjection,
     ServiceAuthenticationRunRecord, ServiceAuthenticationRunStartDecision,
-    ServiceAuthenticationRunStartInput, SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION,
+    ServiceAuthenticationRunStartInput, ServiceAuthenticationRunStateError,
+    SERVICE_AUTHENTICATION_RUN_SCHEMA_VERSION,
 };
 pub use service_challenge_task::{
     admit_challenge_consumer_from_receipt, cancel_service_challenge_task,
