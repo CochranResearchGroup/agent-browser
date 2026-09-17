@@ -6,7 +6,6 @@ const JOB_NAMES = Object.freeze({
   dashboard: 'Dashboard',
   serviceClient: 'Service Client',
   workstation: 'Workstation Fixtures',
-  comprehensive: 'Comprehensive Rust',
 });
 
 export function summarizeValidationEconomics({ selection, jobs }) {
@@ -37,7 +36,7 @@ export function summarizeValidationEconomics({ selection, jobs }) {
     observedRunnerSeconds,
     observedRunnerMinutes: Number((observedRunnerSeconds / 60).toFixed(2)),
     jobs: intervals,
-    note: 'Observed duration for selected jobs through aggregate start; excludes Presubmit itself and separate slow qualification jobs, and is not billing-exact runner usage.',
+    note: 'Observed duration for selected jobs through aggregate start; excludes Presubmit itself and is not billing-exact runner usage.',
   };
 }
 

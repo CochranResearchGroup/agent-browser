@@ -24,6 +24,7 @@ assert.deepEqual(summary.selectedJobs, ['Validation Selection', 'Rust Quality', 
 assert.match(economicsMarkdown(summary), /Tier: `focused`/);
 assert.match(economicsMarkdown(summary), /not billing-exact/);
 assert.match(economicsMarkdown(summary), /excludes Presubmit itself/);
+assert.doesNotMatch(economicsMarkdown(summary), /slow qualification/);
 
 assert.throws(
   () => summarizeValidationEconomics({ selection: { jobs: { docs: true } }, jobs: [] }),

@@ -1,14 +1,13 @@
-export const VALIDATION_SELECTION_SCHEMA_VERSION = 'agent-browser.validation-selection.v1';
+export const VALIDATION_SELECTION_SCHEMA_VERSION = 'agent-browser.validation-selection.v2';
 export const VALIDATION_SELECTION_VERSION = VALIDATION_SELECTION_SCHEMA_VERSION;
 
-const JOB_KEYS = Object.freeze(['docs', 'versionSync', 'rustQuality', 'rust', 'dashboard', 'serviceClient', 'workstation', 'comprehensive']);
+const JOB_KEYS = Object.freeze(['docs', 'versionSync', 'rustQuality', 'rust', 'dashboard', 'serviceClient', 'workstation']);
 
 /** Classifies changed paths without reading Git, the filesystem, or process environment. */
-export function classifyValidationSelection(files, { qualificationMode } = {}) {
+export function classifyValidationSelection(files) {
   const changedFiles = normalizeFiles(files);
-  if (qualificationMode === 'comprehensive') return comprehensiveResult(changedFiles, ['explicit comprehensive qualification mode']);
   if (changedFiles.length === 0) return result({ changedFiles, tier: 'none', reasons: ['no changed files'] });
-  if (changedFiles.some(isMaterialDependencyOrToolchain)) return comprehensiveResult(changedFiles, ['material dependency or toolchain change requires comprehensive qualification']);
+  if (changedFiles.some(isMaterialDependencyOrToolchain)) return broadResult(changedFiles, [], ['material dependency or toolchain change fails safe to broad presubmit']);
   if (changedFiles.some(isClassifierOrWorkflow)) return broadResult(changedFiles, [], ['classifier or workflow change fails safe to broad presubmit']);
 
   const perFile = changedFiles.map((file) => ({ file, surfaces: surfacesFor(file) }));
@@ -31,17 +30,6 @@ export function classifyValidationSelection(files, { qualificationMode } = {}) {
 }
 
 export const selectValidation = classifyValidationSelection;
-
-function comprehensiveResult(changedFiles, reasons) {
-  return result({
-    changedFiles,
-    tier: 'comprehensive',
-    matchedSurfaces: ['material-dependency-toolchain'],
-    jobs: { ...allPresubmitJobs(), rust: false, comprehensive: true },
-    serviceSmokes: true,
-    reasons,
-  });
-}
 
 function broadResult(changedFiles, unknownFiles, reasons, matchedSurfaces = []) {
   return result({ changedFiles, tier: 'broad', matchedSurfaces, unknownFiles, jobs: allPresubmitJobs(), rustCompartments: allRustCompartments(), serviceSmokes: true, reasons });

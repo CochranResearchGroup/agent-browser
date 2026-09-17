@@ -1,4 +1,4 @@
-const SCHEMA_VERSION = 'agent-browser.validation-selection.v1';
+const SCHEMA_VERSION = 'agent-browser.validation-selection.v2';
 
 export const PRESUBMIT_JOB_KEYS = Object.freeze([
   'docs',
@@ -8,7 +8,6 @@ export const PRESUBMIT_JOB_KEYS = Object.freeze([
   'dashboard',
   'serviceClient',
   'workstation',
-  'comprehensive',
 ]);
 
 const TERMINAL_RESULTS = new Set(['success', 'failure', 'cancelled', 'skipped']);
