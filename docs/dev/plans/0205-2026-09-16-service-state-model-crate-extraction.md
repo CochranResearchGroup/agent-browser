@@ -4,7 +4,13 @@ Date: 2026-09-16
 
 Plan version: 1
 
-State: OPEN
+State: CLOSED
+
+Closure disposition: `SUPERSEDED_BY_0216`
+
+Closed: 2026-09-17
+
+Successor: [Plan 0216](0216-2026-09-17-service-model-extraction-landing.md)
 
 Consolidation: required
 
@@ -37,6 +43,26 @@ large file unchanged. Deleting the crate must force callers to recreate the
 canonical aggregate, compatibility rules, transition invariants, and
 projection semantics across many adapters. A types-only or re-export-only
 crate fails this plan.
+
+## Closure
+
+Plan 0205 is closed at published source checkpoint `1ff20161`. It delivered the
+canonical provider-free Service State crate, aggregate and codec ownership,
+deep transition and projection interfaces, CLI adoption, architecture guards,
+focused correctness evidence, and the measured focused-loop improvement.
+
+The plan is not being represented as complete against its original exhaustive
+P4 field-privacy and facade-deletion ambition. That tail produced an
+expression-by-expression checkpoint loop that no longer served the primary
+product outcome. The remaining 155 classified production runtime-owner field
+expressions, fixture migration, full aggregate privacy, and optional facade
+deletion are preserved as explicit architectural debt. They are not automatic
+acceptance gates for the already useful extraction and require separate,
+value-bounded admission if resumed.
+
+Plan 0216 owns one corrected outcome: qualify and integrate the accepted
+extraction without expanding the source refactor. It also owns the protected
+pull request, canonical-main readback, issue disposition, and final evidence.
 
 ## Current State
 
