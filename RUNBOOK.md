@@ -67,6 +67,18 @@ unpushed until PR #180 enters `main` and the canonical checkpoint is reconciled.
 No browser, provider, CAPTCHA, credential, runtime or production effect
 occurred.
 
+## Turn 379 | 2026-09-17
+
+P206 pre-merge review reproduced two budget-boundary defects: cumulative
+selection arithmetic could saturate and admit an actual total above 255, and a
+256-candidate selection returned a generic transition error rather than typed
+round-budget intervention. Repair checkpoint `4813d385` replaces saturation
+with widened and checked arithmetic. All 41 challenge-control tests, including
+25 visual-round cases, the crate architecture guard, strict workspace Clippy,
+formatting and diff hygiene pass. The corrected head still requires protected
+exact-head evaluation. No provider, browser, CAPTCHA, credential, runtime or
+production effect occurred.
+
 ## Turn 373 | 2026-09-17
 
 [Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)

@@ -499,9 +499,8 @@ fn select(
             VisualRoundInterventionReason::CandidateMismatch,
         ));
     }
-    let selection_count = u8::try_from(selection.selected_candidate_ids.len())
-        .map_err(|_| VisualRoundError::InvalidTransition)?;
-    if selection_count > policy.max_selections_per_round
+    let selection_count = selection.selected_candidate_ids.len();
+    if selection_count > usize::from(policy.max_selections_per_round)
         || selection.planned_steps > policy.max_steps_per_round
         || selection.planned_pointer_events > policy.max_pointer_events_per_round
         || selection.planned_key_events > policy.max_key_events_per_round
@@ -511,16 +510,21 @@ fn select(
             VisualRoundInterventionReason::RoundBudgetExceeded,
         ));
     }
-    if current.total_selections.saturating_add(selection_count) > policy.max_total_selections
-        || current.total_steps.saturating_add(selection.planned_steps) > policy.max_total_steps
+    if usize::from(current.total_selections)
+        .checked_add(selection_count)
+        .is_none_or(|total| total > usize::from(policy.max_total_selections))
+        || current
+            .total_steps
+            .checked_add(selection.planned_steps)
+            .is_none_or(|total| total > policy.max_total_steps)
         || current
             .total_pointer_events
-            .saturating_add(selection.planned_pointer_events)
-            > policy.max_total_pointer_events
+            .checked_add(selection.planned_pointer_events)
+            .is_none_or(|total| total > policy.max_total_pointer_events)
         || current
             .total_key_events
-            .saturating_add(selection.planned_key_events)
-            > policy.max_total_key_events
+            .checked_add(selection.planned_key_events)
+            .is_none_or(|total| total > policy.max_total_key_events)
     {
         return Ok(intervention(
             current,
@@ -582,12 +586,22 @@ fn finish_effect(
     let mut next = current.clone();
     let selection_count = u8::try_from(selection.selected_candidate_ids.len())
         .map_err(|_| VisualRoundError::InvalidTransition)?;
-    next.total_selections = next.total_selections.saturating_add(selection_count);
-    next.total_steps = next.total_steps.saturating_add(receipt.steps);
+    next.total_selections = next
+        .total_selections
+        .checked_add(selection_count)
+        .ok_or(VisualRoundError::InvalidTransition)?;
+    next.total_steps = next
+        .total_steps
+        .checked_add(receipt.steps)
+        .ok_or(VisualRoundError::InvalidTransition)?;
     next.total_pointer_events = next
         .total_pointer_events
-        .saturating_add(receipt.pointer_events);
-    next.total_key_events = next.total_key_events.saturating_add(receipt.key_events);
+        .checked_add(receipt.pointer_events)
+        .ok_or(VisualRoundError::InvalidTransition)?;
+    next.total_key_events = next
+        .total_key_events
+        .checked_add(receipt.key_events)
+        .ok_or(VisualRoundError::InvalidTransition)?;
     next.last_effect_receipt_ref = Some(receipt.receipt_ref.clone());
     match receipt.delivery {
         DeliveryState::Acknowledged => {
