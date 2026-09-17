@@ -127,6 +127,45 @@ const SERVICE_CHALLENGE_CONSTANTS = [
   'NAVIGATION_CHALLENGE_INTENT_ID',
 ];
 
+const SERVICE_STATE_DIRECT_OWNER_FIELDS = [
+  [
+    'presentation_capacity',
+    /presentation_capacity\s*:\s*Option\s*<\s*agent_browser_service_model\s*::\s*PresentationCapacityAuthority\s*>/,
+  ],
+  [
+    'profile_policy_migration',
+    /profile_policy_migration\s*:\s*Option\s*<\s*agent_browser_service_model\s*::\s*ProfilePolicyMigrationReport\s*>/,
+  ],
+  [
+    'service_principals',
+    /service_principals\s*:\s*agent_browser_lease_authority\s*::\s*ServicePrincipalRegistry/,
+  ],
+  [
+    'profile_lease_reconcile_receipts',
+    /profile_lease_reconcile_receipts\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*ProfileLeaseReconcileReceipt\s*>/,
+  ],
+  [
+    'profile_recovery_receipts',
+    /profile_recovery_receipts\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*RecoveryReceipt\s*>/,
+  ],
+  [
+    'profile_reset_receipts',
+    /profile_reset_receipts\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*ProfileResetReceipt\s*>/,
+  ],
+  [
+    'profile_lifecycle_authorizations',
+    /profile_lifecycle_authorizations\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*ProfileLifecycleAuthorization\s*>/,
+  ],
+  [
+    'profile_lifecycle_effect_receipts',
+    /profile_lifecycle_effect_receipts\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*ProfileLifecycleEffectReceipt\s*>/,
+  ],
+  [
+    'browser_retirement_receipts',
+    /browser_retirement_receipts\s*:\s*BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*BrowserRetirementReceipt\s*>/,
+  ],
+];
+
 const SERVICE_MODEL_ALLOWED_DEPENDENCIES = new Set([
   'agent-browser-authentication-control',
   'agent-browser-challenge-control',
@@ -197,6 +236,50 @@ function withoutComments(source) {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/\/\/.*$/gm, ' ');
+}
+
+function rustStructDefinition(source, name) {
+  const header = new RegExp(`\\bpub(?:\\([^)]*\\))?\\s+struct\\s+${name}\\b[^\\{]*\\{`);
+  const match = header.exec(source);
+  if (!match) return '';
+
+  let depth = 1;
+  let cursor = match.index + match[0].length;
+  let state = 'code';
+  while (cursor < source.length && depth > 0) {
+    const character = source[cursor];
+    const next = source[cursor + 1];
+    if (state === 'line-comment') {
+      if (character === '\n') state = 'code';
+    } else if (state === 'block-comment') {
+      if (character === '*' && next === '/') {
+        state = 'code';
+        cursor += 1;
+      }
+    } else if (state === 'string') {
+      if (character === '\\') cursor += 1;
+      else if (character === '"') state = 'code';
+    } else if (state === 'character') {
+      if (character === '\\') cursor += 1;
+      else if (character === "'") state = 'code';
+    } else if (character === '/' && next === '/') {
+      state = 'line-comment';
+      cursor += 1;
+    } else if (character === '/' && next === '*') {
+      state = 'block-comment';
+      cursor += 1;
+    } else if (character === '"') {
+      state = 'string';
+    } else if (character === "'") {
+      state = 'character';
+    } else if (character === '{') {
+      depth += 1;
+    } else if (character === '}') {
+      depth -= 1;
+    }
+    cursor += 1;
+  }
+  return depth === 0 ? source.slice(match.index, cursor) : '';
 }
 
 function importedPaths(source) {
@@ -523,6 +606,29 @@ function check(root = repoRoot) {
   );
   const cliServiceModelSource = read(root, 'cli/src/native/service_model.rs');
   const cliServiceModel = withoutCommentsAndStrings(cliServiceModelSource);
+  const serviceStateDefinition = rustStructDefinition(cliServiceModelSource, 'ServiceState');
+  const serviceStateSyntax = withoutComments(serviceStateDefinition);
+  requireCondition(Boolean(serviceStateDefinition),
+    'CLI must contain the ServiceState definition during aggregate dependency closure');
+  requireCondition(
+    !/\bsuper\s*::/.test(serviceStateSyntax),
+    'CLI ServiceState definition must not route canonical owners through a CLI super:: path',
+  );
+  for (const [field, pattern] of SERVICE_STATE_DIRECT_OWNER_FIELDS) {
+    requireCondition(
+      pattern.test(serviceStateSyntax),
+      `CLI ServiceState field must use its direct canonical owner: ${field}`,
+    );
+  }
+  const servicePrincipalField = serviceStateSyntax.match(
+    /((?:#\s*\[[^\]]*\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?service_principals\s*:/,
+  );
+  requireCondition(
+    Boolean(servicePrincipalField?.[1].match(
+      /#\s*\[\s*serde\s*\([^\]]*skip_serializing_if\s*=\s*["']agent_browser_lease_authority\s*::\s*ServicePrincipalRegistry\s*::\s*is_empty["'][^\]]*\)\s*\]/,
+    )),
+    'CLI ServiceState must use the direct Lease Authority principal omission predicate',
+  );
   requireCondition(
     /BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*CrashRegenerationTransaction\s*>/
       .test(cliServiceModel),

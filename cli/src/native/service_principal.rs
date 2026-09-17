@@ -17,8 +17,7 @@ pub(crate) use agent_browser_lease_authority::{
     generate_profile_capability_token, register_profile_capability, rotate_profile_capability,
     AuthenticatedServicePrincipal, RegisteredProfileCapability, ServicePrincipalError,
     ServicePrincipalFailureCode, ServicePrincipalProvenance, ServicePrincipalRegistrationRequest,
-    ServicePrincipalRegistry, ServicePrincipalState, ServiceProfileCapability,
-    ServiceProfileCapabilityState,
+    ServicePrincipalState, ServiceProfileCapability, ServiceProfileCapabilityState,
 };
 pub(crate) use agent_browser_service_model::PrincipalContinuityRecourse;
 

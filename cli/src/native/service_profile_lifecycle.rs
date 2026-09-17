@@ -20,11 +20,13 @@ use super::service_store::{LockedServiceStateRepository, ServiceStateRepository}
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub(crate) use agent_browser_service_model::{
-    register_profile_eviction_authorization, ProfileLifecycleAuthorization,
-    ProfileLifecycleAuthorizationState, ProfileLifecycleEffectReceipt, ProfileLifecycleProof,
+    register_profile_eviction_authorization, ProfileLifecycleAuthorizationState,
+    ProfileLifecycleEffectReceipt, ProfileLifecycleProof,
     PROFILE_LIFECYCLE_AUTHORIZATION_SCHEMA_V1, PROFILE_LIFECYCLE_PROOF_SCHEMA_V1,
     PROFILE_LIFECYCLE_RECEIPT_SCHEMA_V1,
 };
+#[cfg(test)]
+use agent_browser_service_model::ProfileLifecycleAuthorization;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProfileTabPhysicalObservation<'a> {

@@ -2092,20 +2092,20 @@ pub struct ServiceState {
     /// Logical browsers remain separate and survive slot release or parking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) presentation_capacity:
-        Option<super::presentation_capacity::PresentationCapacityAuthority>,
+        Option<agent_browser_service_model::PresentationCapacityAuthority>,
     pub profiles: BTreeMap<String, BrowserProfile>,
     /// Durable, redacted result of materializing missing legacy Profile access
     /// policies. Ambiguous legacy identity remains observable but nonblocking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) profile_policy_migration:
-        Option<super::service_state_migration::ProfilePolicyMigrationReport>,
+        Option<agent_browser_service_model::ProfilePolicyMigrationReport>,
     /// Registered service principals and their hashed profile capabilities.
     /// Raw capability material is never retained in Service State.
     #[serde(
         default,
-        skip_serializing_if = "super::service_principal::ServicePrincipalRegistry::is_empty"
+        skip_serializing_if = "agent_browser_lease_authority::ServicePrincipalRegistry::is_empty"
     )]
-    pub(crate) service_principals: super::service_principal::ServicePrincipalRegistry,
+    pub(crate) service_principals: agent_browser_lease_authority::ServicePrincipalRegistry,
     /// Canonical current service-resource claims and their append-only history.
     /// Only `active_claims` grants authority; terminal events are never blockers.
     #[serde(
@@ -2116,31 +2116,31 @@ pub struct ServiceState {
     /// Idempotent receipts for applied profile-lease reconciliation plans.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_lease_reconcile_receipts:
-        BTreeMap<String, super::service_profile_lease::ProfileLeaseReconcileReceipt>,
+        BTreeMap<String, agent_browser_service_model::ProfileLeaseReconcileReceipt>,
     /// Idempotent terminal receipts for sealed profile acquisition recoveries.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_recovery_receipts:
-        BTreeMap<String, super::service_profile_acquisition::RecoveryReceipt>,
+        BTreeMap<String, agent_browser_service_model::RecoveryReceipt>,
     /// Idempotent terminal receipts for sealed, explicitly scoped profile resets.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_reset_receipts:
-        BTreeMap<String, super::service_profile_acquisition::ProfileResetReceipt>,
+        BTreeMap<String, agent_browser_service_model::ProfileResetReceipt>,
     /// Exact, permission-backed Profile lifecycle authorizations. These bind
     /// logical eviction intent to a policy revision before a daemon may join
     /// it with fresh physical target evidence.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_lifecycle_authorizations:
-        BTreeMap<String, super::service_profile_lifecycle::ProfileLifecycleAuthorization>,
+        BTreeMap<String, agent_browser_service_model::ProfileLifecycleAuthorization>,
     /// Idempotent minimal receipts for physically proven Profile lifecycle
     /// effects. Page contents, paths, credentials, and bearer material are
     /// never retained here.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_lifecycle_effect_receipts:
-        BTreeMap<String, super::service_profile_lifecycle::ProfileLifecycleEffectReceipt>,
+        BTreeMap<String, agent_browser_service_model::ProfileLifecycleEffectReceipt>,
     /// Idempotent receipts for exact inert browser-record retirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) browser_retirement_receipts:
-        BTreeMap<String, super::service_browser_retirement::BrowserRetirementReceipt>,
+        BTreeMap<String, agent_browser_service_model::BrowserRetirementReceipt>,
     /// Durable reservations and terminal receipts for exact live abandoned
     /// browser retirement. External process observation and signaling remain
     /// outside replayable Service State mutations.

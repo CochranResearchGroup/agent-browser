@@ -2340,6 +2340,60 @@ method disposition against a dependency-closed definition.
 Progress classification: this is blocker reduction. It must land as a clean
 published checkpoint before aggregate movement starts.
 
+## Checkpoint 38 | Aggregate Dependency Closure Accepted
+
+State transition: the `ServiceState` definition now names every embedded owner
+directly. The nine frozen fields use `agent_browser_service_model` or
+`agent_browser_lease_authority` without passing through a CLI compatibility
+module, and the principal omission predicate uses the same direct Lease
+Authority path. There is no remaining `super::` path in the aggregate
+definition.
+
+The architecture contract now extracts the exact Rust `ServiceState`
+definition, requires each of the nine canonical field paths, requires the
+direct principal omission predicate, and rejects any reintroduced `super::`
+owner path. Its mutation fixtures prove both a field-type indirection and a
+serde-predicate indirection fail. The cutover also removed the now-unused
+`ServicePrincipalRegistry` CLI re-export and made the test-only
+`ProfileLifecycleAuthorization` import test-only. No record, field visibility,
+default, wire name, omission rule, transition, projection, revision, codec,
+repository, clock, process, or effect behavior changed.
+
+Acceptance evidence:
+
+- the Service Model crate passed 136 unit tests and 14 integration tests;
+- the focused `service_model` lane passed 41 tests;
+- the focused `service_state` lane passed 89 tests;
+- the architecture contract and all mutation fixtures passed;
+- Service API/MCP parity passed for 66 browser controls, 26 Service tools,
+  19 Service resources, 101 native Service actions, and 118 Service-request
+  actions;
+- generated Service client contract and JavaScript type checks passed;
+- the changed-surface selector completed and retained the broad local route;
+- formatting, strict workspace Clippy with `-D warnings`, and diff hygiene
+  passed; and
+- no GitHub CI, runtime, browser, profile, provider, credential, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: `/root/p205_aggregate_codec_inventory`
+used requested `gpt-5.6-sol` high routing for a read-only aggregate, codec,
+revision, caller-seam, and blocker inventory at the last clean implementation
+head. It made no edits or effects. The inventory confirmed 19 current
+`ServiceState` methods, one direct upward cycle through the abandoned-browser
+retirement claim predicate, a mixed pure/effectful migration file, and a
+drift-prone manually maintained known-key list. The runtime did not
+independently expose effective model metadata.
+
+Acceptance state and progress classification: aggregate dependency closure is
+accepted as blocker reduction and published separately from the aggregate
+move. The next packet must freeze the aggregate interface and method
+disposition before implementation. It must introduce one crate-owned
+`ServiceState`, compatibility codec, revision interface, and unknown-field
+owner while retaining repository locks, replay, file replacement, process
+observation, and effect custody in CLI adapters. The upward retirement
+predicate moves with lease admission; `service_state_migration.rs` must be
+split rather than moved wholesale.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |

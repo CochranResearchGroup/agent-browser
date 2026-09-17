@@ -32,6 +32,25 @@ pub use crash_regeneration::{
 `;
 const validCrashStateUse = `
 pub struct ServiceState {
+  presentation_capacity:
+    Option<agent_browser_service_model::PresentationCapacityAuthority>,
+  profile_policy_migration:
+    Option<agent_browser_service_model::ProfilePolicyMigrationReport>,
+  #[serde(skip_serializing_if = "agent_browser_lease_authority::ServicePrincipalRegistry::is_empty")]
+  service_principals:
+    agent_browser_lease_authority::ServicePrincipalRegistry,
+  profile_lease_reconcile_receipts:
+    BTreeMap<String, agent_browser_service_model::ProfileLeaseReconcileReceipt>,
+  profile_recovery_receipts:
+    BTreeMap<String, agent_browser_service_model::RecoveryReceipt>,
+  profile_reset_receipts:
+    BTreeMap<String, agent_browser_service_model::ProfileResetReceipt>,
+  profile_lifecycle_authorizations:
+    BTreeMap<String, agent_browser_service_model::ProfileLifecycleAuthorization>,
+  profile_lifecycle_effect_receipts:
+    BTreeMap<String, agent_browser_service_model::ProfileLifecycleEffectReceipt>,
+  browser_retirement_receipts:
+    BTreeMap<String, agent_browser_service_model::BrowserRetirementReceipt>,
   crash_regeneration_transactions:
     BTreeMap<String, agent_browser_service_model::CrashRegenerationTransaction>,
   browser_capability_registry:
@@ -219,6 +238,38 @@ try {
   doesNotThrow(() => ok(check(clean).length === 0, check(clean).join('\n')));
 } finally {
   rmSync(clean, { recursive: true, force: true });
+}
+
+const indirectAggregateOwner = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    'agent_browser_service_model::PresentationCapacityAuthority',
+    'super::presentation_capacity::PresentationCapacityAuthority',
+  ),
+});
+try {
+  ok(check(indirectAggregateOwner).some((failure) =>
+    failure.includes('must not route canonical owners through a CLI super:: path')),
+  'indirect aggregate owner path was accepted');
+} finally {
+  rmSync(indirectAggregateOwner, { recursive: true, force: true });
+}
+
+const indirectPrincipalPredicate = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    'agent_browser_lease_authority::ServicePrincipalRegistry::is_empty',
+    'super::service_principal::ServicePrincipalRegistry::is_empty',
+  ),
+});
+try {
+  ok(check(indirectPrincipalPredicate).some((failure) =>
+    failure.includes('must not route canonical owners through a CLI super:: path')),
+  'indirect aggregate serde predicate was accepted');
+} finally {
+  rmSync(indirectPrincipalPredicate, { recursive: true, force: true });
 }
 
 const missingAuthenticationModule = fixture({ manifest: validManifest, source: validSource });
