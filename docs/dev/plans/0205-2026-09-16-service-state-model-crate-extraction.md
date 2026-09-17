@@ -2300,6 +2300,46 @@ the canonical `ServiceState`, compatibility codec, revision access, and
 unknown-field preservation, then close remaining pure decisions before facade
 deletion. Do not combine that freeze with runtime, bug-fix, CI, or release work.
 
+## Checkpoint 37 | Aggregate Dependency Closure Freeze
+
+State transition: aggregate movement is split from dependency closure so the
+first packet has one falsifiable outcome. The `ServiceState` definition has
+nine fields whose canonical types already live below the CLI but whose paths
+still pass through CLI compatibility modules. Moving the aggregate while those
+paths remain would either create an upward dependency or silently duplicate
+types. This packet changes only those type and serde-predicate paths.
+
+Frozen direct-owner replacements:
+
+| `ServiceState` field | Current CLI path | Canonical path |
+| --- | --- | --- |
+| `presentation_capacity` | `super::presentation_capacity::PresentationCapacityAuthority` | `agent_browser_service_model::PresentationCapacityAuthority` |
+| `profile_policy_migration` | `super::service_state_migration::ProfilePolicyMigrationReport` | `agent_browser_service_model::ProfilePolicyMigrationReport` |
+| `service_principals` | `super::service_principal::ServicePrincipalRegistry` | `agent_browser_lease_authority::ServicePrincipalRegistry` |
+| `profile_lease_reconcile_receipts` | `super::service_profile_lease::ProfileLeaseReconcileReceipt` | `agent_browser_service_model::ProfileLeaseReconcileReceipt` |
+| `profile_recovery_receipts` | `super::service_profile_acquisition::RecoveryReceipt` | `agent_browser_service_model::RecoveryReceipt` |
+| `profile_reset_receipts` | `super::service_profile_acquisition::ProfileResetReceipt` | `agent_browser_service_model::ProfileResetReceipt` |
+| `profile_lifecycle_authorizations` | `super::service_profile_lifecycle::ProfileLifecycleAuthorization` | `agent_browser_service_model::ProfileLifecycleAuthorization` |
+| `profile_lifecycle_effect_receipts` | `super::service_profile_lifecycle::ProfileLifecycleEffectReceipt` | `agent_browser_service_model::ProfileLifecycleEffectReceipt` |
+| `browser_retirement_receipts` | `super::service_browser_retirement::BrowserRetirementReceipt` | `agent_browser_service_model::BrowserRetirementReceipt` |
+
+The `service_principals` omission predicate moves to the same Lease Authority
+path. Existing CLI compatibility re-exports remain temporarily available to
+their own adapters and callers; this packet does not delete them, move
+`ServiceState`, change field visibility, or change any record, default, codec,
+revision, transition, projection, repository, clock, process, or effect logic.
+
+Acceptance requires zero CLI-module type or predicate path inside the
+`ServiceState` definition, an architecture guard that rejects any reintroduced
+`super::` owner there, unchanged empty and populated aggregate serialization,
+the focused Service Model and affected adapter tests, formatting, strict
+workspace Clippy, and diff hygiene. GitHub CI and runtime effects remain
+excluded. After acceptance, the next packet may freeze the aggregate move and
+method disposition against a dependency-closed definition.
+
+Progress classification: this is blocker reduction. It must land as a clean
+published checkpoint before aggregate movement starts.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
