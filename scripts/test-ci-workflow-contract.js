@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 
 assert.equal(existsSync('.github/workflows/ci.yml'), false, 'active CI workflow must remain absent');
+assert.equal(existsSync('.github/workflows/lease-authority.yml'), false, 'Lease Authority CI must remain absent');
+for (const file of readdirSync('.github/workflows').filter((name) => /\.ya?ml$/.test(name))) {
+  const activeWorkflow = readFileSync(`.github/workflows/${file}`, 'utf8');
+  assert.doesNotMatch(activeWorkflow, /^  (?:push|pull_request):/m, `${file} must not contain an automatic CI trigger`);
+}
 const workflow = readFileSync('.github/workflows/ci.yml.disabled', 'utf8');
 
 assert.match(workflow, /^# Dormant while this file has the `\.disabled` suffix\.\non:\n  pull_request:/m);
