@@ -596,16 +596,56 @@ Next action: publish this checkpoint, then extract `ServiceJob`,
 record-level helpers. Keep incident derivation, journal persistence, transport,
 monitoring, and retention in CLI adapters.
 
+## Checkpoint 10 | Job, Event, And Incident Records
+
+State transition: the crate now owns canonical job, event, and incident
+records, their lifecycle enums, and their stable wire-value constants. The CLI
+keeps one compatibility re-export while Service State joins, incident
+derivation, queue mutation, persistence, clocks, timeouts, retention,
+monitoring, activity projection, and transport remain effect adapters.
+
+Acceptance state and progress classification: this P1 durable-family packet is
+accepted locally. The extraction closes the dependency chain opened in
+checkpoint 9 without pulling the `ServiceState` aggregate or operational
+derivation into the crate. High-fanout CLI consumers continue through the
+existing `service_model` facade with no broad import churn.
+
+Evidence:
+
+- all 60 service-model crate unit and integration tests pass, including job,
+  event, incident default and wire-contract coverage;
+- three CLI record-contract tests and the nested Service State round-trip pass;
+- six derived-view incident tests pass across browser, route, route-pool, and
+  operator-metadata behavior;
+- timeout terminalization, incident activity, persisted-incident backfill, and
+  18 MCP resource projection tests pass;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no browser, profile, provider, runtime, install, staging, production,
+  release, or GitHub CI effect was performed.
+
+Material blockers: `ServiceState` still aggregates CLI-owned monitor, receipt,
+transaction, migration, runtime-owner, authentication, recovery, lifecycle,
+and capacity families. Moving the aggregate before those families are
+classified would create a shallow crate or pull effects upward. P204 still
+owns the shared validation and roadmap surfaces.
+
+Next action: publish this checkpoint and inventory the remaining `ServiceState`
+field families by provider-free closure. Select the next cohesive family with
+the highest aggregate-unblocking value; do not move incident derivation or
+other effect-facing joins.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | nine families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | ten families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | nine packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | nine packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | ten packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | ten packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

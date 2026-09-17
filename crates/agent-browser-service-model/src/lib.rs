@@ -7,6 +7,8 @@ mod browser_process;
 mod browser_profile;
 mod entity_source;
 mod failure_recourse;
+mod incident;
+mod job_event;
 mod presentation;
 mod profile_access;
 mod profile_readiness;
@@ -32,6 +34,18 @@ pub use failure_recourse::{
     child_access_failure_evidence, classify_service_failure, operator_focus_failure_code,
     profile_child_denial_error, ServiceEffectState, ServiceFailureAxis, ServiceFailurePhase,
     ServiceFailureRecourse, ServiceRetryDisposition, SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION,
+};
+pub use incident::{
+    ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity, ServiceIncidentState,
+    SERVICE_INCIDENT_ESCALATION_VALUES, SERVICE_INCIDENT_SEVERITY_VALUES,
+    SERVICE_INCIDENT_STATE_VALUES,
+};
+pub use job_event::{
+    JobControlPlaneMode, JobPriority, JobState, JobTarget, ServiceEvent, ServiceEventKind,
+    ServiceJob, SERVICE_EVENT_KIND_VALUES, SERVICE_JOB_CONTROL_PLANE_MODE_VALUES,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME, SERVICE_JOB_NAMING_WARNING_VALUES,
+    SERVICE_JOB_PRIORITY_VALUES, SERVICE_JOB_STATE_VALUES,
 };
 pub use presentation::{
     ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,

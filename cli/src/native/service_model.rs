@@ -9,48 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME: &str = "missing_service_name";
-pub const SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME: &str = "missing_agent_name";
-pub const SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME: &str = "missing_task_name";
-pub const SERVICE_JOB_NAMING_WARNING_VALUES: [&str; 3] = [
-    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
-];
-pub const SERVICE_INCIDENT_STATE_VALUES: [&str; 3] = ["active", "recovered", "service"];
-pub const SERVICE_INCIDENT_SEVERITY_VALUES: [&str; 4] = ["info", "warning", "error", "critical"];
-pub const SERVICE_INCIDENT_ESCALATION_VALUES: [&str; 7] = [
-    "none",
-    "browser_degraded",
-    "browser_recovery",
-    "job_attention",
-    "monitor_attention",
-    "service_triage",
-    "os_degraded_possible",
-];
 pub const SERVICE_MONITOR_STATE_VALUES: [&str; 3] = ["active", "paused", "faulted"];
-pub const SERVICE_EVENT_KIND_VALUES: [&str; 20] = [
-    "reconciliation",
-    "browser_launch_recorded",
-    "browser_health_changed",
-    "browser_recovery_started",
-    "browser_recovery_override",
-    "tab_lifecycle_changed",
-    "profile_lease_wait_started",
-    "profile_lease_wait_ended",
-    "profile_lease_lifecycle_changed",
-    "viewer_takeover_requested",
-    "viewer_connected",
-    "viewer_disconnected",
-    "controller_requested",
-    "controller_granted",
-    "controller_denied",
-    "route_released",
-    "reconciliation_error",
-    "incident_acknowledged",
-    "incident_resolved",
-    "job_terminal",
-];
 pub const SERVICE_TRACE_ACTIVITY_SOURCE_VALUES: [&str; 3] = ["event", "job", "metadata"];
 pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 23] = [
     "reconciliation",
@@ -77,18 +36,6 @@ pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 23] = [
     "service_job_cancelled",
     "service_job",
 ];
-pub const SERVICE_JOB_STATE_VALUES: [&str; 7] = [
-    "queued",
-    "waiting_profile_lease",
-    "running",
-    "succeeded",
-    "failed",
-    "cancelled",
-    "timed_out",
-];
-pub const SERVICE_JOB_PRIORITY_VALUES: [&str; 3] = ["low", "normal", "lifecycle"];
-pub const SERVICE_JOB_CONTROL_PLANE_MODE_VALUES: [&str; 3] = ["cdp", "cdp_free", "service"];
-
 #[cfg(test)]
 fn assert_record_fields(
     record_name: &str,
@@ -3839,116 +3786,6 @@ fn sorted_strings<'a>(values: impl Iterator<Item = &'a String>) -> Vec<String> {
         .collect()
 }
 
-/// Bounded service event log entry for operator auditability.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ServiceEvent {
-    pub id: String,
-    pub timestamp: String,
-    pub kind: ServiceEventKind,
-    pub message: String,
-    pub browser_id: Option<String>,
-    pub profile_id: Option<String>,
-    pub session_id: Option<String>,
-    pub service_name: Option<String>,
-    pub agent_name: Option<String>,
-    pub task_name: Option<String>,
-    pub provenance: Option<super::service_request_provenance::ServiceRequestProvenance>,
-    pub terminal_outcome: Option<super::service_terminal_outcome::ServiceTerminalOutcome>,
-    pub previous_health: Option<BrowserHealth>,
-    pub current_health: Option<BrowserHealth>,
-    pub details: Option<serde_json::Value>,
-}
-
-/// Grouped service incident derived from event and job history.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ServiceIncident {
-    pub id: String,
-    pub browser_id: Option<String>,
-    pub monitor_id: Option<String>,
-    pub monitor_target: Option<serde_json::Value>,
-    pub monitor_result: Option<String>,
-    pub label: String,
-    pub state: ServiceIncidentState,
-    pub severity: ServiceIncidentSeverity,
-    pub escalation: ServiceIncidentEscalation,
-    pub recommended_action: String,
-    pub acknowledged_at: Option<String>,
-    pub acknowledged_by: Option<String>,
-    pub acknowledgement_note: Option<String>,
-    pub resolved_at: Option<String>,
-    pub resolved_by: Option<String>,
-    pub resolution_note: Option<String>,
-    pub latest_timestamp: String,
-    pub latest_message: String,
-    pub latest_kind: String,
-    pub current_health: Option<BrowserHealth>,
-    pub event_ids: Vec<String>,
-    pub job_ids: Vec<String>,
-}
-
-/// Operator-facing summary state for a grouped incident.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ServiceIncidentState {
-    #[default]
-    Active,
-    Recovered,
-    Service,
-}
-
-/// Operator-facing severity for a grouped incident.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ServiceIncidentSeverity {
-    #[default]
-    Info,
-    Warning,
-    Error,
-    Critical,
-}
-
-/// Operator escalation bucket for a grouped incident.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ServiceIncidentEscalation {
-    #[default]
-    None,
-    BrowserDegraded,
-    BrowserRecovery,
-    JobAttention,
-    MonitorAttention,
-    ServiceTriage,
-    OsDegradedPossible,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ServiceEventKind {
-    #[default]
-    Reconciliation,
-    BrowserLaunchRecorded,
-    BrowserHealthChanged,
-    BrowserRecoveryStarted,
-    BrowserRecoveryOverride,
-    TabLifecycleChanged,
-    ProfileLeaseWaitStarted,
-    ProfileLeaseWaitEnded,
-    ProfileLeaseLifecycleChanged,
-    ViewerTakeoverRequested,
-    ViewerConnected,
-    ViewerDisconnected,
-    ControllerRequested,
-    ControllerGranted,
-    ControllerDenied,
-    RouteReleased,
-    ReconciliationError,
-    IncidentAcknowledged,
-    IncidentResolved,
-    JobTerminal,
-}
-
 fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
     let mut grouped = BTreeMap::<String, ServiceIncident>::new();
 
@@ -4846,18 +4683,27 @@ pub use agent_browser_service_model::{
     BrowserRecordAuthoritySource, BrowserRecordLifecycleClassification, BrowserRecordProvenance,
     BrowserRecordSource, BrowserSession, BrowserTab, Challenge, ChallengePolicy, ChallengeState,
     ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt, InteractionMode,
-    LeaseState, ProfileAllocationPolicy, ProfileClass, ProfileConnectionState,
-    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState,
-    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
-    ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness,
+    JobControlPlaneMode, JobPriority, JobState, JobTarget, LeaseState, ProfileAllocationPolicy,
+    ProfileClass, ProfileConnectionState, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileOrigin, ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
+    ProfileSeedingMode, ProfileSelectionReason, ProfileSourceRecord, ProfileTargetReadiness,
     ProtectedBrowserOwnerObservation, RateLimitPolicy, RemoteViewAcquisitionLease,
     RemoteViewHandoff, RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry,
     ServiceActor, ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEntitySources,
-    ServiceProvider, ServiceTabHandle, ServiceTabHandleTraceFilter, SessionCleanupPolicy,
-    SitePolicy, SitePolicySourceRecord, TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
+    ServiceEvent, ServiceEventKind, ServiceIncident, ServiceIncidentEscalation,
+    ServiceIncidentSeverity, ServiceIncidentState, ServiceJob, ServiceProvider, ServiceTabHandle,
+    ServiceTabHandleTraceFilter, SessionCleanupPolicy, SitePolicy, SitePolicySourceRecord,
+    TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 #[cfg(test)]
-pub use agent_browser_service_model::{ChallengeKind, ProviderCapability, ProviderKind};
+pub use agent_browser_service_model::{
+    ChallengeKind, ProviderCapability, ProviderKind, SERVICE_EVENT_KIND_VALUES,
+    SERVICE_INCIDENT_ESCALATION_VALUES, SERVICE_INCIDENT_SEVERITY_VALUES,
+    SERVICE_INCIDENT_STATE_VALUES, SERVICE_JOB_CONTROL_PLANE_MODE_VALUES,
+    SERVICE_JOB_NAMING_WARNING_VALUES, SERVICE_JOB_PRIORITY_VALUES, SERVICE_JOB_STATE_VALUES,
+};
 #[cfg(test)]
 use agent_browser_service_model::{
     ProfileChildAccess, SERVICE_BROWSER_BUILD_VALUES, SERVICE_BROWSER_HEALTH_VALUES,
@@ -5115,116 +4961,6 @@ fn boot_epoch_is_prior(
     )
 }
 
-/// Queued or completed service work item.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ServiceJob {
-    pub id: String,
-    pub action: String,
-    /// Immutable, redacted causal identity captured at runtime-lane ingress.
-    pub provenance: super::service_request_provenance::ServiceRequestProvenance,
-    /// Canonical result attached once the job reaches a terminal state.
-    pub terminal_outcome: Option<super::service_terminal_outcome::ServiceTerminalOutcome>,
-    /// Service-level caller label supplied by MCP, CLI, HTTP, or API clients.
-    pub service_name: Option<String>,
-    /// Agent-level caller label supplied by MCP, CLI, HTTP, or API clients.
-    pub agent_name: Option<String>,
-    /// Task-level caller label supplied by MCP, CLI, HTTP, or API clients.
-    pub task_name: Option<String>,
-    /// Target service or identity-provider hint supplied by the caller.
-    pub target_service_id: Option<String>,
-    /// Site hint supplied by the caller. This is treated as a target-service alias.
-    pub site_id: Option<String>,
-    /// Login identity hint supplied by the caller. This is treated as a target-service alias.
-    pub login_id: Option<String>,
-    /// Normalized target-service, site, and login identity hints used for profile selection.
-    pub target_service_ids: Vec<String>,
-    /// Non-blocking policy warnings for missing caller labels.
-    ///
-    /// Current warning values are the `SERVICE_JOB_NAMING_WARNING_VALUES`
-    /// constants.
-    pub naming_warnings: Vec<String>,
-    /// True when `naming_warnings` is non-empty.
-    pub has_naming_warning: bool,
-    /// Control-plane mode required for this job. CDP-free jobs launch or manage
-    /// browsers without attaching a DevTools endpoint.
-    pub control_plane_mode: JobControlPlaneMode,
-    /// True when this job manages process or profile lifecycle rather than a
-    /// CDP-backed tab interaction.
-    pub lifecycle_only: bool,
-    /// Remote-headed display allocation requested by the caller or access plan.
-    pub display_isolation: Option<String>,
-    /// Display allocation id requested by the caller, when distinct from the
-    /// resolved allocation that eventually backs the browser workspace.
-    pub requested_display_allocation_id: Option<String>,
-    /// Display allocation id resolved by launch, focus, route allocation, or
-    /// viewer takeover handling.
-    pub display_allocation_id: Option<String>,
-    /// Remote-view route id requested by the caller.
-    pub requested_remote_view_route_id: Option<String>,
-    /// Remote-view route id resolved by the service or provider.
-    pub remote_view_route_id: Option<String>,
-    /// Static route-pool entry used to resolve the remote-view route.
-    pub route_pool_entry_id: Option<String>,
-    /// Viewer lease id requested or created by a view operation.
-    pub viewer_lease_id: Option<String>,
-    /// Controller lease id requested or granted by a view operation.
-    pub controller_lease_id: Option<String>,
-    pub target: JobTarget,
-    pub owner: ServiceActor,
-    pub state: JobState,
-    pub priority: JobPriority,
-    pub submitted_at: Option<String>,
-    pub started_at: Option<String>,
-    pub completed_at: Option<String>,
-    pub timeout_ms: Option<u64>,
-    pub result: Option<serde_json::Value>,
-    pub error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub failure: Option<super::service_failure::ServiceFailureRecourse>,
-}
-
-impl Default for ServiceJob {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            action: String::new(),
-            provenance: super::service_request_provenance::ServiceRequestProvenance::default(),
-            terminal_outcome: None,
-            service_name: None,
-            agent_name: None,
-            task_name: None,
-            target_service_id: None,
-            site_id: None,
-            login_id: None,
-            target_service_ids: Vec::new(),
-            naming_warnings: Vec::new(),
-            has_naming_warning: false,
-            control_plane_mode: JobControlPlaneMode::Cdp,
-            lifecycle_only: false,
-            display_isolation: None,
-            requested_display_allocation_id: None,
-            display_allocation_id: None,
-            requested_remote_view_route_id: None,
-            remote_view_route_id: None,
-            route_pool_entry_id: None,
-            viewer_lease_id: None,
-            controller_lease_id: None,
-            target: JobTarget::Service,
-            owner: ServiceActor::System,
-            state: JobState::Queued,
-            priority: JobPriority::Normal,
-            submitted_at: None,
-            started_at: None,
-            completed_at: None,
-            timeout_ms: None,
-            result: None,
-            error: None,
-            failure: None,
-        }
-    }
-}
-
 /// Site or tab heartbeat managed by the service.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -5307,50 +5043,6 @@ pub(crate) fn controller_authority_fence_matches(
                 && stream.controller_epoch == controller_epoch
         })
     })
-}
-
-/// Queue target for a service job.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JobTarget {
-    Service,
-    Browser(String),
-    Tab(String),
-    Profile(String),
-    Monitor(String),
-    Challenge(String),
-}
-
-/// Queue lifecycle for a service job.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JobState {
-    Queued,
-    WaitingProfileLease,
-    Running,
-    Succeeded,
-    Failed,
-    Cancelled,
-    TimedOut,
-}
-
-/// Job dispatch priority.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JobPriority {
-    Low,
-    Normal,
-    Lifecycle,
-}
-
-/// Control-plane attachment posture for a service job.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JobControlPlaneMode {
-    #[default]
-    Cdp,
-    CdpFree,
-    Service,
 }
 
 /// Monitor target variants.
