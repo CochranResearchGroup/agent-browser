@@ -8,21 +8,28 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), and [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
 
-## Turn 369 | 2026-09-16
+## Turn 370 | 2026-09-16
 
 [Plan 0197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
-version 7 is source-complete locally at `ea519565`. P197 merged P202 dependency
-head `6f099292`, including current `main` through P203, without textual
-conflicts and preserved both public-documentation deltas. Formatting, strict
-workspace Clippy, all 16 challenge-control tests, four focused consumer
-regressions, Service API/MCP parity, full service-client checks, no-launch
-Service collections, route-confusion gates, the docs build, and documentation
-contract checks pass on the combined source. P202 [PR
-#168](https://github.com/CochranResearchGroup/agent-browser/pull/168) retains
-its protected merge transition at exact head `6f099292`; CI run
-`35166053829` is the remaining dependency gate. After P202 enters `main`,
-P197 will reconcile the canonical branch, publish one final checkpoint, and
-complete exact-head CI for [PR
-#157](https://github.com/CochranResearchGroup/agent-browser/pull/157). No
-browser, CAPTCHA, provider, credential, installed-runtime, Service State,
-production, or release effect occurred.
+joins canonical `main@2632e31c` after P202 protected integration and closeout.
+The source merge is clean outside this runbook projection, retains the complete
+P197 consumer-admission implementation and combined provider-free validation,
+and removes P202 as an active dependency. Final plan and lane reconciliation,
+branch publication, exact-head forge evaluation, and protected P197 integration
+remain. W7-A is selected as the next provider-free challenge packet but is not
+admitted while P197 retains primary worktree custody. No browser, CAPTCHA,
+provider, credential, installed-runtime, Service State, production, release, or
+CI-policy effect occurred.
+
+## Turn 369 | 2026-09-16
+
+[Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+is closed. [PR #168](https://github.com/CochranResearchGroup/agent-browser/pull/168)
+merged source head `6f099292` into `main` as `528f2ef0`; issue #103 closed.
+Provider-free qualification and the isolated disposable real-browser acceptance
+passed. CI run `35163527521` passed every ordinary gate at reviewed code head
+`d7ceca98`; the final head added only integrated P203 closeout documentation,
+and its in-flight Rust rerun was cancelled after the PR merged. P202 is removed
+from the active-lane catalog and releases its shared surfaces to P197. No
+browser, provider, credential, profile, installed-runtime, Service State,
+production, or release effect occurred during integration or closeout.
