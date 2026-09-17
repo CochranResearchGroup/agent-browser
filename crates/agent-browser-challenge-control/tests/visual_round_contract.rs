@@ -714,6 +714,111 @@ fn cumulative_budget_is_not_renewed_by_a_new_round() {
 }
 
 #[test]
+fn selection_budget_boundaries_do_not_saturate_cumulative_totals() {
+    let mut policy = policy();
+    policy.max_selections_per_round = 250;
+    policy.max_total_selections = u8::MAX;
+
+    let mut evidence = evidence(2, 1_000);
+    evidence.candidate_ids = (0..10)
+        .map(|index| format!("round:2:candidate:{index}"))
+        .collect();
+    evidence.candidate_set_digest = visual_candidate_set_digest(&evidence.candidate_ids);
+    evidence.evidence_digest = visual_round_evidence_digest(&evidence);
+
+    let mut near_limit = VisualRoundSnapshot::new("task:visual", "attempt:1").unwrap();
+    near_limit.phase = VisualRoundPhase::AwaitingSelection;
+    near_limit.next_round_index = 2;
+    near_limit.completed_rounds = 1;
+    near_limit.total_selections = 250;
+    near_limit.completed_round_ids = vec!["round:1".to_string()];
+    near_limit.active_evidence = Some(evidence.clone());
+    let selected = VisualRoundSelection {
+        round_id: evidence.round_id.clone(),
+        evidence_digest: evidence.evidence_digest.clone(),
+        candidate_set_digest: evidence.candidate_set_digest.clone(),
+        selected_candidate_ids: evidence.candidate_ids.clone(),
+        planned_steps: 1,
+        planned_pointer_events: 4,
+        planned_key_events: 0,
+        provider_capability: capability(),
+    };
+
+    let decision = decide_visual_round(
+        &policy,
+        &near_limit,
+        VisualRoundEvent::Select {
+            selection: selected,
+            now_ms: 1_100,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        decision.snapshot().intervention,
+        Some(VisualRoundInterventionReason::CumulativeBudgetExceeded)
+    );
+    assert!(!matches!(
+        decision,
+        VisualRoundDecision::PermitIntent { .. }
+    ));
+}
+
+#[test]
+fn selection_budget_boundaries_report_typed_intervention_for_unrepresentable_count() {
+    let mut policy = policy();
+    policy.max_selections_per_round = u8::MAX;
+    policy.max_total_selections = u8::MAX;
+
+    let mut evidence = evidence(1, 1_000);
+    evidence.candidate_ids = (0..=u8::MAX)
+        .map(|index| format!("round:1:candidate:{index}"))
+        .collect();
+    evidence.candidate_set_digest = visual_candidate_set_digest(&evidence.candidate_ids);
+    evidence.evidence_digest = visual_round_evidence_digest(&evidence);
+
+    let initial = VisualRoundSnapshot::new("task:visual", "attempt:1").unwrap();
+    let observed = decide_visual_round(
+        &policy,
+        &initial,
+        VisualRoundEvent::Observe {
+            evidence: evidence.clone(),
+            now_ms: 1_000,
+        },
+    )
+    .unwrap();
+    let selected = VisualRoundSelection {
+        round_id: evidence.round_id.clone(),
+        evidence_digest: evidence.evidence_digest.clone(),
+        candidate_set_digest: evidence.candidate_set_digest.clone(),
+        selected_candidate_ids: evidence.candidate_ids.clone(),
+        planned_steps: 1,
+        planned_pointer_events: 4,
+        planned_key_events: 0,
+        provider_capability: capability(),
+    };
+
+    let decision = decide_visual_round(
+        &policy,
+        observed.snapshot(),
+        VisualRoundEvent::Select {
+            selection: selected,
+            now_ms: 1_100,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        decision.snapshot().intervention,
+        Some(VisualRoundInterventionReason::RoundBudgetExceeded)
+    );
+    assert!(!matches!(
+        decision,
+        VisualRoundDecision::PermitIntent { .. }
+    ));
+}
+
+#[test]
 fn partial_and_uncertain_effects_never_continue_to_another_round() {
     let policy = policy();
     for (delivery, reason) in [
