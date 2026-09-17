@@ -22,10 +22,12 @@ crate tests, including the complete 23-case visual-round matrix, the crate
 architecture guard, formatting, strict workspace Clippy and diff hygiene pass.
 P197 head `cd22a39f` passed all ordinary required checks and merged through PR
 #157 as `c855fc33`. P206 joined that canonical checkpoint at tree-preserving
-merge `5d6e3d57` and is reconciling merged P204 checkpoint `f5e3f31b` before
-exact-head forge evaluation and protected P206 integration. No browser, model
-provider, CAPTCHA, desktop input, credential, installed runtime, production or
-CI-policy effect occurred.
+merge `5d6e3d57`, then joined merged P204 and current `main@f5e3f31b` at
+`89bdfdbf`. Reconciled local validation passes the 39-test challenge-control
+compartment, strict workspace Clippy and formatting, four architecture guards,
+and 114 selector-expanded extracted-crate tests. Exact-head forge evaluation
+and protected P206 integration remain. No browser, model provider, CAPTCHA,
+desktop input, credential, installed runtime or production effect occurred.
 
 ## Turn 372 | 2026-09-16
 

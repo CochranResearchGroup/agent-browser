@@ -256,7 +256,9 @@ on `challenge/p206-visual-round-contract` from exact published P197 head
 pure provider-free round contract and 23-case synthetic matrix are green with the complete crate,
 architecture, formatting and strict Clippy gates. P197 merged through PR #157
 as `c855fc33`; P206 joined that canonical checkpoint at `5d6e3d57` without a
-tree change. Exact-head forge evaluation and protected P206 integration remain.
+tree change, then joined merged P204 and current `main@f5e3f31b` at
+`89bdfdbf`. Reconciled local path-selected validation passes. Exact-head forge
+evaluation and protected P206 integration remain.
 Issue #66 retains the separately live-gated challenge acceptance leaf. This
 registration authorizes no challenge attempt, retry, browser effect, provider
 effect, credential use, runtime mutation, installation, or release.
