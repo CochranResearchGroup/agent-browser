@@ -31,15 +31,16 @@ State: OPEN
 
 Current state: [Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md),
 [issue #171](https://github.com/CochranResearchGroup/agent-browser/issues/171),
-and draft [PR #182](https://github.com/CochranResearchGroup/agent-browser/pull/182)
+and ready [PR #182](https://github.com/CochranResearchGroup/agent-browser/pull/182)
 own the `PL-PLATFORM` repair. The rebased source serializes one durable
 repository-scoped closeout operation, requires explicit retain, archive, or
 discard choices for pinned candidates, verifies external archives from a fresh
 process, and recovers interrupted archive and Git-removal effects. The merged
-P204 validation contract now includes a lightweight `Repository Tooling` lane
-for these provider-free Node contracts. Local source, concurrency, crash,
-policy, selector, and workflow checks are green; exact-head forge evaluation
-and protected integration remain. No worktree outside disposable fixtures,
+P204 validation contract retains a lightweight `Repository Tooling` lane for
+these provider-free Node contracts in the dormant workflow. Exact-head
+`8a010264` passed run `35227459177` before CI was disabled. The branch is
+rebased onto `main@f6d49f89`, conflict-affected local checks pass, and PR
+integration remains. No worktree outside disposable fixtures,
 candidate, browser, provider, installed runtime, Service State, production, or
 release effect occurred.
 

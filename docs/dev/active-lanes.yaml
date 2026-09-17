@@ -51,16 +51,16 @@ lanes:
     branch: platform/p208-worktree-closeout
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 5b369e3399c6d5bef1e8591092866d3a85f86acd
+    custody_state: PUBLISHED_INTEGRATION_READY
+    checkpoint: 8c5137890c0224d60965104d964a789fda9b9396
     remote_ref: refs/remotes/origin/platform/p208-worktree-closeout
     integration_receipt: null
-    integration: merge through the protected `main` workflow after provider-free concurrency, crash-recovery, candidate-custody, and changed-surface validation
-    validation_status: provider-free closeout, candidate-build, selector, workflow, policy, planning, documentation-link, docs-build, release-verifier, and package-command checks green locally; exact-head forge evaluation pending
-    validation_ref: 5b369e3399c6d5bef1e8591092866d3a85f86acd
+    integration: merge through PR #182 after provider-free validation; GitHub CI remains disabled by separate operator direction
+    validation_status: pre-rebase exact head 8a010264 passed run 35227459177 including Repository Tooling and Presubmit; rebased conflict surfaces pass repository-tooling, selector, dormant-workflow, policy, planning, documentation-link, and docs-build checks locally
+    validation_ref: 8c5137890c0224d60965104d964a789fda9b9396
     work_items: [CochranResearchGroup/agent-browser#171]
     dependencies: []
     overlaps: []
-    reconciled_overlaps: [P204 integrated through PR #179; P208 rebased onto merge f5e3f31b and preserves P204 open records]
-    blocker: exact-head forge evaluation and protected integration remain
+    reconciled_overlaps: [P204 CI shutdown integrated through PRs #185 and #186; P208 rebased onto f6d49f89 and preserves the disabled-workflow contract]
+    blocker: PR #182 integration remains; automatic exact-head forge evaluation is intentionally unavailable while CI is disabled
     updated_at: 2026-09-17

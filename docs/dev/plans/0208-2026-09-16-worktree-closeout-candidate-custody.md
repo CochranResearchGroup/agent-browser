@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -18,18 +18,19 @@ Branch: `platform/p208-worktree-closeout`
 
 Target: `main`
 
-Integration: merge through the protected `main` workflow after provider-free
-concurrency, crash-recovery, candidate-custody, and changed-surface validation
+Integration: merge through pull request #182 after provider-free concurrency,
+crash-recovery, candidate-custody, and changed-surface validation; GitHub CI
+remains disabled by separate operator direction
 
-Source baseline: `2632e31ce34e62873598088d0c92c498357aafe2`
+Source baseline: `f6d49f8959a23307205cad10b58b13d69ac05d16`
 
-Implementation checkpoint: `907ae9f2fe669478b73f152f84d9e25a59cfb7db`
+Implementation checkpoint: `8c5137890c0224d60965104d964a789fda9b9396`
 
-Validation-wiring checkpoint: `9d34365d302baa7725b3d4689a7b079dea4258a5`
+Validation-wiring checkpoint: `e757add6`
 
-Local validation checkpoint: `5b369e3399c6d5bef1e8591092866d3a85f86acd`
+Local validation checkpoint: `8c5137890c0224d60965104d964a789fda9b9396`
 
-Pull request: `CochranResearchGroup/agent-browser#182` (draft pending exact-head validation)
+Pull request: `CochranResearchGroup/agent-browser#182` (ready; integration pending)
 
 ## Objective
 
@@ -58,11 +59,15 @@ was reconciled into this P208 branch. This is evidence for serializing the
 inventory-to-transition boundary, not a substitute for the required
 provider-free regression.
 
-P204 merged through PR #179 as `f5e3f31b` after its exact-head CI passed. P208
-is rebased onto that integration point and now owns its bounded shared-surface
-transition while preserving P204's still-open issue #164 records. The merged
-selector and aggregate now include a dedicated provider-free `Repository
-Tooling` lane for candidate-build and worktree-closeout contracts.
+P204 first merged its path-selected validation contract through PR #179 as
+`f5e3f31b`. P208 exact-head `8a010264` then passed run `35227459177`, including
+the dedicated provider-free `Repository Tooling` lane and stable `Presubmit`.
+Subsequent operator direction disabled all GitHub CI through PRs #185 and #186.
+P208 is now rebased onto `origin/main@f6d49f89`; its repository-tooling job is
+retained only in `.github/workflows/ci.yml.disabled`, and no automatic trigger
+or dispatch route was restored. The conflict-affected selector, aggregate,
+workflow contract, policy, planning, documentation, and closeout surfaces pass
+locally at `8c513789`.
 
 ## Consolidated Batch
 
@@ -158,7 +163,7 @@ reasoning for the specialist tier.
 | Interrupted removal | Recovery reconciles filesystem and Git registration after intent or effect without a second removal | proven by post-removal recovery and CLI replay on `907ae9f2` |
 | Advisory authority | Status and plan remain read-only; explicit operator choices are supported and typed rather than reduced to generic denial | proven on rebased implementation `907ae9f2` |
 | Policy and documentation | Policies and command guidance describe the implemented boundary and raw-Git limitation | complete through policies, tested AGENTS/package invocation, and repository-tooling validation at `5b369e33` |
-| Integration | Final published head passes selected gates and enters `main` through the linked PR | draft PR #182; final exact-head gates and protected integration pending |
+| Integration | Validated source enters `main` through the linked PR without reviving disabled CI | pre-rebase exact-head run `35227459177` passed; rebased conflict surfaces pass locally at `8c513789`; PR #182 integration pending |
 
 ## Version 3 Checkpoint
 
@@ -179,8 +184,20 @@ the helper as `pnpm run worktree:closeout`, adds the provider-free repository
 tooling test command, and extends the versioned selector plus stable Presubmit
 aggregate with a dedicated `Repository Tooling` job. Local focused checks are
 green at `5b369e33`, including a read-only package-command invocation after the
-pnpm argument form was corrected. PR #182 remains draft only until the
-reconciled final head is published and exact-head forge evaluation completes.
+pnpm argument form was corrected. PR #182 was then published for exact-head
+forge evaluation.
+
+## Version 4 Checkpoint
+
+After the version 3 exact head passed GitHub run `35227459177`, operator-directed
+PRs #185 and #186 disabled GitHub CI and advanced `main` to `f6d49f89`. P208
+rebased onto that tip without restoring any active workflow. The dormant
+workflow retains the Repository Tooling definition for a future explicitly
+authorized re-enable. Rebase conflict resolution removed the obsolete
+`comprehensive` selector expectation and passed repository-tooling,
+validation-control-plane, policy, active-plan, documentation-link, and docs
+build checks locally. Automatic exact-head forge re-evaluation is unavailable
+by design; integration through PR #182 is the only remaining plan gate.
 
 Exit requires every row complete or an explicit separately tracked deferral that
 does not weaken the issue's promised outcome. A clean worktree, copied archive,
