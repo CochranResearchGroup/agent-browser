@@ -5840,7 +5840,7 @@ mod tests {
         dashboard_auth::verify_operator_focus(&state, &command).unwrap();
         assert_eq!(serde_json::to_value(&state).unwrap(), original);
         let provenance =
-            crate::native::service_request_provenance::ServiceRequestProvenance::capture(
+            crate::native::service_request_provenance::capture_service_request_provenance(
                 &command,
                 "request",
                 "job",

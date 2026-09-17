@@ -556,16 +556,56 @@ outcome, and failure-recourse records as the prerequisites for a cohesive
 job, event, and incident model packet; keep request handling, failure
 classification, and incident derivation in CLI adapters.
 
+## Checkpoint 9 | Request And Outcome Prerequisites
+
+State transition: the crate now owns request-provenance, terminal-outcome, and
+failure-recourse records plus the deterministic failure classifier. The CLI
+retains environment observation, ingress capture, native session attribution,
+and failed-response decoration as effect-facing adapters.
+
+Acceptance state and progress classification: this P1 prerequisite packet is
+accepted locally. It removes the remaining CLI-owned model dependencies that
+prevented `ServiceJob`, `ServiceEvent`, and `ServiceIncident` from moving as
+one cohesive durable family. The terminal projection and failure classifier
+are provider-free and deterministic; request capture still reads deployment
+environment only in the CLI.
+
+Evidence:
+
+- all 55 service-model crate unit and integration tests pass, including new
+  wire-contract, privacy-bound, failure-classification, and terminal-projection
+  coverage;
+- four CLI provenance-capture tests pass through the new adapter;
+- three CLI response-decoration tests pass while the full pure classifier
+  matrix now runs in the crate;
+- Service collection wire-shape and nested-state round-trip tests pass;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no browser, profile, provider, runtime, install, staging, production,
+  release, or GitHub CI effect was performed.
+
+Material blockers: the canonical aggregate remains in the CLI. Job, event,
+and incident records are now dependency-ready, while receipt, transaction,
+migration, runtime-owner, authentication, recovery, lifecycle, and capacity
+families remain distributed across their effect adapters. P204 still owns the
+shared validation and roadmap surfaces.
+
+Next action: publish this checkpoint, then extract `ServiceJob`,
+`ServiceEvent`, and `ServiceIncident` together with only their deterministic
+record-level helpers. Keep incident derivation, journal persistence, transport,
+monitoring, and retention in CLI adapters.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | eight families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | nine families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | eight packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | eight packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | nine packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | nine packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

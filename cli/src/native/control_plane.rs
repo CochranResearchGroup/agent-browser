@@ -40,7 +40,9 @@ use super::service_model::{
 use super::service_monitors::{
     persisted_due_monitor_work_pending, SERVICE_MONITORS_RUN_DUE_ACTION,
 };
-use super::service_request_provenance::ServiceRequestProvenance;
+use super::service_request_provenance::{
+    capture_service_request_provenance, ServiceRequestProvenance,
+};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_terminal_outcome::{
     ServiceTerminalOutcome, ServiceTerminalPhase, ServiceTerminalState,
@@ -478,7 +480,7 @@ impl ControlPlaneHandle {
             agent_name.as_deref(),
             task_name.as_deref(),
         );
-        let provenance = ServiceRequestProvenance::capture(
+        let provenance = capture_service_request_provenance(
             &command,
             if id.is_empty() { &job_id } else { &id },
             &job_id,
@@ -1519,7 +1521,7 @@ fn enqueue_due_monitor_run(
         "action": SERVICE_MONITORS_RUN_DUE_ACTION,
     });
     let connection_instance_id = super::service_connection_lifetime::new_connection_id();
-    let provenance = ServiceRequestProvenance::capture(
+    let provenance = capture_service_request_provenance(
         &command,
         &id,
         &id,
@@ -3011,7 +3013,7 @@ mod tests {
 
     fn control_request_for_mode_test(command: Value) -> ControlRequest {
         let (response_tx, _response_rx) = oneshot::channel();
-        let provenance = ServiceRequestProvenance::capture(
+        let provenance = capture_service_request_provenance(
             &command,
             "mode-test",
             "mode-test",

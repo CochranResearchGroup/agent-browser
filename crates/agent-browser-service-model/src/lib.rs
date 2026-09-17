@@ -6,12 +6,15 @@
 mod browser_process;
 mod browser_profile;
 mod entity_source;
+mod failure_recourse;
 mod presentation;
 mod profile_access;
 mod profile_readiness;
 mod profile_seeding;
+mod request_provenance;
 mod session_tab;
 mod site_policy;
+mod terminal_outcome;
 
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
@@ -25,6 +28,11 @@ pub use browser_profile::{
     SERVICE_PROFILE_CLASS_VALUES,
 };
 pub use entity_source::{ServiceEntitySource, ServiceEntitySources};
+pub use failure_recourse::{
+    child_access_failure_evidence, classify_service_failure, operator_focus_failure_code,
+    profile_child_denial_error, ServiceEffectState, ServiceFailureAxis, ServiceFailurePhase,
+    ServiceFailureRecourse, ServiceRetryDisposition, SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION,
+};
 pub use presentation::{
     ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,
     RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
@@ -56,6 +64,10 @@ pub use profile_seeding::{
     ProfileSeedingMode, SERVICE_PROFILE_SEEDING_HANDOFF_STATE_VALUES,
     SERVICE_PROFILE_SEEDING_MODE_VALUES,
 };
+pub use request_provenance::{
+    normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,
+    SERVICE_REQUEST_PROVENANCE_SCHEMA_VERSION,
+};
 pub use session_tab::{
     BrowserSession, BrowserTab, LeaseState, ProfileLeaseDisposition, ProfileSelectionReason,
     ServiceActor, ServiceTabHandle, ServiceTabHandleTraceFilter, SessionCleanupPolicy,
@@ -71,4 +83,8 @@ pub use site_policy::{
     SERVICE_CHALLENGE_POLICY_VALUES, SERVICE_CHALLENGE_STATE_VALUES,
     SERVICE_INTERACTION_MODE_VALUES, SERVICE_PROVIDER_CAPABILITY_VALUES,
     SERVICE_PROVIDER_KIND_VALUES,
+};
+pub use terminal_outcome::{
+    ServiceTerminalOutcome, ServiceTerminalPhase, ServiceTerminalState,
+    SERVICE_TERMINAL_OUTCOME_SCHEMA_VERSION,
 };
