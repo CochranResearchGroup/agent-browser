@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 3
+Plan version: 4
 
-State: OPEN
+State: SOURCE ACCEPTED | INTEGRATION READY
 
 Consolidation: required
 
@@ -46,9 +46,10 @@ P206 and P209 are integrated in dependency order. P209 exact head `27cd5342`
 merged through PR #188 as canonical `main@fb616aee`. The existing clean
 challenge worktree is assigned to P210 at that exact baseline, the proposed
 adapter-crate path has no competing writer, and the baseline selector reports
-no changed files. Source implementation and the provider-free fixture matrix
-remain. GitHub CI is operator-disabled and no workflow will be restored or
-dispatched for this packet.
+no changed files. Source checkpoint `0729b63d` implements the provider-free
+adapter and complete fixture matrix. GitHub CI is operator-disabled and no
+workflow will be restored or dispatched for this packet. Branch publication
+and normal protected integration remain.
 
 ## Dependency And Admission Gate
 
@@ -114,7 +115,8 @@ The proposed contract contains:
 - `VisualProviderInvocation`: the exact P209 request plus the matching prepared
   payload, with one canonical invocation digest;
 - `VisualProviderTransport`: one injected call that accepts the invocation and
-  returns serialized response bytes or a typed transport failure; and
+  returns serialized response bytes with a receipt timestamp, or a typed
+  transport failure; and
 - one orchestration function that validates the payload, prepares the P209
   request, calls the injected transport at most once, strictly parses the
   response and delegates semantic adjudication back to P209.
@@ -249,8 +251,43 @@ strict workspace Clippy, changed-surface selection and diff hygiene at one
 clean commit.
 
 Publication requires P209's canonical integration receipt, a branch based on
-that exact `main`, durable remote custody and the protected validation path in
-effect at admission time.
+that exact `main`, durable remote custody and a normal protected merge. GitHub
+CI is operator-disabled and is not part of this packet's publication path.
+
+## Source Acceptance | 2026-09-17
+
+Checkpoint `0729b63d` adds the pure
+`agent-browser-challenge-visual-adapter` crate. It validates an exact
+repository-owned payload envelope, enforces media, dimension and byte
+ceilings, binds deterministic artifact and invocation digests, prepares the
+P209 request, calls one injected transport at most once, strictly parses its
+bounded response and delegates semantic adjudication back to P209. Payload and
+provider-response bytes are redacted from `Debug` output and are absent from
+typed errors.
+
+The first tracer moved from missing public contracts to one bound selection
+after exactly one fake call. A policy-ambiguity regression then proved
+duplicate media allowlist entries fail before transport. Review found two
+temporal boundary defects before checkpointing: artifact expiry originally
+matched evidence expiry even when the exact request deadline was earlier, and
+adjudication originally reused request time after transport. The repaired
+contract binds artifact expiry to the exact request boundary and requires the
+transport to return a redacted receipt timestamp for response adjudication.
+
+Local acceptance passes:
+
+- all 52 challenge-control tests and all 10 adapter tests;
+- the challenge-control and new adapter architecture guards;
+- workspace formatting and strict workspace Clippy;
+- diff hygiene, documentation links and the active planning audit; and
+- changed-surface selection from `main@fb616aee`.
+
+The selector expands to broad validation because the new workspace member
+updates the shared lockfile. CDP, Lease Authority and desktop-services source
+and dependency closures are unchanged, so their previously accepted evidence
+remains reusable under the current validation policy. No browser, image
+capture, provider, credential, CAPTCHA, desktop-input, runtime, production or
+CI effect occurred.
 
 ## Stop Condition
 

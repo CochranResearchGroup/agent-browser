@@ -9,6 +9,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P210](docs/dev/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md)
 
+## Turn 383 | 2026-09-17
+
+P210 source checkpoint `0729b63d` adds the pure visual artifact and one-shot
+injected transport adapter. Ten adapter fixtures prove exact payload custody,
+deterministic digests, zero-call invalid input, explicit byte ceilings,
+one-call transport and malformed-output failure, strict effect-smuggling
+rejection, typed abstention, delayed response receipt time and raw-byte
+redaction. Review repaired exact artifact/request expiry binding and separated
+request time from transport receipt time. All 52 challenge-control tests, 10
+adapter tests, both architecture guards, workspace formatting, strict
+workspace Clippy and diff hygiene pass. GitHub CI remains disabled and was not
+restored or run. Publication and protected integration remain. No browser,
+image capture, real provider, credential, CAPTCHA, desktop-input, runtime or
+production effect occurred.
+
 ## Turn 382 | 2026-09-17
 
 P209 exact head `27cd5342` merged through PR #188 as `fb616aee`. P210 is

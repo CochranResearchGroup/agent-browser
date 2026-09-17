@@ -311,7 +311,12 @@ source-identical. P209 exact head `27cd5342` merged through PR #188 as
 on `challenge/p210-visual-artifact-adapter` from that exact canonical baseline.
 It owns only a pure artifact-custody and one-shot injected fake-provider
 adapter. GitHub CI remains operator-disabled. The packet creates no real
-provider, browser, credential, CAPTCHA, runtime or production authority.
+provider, browser, credential, CAPTCHA, runtime or production authority. P210
+source checkpoint `0729b63d` now implements that boundary with 10 adapter
+fixtures. All 52 challenge-control tests, both architecture guards, workspace
+formatting and strict workspace Clippy pass. Review repaired exact
+artifact/request expiry binding and delayed provider receipt-time
+adjudication. Publication and protected integration remain.
 
 ## P186 | Route Viewer Admission Drain Recovery
 
