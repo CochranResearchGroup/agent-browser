@@ -22,6 +22,14 @@ pub struct PreparedVisualArtifact {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct VisualRoundExecutionPlan {
+    pub planned_steps: u8,
+    pub planned_pointer_events: u8,
+    pub planned_key_events: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VisualProviderRequest {
     pub task_id: String,
     pub attempt_id: String,
@@ -36,6 +44,7 @@ pub struct VisualProviderRequest {
     pub candidate_set_digest: String,
     pub candidate_ids: Vec<String>,
     pub prepared_artifact: PreparedVisualArtifact,
+    pub execution_plan: VisualRoundExecutionPlan,
     pub provider_capability: VisualProviderCapability,
     pub requested_at_ms: u64,
     pub expires_at_ms: u64,
@@ -81,12 +90,14 @@ pub enum VisualProviderError {
     InvalidPolicy,
     InvalidEvidence,
     InvalidArtifact,
+    InvalidExecutionPlan,
 }
 
 pub fn prepare_visual_provider_request(
     policy: &VisualRoundPolicy,
     evidence: &VisualRoundEvidence,
     prepared_artifact: PreparedVisualArtifact,
+    execution_plan: VisualRoundExecutionPlan,
     now_ms: u64,
 ) -> Result<VisualProviderRequest, VisualProviderError> {
     if !valid_policy_identity(policy) {
@@ -104,6 +115,9 @@ pub fn prepare_visual_provider_request(
     {
         return Err(VisualProviderError::InvalidArtifact);
     }
+    if !valid_execution_plan(policy, &execution_plan) {
+        return Err(VisualProviderError::InvalidExecutionPlan);
+    }
 
     let mut request = VisualProviderRequest {
         task_id: evidence.task_id.clone(),
@@ -119,6 +133,7 @@ pub fn prepare_visual_provider_request(
         candidate_set_digest: evidence.candidate_set_digest.clone(),
         candidate_ids: evidence.candidate_ids.clone(),
         prepared_artifact,
+        execution_plan,
         provider_capability: evidence.provider_capability.clone(),
         requested_at_ms: now_ms,
         expires_at_ms: evidence.expires_at_ms.min(policy.deadline_at_ms),
@@ -200,9 +215,7 @@ pub fn adjudicate_visual_provider_response(
                 VisualProviderDecision::Intervention(
                     VisualRoundInterventionReason::CandidateMismatch,
                 )
-            } else if selection_count > policy.max_selections_per_round
-                || selection_count > policy.max_pointer_events_per_round
-            {
+            } else if selection_count > policy.max_selections_per_round {
                 VisualProviderDecision::Intervention(
                     VisualRoundInterventionReason::RoundBudgetExceeded,
                 )
@@ -212,9 +225,9 @@ pub fn adjudicate_visual_provider_response(
                     evidence_digest: evidence.evidence_digest.clone(),
                     candidate_set_digest: evidence.candidate_set_digest.clone(),
                     selected_candidate_ids: selected_candidate_ids.clone(),
-                    planned_steps: 1,
-                    planned_pointer_events: selection_count,
-                    planned_key_events: 0,
+                    planned_steps: request.execution_plan.planned_steps,
+                    planned_pointer_events: request.execution_plan.planned_pointer_events,
+                    planned_key_events: request.execution_plan.planned_key_events,
                     provider_capability: response.provider_capability.clone(),
                 })
             }
@@ -236,6 +249,9 @@ pub fn visual_provider_request_digest(request: &VisualProviderRequest) -> String
     let round_index = request.round_index.to_string();
     let requested_at_ms = request.requested_at_ms.to_string();
     let expires_at_ms = request.expires_at_ms.to_string();
+    let planned_steps = request.execution_plan.planned_steps.to_string();
+    let planned_pointer_events = request.execution_plan.planned_pointer_events.to_string();
+    let planned_key_events = request.execution_plan.planned_key_events.to_string();
     let candidates_digest = visual_candidate_set_digest(&request.candidate_ids);
     digest_parts([
         request.task_id.as_str(),
@@ -252,6 +268,9 @@ pub fn visual_provider_request_digest(request: &VisualProviderRequest) -> String
         candidates_digest.as_str(),
         request.prepared_artifact.artifact_id.as_str(),
         request.prepared_artifact.artifact_digest.as_str(),
+        planned_steps.as_str(),
+        planned_pointer_events.as_str(),
+        planned_key_events.as_str(),
         request.provider_capability.capability_id.as_str(),
         request.provider_capability.capability_version.as_str(),
         request.provider_capability.capability_digest.as_str(),
@@ -307,6 +326,7 @@ fn request_matches(
         && request.candidate_ids == evidence.candidate_ids
         && !request.prepared_artifact.artifact_id.trim().is_empty()
         && valid_digest(&request.prepared_artifact.artifact_digest)
+        && valid_execution_plan(policy, &request.execution_plan)
         && request.provider_capability == policy.provider_capability
         && request.requested_at_ms >= evidence.observed_at_ms
         && request.expires_at_ms == evidence.expires_at_ms.min(policy.deadline_at_ms)
@@ -316,6 +336,20 @@ fn request_matches(
 
 fn valid_policy_identity(policy: &VisualRoundPolicy) -> bool {
     validate_policy(policy).is_ok()
+}
+
+fn valid_execution_plan(
+    policy: &VisualRoundPolicy,
+    execution_plan: &VisualRoundExecutionPlan,
+) -> bool {
+    execution_plan.planned_steps > 0
+        && execution_plan.planned_steps <= policy.max_steps_per_round
+        && execution_plan.planned_pointer_events <= policy.max_pointer_events_per_round
+        && execution_plan.planned_key_events <= policy.max_key_events_per_round
+        && execution_plan
+            .planned_pointer_events
+            .saturating_add(execution_plan.planned_key_events)
+            > 0
 }
 
 fn valid_evidence_for_policy(policy: &VisualRoundPolicy, evidence: &VisualRoundEvidence) -> bool {

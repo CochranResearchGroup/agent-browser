@@ -3,7 +3,8 @@ use agent_browser_challenge_control::{
     visual_candidate_set_digest, visual_provider_response_digest, visual_round_evidence_digest,
     PreparedVisualArtifact, VisualProviderCapability, VisualProviderDecision,
     VisualProviderDisposition, VisualProviderResponse, VisualRoundDecision, VisualRoundEvent,
-    VisualRoundEvidence, VisualRoundInterventionReason, VisualRoundPolicy, VisualRoundSnapshot,
+    VisualRoundEvidence, VisualRoundExecutionPlan, VisualRoundInterventionReason,
+    VisualRoundPolicy, VisualRoundSnapshot,
 };
 
 fn digest(byte: char) -> String {
@@ -66,6 +67,28 @@ fn prepared_artifact() -> PreparedVisualArtifact {
     }
 }
 
+fn execution_plan() -> VisualRoundExecutionPlan {
+    VisualRoundExecutionPlan {
+        planned_steps: 1,
+        planned_pointer_events: 4,
+        planned_key_events: 0,
+    }
+}
+
+fn prepare_request(
+    policy: &VisualRoundPolicy,
+    evidence: &VisualRoundEvidence,
+) -> agent_browser_challenge_control::VisualProviderRequest {
+    prepare_visual_provider_request(
+        policy,
+        evidence,
+        prepared_artifact(),
+        execution_plan(),
+        1_100,
+    )
+    .unwrap()
+}
+
 fn selected_response(
     request_digest: &str,
     evidence: &VisualRoundEvidence,
@@ -96,8 +119,7 @@ fn assert_intervention(decision: VisualProviderDecision, expected: VisualRoundIn
 fn valid_fake_provider_selection_crosses_the_round_seam_without_emitting_effects() {
     let policy = policy();
     let evidence = evidence();
-    let request =
-        prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100).unwrap();
+    let request = prepare_request(&policy, &evidence);
     let response = selected_response(
         &request.request_digest,
         &evidence,
@@ -110,6 +132,9 @@ fn valid_fake_provider_selection_crosses_the_round_seam_without_emitting_effects
     let VisualProviderDecision::Selection(selection) = decision else {
         panic!("expected a candidate-only selection");
     };
+    assert_eq!(selection.planned_steps, 1);
+    assert_eq!(selection.planned_pointer_events, 4);
+    assert_eq!(selection.planned_key_events, 0);
 
     let initial = VisualRoundSnapshot::new("task:visual", "attempt:1").unwrap();
     let observed = decide_visual_round(
@@ -142,10 +167,8 @@ fn valid_fake_provider_selection_crosses_the_round_seam_without_emitting_effects
 fn request_digest_is_deterministic_and_binds_candidate_order_and_artifact() {
     let policy = policy();
     let evidence = evidence();
-    let first =
-        prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100).unwrap();
-    let second =
-        prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100).unwrap();
+    let first = prepare_request(&policy, &evidence);
+    let second = prepare_request(&policy, &evidence);
     assert_eq!(first, second);
 
     let mut reordered = first.clone();
@@ -187,6 +210,14 @@ fn request_digest_is_deterministic_and_binds_candidate_order_and_artifact() {
             }),
         ),
         (
+            "executionPlan",
+            serde_json::json!({
+                "plannedSteps": 1,
+                "plannedPointerEvents": 3,
+                "plannedKeyEvents": 0
+            }),
+        ),
+        (
             "providerCapability",
             serde_json::json!({
                 "capabilityId": "fake-visual-reasoning-changed",
@@ -216,8 +247,7 @@ fn request_digest_is_deterministic_and_binds_candidate_order_and_artifact() {
 fn request_and_response_mutations_fail_before_selection() {
     let policy = policy();
     let evidence = evidence();
-    let request =
-        prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100).unwrap();
+    let request = prepare_request(&policy, &evidence);
     let response = selected_response(
         &request.request_digest,
         &evidence,
@@ -283,8 +313,7 @@ fn request_and_response_mutations_fail_before_selection() {
 fn stale_request_or_response_fails_before_selection() {
     let policy = policy();
     let evidence = evidence();
-    let request =
-        prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100).unwrap();
+    let request = prepare_request(&policy, &evidence);
     let response = selected_response(
         &request.request_digest,
         &evidence,
@@ -324,9 +353,7 @@ fn invalid_candidate_sets_and_budget_excess_fail_before_intent() {
         ),
     ] {
         let policy = policy();
-        let request =
-            prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100)
-                .unwrap();
+        let request = prepare_request(&policy, &evidence);
         let response = selected_response(&request.request_digest, &evidence, selected);
         assert_intervention(
             adjudicate_visual_provider_response(&policy, &evidence, &request, &response, 1_300)
@@ -337,9 +364,7 @@ fn invalid_candidate_sets_and_budget_excess_fail_before_intent() {
 
     let mut constrained = policy();
     constrained.max_selections_per_round = 1;
-    let request =
-        prepare_visual_provider_request(&constrained, &evidence, prepared_artifact(), 1_100)
-            .unwrap();
+    let request = prepare_request(&constrained, &evidence);
     let response = selected_response(
         &request.request_digest,
         &evidence,
@@ -353,11 +378,28 @@ fn invalid_candidate_sets_and_budget_excess_fail_before_intent() {
 }
 
 #[test]
+fn execution_budget_is_bound_before_provider_adjudication() {
+    let policy = policy();
+    let evidence = evidence();
+    let mut over_budget = execution_plan();
+    over_budget.planned_pointer_events = policy.max_pointer_events_per_round + 1;
+    assert_eq!(
+        prepare_visual_provider_request(
+            &policy,
+            &evidence,
+            prepared_artifact(),
+            over_budget,
+            1_100,
+        ),
+        Err(agent_browser_challenge_control::VisualProviderError::InvalidExecutionPlan)
+    );
+}
+
+#[test]
 fn typed_abstentions_preserve_their_intervention_reason() {
     let policy = policy();
     let evidence = evidence();
-    let request =
-        prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100).unwrap();
+    let request = prepare_request(&policy, &evidence);
     for (disposition, expected) in [
         (
             VisualProviderDisposition::Ambiguous,
@@ -387,8 +429,7 @@ fn typed_abstentions_preserve_their_intervention_reason() {
 fn serialized_effect_instructions_and_retry_fields_are_rejected() {
     let policy = policy();
     let evidence = evidence();
-    let request =
-        prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100).unwrap();
+    let request = prepare_request(&policy, &evidence);
     let response = selected_response(
         &request.request_digest,
         &evidence,
@@ -419,8 +460,7 @@ fn serialized_effect_instructions_and_retry_fields_are_rejected() {
 fn replaying_identical_provider_input_is_deterministic_and_effect_free() {
     let policy = policy();
     let evidence = evidence();
-    let request =
-        prepare_visual_provider_request(&policy, &evidence, prepared_artifact(), 1_100).unwrap();
+    let request = prepare_request(&policy, &evidence);
     let response = selected_response(
         &request.request_digest,
         &evidence,
