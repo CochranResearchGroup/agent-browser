@@ -1,46 +1,106 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
+
+import { classifyValidationSelection } from '../lib/validation-selection.js';
 
 const args = process.argv.slice(2);
 const baseArgIndex = args.findIndex((arg) => arg === '--base');
+const headArgIndex = args.findIndex((arg) => arg === '--head');
+const githubOutputArgIndex = args.findIndex((arg) => arg === '--github-output');
+const qualificationArgIndex = args.findIndex((arg) => arg === '--qualification');
 const json = args.includes('--json');
+const ci = args.includes('--ci');
 const base = baseArgIndex >= 0 ? args[baseArgIndex + 1] : defaultBase();
+const head = headArgIndex >= 0 ? args[headArgIndex + 1] : 'HEAD';
+const githubOutput = githubOutputArgIndex >= 0 ? args[githubOutputArgIndex + 1] : null;
+const qualificationMode = qualificationArgIndex >= 0 ? args[qualificationArgIndex + 1] : undefined;
 
-if (baseArgIndex >= 0 && !base) {
-  console.error('Missing value for --base');
+if (!base || !head || (githubOutputArgIndex >= 0 && !githubOutput) || (qualificationArgIndex >= 0 && !qualificationMode)) {
+  console.error('Missing value for --base, --head, --github-output, or --qualification');
+  process.exit(2);
+}
+if (qualificationMode && qualificationMode !== 'comprehensive') {
+  console.error(`Unsupported qualification mode: ${qualificationMode}`);
   process.exit(2);
 }
 
-const files = changedFiles(base);
+const files = changedFiles(base, head, { includeWorktree: !ci });
+const effectiveQualificationMode = qualificationMode ?? (
+  files.includes('package.json') && packageJsonFieldsChanged(base, dependencyMetadataFields())
+    ? 'comprehensive'
+    : undefined
+);
+const selection = classifyValidationSelection(files, { qualificationMode: effectiveQualificationMode });
 const recommendations = selectRecommendations(files, base);
+const report = { base, head, ...selection, recommendations };
+
+if (githubOutput) writeGithubOutputs(githubOutput, report);
 
 if (json) {
-  console.log(JSON.stringify({ base, files, recommendations }, null, 2));
+  console.log(JSON.stringify(report, null, 2));
 } else {
-  printText({ base, files, recommendations });
+  printText(report);
 }
 
 function defaultBase() {
   return process.env.VALIDATION_BASE || 'HEAD';
 }
 
-function changedFiles(ref) {
-  const output = git(['diff', '--name-only', `${ref}...HEAD`]).trim();
-  const committed = output ? output.split('\n') : [];
+function changedFiles(ref, headRef, { includeWorktree }) {
+  const output = git(['diff', '--name-status', '-z', '--find-renames', `${ref}...${headRef}`]);
+  const committed = parseNameStatus(output);
+  if (!includeWorktree) return normalizedFiles(committed);
   const worktree = git(['diff', '--name-only']).trim();
   const staged = git(['diff', '--cached', '--name-only']).trim();
   const untracked = git(['ls-files', '--others', '--exclude-standard']).trim();
-  return [...new Set([
+  return normalizedFiles([
     ...committed,
     ...(worktree ? worktree.split('\n') : []),
     ...(staged ? staged.split('\n') : []),
     ...(untracked ? untracked.split('\n') : []),
-  ])]
+  ]);
+}
+
+function parseNameStatus(output) {
+  const fields = output.split('\0').filter(Boolean);
+  const files = [];
+  for (let index = 0; index < fields.length;) {
+    const status = fields[index++];
+    if (/^[RC]/.test(status)) {
+      files.push(fields[index++], fields[index++]);
+    } else {
+      files.push(fields[index++]);
+    }
+  }
+  return files.filter(Boolean);
+}
+
+function normalizedFiles(files) {
+  return [...new Set(files)]
     .filter(Boolean)
     .filter((file) => !file.startsWith('scripts/architecture/actions-inventory/target/'))
     .sort();
+}
+
+function writeGithubOutputs(path, report) {
+  const outputs = {
+    selection: JSON.stringify(report),
+    tier: report.tier,
+    docs: report.jobs.docs,
+    version_sync: report.jobs.versionSync,
+    rust_quality: report.jobs.rustQuality,
+    rust: report.jobs.rust,
+    dashboard: report.jobs.dashboard,
+    service_client: report.jobs.serviceClient,
+    workstation: report.jobs.workstation,
+    comprehensive: report.jobs.comprehensive,
+    rust_compartments: JSON.stringify(report.rustCompartments),
+    base: report.base,
+    head: report.head,
+  };
+  appendFileSync(path, `${Object.entries(outputs).map(([key, value]) => `${key}=${value}`).join('\n')}\n`);
 }
 
 function git(args) {
@@ -285,6 +345,22 @@ function selectRecommendations(files, base) {
   if (files.some((file) => file.startsWith('scripts/') || file === '.github/workflows/ci.yml')) {
     add('node scripts/dev/select-validation.js --base HEAD --json', 'validation selector or CI scripts changed');
   }
+  if (files.some((file) =>
+    file === '.github/workflows/ci.yml' ||
+    file === 'package.json' ||
+    file === 'scripts/ci/rust-tests.sh' ||
+    file === 'scripts/dev/select-validation.js' ||
+    file === 'scripts/check-documentation-links.js' ||
+    file.startsWith('scripts/ci/report-validation-') ||
+    file.startsWith('scripts/ci/verify-presubmit') ||
+    file.startsWith('scripts/lib/presubmit-') ||
+    file.startsWith('scripts/lib/validation-') ||
+    file.startsWith('scripts/test-validation-') ||
+    file === 'scripts/test-documentation-links.js' ||
+    file === 'scripts/test-ci-workflow-contract.js'
+  )) {
+    add('pnpm run test:validation-selection', 'validation selection, aggregate, documentation, economics, or workflow contract changed');
+  }
 
   return mapChecks(checks);
 }
@@ -296,7 +372,9 @@ function isRustWorkspaceSurface(file) {
     file === 'cli/Cargo.toml' ||
     file === 'cli/build.rs' ||
     file.startsWith('cli/src/') ||
+    file.startsWith('crates/agent-browser-candidate/') ||
     file.startsWith('crates/agent-browser-cdp/') ||
+    file.startsWith('crates/agent-browser-challenge-control/') ||
     file.startsWith('crates/agent-browser-desktop-services/') ||
     file.startsWith('crates/agent-browser-lease-authority/')
   );
@@ -509,6 +587,20 @@ function focusedRustTestCommands(files) {
     }
   };
 
+  if (files.some((file) => file.startsWith('crates/agent-browser-candidate/'))) {
+    add(
+      'scripts/ci/rust-tests.sh --compartment candidate',
+      'candidate orchestration kernel changed',
+    );
+  }
+
+  if (files.some((file) => file.startsWith('crates/agent-browser-challenge-control/'))) {
+    add(
+      'scripts/ci/rust-tests.sh --compartment challenge-control',
+      'challenge-control kernel changed',
+    );
+  }
+
   if (files.includes('cli/src/workstation_install.rs')) {
     add(
       'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml workstation_install -- --nocapture',
@@ -589,12 +681,16 @@ function mapChecks(checks) {
   }));
 }
 
-function printText({ base, files, recommendations }) {
+function printText({ base, head, changedFiles: files, tier, exclusions, recommendations }) {
   console.log(`Validation base: ${base}`);
+  console.log(`Validation head: ${head}`);
+  console.log(`Validation tier: ${tier}`);
   console.log(`Changed files: ${files.length}`);
   for (const file of files) {
     console.log(`  ${file}`);
   }
+  console.log('');
+  console.log(`Excluded jobs: ${exclusions.join(', ') || 'none'}`);
   console.log('');
   console.log('Recommended checks:');
   for (const { command, reasons } of recommendations) {

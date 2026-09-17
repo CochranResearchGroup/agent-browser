@@ -224,14 +224,14 @@ serial inside its process, gives every CLI process a disposable home and XDG
 runtime tree, and partitions CLI tests into disjoint action, browser, service,
 stream, other native, workstation, and remaining core compartments. Two
 balanced lanes overlap through the existing Cargo admission wrapper. The
-support lane then runs the Lease Authority crate, CDP crate, and CLI
-integration-test binaries.
+support lane then runs the Candidate, Challenge Control, Desktop Services,
+Lease Authority, and CDP crates plus the CLI integration-test binaries.
 First-failure logs remain separate and are printed before each compartment
 result.
 
 Use `scripts/ci/rust-tests.sh --focused <filter>` during implementation or to
 re-run one failed invariant. Use `--compartment <name>` for `lease-authority`,
-`candidate`, `transport`, `cli-native`, one of the narrower `cli-native-*` groups, `cli-workstation`,
+`candidate`, `challenge-control`, `desktop-services`, `transport`, `cli-native`, one of the narrower `cli-native-*` groups, `cli-workstation`,
 `cli-core`, or `cli-integration`, and `--list-compartments` for machine-readable
 discovery. The runner defaults
 `RUST_MIN_STACK` to 16 MiB so state-heavy async fixtures do not require
@@ -284,8 +284,22 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 ### CI Cadence
 
-Ordinary pushes to `main` run the fast CI gates only: Version Sync Check,
-Dashboard, Service Client, Rust Quality, and Rust. Service Client runs
+Pull requests first run the versioned changed-surface classifier, then only the
+selected Documentation, Version Sync, Dashboard, Service Client, Rust Quality,
+affected Rust compartments, and Workstation Fixtures jobs. The stable
+`Presubmit` aggregate fails when a selected job is skipped, cancelled, or
+failed, and records the tier, exclusions, elapsed time, and observed runner
+minutes without describing the selected lane as comprehensive. Unknown paths
+and changes to the classifier or workflow fail safe to the broad ordinary
+presubmit. Material dependency or toolchain changes, manual dispatches, the
+monthly selection-drift audit, and the temporary `main` fallback run the
+comprehensive Rust lane. Retain the `main` fallback until issue #164 proves the
+`Presubmit` check is enforced by live branch rules. Pull-request concurrency
+cancels an older run when a newer head for the same pull request starts.
+
+Documentation and governance-only changes run patch hygiene, policy and
+planning audits, changed-link validation, and the docs build without
+application suites. Service Client runs
 `pnpm test:browser-capability-registry-draft` and `pnpm test:service-client`,
 which check the draft browser capability registry sample, generated service
 client files, JavaScript type coverage, service request helper contracts,
@@ -294,18 +308,15 @@ the no-launch service-client example broker-first contract without launching
 Chrome. Dashboard action-surface changes should run
 `pnpm test:dashboard-inspector-actions` so the Service right-pane inspector
 keeps selected-record state separate from mutable incident and job actions.
-Rust Quality runs Linux format and clippy checks before the Rust test job starts,
-so style or lint failures fail fast without spending time on the unit suite.
-The Rust job uses `scripts/ci/rust-tests.sh` with Cargo's default test profile.
-Each compartment remains serial because tests mutate process-global environment
-or user-scoped runtime state. Every CLI compartment receives a disposable home
-and XDG runtime tree, and only disjoint compartment processes overlap, with
-Cargo admission capped at two. This preserves in-process and filesystem
-isolation while avoiding one monolithic 3,000-test replay. The Rust
-test step is bounded to 30 minutes. The fixed-input status producer and
-generated-client harness runs after that suite. The job then builds one
-exact-head debug CLI and pins every command-based no-launch smoke to that
-binary; the smoke step is bounded to 10 minutes. Service request action changes
+Rust Quality runs Linux format and clippy before selected Rust compartments, so
+style or lint failures fail fast. `scripts/ci/rust-tests.sh --compartment`
+keeps each compartment serial inside its process and gives every CLI
+compartment a disposable home and XDG runtime tree; at most two disjoint
+compartments overlap through Cargo admission. The selected Rust job then builds
+one exact-head debug CLI and pins every command-based no-launch smoke to that
+binary. Explicit comprehensive qualification uses `scripts/ci/rust-tests.sh`
+without a compartment and retains the two-lane provider-free suite plus the
+no-launch smoke bundle. Service request action changes
 must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`,
 `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
 HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
@@ -345,7 +356,9 @@ that could not fix the already-broken fast CI baseline.
 Use `pnpm validation:select -- --base <ref>` to print recommended local checks
 from changed file paths before push. The default base is `HEAD`, which is useful
 for staged or uncommitted work. For a whole slice, pass the last known green
-commit or another explicit base ref.
+commit or another explicit base ref. Run `pnpm run test:validation-selection`
+after changing the selector, CI workflow, aggregate verifier, documentation
+link checker, economics receipt, or Rust compartment inventory.
 
 Do not babysit GitHub Actions as part of normal implementation closeout. CI
 evaluation is a separate task and should only include active waiting, log

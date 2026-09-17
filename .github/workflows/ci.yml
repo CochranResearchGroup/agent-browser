@@ -6,24 +6,155 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 5 1 * *'
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  version-sync:
-    name: Version Sync Check
+  classify:
+    name: Validation Selection
+    runs-on: ubuntu-latest
+    outputs:
+      selection: ${{ steps.selection.outputs.selection }}
+      tier: ${{ steps.selection.outputs.tier }}
+      docs: ${{ steps.selection.outputs.docs }}
+      version_sync: ${{ steps.selection.outputs.version_sync }}
+      rust_quality: ${{ steps.selection.outputs.rust_quality }}
+      rust: ${{ steps.selection.outputs.rust }}
+      dashboard: ${{ steps.selection.outputs.dashboard }}
+      service_client: ${{ steps.selection.outputs.service_client }}
+      workstation: ${{ steps.selection.outputs.workstation }}
+      comprehensive: ${{ steps.selection.outputs.comprehensive }}
+      rust_compartments: ${{ steps.selection.outputs.rust_compartments }}
+      base: ${{ steps.selection.outputs.base }}
+      head: ${{ steps.selection.outputs.head }}
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Classify changed surfaces
+        id: selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          qualification_args=()
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            qualification_args=(--qualification comprehensive)
+          fi
+          if ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+            base_sha="$(git rev-list --max-parents=0 "$head_sha" | tail -n 1)"
+          fi
+          git diff --check "${base_sha}...${head_sha}"
+          node scripts/dev/select-validation.js \
+            --base "$base_sha" \
+            --head "$head_sha" \
+            --ci \
+            --json \
+            --github-output "$GITHUB_OUTPUT" \
+            "${qualification_args[@]}" | tee validation-selection.json
+          {
+            echo '## Validation selection'
+            echo
+            echo "- Tier: \`$(jq -r .tier validation-selection.json)\`"
+            echo "- Changed files: $(jq '.changedFiles | length' validation-selection.json)"
+            echo "- Selected jobs: $(jq -r '.jobs | to_entries | map(select(.value) | .key) | join(", ")' validation-selection.json)"
+            echo "- Exclusions: $(jq -r '.exclusions | join(", ")' validation-selection.json)"
+            echo "- Unknown files: $(jq -r '.unknownFiles | join(", ")' validation-selection.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Test validation control plane
+        run: pnpm run test:validation-selection
+
+      - name: Upload validation selection
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-selection
+          path: validation-selection.json
+
+  docs:
+    name: Documentation
+    needs: classify
+    if: needs.classify.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout exact head
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.classify.outputs.head }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Install documentation dependency slice
+        run: pnpm install --frozen-lockfile --filter docs
+
+      - name: Check policy and planning contracts
+        run: |
+          pnpm test:policy-wiring
+          python .codex/skills/repo-policy-selector/scripts/audit_planning_contract.py --repo-root . --active-only
+
+      - name: Check changed documentation links
+        run: node scripts/check-documentation-links.js --base "${{ needs.classify.outputs.base }}" --head "${{ needs.classify.outputs.head }}"
+
+      - name: Build documentation site
+        run: pnpm --dir docs build
+
+  version-sync:
+    name: Version Sync Check
+    needs: classify
+    if: needs.classify.outputs.version_sync == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head }}
 
       - name: Check version sync
         run: node scripts/check-version-sync.js
 
   rust-quality:
     name: Rust Quality
+    needs: classify
+    if: needs.classify.outputs.rust_quality == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout exact head
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -44,10 +175,13 @@ jobs:
   rust-tests:
     name: Rust
     runs-on: ubuntu-latest
-    needs: rust-quality
+    needs: [classify, rust-quality]
+    if: needs.classify.outputs.rust == 'true'
     steps:
-      - name: Checkout repository
+      - name: Checkout exact head
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -67,8 +201,12 @@ jobs:
         with:
           workspaces: .
 
-      - name: Run Rust tests
-        run: scripts/ci/rust-tests.sh
+      - name: Run affected Rust compartments
+        env:
+          RUST_COMPARTMENTS: ${{ needs.classify.outputs.rust_compartments }}
+        run: |
+          jq -r '.[]' <<< "$RUST_COMPARTMENTS" | \
+            xargs -r -P2 -n1 bash -c "scripts/ci/rust-tests.sh --compartment \"\$1\"" _
         timeout-minutes: 30
 
       - name: Run no-launch service smokes
@@ -89,10 +227,14 @@ jobs:
 
   dashboard:
     name: Dashboard
+    needs: classify
+    if: needs.classify.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout exact head
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -117,10 +259,14 @@ jobs:
 
   service-client:
     name: Service Client
+    needs: classify
+    if: needs.classify.outputs.service_client == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout exact head
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -143,10 +289,14 @@ jobs:
 
   workstation-fixtures:
     name: Workstation Fixtures
+    needs: classify
+    if: needs.classify.outputs.workstation == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout exact head
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -189,6 +339,106 @@ jobs:
       - name: Test release asset and changelog verification
         run: bash scripts/release/test-verify-release-assets.sh
 
+  comprehensive:
+    name: Comprehensive Rust
+    needs: [classify, rust-quality]
+    if: needs.classify.outputs.comprehensive == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Run comprehensive Rust tests
+        run: scripts/ci/rust-tests.sh
+        timeout-minutes: 30
+
+      - name: Run no-launch service smokes
+        run: |
+          pnpm test:service-status-fixed-input-harness
+          scripts/ci/cargo-safe.sh build --manifest-path cli/Cargo.toml
+          export AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD="$PWD/cli/target/debug/agent-browser"
+          node scripts/smoke-service-contracts-no-launch.js
+          node scripts/smoke-mcp-read-no-launch.js
+          node scripts/smoke-service-profile-sources.js
+          node scripts/smoke-service-site-policy-sources.js
+          node scripts/smoke-service-remedies-cli-no-launch.js
+          node scripts/smoke-service-remedies-json-no-launch.js
+          node scripts/smoke-service-remedies-apply-json-no-launch.js
+          node scripts/smoke-service-incident-summary-http.js
+          node scripts/smoke-service-incident-summary-mcp.js
+        timeout-minutes: 10
+
+  presubmit:
+    name: Presubmit
+    if: always()
+    needs:
+      - classify
+      - docs
+      - version-sync
+      - rust-quality
+      - rust-tests
+      - dashboard
+      - service-client
+      - workstation-fixtures
+      - comprehensive
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.head || github.sha }}
+
+      - name: Verify selected jobs
+        shell: bash
+        env:
+          VALIDATION_SELECTION_JSON: ${{ needs.classify.outputs.selection }}
+          VALIDATION_RESULTS_JSON: >-
+            {"docs":"${{ needs.docs.result }}","versionSync":"${{ needs['version-sync'].result }}","rustQuality":"${{ needs['rust-quality'].result }}","rust":"${{ needs['rust-tests'].result }}","dashboard":"${{ needs.dashboard.result }}","serviceClient":"${{ needs['service-client'].result }}","workstation":"${{ needs['workstation-fixtures'].result }}","comprehensive":"${{ needs.comprehensive.result }}"}
+        run: |
+          set -euo pipefail
+          node scripts/ci/verify-presubmit.js | tee presubmit-receipt.json
+
+      - name: Record validation economics
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATION_SELECTION_JSON: ${{ needs.classify.outputs.selection }}
+          VALIDATION_JOBS_PATH: validation-jobs.json
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" > "$VALIDATION_JOBS_PATH"
+          node scripts/ci/report-validation-economics.js | tee validation-economics.json
+
+      - name: Upload presubmit receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: presubmit-receipts
+          path: |
+            presubmit-receipt.json
+            validation-economics.json
+
   rust-cross:
     name: Rust (${{ matrix.os }} - ${{ matrix.target }})
     if: >-
@@ -229,7 +479,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && contains(github.event.head_commit.message, '[full ci]'))
     runs-on: ubuntu-latest
-    needs: rust-tests
+    needs: comprehensive
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
