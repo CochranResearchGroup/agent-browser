@@ -5,50 +5,26 @@
 //! target is joined to a fresh physical observation made by the executing
 //! daemon. It does not evaluate access policy or infer process ownership.
 
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+#[cfg(test)]
 use std::collections::BTreeMap;
 
 use super::service_model::{ServiceState, TabLifecycle};
 use super::service_profile_access_policy::{
-    ProfileAccessPolicyState, ProfileEvictionMode, ProfileEvictionPlan, ProfileIdentityAssurance,
-    ProfilePermission,
+    ProfileAccessPolicyState, ProfileEvictionMode, ProfilePermission,
 };
+#[cfg(test)]
+use super::service_profile_access_policy::{ProfileEvictionPlan, ProfileIdentityAssurance};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-pub(crate) const PROFILE_LIFECYCLE_AUTHORIZATION_SCHEMA_V1: &str =
-    "agent-browser.profile-lifecycle-authorization.v1";
-pub(crate) const PROFILE_LIFECYCLE_PROOF_SCHEMA_V1: &str =
-    "agent-browser.profile-lifecycle-proof.v1";
-pub(crate) const PROFILE_LIFECYCLE_RECEIPT_SCHEMA_V1: &str =
-    "agent-browser.profile-lifecycle-receipt.v1";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ProfileLifecycleAuthorizationState {
-    Authorized,
-    Completed,
-    Incomplete,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLifecycleAuthorization {
-    pub(crate) schema_version: String,
-    pub(crate) authorization_id: String,
-    pub(crate) profile_id: String,
-    pub(crate) policy_revision: u64,
-    pub(crate) subject_id: Option<String>,
-    pub(crate) assurance: ProfileIdentityAssurance,
-    pub(crate) permission: ProfilePermission,
-    pub(crate) eviction_mode: ProfileEvictionMode,
-    pub(crate) grace_deadline: Option<String>,
-    pub(crate) target_resource_ids: Vec<String>,
-    pub(crate) issued_at: String,
-    pub(crate) state: ProfileLifecycleAuthorizationState,
-}
+pub(crate) use agent_browser_service_model::{
+    register_profile_eviction_authorization, ProfileLifecycleAuthorization,
+    ProfileLifecycleAuthorizationState, ProfileLifecycleEffectReceipt, ProfileLifecycleProof,
+    PROFILE_LIFECYCLE_AUTHORIZATION_SCHEMA_V1, PROFILE_LIFECYCLE_PROOF_SCHEMA_V1,
+    PROFILE_LIFECYCLE_RECEIPT_SCHEMA_V1,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProfileTabPhysicalObservation<'a> {
@@ -57,85 +33,6 @@ pub(crate) struct ProfileTabPhysicalObservation<'a> {
     pub(crate) target_id: &'a str,
     pub(crate) attached_target_ids: &'a [String],
     pub(crate) observed_at: &'a str,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLifecycleProof {
-    pub(crate) schema_version: String,
-    pub(crate) proof_id: String,
-    pub(crate) authorization_id: String,
-    pub(crate) profile_id: String,
-    pub(crate) policy_revision: u64,
-    pub(crate) tab_id: String,
-    pub(crate) browser_id: String,
-    pub(crate) target_id: String,
-    pub(crate) daemon_session_id: String,
-    pub(crate) observed_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLifecycleEffectReceipt {
-    pub(crate) schema_version: String,
-    pub(crate) receipt_id: String,
-    pub(crate) authorization_id: String,
-    pub(crate) proof_id: String,
-    pub(crate) profile_id: String,
-    pub(crate) policy_revision: u64,
-    pub(crate) tab_id: String,
-    pub(crate) browser_id: String,
-    pub(crate) target_id: String,
-    pub(crate) cancelled_job_ids: Vec<String>,
-    pub(crate) released_session_id: Option<String>,
-    pub(crate) terminated_viewer_lease_ids: Vec<String>,
-    pub(crate) outcome: String,
-    pub(crate) completed_at: String,
-}
-
-pub(crate) fn register_profile_eviction_authorization(
-    authorizations: &mut BTreeMap<String, ProfileLifecycleAuthorization>,
-    plan: &ProfileEvictionPlan,
-    assurance: ProfileIdentityAssurance,
-    issued_at: &str,
-) -> Result<ProfileLifecycleAuthorization, String> {
-    if plan.plan_id.trim().is_empty()
-        || plan.profile_id.trim().is_empty()
-        || plan.target_resource_ids.is_empty()
-        || !assurance.satisfies(ProfileIdentityAssurance::RegisteredCapability)
-    {
-        return Err("profile_lifecycle_authorization_invalid".to_string());
-    }
-    let mut target_resource_ids = plan.target_resource_ids.clone();
-    target_resource_ids.sort();
-    target_resource_ids.dedup();
-    if target_resource_ids != plan.target_resource_ids {
-        return Err("profile_lifecycle_authorization_targets_noncanonical".to_string());
-    }
-    let authorization = ProfileLifecycleAuthorization {
-        schema_version: PROFILE_LIFECYCLE_AUTHORIZATION_SCHEMA_V1.to_string(),
-        authorization_id: plan.plan_id.clone(),
-        profile_id: plan.profile_id.clone(),
-        policy_revision: plan.policy_revision,
-        subject_id: plan.requested_by.clone(),
-        assurance,
-        permission: ProfilePermission::Evict,
-        eviction_mode: plan.mode,
-        grace_deadline: plan.grace_deadline.clone(),
-        target_resource_ids,
-        issued_at: issued_at.to_string(),
-        state: ProfileLifecycleAuthorizationState::Authorized,
-    };
-    match authorizations.get(&authorization.authorization_id) {
-        Some(existing) if existing == &authorization => return Ok(existing.clone()),
-        Some(_) => return Err("profile_lifecycle_authorization_conflict".to_string()),
-        None => {}
-    }
-    authorizations.insert(
-        authorization.authorization_id.clone(),
-        authorization.clone(),
-    );
-    Ok(authorization)
 }
 
 pub(crate) fn prove_profile_tab_eviction(

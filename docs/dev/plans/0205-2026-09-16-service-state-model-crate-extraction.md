@@ -709,16 +709,64 @@ authorization record closure and its deterministic registration kernel only;
 leave physical observations, proof construction, effect settlement, runtime
 commands, and state mutation in CLI adapters.
 
+## Checkpoint 13 | Profile Lifecycle Authorization Kernel
+
+State transition: the crate now owns the lifecycle authorization, proof, and
+minimal effect-receipt wire records plus deterministic authorization
+registration. Registration validates the assurance floor and canonical target
+set, preserves exact error codes, and is idempotent for an identical
+authorization while rejecting conflicting reuse of the same identifier.
+
+Acceptance state and progress classification: this P1 deep-module packet is
+accepted locally. The CLI compatibility facade preserves existing internal
+paths. Fresh daemon/browser observation, proof construction, grace-time checks,
+policy fencing against current Service State, effect settlement, recovery,
+clock access, repository mutation, and runtime commands remain CLI adapters.
+
+Evidence:
+
+- all 72 service-model crate unit and integration tests pass, including seven
+  lifecycle wire, unknown-field, state, validation, canonicalization,
+  idempotency, and conflict tests;
+- all five CLI lifecycle authorization-to-effect boundary tests pass;
+- the repository mutation test proves that profile draining and authorization
+  remain atomically persisted through the extracted kernel;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no profile eviction, browser observation, browser close, runtime, install,
+  staging, production, release, or GitHub CI effect was performed.
+
+Delegation receipt:
+
+- `/root/p205_lifecycle_impl`, requested `gpt-5.6-sol` at medium effort,
+  completed the isolated new-file implementation; the primary reviewed and
+  integrated it;
+- `/root/p205_lifecycle_consumers`, requested `gpt-5.6-luna` at medium effort,
+  completed the read-only consumer and focused-test inventory;
+- `/root/p205_lifecycle_boundary`, requested `gpt-5.6-terra` at medium effort,
+  returned no blocking findings in the closed-world authority-boundary review.
+
+Material blockers: profile-lease records still depend on the principal
+continuity and provenance seam; effect transaction families still encode
+runtime joins and should not move as passive records. The canonical aggregate
+therefore remains in the CLI.
+
+Next action: publish this checkpoint. Resolve the principal-provenance seam
+against the existing Lease Authority crate before moving profile-lease durable
+records. Prefer direct reuse of the focused authority crate over duplicating
+principal or lease concepts in the service-model crate.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twelve families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | thirteen families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twelve packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | twelve packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | thirteen packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | thirteen packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

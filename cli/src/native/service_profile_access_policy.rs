@@ -9,12 +9,14 @@ pub use agent_browser_service_model::{
     mutate_profile_policy, profile_policy_target_for_preset, ProfileAccessEvaluation,
     ProfileAccessGrant, ProfileAccessMode, ProfileAccessPolicyState, ProfileAccessPreset,
     ProfileChildAccess, ProfileChildAccessRequest, ProfileConnectionState, ProfileEvictionMode,
-    ProfileEvictionPlan, ProfileIdentityAssurance, ProfilePermission, ProfilePolicyMutationRequest,
+    ProfileIdentityAssurance, ProfilePermission, ProfilePolicyMutationRequest,
     ProfilePolicyMutationResult, ProfilePolicyTarget, ServiceProfileAccessDecision,
     ServiceProfileAccessPolicy,
 };
 #[cfg(test)]
-pub use agent_browser_service_model::{ProfileAccessDrain, PROFILE_CHILD_ACCESS_SCHEMA_V1};
+pub use agent_browser_service_model::{
+    ProfileAccessDrain, ProfileEvictionPlan, PROFILE_CHILD_ACCESS_SCHEMA_V1,
+};
 
 #[cfg(test)]
 mod tests {

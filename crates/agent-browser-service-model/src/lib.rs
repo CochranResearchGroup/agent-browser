@@ -13,6 +13,7 @@ mod monitor;
 mod operational_snapshot;
 mod presentation;
 mod profile_access;
+mod profile_lifecycle;
 mod profile_readiness;
 mod profile_seeding;
 mod request_provenance;
@@ -70,6 +71,12 @@ pub use profile_access::{
     ProfilePolicyRevisionDiff, ProfilePolicyTarget, ServiceProfileAccessDecision,
     ServiceProfileAccessPolicy, PROFILE_ACCESS_DECISION_SCHEMA_V1, PROFILE_ACCESS_POLICY_SCHEMA_V1,
     PROFILE_CHILD_ACCESS_SCHEMA_V1,
+};
+pub use profile_lifecycle::{
+    register_profile_eviction_authorization, ProfileLifecycleAuthorization,
+    ProfileLifecycleAuthorizationState, ProfileLifecycleEffectReceipt, ProfileLifecycleProof,
+    PROFILE_LIFECYCLE_AUTHORIZATION_SCHEMA_V1, PROFILE_LIFECYCLE_PROOF_SCHEMA_V1,
+    PROFILE_LIFECYCLE_RECEIPT_SCHEMA_V1,
 };
 pub use profile_readiness::{
     BrowserBuild, BrowserProfileCompatibilityEvidence, ProfileAllocationPolicy,
