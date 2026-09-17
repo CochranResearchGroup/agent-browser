@@ -171,6 +171,19 @@ function assertSameInspection(expected, actual) {
 }
 
 export function removeInspectedWorktree({ repositoryRoot, inspection }) {
+  const path = resolve(inspection.worktreePath);
+  if (!existsSync(path)) {
+    const remainsRegistered = registeredWorktrees(resolve(repositoryRoot))
+      .some((entry) => entry.path === path);
+    if (remainsRegistered) fail('worktree_closeout_missing_registered_path', path);
+    return {
+      outcome: 'already_removed',
+      worktreePath: path,
+      worktreeIncarnation: inspection.worktreeIncarnation,
+      expectedHead: inspection.expectedHead,
+      expectedRef: inspection.expectedRef,
+    };
+  }
   const current = inspectWorktreeCloseout({
     repositoryRoot,
     worktreePath: inspection.worktreePath,
@@ -195,6 +208,7 @@ export function removeInspectedWorktree({ repositoryRoot, inspection }) {
 export function createWorktreeCloseoutFilesystemAdapter({
   stateRoot,
   archiveRoot,
+  repositoryRoot = null,
   faultInjector = () => {},
 } = {}) {
   if (typeof stateRoot !== 'string' || typeof archiveRoot !== 'string') {
@@ -285,13 +299,14 @@ export function createWorktreeCloseoutFilesystemAdapter({
       path: checkedArtifactPath(candidate.sourceRoot, artifact.relativePath),
     }));
     for (const artifact of paths) {
-      if (!existsSync(artifact.path) || sha256(readFileSync(artifact.path)) !== artifact.sha256) {
+      if (existsSync(artifact.path) && sha256(readFileSync(artifact.path)) !== artifact.sha256) {
         fail('worktree_closeout_source_digest_mismatch', artifact.relativePath);
       }
     }
-    for (const artifact of paths) unlinkSync(artifact.path);
+    const existing = paths.filter((artifact) => existsSync(artifact.path));
+    for (const artifact of existing) unlinkSync(artifact.path);
     return {
-      outcome: 'discarded',
+      outcome: existing.length > 0 ? 'discarded' : 'already_discarded',
       candidateId: candidate.candidateId,
       removedArtifacts: paths.map(({ relativePath, sha256: digest }) => ({
         relativePath,
@@ -300,5 +315,10 @@ export function createWorktreeCloseoutFilesystemAdapter({
     };
   }
 
-  return { archiveCandidate, discardCandidate, resolveArchivedCandidate };
+  function removeWorktree(inspection) {
+    if (!repositoryRoot) throw new TypeError('repositoryRoot is required for removal');
+    return removeInspectedWorktree({ repositoryRoot, inspection });
+  }
+
+  return { archiveCandidate, discardCandidate, removeWorktree, resolveArchivedCandidate };
 }

@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import {
   beginOrJoinWorktreeCloseout,
   CandidateDispositionRequiredError,
+  executeWorktreeCloseout,
   WorktreeCloseoutConflictError,
 } from './lib/worktree-closeout.js';
 import {
@@ -19,6 +20,7 @@ import {
 } from './lib/worktree-closeout-filesystem-adapter.js';
 
 const scriptPath = fileURLToPath(import.meta.url);
+const closeoutCliPath = fileURLToPath(new URL('./dev/worktree-closeout.js', import.meta.url));
 
 if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
   const result = beginOrJoinWorktreeCloseout({
@@ -202,6 +204,16 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
       worktreePath: gitWorktree,
     });
     assert.equal(inspection.dirty, false);
+    const cliInspection = JSON.parse(execFileSync(process.execPath, [
+      closeoutCliPath,
+      'inspect',
+      '--repository-root',
+      gitRepository,
+      '--worktree',
+      gitWorktree,
+    ], { encoding: 'utf8' }));
+    assert.equal(cliInspection.effect, 'none');
+    assert.equal(cliInspection.request.worktreeIncarnation, inspection.worktreeIncarnation);
     writeFileSync(join(gitWorktree, 'tracked.txt'), 'drifted\n');
     assert.throws(
       () => removeInspectedWorktree({ repositoryRoot: gitRepository, inspection }),
@@ -211,9 +223,56 @@ if (process.env.AGENT_BROWSER_WORKTREE_CLOSEOUT_FIXTURE_WORKER === '1') {
     );
     assert.equal(existsSync(gitWorktree), true);
     writeFileSync(join(gitWorktree, 'tracked.txt'), 'baseline\n');
-    const removal = removeInspectedWorktree({ repositoryRoot: gitRepository, inspection });
-    assert.equal(removal.outcome, 'removed');
+    const removalStateRoot = join(fixtureRoot, 'removal-state');
+    const removalRequest = {
+      schemaVersion: 'agent-browser.worktree-closeout-request.v1',
+      ...inspection,
+      pinnedCandidates: [],
+      candidateDispositions: [],
+    };
+    const removalOperation = beginOrJoinWorktreeCloseout({
+      stateRoot: removalStateRoot,
+      request: removalRequest,
+    });
+    const removalAdapter = createWorktreeCloseoutFilesystemAdapter({
+      stateRoot: removalStateRoot,
+      archiveRoot: join(fixtureRoot, 'removal-archives'),
+      repositoryRoot: gitRepository,
+    });
+    const preview = JSON.parse(execFileSync(process.execPath, [
+      closeoutCliPath,
+      'apply',
+      '--operation',
+      removalOperation.operationPath,
+    ], { encoding: 'utf8' }));
+    assert.equal(preview.effect, 'none');
+    assert.equal(preview.outcome, 'apply_required');
+    assert.equal(existsSync(gitWorktree), true);
+    assert.throws(
+      () => executeWorktreeCloseout({
+        operationPath: removalOperation.operationPath,
+        adapter: removalAdapter,
+        faultInjector(point) {
+          if (point === 'after_removal_before_receipt') throw new Error('fixture_post_removal_crash');
+        },
+      }),
+      /fixture_post_removal_crash/,
+    );
     assert.equal(existsSync(gitWorktree), false);
+    const recoveredRemoval = executeWorktreeCloseout({
+      operationPath: removalOperation.operationPath,
+      adapter: removalAdapter,
+      recover: true,
+    });
+    assert.equal(recoveredRemoval.outcome, 'committed');
+    assert.equal(recoveredRemoval.receipt.generation, 2);
+    assert.equal(recoveredRemoval.receipt.removal.outcome, 'already_removed');
+    const replayedRemoval = executeWorktreeCloseout({
+      operationPath: removalOperation.operationPath,
+      adapter: removalAdapter,
+    });
+    assert.equal(replayedRemoval.outcome, 'replayed_terminal');
+    assert.deepEqual(replayedRemoval.receipt, recoveredRemoval.receipt);
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
