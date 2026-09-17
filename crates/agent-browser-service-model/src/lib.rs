@@ -13,6 +13,7 @@ mod job_event;
 mod monitor;
 mod operational_snapshot;
 mod presentation;
+mod presentation_capacity;
 mod principal_continuity;
 mod profile_access;
 mod profile_lease;
@@ -67,6 +68,12 @@ pub use presentation::{
     RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
     RetainedDisplayAllocationCandidate, RoutePoolEntry, ViewStream, ViewStreamProvider,
     ViewerLease, SERVICE_CONTROL_INPUT_PROVIDER_VALUES, SERVICE_VIEW_STREAM_PROVIDER_VALUES,
+};
+pub use presentation_capacity::{
+    CapacityDecision, CapacityLimitingResource, CapacityNextSafeAction,
+    PresentationCapacityAuthority, PresentationCapacityConfig, PresentationCapacityObservations,
+    PresentationCapacityProjection, PresentationPriority, PresentationRequest, PresentationSlot,
+    PresentationSlotObservation, PresentationSlotState, PressureAdmission, SlotTransitionReceipt,
 };
 pub use principal_continuity::PrincipalContinuityRecourse;
 pub use profile_access::{
