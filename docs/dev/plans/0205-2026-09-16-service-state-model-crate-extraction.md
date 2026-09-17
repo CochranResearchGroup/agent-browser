@@ -959,6 +959,89 @@ authority as a deep provider-free kernel. Move only deterministic inventory,
 admission, and state-transition behavior; keep environment-derived Service
 State joins and provider/runtime effects in CLI adapters.
 
+## Checkpoint 18 | Presentation Capacity Interface Freeze
+
+State transition: the presentation-capacity deep-module seam is frozen before
+parallel implementation. This checkpoint changes no runtime behavior. It
+classifies every dependency as in-process and rejects both a callback or port
+interface and a generic command/outcome wrapper.
+
+Acceptance state and progress classification: this is blocker reduction for
+the next P1 deep-kernel packet. The chosen interface combines a concrete,
+immutable `PresentationCapacityObservations` envelope with explicit domain
+methods for admission, bound admission, transition, release and dispatch,
+binding reflection, quarantine, reconciliation, and projection. The common
+caller remains one typed method call. The CLI is the sole adapter that derives
+observations from Service State; the model module remains the sole owner of
+capacity policy.
+
+The observation envelope carries one entry per durable slot in inventory
+order. Each entry binds the observed slot, route, and display identities and
+contains only raw facts:
+
+- whether an acquisition lease is current;
+- whether a human controller is current;
+- whether a non-controller viewer conflicts with staging;
+- the live durable-handoff browser identities substantiated by current view
+  streams;
+- the authoritative browser identity resolved by the CLI route, display,
+  browser, and pending-acquisition join.
+
+The model converts those facts into limiting resources in the existing exact
+precedence order. It owns constructor invariants, pressure-prefix admission,
+protected reserves, browser exclusion, first-slot selection, bound observation
+and recovery semantics, route-switch migration fencing, queue bounds, priority
+aging, FIFO tie-breaking, transition fencing, scene generation, quarantine,
+release and dispatch, binding reflection, reconciliation mutation, warning
+ordering, projections, error strings, and durable serde compatibility.
+
+The CLI retains inventory qualification from route, display, and pool records;
+all Service State joins; provider and environment interpretation; process and
+browser observation; repository custody; persistence; and runtime effects.
+There is one in-process adapter, so no trait or port is introduced.
+
+Compatibility freeze:
+
+- preserve every current serde attribute, default, omission rule, enum spelling
+  and order, error string, slot-vector ordering, and permissive decode behavior;
+- preserve request clock advancement and error precedence;
+- preserve the difference between conflict-free reserve counting during initial
+  admission and all-warm-slot reserve counting during dispatch;
+- preserve acquisition, controller, staging-viewer, then durable-handoff
+  conflict precedence and minimum limiting-resource selection across slots;
+- preserve bounded priority aging, insertion-order tie-breaking, and the exact
+  transition graph;
+- preserve bound-release behavior and route-switch destination custody;
+- preserve the current release-and-dispatch quirk that advances the queue clock
+  before a missing-slot result and clears a found slot before inventory-error
+  dispatch suppression;
+- preserve reconciliation fences for leased or non-warm/non-active slots.
+
+Design comparison and model-choice receipt:
+
+- `/root/p205_capacity_minimal_interface`, requested `gpt-6-astra` at high
+  effort, maximized leverage through a three-entry command interface and found
+  several hidden compatibility quirks;
+- `/root/p205_capacity_flexible_interface`, requested `gpt-5.6-sol` at high
+  effort, designed a sealed typed-operation kernel and a complete observation
+  envelope;
+- `/root/p205_capacity_common_interface`, requested `gpt-5.6-luna` at medium
+  effort, optimized the ordinary caller and rejected a generic conflict trait;
+- the primary selected the explicit-method and concrete-observation hybrid to
+  avoid both broad outcome unpacking and operation-type interface growth.
+
+Deletion test: after cutover, deleting the model module must force callers to
+recreate durable wire compatibility, inventory validation, reserve arithmetic,
+queue aging, exclusion, conflict precedence, bound and route-switch semantics,
+transition fencing, quarantine, dispatch, and reconciliation. The CLI module
+must contain only observation and Service State adapter logic, not a duplicate
+decision path.
+
+Next action: implement the provider-free capacity module and observation
+records, then cut CLI callers over in bounded slices. Move records and policy
+together; do not stop at a types-only extraction. Retain adapter-specific tests
+for Service State joins and move pure behavior tests to the model interface.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
