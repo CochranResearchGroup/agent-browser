@@ -1512,6 +1512,103 @@ fixture builders but must not keep raw production mutation seams open. Stop
 before abandoned-retirement, crash-regeneration, authentication, challenge,
 or capability-registry ownership work.
 
+## Checkpoint 25 | Runtime-Owner Encapsulation Interface Freeze
+
+State transition: the complete production direct-access ledger is classified,
+and the minimum interface required to privatize all four registry fields is
+frozen. Repository locks, clone/apply/publish transactions, profile joins,
+host observations, route naming policy, and whole-registry Service State
+replacement remain CLI responsibilities.
+
+Immutable Lease Authority projections:
+
+- `revision() -> u64`;
+- `owners() -> &BTreeMap<String, ProfileOwner>`;
+- `principal_bindings() -> &BTreeMap<String,
+  RuntimeOwnerPrincipalBinding>`; and
+- `lifecycle_records() -> &BTreeMap<String, RuntimeLifecycleRecord>`.
+
+The borrowed maps preserve deterministic iteration, exact durable keys,
+indexing, counts, and existing joins without exposing mutable authority.
+Existing semantic lookups such as `owner()` remain preferred where sufficient.
+
+Named mutation surface:
+
+1. one pure `apply_lifecycle_transition` entrypoint whose typed mutation and
+   result vocabulary mirrors the existing CLI lifecycle intent and transition
+   variants;
+2. explicit `boot_epoch` observations for launch and replacement mutations,
+   plus a CLI-computed canonical-route verdict for terminal profile migration;
+3. `rotate_registered_principal_authority`, preserving the current validated
+   removal and revision increment before the absent or non-ready owner result,
+   and the second increment when the replacement bind succeeds;
+4. `apply_runtime_reset_terminalization`, preserving one revision increment,
+   the orphaned owner, terminal and satisfied lifecycle posture, and
+   deduplicated evidence without adding a new generation or identity check;
+5. `restore_lifecycle_records`, replacing the sidecar projection without a
+   revision increment; and
+6. `persistence_projection_without_lifecycle_records`, producing the current
+   owner-sidecar/primary-state projection without mutating revision.
+
+The lifecycle error remains typed but renders the existing byte-for-byte CLI
+diagnostics. Owner transfer errors remain distinguishable from static
+lifecycle rejections. Principal rotation and runtime-reset failures also use
+small typed errors; they do not become generic edit closures.
+
+Compatibility constraints:
+
+- preserve saturating revision increments, current checked versus saturating
+  generation behavior, first-error ordering, replay and no-op behavior, and
+  the existing one- or two-increment lifecycle sequences;
+- preserve partial in-memory candidate mutation before caller-owned rollback
+  where it exists today;
+- preserve ordered maps, serde defaults and omissions, sidecar precedence,
+  and `is_empty()` ignoring lifecycle history;
+- sidecar hydration replaces lifecycle records only and must not begin using
+  the lifecycle sidecar's recorded registry revision as authority;
+- runtime-reset filesystem preflight remains before the named registry
+  mutation; and
+- no mutable-map getter, mutable row getter, generic edit closure, production
+  fixture setter, or public revision setter is admitted.
+
+Whole-registry replacement remains valid only at existing transaction publish
+boundaries: lifecycle authority clone/apply/publish, abandoned-browser
+retirement commit, health reconciliation exact-before replacement, and durable
+owner-sidecar precedence followed by lifecycle overlay. Those are Service
+State custody operations, not registry mutation interfaces.
+
+Implementation sequence:
+
+1. add immutable projections and the pure lifecycle mutation vocabulary;
+2. move lifecycle mutation bodies and their bootstrap/store helpers verbatim,
+   injecting boot epoch and the route-policy verdict from the CLI;
+3. add principal rotation, runtime-reset, and persistence operations and cut
+   their three adapter owners over without changing transaction ordering;
+4. mechanically convert remaining production reads, then fixtures and tests;
+5. make `revision`, `owners`, `principal_bindings`, and `lifecycle_records`
+   private and strengthen the architecture guard to reject direct CLI access,
+   registry literals, public mutable getters, and public fields; and
+6. run the frozen runtime-owner, lifecycle, profile lease/recovery, store,
+   migration, health, retirement, Service State serialization, architecture,
+   formatting, and strict Clippy gates. GitHub CI remains skipped.
+
+Delegation and model-choice receipt:
+
+- `/root/p205_owner_mutation_api` used `gpt-6-astra` at high effort to classify
+  every production mutation, freeze the typed operation seam, and preserve
+  revision and transaction semantics;
+- `/root/p205_owner_projection_audit` used `gpt-5.6-luna` at medium effort to
+  inventory read-only and fixture access, choose the minimal borrowed
+  projections, and define the final structural guard; and
+- the primary reconciled both reports against the lifecycle, principal
+  rotation, runtime-reset, and service-store source before freezing this
+  interface.
+
+Progress classification: this checkpoint is blocker reduction and an
+implementation-ready deep-interface decision. Checkpoint 24 remains accepted;
+runtime-owner encapsulation remains open until all four fields are private and
+the local gate set passes.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
