@@ -1446,6 +1446,72 @@ The next action is the four-slice runtime-owner kernel implementation above.
 No bug-fix issue, GitHub CI, runtime effect, or other aggregate dependency
 family enters this packet.
 
+## Checkpoint 24 | Runtime-Owner Canonical Placement Implemented
+
+State transition: the provider-free runtime-owner value and transition kernel
+now has one canonical source in `agent-browser-lease-authority`. The CLI
+runtime-owner module is a compatibility facade containing typed re-exports,
+repository snapshot joins, action admission classification, error formatting,
+and CLI-layer compatibility tests. `BrowserAdoptionMode` also moved to Lease
+Authority, and the CLI adoption module re-exports it. The CLI-owned
+`ServiceState` field now names the Lease Authority registry directly.
+
+Deletion and dependency evidence:
+
+- the CLI no longer defines `ProfileOwner`, `RuntimeOwnerRegistry`,
+  `OwnerTransferRequest`, `RuntimeLifecycleRecord`, `BrowserAdoptionMode`, or
+  the registry transition implementation;
+- the Lease Authority architecture guard now requires the runtime-owner
+  module, rejects those duplicate CLI definitions, and rejects repository,
+  Service State, runtime-adoption, process, or filesystem dependencies in the
+  kernel;
+- the guard accepts either the active or intentionally disabled focused
+  workflow filename, preserving the current-main CI-disable decision without
+  dispatching or re-enabling CI; and
+- the existing Service State primary record and runtime-owner/lifecycle
+  sidecars remain unchanged in shape and ordering.
+
+Local evidence:
+
+- all 110 Lease Authority tests pass, including the standalone owner generation
+  7 to commit generation 8, byte-identical replay, and reverse generation 9
+  custody test;
+- all 24 CLI runtime-owner tests pass against the extracted kernel, including
+  legacy defaults, lifecycle wire compatibility, principal binding, commit,
+  replay, abort, adoption, reversal, terminal-history, repository persistence,
+  fixture corpus, and action-gate ordering;
+- the Lease Authority architecture guard and its mutation-fixture self-test
+  pass; formatting and diff checks pass for the implemented slice; and
+- no GitHub CI, runtime, browser, profile, provider, install, staging,
+  production, or release effect occurred.
+
+Delegation and model-choice receipt:
+
+- `/root/p205_runtime_owner_core` used `gpt-5.6-terra` at high effort for the
+  isolated Lease Authority module, minimum provider-free tests, and export;
+- `/root/p205_runtime_owner_cli_facade` used `gpt-5.6-sol` at high effort for
+  the deletion of duplicate CLI ownership and preservation of the adapter and
+  compatibility-test layer; and
+- the primary moved the aggregate field and adoption enum reference, extended
+  the structural guard, integrated both write surfaces, and reran the local
+  gates.
+
+Acceptance state and progress classification: canonical placement, dependency
+direction, duplicate deletion, and compatibility-facade cutover are accepted.
+This is outcome progress, but the complete Checkpoint 23 packet is not yet
+accepted. The initial cross-crate cutover temporarily exposes the registry
+revision and owner, principal-binding, and lifecycle maps because production
+adapters still mutate them directly. That surface is the exact remaining
+encapsulation blocker; it is not a final public contract.
+
+Next action: inventory only production direct mutations, add the smallest
+named Lease Authority operations and immutable projections that preserve each
+existing transaction boundary, cut those mutation owners over in disjoint
+slices, and privatize the four registry fields. Tests may use constructors or
+fixture builders but must not keep raw production mutation seams open. Stop
+before abandoned-retirement, crash-regeneration, authentication, challenge,
+or capability-registry ownership work.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |

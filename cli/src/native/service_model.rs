@@ -2201,9 +2201,9 @@ pub struct ServiceState {
     /// adoption. The record contains opaque IDs and digests only.
     #[serde(
         default,
-        skip_serializing_if = "crate::runtime_owner_transfer::RuntimeOwnerRegistry::is_empty"
+        skip_serializing_if = "agent_browser_lease_authority::RuntimeOwnerRegistry::is_empty"
     )]
-    pub(crate) runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry,
+    pub(crate) runtime_owner_registry: agent_browser_lease_authority::RuntimeOwnerRegistry,
     pub sessions: BTreeMap<String, BrowserSession>,
     pub tabs: BTreeMap<String, BrowserTab>,
     pub jobs: BTreeMap<String, ServiceJob>,

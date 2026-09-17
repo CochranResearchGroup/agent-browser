@@ -11,6 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub(crate) use agent_browser_lease_authority::BrowserAdoptionMode;
+
 pub(crate) const RUNTIME_ADOPTION_SCHEMA_VERSION: &str = "agent-browser.runtime-adoption.v1";
 pub(crate) const RUNTIME_ADMISSION_TRANSACTION_ID_ENV: &str =
     "AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID";
@@ -801,14 +803,6 @@ fn upgrade_transition_allowed(
             )
             | (ClosedZeroEffect, FailedPreservedOldGeneration)
     )
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum BrowserAdoptionMode {
-    CooperativeTransfer,
-    OrphanAdoption,
-    ManualPreservation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

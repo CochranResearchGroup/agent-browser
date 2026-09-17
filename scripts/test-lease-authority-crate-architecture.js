@@ -32,13 +32,18 @@ function check(root) {
   const workspace = read('Cargo.toml', root);
   const cliManifest = read('cli/Cargo.toml', root);
   const crateManifest = read('crates/agent-browser-lease-authority/Cargo.toml', root);
-  const focusedWorkflow = read('.github/workflows/lease-authority.yml', root);
+  const runtimeOwnerSource = read('crates/agent-browser-lease-authority/src/runtime_owner.rs', root);
+  const cliRuntimeOwnerSource = read('cli/src/runtime_owner_transfer.rs', root);
+  const cliRuntimeAdoptionSource = read('cli/src/runtime_adoption.rs', root);
+  const focusedWorkflow = read('.github/workflows/lease-authority.yml', root) ||
+    read('.github/workflows/lease-authority.yml.disabled', root);
   const cliRust = rustFilesUnder(join(root, 'cli', 'src'));
   const cliSources = cliRust.map((file) => readFileSync(file, 'utf8'));
   requireCondition(workspace.includes('crates/agent-browser-lease-authority'), 'root Cargo workspace must include agent-browser-lease-authority');
   requireCondition(crateManifest.includes('name = "agent-browser-lease-authority"'), 'agent-browser-lease-authority package manifest must exist');
   requireCondition(cliManifest.includes('agent-browser-lease-authority = { path = "../crates/agent-browser-lease-authority" }'), 'CLI must depend directly on the local Lease-authority crate');
   requireCondition(existsSync(join(root, 'crates/agent-browser-lease-authority/src/lib.rs')), 'Lease-authority crate must own src/lib.rs');
+  requireCondition(runtimeOwnerSource.length > 0, 'Lease-authority crate must own the runtime-owner kernel');
   requireCondition(!existsSync(join(root, 'cli/src/native/service_lease_authority.rs')), 'legacy native::service_lease_authority implementation must be absent');
   requireCondition(!existsSync(join(root, 'cli/src/native/service_lease_authority')), 'legacy native::service_lease_authority directory must be absent');
   requireCondition(!read('cli/src/native/mod.rs', root).match(/(?:pub\s+)?(?:crate\s+)?mod\s+service_lease_authority\s*;/), 'native module must not retain a service_lease_authority facade');
@@ -62,6 +67,18 @@ function check(root) {
   );
   const crateSources = rustFilesUnder(join(root, 'crates/agent-browser-lease-authority/src')).map((file) => readFileSync(file, 'utf8'));
   requireCondition(!crateSources.some((source) => /(?:crate::native::|\bagent_browser::native::|\bagent_browser_cli::native::)/.test(source)), 'Lease-authority crate must not import CLI/native paths upward');
+  requireCondition(
+    !/(?:ServiceStateRepository|runtime_adoption|service_model|std::process|std::fs)/.test(runtimeOwnerSource),
+    'runtime-owner kernel must not import repositories, CLI adoption, Service State, process, or filesystem adapters',
+  );
+  requireCondition(
+    !/\b(?:struct|enum)\s+(?:ProfileOwner|RuntimeOwnerRegistry|OwnerTransferRequest|RuntimeLifecycleRecord)\b/.test(cliRuntimeOwnerSource),
+    'CLI runtime-owner module must not retain canonical runtime-owner record definitions',
+  );
+  requireCondition(
+    !/\benum\s+BrowserAdoptionMode\b/.test(cliRuntimeAdoptionSource),
+    'CLI runtime-adoption module must not retain the canonical BrowserAdoptionMode definition',
+  );
   const joinedCrateSources = crateSources.join('\n');
   requireCondition(
     !/\bpub(?:\([^)]*\))?\s+(?:struct|enum)\s+LeaseAuthority(?:SigningKey|VerificationKeyring|SigningKeyFile)\b/.test(joinedCrateSources),
@@ -98,9 +115,12 @@ function selfTest() {
     writeFileSync(join(root, 'cli/Cargo.toml'), '[dependencies]\nagent-browser-lease-authority = { path = "../crates/agent-browser-lease-authority" }\n');
     writeFileSync(join(root, 'crates/agent-browser-lease-authority/Cargo.toml'), '[package]\nname = "agent-browser-lease-authority"\n');
     writeFileSync(join(root, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub struct Authority;\n');
+    writeFileSync(join(root, 'crates/agent-browser-lease-authority/src/runtime_owner.rs'), 'pub struct RuntimeOwnerRegistry;\n');
     writeFileSync(join(root, '.github/workflows/lease-authority.yml'), 'strategy:\n  fail-fast: false\nrun: cargo test --profile ci -p agent-browser-lease-authority\ntargets: x86_64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc\n');
     writeFileSync(join(root, 'cli/src/native/mod.rs'), 'pub(crate) mod adapter;\n');
     writeFileSync(join(root, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\n');
+    writeFileSync(join(root, 'cli/src/runtime_owner_transfer.rs'), 'pub(crate) use agent_browser_lease_authority::RuntimeOwnerRegistry;\n');
+    writeFileSync(join(root, 'cli/src/runtime_adoption.rs'), 'pub(crate) use agent_browser_lease_authority::BrowserAdoptionMode;\n');
     if (check(root).length) throw new Error('valid extracted fixture was rejected');
     const cases = [
       ['missing crate', 'rm-crate'], ['upward import', 'upward-import'],
@@ -110,6 +130,9 @@ function selfTest() {
       ['upward crate import', 'upward-crate-import'],
       ['forbidden dependency', 'forbidden-dependency'], ['public signing type', 'public-signing-type'],
       ['public secret loader', 'public-secret-loader'], ['public claim map', 'public-claim-map'],
+      ['runtime owner upward import', 'runtime-owner-upward-import'],
+      ['duplicate runtime owner', 'duplicate-runtime-owner'],
+      ['duplicate adoption mode', 'duplicate-adoption-mode'],
       ['missing focused workflow', 'missing-focused-workflow'],
     ];
     for (const [label, mutation] of cases) {
@@ -117,7 +140,7 @@ function selfTest() {
       try {
         mkdirSync(join(mutated, 'cli/src/native'), { recursive: true });
         mkdirSync(join(mutated, 'crates/agent-browser-lease-authority/src'), { recursive: true });
-        for (const path of ['Cargo.toml', 'cli/Cargo.toml', 'crates/agent-browser-lease-authority/Cargo.toml', 'crates/agent-browser-lease-authority/src/lib.rs', '.github/workflows/lease-authority.yml', 'cli/src/native/mod.rs', 'cli/src/native/adapter.rs']) {
+        for (const path of ['Cargo.toml', 'cli/Cargo.toml', 'crates/agent-browser-lease-authority/Cargo.toml', 'crates/agent-browser-lease-authority/src/lib.rs', 'crates/agent-browser-lease-authority/src/runtime_owner.rs', '.github/workflows/lease-authority.yml', 'cli/src/native/mod.rs', 'cli/src/native/adapter.rs', 'cli/src/runtime_owner_transfer.rs', 'cli/src/runtime_adoption.rs']) {
           mkdirSync(join(mutated, path, '..'), { recursive: true });
           writeFileSync(join(mutated, path), read(path, root));
         }
@@ -128,12 +151,19 @@ function selfTest() {
         if (mutation === 'retained-facade') writeFileSync(join(mutated, 'cli/src/native/mod.rs'), 'mod service_lease_authority;\n');
         if (mutation === 'missing-dependency') writeFileSync(join(mutated, 'cli/Cargo.toml'), '[dependencies]\n');
         if (mutation === 'reverse-dependency') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/Cargo.toml'), '[package]\nname = "agent-browser-lease-authority"\n[dependencies]\nagent-browser = { path = "../../cli" }\n');
-        if (mutation === 'missing-import') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'pub fn adapter() {}\n');
+        if (mutation === 'missing-import') {
+          writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'pub fn adapter() {}\n');
+          writeFileSync(join(mutated, 'cli/src/runtime_owner_transfer.rs'), 'pub fn adapter() {}\n');
+          writeFileSync(join(mutated, 'cli/src/runtime_adoption.rs'), 'pub fn adapter() {}\n');
+        }
         if (mutation === 'upward-crate-import') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'use crate::native::service_lease_authority::Authority;\n');
         if (mutation === 'forbidden-dependency') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/Cargo.toml'), '[package]\nname = "agent-browser-lease-authority"\n[dependencies]\ntokio = "1"\n');
         if (mutation === 'public-signing-type') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub struct LeaseAuthoritySigningKey;\n');
         if (mutation === 'public-secret-loader') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub fn load_or_create_lease_authority_signing_key() {}\n');
         if (mutation === 'public-claim-map') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub struct Authority { pub active_claims: usize }\n');
+        if (mutation === 'runtime-owner-upward-import') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/runtime_owner.rs'), 'use crate::native::service_store::ServiceStateRepository;\n');
+        if (mutation === 'duplicate-runtime-owner') writeFileSync(join(mutated, 'cli/src/runtime_owner_transfer.rs'), 'pub(crate) struct RuntimeOwnerRegistry;\n');
+        if (mutation === 'duplicate-adoption-mode') writeFileSync(join(mutated, 'cli/src/runtime_adoption.rs'), 'pub(crate) enum BrowserAdoptionMode { CooperativeTransfer }\n');
         if (mutation === 'missing-focused-workflow') rmSync(join(mutated, '.github/workflows/lease-authority.yml'));
         if (!check(mutated).length) throw new Error(`${label} mutation was not rejected`);
       } finally { rmSync(mutated, { recursive: true, force: true }); }
