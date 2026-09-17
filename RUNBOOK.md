@@ -15,9 +15,10 @@ joins canonical `main@2632e31c` after P202 protected integration and closeout.
 The source merge is clean outside this runbook projection, retains the complete
 P197 consumer-admission implementation and combined provider-free validation,
 and removes P202 as an active dependency. Final plan and lane reconciliation,
-branch publication, exact-head forge evaluation, and protected P197 integration
-remain. W7-A is selected as the next provider-free challenge packet but is not
-admitted while P197 retains primary worktree custody. No browser, CAPTCHA,
+branch publication at `4321961c` is complete; exact-head forge evaluation and
+protected P197 integration remain. P197 now has durable remote custody and its
+clean primary checkout can be released. W7-A is selected as the next
+provider-free challenge packet but is not yet admitted. No browser, CAPTCHA,
 provider, credential, installed-runtime, Service State, production, release, or
 CI-policy effect occurred.
 

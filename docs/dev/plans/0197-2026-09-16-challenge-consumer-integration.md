@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 8
+Plan version: 9
 
 State: OPEN
 
@@ -61,8 +61,9 @@ overlapping source custody. P202 has now merged through PR #168 as `528f2ef0`
 and closed through canonical `main@2632e31c`. P197 joined that exact mainline at
 merge checkpoint `7dc8a860`. The challenge implementation and four public
 guidance files remain intact; P202 is no longer a dependency or active overlap.
-Final branch publication, exact-head forge evaluation, and protected P197
-integration remain.
+Exact branch head `4321961c` is published to the PR. Exact-head forge evaluation
+and protected P197 integration remain; the clean primary checkout can now be
+released without closing the plan or claiming integration.
 
 ## Contract
 
@@ -200,6 +201,11 @@ evaluation under the repository's current CI policy, and protected P197
 integration. No source expansion or runtime effect is introduced by this
 reconciliation.
 
+Plan version 9 records durable handoff. Exact head `4321961c` is published to
+the branch and draft PR #157, the issue and PR projections identify the current
+scope and remaining gates, and the clean checkout no longer needs to retain
+primary custody while forge evaluation and protected integration proceed.
+
 ## Implementation Checkpoint
 
 The pure challenge-control contract verifies terminal receipt consistency,
@@ -244,8 +250,8 @@ Authentication Run tests, four Service challenge-task tests, the navigation
 bypass test, and the correctly stack-sized dispatch fixture pass. P197 joined
 canonical `main@2632e31c` after P202 integration at merge checkpoint
 `7dc8a860`; the shared documentation and governance histories remain intact.
-Final branch publication, exact-head forge evaluation, and protected P197
-integration remain.
+Exact branch head `4321961c` is published. Exact-head forge evaluation and
+protected P197 integration remain.
 
 ## Validation And Exit
 

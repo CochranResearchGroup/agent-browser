@@ -9,8 +9,8 @@ lanes:
     branch: challenge/p197-consumer-integration
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 7dc8a860efac657e3229fec9ddadd8bc775b585e
+    custody_state: PUBLISHED_INTEGRATION_READY
+    checkpoint: 4321961c6545c405a85578b84788e0db6112d10a
     remote_ref: refs/remotes/origin/challenge/p197-consumer-integration
     integration_receipt: null
     integration: merge through the protected `main` workflow after provider-free W6 validation
@@ -20,5 +20,5 @@ lanes:
     dependencies: []
     overlaps: []
     reconciled_overlaps: [P202]
-    blocker: final branch publication, exact-head forge evaluation, and protected integration remain; every live challenge effect stays with issue #66
+    blocker: exact-head forge evaluation and protected integration remain; every live challenge effect stays with issue #66
     updated_at: 2026-09-16
