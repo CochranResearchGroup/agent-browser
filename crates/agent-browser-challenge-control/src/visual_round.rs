@@ -385,6 +385,43 @@ pub fn visual_round_intent_digest(
     ])
 }
 
+/// Proves that an intent is the exact current output of an authorized visual snapshot.
+pub fn validate_visual_round_intent(
+    policy: &VisualRoundPolicy,
+    snapshot: &VisualRoundSnapshot,
+    intent: &VisualRoundIntent,
+) -> Result<(), VisualRoundError> {
+    validate_policy(policy)?;
+    validate_snapshot(policy, snapshot)?;
+    if snapshot.phase != VisualRoundPhase::IntentAuthorized {
+        return Err(VisualRoundError::InvalidTransition);
+    }
+    let (Some(evidence), Some(selection), Some(intent_digest)) = (
+        snapshot.active_evidence.as_ref(),
+        snapshot.active_selection.as_ref(),
+        snapshot.active_intent_digest.as_ref(),
+    ) else {
+        return Err(VisualRoundError::InvalidSnapshot);
+    };
+    if intent.intent_digest != *intent_digest
+        || intent.intent_digest != visual_round_intent_digest(evidence, selection)
+        || intent.task_id != snapshot.task_id
+        || intent.attempt_id != snapshot.attempt_id
+        || intent.round_index != evidence.round_index
+        || intent.round_id != evidence.round_id
+        || intent.evidence_digest != evidence.evidence_digest
+        || intent.candidate_set_digest != evidence.candidate_set_digest
+        || intent.selected_candidate_ids != selection.selected_candidate_ids
+        || intent.planned_steps != selection.planned_steps
+        || intent.planned_pointer_events != selection.planned_pointer_events
+        || intent.planned_key_events != selection.planned_key_events
+        || intent.provider_capability != selection.provider_capability
+    {
+        return Err(VisualRoundError::InvalidTransition);
+    }
+    Ok(())
+}
+
 fn observe(
     policy: &VisualRoundPolicy,
     current: &VisualRoundSnapshot,
