@@ -1696,6 +1696,27 @@ crash-regeneration durable transaction records without moving process,
 cleanup, or repository effects. Do not begin authentication, challenge,
 capability-registry, bug-fix, or runtime work in that packet.
 
+## Checkpoint 27 | Post-Encapsulation Current-Main Synchronization
+
+State transition: after publishing Checkpoint 26, the branch fetched current
+`origin/main` at `bea09376` and found thirteen integrated commits. They contain
+P212, P213, and P214 desktop/challenge contract work plus shared roadmap,
+runbook, and lane-catalog updates. Merge commit `99089337` incorporated that
+baseline without conflict. P205 is now zero commits behind current main; no
+bug-fix source or runtime effect entered architecture custody.
+
+Acceptance evidence: all 116 Lease Authority tests, the Lease Authority
+architecture guard and mutation self-test, and strict workspace Clippy pass at
+the exact merged head. The integrated desktop/challenge source did not change
+the accepted runtime-owner interface or reopen its private registry fields.
+GitHub CI remains skipped.
+
+Progress classification: this is blocker reduction and exact-head
+revalidation. Checkpoint 26 remains accepted. The next bounded architecture
+gate remains the ownership matrix for abandoned-retirement and crash-
+regeneration durable transaction records. Their host process, cleanup,
+repository, and provider effects remain CLI adapters.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
