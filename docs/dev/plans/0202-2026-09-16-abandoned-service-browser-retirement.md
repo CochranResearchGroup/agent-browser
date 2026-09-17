@@ -2,9 +2,9 @@
 
 Date: 2026-09-16
 
-Plan version: 28
+Plan version: 30
 
-State: OPEN
+State: COMPLETE
 
 Consolidation: required
 
@@ -16,11 +16,16 @@ Work item: `CochranResearchGroup/agent-browser#103`
 
 Branch: `platform/p202-abandoned-browser-retirement`
 
+Integration PR: [#168](https://github.com/CochranResearchGroup/agent-browser/pull/168)
+
+Integration commit: `528f2ef02ffffc15a7349233858816d8d358bdcf`
+
 Target: `main`
 
-Integration: merge through the protected `main` workflow after provider-free
-regression, one isolated disposable real-browser acceptance, and complete
-changed-surface validation
+Integration: merged through PR #168 after provider-free regression, one
+isolated disposable real-browser acceptance, complete changed-surface
+validation, and policy-governed reuse of reviewed-code CI evidence for the
+final documentation-only base reconciliation
 
 Source baseline: `151ebccd610869f457ea684b416e31408fee9fb3`
 
@@ -77,6 +82,19 @@ documentation against current `main`. P197 remains active and is the current
 writer for generated service-request contracts. P202 keeps that writer
 authoritative and records or serializes any overlapping integration. The repair
 did not require changing the core `service_store.rs` lock/CAS algorithm.
+
+PR #168 merged final branch head
+`6f099292a828fc366d61a2c6777f3f03f4144629` into `main` as
+`528f2ef02ffffc15a7349233858816d8d358bdcf`; issue #103 closed automatically.
+CI run `35163527521` passed every ordinary gate at reviewed code head
+`d7ceca98bd1e82286805d00e7c64832ebd9791f6`. The only later paths were P203
+closeout documentation and lane-ledger reconciliation. That documentation-only
+delta reused the green code evidence plus passing diff and policy-wiring checks
+under policy 0042. The final-head run was cancelled after PR #168 merged, not by
+a failed test. P202 released the four shared user-facing documentation surfaces
+to P197 on issue #127. Plan 0202 is complete, with no integration-time browser,
+provider, credential, profile, installed-runtime, Service State, production, or
+release effect.
 
 ## Consolidated Batch
 
@@ -208,7 +226,32 @@ Exit requires current evidence that:
 | Sealed activity-aware plan/apply | Twenty-one retirement-focused tests cover reservation, revalidation, exact descendant identity, authoritative occupancy, drift, repository CAS revisions, normalization, exit recourse, lock release, and terminal finalize | provider-free and comprehensive Rust green |
 | Terminal Service State convergence | Finalize removes the exact browser, session, tab, display, route, viewer, acquisition, pool, and capacity records after effect proof; Packet 12 proved the accepted terminal projection with one lifecycle record and retirement receipt | provider-free and isolated real-browser acceptance green |
 | Provider-free and real-browser acceptance | Provider-free suites pass. Packet 12's sole renewed exact-artifact disposable replay passed, and fresh readback found no matching fixture process or temporary-directory residue. | complete |
-| Integration | Draft PR #168 is open from authority-reconciliation checkpoint `3de2a6c0`; P190 is integrated and closed, Packet 13 documentation reconciliation is complete, and P197 is the only active overlap | exact-head CI and final integration pending |
+| Integration | PR #168 merged final head `6f099292` as `528f2ef0`; issue #103 closed and shared-documentation custody was released to P197 | complete with explicit CI evidence reuse for the final documentation-only base reconciliation |
+
+## Closeout Receipt
+
+- Integration: PR #168 merged final branch head
+  `6f099292a828fc366d61a2c6777f3f03f4144629` as
+  `528f2ef02ffffc15a7349233858816d8d358bdcf` on 2026-09-16.
+- Work item: issue #103 closed automatically from the merged pull request.
+- Code qualification: exact-head CI run `35163527521` passed Version Sync,
+  Rust Quality, Dashboard, Service Client, Workstation Fixtures, the complete
+  provider-free Rust suite, and every no-launch service smoke at reviewed code
+  head `d7ceca98bd1e82286805d00e7c64832ebd9791f6`.
+- Final-head impact: `d7ceca98..6f099292` changes only `ROADMAP.md`,
+  `RUNBOOK.md`, `docs/dev/active-lanes.yaml`, and Plan 0203 while preserving
+  P203 closeout and P202 lane history. Diff hygiene and policy wiring passed.
+- CI disposition: the documentation-only final delta reused the green code
+  receipt under policy 0042. Final-head run `35166053829` had every non-Rust
+  gate green and was cancelled after PR #168 merged; it recorded no failed test.
+- Real-browser acceptance: Packet 12 passed once on the frozen executable,
+  proved the exact managed process group exited, retained protected controls,
+  observed the terminal receipt, and found no fixture process or temporary
+  directory residue.
+- Shared-surface custody: P202 released `README.md`, `cli/src/output.rs`,
+  `skills/agent-browser/SKILL.md`, and `docs/src/app/commands/page.mdx` to P197
+  in issue #127 comment `5706766375`.
+- Runtime effect during integration and closeout: none.
 
 ## Implementation Checkpoint 1
 
@@ -783,7 +826,9 @@ but four current projections still treated completed P190 as active.
   plan-and-catalog-only correction.
 - This receipt changes no executable or user-facing product input and performs
   no browser, installed-runtime, provider, profile, or shared-runtime effect.
-  Exact-head forge CI and integration remain the only completion gates.
+  Exact-head forge CI passed at the reviewed code head. The later
+  documentation-only P203 closeout reconciliation reused that evidence under
+  the operator-directed CI exception, and PR #168 merged as `528f2ef0`.
 
 ## Stop Condition
 
