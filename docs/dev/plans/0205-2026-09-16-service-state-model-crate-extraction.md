@@ -3686,6 +3686,106 @@ transition classification and interface freeze. It must distinguish staged
 all-or-nothing transitions from intentionally retained partial mutations and
 must not move host observation or effects into the model.
 
+## Checkpoint 56 | Atomic Runtime Lifecycle Transition Interface Freeze
+
+State transition: the remaining runtime-owner surface is classified as 177
+production direct expressions across 27 files plus 288 fixture-only
+expressions. The first transition packet is limited to the two accesses in
+`RuntimeLifecycleAuthority::transition`: clone the current registry, apply one
+typed lifecycle intent to the clone, and assign only the successful result.
+After this packet, 175 production expressions remain explicit debt.
+
+The item-aware audit also found that the architecture checker's source scanner
+currently counts six `service_health.rs` test-module expressions as production
+because lifetime syntax confuses its general item stripper. This does not
+weaken the targeted first-packet guard, but final aggregate privacy must either
+correct that parser case or use an equivalent exact production classifier
+before claiming zero.
+
+The model interface is one inherent aggregate method using the existing Lease
+Authority vocabulary:
+
+```rust
+pub fn apply_runtime_lifecycle_transition_atomically(
+    &mut self,
+    intent: agent_browser_lease_authority::RuntimeLifecycleIntent,
+) -> Result<
+    agent_browser_lease_authority::RuntimeLifecycleTransition,
+    String,
+>;
+```
+
+The method clones the current registry, calls its existing
+`apply_lifecycle_transition`, assigns the staged registry only after success,
+and returns the exact kernel transition. It adds no validation, error mapping,
+revision bump, persistence, retry, observation, callback, or registry handle.
+On any error, the complete aggregate remains unchanged even when the kernel
+mutated the staged registry before failing. On success, only the registry
+changes exactly as the kernel defines; the Service State envelope revision
+remains repository-owned.
+
+The CLI splits its current helper into intent preparation and application.
+`prepare_lifecycle_intent` converts the CLI intent into the Lease Authority
+intent and retains current-boot observation plus canonical route policy. The
+ordinary repository closure performs that conversion inside each mutation
+invocation, then calls the aggregate atomic method. Direct reconciliation
+helpers retain their existing registry-oriented application path because some
+of them intentionally preserve ordered partial mutations.
+
+Transition variant checks remain after the repository commit. An unexpected
+variant therefore retains the current behavior: the transition is already
+committed before the caller returns its outcome-mismatch error. The packet must
+not move those checks inside the aggregate merely to manufacture broader
+rollback.
+
+Excluded surfaces require separate freezes:
+
+- terminal replacement with profile synchronization validates a UTF-8 path
+  before mutation, validates profile identity inside mutation, updates the
+  profile path, and assigns the transitioned registry as one cross-field join;
+- principal rotation deliberately retains removal and revision advancement
+  before replacement may fail or return false;
+- reconciliation and health helpers can retain an earlier lifecycle transition
+  when a later transition fails;
+- legacy revocation converts transition failure to absence;
+- runtime reset follows validated records and filesystem cleanup; and
+- principal binding can succeed before a later session join fails.
+
+Model witnesses must compare successful registration, transfer, and close with
+the raw kernel result; prove complete rollback for ambiguity, historical-row
+removal, profile mismatch, and transfer rejection; preserve explicit boot
+inputs, pending transfer, principal bindings, lifecycle evidence, unrelated
+aggregate fields, envelope revision, and maximum registry revision. Focused
+CLI witnesses use the in-memory repository whose mutation closure retains
+partial state, proving rollback belongs to the aggregate rather than repository
+infrastructure.
+
+The architecture guard must require the exact aggregate method, reject a
+callback, mutable-registry argument or result, registry return, iterator,
+persistence-snapshot bypass, and direct clone or assignment in the ordinary
+`transition` body. It must not claim the entire lifecycle file is closed or
+reject the deferred direct helpers.
+
+Hard stops are changed error strings, kernel mutation order, current-boot or
+route-policy observation placement, profile validation precedence, reset
+effect order, outcome-mismatch commit behavior, repository rollback
+assumptions, or partial-mutation retention.
+
+Delegation and model-choice receipt: `/root/p205_receipt_kernel_design` used
+the requested high-capability `gpt-6-astra` high route to classify atomic,
+cross-field, partial, sequential, and effect-separated transitions and freeze
+the aggregate API. `/root/p205_receipt_cli_audit` used the requested workhorse
+`gpt-5.6-sol` high route for the item-aware 177-production and 288-fixture
+inventory, the exact two-access first cut, ordering, and focused witnesses.
+Both were read-only and had no edit, build, test, Git, forge, CI, runtime, or
+child-agent custody.
+
+Acceptance state and progress classification: this is an interface freeze and
+does not itself advance a P4 implementation criterion. Exit requires aggregate
+rollback and success parity, the ordinary CLI transition cutover, exact focused
+witnesses, and a targeted guard without obscuring the 175 deferred production
+accesses.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
