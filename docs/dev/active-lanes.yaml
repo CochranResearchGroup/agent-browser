@@ -1,27 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P203
-    product_lane: PL-PLATFORM
-    objective: Route fresh CLI and MCP clients through the selected singleton runtime host without admitting legacy daemon creation
-    plan: docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md
-    plan_ref: refs/remotes/origin/platform/p203-runtime-host-admission
-    branch: platform/p203-runtime-host-admission
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 08bebd298665773918763605119838a041e96676
-    remote_ref: refs/remotes/origin/platform/p203-runtime-host-admission
-    integration_receipt: null
-    integration: merge through the protected `main` workflow after provider-free regression and changed-surface validation
-    validation_status: passed
-    validation_ref: 08bebd298665773918763605119838a041e96676
-    work_items: [CochranResearchGroup/agent-browser#169]
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
-    blocker: protected exact-head CI, review, integration, and closeout remain; all installed-runtime and provider effects remain separately gated
-    updated_at: 2026-09-16
   - id: P197
     product_lane: PL-CHALLENGE
     objective: Integrate authentication and navigation through one provider-neutral challenge consumer-admission contract
