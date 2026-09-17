@@ -108,6 +108,16 @@ must not hold the install coordination record.
   merely because a merge commit has a different identifier.
 - Pin queued and active candidate generations against garbage collection until
   they become installed, discarded, superseded, or terminally failed.
+- A worktree that owns a pinned candidate cannot be treated as disposable build
+  storage. Before checkout removal, select retain, archive, or discard through
+  the repository closeout contract. Archive preserves the sealed bytes and
+  publishes a separately verified locator; it does not rewrite the original
+  seal or imply install authority.
+- Worktree closeout and runtime installation are separate transactions. A
+  closeout receipt can prove artifact custody and Git removal, but it cannot
+  grant promotion, installation, recovery, or browser authority. Conversely,
+  an install transaction does not authorize deletion of its source checkout or
+  pinned artifact.
 
 ## Timeout, Recovery, And Progress
 
@@ -165,4 +175,5 @@ This Agent Browser repo-local extension responds to the Plan 0186 installer
 collision and the subsequent policy review. It composes with active-lane
 coordination, runtime-state governance, multi-agent reconciliation, and
 collaborative development. Plan 0190 owns the deterministic advisory tool that
-will implement this contract over the existing workstation transaction.
+implements this contract over the existing workstation transaction. Plan 0208
+owns the separate provider-free worktree closeout and candidate-custody helper.

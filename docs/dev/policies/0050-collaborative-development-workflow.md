@@ -39,6 +39,11 @@
   Before handoff or review, verify that the intended remote branch resolves to
   the reported commit. A local branch, clean worktree, chat message, plan, or
   live runtime does not prove shared custody.
+- Closing an integrated lane is also a shared transition. When its checkout
+  contains a pinned build candidate, use the durable worktree-closeout
+  operation to publish one disposition request and terminal receipt. A second
+  session joins or observes that operation instead of independently copying or
+  removing the same checkout.
 - Every change to the canonical branch goes through a pull request linked to its
   work item. Keep the description short: objective, affected surface, risk or
   deployment effect, durable plan locator when applicable, validation evidence,
@@ -54,6 +59,10 @@
   pull request and record any deferred work separately. A closed issue, merged
   pull request, successful test, deployment, or observed outcome proves only its
   own boundary.
+- Do not infer closeout completion from a vanished path alone. Reconcile the
+  worktree registration, exact incarnation, candidate locator or discard
+  evidence, branch custody, and terminal receipt. Interrupted archive or
+  removal resumes the same fenced operation.
 - Production deployment is allowed only from source proven to have entered the
   configured canonical remote branch. Fetch the remote immediately before
   release and verify the candidate commit entered through a merged pull request.

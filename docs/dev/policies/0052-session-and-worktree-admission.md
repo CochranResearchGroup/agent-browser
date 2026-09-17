@@ -79,6 +79,14 @@ attributable and disposable.
 - Close a clean primary worktree promptly after integration or durable handoff
   when the next owner does not need the checkout. A paused branch may retain
   durable Git custody without retaining a worktree.
+- Serialize closure as well as admission. Start or join one durable closeout
+  operation keyed by repository identity and worktree incarnation. Revalidate
+  the exact path, HEAD, ref, dirty state, and candidate dispositions immediately
+  before the Git transition, and publish one terminal receipt after readback.
+- A pinned candidate without a disposition suspends automatic removal and
+  reports the exact retain, archive, and discard choices. It does not create a
+  permanent coordinator role or remove the operator's ability to choose a
+  supported transition.
 - Reconcile the complete inventory after every lane merge, session termination,
   interrupted auxiliary operation, and portfolio change. Integrated, archived,
   paused, missing, and active claims should agree across work items, plans,
@@ -97,6 +105,10 @@ attributable and disposable.
   warning overrides explicit user direction.
 - Every operator-directed create, retain, handoff, archive, or close action
   returns a receipt and refreshes the advice from current state.
+- The closeout helper uses short physical locks only for durable selection and
+  receipt commits. Artifact copying and hashing occur outside that lock under a
+  fenced logical operation. Replays return the same operation or terminal
+  receipt; changed dispositions return a typed conflict.
 
 ## Adoption Notes
 
