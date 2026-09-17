@@ -1,8 +1,11 @@
 use agent_browser_desktop_services::{
-    admit_desktop_candidate_intent, desktop_candidate_intent_digest,
-    desktop_candidate_observation_digest, desktop_candidate_set_digest, ControllerAuthority,
-    DesktopBinding, DesktopCandidateAdmissionError, DesktopCandidateGeometry,
-    DesktopCandidateIntent, DesktopCandidateObservation, PixelBounds, PixelPoint, COORDINATE_SPACE,
+    admit_desktop_candidate_intent, desktop_candidate_effect_permit_digest,
+    desktop_candidate_event_plan_digest, desktop_candidate_intent_digest,
+    desktop_candidate_observation_digest, desktop_candidate_set_digest,
+    plan_desktop_candidate_events, ControllerAuthority, DesktopBinding,
+    DesktopCandidateAdmissionError, DesktopCandidateEffectPermit, DesktopCandidateEventPlanError,
+    DesktopCandidateGeometry, DesktopCandidateIntent, DesktopCandidateObservation, InputEvent,
+    PixelBounds, PixelPoint, COORDINATE_SPACE,
 };
 
 fn digest(byte: char) -> String {
@@ -129,6 +132,34 @@ fn refresh_intent(intent: &mut DesktopCandidateIntent) {
     intent.intent_digest = desktop_candidate_intent_digest(intent);
 }
 
+fn permit_for(
+    selected_candidate_ids: &[&str],
+    planned_steps: u8,
+    planned_pointer_events: u8,
+    planned_key_events: u8,
+) -> DesktopCandidateEffectPermit {
+    let observation = observation();
+    let mut intent = intent(&observation);
+    intent.selected_candidate_ids = selected_candidate_ids
+        .iter()
+        .map(|candidate_id| (*candidate_id).to_string())
+        .collect();
+    intent.planned_steps = planned_steps;
+    intent.planned_pointer_events = planned_pointer_events;
+    intent.planned_key_events = planned_key_events;
+    refresh_intent(&mut intent);
+    admit_desktop_candidate_intent(&intent, &observation, &authority(), 1_100)
+        .expect("fixture intent should be admitted")
+}
+
+fn permit() -> DesktopCandidateEffectPermit {
+    permit_for(&["candidate:1"], 1, 4, 0)
+}
+
+fn refresh_permit(permit: &mut DesktopCandidateEffectPermit) {
+    permit.permit_digest = desktop_candidate_effect_permit_digest(permit);
+}
+
 fn rejection(
     intent: &DesktopCandidateIntent,
     observation: &DesktopCandidateObservation,
@@ -157,6 +188,179 @@ fn valid_candidate_intent_returns_one_exact_effect_free_permit() {
     let replay = admit_desktop_candidate_intent(&intent, &observation, &authority(), 1_100)
         .expect("exact replay should remain deterministic");
     assert_eq!(permit, replay);
+}
+
+#[test]
+fn admitted_candidate_permit_plans_exact_raw_pointer_budget_without_effects() {
+    let permit = permit();
+    let plan = plan_desktop_candidate_events(&permit, PixelPoint { x: 0, y: 0 }, 1_100, 100)
+        .expect("admitted permit should produce an inert event plan");
+
+    assert_eq!(plan.source_permit_digest, permit.permit_digest);
+    assert_eq!(
+        plan.events,
+        vec![
+            InputEvent::PointerMove {
+                point: PixelPoint { x: 70, y: 110 },
+                at_ms: 1_125,
+            },
+            InputEvent::PointerMove {
+                point: PixelPoint { x: 140, y: 220 },
+                at_ms: 1_150,
+            },
+            InputEvent::LeftDown { at_ms: 1_175 },
+            InputEvent::LeftUp {
+                at_ms: 1_200,
+                emergency: false,
+            },
+        ]
+    );
+    assert_eq!(plan.duration_ms, 100);
+    assert_eq!(plan.expires_at_ms, permit.expires_at_ms);
+    assert!(!plan.emitted_effects());
+
+    let replay = plan_desktop_candidate_events(&permit, PixelPoint { x: 0, y: 0 }, 1_100, 100)
+        .expect("exact replay should remain deterministic");
+    assert_eq!(plan, replay);
+}
+
+#[test]
+fn multi_target_move_remainder_is_deterministic_and_preserves_order() {
+    let permit = permit_for(&["candidate:1", "candidate:2"], 2, 7, 0);
+    let plan =
+        plan_desktop_candidate_events(&permit, PixelPoint { x: 0, y: 0 }, 1_100, 140).unwrap();
+
+    assert_eq!(plan.events.len(), 7);
+    assert_eq!(
+        plan.events,
+        vec![
+            InputEvent::PointerMove {
+                point: PixelPoint { x: 70, y: 110 },
+                at_ms: 1_120,
+            },
+            InputEvent::PointerMove {
+                point: PixelPoint { x: 140, y: 220 },
+                at_ms: 1_140,
+            },
+            InputEvent::LeftDown { at_ms: 1_160 },
+            InputEvent::LeftUp {
+                at_ms: 1_180,
+                emergency: false,
+            },
+            InputEvent::PointerMove {
+                point: PixelPoint { x: 340, y: 220 },
+                at_ms: 1_200,
+            },
+            InputEvent::LeftDown { at_ms: 1_220 },
+            InputEvent::LeftUp {
+                at_ms: 1_240,
+                emergency: false,
+            },
+        ]
+    );
+}
+
+#[test]
+fn malformed_or_mutated_permits_fail_before_planning() {
+    for field in 0..8 {
+        let mut changed = permit();
+        match field {
+            0 => changed.permit_digest = digest('9'),
+            1 => changed.source_intent_digest = "A".repeat(64),
+            2 => changed.controller_authority_digest = digest('9'),
+            3 => changed.provider_capability_digest = digest('9'),
+            4 => changed.binding.coordinate_space = "css_pixels".to_string(),
+            5 => changed.selected_candidates[0].candidate_id.clear(),
+            6 => changed.selected_candidates[0].center.x = 10_000,
+            _ => changed.planned_steps = 2,
+        }
+        if matches!(field, 1 | 4 | 5 | 6 | 7) {
+            refresh_permit(&mut changed);
+        }
+        assert_eq!(
+            plan_desktop_candidate_events(&changed, PixelPoint { x: 0, y: 0 }, 1_100, 100),
+            Err(DesktopCandidateEventPlanError::InvalidPermit)
+        );
+    }
+}
+
+#[test]
+fn unsupported_or_insufficient_event_budgets_fail_closed() {
+    let insufficient = permit_for(&["candidate:1"], 1, 2, 0);
+    assert_eq!(
+        plan_desktop_candidate_events(&insufficient, PixelPoint { x: 0, y: 0 }, 1_100, 100),
+        Err(DesktopCandidateEventPlanError::InsufficientPointerBudget)
+    );
+
+    let with_keys = permit_for(&["candidate:1"], 1, 4, 1);
+    assert_eq!(
+        plan_desktop_candidate_events(&with_keys, PixelPoint { x: 0, y: 0 }, 1_100, 100),
+        Err(DesktopCandidateEventPlanError::UnsupportedKeyEvents)
+    );
+}
+
+#[test]
+fn invalid_start_schedule_or_expiry_fails_closed() {
+    let permit = permit();
+    for start in [
+        PixelPoint { x: -1, y: 0 },
+        PixelPoint { x: 0, y: -1 },
+        PixelPoint { x: 1_280, y: 0 },
+        PixelPoint { x: 0, y: 720 },
+    ] {
+        assert_eq!(
+            plan_desktop_candidate_events(&permit, start, 1_100, 100),
+            Err(DesktopCandidateEventPlanError::InvalidStart)
+        );
+    }
+
+    assert_eq!(
+        plan_desktop_candidate_events(&permit, PixelPoint { x: 0, y: 0 }, 1_100, 3),
+        Err(DesktopCandidateEventPlanError::InvalidSchedule)
+    );
+    assert_eq!(
+        plan_desktop_candidate_events(&permit, PixelPoint { x: 0, y: 0 }, u64::MAX - 1, 100),
+        Err(DesktopCandidateEventPlanError::InvalidSchedule)
+    );
+    assert_eq!(
+        plan_desktop_candidate_events(&permit, PixelPoint { x: 0, y: 0 }, 2_000, 100),
+        Err(DesktopCandidateEventPlanError::Stale)
+    );
+    assert_eq!(
+        plan_desktop_candidate_events(&permit, PixelPoint { x: 0, y: 0 }, 1_950, 100),
+        Err(DesktopCandidateEventPlanError::Stale)
+    );
+}
+
+#[test]
+fn event_plan_digest_binds_every_input_event_variant_field() {
+    let plan =
+        plan_desktop_candidate_events(&permit(), PixelPoint { x: 0, y: 0 }, 1_100, 100).unwrap();
+    let original_digest = plan.plan_digest.clone();
+
+    for event in [
+        InputEvent::KeyDown {
+            key: 'a',
+            at_ms: 1_125,
+        },
+        InputEvent::KeyUp {
+            key: 'a',
+            at_ms: 1_125,
+            emergency: false,
+        },
+        InputEvent::KeyUp {
+            key: 'a',
+            at_ms: 1_125,
+            emergency: true,
+        },
+    ] {
+        let mut changed = plan.clone();
+        changed.events[0] = event;
+        assert_ne!(
+            desktop_candidate_event_plan_digest(&changed),
+            original_digest
+        );
+    }
 }
 
 #[test]

@@ -31,6 +31,7 @@ const crateManifest = read('crates/agent-browser-desktop-services/Cargo.toml');
 const crateSources = rustSources(join(repoRoot, 'crates/agent-browser-desktop-services', 'src'));
 const joinedCrateSources = crateSources.join('\n');
 const cliDesktopInteraction = read('cli/src/native/desktop_interaction.rs');
+const candidateEventPlan = read('crates/agent-browser-desktop-services/src/candidate_event_plan.rs');
 
 requireCondition(
   workspace.includes('crates/agent-browser-desktop-services'),
@@ -55,6 +56,10 @@ requireCondition(
 requireCondition(
   /\bpub\s+fn\s+admit_desktop_candidate_intent\b/.test(joinedCrateSources),
   'desktop-services crate must own the effect-free candidate-intent admission contract',
+);
+requireCondition(
+  /\bpub\s+fn\s+plan_desktop_candidate_events\b/.test(candidateEventPlan),
+  'desktop-services crate must own the effect-free exact-budget candidate event planner',
 );
 requireCondition(
   !/\bfn\s+run_claimed_interaction\b/.test(cliDesktopInteraction),
@@ -91,6 +96,24 @@ for (const dependency of [
   requireCondition(
     !new RegExp(`^\\s*${dependency}\\s*=`, 'm').test(crateManifest),
     `desktop-services crate must not depend on ${dependency}`,
+  );
+}
+
+for (const forbidden of [
+  'DesktopInteractionProvider',
+  'ControllerAuthorityRepository',
+  'DesktopControlCoordinator',
+  'InteractionOperationLedger',
+  'execute_event',
+  'observe_before',
+  'refresh_before_effect',
+  'probe(',
+  'std::fs',
+  'std::net',
+]) {
+  requireCondition(
+    !candidateEventPlan.includes(forbidden),
+    `candidate event planner must remain effect-free: ${forbidden}`,
   );
 }
 
