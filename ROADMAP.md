@@ -41,6 +41,20 @@ Clippy, planning audit, a disposable no-launch supervisor smoke, and exact-head
 CI run `35160652859` pass. No browser, provider, credential, installed-runtime,
 Service State, retained-profile, production, or release effect occurred.
 
+## P202 | Abandoned Service Browser Retirement
+
+State: OPEN
+
+Current state: [Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+owns the bounded no-live implementation for
+[issue #103](https://github.com/CochranResearchGroup/agent-browser/issues/103).
+P202 starts from `main@151ebccd` and will join existing exact process-tree
+shutdown and record-retirement primitives into owner-aware abandoned-lane
+classification, per-lane resource/status projection, and sealed activity-aware
+retirement. P190 and P197 retain their existing shared-surface ownership. No
+installed cleanup, browser shutdown, protected-profile effect, runtime restart,
+provider mutation, production effect, or release is authorized.
+
 ## P201 | X Display Live Occupancy
 
 State: CLOSED

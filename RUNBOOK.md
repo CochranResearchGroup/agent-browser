@@ -7,7 +7,7 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), and [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
 
-## Turn 359 | 2026-09-16
+## Turn 368 | 2026-09-16
 
 [Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
 is closed. [PR #172](https://github.com/CochranResearchGroup/agent-browser/pull/172)
@@ -19,7 +19,7 @@ The active-lane projection no longer includes P203. No browser, provider,
 credential, installed-runtime, Service State, retained-profile, production, or
 release effect occurred.
 
-## Turn 358 | 2026-09-16
+## Turn 367 | 2026-09-16
 
 [Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
 is source-complete at `08bebd29`. The red prior-boot fixture reproduced
@@ -33,7 +33,7 @@ first attempt timed out before lane stream files under host load; its sole retry
 passed with complete fixture teardown. Protected exact-head CI, review,
 integration, and closeout remain. No installed runtime or provider was touched.
 
-## Turn 357 | 2026-09-16
+## Turn 366 | 2026-09-16
 
 [Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
 version 2 records the root defect. The selected ingress registry retains prior-
@@ -45,7 +45,7 @@ fail closed into retired legacy admission. P203 now owns only
 `cli/src/runtime_host_ingress.rs` and provider-free tests for the exact CAS-
 fenced reboot recovery. No runtime mutation was performed.
 
-## Turn 356 | 2026-09-16
+## Turn 365 | 2026-09-16
 
 [Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
 is admitted from `main@dd34977e` for issue #169. The provider-free packet will
@@ -55,6 +55,126 @@ legacy per-session daemon. P203 owns `cli/src/connection.rs`; P202 and P197 are
 source-disjoint. No browser, provider, credential, installed-runtime, Service
 State, retained-profile, production, or release effect is authorized.
 
+## Turn 364 | 2026-09-16
+
+P202 Final Acceptance Packet 7 ended without retry at one discriminating
+failure: `profile_lock_released=false`. The receipt simultaneously proves root,
+descendant, and process-group exit true, so the zombie repair reached its real
+boundary. Independent teardown readback found no fixture process or temporary
+directory, but does not substitute for product lock release. Provider-free
+Profile-Lock Convergence Packet 8 now owns only exact stale-lock release after
+reviewed-tree exit, with a live-process preservation control and no further
+browser replay authorized.
+
+## Turn 363 | 2026-09-16
+
+P202 repaired-source comprehensive requalification passes at branch head
+`ba18521c`: `nativeLane=0`, `supportLane=0`, 736 seconds, with Cargo caching
+disabled to avoid the earlier sccache infrastructure failure. Final Acceptance
+Packet 7 freezes source checkpoint `2243de8c` for one cumulative fifth,
+non-retryable disposable run. The prior live failure now has a direct
+0.01-second red/green reproducer for both false exit predicates and typed
+terminal diagnostics. Preconditions require a clean exact branch, fresh debug
+build, Chrome, and zero prior fixture residue. Any outcome is terminal for live
+execution in P202.
+
+## Turn 362 | 2026-09-16
+
+P202 Exit-Proof Diagnostic Packet 6 is focused-green at source checkpoint
+`2243de8c`. The Linux zombie-only fixture was red twice with both sealed root
+and process-group exit false; both are now true only when no matching
+non-zombie group member exists. Terminal recourse now returns all failed exit
+predicates with the exact observed evidence while preserving the stable
+`exit_unproven` code, state immutability, cleanup ownership, and every original
+fail-closed predicate. All ten retirement tests, the zombie regression,
+decision matrix, formatting, strict Clippy, patch hygiene, and smoke syntax
+pass. Read-only W7 and W8 evidence was reconciled; no worker edited source or
+held Git/runtime custody. This is blocker reduction, not live acceptance.
+
+## Turn 361 | 2026-09-16
+
+P202 changes tactic from browser replay to provider-free Exit-Proof Diagnostic
+Packet 6. The primary owns the tight red/green loop and all writes. Read-only
+worker `/root/p202_exit_cause` uses the strongest tier for ambiguous causal
+analysis, while `/root/p202_resource_implementation` reuses normal-tier context
+for Linux process-semantics fixture design. Graphiti is healthy but returned no
+current P202 source episode, so Plan 0202, PR #168, source, and tests remain
+authoritative. The packet has one implementation attempt, one focused
+validation cycle, a 30-minute bound, and no browser or runtime effect.
+
+## Turn 360 | 2026-09-16
+
+The one renewed P202 acceptance replay reached the exact-tree effect and then
+stopped with `abandoned_browser_retirement:ExitUnproven`. No retry was taken.
+The harness used exact task-owned cleanup, and independent readback found no
+fixture process or temporary-directory residue. Provider-free validation
+remains green. The next packet must make the exit proof discriminating and
+cover the observed condition without a browser before any newly bounded live
+replay. P190 still owns the shared user-facing documentation surface.
+
+## Turn 359 | 2026-09-16
+
+P202 opens one renewed, terminal disposable acceptance packet after the third
+fixture attempt exposed an exact persistence-normalization cause and the real
+JSON repository regression proved its repair. This extends the cumulative
+attempt maximum from three to four without resetting history. The run must use
+a fresh debug binary and isolated temporary namespace, preserve the protected
+and foreign controls, and stop after one outcome with an exact residue census.
+No installed runtime, shared provider, protected profile, retained browser, or
+foreign process is in scope.
+
+## Turn 358 | 2026-09-16
+
+P202 provider-free validation is complete at published head `d544ed2e`.
+Strict workspace Clippy, formatting, service API/MCP parity, generated client
+checks, lease-authority architecture and tests, focused service-model and P202
+tests, and every comprehensive Rust compartment pass. The comprehensive
+runner's `transport` compartment initially failed before testing because its
+sccache wrapper could not spawn `rustc`; the exact compartment passed all
+three tests with the documented cache opt-out. Fresh branch, remote, process,
+and temporary-directory readback agree and show no P202 residue. Shared
+user-facing documentation remains with P190, and P202 still requires one
+renewed bounded real-browser acceptance before integration.
+Draft PR #168 is open against `main`; issue #103 remains open with the exact
+evidence and remaining gates. The initial PR readback has Version Sync Check
+green and the other fast checks in progress. P202 is not actively monitoring
+those checks during normal implementation closeout.
+
+## Turn 357 | 2026-09-16
+
+[Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+is provider-free green for the per-lane resource projection, activity-aware
+candidate matrix, and sealed reserve/effect/finalize transaction. Nine focused
+transaction tests include a real JSON repository regression for pre-advanced
+CAS revisions and persistence normalization. Three bounded disposable
+real-browser fixture cycles were used; the final cycle reached apply and
+exposed `BrowserRecordChanged` from derived-view normalization. That cause is
+repaired and deterministically covered, but the plan attempt budget is
+exhausted, so a fourth live replay was not taken and real-browser acceptance
+remains unverified. Fresh readback found no disposable fixture residue. P190
+still owns the overlapping shared documentation while PR #152 remains open.
+No installed runtime, provider, protected profile, retained browser, or foreign
+process was changed.
+
+## Turn 356 | 2026-09-16
+
+[Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+is admitted from `main@151ebccd` for issue #103. Existing exact reviewed-tree
+shutdown and inert-row retirement are reusable but do not classify or retire a
+still-live inactive service-owned lane. Three shallow read-only workers will
+inspect disjoint resource/status, retirement/apply, and acceptance/overlap
+questions using economical task-matched models while P202 retains every write,
+contract decision, integration, and final acceptance. The critical path remains
+one red-capable focused fixture before repair. That fixture now fails exactly
+at the missing candidate classification: an exact-owned `Retained` lane with
+an expired `CloseBrowser` lease and retained display reports zero candidates.
+The read-only join found no need to change the core store CAS algorithm and
+split implementation into disjoint resource/status and sealed-transaction
+packets. The transaction must reserve and finalize through pure state changes,
+with fresh observation and exact-tree signaling outside replayable mutations.
+No installed cleanup, browser
+shutdown, runtime restart, provider mutation, production effect, or release is
+authorized.
 ## Turn 355 | 2026-09-16
 
 [Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
