@@ -422,6 +422,41 @@ fn selection_outside_the_bound_candidate_set_requires_intervention_before_intent
 }
 
 #[test]
+fn duplicate_candidate_selection_is_ambiguous_and_stops_before_intent() {
+    let policy = policy();
+    let evidence = evidence(1, 1_000);
+    let initial = VisualRoundSnapshot::new("task:visual", "attempt:1").unwrap();
+    let observed = decide_visual_round(
+        &policy,
+        &initial,
+        VisualRoundEvent::Observe {
+            evidence: evidence.clone(),
+            now_ms: 1_000,
+        },
+    )
+    .unwrap();
+    let decision = decide_visual_round(
+        &policy,
+        observed.snapshot(),
+        VisualRoundEvent::Select {
+            selection: selection(&evidence, &["round:1:candidate:1", "round:1:candidate:1"]),
+            now_ms: 1_100,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        decision.snapshot().intervention,
+        Some(VisualRoundInterventionReason::CandidateMismatch)
+    );
+    assert_eq!(decision.snapshot().total_selections, 0);
+    assert!(!matches!(
+        decision,
+        VisualRoundDecision::PermitIntent { .. }
+    ));
+}
+
+#[test]
 fn expired_round_evidence_requires_intervention_before_intent() {
     let policy = policy();
     let evidence = evidence(1, 1_000);
@@ -534,6 +569,34 @@ fn candidate_set_mutation_invalidates_the_evidence_envelope() {
         decision.snapshot().intervention,
         Some(VisualRoundInterventionReason::InvalidEvidence)
     );
+}
+
+#[test]
+fn policy_digest_mismatch_fails_closed_before_selection() {
+    let policy = policy();
+    let mut mismatched = evidence(1, 1_000);
+    mismatched.policy_digest = digest('d');
+    mismatched.evidence_digest = visual_round_evidence_digest(&mismatched);
+    let initial = VisualRoundSnapshot::new("task:visual", "attempt:1").unwrap();
+
+    let decision = decide_visual_round(
+        &policy,
+        &initial,
+        VisualRoundEvent::Observe {
+            evidence: mismatched,
+            now_ms: 1_000,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        decision.snapshot().intervention,
+        Some(VisualRoundInterventionReason::InvalidEvidence)
+    );
+    assert!(!matches!(
+        decision,
+        VisualRoundDecision::AwaitSelection { .. }
+    ));
 }
 
 #[test]
@@ -781,6 +844,53 @@ fn skipped_round_index_fails_closed() {
         decision.snapshot().intervention,
         Some(VisualRoundInterventionReason::RoundOrder)
     );
+}
+
+#[test]
+fn repeated_or_reordered_rounds_fail_closed_after_continuation() {
+    let policy = policy();
+    let first = evidence(1, 1_000);
+    let second = evidence(2, 1_300);
+    let snapshot = await_after_state(&policy, &first);
+    let mut next_state = after_state(&first, VisualAfterStateOutcome::NextRound, 1_200);
+    next_state.frame_digest = second.frame_digest.clone();
+    next_state.context_digest = second.context_digest.clone();
+    next_state.geometry_digest = second.geometry_digest.clone();
+    next_state.candidate_set_digest = second.candidate_set_digest.clone();
+    let continued = decide_visual_round(
+        &policy,
+        &snapshot,
+        VisualRoundEvent::Classify {
+            after_state: next_state,
+            now_ms: 1_200,
+        },
+    )
+    .unwrap();
+
+    let mut repeated_identity = second.clone();
+    repeated_identity.round_id = first.round_id.clone();
+    repeated_identity.evidence_digest = visual_round_evidence_digest(&repeated_identity);
+    let mut reordered_index = second;
+    reordered_index.round_index = 1;
+    reordered_index.evidence_digest = visual_round_evidence_digest(&reordered_index);
+
+    for invalid in [repeated_identity, reordered_index] {
+        let decision = decide_visual_round(
+            &policy,
+            continued.snapshot(),
+            VisualRoundEvent::Observe {
+                evidence: invalid,
+                now_ms: 1_300,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            decision.snapshot().intervention,
+            Some(VisualRoundInterventionReason::RoundOrder)
+        );
+        assert_eq!(decision.snapshot().completed_rounds, 1);
+    }
 }
 
 #[test]

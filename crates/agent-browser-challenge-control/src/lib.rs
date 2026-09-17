@@ -709,6 +709,10 @@ mod tests {
                 assert_eq!(first, second);
                 assert_eq!(first.state, expected_state);
                 assert!(!first.emitted_effects);
+                assert!(first.attempts_started <= 1);
+                if outcome == ProviderFreeScenarioOutcome::Passed {
+                    assert_eq!(first.attempts_started, 1);
+                }
                 assert_eq!(
                     first.evidence_class,
                     CompositeEvidenceClass::ProviderFreeScenario
