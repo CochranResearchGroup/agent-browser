@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 2
+Plan version: 3
 
-State: PLANNED | NOT ADMITTED
+State: OPEN
 
 Consolidation: required
 
@@ -17,11 +17,14 @@ Parent plan: Plan 0187 W7-C
 Work item: `CochranResearchGroup/agent-browser#127`; issue #66 retains every
 browser, provider-backed, Turnstile or hCaptcha acceptance effect
 
-Proposed branch: `challenge/p210-visual-artifact-adapter`
+Branch: `challenge/p210-visual-artifact-adapter`
 
 Target: `main`
 
-Dependency: P209 must enter canonical `main` before P210 source admission
+Integrated dependency: P209 exact head `27cd5342`, merged through PR #188 as
+`fb616aeed2233aca06b4379d61af5d34609a804d`
+
+Source baseline: `fb616aeed2233aca06b4379d61af5d34609a804d`
 
 ## Objective
 
@@ -36,6 +39,16 @@ a real model, opening a network connection, loading credentials, capturing a
 browser frame, persisting pixels, translating candidates to coordinates,
 emitting desktop input, exposing a public Service action, or attempting a
 challenge.
+
+## Current State
+
+P206 and P209 are integrated in dependency order. P209 exact head `27cd5342`
+merged through PR #188 as canonical `main@fb616aee`. The existing clean
+challenge worktree is assigned to P210 at that exact baseline, the proposed
+adapter-crate path has no competing writer, and the baseline selector reports
+no changed files. Source implementation and the provider-free fixture matrix
+remain. GitHub CI is operator-disabled and no workflow will be restored or
+dispatched for this packet.
 
 ## Dependency And Admission Gate
 
@@ -52,9 +65,11 @@ ref. Admission requires:
 5. The changed-surface selector is run from the admitted baseline before the
    first source edit.
 
-Until those gates pass, this document is planning evidence only. It grants no
-branch, worktree, provider, browser, credential, runtime, CI or effect
-authority.
+All admission gates passed on 2026-09-17. The existing clean challenge
+worktree was reassigned to P210 at canonical `main@fb616aee`; no new worktree
+was created. The baseline selector reports no changed files and only diff
+hygiene. Admission grants source work in the bounded write surface only. It
+grants no provider, browser, credential, runtime, CI or effect authority.
 
 ## Fixture Relationship
 

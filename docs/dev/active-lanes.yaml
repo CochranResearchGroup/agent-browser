@@ -22,24 +22,24 @@ lanes:
     reconciled_overlaps: [P204 writes only its own bounded planning sections and catalog entry; P197 retains its own records]
     blocker: integration of the CI-disable correction remains; organic CI evidence is intentionally unavailable while disabled
     updated_at: 2026-09-17
-  - id: P209
+  - id: P210
     product_lane: PL-CHALLENGE
-    objective: Freeze and prove the provider-neutral visual-reasoning request and response protocol over P206 evidence
-    plan: docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md
-    plan_ref: refs/heads/challenge/p209-visual-provider-protocol
-    branch: challenge/p209-visual-provider-protocol
+    objective: Prove provider-free visual artifact custody and one-shot injected provider invocation over the P209 protocol
+    plan: docs/dev/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md
+    plan_ref: refs/heads/challenge/p210-visual-artifact-adapter
+    branch: challenge/p210-visual-artifact-adapter
     target: main
-    plan_state: SOURCE_ACCEPTED_INTEGRATION_READY
-    custody_state: LOCAL_INTEGRATION_READY
-    checkpoint: 3ef2ad9e
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: fb616aee
     remote_ref: null
     integration_receipt: null
-    integration: publish the canonically reconciled branch and merge normally without restoring or dispatching operator-disabled GitHub CI
-    validation_status: canonical P206 reconciliation passes all 52 challenge-control tests; request-smuggling, provider response-time, request-preparation and response-digest hardening plus challenge-control architecture, strict workspace Clippy, formatting and diff hygiene remain source-identical
-    validation_ref: 3ef2ad9e
+    integration: implement from canonical P209 merge receipt, validate locally, then publish and merge normally without restoring or dispatching operator-disabled GitHub CI
+    validation_status: admitted from clean canonical main after baseline selector reported no changed files and only diff hygiene
+    validation_ref: fb616aee
     work_items: [CochranResearchGroup/agent-browser#127]
     dependencies: []
     overlaps: []
-    reconciled_overlaps: [P206]
-    blocker: branch publication and protected integration remain; GitHub CI is operator-disabled and all model-provider, image, browser, CAPTCHA, desktop-input, runtime and production effects remain excluded
+    reconciled_overlaps: [P209]
+    blocker: source implementation and local acceptance remain; GitHub CI is operator-disabled and all real model-provider, image-capture, browser, CAPTCHA, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17
