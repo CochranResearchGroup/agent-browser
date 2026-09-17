@@ -10,7 +10,6 @@
 //! same capability binding to a newer current owner generation, then binds only
 //! that session and its same-browser active tabs, with an explicit expiry.
 
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -37,108 +36,14 @@ use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
 use agent_browser_lease_authority::{ActiveLeaseClaim, LeaseClaimMode, LeaseClaimTerminalReceipt};
-
-pub(crate) const PROFILE_LEASE_SCHEMA_VERSION: &str = "agent-browser.profile-lease.v1";
-pub(crate) const PROFILE_LEASE_RECONCILE_PLAN_SCHEMA_VERSION: &str =
-    "agent-browser.profile-lease-reconcile-plan.v1";
-pub(crate) const PROFILE_LEASE_RECONCILE_RECEIPT_SCHEMA_VERSION: &str =
-    "agent-browser.profile-lease-reconcile-receipt.v1";
+pub(crate) use agent_browser_service_model::{
+    ProfileLeaseDoctorReport, ProfileLeaseFinding, ProfileLeaseReconcilePlan,
+    ProfileLeaseReconcileReceipt, ProfileLeaseRecord, ProfileLeaseTransition,
+    PROFILE_LEASE_RECONCILE_PLAN_SCHEMA_VERSION, PROFILE_LEASE_RECONCILE_RECEIPT_SCHEMA_VERSION,
+    PROFILE_LEASE_SCHEMA_VERSION,
+};
 
 const READ_ACTIONS: [&str; 5] = ["list", "inspect", "explain", "doctor", "watch"];
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLeaseRecord {
-    pub(crate) schema_version: String,
-    pub(crate) id: String,
-    pub(crate) lease_revision: String,
-    pub(crate) principal_id: Option<String>,
-    pub(crate) principal_provenance: Option<ServicePrincipalProvenance>,
-    pub(crate) profile_id: String,
-    pub(crate) profile_identity_digest: Option<String>,
-    pub(crate) browser_id: Option<String>,
-    pub(crate) session_ids: Vec<String>,
-    pub(crate) tab_ids: Vec<String>,
-    pub(crate) mode: String,
-    pub(crate) state: String,
-    pub(crate) owner_generation: Option<u64>,
-    pub(crate) process_instance_digest: Option<String>,
-    pub(crate) route_ids: Vec<String>,
-    pub(crate) last_heartbeat_at: Option<String>,
-    pub(crate) expires_at: Option<String>,
-    pub(crate) cleanup_obligation: Option<String>,
-    pub(crate) blocking_identity_axes: Vec<String>,
-    pub(crate) authorized_actions: Vec<String>,
-    pub(crate) recourse: PrincipalContinuityRecourse,
-    pub(crate) observation_only: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLeaseFinding {
-    pub(crate) code: String,
-    pub(crate) severity: String,
-    pub(crate) lease_id: String,
-    pub(crate) profile_id: String,
-    pub(crate) message: String,
-    pub(crate) safe_actions: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLeaseDoctorReport {
-    pub(crate) schema_version: String,
-    pub(crate) observed_at: String,
-    pub(crate) healthy: bool,
-    pub(crate) lease_count: usize,
-    pub(crate) findings: Vec<ProfileLeaseFinding>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLeaseTransition {
-    pub(crate) action: String,
-    pub(crate) session_id: String,
-    pub(crate) from_state: String,
-    pub(crate) to_state: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLeaseReconcilePlan {
-    pub(crate) schema_version: String,
-    pub(crate) plan_id: String,
-    pub(crate) lease_id: String,
-    pub(crate) lease_revision: String,
-    pub(crate) owner_generation: Option<u64>,
-    pub(crate) principal_id: String,
-    pub(crate) profile_id: String,
-    pub(crate) browser_id: Option<String>,
-    pub(crate) process_instance_digest: Option<String>,
-    pub(crate) route_ids: Vec<String>,
-    pub(crate) boot_epoch: Option<String>,
-    pub(crate) proposed_transitions: Vec<ProfileLeaseTransition>,
-    pub(crate) idempotency_key: String,
-    pub(crate) issued_at: String,
-    pub(crate) expires_at: String,
-    pub(crate) effect_capable: bool,
-    pub(crate) blocked_reasons: Vec<String>,
-    pub(crate) seal: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileLeaseReconcileReceipt {
-    pub(crate) schema_version: String,
-    pub(crate) idempotency_key: String,
-    pub(crate) plan_id: String,
-    pub(crate) lease_id: String,
-    pub(crate) principal_id: String,
-    pub(crate) applied_at: String,
-    pub(crate) replayed: bool,
-    pub(crate) transition_count: usize,
-    pub(crate) resulting_lease_revision: String,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProfileLeaseFailureCode {

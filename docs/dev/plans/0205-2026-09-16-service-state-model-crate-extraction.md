@@ -757,16 +757,67 @@ against the existing Lease Authority crate before moving profile-lease durable
 records. Prefer direct reuse of the focused authority crate over duplicating
 principal or lease concepts in the service-model crate.
 
+## Checkpoint 14 | Profile Lease Durable Records
+
+State transition: the crate now owns the principal-continuity recourse enum,
+the six passive profile-lease record shapes, and their three schema constants.
+The records reuse `ServicePrincipalProvenance` directly from Lease Authority,
+so the extraction introduces neither a second authority vocabulary nor a
+dependency cycle. The CLI modules remain compatibility facades.
+
+Acceptance state and progress classification: this P1 aggregate-unblocking
+packet is accepted locally. Projection from canonical claims and legacy state,
+authentication, rejoin, renew, release, reconciliation planning and
+application, time, process and runtime-owner joins, repository custody, and
+event emission remain CLI adapters. Failure and error types also remain local
+until their effect boundary is independently resolved.
+
+Evidence:
+
+- all 79 service-model crate unit and integration tests pass, including seven
+  new exact wire-name, camel-case, nested-record, round-trip, and unknown-field
+  tests;
+- 67 focused CLI tests containing `profile_lease` pass across command, MCP,
+  HTTP, routing, control-plane, recovery, resource, and lease adapter surfaces;
+- strict workspace Clippy passes with warnings denied;
+- formatting, architecture guard, guard fixtures, duplicate-definition scan,
+  and diff checks pass;
+- no lease mutation, profile recovery, browser, runtime, install, staging,
+  production, release, or GitHub CI effect was performed.
+
+Delegation receipt:
+
+- `/root/p205_lease_record_inventory`, requested `gpt-5.6-luna` at medium
+  effort, completed the read-only record and consumer inventory;
+- `/root/p205_lease_authority_types`, requested `gpt-5.6-sol` at medium effort,
+  verified dependency direction and the canonical authority-type seam;
+- `/root/p205_lease_seam_review`, requested `gpt-5.6-terra` at high effort,
+  independently approved direct reuse without a new authority vocabulary;
+- `/root/p205_continuity_model`, requested `gpt-5.6-luna` at medium effort,
+  implemented the isolated principal-continuity model and focused tests;
+- `/root/p205_profile_lease_model`, requested `gpt-5.6-sol` at medium effort,
+  implemented the isolated passive record family and focused tests; the
+  primary reviewed and integrated both implementation packets.
+
+Material blockers: the canonical `ServiceState` aggregate still contains
+CLI-owned effect transactions, authority joins, migration behavior, and draft
+capability data. Those families require a fresh dependency review rather than
+being treated as passive records.
+
+Next action: publish this checkpoint, then reassess the remaining aggregate
+edges and select one closed provider-free family. Do not move the draft browser
+capability registry or any runtime transaction merely to reduce line count.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | thirteen families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | fourteen families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | first deep kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | thirteen packets accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | thirteen packets accepted |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | fourteen packets accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | fourteen packets accepted |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 integrated before P205 edits its owned files | dependency pending |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

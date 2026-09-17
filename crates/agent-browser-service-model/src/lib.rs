@@ -12,7 +12,9 @@ mod job_event;
 mod monitor;
 mod operational_snapshot;
 mod presentation;
+mod principal_continuity;
 mod profile_access;
+mod profile_lease;
 mod profile_lifecycle;
 mod profile_readiness;
 mod profile_seeding;
@@ -58,6 +60,7 @@ pub use presentation::{
     RetainedDisplayAllocationCandidate, RoutePoolEntry, ViewStream, ViewStreamProvider,
     ViewerLease, SERVICE_CONTROL_INPUT_PROVIDER_VALUES, SERVICE_VIEW_STREAM_PROVIDER_VALUES,
 };
+pub use principal_continuity::PrincipalContinuityRecourse;
 pub use profile_access::{
     effective_profile_permissions, evaluate_profile_access, evaluate_profile_child_access,
     mutate_profile_policy, profile_policy_target_for_preset, record_profile_eviction_receipt,
@@ -71,6 +74,12 @@ pub use profile_access::{
     ProfilePolicyRevisionDiff, ProfilePolicyTarget, ServiceProfileAccessDecision,
     ServiceProfileAccessPolicy, PROFILE_ACCESS_DECISION_SCHEMA_V1, PROFILE_ACCESS_POLICY_SCHEMA_V1,
     PROFILE_CHILD_ACCESS_SCHEMA_V1,
+};
+pub use profile_lease::{
+    ProfileLeaseDoctorReport, ProfileLeaseFinding, ProfileLeaseReconcilePlan,
+    ProfileLeaseReconcileReceipt, ProfileLeaseRecord, ProfileLeaseTransition,
+    PROFILE_LEASE_RECONCILE_PLAN_SCHEMA_VERSION, PROFILE_LEASE_RECONCILE_RECEIPT_SCHEMA_VERSION,
+    PROFILE_LEASE_SCHEMA_VERSION,
 };
 pub use profile_lifecycle::{
     register_profile_eviction_authorization, ProfileLifecycleAuthorization,

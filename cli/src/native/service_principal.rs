@@ -20,30 +20,7 @@ pub(crate) use agent_browser_lease_authority::{
     ServicePrincipalRegistry, ServicePrincipalState, ServiceProfileCapability,
     ServiceProfileCapabilityState,
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum PrincipalContinuityRecourse {
-    ContinueWithActiveClaim,
-    ContinueWithSelfDeclaredAccess,
-    RejoinOwnedBrowser,
-    ReplaceStaleSamePrincipalSession,
-    WaitForForeignPrincipal,
-    ReconcilePrincipalIdentity,
-}
-
-impl PrincipalContinuityRecourse {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::ContinueWithActiveClaim => "continue_with_active_claim",
-            Self::ContinueWithSelfDeclaredAccess => "continue_with_self_declared_access",
-            Self::RejoinOwnedBrowser => "rejoin_owned_browser",
-            Self::ReplaceStaleSamePrincipalSession => "replace_stale_same_principal_session",
-            Self::WaitForForeignPrincipal => "wait_for_foreign_principal",
-            Self::ReconcilePrincipalIdentity => "reconcile_principal_identity",
-        }
-    }
-}
+pub(crate) use agent_browser_service_model::PrincipalContinuityRecourse;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
