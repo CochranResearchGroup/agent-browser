@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Plan version: 2
+Plan version: 3
 
 State: SOURCE ACCEPTED | PUBLICATION AND CI HELD
 
@@ -66,15 +66,17 @@ planning projections. It remains local during the CI hold.
 The protocol interface consists of two pure functions:
 
 ```rust
-prepare_visual_provider_request(policy, evidence, prepared_artifact)
+prepare_visual_provider_request(policy, evidence, prepared_artifact, execution_plan)
 adjudicate_visual_provider_response(policy, evidence, request, response, now_ms)
 ```
 
 The prepared request binds the challenge task and attempt, monotonic round,
 policy and profile revisions, evidence, frame, context, geometry, candidate
 set, exact ordered candidate identities, prepared-artifact identity and digest,
-provider capability, request time and expiry. Its canonical request digest
-covers every field.
+a caller-owned, policy-checked execution budget, provider capability, request
+time and expiry. Its canonical request digest covers every field. The provider
+cannot set execution cost or cause it to be derived from selected candidate
+count.
 
 The response binds that request digest, evidence digest, candidate-set digest,
 provider capability and one typed disposition:
@@ -168,18 +170,21 @@ protected validation path.
 
 ## Local Acceptance | 2026-09-16
 
-Source checkpoint `2148caad` implements the pure provider protocol and its
-eight-case fake serialized fixture matrix. The request digest binds every
+Source checkpoint `4be65f06` implements the pure provider protocol and its
+nine-case fake serialized fixture matrix. The request digest binds every
 request field other than the digest itself, including exact candidate order
-and prepared-artifact identity. Response adjudication accepts only selected
-candidate identities or typed ambiguous, unsupported and inconclusive
-abstention. Request, response, evidence, capability, freshness and budget
-violations stop before selection or intent, while coordinate, event-sequence,
-retry and free-form instruction fields fail strict deserialization.
+and prepared-artifact identity. It also binds a caller-owned execution budget
+before provider adjudication, preventing provider candidate output from
+inventing or implicitly determining pointer-event cost. Response adjudication
+accepts only selected candidate identities or typed ambiguous, unsupported and
+inconclusive abstention. Request, response, evidence, capability, freshness and
+budget violations stop before selection or intent, while coordinate,
+event-sequence, retry and free-form instruction fields fail strict
+deserialization.
 
 Local acceptance passed:
 
-- all 47 challenge-control crate tests, including 8 provider-protocol and 23
+- all 48 challenge-control crate tests, including 9 provider-protocol and 23
   visual-round cases;
 - strict workspace Clippy and workspace formatting;
 - challenge-control, CDP, Lease Authority and desktop-services architecture
