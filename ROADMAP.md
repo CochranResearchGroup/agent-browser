@@ -355,7 +355,19 @@ operator-disabled. Source checkpoint `f90ef7a7` now produces exact-budget,
 checked, deterministic raw pointer plans without an executor. All 18
 desktop-services tests, all 58 challenge-control tests, the strengthened
 architecture guard, workspace formatting and strict workspace Clippy pass
-locally. Publication and protected integration remain.
+locally. P214 exact head `1ea70c47` merged through PR #198 as `bea09376` and
+issue #197 closed. No GitHub Actions branch or merge-head run started.
+
+[Plan 0215](docs/dev/plans/0215-2026-09-17-candidate-event-executor.md) is
+admitted on `platform/p215-candidate-event-executor` from that exact canonical
+baseline. P215 binds one exact event plan to the existing route claim,
+controller-authority fence, surface probe, provider acknowledgement, cleanup
+and effect-certainty primitives. It requires a fresh exact candidate
+observation before every button-down and proves the adapter only with injected
+fakes. It adds no CLI, Service State, browser adapter, installed provider or
+live effect. P205 and P211 retain their declared source surfaces; shared
+planning projections reconcile at integration. GitHub CI remains
+operator-disabled.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

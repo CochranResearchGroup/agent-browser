@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 2
+Plan version: 3
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -68,6 +68,11 @@ challenge-control tests pass with the strengthened file-local architecture
 guard, formatting, strict workspace Clippy, documentation links, planning
 audit, selector readback and diff hygiene. Publication and protected
 integration remain.
+
+P214 exact head `1ea70c47` merged through PR #198 as canonical
+`main@bea09376`. Issue #197 closed through the PR, and no GitHub Actions branch
+or merge-head run started. P214 is closed. P215 owns the separately governed
+provider-injected execution boundary.
 
 ## Architecture Boundary
 
