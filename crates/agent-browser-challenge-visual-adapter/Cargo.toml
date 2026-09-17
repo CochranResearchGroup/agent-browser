@@ -1,0 +1,14 @@
+[package]
+name = "agent-browser-challenge-visual-adapter"
+version = "0.1.0"
+edition = "2021"
+description = "Provider-free visual artifact custody and invocation for Agent Browser"
+license = "Apache-2.0"
+repository = "https://github.com/vercel-labs/agent-browser"
+publish = false
+
+[dependencies]
+agent-browser-challenge-control = { path = "../agent-browser-challenge-control" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
