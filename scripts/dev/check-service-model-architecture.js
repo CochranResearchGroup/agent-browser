@@ -28,6 +28,10 @@ const CRASH_REGENERATION_DEFINITIONS = [
   'CrashRegenerationPhaseReceipt',
 ];
 
+const CAPABILITY_REGISTRY_DEFINITIONS = [
+  'BrowserCapabilityRegistry',
+];
+
 const FORBIDDEN_DEPENDENCIES = [
   'agent-browser',
   'agent-browser-cdp',
@@ -171,6 +175,10 @@ function check(root = repoRoot) {
     'crates/agent-browser-service-model/src/crash_regeneration.rs');
   const crashRegeneration = withoutCommentsAndStrings(read(root,
     'crates/agent-browser-service-model/src/crash_regeneration.rs'));
+  const capabilityRegistryPath = join(sourceRoot, 'browser_capability_registry.rs');
+  const capabilityRegistrySource = read(root,
+    'crates/agent-browser-service-model/src/browser_capability_registry.rs');
+  const capabilityRegistry = withoutCommentsAndStrings(capabilityRegistrySource);
   const cliSources = rustFilesUnder(join(root, 'cli/src'))
     .map((path) => withoutCommentsAndStrings(readFileSync(path, 'utf8')));
   requireCondition(existsSync(crashRegenerationPath),
@@ -215,6 +223,48 @@ function check(root = repoRoot) {
     /BTreeMap\s*<\s*String\s*,\s*agent_browser_service_model\s*::\s*CrashRegenerationTransaction\s*>/
       .test(cliServiceModel),
     'CLI ServiceState must use the canonical service-model crash regeneration transaction',
+  );
+  requireCondition(existsSync(capabilityRegistryPath),
+    'service-model must own src/browser_capability_registry.rs');
+  const capabilityRegistryExport = serviceModelLib.match(
+    /\bpub\s+use\s+browser_capability_registry\s*::\s*\{([\s\S]*?)\}\s*;/,
+  );
+  requireCondition(/\bmod\s+browser_capability_registry\s*;/.test(serviceModelLib),
+    'service-model lib must declare the browser capability registry module');
+  requireCondition(Boolean(capabilityRegistryExport),
+    'service-model lib must export the browser capability registry interface');
+  for (const name of CAPABILITY_REGISTRY_DEFINITIONS) {
+    const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');
+    requireCondition(
+      [...capabilityRegistrySource.matchAll(definition)].length === 1,
+      `service-model capability registry module must own exactly one definition: ${name}`,
+    );
+    requireCondition(
+      !cliSources.some((source) => new RegExp(definition.source).test(source)),
+      `CLI must not duplicate capability registry definition: ${name}`,
+    );
+    requireCondition(
+      Boolean(capabilityRegistryExport?.[1].match(new RegExp(`\\b${name}\\b`))),
+      `service-model lib must export capability registry definition: ${name}`,
+    );
+  }
+  requireCondition(
+    /\bpub\s+fn\s+browser_profile_compatibility_matches\b/.test(capabilityRegistry),
+    'service-model must own browser_profile_compatibility_matches',
+  );
+  requireCondition(
+    !cliSources.some((source) => /\bfn\s+browser_profile_compatibility_matches\b/.test(source)),
+    'CLI must not duplicate browser_profile_compatibility_matches',
+  );
+  requireCondition(
+    Boolean(capabilityRegistryExport?.[1]
+      .match(/\bbrowser_profile_compatibility_matches\b/)),
+    'service-model lib must export browser_profile_compatibility_matches',
+  );
+  requireCondition(
+    /browser_capability_registry\s*:\s*agent_browser_service_model\s*::\s*BrowserCapabilityRegistry/
+      .test(cliServiceModel),
+    'CLI ServiceState must use the canonical service-model browser capability registry',
   );
   for (const name of ABANDONED_RETIREMENT_RECORDS) {
     const definition = new RegExp(`\\b(?:struct|enum|type)\\s+${name}\\b`, 'g');

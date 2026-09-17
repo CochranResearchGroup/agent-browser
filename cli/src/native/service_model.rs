@@ -2058,45 +2058,9 @@ pub fn assert_service_incident_activity_response_contract(value: &serde_json::Va
     }
 }
 
-/// Draft browser capability registry carried by service config and service state.
-///
-/// The nested record arrays intentionally stay JSON-shaped while the registry
-/// contract is still evolving. Runtime routing must not depend on these records
-/// until the registry graduates from advisory state to authoritative policy.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct BrowserCapabilityRegistry {
-    pub browser_hosts: Vec<Value>,
-    pub browser_executables: Vec<Value>,
-    pub browser_capabilities: Vec<Value>,
-    pub profile_compatibility: Vec<Value>,
-    pub browser_preference_bindings: Vec<Value>,
-    pub validation_evidence: Vec<Value>,
-    pub generated_at: Option<String>,
-}
-
-impl BrowserCapabilityRegistry {
-    pub fn is_empty(&self) -> bool {
-        self.browser_hosts.is_empty()
-            && self.browser_executables.is_empty()
-            && self.browser_capabilities.is_empty()
-            && self.profile_compatibility.is_empty()
-            && self.browser_preference_bindings.is_empty()
-            && self.validation_evidence.is_empty()
-            && self.generated_at.is_none()
-    }
-}
-
-pub(crate) fn browser_profile_compatibility_matches(
-    compatibility: &Value,
-    profile_id: &str,
-    host_id: &str,
-    executable_id: &str,
-) -> bool {
-    compatibility.get("profileId").and_then(Value::as_str) == Some(profile_id)
-        && compatibility.get("hostId").and_then(Value::as_str) == Some(host_id)
-        && compatibility.get("executableId").and_then(Value::as_str) == Some(executable_id)
-}
+pub use agent_browser_service_model::{
+    browser_profile_compatibility_matches, BrowserCapabilityRegistry,
+};
 
 /// Top-level snapshot of the browser service control plane.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -2227,8 +2191,11 @@ pub struct ServiceState {
     pub(crate) challenge_tasks:
         BTreeMap<String, super::service_challenge_task::ServiceChallengeTaskRecord>,
     pub profile_seeding_handoffs: BTreeMap<String, ProfileSeedingHandoffRecord>,
-    #[serde(default, skip_serializing_if = "BrowserCapabilityRegistry::is_empty")]
-    pub browser_capability_registry: BrowserCapabilityRegistry,
+    #[serde(
+        default,
+        skip_serializing_if = "agent_browser_service_model::BrowserCapabilityRegistry::is_empty"
+    )]
+    pub browser_capability_registry: agent_browser_service_model::BrowserCapabilityRegistry,
     pub default_browser_build: Option<BrowserBuild>,
     /// Forward-compatible top-level fields written by newer Service State
     /// producers. Older writers round-trip these values without interpreting

@@ -1983,16 +1983,66 @@ capability record and matcher. Do not combine it with authentication,
 challenge, aggregate, bug-fix, CI, runtime, provider, browser, install, or
 production work.
 
+## Checkpoint 32 | Advisory Capability Registry Accepted
+
+State transition: Service Model now canonically owns the passive
+`BrowserCapabilityRegistry`, its exact `is_empty` contract, and the pure
+profile, host, and executable compatibility-row matcher. `ServiceState` names
+the canonical registry directly. The CLI retains a narrow compatibility
+re-export plus all config overlay, path/body validation, timestamping,
+collection mutation, access planning, preflight, launch selection, and routing
+decisions.
+
+Compatibility and authority evidence:
+
+- camelCase fields, permissive unknown outer fields, opaque nested JSON values,
+  default empty arrays, serialized `generatedAt: null`, nonempty handling for
+  every collection and any present timestamp string, and exact case- and
+  whitespace-sensitive matching remain unchanged;
+- a populated model fixture proves nested arbitrary JSON round trips while
+  unknown outer fields remain accepted and ignored exactly as before;
+- the structural guard requires the model module, public exports, one canonical
+  definition and matcher, and the direct aggregate type. Mutation fixtures
+  reject a missing module, missing export, indirect aggregate type, duplicate
+  CLI record, and duplicate CLI matcher;
+- all 121 Service Model unit tests and fourteen crate integration tests pass;
+  all twenty `browser_capability` CLI tests and 41 focused `service_model` CLI
+  tests pass;
+- Service API/MCP parity, generated service client contract checks, JavaScript
+  client type checks, formatting, diff hygiene, and strict workspace Clippy
+  pass; and
+- the move creates no new dependency and does not change the existing advisory
+  data's runtime use. No GitHub CI, runtime, browser, profile, provider, install,
+  staging, production, or release effect occurred.
+
+Delegation and model-choice receipt: the primary reused the warm-context
+`/root/p205_owner_mutation_api` worker for the three-file record extraction
+after the runtime rejected a new third thread. The worker changed only the
+model module, crate exports, and CLI compatibility seam, then reported the
+model tests. The primary independently added and ran the architecture guard,
+reviewed the ownership and authority boundary, and ran all CLI and final gates.
+No new model route was allocated, and effective runtime model and effort
+metadata were not independently exposed.
+
+Acceptance state and progress classification: the advisory capability packet
+is accepted. This is outcome progress and removes the last passive aggregate
+record owned only by the CLI. Next action: create the separately frozen
+provider-free `agent-browser-authentication-control` crate and reduce
+`cli/src/native/authentication_run.rs` to a compatibility re-export. Do not
+combine that packet with the Service authentication envelope, challenge task,
+aggregate, bug-fix, CI, runtime, provider, browser, install, or production
+work.
+
 ## Evidence And Exit
 
 | Requirement | Evidence | Current state |
 | --- | --- | --- |
-| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twenty families accepted; aggregate pending |
+| One provider-free model crate | workspace manifest, crate manifest, architecture guard | twenty-one families accepted; aggregate pending |
 | Stable compatibility | frozen current fixtures and byte or value-equivalent canonical outputs | pending |
 | One canonical aggregate | no duplicate `ServiceState` or durable record owners | pending |
 | Deep module interface | pure policy decisions and record contracts through one crate seam | presentation-capacity kernel accepted; aggregate interface pending |
-| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty families plus capacity mutation closure accepted |
-| Focused correctness | crate tests and affected CLI adapter tests | crash-regeneration kernel accepted through Checkpoint 30 |
+| CLI adapters remain adapters | repository, process, browser, transport, and provider imports absent from crate | twenty-one families plus capacity mutation closure accepted |
+| Focused correctness | crate tests and affected CLI adapter tests | capability registry accepted through Checkpoint 32 |
 | Build acceleration | comparable baseline and candidate focused-loop receipts | 171.01-second cold CLI baseline and 4.08-second crate loop recorded; broader claim pending |
 | Shared validation wiring | P204 commits contained in `origin/main`; merged into P205 at `d10e7c17` | changed-surface selector and focused lane used locally |
 | Runtime effect | no runtime, browser, profile, provider, install, staging, production, or release effect | required none |

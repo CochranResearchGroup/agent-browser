@@ -34,11 +34,24 @@ const validCrashStateUse = `
 pub struct ServiceState {
   crash_regeneration_transactions:
     BTreeMap<String, agent_browser_service_model::CrashRegenerationTransaction>,
+  browser_capability_registry:
+    agent_browser_service_model::BrowserCapabilityRegistry,
 }
+`;
+const validCapabilityRegistry = `
+pub struct BrowserCapabilityRegistry;
+pub fn browser_profile_compatibility_matches() {}
+`;
+const validCapabilityExport = `mod browser_capability_registry;
+pub use browser_capability_registry::{
+  browser_profile_compatibility_matches,
+  BrowserCapabilityRegistry,
+};
 `;
 
 function fixture({ manifest = '', source = '', workspace = true, retirement = validRetirement,
-  crash = validCrashRegeneration, cli = '', serviceModel = validCrashStateUse } = {}) {
+  crash = validCrashRegeneration, capability = validCapabilityRegistry, cli = '',
+  serviceModel = validCrashStateUse } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'agent-browser-service-model-architecture-'));
   mkdirSync(join(root, 'crates/agent-browser-service-model/src'), { recursive: true });
   writeFileSync(join(root, 'Cargo.toml'), workspace ? '[workspace]\nmembers = ["crates/agent-browser-service-model"]\n' : 'workspace = false\n');
@@ -46,6 +59,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/lib.rs'), source);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/abandoned_browser_retirement.rs'), retirement);
   writeFileSync(join(root, 'crates/agent-browser-service-model/src/crash_regeneration.rs'), crash);
+  writeFileSync(join(root, 'crates/agent-browser-service-model/src/browser_capability_registry.rs'), capability);
   mkdirSync(join(root, 'cli/src/native'), { recursive: true });
   writeFileSync(join(root, 'cli/src/native/retirement.rs'), cli);
   writeFileSync(join(root, 'cli/src/native/service_model.rs'), serviceModel);
@@ -54,6 +68,7 @@ function fixture({ manifest = '', source = '', workspace = true, retirement = va
 
 const validManifest = '[package]\nname = "agent-browser-service-model"\nversion = "0.1.0"\n[dependencies]\nserde = "1"\n';
 const validSource = `${validCrashExport}
+${validCapabilityExport}
 // std::fs and provider are allowed in prose.
 pub struct BrowserProfile { pub id: String }
 pub fn profile(id: String) -> BrowserProfile { BrowserProfile { id } }
@@ -73,6 +88,17 @@ try {
     'missing crash-regeneration module was accepted');
 } finally {
   rmSync(missingCrashModule, { recursive: true, force: true });
+}
+
+const missingCapabilityModule = fixture({ manifest: validManifest, source: validSource });
+try {
+  rmSync(join(missingCapabilityModule,
+    'crates/agent-browser-service-model/src/browser_capability_registry.rs'));
+  ok(check(missingCapabilityModule).some((failure) =>
+    failure.includes('browser_capability_registry.rs')),
+  'missing capability-registry module was accepted');
+} finally {
+  rmSync(missingCapabilityModule, { recursive: true, force: true });
 }
 
 const clean = fixture({ manifest: validManifest, source: validSource });
@@ -152,6 +178,60 @@ try {
     'indirect CLI crash-regeneration transaction type was accepted');
 } finally {
   rmSync(indirectCrashStateType, { recursive: true, force: true });
+}
+
+const duplicateCapabilityDefinition = fixture({
+  manifest: validManifest,
+  source: validSource,
+  cli: 'pub(crate) struct BrowserCapabilityRegistry;\n',
+});
+try {
+  ok(check(duplicateCapabilityDefinition).some((failure) =>
+    failure.includes('BrowserCapabilityRegistry')),
+  'duplicate CLI capability-registry definition was accepted');
+} finally {
+  rmSync(duplicateCapabilityDefinition, { recursive: true, force: true });
+}
+
+const missingCapabilityExport = fixture({
+  manifest: validManifest,
+  source: validSource.replace(validCapabilityExport, ''),
+});
+try {
+  ok(check(missingCapabilityExport).some((failure) =>
+    failure.includes('export the browser capability registry')),
+  'missing capability-registry public export was accepted');
+} finally {
+  rmSync(missingCapabilityExport, { recursive: true, force: true });
+}
+
+const indirectCapabilityStateType = fixture({
+  manifest: validManifest,
+  source: validSource,
+  serviceModel: validCrashStateUse.replace(
+    'agent_browser_service_model::BrowserCapabilityRegistry',
+    'BrowserCapabilityRegistry',
+  ),
+});
+try {
+  ok(check(indirectCapabilityStateType).some((failure) =>
+    failure.includes('canonical service-model browser capability registry')),
+  'indirect CLI capability-registry type was accepted');
+} finally {
+  rmSync(indirectCapabilityStateType, { recursive: true, force: true });
+}
+
+const duplicateCapabilityMatcher = fixture({
+  manifest: validManifest,
+  source: validSource,
+  cli: 'pub(crate) fn browser_profile_compatibility_matches() {}\n',
+});
+try {
+  ok(check(duplicateCapabilityMatcher).some((failure) =>
+    failure.includes('browser_profile_compatibility_matches')),
+  'duplicate CLI capability-registry matcher was accepted');
+} finally {
+  rmSync(duplicateCapabilityMatcher, { recursive: true, force: true });
 }
 
 for (const name of retirementRecords) {

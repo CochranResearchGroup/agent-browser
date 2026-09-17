@@ -4,6 +4,7 @@
 //! Adapters own persistence, browser observation, process control, and transport.
 
 mod abandoned_browser_retirement;
+mod browser_capability_registry;
 mod browser_process;
 mod browser_profile;
 mod browser_retirement;
@@ -35,6 +36,9 @@ pub use abandoned_browser_retirement::{
     AbandonedBrowserRetirementTransaction, ResourceRetirementPolicy, RetirementExitEvidence,
     RetirementExitFailure, RetirementRecourse, RetirementTerminalProjection,
     ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1,
+};
+pub use browser_capability_registry::{
+    browser_profile_compatibility_matches, BrowserCapabilityRegistry,
 };
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
