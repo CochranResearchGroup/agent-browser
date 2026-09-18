@@ -412,9 +412,10 @@ dashboard `/remote-view/<handoff-id>` URL, and updates the desired URL while
 retaining that handoff across later same-session navigation. Resolution
 revalidates the live session record, heartbeat, exact PID, responsive CDP
 endpoint, attributed target, static display binding, route-pool readiness, and
-route readiness before raising the browser. A stale proof returns a typed
-converging response and never falls through to legacy retained-browser
-adoption. The dashboard accepts the manager-specific receipt from its
+route readiness before raising the browser. A stale proof returns a terminal
+typed unavailable response and never enters the dashboard's automatic retry
+loop or falls through to legacy retained-browser adoption. The dashboard
+accepts the manager-specific receipt from its
 authenticated Service response while preserving the stricter legacy receipt
 checks for legacy handoffs. Both manager handoff fixtures, all 19 other
 executed browser-session tests, all 14 durable-handoff regressions, the route

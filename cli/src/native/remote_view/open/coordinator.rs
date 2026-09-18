@@ -1439,14 +1439,14 @@ pub(crate) async fn execute_durable_resolution<
         Err(error) => {
             return Ok(RouteBoundOpenOutcome::Converging {
                 result: RouteBoundOpenDocument::from_compatibility(json!({
-                    "status": "converging",
+                    "status": "unavailable",
                     "resolved": false,
                     "handoffId": handoff.id,
                     "handoffUrl": handoff.handoff_url,
                     "browserId": handoff.browser_id,
                     "sessionName": handoff.session_name,
                     "message": error,
-                    "retryable": true,
+                    "retryable": false,
                     "browserSessionManager": true,
                 }))?,
             });
