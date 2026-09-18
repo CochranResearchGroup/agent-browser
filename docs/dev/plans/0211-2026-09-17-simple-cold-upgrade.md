@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 14
+Plan version: 15
 
 State: OPEN
 
@@ -235,6 +235,21 @@ tests, five catalog tests, two CLI store tests, workspace formatting, strict
 workspace Clippy, and diff hygiene pass. Service hosting, concrete browser and
 filesystem effects, CLI routing, and process-restart fixtures remain open.
 
+Checkpoint `833da2a5` adds the concrete BrowserManager effect adapter without
+switching any public route or launching Chrome. One serialized worker owns all
+manager instances and maps launch, recorded-PID plus CDP liveness, exact close,
+bootstrap adoption, session-initial tab creation, explicit tab creation, and
+target close to existing BrowserManager primitives. Disposable filesystem
+effects create a private direct child of the configured absolute root and
+delete only that recorded child. The multi-session tab contract now handles
+the real Chrome bootstrap constraint: Alice adopts the unowned bootstrap; Bob
+gets exactly one session-initial tab when no unattributed target remains; and
+closing Alice's only tab first provisions Bob's required survivor tab before
+physical close. Repeated commands still reuse the session-current tab. Eighteen
+manager tests, the focused adapter filesystem test, workspace formatting,
+strict workspace Clippy, and diff hygiene pass. The adapter is not yet hosted
+by the Service and restart-time CDP reattachment remains open.
+
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
 `--session` is the caller-visible attribution identity rather than a daemon
@@ -259,10 +274,11 @@ raises its primary browser window. Tree expansion from browser to sessions to
 tabs remains a later UX improvement.
 
 The tab follow-up closes the accidental-growth loophole. Each session has at
-most one current tab. Its first tab-requiring command adopts Chrome's existing
-bootstrap tab when one is available. Ordinary `open` and navigation commands
-reuse the current tab; only an explicit new-tab operation increases the tab
-count. Closing the current tab selects the session's most recently used
+most one current tab. Its first tab-requiring command adopts an unattributed
+Chrome bootstrap tab when one is available; otherwise it creates exactly one
+session-initial tab. Ordinary `open` and navigation commands then reuse the
+current tab; only an explicit new-tab operation increases the tab count within
+that session. Closing the current tab selects the session's most recently used
 remaining tab, or leaves the session tabless until another command needs one.
 Session termination closes its live tabs, while historical tab metadata
 remains queryable. The prototype records tab-count and cleanup telemetry but
@@ -317,9 +333,10 @@ An active browser is one concrete process attached to one profile. Multiple
 named sessions may share it and route requests through its one CDP endpoint.
 Each session owns attribution, not permanent tab control. Every live tab has at
 least one active session reference and one session-current pointer is retained
-when that session has tabs. The first session adopts an available Chrome
-bootstrap tab. Ordinary navigation reuses the current tab; explicit new-tab is
-the only normal tab-creation command. Closing the current tab selects the most
+when that session has tabs. A session adopts an available unattributed Chrome
+bootstrap tab, or receives one session-initial tab when none remains. Ordinary
+navigation reuses the current tab; explicit new-tab is the only additional
+tab-creation command within a session. Closing the current tab selects the most
 recently used remaining tab without eagerly creating a replacement. Session
 termination closes its live tabs and preserves only historical metadata. Tab
 sharing, tab handoff, authenticated principals, identity-restricted profiles,
@@ -408,10 +425,11 @@ open.
    session-scoped allocation for disposable profile intent, refresh heartbeats
    from activity, and proactively reap expired sessions, sessionless browsers,
    and exactly proven disposable profile directories.
-9. Give each session one current tab. Adopt Chrome's bootstrap tab, reuse the
-   current tab for ordinary navigation, create additional tabs only on explicit
-   request, select the most recently used remaining tab after close, and close
-   live tabs when their session ends without deleting historical metadata.
+9. Give each session one current tab. Adopt an unattributed Chrome bootstrap
+   tab or create one session-initial tab, reuse the current tab for ordinary
+   navigation, create further tabs only on explicit request, select the most
+   recently used remaining tab after close, and close live tabs when their
+   session ends without deleting historical metadata.
 10. Replace dynamic presentation leasing on the ordinary path with configured
    display-to-viewer lookup. Assign remotely viewable browsers to the least
    crowded healthy virtual desktop, reserve `:0` for explicit local-screen
@@ -569,8 +587,8 @@ touching overlapping documentation surfaces.
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | provider-free manager behavior green; Service hosting, persistence, and browser adapter pending |
 | Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, and exact recorded deletion green; filesystem effect adapter pending |
-| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts the bootstrap tab; explicit new-tab is the only normal growth path; close selects the most recently used remainder; session end removes live tabs | provider-free live-tab behavior, terminal tab metadata, navigation attribution, and persistence green; CDP adapter pending |
-| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat and abstract bounded-recovery behavior green; concrete PID and CDP observation adapter pending |
+| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle and concrete BrowserManager tab adapter green; hosted CDP fixture pending |
+| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, and recorded-PID plus CDP adapter green; Service hosting and restart reattachment pending |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions and independent provider-free manager proof green; CLI routing pending |
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | not implemented |
@@ -586,8 +604,9 @@ tests must include idempotent replay, a shutdown interrupted after each phase,
 stale PID metadata, exact foreign-process preservation, owned container
 cleanup, browser close escalation, ownership release, and restart readiness.
 It must also include two named sessions sharing one browser, exact and
-disposable profile intent, bootstrap-tab adoption, repeated navigation without
-tab growth, explicit tab creation, current-tab close selection, session tab
+disposable profile intent, bootstrap or session-initial tab acquisition,
+repeated navigation without tab growth, explicit tab creation, current-tab
+close selection, session tab
 cleanup, heartbeat expiry, join-versus-final-close serialization, Service
 restart recovery, unresponsive PID and CDP recovery, nonblocking legacy
 projection failure, exact disposable cleanup, deterministic least-crowded
