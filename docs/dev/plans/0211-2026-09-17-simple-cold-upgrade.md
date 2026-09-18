@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 31
+Plan version: 32
 
 State: OPEN
 
@@ -667,6 +667,16 @@ tests pass; the disposable Chrome/Xvfb browser journey remains intentionally
 ignored in this provider-free batch. Formatting passes. Installed shutdown
 acceptance remains open and no installed or shared runtime was mutated.
 
+The version 32 continuation closes the remaining injected-clock platform
+timeout evidence. The real platform-effects adapter is composed with the
+controller's injected clock while its browser phase consumes the exact
+controller-owned allowance. The resulting receipt attributes the browser
+deadline overrun, retains the platform's changed and escalation evidence, and
+still records ownership release, transient cleanup, final verification, and
+zero residue. This is a deterministic no-sleep fixture; concrete daemon,
+systemd, and container subprocess effects remain independently bounded by
+their existing adapters.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -954,7 +964,7 @@ touching overlapping documentation surfaces.
 | Requirement | Acceptance evidence | Current state |
 | --- | --- | --- |
 | One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public route, empty-workstation idempotence, retained-profile release, protected-claim release, failed-upgrade independence, partial-prior-run completion, manager-only state, exact process termination, foreign-process preservation, and replay fixtures green; installed acceptance pending |
-| Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | fixed phase deadlines, bounded daemon/command waits, and provider-free escalation receipt mapping are green; injected-clock platform timeout fixture pending |
+| Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | fixed phase deadlines, injected-clock controller and platform-adapter overruns, bounded daemon and command waits, and provider-free escalation receipt mapping are green |
 | Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | exact browser/daemon, fixed user-unit, fixed container, state-release, metadata, and verification adapters implemented; installed residue proof pending |
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixtures release retained sessions and an active protected claim while preserving profile records and physical data |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |

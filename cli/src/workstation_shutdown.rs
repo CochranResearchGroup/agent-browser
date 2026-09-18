@@ -812,12 +812,16 @@ mod tests {
     struct FakePlatform {
         calls: Vec<ShutdownPhase>,
         fail_units: bool,
+        browser_clock: Option<Rc<Cell<u64>>>,
         residue: ShutdownResidue,
     }
 
     impl ShutdownPlatform for FakePlatform {
-        fn close_owned_browsers(&mut self, _deadline: Duration) -> Result<(bool, bool), String> {
+        fn close_owned_browsers(&mut self, deadline: Duration) -> Result<(bool, bool), String> {
             self.calls.push(ShutdownPhase::Browsers);
+            if let Some(clock) = &self.browser_clock {
+                clock.set(clock.get() + deadline.as_millis() as u64);
+            }
             Ok((true, true))
         }
 
@@ -972,6 +976,41 @@ mod tests {
         );
         assert_eq!(effects.calls.len(), 6);
         assert_eq!(effects.calls.last(), Some(&ShutdownPhase::Verify));
+    }
+
+    #[test]
+    fn platform_browser_timeout_retains_escalation_and_later_cleanup_receipts() {
+        let now = Rc::new(Cell::new(0));
+        let clock = InjectedClock(now.clone());
+        let platform = FakePlatform {
+            browser_clock: Some(now),
+            ..FakePlatform::default()
+        };
+        let mut effects = PlatformShutdownEffects::new(platform);
+
+        let receipt = execute_workstation_shutdown_with_clock(&mut effects, &clock);
+
+        assert!(!receipt.success);
+        assert_eq!(
+            receipt.steps[0].error.as_deref(),
+            Some("shutdown_browsers_deadline_exceeded")
+        );
+        assert!(receipt.steps[0].changed);
+        assert!(receipt.steps[0].escalated);
+        assert_eq!(
+            effects.platform.calls,
+            vec![
+                ShutdownPhase::Browsers,
+                ShutdownPhase::UserUnits,
+                ShutdownPhase::Containers,
+                ShutdownPhase::Ownership,
+                ShutdownPhase::TransientMetadata,
+                ShutdownPhase::Verify,
+            ]
+        );
+        assert!(receipt.steps[3].changed);
+        assert!(receipt.steps[4].changed);
+        assert_eq!(receipt.residue, ShutdownResidue::default());
     }
 
     #[test]
