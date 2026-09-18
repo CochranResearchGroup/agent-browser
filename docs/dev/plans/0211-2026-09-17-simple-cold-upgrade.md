@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 32
+Plan version: 33
 
 State: OPEN
 
@@ -677,6 +677,23 @@ zero residue. This is a deterministic no-sleep fixture; concrete daemon,
 systemd, and container subprocess effects remain independently bounded by
 their existing adapters.
 
+The version 33 continuation joins a disposable fresh cold install to first
+Service use without launching Chrome or mutating an installed runtime. The
+fixture executes the selected installed binary, starts one runtime host and
+its embedded dashboard, receives HTTP 200 from the dashboard authentication
+status endpoint, completes two fresh Service status requests, and proves that
+the repeated dashboard and Service calls retain the same runtime-host process
+identity and stream port. The runtime host's recorded executable resolves to
+the selected installed generation. The installed binary then performs a
+successful cold shutdown, removes its process metadata, and terminates that
+exact process. Both cold-install integration tests pass together, and a fresh
+process and filesystem readback finds no fixture residue. The first draft of
+the fixture correctly unwound through its shutdown guard but failed because it
+expected separate dashboard PID files; the dashboard on this path is embedded
+in the runtime host. The repaired assertion uses the reachable dashboard
+endpoint as the logical dashboard identity. The fixture also makes the
+cold-install harness remove read-only generation directories during cleanup.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -969,7 +986,7 @@ touching overlapping documentation surfaces.
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixtures release retained sessions and an active protected claim while preserving profile records and physical data |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | ordinary and reviewed-candidate source routes plus isolated success and rollback fixtures green; installed acceptance pending |
-| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization, provider-free restart reuse, concrete disposable-Chrome worker reattachment, and the compiled-CLI shared-daemon title, snapshot, click, redirect, and close journey are green; joined cold-install-to-dashboard restart acceptance remains pending |
+| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | joined disposable cold-install-to-first-use proves the selected generation, one reused runtime-host identity, one reachable reused dashboard endpoint, repeated fresh Service requests, and exact installed shutdown; independent host serialization, provider-free restart reuse, concrete disposable-Chrome worker reattachment, and the compiled-CLI shared-daemon title, snapshot, click, redirect, and close journey are also green |
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, public named-session lifecycle routing, generic current-tab command routing, and the two-session compiled-CLI/runtime-host Chrome fixture are green |
 | Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, exact recorded deletion, filesystem adapter, default host policy, and exact hosted-Chrome final-process termination are green; hosted disposable-directory reaping remains pending |
