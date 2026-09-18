@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -216,6 +216,55 @@ Gate 2 fetched `origin/main`, the P216 branch, and the P211 branch once. Remote
 required in P216. The P211 preview remains read-only and is not integrated into
 this branch.
 
+## Candidate Freeze
+
+The exact P216 integration candidate is
+`6ff7bc0de0a10fab0afbb1bbf56c591a98ea118c`. It contains the accepted source
+checkpoint `1ff20161` plus the P205 closeout, P216 admission, issue-acceptance
+map, and P211 sequencing record. Gate 1 and Gate 2 found no source repair to
+make, so the qualified Rust and JavaScript source tree is identical to
+`1ff20161`.
+
+`pnpm validation:select -- --base refs/remotes/origin/main` classified the
+117-file inherited slice as broad. The final local qualification matched the
+actual Service Model, CLI adapter, Lease Authority, workstation routing, and
+service-contract surfaces:
+
+- `pnpm version:sync`, `git diff --check`, the Service Model architecture
+  guard and mutation fixtures, and the Lease Authority architecture guard
+  passed. Documentation links and policy wiring also passed after this
+  receipt was recorded.
+- Workspace formatting and strict workspace Clippy passed through
+  `scripts/ci/cargo-safe.sh`.
+- The Service Model crate passed 234 tests. The focused CLI `service_model`
+  filter passed 41 tests, and all six exact CLI adapter witnesses named by the
+  selector passed.
+- The Lease Authority crate passed 116 tests.
+- Route-confusion, workstation-install fixture, workstation host-provision,
+  fresh-workstation VM harness, workstation Guacamole asset, Guacamole
+  PostgreSQL durability, and route-specific RDP user-sync checks passed.
+- Service API and MCP parity, service-client contract and type checks,
+  no-launch service collections, and the focused `workstation_install`,
+  `workstation_payload_status`, `service_access_plan`, and `service_health`
+  Rust filters passed. The original sequential filter runner lost its output
+  handle after reaching the final filter; the terminal `service_health`
+  filter was rerun once for an exact receipt and passed all 99 selected tests.
+- A final selector read against `HEAD` reported no uncommitted changed files
+  and only diff hygiene.
+
+The CDP and desktop-services crate suites were not repeated because their
+source is unchanged in this slice; their workspace membership is covered by
+strict workspace Clippy and the source-identical historical evidence. Browser
+E2E, provider, GitHub CI, release-build, installed-runtime, development-runtime,
+staging, production, and release checks remain excluded by plan. No browser,
+profile, provider, credential, install, runtime, staging, production, or
+release effect occurred.
+
+The build-time claim remains deliberately narrow: the recorded cold pure-model
+feedback loop improved from 171.01 seconds to 4.08 seconds. The affected cold
+CLI loop remained 132 seconds and the warm compatibility loop was 0.44 seconds,
+so P216 does not claim a general workspace or CLI build-time reduction.
+
 ## Delivery Sequence And Budget
 
 ### Gate 1 | Acceptance Map
@@ -307,13 +356,13 @@ condition before assignment. The primary must inspect its diff.
 
 | Requirement | Evidence | Admission state |
 | --- | --- | --- |
-| Canonical provider-free model crate | workspace manifests, crate source, architecture guard | implemented at `1ff20161`; final branch verification pending |
-| One canonical aggregate and codec | Service Model aggregate and persistence contracts | implemented; final acceptance map pending |
-| Deep transitions and projections | crate APIs, provider-free tests, CLI callers | implemented; final acceptance map pending |
-| CLI remains the effect adapter | forbidden-import guard and current adapter boundaries | locally proved at `1ff20161`; final candidate rerun pending |
-| Focused correctness | retained crate and affected CLI tests | passed at `1ff20161`; reconciliation impact review pending |
+| Canonical provider-free model crate | workspace manifests, crate source, architecture guard | verified at candidate `6ff7bc0d` |
+| One canonical aggregate and codec | Service Model aggregate and persistence contracts | verified by the acceptance map and final local qualification |
+| Deep transitions and projections | crate APIs, provider-free tests, CLI callers | verified by 234 crate tests, 41 focused CLI tests, and six exact adapter witnesses |
+| CLI remains the effect adapter | forbidden-import guard and current adapter boundaries | architecture and mutation guards pass at `6ff7bc0d` |
+| Focused correctness | retained crate and affected CLI tests | final local qualification passes at `6ff7bc0d` |
 | Build acceleration evidence | Plan 0205 baseline and focused-loop measurements | recorded; no new benchmark authorized |
-| P211 dependent-consumer readiness | current P211 branch, read-only merge preview, exact candidate handoff | three overlaps and one known test conflict classified; final candidate handoff pending |
+| P211 dependent-consumer readiness | current P211 branch, read-only merge preview, exact candidate handoff | three overlaps, one known test conflict, and the post-merge reconciliation contract are recorded against `6ff7bc0d` |
 | Canonical integration | protected PR merge and `origin/main` readback | incomplete |
 | GitHub CI | none | explicitly excluded by operator direction |
 | Runtime or production effects | none | explicitly excluded |

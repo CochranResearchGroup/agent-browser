@@ -53,15 +53,15 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 1ff20161
+    checkpoint: 6ff7bc0d
     remote_ref: refs/remotes/origin/platform/p205-service-model-crate
     integration_receipt: null
     integration: one protected pull request after a single final local qualification batch without restoring or dispatching operator-disabled GitHub CI
-    validation_status: checkpoint 69 model and CLI focused tests, architecture guards, formatting, strict workspace Clippy, diff hygiene and selection pass locally at 1ff20161
-    validation_ref: 1ff20161
+    validation_status: final candidate passes Service Model and Lease Authority crates, focused CLI adapter and health filters, architecture guards, workstation and route fixtures, service contracts, formatting, strict workspace Clippy, version sync and diff hygiene locally
+    validation_ref: 6ff7bc0d
     work_items: [CochranResearchGroup/agent-browser#178]
     dependencies: []
     overlaps: [P204:docs/dev/active-lanes.yaml, P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml, P215:ROADMAP.md, P215:RUNBOOK.md, P215:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P216 retains the inherited P205 source branch and does not independently rewrite P204, P211 or P215 source or shared planning sections]
-    blocker: issue acceptance mapping, one current-main reconciliation, final local qualification, pull request publication and canonical integration remain
+    blocker: pull request publication and canonical integration remain
     updated_at: 2026-09-17
