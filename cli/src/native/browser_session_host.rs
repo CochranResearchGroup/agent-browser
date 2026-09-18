@@ -12,6 +12,7 @@ use agent_browser_service_model::{
 
 use super::browser_session_runtime::{
     BrowserManagerRuntime, BrowserManagerRuntimeConfig, BrowserSessionEffectAdapter,
+    ManagedBrowserCommandEffects,
 };
 use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionJsonStore};
 
@@ -459,6 +460,65 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 }
 
+impl<P, E> BrowserSessionHost<P, E>
+where
+    P: BrowserSessionPersistence,
+    E: BrowserSessionEffects + ManagedBrowserCommandEffects,
+{
+    /// Route an ordinary browser command through an already active managed
+    /// session. `Ok(None)` means this lane has no manager-owned session and the
+    /// caller may continue through the legacy lane.
+    pub(crate) fn execute_managed_command(
+        &mut self,
+        session_name: &str,
+        command: &serde_json::Value,
+    ) -> Result<Option<serde_json::Value>, String> {
+        let profile_id = optional_string(command, "profileId")
+            .or_else(|| optional_string(command, "runtimeProfile"));
+        let matching_ids = self
+            .state
+            .sessions
+            .values()
+            .filter(|session| {
+                session.name == session_name
+                    && profile_id.is_none_or(|profile_id| session.profile_id == profile_id)
+            })
+            .map(|session| session.id.clone())
+            .collect::<Vec<_>>();
+        let session_id = match matching_ids.as_slice() {
+            [] => return Ok(None),
+            [session_id] => session_id.clone(),
+            _ => return Err(format!("browser_session_name_ambiguous:{session_name}")),
+        };
+        let now_ms = command
+            .get("activityAtMs")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms);
+        let tab = self.tab_for_navigation(&session_id, now_ms)?;
+        let session = self
+            .state
+            .sessions
+            .get(&session_id)
+            .cloned()
+            .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_browser_missing".to_string())?;
+        let tab = self
+            .state
+            .tabs
+            .get(&tab.tab_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+        self.effects
+            .execute_command(&browser, &tab, &session.id, &session.name, command)
+            .map(Some)
+    }
+}
+
 fn session_close_disposition_name(
     disposition: agent_browser_service_model::SessionCloseDisposition,
 ) -> &'static str {
@@ -577,6 +637,28 @@ mod tests {
         ) -> Result<(), String> {
             Ok(())
         }
+
+        fn execute_command(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+            tab: &ManagedBrowserTab,
+            session_id: &str,
+            session_name: &str,
+            command: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            Ok(serde_json::json!({
+                "id": command.get("id").cloned().unwrap_or_default(),
+                "success": true,
+                "data": {
+                    "browserId": browser.id,
+                    "tabId": tab.id,
+                    "targetId": tab.target_id,
+                    "sessionId": session_id,
+                    "sessionName": session_name,
+                    "action": command.get("action").cloned().unwrap_or_default(),
+                }
+            }))
+        }
     }
 
     struct TempDirectory(PathBuf);
@@ -673,6 +755,38 @@ mod tests {
         assert_eq!(focus["data"]["focused"], true);
         assert_eq!(focus["data"]["maximized"], true);
         assert_eq!(focus["data"]["targetId"], "target-1");
+
+        let snapshot = restarted
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({
+                    "id": "snapshot-alice",
+                    "action": "snapshot",
+                    "activityAtMs": 2_700
+                }),
+            )
+            .unwrap()
+            .expect("alice's active manager session should own the command");
+        assert_eq!(snapshot["success"], true);
+        assert_eq!(snapshot["data"]["browserId"], resumed.browser_id);
+        assert_eq!(snapshot["data"]["tabId"], "tab-1");
+        assert_eq!(snapshot["data"]["targetId"], "target-1");
+        assert_eq!(snapshot["data"]["sessionId"], first.session_id);
+        assert_eq!(snapshot["data"]["sessionName"], "alice");
+        assert_eq!(snapshot["data"]["action"], "snapshot");
+        assert_eq!(
+            restarted
+                .state()
+                .sessions
+                .get(&first.session_id)
+                .unwrap()
+                .last_activity_at_ms,
+            2_700
+        );
+        assert!(restarted
+            .execute_managed_command("bob", &serde_json::json!({ "action": "snapshot" }))
+            .unwrap()
+            .is_none());
 
         let close_tab = restarted.handle_command(&serde_json::json!({
             "id": "close-alice-tab",

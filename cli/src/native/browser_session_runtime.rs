@@ -14,6 +14,7 @@ use agent_browser_service_model::{
 };
 use serde_json::Value;
 
+use super::action_runtime::runtime::DaemonState;
 use super::browser::{BrowserManager, WaitUntil};
 use super::cdp::chrome::LaunchOptions;
 
@@ -58,6 +59,18 @@ pub(crate) trait BrowserRuntimeDriver {
         browser: &ManagedBrowserInstance,
         tab: Option<&ManagedBrowserTab>,
     ) -> Result<(), String>;
+
+    fn execute_command(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        session_id: &str,
+        session_name: &str,
+        command: &Value,
+    ) -> Result<Value, String> {
+        let _ = (browser, tab, session_id, session_name, command);
+        Err("browser_session_runtime_command_unsupported".to_string())
+    }
 }
 
 pub(crate) struct BrowserSessionEffectAdapter<D> {
@@ -67,6 +80,31 @@ pub(crate) struct BrowserSessionEffectAdapter<D> {
 impl<D> BrowserSessionEffectAdapter<D> {
     pub(crate) fn new(runtime: D) -> Self {
         Self { runtime }
+    }
+}
+
+pub(crate) trait ManagedBrowserCommandEffects {
+    fn execute_command(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        session_id: &str,
+        session_name: &str,
+        command: &Value,
+    ) -> Result<Value, String>;
+}
+
+impl<D: BrowserRuntimeDriver> ManagedBrowserCommandEffects for BrowserSessionEffectAdapter<D> {
+    fn execute_command(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        session_id: &str,
+        session_name: &str,
+        command: &Value,
+    ) -> Result<Value, String> {
+        self.runtime
+            .execute_command(browser, tab, session_id, session_name, command)
     }
 }
 
@@ -227,6 +265,14 @@ enum BrowserRuntimeCommand {
         browser: ManagedBrowserInstance,
         tab: Option<ManagedBrowserTab>,
         reply: mpsc::Sender<Result<(), String>>,
+    },
+    Execute {
+        browser: ManagedBrowserInstance,
+        tab: ManagedBrowserTab,
+        session_id: String,
+        session_name: String,
+        command: Value,
+        reply: mpsc::Sender<Result<Value, String>>,
     },
     Shutdown,
 }
@@ -400,6 +446,28 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
+
+    fn execute_command(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        session_id: &str,
+        session_name: &str,
+        command: &Value,
+    ) -> Result<Value, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::Execute {
+                browser: browser.clone(),
+                tab: tab.clone(),
+                session_id: session_id.to_string(),
+                session_name: session_name.to_string(),
+                command: command.clone(),
+                reply,
+            },
+        )
+    }
 }
 
 impl Drop for BrowserManagerRuntime {
@@ -416,7 +484,7 @@ fn run_browser_worker(
     receiver: mpsc::Receiver<BrowserRuntimeCommand>,
     config: BrowserManagerRuntimeConfig,
 ) {
-    let mut browsers = HashMap::<String, BrowserManager>::new();
+    let mut browsers = HashMap::<String, DaemonState>::new();
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receiver.recv() {
         match command {
@@ -460,14 +528,21 @@ fn run_browser_worker(
                         cdp_endpoint: manager.get_cdp_url().to_string(),
                         desktop,
                     };
-                    browsers.insert(browser_id, manager);
+                    let mut state = DaemonState::new();
+                    state.browser = Some(manager);
+                    state.browser_session_manager_owned = true;
+                    browsers.insert(browser_id, state);
                     Ok(launch)
                 });
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Close { browser, reply } => {
                 let result = match browsers.remove(&browser.id) {
-                    Some(mut manager) => runtime.block_on(async {
+                    Some(mut state) => runtime.block_on(async {
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
                         if manager.owns_launched_browser_process() {
                             manager.approve_lifecycle_close();
                             let outcome = manager.close_with_outcome().await?;
@@ -476,7 +551,7 @@ fn run_browser_worker(
                             }
                             Ok(())
                         } else {
-                            close_reattached_browser(&manager, browser.pid).await
+                            close_reattached_browser(manager, browser.pid).await
                         }
                     }),
                     None if !recorded_browser_process_exists(&browser) => Ok(()),
@@ -493,7 +568,11 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = match browsers.get_mut(&browser.id) {
-                    Some(manager) => runtime.block_on(async {
+                    Some(state) => runtime.block_on(async {
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
                         if let Some(tab) = manager.tab_list(true).into_iter().find(|tab| {
                             tab.get("targetId")
                                 .and_then(Value::as_str)
@@ -512,7 +591,11 @@ fn run_browser_worker(
             }
             BrowserRuntimeCommand::CreateTab { browser, reply } => {
                 let result = match browsers.get_mut(&browser.id) {
-                    Some(manager) => runtime.block_on(async {
+                    Some(state) => runtime.block_on(async {
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
                         let tab = manager.tab_new(None).await?;
                         tab_acquisition(tab, BrowserTabSource::ExplicitNew)
                     }),
@@ -526,7 +609,11 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = match browsers.get_mut(&browser.id) {
-                    Some(manager) => runtime.block_on(async {
+                    Some(state) => runtime.block_on(async {
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
                         manager
                             .tab_close_target_id_for_release(&tab.target_id)
                             .await?;
@@ -543,7 +630,11 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = match browsers.get_mut(&browser.id) {
-                    Some(manager) => runtime.block_on(async {
+                    Some(state) => runtime.block_on(async {
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
                         manager.tab_switch_target_id(&tab.target_id).await?;
                         manager.navigate(&url, WaitUntil::Load).await?;
                         Ok(())
@@ -558,7 +649,11 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = match browsers.get_mut(&browser.id) {
-                    Some(manager) => runtime.block_on(async {
+                    Some(state) => runtime.block_on(async {
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
                         if let Some(tab) = tab {
                             manager.tab_switch_target_id(&tab.target_id).await?;
                         }
@@ -569,16 +664,41 @@ fn run_browser_worker(
                 };
                 let _ = reply.send(result);
             }
+            BrowserRuntimeCommand::Execute {
+                browser,
+                tab,
+                session_id,
+                session_name,
+                command,
+                reply,
+            } => {
+                let result = match browsers.get_mut(&browser.id) {
+                    Some(state) => runtime.block_on(async {
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        manager.tab_switch_target_id(&tab.target_id).await?;
+                        state.session_id = session_id;
+                        state.session_name = Some(session_name);
+                        Ok(super::actions::execute_command(&command, state).await)
+                    }),
+                    None => Err("browser_session_runtime_browser_missing".to_string()),
+                };
+                let _ = reply.send(result);
+            }
             BrowserRuntimeCommand::Shutdown => break,
         }
     }
-    for manager in browsers.values_mut() {
-        manager.relinquish_browser_for_handoff();
+    for state in browsers.values_mut() {
+        if let Some(manager) = state.browser.as_mut() {
+            manager.relinquish_browser_for_handoff();
+        }
     }
 }
 
 async fn recorded_browser_is_live(
-    browsers: &mut HashMap<String, BrowserManager>,
+    browsers: &mut HashMap<String, DaemonState>,
     browser: &ManagedBrowserInstance,
 ) -> Result<bool, String> {
     if !recorded_browser_process_exists(browser) {
@@ -590,10 +710,17 @@ async fn recorded_browser_is_live(
             Ok(manager) => manager,
             Err(_) => return Ok(false),
         };
-        browsers.insert(browser.id.clone(), manager);
+        let mut state = DaemonState::new();
+        state.browser = Some(manager);
+        state.browser_session_manager_owned = true;
+        browsers.insert(browser.id.clone(), state);
     }
-    let manager = browsers
+    let state = browsers
         .get_mut(&browser.id)
+        .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+    let manager = state
+        .browser
+        .as_mut()
         .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
     let process_matches = if manager.owns_launched_browser_process() {
         manager.browser_pid() == Some(browser.pid) && manager.poll_process_exit().is_none()
@@ -803,9 +930,46 @@ mod tests {
 
         let mut restarted = BrowserManagerRuntime::start(config).unwrap();
         let live = restarted.browser_is_live(&browser).unwrap();
+        let tab = restarted.acquire_initial_tab(&browser, &[]).unwrap();
+        let managed_tab = ManagedBrowserTab {
+            id: tab.tab_id,
+            target_id: tab.target_id,
+            browser_id: browser.id.clone(),
+            session_id: "session:alice:restart-fixture:1".to_string(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+        };
+        restarted
+            .navigate(
+                &browser,
+                &managed_tab,
+                "data:text/html,<title>managed-session</title><main>ready</main>",
+            )
+            .unwrap();
+        let title = restarted
+            .execute_command(
+                &browser,
+                &managed_tab,
+                &managed_tab.session_id,
+                "alice",
+                &serde_json::json!({ "id": "title-1", "action": "title" }),
+            )
+            .unwrap();
+        let snapshot = restarted
+            .execute_command(
+                &browser,
+                &managed_tab,
+                &managed_tab.session_id,
+                "alice",
+                &serde_json::json!({ "id": "snapshot-1", "action": "snapshot" }),
+            )
+            .unwrap();
         let close = restarted.close_browser(&browser);
 
         assert!(live);
+        assert_eq!(title["success"], true);
+        assert_eq!(title["data"]["title"], "managed-session");
+        assert_eq!(snapshot["success"], true);
         close.unwrap();
         assert!(!recorded_browser_process_exists(&browser));
     }

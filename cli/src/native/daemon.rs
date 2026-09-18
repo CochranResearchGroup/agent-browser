@@ -656,6 +656,44 @@ impl RuntimeHostRouter {
         }
     }
 
+    async fn try_handle_managed_browser_command(
+        &self,
+        session_name: &str,
+        command: Value,
+    ) -> Option<Value> {
+        let browser_sessions = self.browser_sessions.clone();
+        let session_name = session_name.to_string();
+        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if host.is_none() {
+                let store = super::browser_session_store::BrowserSessionJsonStore::default_json()?;
+                let state = store.load_session_state()?;
+                let has_session = state
+                    .sessions
+                    .values()
+                    .any(|session| session.name == session_name);
+                if !has_session {
+                    return Ok(None);
+                }
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            host.as_mut()
+                .ok_or_else(|| "browser_session_host_missing".to_string())?
+                .execute_managed_command(&session_name, &command)
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
+            Err(error) => Some(serde_json::json!({
+                "success": false,
+                "error": format!("browser_session_host_join_failed:{error}"),
+            })),
+        }
+    }
+
     async fn try_handle_browser_session_focus(&self, command: Value) -> Option<Value> {
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
@@ -1148,6 +1186,25 @@ async fn handle_connection<S>(
                         break;
                     }
                     continue;
+                }
+                if action.as_deref().is_some_and(|action| {
+                    !super::actions::action_skips_browser_launch(action)
+                        && !matches!(action, "tab_new" | "tab_switch" | "window_new")
+                }) {
+                    if let Some(response) = router
+                        .try_handle_managed_browser_command(&lane_session, cmd.clone())
+                        .await
+                    {
+                        if let Some(ref tx) = idle_reset_tx {
+                            let _ = tx.try_send(());
+                        }
+                        let mut serialized = serialize_daemon_response(response).await;
+                        serialized.push('\n');
+                        if writer.write_all(serialized.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
                 }
                 let lane = match router.lane(&lane_session, lane_config).await {
                     Ok(lane) => lane,
