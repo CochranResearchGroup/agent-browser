@@ -14,6 +14,8 @@ use agent_browser_service_model::{
 };
 use serde_json::Value;
 
+use crate::process_identity::{VerifiedProcessSignal, VerifiedProcessTermination};
+
 use super::action_runtime::runtime::DaemonState;
 use super::browser::{BrowserManager, WaitUntil};
 use super::cdp::chrome::LaunchOptions;
@@ -570,8 +572,15 @@ fn run_browser_worker(
                     }),
                     None if !recorded_browser_process_exists(&browser) => Ok(()),
                     None => runtime.block_on(async {
-                        let manager = attach_recorded_browser(&browser).await?;
-                        close_reattached_browser(&manager, browser.pid).await
+                        match attach_recorded_browser(&browser).await {
+                            Ok(manager) => close_reattached_browser(&manager, browser.pid).await,
+                            Err(attach_error) => close_unresponsive_recorded_browser(&browser)
+                                .map_err(|termination_error| {
+                                    format!(
+                                        "{attach_error}; browser_session_exact_termination_failed:{termination_error}"
+                                    )
+                                }),
+                        }
                     }),
                 };
                 let _ = reply.send(result);
@@ -866,6 +875,38 @@ async fn close_reattached_browser(
     Ok(())
 }
 
+/// Close a manager-recorded browser only when its retained process identity
+/// opens an exact kernel-backed termination capability. CDP failure alone is
+/// never authority to signal an unverified PID.
+fn close_unresponsive_recorded_browser(browser: &ManagedBrowserInstance) -> Result<(), String> {
+    let identity = browser
+        .process_identity
+        .as_ref()
+        .ok_or_else(|| "browser_session_close_process_identity_missing".to_string())?;
+    if identity.pid != browser.pid {
+        return Err("browser_session_close_process_identity_pid_mismatch".to_string());
+    }
+    let Some(process) = VerifiedProcessTermination::open(identity)? else {
+        return Ok(());
+    };
+    process.signal(VerifiedProcessSignal::Terminate)?;
+    let polite_deadline = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < polite_deadline && process.is_running()? {
+        thread::sleep(Duration::from_millis(25));
+    }
+    if process.is_running()? {
+        process.signal(VerifiedProcessSignal::Kill)?;
+    }
+    let exit_deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < exit_deadline && process.is_running()? {
+        thread::sleep(Duration::from_millis(25));
+    }
+    if process.is_running()? {
+        return Err("browser_session_close_exit_unproven".to_string());
+    }
+    Ok(())
+}
+
 fn recorded_browser_process_exists(browser: &ManagedBrowserInstance) -> bool {
     match browser.process_identity.as_ref() {
         Some(identity) => crate::process_identity::VerifiedProcessTermination::open(identity)
@@ -902,7 +943,10 @@ fn tab_acquisition(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use std::net::TcpListener;
     use std::path::PathBuf;
+    use std::process::Command;
 
     #[derive(Default)]
     struct FakeRuntime;
@@ -998,6 +1042,95 @@ mod tests {
 
         browser.pid = u32::MAX;
         assert!(!recorded_browser_process_exists(&browser));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn unresponsive_recorded_browser_uses_exact_process_termination() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("unresponsive CDP listener");
+        let address = listener.local_addr().expect("unresponsive CDP address");
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().expect("unresponsive CDP connection");
+                let _ = stream.write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+            }
+        });
+        let mut child = Command::new("/usr/bin/sleep")
+            .arg("300")
+            .spawn()
+            .expect("disposable external browser process");
+        let process_identity = crate::process_identity::capture_process_identity(
+            child.id(),
+            Some(Path::new("/usr/bin/sleep")),
+            None,
+        )
+        .expect("external process identity");
+        let browser = ManagedBrowserInstance {
+            id: "browser:external-unresponsive:1".to_string(),
+            profile_id: "external-unresponsive".to_string(),
+            pid: child.id(),
+            cdp_endpoint: format!("ws://{address}/devtools/browser/unresponsive"),
+            process_identity: Some(process_identity),
+            desktop: None,
+            active_session_ids: vec!["session:external-unresponsive:1".to_string()],
+        };
+        let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig::default())
+            .expect("browser manager runtime");
+
+        assert!(!runtime.browser_is_live(&browser).unwrap());
+        let close = runtime.close_browser(&browser);
+        if close.is_err() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        server.join().expect("unresponsive CDP server");
+        assert!(close.is_ok(), "unresponsive exact close failed: {close:?}");
+        for _ in 0..100 {
+            if child.try_wait().unwrap().is_some() {
+                return;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("unresponsive exact close left the recorded process running");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn unresponsive_recorded_browser_without_identity_is_preserved() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("unresponsive CDP listener");
+        let address = listener.local_addr().expect("unresponsive CDP address");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("unresponsive CDP connection");
+            let _ = stream.write_all(
+                b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+        });
+        let mut child = Command::new("/usr/bin/sleep")
+            .arg("300")
+            .spawn()
+            .expect("disposable unverified process");
+        let browser = ManagedBrowserInstance {
+            id: "browser:external-unverified:1".to_string(),
+            profile_id: "external-unverified".to_string(),
+            pid: child.id(),
+            cdp_endpoint: format!("ws://{address}/devtools/browser/unresponsive"),
+            process_identity: None,
+            desktop: None,
+            active_session_ids: vec!["session:external-unverified:1".to_string()],
+        };
+        let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig::default())
+            .expect("browser manager runtime");
+
+        let error = runtime.close_browser(&browser).unwrap_err();
+        server.join().expect("unresponsive CDP server");
+        assert!(error.contains("browser_session_close_process_identity_missing"));
+        assert!(child.try_wait().unwrap().is_none());
+        child.kill().unwrap();
+        child.wait().unwrap();
     }
 
     #[test]

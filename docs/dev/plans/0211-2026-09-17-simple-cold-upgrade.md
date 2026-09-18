@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 33
+Plan version: 34
 
 State: OPEN
 
@@ -694,6 +694,23 @@ in the runtime host. The repaired assertion uses the reachable dashboard
 endpoint as the logical dashboard identity. The fixture also makes the
 cold-install harness remove read-only generation directories during cleanup.
 
+The version 34 continuation closes two manager-host lifecycle gaps. The hosted
+reaper now has an end-to-end provider-free fixture across the host,
+persistence, manager, and concrete filesystem adapter: an ended disposable
+session loses only its recorded direct-child profile directory, a foreign
+sibling and marker remain, and the persisted disposable allocation is gone.
+The external unresponsive-CDP path now falls back from a typed CDP attach
+failure to bounded exact-process termination only when the retained process
+identity opens a kernel-backed termination capability and its PID matches the
+browser record. The red fixture first failed with
+`browser_session_reattach_failed`; after repair, a live disposable external
+process with a deterministic HTTP 503 CDP endpoint is terminated and the
+adapter can complete manager retirement. A paired negative fixture proves the
+same CDP failure preserves a live process when exact identity is absent. An
+initial loopback-refusal draft exposed the adapter's long connection timeout
+and was cancelled; its process left no residue, and the deterministic local
+503 fixture replaced that tactic.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -989,9 +1006,9 @@ touching overlapping documentation surfaces.
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | joined disposable cold-install-to-first-use proves the selected generation, one reused runtime-host identity, one reachable reused dashboard endpoint, repeated fresh Service requests, and exact installed shutdown; independent host serialization, provider-free restart reuse, concrete disposable-Chrome worker reattachment, and the compiled-CLI shared-daemon title, snapshot, click, redirect, and close journey are also green |
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, public named-session lifecycle routing, generic current-tab command routing, and the two-session compiled-CLI/runtime-host Chrome fixture are green |
-| Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, exact recorded deletion, filesystem adapter, default host policy, and exact hosted-Chrome final-process termination are green; hosted disposable-directory reaping remains pending |
+| Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, hosted exact recorded filesystem deletion with foreign-sibling preservation, default host policy, and exact hosted-Chrome final-process termination are green |
 | Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle, concrete adapter, real-Chrome restart and ordinary-command fixture, public named-session new/current-close routing, and the two-session daemon-process tab and close fixture are green |
-| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, concrete restart reattachment, and full daemon-process command routing are green; external unresponsive-CDP recovery remains pending |
+| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, concrete restart reattachment, full daemon-process command routing, and bounded exact-process recovery for a verified external unresponsive-CDP browser are green; unverified processes remain untouched |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, exact-display launch wiring, and a hosted static-route Xvfb handoff are green; multi-display hosted selection remains pending |

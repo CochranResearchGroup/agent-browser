@@ -945,6 +945,68 @@ mod tests {
     }
 
     #[test]
+    fn hosted_reaper_deletes_only_the_recorded_disposable_directory() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(&legacy_path, r#"{"profiles":{}}"#).unwrap();
+        let disposable_root = directory.0.join("disposable-profiles");
+        let foreign_directory = disposable_root.join("foreign-directory");
+        fs::create_dir_all(&foreign_directory).unwrap();
+        let foreign_marker = foreign_directory.join("keep");
+        fs::write(&foreign_marker, b"foreign").unwrap();
+
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: Some(BrowserDisposableProfilePolicy {
+                    id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
+                    user_data_root: disposable_root.to_string_lossy().into_owned(),
+                    cleanup_delay_ms: 0,
+                }),
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::disposable(
+                "alice",
+                DEFAULT_DISPOSABLE_POLICY_ID,
+                1_000,
+            ))
+            .unwrap();
+        let allocation = host
+            .state()
+            .disposable_profiles
+            .get(&opened.profile_id)
+            .cloned()
+            .expect("hosted disposable allocation");
+        let allocated_directory = PathBuf::from(&allocation.profile.user_data_dir);
+        assert!(allocated_directory.is_dir());
+        fs::write(allocated_directory.join("owned-marker"), b"owned").unwrap();
+
+        host.close_session(&opened.session_id, SessionEndReason::ExplicitClose, 1_100)
+            .unwrap();
+        assert!(allocated_directory.is_dir());
+
+        let reaped = host.reap(1_100).unwrap();
+
+        assert_eq!(
+            reaped.deleted_disposable_profile_ids,
+            vec![opened.profile_id.clone()]
+        );
+        assert!(!allocated_directory.exists());
+        assert_eq!(fs::read(&foreign_marker).unwrap(), b"foreign");
+        assert!(host.state().disposable_profiles.is_empty());
+        let persisted = BrowserSessionJsonStore::new(&directory.0)
+            .load_session_state()
+            .unwrap();
+        assert!(persisted.disposable_profiles.is_empty());
+    }
+
+    #[test]
     fn handoff_resolution_focuses_and_persists_the_exact_session_heartbeat() {
         let directory = TempDirectory::new();
         let legacy_path = directory.0.join("state.json");
