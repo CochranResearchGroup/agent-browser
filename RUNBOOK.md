@@ -9,6 +9,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 391 | 2026-09-17
+
+P211 checkpoint `83e23eb2` makes the trusted single-user shared-local profile
+path recovery-first for retained identity collisions. A valid configured
+profile now returns `ExplicitProfile` instead of
+`existing_session_profile_identity_inconsistent`, so the wrong retained
+browser cannot qualify for reuse and the requested profile can continue through
+a fresh or requalified connection. Contradictory records remain intact for
+diagnosis; stricter registered-capability and non-shared-local paths remain
+unchanged. The exact SoyLei-shaped regression failed before the change and now
+passes. Six existing-session tests, nine shared-local tests, formatting, strict
+workspace Clippy, and diff hygiene pass. No installed runtime or tenant effect
+occurred. Typed collision telemetry and joined launch and remote-view proof
+remain open.
+
 ## Turn 390 | 2026-09-17
 
 P211 checkpoint `839f8cf8` extends the black-box public shutdown boundary with

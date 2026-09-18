@@ -41,6 +41,11 @@ public JSON command twice in a disposable workstation with fake host tools.
 Checkpoint `839f8cf8` proves the same public command releases a retained
 exclusive session while preserving its named profile record and physical data,
 then replays as a no-op.
+Checkpoint `83e23eb2` changes trusted single-user shared-local profile
+collisions from denial into explicit valid-profile selection, preventing wrong
+browser reuse while preserving collision evidence for diagnosis. Source
+selection regressions are green; collision telemetry and joined connection
+proof remain open.
 The command was not run against an installed runtime. Protected-claim,
 interrupted, and stale-sidecar shutdown fixtures, cold-install routing, restart
 and remote-view convergence,

@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 9
+Plan version: 10
 
 State: OPEN
 
@@ -43,6 +43,15 @@ must be able to name a profile, self-identify, and obtain a ready durable
 repair plans, route identifiers, display identifiers, or recovery tokens.
 Multi-user concurrency and adversarial identity are deferred until this
 single-user journey is operational.
+
+The ordinary trusted single-user path is recovery-first. A valid configured
+profile must not be denied merely because retained session, browser, owner, or
+prior-boot identity records collide. Preserve and report those records for
+diagnosis, select the requested valid profile explicitly, and continue through
+a fresh or requalified connection. Reject only an invalid profile request or a
+case where the product truly cannot choose a concrete profile. Collision
+telemetry must help improve reconciliation without turning Agent Browser into
+a denial-only machine.
 
 ## Current State
 
@@ -156,6 +165,20 @@ fixtures pass with formatting and diff hygiene. Active protected authority
 claims, interrupted phases, and stale upgrade-sidecar cases remain to be added
 before the shutdown acceptance row is complete.
 
+Checkpoint `83e23eb2` addresses the broader valid-profile refusal represented
+by `existing_session_profile_identity_inconsistent`, observed most recently by
+the SoyLei Website workflow. In trusted single-user shared-local mode, a valid
+explicitly requested profile now wins over contradictory retained session and
+browser history. The selector returns `ExplicitProfile`, which prevents the
+wrong retained browser from qualifying for reuse and sends the request through
+the fresh or requalified profile path. Conflicting records remain available
+for diagnosis. Registered-capability callers and requests without the
+shared-local self-declared identity contract retain their stricter behavior.
+The exact regression was red before the change and green afterward; six
+existing-session tests, nine shared-local tests, formatting, strict workspace
+Clippy, and diff hygiene pass. End-to-end connection proof and a typed
+collision-observation surface remain open.
+
 The fresh-context startup readback on 2026-09-17 found the P211 worktree clean
 and synchronized with `origin/platform/p211-simple-cold-upgrade@4b9edcca`.
 Current `origin/main` is 17 commits ahead and P211 is 6 commits ahead of its
@@ -265,9 +288,12 @@ open.
    presentation resources and admit each independently healthy route for the
    current boot without reinstalling or editing primary Service State.
 7. In trusted single-user mode, accept the caller's stable self-declared
-   identity for a named profile. Reuse one healthy retained browser when
-   present; otherwise launch one. A failed attempt must leave the profile and
-   browser immediately reusable rather than retaining an unmatched owner.
+   identity for a named profile. Reuse one healthy matching retained browser
+   when present; otherwise launch or requalify one. Retained identity
+   collisions are diagnostic observations, not denials: select the valid
+   requested profile explicitly, preserve the conflicting evidence, and
+   continue. A failed attempt must leave the profile and browser immediately
+   reusable rather than retaining an unmatched owner.
 8. Make ordinary route selection exclude orphaned, quarantined, or
    route/display-mismatched inventory. A normal same-site authentication
    redirect must preserve a usable login handoff or return a typed
@@ -396,7 +422,7 @@ overlapping surfaces.
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | not implemented |
 | Current-boot presentation | startup fixture invalidates prior-boot claims, re-observes configured routes and displays, and admits each healthy current-boot route without repair input | not implemented |
-| Trusted single-user profile | a named profile accepts stable self-identification, reuses one healthy browser, and requires no hash, capability, sealed plan, or repair token | not implemented |
+| Trusted single-user profile | a named profile accepts stable self-identification, reuses one healthy matching browser, and requires no hash, capability, sealed plan, or repair token; retained identity collisions choose the valid profile and remain observable | source selector and provider-free collision regressions green; joined launch and remote-view proof plus typed collision telemetry pending |
 | Safe route selection | #189 regression proves quarantined, orphaned, and mismatched routes are repaired or excluded before preflight reports ready | not implemented |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | not implemented |
 | Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | not implemented |
