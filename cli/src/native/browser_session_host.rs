@@ -1007,6 +1007,110 @@ mod tests {
     }
 
     #[test]
+    fn hosted_multi_display_selection_persists_without_legacy_authority() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let legacy_state = serde_json::json!({
+            "profiles": {
+                "work": {
+                    "id": "work",
+                    "name": "Work",
+                    "userDataDir": directory.0.join("work"),
+                    "profileClass": "durable_named"
+                },
+                "personal": {
+                    "id": "personal",
+                    "name": "Personal",
+                    "userDataDir": directory.0.join("personal"),
+                    "profileClass": "durable_named"
+                }
+            },
+            "sessions": "contradictory legacy session state",
+            "runtimeOwners": ["contradictory legacy owner state"],
+            "displayAllocations": "contradictory legacy display state"
+        });
+        fs::write(
+            &legacy_path,
+            serde_json::to_vec_pretty(&legacy_state).unwrap(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![
+                BrowserDesktopRoute {
+                    id: "slot-a".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                },
+                BrowserDesktopRoute {
+                    id: "slot-b".to_string(),
+                    display_name: ":11".to_string(),
+                    healthy: true,
+                },
+            ],
+            default_disposable_policy: None,
+        };
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            &legacy_path,
+            config.clone(),
+        )
+        .unwrap();
+
+        let alice = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let bob = host
+            .open(OpenBrowserSession::exact_profile("bob", "personal", 1_100))
+            .unwrap();
+        let alice_desktop = host.state().browsers[&alice.browser_id]
+            .desktop
+            .as_ref()
+            .expect("Alice desktop assignment");
+        let bob_desktop = host.state().browsers[&bob.browser_id]
+            .desktop
+            .as_ref()
+            .expect("Bob desktop assignment");
+        assert_eq!(alice_desktop.route_id, "slot-a");
+        assert_eq!(alice_desktop.display_name, ":10");
+        assert_eq!(alice_desktop.live_browser_count, 0);
+        assert_eq!(bob_desktop.route_id, "slot-b");
+        assert_eq!(bob_desktop.display_name, ":11");
+        assert_eq!(bob_desktop.live_browser_count, 0);
+        drop(host);
+
+        let restarted = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+        assert_eq!(
+            restarted.state().browsers[&alice.browser_id]
+                .desktop
+                .as_ref()
+                .map(|desktop| desktop.display_name.as_str()),
+            Some(":10")
+        );
+        assert_eq!(
+            restarted.state().browsers[&bob.browser_id]
+                .desktop
+                .as_ref()
+                .map(|desktop| desktop.display_name.as_str()),
+            Some(":11")
+        );
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&fs::read(&legacy_path).unwrap()).unwrap(),
+            legacy_state
+        );
+    }
+
+    #[test]
     fn handoff_resolution_focuses_and_persists_the_exact_session_heartbeat() {
         let directory = TempDirectory::new();
         let legacy_path = directory.0.join("state.json");
