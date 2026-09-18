@@ -329,6 +329,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         {
             return Err("browser_session_handoff_focus_identity_changed".to_string());
         }
+        let presentation_generation = 1_u64;
+        let presentation_receipt = serde_json::json!({
+            "generation": presentation_generation,
+            "logicalBrowserId": browser.id,
+            "targetId": tab.target_id,
+            "requiredStreamProvider": binding.provider,
+            "observedStreamProvider": binding.provider,
+            "state": "ready",
+            "browserSessionManager": true,
+        });
         Ok(serde_json::json!({
             "status": "ready",
             "resolved": true,
@@ -343,6 +353,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             "requiredViewStreamProvider": binding.provider,
             "controlInput": control_input,
             "operatorVisible": { "state": "ready" },
+            "presentationGeneration": presentation_generation,
+            "presentationReceipt": presentation_receipt,
         }))
     }
 
@@ -1034,6 +1046,26 @@ mod tests {
         assert_eq!(resolved["tabId"], tab.tab_id);
         assert_eq!(resolved["targetId"], tab.target_id);
         assert_eq!(resolved["operatorVisible"]["state"], "ready");
+        assert_eq!(resolved["presentationGeneration"], 1);
+        assert_eq!(resolved["presentationReceipt"]["generation"], 1);
+        assert_eq!(
+            resolved["presentationReceipt"]["logicalBrowserId"],
+            opened.browser_id
+        );
+        assert_eq!(resolved["presentationReceipt"]["targetId"], tab.target_id);
+        assert_eq!(
+            resolved["presentationReceipt"]["requiredStreamProvider"],
+            resolved["viewStreamProvider"]
+        );
+        assert_eq!(
+            resolved["presentationReceipt"]["observedStreamProvider"],
+            resolved["viewStreamProvider"]
+        );
+        assert_eq!(resolved["presentationReceipt"]["state"], "ready");
+        assert_eq!(
+            resolved["presentationReceipt"]["browserSessionManager"],
+            true
+        );
         assert!(resolved.get("externalUrl").is_none());
         assert!(resolved.get("providerExternalUrl").is_none());
 

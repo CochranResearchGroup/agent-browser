@@ -2,12 +2,12 @@
 
 use std::fs;
 use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -109,6 +109,73 @@ fn run_managed_browser_command(
     })
 }
 
+fn managed_stream_port(fixture: &TempWorkstation, route_inventory: &str) -> u16 {
+    let status = run_managed_browser_command(
+        fixture,
+        route_inventory,
+        &["--session", "bootstrap", "stream", "status", "--json"],
+    );
+    let stream = if status["data"]["enabled"] == true {
+        status
+    } else {
+        run_managed_browser_command(
+            fixture,
+            route_inventory,
+            &["--session", "bootstrap", "stream", "enable", "--json"],
+        )
+    };
+    stream["data"]["port"]
+        .as_u64()
+        .and_then(|port| u16::try_from(port).ok())
+        .filter(|port| *port > 0)
+        .expect("dashboard stream port")
+}
+
+fn dashboard_bootstrap_credentials(fixture: &TempWorkstation) -> (String, String) {
+    let path = fixture.root.join("home/.agent-browser/dashboard-auth.env");
+    let text = (0..100)
+        .find_map(|_| match fs::read_to_string(&path) {
+            Ok(text) => Some(text),
+            Err(_) => {
+                thread::sleep(Duration::from_millis(20));
+                None
+            }
+        })
+        .expect("dashboard bootstrap credentials");
+    let value = |key: &str| {
+        text.lines().find_map(|line| {
+            let (name, value) = line.split_once('=')?;
+            (name.trim() == key).then(|| value.trim().trim_matches('"').to_string())
+        })
+    };
+    (
+        value("AGENT_BROWSER_DASHBOARD_ADMIN_USERNAME").unwrap_or_else(|| "admin".to_string()),
+        value("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD")
+            .expect("dashboard admin bootstrap password"),
+    )
+}
+
+fn request_dashboard_auth_status(port: u16) {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("dashboard HTTP listener");
+    stream
+        .write_all(
+            format!(
+                "GET /api/dashboard-auth/status HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .expect("dashboard auth status request");
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .expect("dashboard auth status response");
+    assert!(
+        response.starts_with(b"HTTP/1.1 200"),
+        "dashboard auth status response was not successful: {}",
+        String::from_utf8_lossy(&response)
+    );
+}
+
 struct XvfbFixture {
     child: Child,
     display_name: String,
@@ -195,6 +262,9 @@ impl LocalAuthServer {
             while !worker_stopping.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        stream
+                            .set_read_timeout(Some(Duration::from_millis(100)))
+                            .expect("local auth client read timeout");
                         let mut request = [0_u8; 8_192];
                         let length = stream.read(&mut request).unwrap_or_default();
                         let request = String::from_utf8_lossy(&request[..length]);
@@ -244,6 +314,28 @@ impl Drop for LocalAuthServer {
             let _ = worker.join();
         }
     }
+}
+
+#[test]
+fn local_auth_server_drop_does_not_wait_for_an_idle_client() {
+    let server = LocalAuthServer::spawn();
+    let address = server
+        .base_url
+        .strip_prefix("http://")
+        .expect("local auth server origin");
+    let _idle_client = TcpStream::connect(address).expect("idle local auth client");
+    thread::sleep(Duration::from_millis(50));
+
+    let (dropped_tx, dropped_rx) = mpsc::channel();
+    thread::spawn(move || {
+        drop(server);
+        let _ = dropped_tx.send(());
+    });
+
+    assert!(
+        dropped_rx.recv_timeout(Duration::from_secs(1)).is_ok(),
+        "local auth server teardown blocked on an idle accepted client"
+    );
 }
 
 fn http_html_response(body: &str) -> String {
@@ -577,8 +669,18 @@ fn e2e_named_sessions_share_one_named_profile_browser() {
     let fixture = TempWorkstation::new();
     let xvfb = XvfbFixture::spawn();
     let auth_server = LocalAuthServer::spawn();
+    let route_inventory = serde_json::json!([{
+        "id": "slot-fixture",
+        "target": {"displayName": xvfb.display_name}
+    }])
+    .to_string();
+    let stream_port = managed_stream_port(&fixture, &route_inventory);
+    let dashboard_origin = format!("http://127.0.0.1:{stream_port}");
+    let viewer_url = format!("{}/viewer", auth_server.base_url);
     let profile_dir = fixture.root.join("profiles/work");
+    let dashboard_profile_dir = fixture.root.join("profiles/dashboard");
     fs::create_dir_all(&profile_dir).expect("named profile directory");
+    fs::create_dir_all(&dashboard_profile_dir).expect("dashboard profile directory");
     let service_dir = fixture.root.join("home/.agent-browser/service");
     fs::create_dir_all(&service_dir).expect("service directory");
     fs::write(
@@ -590,6 +692,12 @@ fn e2e_named_sessions_share_one_named_profile_browser() {
                     "id": "work",
                     "name": "Work",
                     "userDataDir": profile_dir,
+                    "kind": "named"
+                },
+                "dashboard": {
+                    "id": "dashboard",
+                    "name": "Dashboard",
+                    "userDataDir": dashboard_profile_dir,
                     "kind": "named"
                 }
             }
@@ -610,13 +718,24 @@ fn e2e_named_sessions_share_one_named_profile_browser() {
                     "readiness": {"state": "ready"}
                 }
             },
+            "routePool": {
+                "slot-fixture": {
+                    "id": "slot-fixture",
+                    "routeId": "route-fixture",
+                    "state": "ready"
+                }
+            },
             "remoteViewRoutes": {
                 "route-fixture": {
                     "id": "route-fixture",
                     "provider": "rdp_gateway",
                     "displayAllocationId": "display-fixture",
+                    "frameUrl": viewer_url,
+                    "externalUrl": viewer_url,
                     "routeDescriptor": {
-                        "publicOperatorUrl": "https://dashboard.example/operator"
+                        "publicOperatorUrl": dashboard_origin,
+                        "localEmbedUrl": viewer_url,
+                        "dashboardEmbedUrl": viewer_url
                     },
                     "controlInput": "manual_attached_desktop",
                     "state": "ready",
@@ -627,12 +746,6 @@ fn e2e_named_sessions_share_one_named_profile_browser() {
         .expect("service state JSON"),
     )
     .expect("service state");
-    let route_inventory = serde_json::json!([{
-        "id": "slot-fixture",
-        "target": {"displayName": xvfb.display_name}
-    }])
-    .to_string();
-
     let alice = run_managed_browser_command(
         &fixture,
         &route_inventory,
@@ -667,7 +780,7 @@ fn e2e_named_sessions_share_one_named_profile_browser() {
         assert_eq!(response["data"]["operatorVisible"]["state"], "ready");
         assert!(response["data"]["handoffUrl"]
             .as_str()
-            .is_some_and(|url| url.starts_with("https://dashboard.example/remote-view/")));
+            .is_some_and(|url| url.starts_with(&format!("{dashboard_origin}/remote-view/"))));
     }
     let alice_login_url = run_managed_browser_command(
         &fixture,
@@ -782,6 +895,123 @@ fn e2e_named_sessions_share_one_named_profile_browser() {
         &["--session", "bob", "get", "title", "--json"],
     );
     assert_eq!(bob_after_redirect["data"]["title"], "bob-clicked");
+
+    let alice_handoff_url = alice["data"]["handoffUrl"]
+        .as_str()
+        .expect("Alice opaque dashboard handoff")
+        .to_string();
+    assert!(alice_handoff_url.starts_with(&format!("{dashboard_origin}/remote-view/")));
+    let operator_open = run_managed_browser_command(
+        &fixture,
+        &route_inventory,
+        &[
+            "--session",
+            "operator",
+            "--runtime-profile",
+            "dashboard",
+            "open",
+            &alice_handoff_url,
+            "--json",
+        ],
+    );
+    assert_eq!(operator_open["success"], true);
+    request_dashboard_auth_status(stream_port);
+    let (dashboard_username, dashboard_password) = dashboard_bootstrap_credentials(&fixture);
+    let login_script = format!(
+        r#"(async () => {{
+            const response = await fetch('/api/dashboard-auth/login', {{
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify({{username: {}, password: {}}}),
+            }});
+            const payload = await response.json().catch(() => ({{}}));
+            return {{ok: response.ok, authenticated: payload.authenticated === true}};
+        }})()"#,
+        serde_json::to_string(&dashboard_username).unwrap(),
+        serde_json::to_string(&dashboard_password).unwrap(),
+    );
+    let login = run_managed_browser_command(
+        &fixture,
+        &route_inventory,
+        &["--session", "operator", "eval", &login_script, "--json"],
+    );
+    assert_eq!(login["data"]["result"]["ok"], true);
+    assert_eq!(login["data"]["result"]["authenticated"], true);
+    let authenticated_open = run_managed_browser_command(
+        &fixture,
+        &route_inventory,
+        &[
+            "--session",
+            "operator",
+            "--runtime-profile",
+            "dashboard",
+            "open",
+            &alice_handoff_url,
+            "--json",
+        ],
+    );
+    assert_eq!(authenticated_open["success"], true);
+    let dashboard_state_script = r#"(() => {
+        const viewport = document.querySelector('[aria-label="Workspace remote viewport"]');
+        const frame = viewport?.querySelector('iframe');
+        const body = document.body?.innerText || '';
+        return {
+            url: location.href,
+            readiness: viewport?.getAttribute('data-readiness-status') || null,
+            frameSrc: frame?.getAttribute('src') || null,
+            controlMode: body.includes('Workspace viewport / control'),
+            converging: body.includes('Restoring remote view'),
+            viewOnly: body.includes('viewport is view-only'),
+        };
+    })()"#;
+    let mut dashboard_state = serde_json::Value::Null;
+    for _ in 0..120 {
+        let evaluated = run_managed_browser_command(
+            &fixture,
+            &route_inventory,
+            &[
+                "--session",
+                "operator",
+                "eval",
+                dashboard_state_script,
+                "--json",
+            ],
+        );
+        dashboard_state = evaluated["data"]["result"].clone();
+        if dashboard_state["readiness"] == "ready"
+            && dashboard_state["frameSrc"] == viewer_url
+            && dashboard_state["controlMode"] == true
+        {
+            break;
+        }
+        thread::sleep(Duration::from_millis(250));
+    }
+    assert_eq!(dashboard_state["readiness"], "ready", "{dashboard_state}");
+    assert_eq!(dashboard_state["frameSrc"], viewer_url, "{dashboard_state}");
+    assert_eq!(dashboard_state["controlMode"], true, "{dashboard_state}");
+    assert_eq!(dashboard_state["converging"], false, "{dashboard_state}");
+    assert_eq!(dashboard_state["viewOnly"], false, "{dashboard_state}");
+    let service_after_dashboard: serde_json::Value = serde_json::from_slice(
+        &fs::read(service_dir.join("state.json")).expect("service state after dashboard resolve"),
+    )
+    .expect("service state after dashboard resolve JSON");
+    assert!(service_after_dashboard["remoteViewRoutes"]["route-fixture"]
+        .get("controllerLeaseId")
+        .is_none_or(serde_json::Value::is_null));
+    let operator_close = run_managed_browser_command(
+        &fixture,
+        &route_inventory,
+        &[
+            "--session",
+            "operator",
+            "--runtime-profile",
+            "dashboard",
+            "close",
+            "--json",
+        ],
+    );
+    assert_eq!(operator_close["data"]["disposition"], "browser_closed");
 
     let alice_close = run_managed_browser_command(
         &fixture,

@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 29
+Plan version: 30
 
 State: OPEN
 
@@ -608,6 +608,49 @@ provider-free validation for the frozen remediation batch, not proof of the
 still-open authenticated dashboard-control, joined install-to-use,
 documentation, or installed-runtime acceptance gates.
 
+The version 30 continuation preserves the bounded authenticated-dashboard
+attempt without promoting it to acceptance. Manager handoff resolution now
+returns the dashboard's required compatibility presentation generation and an
+exact ready receipt binding the logical browser, target, required and observed
+stream provider, and Browser Session Manager source. Generation `1` is a
+compatibility sentinel, not lease, owner-generation, or monotonic authority.
+The focused handoff-resolution test, dashboard workspace-node projection
+smoke, formatting, strict workspace Clippy, all four nonignored workstation
+shutdown integration tests, and diff hygiene pass.
+
+Three bounded read-only workers supported this continuation without source,
+Git, runtime, or acceptance authority. `/root/p211_efficiency_audit` used the
+requested `gpt-5.6-luna` low route to assess the prior attempt economics;
+`/root/p211_plan_audit` used `gpt-5.6-terra` medium to reconcile the plan and
+lane catalog; and `/root/p211_validation_audit` used `gpt-5.6-luna` medium to
+select the cheapest discriminating checks. The runtime did not expose their
+effective model identities. The primary accepted the bounded state and test
+evidence, retained integration and acceptance, and rejected the plan worker's
+broader joined-install next step because the fresh handoff made this preserved
+dashboard fixture the immediate packet.
+
+The existing compiled-CLI, runtime-host, Xvfb, and Chrome fixture was extended
+to authenticate through the real dashboard endpoint, reopen Alice's same
+opaque handoff, and inspect the rendered workspace control viewport against a
+static fake viewer. Its static Service State now includes the required
+route-pool-entry to concrete-route mapping. The one permitted replay produced
+no terminal verdict: after more than three minutes it still owned its isolated
+daemon, two Chrome profiles, and Xvfb process, so the run was cancelled and
+only those exact task-owned processes were stopped. No second browser replay
+was started. The failed fixture directory remains at
+`/tmp/agent-browser-workstation-shutdown-71248-1789766339538183572` as
+ephemeral diagnostic evidence.
+
+A new focused regression then proved the fixture's local auth server could
+block teardown indefinitely after accepting an idle browser connection. That
+test failed before the repair and passed after accepted connections received a
+100-millisecond read timeout. This repairs evidence visibility but does not
+reconstruct the hidden dashboard assertion or prove authenticated rendering
+and control. Those acceptance claims remain open. One initial focused Cargo
+invocation also failed before compilation in the optional compiler-cache
+wrapper; the same manager test and subsequent Rust gates passed with compiler
+caching disabled.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -910,8 +953,8 @@ touching overlapping documentation surfaces.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, exact-display launch wiring, and a hosted static-route Xvfb handoff are green; multi-display hosted selection remains pending |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
-| Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | the compiled-CLI Chrome fixture follows a same-site `/protected` to `/login` redirect and retains the same ready opaque handoff through `/account`; the dashboard same-origin post-auth return contract is green; authenticated dashboard rendering remains pending |
-| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | compiled ordinary opens now return ready opaque handoffs from exact static route readiness without leasing, and host resolution focuses and heartbeats the target; authenticated dashboard rendering, control, and doctor agreement remain pending |
+| Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | the compiled-CLI Chrome fixture follows a same-site `/protected` to `/login` redirect and retains the same ready opaque handoff through `/account`; the dashboard same-origin post-auth return contract is green; one authenticated dashboard replay ended without a terminal verdict and its teardown-hang regression is repaired, so authenticated rendering remains pending |
+| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | compiled ordinary opens now return ready opaque handoffs from exact static route readiness without leasing, and host resolution focuses and heartbeats the target; the manager presentation receipt is focused-test green, but the bounded dashboard replay produced no terminal verdict, so authenticated rendering, control, and doctor agreement remain pending |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | the full compiled CLI and runtime-host journey shares one browser, drives independent commands, returns the ready handoff, and closes cleanly with none of those inputs; documentation remains pending |
 | Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | not implemented |
