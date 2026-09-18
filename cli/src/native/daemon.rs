@@ -651,6 +651,46 @@ impl RuntimeHostRouter {
             }),
         }
     }
+
+    async fn attach_browser_session_state(&self, response: Value) -> Value {
+        let browser_sessions = self.browser_sessions.clone();
+        let snapshot = tokio::task::spawn_blocking(move || {
+            let host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if let Some(host) = host.as_ref() {
+                return serde_json::to_value(host.state())
+                    .map_err(|error| format!("browser_session_status_serialize_failed:{error}"));
+            }
+            let store = super::browser_session_store::BrowserSessionJsonStore::default_json()?;
+            let state = store.load_session_state()?;
+            serde_json::to_value(state)
+                .map_err(|error| format!("browser_session_status_serialize_failed:{error}"))
+        })
+        .await
+        .map_err(|error| format!("browser_session_status_join_failed:{error}"))
+        .and_then(|snapshot| snapshot);
+        attach_browser_session_state_to_status(response, snapshot)
+    }
+}
+
+fn attach_browser_session_state_to_status(
+    mut response: Value,
+    snapshot: Result<Value, String>,
+) -> Value {
+    let Some(data) = response.get_mut("data").and_then(Value::as_object_mut) else {
+        return response;
+    };
+    match snapshot {
+        Ok(snapshot) => {
+            data.insert("browserSessionState".to_string(), snapshot);
+        }
+        Err(error) => {
+            data.insert("browserSessionState".to_string(), Value::Null);
+            data.insert("browserSessionStateError".to_string(), Value::String(error));
+        }
+    }
+    response
 }
 
 #[cfg(unix)]
@@ -1068,7 +1108,7 @@ async fn handle_connection<S>(
                     }
                 };
                 tokio::pin!(response_future);
-                let response = if exits_daemon {
+                let mut response = if exits_daemon {
                     response_future.await
                 } else {
                     tokio::select! {
@@ -1081,6 +1121,9 @@ async fn handle_connection<S>(
                         } => break 'connection,
                     }
                 };
+                if action.as_deref() == Some("service_status") {
+                    response = router.attach_browser_session_state(response).await;
+                }
 
                 let mut resp = serialize_daemon_response(response).await;
                 resp.push('\n');
@@ -1633,6 +1676,49 @@ mod tests {
         assert!(
             heartbeat_count.load(Ordering::Relaxed) > 100,
             "the two-worker runtime must continue scheduling unrelated work"
+        );
+    }
+
+    #[test]
+    fn service_status_adds_browser_session_state_without_replacing_legacy_state() {
+        let response = serde_json::json!({
+            "id": "status-1",
+            "success": true,
+            "data": {
+                "service_state": { "browsers": { "legacy": { "id": "legacy" } } }
+            }
+        });
+        let state = serde_json::json!({
+            "schemaVersion": "agent-browser.browser-session-state.v1",
+            "browsers": { "browser:work:1": { "id": "browser:work:1" } }
+        });
+
+        let joined = attach_browser_session_state_to_status(response, Ok(state));
+
+        assert_eq!(
+            joined["data"]["service_state"]["browsers"]["legacy"]["id"],
+            "legacy"
+        );
+        assert_eq!(
+            joined["data"]["browserSessionState"]["browsers"]["browser:work:1"]["id"],
+            "browser:work:1"
+        );
+    }
+
+    #[test]
+    fn service_status_reports_nonblocking_browser_session_projection_failure() {
+        let response = serde_json::json!({ "success": true, "data": {} });
+
+        let joined = attach_browser_session_state_to_status(
+            response,
+            Err("browser-session-state unreadable".to_string()),
+        );
+
+        assert_eq!(joined["success"], true);
+        assert!(joined["data"]["browserSessionState"].is_null());
+        assert_eq!(
+            joined["data"]["browserSessionStateError"],
+            "browser-session-state unreadable"
         );
     }
 }
