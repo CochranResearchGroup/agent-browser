@@ -729,13 +729,16 @@ fn apply_browser_session_manager_route(command: &mut serde_json::Value, flags: &
     let Some(action) = command.get("action").and_then(serde_json::Value::as_str) else {
         return false;
     };
-    if !matches!(action, "navigate" | "close")
+    if !matches!(action, "navigate" | "close" | "tab_new" | "tab_close")
         || !flags.cli_session
         || !crate::runtime_host::admission_enabled()
     {
         return false;
     }
-    if action == "navigate"
+    if action == "tab_close" && command.get("index").is_some() {
+        return false;
+    }
+    if matches!(action, "navigate" | "tab_new")
         && (flags.cdp.is_some()
             || flags.provider.is_some()
             || flags.auto_connect
@@ -771,6 +774,8 @@ fn apply_browser_session_manager_route(command: &mut serde_json::Value, flags: &
     command["action"] = json!(match action {
         "navigate" => "browser_session_navigate",
         "close" => "browser_session_close",
+        "tab_new" => "browser_session_tab_new",
+        "tab_close" => "browser_session_tab_close",
         _ => unreachable!("action was validated above"),
     });
     command["sessionName"] = json!(&flags.session);
@@ -4434,6 +4439,42 @@ mod tests {
         assert_eq!(command["action"], "browser_session_close");
         assert_eq!(command["sessionName"], "alice");
         assert_eq!(command["profileId"], "work");
+    }
+
+    #[test]
+    fn explicit_named_session_routes_new_and_current_tab_close() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "alice".to_string(),
+            "--runtime-profile".to_string(),
+            "work".to_string(),
+            "tab".to_string(),
+            "new".to_string(),
+        ]);
+        let mut new_tab = json!({
+            "action": "tab_new",
+            "url": "https://example.test/next"
+        });
+        assert!(apply_browser_session_manager_route(&mut new_tab, &flags));
+        assert_eq!(new_tab["action"], "browser_session_tab_new");
+        assert_eq!(new_tab["sessionName"], "alice");
+        assert_eq!(new_tab["profileId"], "work");
+
+        let mut close_current = json!({ "action": "tab_close" });
+        assert!(apply_browser_session_manager_route(
+            &mut close_current,
+            &flags
+        ));
+        assert_eq!(close_current["action"], "browser_session_tab_close");
+
+        let mut close_by_legacy_index = json!({ "action": "tab_close", "index": 2 });
+        assert!(!apply_browser_session_manager_route(
+            &mut close_by_legacy_index,
+            &flags
+        ));
     }
 
     #[test]

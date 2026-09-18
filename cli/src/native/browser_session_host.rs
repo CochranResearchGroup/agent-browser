@@ -336,6 +336,30 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "visitedAtMs": navigation.visited_at_ms,
                 }))
             }
+            "browser_session_tab_new" => {
+                let session_id = self.session_id_from_command(command)?;
+                let tab = self.new_tab(&session_id, now_ms)?;
+                let navigation = optional_string(command, "url")
+                    .map(|url| self.navigate(&session_id, url, now_ms))
+                    .transpose()?;
+                Ok(serde_json::json!({
+                    "sessionId": session_id,
+                    "tabId": tab.tab_id,
+                    "targetId": tab.target_id,
+                    "source": "explicit_new",
+                    "url": navigation.map(|record| record.url),
+                }))
+            }
+            "browser_session_tab_close" => {
+                let session_id = self.session_id_from_command(command)?;
+                let closed = self.close_current_tab(&session_id, now_ms)?;
+                Ok(serde_json::json!({
+                    "sessionId": session_id,
+                    "closed": true,
+                    "closedTabId": closed.closed_tab_id,
+                    "currentTabId": closed.current_tab_id,
+                }))
+            }
             "browser_session_reap" => {
                 let reaped = self.reap(now_ms)?;
                 Ok(serde_json::json!({
@@ -401,7 +425,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         match matching_ids.as_slice() {
             [session_id] => Ok((*session_id).to_string()),
             [] => Err(format!("browser_session_not_found_by_name:{session_name}")),
-            _ => Err(format!("browser_session_close_ambiguous:{session_name}")),
+            _ => Err(format!("browser_session_name_ambiguous:{session_name}")),
         }
     }
 }
@@ -454,6 +478,7 @@ mod tests {
     struct FixtureRuntime {
         launches: usize,
         live: bool,
+        next_tab: usize,
     }
 
     impl BrowserRuntimeDriver for FixtureRuntime {
@@ -491,7 +516,12 @@ mod tests {
             &mut self,
             _browser: &ManagedBrowserInstance,
         ) -> Result<BrowserTabAcquisition, String> {
-            Err("unused".to_string())
+            self.next_tab += 1;
+            Ok(BrowserTabAcquisition {
+                tab_id: format!("tab-{}", self.next_tab),
+                target_id: format!("target-{}", self.next_tab),
+                source: agent_browser_service_model::BrowserTabSource::ExplicitNew,
+            })
         }
 
         fn close_tab(
@@ -570,6 +600,7 @@ mod tests {
         let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
             launches: 0,
             live: true,
+            next_tab: 0,
         });
         let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
         let resumed = restarted
@@ -579,6 +610,31 @@ mod tests {
         assert_eq!(resumed.session_id, first.session_id);
         assert_eq!(resumed.browser_id, first.browser_id);
         assert_eq!(restarted.state().sessions.len(), 1);
+
+        let new_tab = restarted.handle_command(&serde_json::json!({
+            "id": "new-alice-tab",
+            "action": "browser_session_tab_new",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://example.test/next",
+            "activityAtMs": 2_500
+        }));
+        assert_eq!(new_tab["success"], true);
+        assert_eq!(new_tab["data"]["source"], "explicit_new");
+        assert_eq!(new_tab["data"]["url"], "https://example.test/next");
+        assert_eq!(restarted.state().tabs.len(), 1);
+        assert_eq!(restarted.state().navigation_history.len(), 1);
+
+        let close_tab = restarted.handle_command(&serde_json::json!({
+            "id": "close-alice-tab",
+            "action": "browser_session_tab_close",
+            "sessionName": "alice",
+            "profileId": "work",
+            "activityAtMs": 2_750
+        }));
+        assert_eq!(close_tab["success"], true);
+        assert_eq!(close_tab["data"]["closedTabId"], "tab-1");
+        assert!(restarted.state().tabs.is_empty());
 
         let response = restarted.handle_command(&serde_json::json!({
             "id": "close-alice",
