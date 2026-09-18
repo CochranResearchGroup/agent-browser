@@ -29,6 +29,12 @@ assert.match(
 
 assert.match(
   dashboardPage,
+  /new URLSearchParams\(window\.location\.search\)\.get\("next"\)[\s\S]*next\?\.startsWith\("\/"\)[\s\S]*!next\.startsWith\("\/\/"\)[\s\S]*window\.history\.replaceState\(\{ dashboardAuth: true \}, "", next\)/,
+  'same-origin authentication must return an opaque remote-view path without replacing it with a provider URL',
+);
+
+assert.match(
+  dashboardPage,
   /resolveHandoff\(true\)[\s\S]*Reopen tab/,
   'a deliberately closed handoff target must require an explicit reopen action',
 );

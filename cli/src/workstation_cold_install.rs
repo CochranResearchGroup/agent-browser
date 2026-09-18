@@ -5,7 +5,8 @@
 //! hot-upgrade transaction state through this interface.
 
 use serde::Serialize;
-use std::time::Duration;
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 pub(crate) const COLD_INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-cold-install.v1";
 
@@ -55,18 +56,50 @@ pub(crate) trait ColdInstallEffects {
     ) -> ColdInstallStepReceipt;
 }
 
-fn phase_deadline(_phase: ColdInstallPhase) -> Duration {
-    Duration::from_secs(30)
+fn phase_deadline(phase: ColdInstallPhase) -> Duration {
+    Duration::from_secs(match phase {
+        ColdInstallPhase::Replace => 60,
+        ColdInstallPhase::Stop
+        | ColdInstallPhase::Start
+        | ColdInstallPhase::Readiness
+        | ColdInstallPhase::Rollback => 30,
+    })
+}
+
+pub(crate) trait ColdInstallClock {
+    fn now(&self) -> Duration;
+}
+
+struct SystemColdInstallClock;
+
+impl ColdInstallClock for SystemColdInstallClock {
+    fn now(&self) -> Duration {
+        static ORIGIN: OnceLock<Instant> = OnceLock::new();
+        ORIGIN.get_or_init(Instant::now).elapsed()
+    }
 }
 
 fn execute_step(
     effects: &mut impl ColdInstallEffects,
     phase: ColdInstallPhase,
+    clock: &impl ColdInstallClock,
 ) -> ColdInstallStepReceipt {
     let deadline = phase_deadline(phase);
+    let started = clock.now();
     let mut step = effects.execute_phase(phase, deadline);
     step.phase = phase;
     step.deadline_ms = deadline.as_millis() as u64;
+    if clock.now().saturating_sub(started) >= deadline {
+        step.ready = false;
+        let phase_name = match phase {
+            ColdInstallPhase::Stop => "stop",
+            ColdInstallPhase::Replace => "replace",
+            ColdInstallPhase::Start => "start",
+            ColdInstallPhase::Readiness => "readiness",
+            ColdInstallPhase::Rollback => "rollback",
+        };
+        step.error = Some(format!("cold_install_{phase_name}_deadline_exceeded"));
+    }
     step
 }
 
@@ -78,6 +111,13 @@ fn execute_step(
 pub(crate) fn execute_workstation_cold_install(
     effects: &mut impl ColdInstallEffects,
 ) -> WorkstationColdInstallReceipt {
+    execute_workstation_cold_install_with_clock(effects, &SystemColdInstallClock)
+}
+
+pub(crate) fn execute_workstation_cold_install_with_clock(
+    effects: &mut impl ColdInstallEffects,
+    clock: &impl ColdInstallClock,
+) -> WorkstationColdInstallReceipt {
     let mut steps = Vec::with_capacity(5);
     for phase in [
         ColdInstallPhase::Stop,
@@ -85,7 +125,7 @@ pub(crate) fn execute_workstation_cold_install(
         ColdInstallPhase::Start,
         ColdInstallPhase::Readiness,
     ] {
-        let mut step = execute_step(effects, phase);
+        let mut step = execute_step(effects, phase, clock);
         if phase == ColdInstallPhase::Readiness && step.error.is_none() && !step.ready {
             step.error = Some("cold_install_readiness_not_ready".to_string());
         }
@@ -95,7 +135,7 @@ pub(crate) fn execute_workstation_cold_install(
             let rollback = if phase == ColdInstallPhase::Stop {
                 None
             } else {
-                let rollback = execute_step(effects, ColdInstallPhase::Rollback);
+                let rollback = execute_step(effects, ColdInstallPhase::Rollback, clock);
                 steps.push(rollback.clone());
                 Some(rollback)
             };

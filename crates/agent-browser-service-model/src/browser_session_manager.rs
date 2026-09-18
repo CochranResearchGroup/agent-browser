@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use crate::{
     select_least_crowded_browser_desktop, BrowserDesktopAssignment, BrowserDesktopRoute,
     BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserProfileCatalogEntry,
-    BrowserProfileKind,
+    BrowserProfileKind, RecordedProcessIdentity,
 };
 
 pub const BROWSER_SESSION_STATE_SCHEMA_V1: &str = "agent-browser.browser-session-state.v1";
@@ -22,6 +22,7 @@ pub struct BrowserLaunch {
     pub browser_id: String,
     pub pid: u32,
     pub cdp_endpoint: String,
+    pub process_identity: Option<RecordedProcessIdentity>,
     pub desktop: Option<BrowserDesktopAssignment>,
 }
 
@@ -216,6 +217,8 @@ pub struct ManagedBrowserInstance {
     pub pid: u32,
     pub cdp_endpoint: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_identity: Option<RecordedProcessIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub desktop: Option<BrowserDesktopAssignment>,
     pub active_session_ids: Vec<String>,
 }
@@ -327,6 +330,57 @@ impl Default for BrowserSessionState {
             navigation_history: Vec::new(),
             session_history: Vec::new(),
         }
+    }
+}
+
+impl BrowserSessionState {
+    /// Record every active manager session and tab as ended after an adapter
+    /// has independently proved that all manager-owned browser processes are
+    /// stopped. Named profile catalog entries and profile directories are not
+    /// part of this state and are intentionally untouched.
+    pub fn terminalize_after_cold_shutdown(&mut self, ended_at_ms: u64) {
+        let sessions = std::mem::take(&mut self.sessions);
+        let tabs = std::mem::take(&mut self.tabs);
+        for tab in tabs.into_values() {
+            let profile_id = sessions
+                .get(&tab.session_id)
+                .map(|session| session.profile_id.clone())
+                .or_else(|| {
+                    self.browsers
+                        .get(&tab.browser_id)
+                        .map(|browser| browser.profile_id.clone())
+                })
+                .unwrap_or_default();
+            self.tab_history.push(TerminalBrowserTab {
+                id: tab.id,
+                target_id: tab.target_id,
+                browser_id: tab.browser_id,
+                session_id: tab.session_id,
+                profile_id,
+                created_at_ms: tab.created_at_ms,
+                last_activity_at_ms: tab.last_activity_at_ms,
+                closed_at_ms: ended_at_ms,
+                reason: BrowserTabEndReason::BrowserEnded,
+                session_end_reason: Some(SessionEndReason::BrowserTerminated),
+            });
+        }
+        for session in sessions.into_values() {
+            if let Some(allocation) = self.disposable_profiles.get_mut(&session.profile_id) {
+                allocation.cleanup_eligible_at_ms =
+                    Some(ended_at_ms.saturating_add(allocation.cleanup_delay_ms));
+            }
+            self.session_history.push(TerminalBrowserSession {
+                id: session.id,
+                name: session.name,
+                profile_id: session.profile_id,
+                browser_id: session.browser_id,
+                created_at_ms: session.created_at_ms,
+                last_activity_at_ms: session.last_activity_at_ms,
+                ended_at_ms,
+                reason: SessionEndReason::BrowserTerminated,
+            });
+        }
+        self.browsers.clear();
     }
 }
 
@@ -472,6 +526,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     profile_id: profile.id.clone(),
                     pid: launch.pid,
                     cdp_endpoint: launch.cdp_endpoint,
+                    process_identity: launch.process_identity,
                     desktop: launch.desktop,
                     active_session_ids: Vec::new(),
                 },
@@ -1148,6 +1203,20 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             result.deleted_disposable_profile_ids.push(profile_id);
         }
         Ok(result)
+    }
+
+    /// Reconcile durable browser records against current process and CDP
+    /// liveness before projecting active inventory.
+    pub fn reconcile_liveness(&mut self, now_ms: u64) -> Result<Vec<String>, String> {
+        let browsers = self.state.browsers.values().cloned().collect::<Vec<_>>();
+        let mut retired = Vec::new();
+        for browser in browsers {
+            if !self.effects.browser_is_live(&browser)? {
+                self.retire_browser(&browser, SessionEndReason::BrowserUnresponsive, now_ms)?;
+                retired.push(browser.id);
+            }
+        }
+        Ok(retired)
     }
 
     fn mark_disposable_cleanup_eligible(

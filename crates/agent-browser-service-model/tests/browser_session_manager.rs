@@ -141,6 +141,7 @@ impl BrowserSessionEffects for FixtureEffects {
             },
             pid: 4242,
             cdp_endpoint: "http://127.0.0.1:9422".to_string(),
+            process_identity: None,
             desktop: desktop.cloned(),
         })
     }

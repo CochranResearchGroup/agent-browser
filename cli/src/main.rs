@@ -2492,7 +2492,21 @@ fn main() {
         return;
     }
 
-    if !command_skips_browser_launch_for_prestart(&cmd)
+    let targets_managed_session =
+        match command_targets_managed_session_before_prestart(&cmd, &flags.session) {
+            Ok(targets) => targets,
+            Err(error) => {
+                if flags.json {
+                    print_json_error(error);
+                } else {
+                    eprintln!("{} {}", color::error_indicator(), error);
+                }
+                exit(1);
+            }
+        };
+
+    if !targets_managed_session
+        && !command_skips_browser_launch_for_prestart(&cmd)
         && !connection::daemon_startup_ready(&flags.session)
     {
         cmd["serviceState"] = json!(flags.service_state.clone());
@@ -2569,7 +2583,9 @@ fn main() {
         }
     }
 
-    if command_targets_existing_daemon_before_prestart(&cmd) && daemon_ready(&flags.session) {
+    if (command_targets_existing_daemon_before_prestart(&cmd) || targets_managed_session)
+        && daemon_ready(&flags.session)
+    {
         let action = cmd.get("action").and_then(|value| value.as_str());
         let output_opts = OutputOptions::from_flags(&flags);
         match send_command(cmd.clone(), &flags.session) {
@@ -2626,7 +2642,7 @@ fn main() {
                 }
                 return;
             }
-            Err(_) => {
+            Err(error) => {
                 if action == Some("close") {
                     match force_close_session_from_metadata(&flags.session) {
                         Ok(true) => {
@@ -2662,6 +2678,14 @@ fn main() {
                         Err(error) => exit_close_identity_failure(&error, flags.json),
                     }
                 }
+                if targets_managed_session {
+                    if flags.json {
+                        print_json_error(error);
+                    } else {
+                        eprintln!("{} {}", color::error_indicator(), error);
+                    }
+                    exit(1);
+                }
                 // Fall through to the normal daemon prestart path. This keeps
                 // token-missing or mid-shutdown sessions repairable when there
                 // is no explicit stale metadata to clean up.
@@ -2680,7 +2704,7 @@ fn main() {
     let use_real_keychain = env::var("AGENT_BROWSER_USE_REAL_KEYCHAIN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""))
         || keychain_password.is_some();
-    if !command_skips_browser_launch_for_prestart(&cmd) {
+    if !targets_managed_session && !command_skips_browser_launch_for_prestart(&cmd) {
         use native::service_store::ServiceStateRepository;
         let continuity = native::service_store::LockedServiceStateRepository::default_json()
             .and_then(|repository| repository.load_snapshot())
@@ -3125,7 +3149,8 @@ fn main() {
             || live_runtime_status.is_some());
 
     // Launch headed browser or configure browser options (without CDP or provider).
-    if !command_skips_browser_launch_for_prestart(&cmd)
+    if !targets_managed_session
+        && !command_skips_browser_launch_for_prestart(&cmd)
         && should_send_prestart_launch
         && flags.cdp.is_none()
         && flags.provider.is_none()
@@ -3742,6 +3767,28 @@ fn command_targets_existing_daemon_before_prestart(cmd: &serde_json::Value) -> b
     cmd.get("action")
         .and_then(|value| value.as_str())
         .is_some_and(|action| matches!(action, "close"))
+}
+
+fn command_targets_managed_session_before_prestart(
+    cmd: &serde_json::Value,
+    session_name: &str,
+) -> Result<bool, String> {
+    let targets_manager = cmd
+        .get("action")
+        .and_then(|value| value.as_str())
+        .is_some_and(|action| {
+            !crate::native::actions::action_skips_browser_launch(action)
+                && !matches!(action, "tab_new" | "tab_switch" | "window_new")
+        });
+    if !targets_manager {
+        return Ok(false);
+    }
+    let store = native::browser_session_store::BrowserSessionJsonStore::default_json()?;
+    let state = store.load_session_state()?;
+    Ok(state
+        .sessions
+        .values()
+        .any(|session| session.name == session_name))
 }
 
 #[cfg(test)]

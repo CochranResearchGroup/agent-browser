@@ -7,7 +7,7 @@ use agent_browser_service_model::{
     BrowserDesktopRoute, BrowserDisposableProfilePolicy, BrowserProfileCatalog,
     BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
     CloseBrowserSessionResult, CloseBrowserTabResult, OpenBrowserSession, OpenBrowserSessionResult,
-    ReapBrowserSessionsResult, SessionEndReason,
+    ReapBrowserSessionsResult, RemoteViewHandoff, ServiceState, SessionEndReason,
 };
 
 use super::browser_session_runtime::{
@@ -15,6 +15,7 @@ use super::browser_session_runtime::{
     ManagedBrowserCommandEffects,
 };
 use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionJsonStore};
+use super::presentation_inventory::StaticRouteInventory;
 
 const DEFAULT_SESSION_IDLE_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_CLEANUP_DELAY_MS: u64 = 300_000;
@@ -236,6 +237,115 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(result)
     }
 
+    /// Resolve one manager-owned opaque handoff while this host has exclusive
+    /// custody of the manager state and its browser effects.
+    pub(crate) fn resolve_manager_handoff(
+        &mut self,
+        handoff: &RemoteViewHandoff,
+        service: &ServiceState,
+        inventory: &StaticRouteInventory,
+        activity_at_ms: u64,
+    ) -> Result<serde_json::Value, String> {
+        if !super::browser_session_handoff::is_manager_handoff(handoff) {
+            return Err("browser_session_handoff_not_manager_owned".to_string());
+        }
+        if handoff.state != "ready" {
+            return Err("browser_session_handoff_not_ready".to_string());
+        }
+        let session_id = handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+        let session = self
+            .state
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
+        if session.expires_at_ms < activity_at_ms {
+            return Err("browser_session_handoff_session_expired".to_string());
+        }
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_browser_missing".to_string())?;
+        let tab_id = handoff
+            .tab_id
+            .as_deref()
+            .ok_or_else(|| "browser_session_handoff_tab_missing".to_string())?;
+        let tab = self
+            .state
+            .tabs
+            .get(tab_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_tab_closed".to_string())?;
+        if handoff.profile_id.as_deref() != Some(session.profile_id.as_str())
+            || handoff.browser_id.as_deref() != Some(browser.id.as_str())
+            || handoff.session_name.as_deref() != Some(session.name.as_str())
+            || handoff.target_id.as_deref() != Some(tab.target_id.as_str())
+            || tab.browser_id != browser.id
+            || tab.session_id != session.id
+        {
+            return Err("browser_session_handoff_identity_changed".to_string());
+        }
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or_else(|| "browser_session_handoff_desktop_missing".to_string())?;
+        let binding = super::browser_session_handoff::manager_route_binding(
+            service,
+            inventory,
+            &browser.id,
+            &desktop.route_id,
+            &desktop.display_name,
+        )?;
+        let control_input = service
+            .remote_view_routes
+            .get(&binding.route_id)
+            .and_then(|route| route.control_input)
+            .ok_or_else(|| "browser_session_handoff_control_input_unavailable".to_string())?;
+        if handoff
+            .view_stream_provider
+            .is_some_and(|provider| provider != binding.provider)
+            || handoff
+                .control_input
+                .is_some_and(|provider| provider != control_input)
+        {
+            return Err("browser_session_handoff_presentation_identity_changed".to_string());
+        }
+        let handoff_url =
+            super::remote_view_handoff::durable_remote_view_handoff_url(&binding, &handoff.id)
+                .ok_or_else(|| "browser_session_handoff_public_operator_url_missing".to_string())?;
+        if handoff.handoff_url.as_deref() != Some(handoff_url.as_str()) {
+            return Err("browser_session_handoff_opaque_url_changed".to_string());
+        }
+
+        let focused = self.focus_browser(&browser.id, Some(&tab.target_id), activity_at_ms)?;
+        if focused.tab_id.as_deref() != Some(tab.id.as_str())
+            || focused.target_id.as_deref() != Some(tab.target_id.as_str())
+        {
+            return Err("browser_session_handoff_focus_identity_changed".to_string());
+        }
+        Ok(serde_json::json!({
+            "status": "ready",
+            "resolved": true,
+            "browserSessionManager": true,
+            "handoffId": handoff.id,
+            "handoffUrl": handoff_url,
+            "browserId": browser.id,
+            "sessionName": session.name,
+            "tabId": tab.id,
+            "targetId": tab.target_id,
+            "viewStreamProvider": binding.provider,
+            "requiredViewStreamProvider": binding.provider,
+            "controlInput": control_input,
+            "operatorVisible": { "state": "ready" },
+        }))
+    }
+
     pub(crate) fn new_tab(
         &mut self,
         session_id: &str,
@@ -283,6 +393,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
 
     pub(crate) fn reap_current(&mut self) -> Result<ReapBrowserSessionsResult, String> {
         self.reap(current_unix_ms())
+    }
+
+    pub(crate) fn reconcile_liveness_current(&mut self) -> Result<Vec<String>, String> {
+        let retired = self.manager().reconcile_liveness(current_unix_ms())?;
+        if !retired.is_empty() {
+            self.commit_state()?;
+        }
+        Ok(retired)
     }
 
     pub(crate) fn handle_command(&mut self, command: &serde_json::Value) -> serde_json::Value {
@@ -557,8 +675,9 @@ mod tests {
         BrowserRuntimeDriver, BrowserSessionEffectAdapter,
     };
     use agent_browser_service_model::{
-        BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, ManagedBrowserInstance,
-        ManagedBrowserTab,
+        BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, ControlInputProvider,
+        DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, RemoteViewHandoff,
+        RemoteViewRoute, ServiceState,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -585,6 +704,7 @@ mod tests {
                 browser_id: format!("browser:{}:{}", profile.id, self.launches),
                 pid: 4242,
                 cdp_endpoint: "ws://127.0.0.1:9422/devtools/browser/test".to_string(),
+                process_identity: None,
                 desktop: desktop.cloned(),
             })
         }
@@ -810,5 +930,183 @@ mod tests {
         assert_eq!(response["data"]["sessionId"], first.session_id);
         assert_eq!(response["data"]["disposition"], "browser_closed");
         assert!(restarted.state().sessions.is_empty());
+    }
+
+    #[test]
+    fn handoff_resolution_focuses_and_persists_the_exact_session_heartbeat() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: vec![BrowserDesktopRoute {
+                    id: "slot-a".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                }],
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let tab = host.new_tab(&opened.session_id, 1_100).unwrap();
+        let handoff = RemoteViewHandoff {
+            id: "opaque-a".to_string(),
+            state: "ready".to_string(),
+            intent: serde_json::json!({
+                "browserSessionManager": true,
+                "sessionId": opened.session_id,
+            }),
+            handoff_url: Some("https://dashboard.example/remote-view/opaque-a".to_string()),
+            profile_id: Some("work".to_string()),
+            browser_id: Some(opened.browser_id.clone()),
+            session_name: Some("alice".to_string()),
+            tab_id: Some(tab.tab_id.clone()),
+            target_id: Some(tab.target_id.clone()),
+            ..RemoteViewHandoff::default()
+        };
+        let mut service = ServiceState::default();
+        service.display_allocations.insert(
+            "display-a".to_string(),
+            DisplayAllocation {
+                id: "display-a".to_string(),
+                display_name: Some(":10".to_string()),
+                owner_browser_id: Some(opened.browser_id.clone()),
+                state: "ready".to_string(),
+                route_ids: vec!["route-a".to_string()],
+                readiness: Some(serde_json::json!({"state":"ready"})),
+                ..DisplayAllocation::default()
+            },
+        );
+        service.remote_view_routes.insert(
+            "route-a".to_string(),
+            RemoteViewRoute {
+                id: "route-a".to_string(),
+                display_allocation_id: Some("display-a".to_string()),
+                browser_id: Some(opened.browser_id.clone()),
+                route_descriptor: Some(serde_json::json!({
+                    "publicOperatorUrl":"https://dashboard.example/operator"
+                })),
+                control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                state: "ready".to_string(),
+                readiness: Some(serde_json::json!({"state":"ready"})),
+                ..RemoteViewRoute::default()
+            },
+        );
+        let inventory = super::super::presentation_inventory::StaticRouteInventory::from_json(
+            r#"[{"id":"slot-a","target":{"displayName":":10"}}]"#,
+        )
+        .unwrap();
+
+        let resolved = host
+            .resolve_manager_handoff(&handoff, &service, &inventory, 2_000)
+            .unwrap();
+
+        assert_eq!(resolved["status"], "ready");
+        assert_eq!(resolved["resolved"], true);
+        assert_eq!(resolved["handoffUrl"], handoff.handoff_url.unwrap());
+        assert_eq!(resolved["browserId"], opened.browser_id);
+        assert_eq!(resolved["tabId"], tab.tab_id);
+        assert_eq!(resolved["targetId"], tab.target_id);
+        assert_eq!(resolved["operatorVisible"]["state"], "ready");
+        assert!(resolved.get("externalUrl").is_none());
+        assert!(resolved.get("providerExternalUrl").is_none());
+
+        let persisted = BrowserSessionJsonStore::new(&directory.0)
+            .load_session_state()
+            .unwrap();
+        let persisted_session = persisted.sessions.get(&opened.session_id).unwrap();
+        assert_eq!(persisted_session.last_activity_at_ms, 2_000);
+        assert_eq!(persisted_session.expires_at_ms, 302_000);
+        assert_eq!(
+            persisted_session.current_tab_id.as_deref(),
+            Some(tab.tab_id.as_str())
+        );
+    }
+
+    #[test]
+    fn status_liveness_reconciliation_retires_dead_persisted_browsers() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+            default_disposable_policy: None,
+        };
+        let opened = {
+            let mut host = BrowserSessionHost::load(
+                BrowserSessionJsonStore::new(&directory.0),
+                BrowserSessionEffectAdapter::new(FixtureRuntime {
+                    live: true,
+                    ..FixtureRuntime::default()
+                }),
+                &legacy_path,
+                config.clone(),
+            )
+            .unwrap();
+            host.open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+                .unwrap()
+        };
+        let mut restarted = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: false,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+
+        let retired = restarted.reconcile_liveness_current().unwrap();
+
+        assert_eq!(retired, vec![opened.browser_id]);
+        assert!(restarted.state().browsers.is_empty());
+        assert!(restarted.state().sessions.is_empty());
+        assert_eq!(restarted.state().session_history.len(), 1);
+        assert_eq!(
+            restarted.state().session_history[0].reason,
+            SessionEndReason::BrowserUnresponsive
+        );
     }
 }

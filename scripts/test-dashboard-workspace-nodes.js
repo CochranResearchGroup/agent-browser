@@ -7,6 +7,7 @@ import {
   deriveWorkspaceNodes,
   deriveWorkspaceOwnershipDiagnostics,
   browserSessionManagerWorkspaceSources,
+  mergeBrowserSessionManagerWorkspaceSources,
   workspaceInventoryGroupForNode,
   workspaceInventoryPlacementForNode,
   workspaceNodeLiveControlEligibility,
@@ -125,6 +126,20 @@ assert.equal(managedSessionNodes.length, 1);
 assert.equal(managedSessionNodes[0].browserId, "browser:work:1");
 assert.equal(managedSessionNodes[0].counts.serviceSessions, 1);
 assert.equal(managedSessionNodes[0].counts.tabs, 1);
+
+const managerAuthoritativeSources = mergeBrowserSessionManagerWorkspaceSources(
+  {
+    serviceBrowsers: [{ id: "legacy-ready", profileId: "legacy", health: "ready" }],
+    serviceSessions: [{ id: "legacy-session", profileId: "legacy", browserIds: ["legacy-ready"] }],
+    serviceTabs: [{ id: "legacy-tab", browserId: "legacy-ready", sessionId: "legacy-session" }],
+  },
+  { browsers: {}, sessions: {}, tabs: {} },
+);
+assert.deepEqual(
+  managerAuthoritativeSources,
+  { serviceBrowsers: [], serviceSessions: [], serviceTabs: [] },
+  "An available manager inventory must be the only source for active dashboard rows",
+);
 
 const diagnosticFixture = {
   serviceBrowsers: [

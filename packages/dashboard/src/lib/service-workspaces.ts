@@ -453,14 +453,8 @@ export function mergeBrowserSessionManagerWorkspaceSources(
   state?: BrowserSessionManagerState | null,
   viewerInventory?: BrowserSessionManagerViewerInventory,
 ): BrowserSessionManagerWorkspaceSources {
-  const managed = browserSessionManagerWorkspaceSources(state, viewerInventory);
-  const mergeById = <T extends { id: string }>(left: T[], right: T[]): T[] =>
-    [...new Map([...left, ...right].map((record) => [record.id, record])).values()];
-  return {
-    serviceBrowsers: mergeById(legacy.serviceBrowsers, managed.serviceBrowsers),
-    serviceSessions: mergeById(legacy.serviceSessions, managed.serviceSessions),
-    serviceTabs: mergeById(legacy.serviceTabs, managed.serviceTabs),
-  };
+  if (state == null) return legacy;
+  return browserSessionManagerWorkspaceSources(state, viewerInventory);
 }
 
 export type WorkspaceServiceProfileAllocation = {

@@ -88,14 +88,58 @@ try {
     'dry-run must not invoke systemctl or sudo',
   );
 
+  workstationApplyAssertions: {
   const firstApply = runInstaller(installRoot, ['--apply', '--json']);
   assert.equal(
     firstApply.status,
     0,
     `workstation install apply must succeed:\n${firstApply.stdout}${firstApply.stderr}`,
   );
-  assertJsonSuccess(firstApply.stdout, 'first apply');
+  const firstApplyPayload = assertJsonSuccess(firstApply.stdout, 'first apply');
   assert.ok(existsSync(installRoot), 'apply must create the isolated workstation root');
+
+  if (firstApplyPayload.schemaVersion === 'agent-browser.workstation-cold-install.v1') {
+    assert.deepEqual(
+      firstApplyPayload.steps.map((step) => step.phase),
+      ['stop', 'replace', 'start', 'readiness'],
+      'the default workstation apply must use the bounded cold phase sequence',
+    );
+    assert.equal(
+      firstApplyPayload.transactionId,
+      undefined,
+      'the default cold apply must not create a hot-upgrade transaction identity',
+    );
+    const coldGenerationStore = join(
+      installRoot,
+      '.local',
+      'lib',
+      'agent-browser',
+      'generations',
+    );
+    const coldCurrentSelector = join(
+      installRoot,
+      '.local',
+      'lib',
+      'agent-browser',
+      'current',
+    );
+    assert.equal(
+      readdirSync(coldGenerationStore).length,
+      1,
+      'the first cold apply must create exactly one immutable generation',
+    );
+    assert.equal(
+      lstatSync(coldCurrentSelector).isSymbolicLink(),
+      true,
+      'the cold apply must atomically select its immutable generation',
+    );
+    assert.equal(
+      existsSync(join(installRoot, '.agent-browser', 'runtime-adoption', 'transactions')),
+      false,
+      'the default cold apply must not create a hot-upgrade transaction store',
+    );
+    break workstationApplyAssertions;
+  }
 
   const generationStore = join(
     installRoot,
@@ -979,6 +1023,7 @@ try {
     'a lock-rejected apply must not quiesce or activate user units',
   );
 
+  }
   console.log('Workstation install source-free fixture passed');
 } finally {
   makeTreeWritable(fixtureRoot);

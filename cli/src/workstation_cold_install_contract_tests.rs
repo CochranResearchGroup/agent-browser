@@ -1,14 +1,19 @@
 //! Provider-free fixtures for the bounded stop, replace, start, readiness flow.
 
 use crate::workstation_cold_install::{
-    execute_workstation_cold_install, ColdInstallEffects, ColdInstallPhase, ColdInstallStepReceipt,
+    execute_workstation_cold_install, execute_workstation_cold_install_with_clock,
+    ColdInstallClock, ColdInstallEffects, ColdInstallPhase, ColdInstallStepReceipt,
 };
+use std::cell::Cell;
+use std::rc::Rc;
 use std::time::Duration;
 
 #[derive(Debug, Default)]
 struct ScriptedInstall {
     calls: Vec<(ColdInstallPhase, Duration)>,
     failures: Vec<ColdInstallPhase>,
+    clock: Option<Rc<Cell<u64>>>,
+    overrun_phase: Option<ColdInstallPhase>,
 }
 
 impl ScriptedInstall {
@@ -27,6 +32,11 @@ impl ColdInstallEffects for ScriptedInstall {
         deadline: Duration,
     ) -> ColdInstallStepReceipt {
         self.calls.push((phase, deadline));
+        if self.overrun_phase == Some(phase) {
+            if let Some(clock) = self.clock.as_ref() {
+                clock.set(clock.get() + deadline.as_millis() as u64);
+            }
+        }
         let failed = self.failures.contains(&phase);
         ColdInstallStepReceipt {
             phase,
@@ -35,6 +45,14 @@ impl ColdInstallEffects for ScriptedInstall {
             deadline_ms: deadline.as_millis() as u64,
             error: failed.then(|| format!("{phase:?}_failed")),
         }
+    }
+}
+
+struct InjectedClock(Rc<Cell<u64>>);
+
+impl ColdInstallClock for InjectedClock {
+    fn now(&self) -> Duration {
+        Duration::from_millis(self.0.get())
     }
 }
 
@@ -59,7 +77,7 @@ fn clean_cold_install_runs_stop_replace_start_and_readiness_in_order() {
         ]
     );
     assert_eq!(effects.calls[0].1, Duration::from_secs(30));
-    assert_eq!(effects.calls[1].1, Duration::from_secs(30));
+    assert_eq!(effects.calls[1].1, Duration::from_secs(60));
     assert_eq!(effects.calls[2].1, Duration::from_secs(30));
     assert_eq!(effects.calls[3].1, Duration::from_secs(30));
 }
@@ -131,4 +149,39 @@ fn readiness_failure_rolls_back_exactly_once() {
         1
     );
     assert_eq!(receipt.original_error.as_deref(), Some("Readiness_failed"));
+}
+
+#[test]
+fn replacement_deadline_overrun_fails_and_attempts_one_bounded_rollback() {
+    let now = Rc::new(Cell::new(0));
+    let clock = InjectedClock(now.clone());
+    let mut effects = ScriptedInstall {
+        clock: Some(now),
+        overrun_phase: Some(ColdInstallPhase::Replace),
+        ..ScriptedInstall::default()
+    };
+
+    let receipt = execute_workstation_cold_install_with_clock(&mut effects, &clock);
+
+    assert!(!receipt.success);
+    assert_eq!(
+        receipt.original_error.as_deref(),
+        Some("cold_install_replace_deadline_exceeded")
+    );
+    assert_eq!(
+        effects
+            .calls
+            .iter()
+            .map(|(phase, _)| *phase)
+            .collect::<Vec<_>>(),
+        vec![
+            ColdInstallPhase::Stop,
+            ColdInstallPhase::Replace,
+            ColdInstallPhase::Rollback,
+        ]
+    );
+    assert!(receipt
+        .rollback
+        .as_ref()
+        .is_some_and(|step| step.error.is_none()));
 }

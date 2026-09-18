@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 26
+Plan version: 29
 
 State: OPEN
 
@@ -465,6 +465,149 @@ keeps this packet in new lane-owned modules until those dependencies integrate.
 Graphiti was healthy but returned only older remote-view history. Current
 source, focused tests, and Git evidence remain authoritative.
 
+## Second-Window Review And Remediation Freeze
+
+The second execution window started from clean local and remote candidate
+`6f8dccd112be3c10d72e75455d53fdf3c371d8f1` against
+`origin/main@a3848e16f75769f31e6855a7e77f9ce9bdb8967f`. Pull request #191 remained
+open and draft. Pull request #184 remained open and draft at `838b771a`, so
+P207 still owns overlapping help, README, skill, generated-client, and service
+documentation surfaces. CodeGraph was not initialized in this worktree and
+was not initialized without operator authority. Graphiti was healthy but had
+no Plan 0211-specific source-backed recall.
+
+The operator authorized one additional execution window capped at 2,000,000
+tokens. Goal-control thread `01a0b5a3-edfc-7a91-94de-e6bf2f1804e3` did not
+expose a writable token-budget field, so this plan records the cap as the
+manual hard ceiling. The prior window consumed 1,988,143 tokens and 11,388
+seconds. The new allowance does not reset the one-review limit, retry counts,
+evidence history, or the 360-active-minute provider-free ceiling. This window
+can finish the provider-free source objective if the accepted remediation and
+P207 documentation join fit the remaining bounds. It cannot establish the
+separately authorized installed clean-install and replacement-upgrade result.
+
+The fresh review was one parallel two-axis pass. The primary adjudicated every
+candidate as follows:
+
+| Finding | Disposition | Adjudication |
+| --- | --- | --- |
+| `P211-S1` | `blocking` | `presentation_requalification.rs` has no production caller and duplicates the presentation design. Delete the unused module and its isolated tests. |
+| `P211-S2` | `blocking` | Public shutdown, manager behavior, and configuration are not documented on all mandatory surfaces. Perform the parity update only after P207 overlap custody is clear. |
+| `P211-S3` | `needs_evidence` | RUNBOOK and the active-lane entry are stale, but both are shared surfaces currently overlapping P207 and P214. Reconcile one writer before refreshing them. |
+| `P211-S4` | `nonblocking_backlog` | Duplicate controller cases and test-harness setup raise maintenance cost but do not falsify current behavior. Consolidation is outside this remediation cycle. |
+| `P211-R201` | `blocking` | Shutdown and residue verification omit independent manager state, while runtime-host teardown relinquishes manager browsers. Add exact manager-process custody, terminal state transition, and replay proof. |
+| `P211-R202` | `blocking` | One `DaemonState` per browser shares refs, frame state, confirmations, and request state across named sessions. Separate session command context from browser lifecycle custody. |
+| `P211-R203` | `blocking` | Managed navigation preserves `success: true` when required handoff publication fails. The ordinary ready-remote-view operation must fail as a whole when its handoff is unavailable. |
+| `P211-R204` | `blocking` | Managed handoff readiness currently treats retained dynamic pool and allocation fields as authority. Bind publication and resolution to the configured static viewer plus current browser, display, route, and control observations without importing legacy leases. |
+| `P211-R205` | `blocking` | Handoff resolution bypasses manager serialization, does not persist heartbeat activity, and can race close or reap. Route it through the live host and its existing persistence lock. |
+| `P211-R206` | `blocking` in part | Hard-coded ready/active projection from an unreconciled persisted manager record is invalid. Preserve legacy browser history as a separately classified compatibility source; reject the candidate suggestion to remove all legacy rows from the dashboard. |
+| `P211-R207` | `rejected` | The exact catalog ID is the profile selector; `name` is a display label. Adding display-name alias selection would weaken the frozen exact-profile rule and create new ambiguity behavior. |
+| `P211-R208` | `blocking` | Several shutdown, replacement, start, readiness, rollback, filesystem, and lock effects only report a deadline without enforcing it. Add injected bounded execution at the effect seam. |
+| `P211-R209` | `rejected` | Indexed close and arbitrary tab switching were explicitly deferred. The prototype owns explicit new-tab and current-tab close only; unsupported indexed operations must not be reinterpreted. |
+| `P211-R210` | `needs_evidence` | The final daemon, dashboard, shutdown, redirect, and joined install fixtures are still absent. This is the acceptance-evidence packet after source repair, not a separate defect. |
+
+The internal `Converging` variant carrying terminal `unavailable` data and the
+constant managed presentation generation are accepted as nonblocking cleanup
+inside the handoff repair only if removing them simplifies the joined
+interface. They do not justify a new generation or recovery subsystem.
+
+The single remediation batch is frozen in this order:
+
+1. Add one red public shutdown fixture for a manager-only browser, then persist
+   exact process identity, close or safely preserve it, terminalize manager
+   sessions, verify independent-state residue, and prove idempotent replay.
+2. Add one two-session command-context regression, then split session-owned
+   command state from the shared browser transport and lifecycle owner.
+3. Add red handoff publication, close-race, heartbeat, and current-readiness
+   fixtures, then route publication and resolution through the serialized host
+   and one current configured presentation observation.
+4. Add injected non-completing effect checks, then enforce the existing phase
+   deadlines without creating a second transaction or rollback design.
+5. Delete the unused presentation-requalification module and retain only tests
+   that cross a production interface.
+6. Run the missing daemon-process, dashboard handoff/control, same-site login
+   redirect, shutdown-state, and joined fresh-install/restart fixtures against
+   one frozen provider-free candidate.
+7. After P207 custody clears, synchronize CLI help, README, Agent Browser skill,
+   docs site, inline docs, RUNBOOK, and the P211 active-lane record. Run the
+   changed-surface selector, required format and strict Clippy gates, focused
+   contracts, and one broad provider-free lane once at the final batch.
+
+Budget reservation for this window is 12 percent review and adjudication, 43
+percent implementation and red-green fixtures, 25 percent selective and broad
+validation, 12 percent documentation and P207 reconciliation, and 8 percent
+publication and closeout. If accepted remediation consumes the documentation
+or final-validation reserve, stop lower-value cleanup and report the exact
+provider-free gate reached. No broad review reopens after this freeze;
+verification is closed-world against the accepted findings and regressions
+introduced by their remediation.
+
+The version 28 remediation checkpoint implements the frozen source repairs.
+Shutdown now treats independently persisted Browser Session Manager processes
+as owned only when their exact process identity verifies, terminalizes the
+manager state after exit proof, preserves named profile data, survives replay,
+and leaves an unreferenced foreign process running in the public command
+fixture. Browser command state is owned per named session while lifecycle and
+transport custody remain shared per browser. Managed handoff publication now
+requires one configured static viewer plus current display, route, control,
+browser, session, and tab evidence; publication failure fails navigation.
+Resolution runs under the manager host lock, focuses the exact target, and
+persists the session heartbeat. Status reconciles process and CDP liveness
+before projection, and the dashboard treats current manager state as the
+active inventory when that state is available. Shutdown and cold-install
+controllers detect injected deadline overruns after every effect boundary;
+the measured filesystem replacement allowance is 60 seconds and the other
+phase allowances remain 30 seconds or less. The unused presentation
+requalification module is removed.
+
+The external-process Chrome fixture then exposed one additional routing defect
+inside the already frozen `P211-R210` evidence packet. A mutating command such
+as `click` for an existing manager session entered the legacy prestart launch
+path and was rejected as duplicate profile pressure before the daemon could
+route it to the manager. The CLI now detects a persisted live named manager
+session before prestart, sends its ordinary command directly to the shared
+runtime host, and fails rather than falling back to a legacy launch if that
+host is unreachable. The ignored Linux fixture crosses the compiled CLI and
+runtime-host daemon with disposable Xvfb and Chrome. Alice and Bob share one
+named-profile browser while retaining distinct sessions, tabs, targets, and
+independent `e1` snapshot references; Alice's close preserves Bob and Bob's
+final close terminates the exact browser process. The same fixture follows a
+real loopback HTTP redirect from `/protected` to `/login`, then reaches
+`/account` on Alice's existing tab while retaining the same opaque handoff ID
+and leaving Bob unaffected. A fresh process census found no fixture browser or
+daemon residue.
+
+Focused receipts at this checkpoint are 25 executed browser-session tests with
+two explicit Chrome tests excluded from the default filter, the explicit
+external-process Chrome/Xvfb fixture, three public shutdown process fixtures,
+231 stream tests, three CDP transport tests with compiler caching disabled,
+the dashboard durable-handoff contract, and diff hygiene. The stream rerun also
+replaced a stale exported-dashboard assertion: current `main` server-renders
+the stable dashboard shell and `Restoring session` before client
+authentication, so the route test now checks the shell plus injected section
+rather than later client-only login copy. Full authenticated dashboard render
+and control, joined cold-install restart use, documentation parity, broad final
+validation, and separately authorized installed acceptance remain open.
+
+The version 29 validation checkpoint freezes the remediated source candidate.
+The first comprehensive runner invocation lost its controlling session during
+the serial workstation compartment after recording green results for the
+native action, native service, native other, and CLI core compartments. The
+unfinished and supporting lanes were then rerun against the unchanged Rust
+source: all 214 workstation tests, all CLI integration tests, 99 native browser
+tests with two explicit Chrome tests ignored, 118 Lease Authority tests, the
+complete 221-test Service Model unit lane and its integration binaries, and
+the candidate, challenge-control, desktop-services, and CDP transport crates
+passed. The 231-test native stream lane had already passed against the same
+source. Strict workspace Clippy, formatting, the dashboard production build,
+dashboard action and durable-handoff contracts, route-confusion gates,
+workstation host and VM harness contracts, Guacamole and PostgreSQL fixtures,
+service API and MCP parity, generated-client checks, the cold-install fixture,
+and the Service collection no-launch smoke also passed. This is final
+provider-free validation for the frozen remediation batch, not proof of the
+still-open authenticated dashboard-control, joined install-to-use,
+documentation, or installed-runtime acceptance gates.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -751,25 +894,25 @@ touching overlapping documentation surfaces.
 
 | Requirement | Acceptance evidence | Current state |
 | --- | --- | --- |
-| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public route and empty-workstation idempotence fixture green; populated, failed-upgrade, partial-prior-run, and installed acceptance pending |
+| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public route, empty-workstation idempotence, retained-profile release, manager-only state, exact process termination, foreign-process preservation, and replay fixtures green; protected-claim, failed-upgrade, partial-prior-run, and installed acceptance pending |
 | Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | fixed phase deadlines, bounded daemon/command waits, and provider-free escalation receipt mapping are green; injected-clock platform timeout fixture pending |
 | Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | exact browser/daemon, fixed user-unit, fixed container, state-release, metadata, and verification adapters implemented; installed residue proof pending |
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixture releases the retained session and preserves the profile record and physical data; active protected-claim process coverage remains |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | ordinary and reviewed-candidate source routes plus isolated success and rollback fixtures green; installed acceptance pending |
-| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization, provider-free restart reuse, and concrete disposable-Chrome worker reattachment plus ordinary title and snapshot calls green; full daemon-process client fixture pending |
+| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization, provider-free restart reuse, concrete disposable-Chrome worker reattachment, and the compiled-CLI shared-daemon title, snapshot, click, redirect, and close journey are green; joined cold-install-to-dashboard restart acceptance remains pending |
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
-| Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, public named-session lifecycle routing, and generic current-tab command routing green; two-session daemon-process Chrome fixture pending |
-| Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, exact recorded deletion, filesystem adapter, and default host policy green; hosted Chrome fixture pending |
-| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle, concrete adapter, real-Chrome restart and ordinary-command fixture, and public named-session new/current-close routing green; two-session daemon-process tab fixture pending |
-| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, and concrete restart reattachment green; full daemon-process fixture pending |
+| Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, public named-session lifecycle routing, generic current-tab command routing, and the two-session compiled-CLI/runtime-host Chrome fixture are green |
+| Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, exact recorded deletion, filesystem adapter, default host policy, and exact hosted-Chrome final-process termination are green; hosted disposable-directory reaping remains pending |
+| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle, concrete adapter, real-Chrome restart and ordinary-command fixture, public named-session new/current-close routing, and the two-session daemon-process tab and close fixture are green |
+| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, concrete restart reattachment, and full daemon-process command routing are green; external unresponsive-CDP recovery remains pending |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
-| Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, and real-Chrome title and snapshot calls green; full daemon-process journey pending |
-| Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, and exact-display launch wiring green; hosted remote-view fixture pending |
+| Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
+| Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, exact-display launch wiring, and a hosted static-route Xvfb handoff are green; multi-display hosted selection remains pending |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
-| Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | stable manager handoff identity now survives desired-URL changes on the same attributed target; real redirect regression pending |
-| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | managed navigation now publishes and resolves a ready opaque handoff from exact static route readiness without leasing; full daemon/dashboard and doctor agreement pending |
-| Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | source path now returns the ready handoff from ordinary named-session navigation with none of those inputs; full process journey and documentation pending |
+| Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | the compiled-CLI Chrome fixture follows a same-site `/protected` to `/login` redirect and retains the same ready opaque handoff through `/account`; the dashboard same-origin post-auth return contract is green; authenticated dashboard rendering remains pending |
+| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | compiled ordinary opens now return ready opaque handoffs from exact static route readiness without leasing, and host resolution focuses and heartbeats the target; authenticated dashboard rendering, control, and doctor agreement remain pending |
+| Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | the full compiled CLI and runtime-host journey shares one browser, drives independent commands, returns the ready handoff, and closes cleanly with none of those inputs; documentation remains pending |
 | Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | not implemented |
 

@@ -484,7 +484,7 @@ fn run_browser_worker(
     receiver: mpsc::Receiver<BrowserRuntimeCommand>,
     config: BrowserManagerRuntimeConfig,
 ) {
-    let mut browsers = HashMap::<String, DaemonState>::new();
+    let mut browsers = HashMap::<String, ManagedBrowserRuntimeState>::new();
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receiver.recv() {
         match command {
@@ -518,6 +518,12 @@ fn run_browser_worker(
                     let pid = manager
                         .browser_pid()
                         .ok_or_else(|| "browser_session_launch_pid_missing".to_string())?;
+                    let process_identity = crate::process_identity::capture_process_identity(
+                        pid,
+                        None,
+                        Some("chrome"),
+                    )
+                    .ok_or_else(|| "browser_session_launch_process_identity_missing".to_string())?;
                     next_browser_sequence = next_browser_sequence
                         .checked_add(1)
                         .ok_or_else(|| "browser_session_browser_sequence_exhausted".to_string())?;
@@ -526,12 +532,19 @@ fn run_browser_worker(
                         browser_id: browser_id.clone(),
                         pid,
                         cdp_endpoint: manager.get_cdp_url().to_string(),
+                        process_identity: Some(process_identity),
                         desktop,
                     };
-                    let mut state = DaemonState::new();
-                    state.browser = Some(manager);
-                    state.browser_session_manager_owned = true;
-                    browsers.insert(browser_id, state);
+                    let mut lifecycle = DaemonState::new();
+                    lifecycle.browser = Some(manager);
+                    lifecycle.browser_session_manager_owned = true;
+                    browsers.insert(
+                        browser_id,
+                        ManagedBrowserRuntimeState {
+                            lifecycle,
+                            command_sessions: HashMap::new(),
+                        },
+                    );
                     Ok(launch)
                 });
                 let _ = reply.send(result);
@@ -539,10 +552,11 @@ fn run_browser_worker(
             BrowserRuntimeCommand::Close { browser, reply } => {
                 let result = match browsers.remove(&browser.id) {
                     Some(mut state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        relinquish_command_sessions(&mut state.command_sessions);
+                        let manager =
+                            state.lifecycle.browser.as_mut().ok_or_else(|| {
+                                "browser_session_runtime_browser_missing".to_string()
+                            })?;
                         if manager.owns_launched_browser_process() {
                             manager.approve_lifecycle_close();
                             let outcome = manager.close_with_outcome().await?;
@@ -569,10 +583,10 @@ fn run_browser_worker(
             } => {
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        let manager =
+                            state.lifecycle.browser.as_mut().ok_or_else(|| {
+                                "browser_session_runtime_browser_missing".to_string()
+                            })?;
                         if let Some(tab) = manager.tab_list(true).into_iter().find(|tab| {
                             tab.get("targetId")
                                 .and_then(Value::as_str)
@@ -592,10 +606,10 @@ fn run_browser_worker(
             BrowserRuntimeCommand::CreateTab { browser, reply } => {
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        let manager =
+                            state.lifecycle.browser.as_mut().ok_or_else(|| {
+                                "browser_session_runtime_browser_missing".to_string()
+                            })?;
                         let tab = manager.tab_new(None).await?;
                         tab_acquisition(tab, BrowserTabSource::ExplicitNew)
                     }),
@@ -610,13 +624,14 @@ fn run_browser_worker(
             } => {
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        let manager =
+                            state.lifecycle.browser.as_mut().ok_or_else(|| {
+                                "browser_session_runtime_browser_missing".to_string()
+                            })?;
                         manager
                             .tab_close_target_id_for_release(&tab.target_id)
                             .await?;
+                        remove_command_session(&mut state.command_sessions, &tab.session_id);
                         Ok(())
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
@@ -631,12 +646,13 @@ fn run_browser_worker(
             } => {
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        let manager =
+                            state.lifecycle.browser.as_mut().ok_or_else(|| {
+                                "browser_session_runtime_browser_missing".to_string()
+                            })?;
                         manager.tab_switch_target_id(&tab.target_id).await?;
                         manager.navigate(&url, WaitUntil::Load).await?;
+                        remove_command_session(&mut state.command_sessions, &tab.session_id);
                         Ok(())
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
@@ -650,10 +666,10 @@ fn run_browser_worker(
             } => {
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        let manager =
+                            state.lifecycle.browser.as_mut().ok_or_else(|| {
+                                "browser_session_runtime_browser_missing".to_string()
+                            })?;
                         if let Some(tab) = tab {
                             manager.tab_switch_target_id(&tab.target_id).await?;
                         }
@@ -674,14 +690,15 @@ fn run_browser_worker(
             } => {
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
-                        manager.tab_switch_target_id(&tab.target_id).await?;
-                        state.session_id = session_id;
-                        state.session_name = Some(session_name);
-                        Ok(super::actions::execute_command(&command, state).await)
+                        let command_state = session_command_state(
+                            state,
+                            &browser,
+                            &tab,
+                            &session_id,
+                            &session_name,
+                        )
+                        .await?;
+                        Ok(super::actions::execute_command(&command, command_state).await)
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
                 };
@@ -691,14 +708,83 @@ fn run_browser_worker(
         }
     }
     for state in browsers.values_mut() {
-        if let Some(manager) = state.browser.as_mut() {
+        relinquish_command_sessions(&mut state.command_sessions);
+        if let Some(manager) = state.lifecycle.browser.as_mut() {
             manager.relinquish_browser_for_handoff();
         }
     }
 }
 
+struct ManagedBrowserRuntimeState {
+    lifecycle: DaemonState,
+    command_sessions: HashMap<String, SessionCommandRuntimeState>,
+}
+
+struct SessionCommandRuntimeState {
+    target_id: String,
+    state: DaemonState,
+}
+
+async fn session_command_state<'a>(
+    runtime_state: &'a mut ManagedBrowserRuntimeState,
+    browser: &ManagedBrowserInstance,
+    tab: &ManagedBrowserTab,
+    session_id: &str,
+    session_name: &str,
+) -> Result<&'a mut DaemonState, String> {
+    let target_changed = runtime_state
+        .command_sessions
+        .get(session_id)
+        .is_some_and(|current| current.target_id != tab.target_id);
+    if target_changed {
+        remove_command_session(&mut runtime_state.command_sessions, session_id);
+    }
+    if !runtime_state.command_sessions.contains_key(session_id) {
+        let mut manager = attach_recorded_browser(browser).await?;
+        manager.tab_switch_target_id(&tab.target_id).await?;
+        let mut state = DaemonState::new();
+        state.browser = Some(manager);
+        state.browser_session_manager_owned = true;
+        state.session_id = session_id.to_string();
+        state.session_name = Some(session_name.to_string());
+        runtime_state.command_sessions.insert(
+            session_id.to_string(),
+            SessionCommandRuntimeState {
+                target_id: tab.target_id.clone(),
+                state,
+            },
+        );
+    }
+    let command_state = runtime_state
+        .command_sessions
+        .get_mut(session_id)
+        .ok_or_else(|| "browser_session_command_state_missing".to_string())?;
+    command_state.state.session_name = Some(session_name.to_string());
+    Ok(&mut command_state.state)
+}
+
+fn remove_command_session(
+    command_sessions: &mut HashMap<String, SessionCommandRuntimeState>,
+    session_id: &str,
+) {
+    if let Some(mut command_state) = command_sessions.remove(session_id) {
+        if let Some(manager) = command_state.state.browser.as_mut() {
+            manager.relinquish_browser_for_handoff();
+        }
+    }
+}
+
+fn relinquish_command_sessions(command_sessions: &mut HashMap<String, SessionCommandRuntimeState>) {
+    for command_state in command_sessions.values_mut() {
+        if let Some(manager) = command_state.state.browser.as_mut() {
+            manager.relinquish_browser_for_handoff();
+        }
+    }
+    command_sessions.clear();
+}
+
 async fn recorded_browser_is_live(
-    browsers: &mut HashMap<String, DaemonState>,
+    browsers: &mut HashMap<String, ManagedBrowserRuntimeState>,
     browser: &ManagedBrowserInstance,
 ) -> Result<bool, String> {
     if !recorded_browser_process_exists(browser) {
@@ -710,15 +796,22 @@ async fn recorded_browser_is_live(
             Ok(manager) => manager,
             Err(_) => return Ok(false),
         };
-        let mut state = DaemonState::new();
-        state.browser = Some(manager);
-        state.browser_session_manager_owned = true;
-        browsers.insert(browser.id.clone(), state);
+        let mut lifecycle = DaemonState::new();
+        lifecycle.browser = Some(manager);
+        lifecycle.browser_session_manager_owned = true;
+        browsers.insert(
+            browser.id.clone(),
+            ManagedBrowserRuntimeState {
+                lifecycle,
+                command_sessions: HashMap::new(),
+            },
+        );
     }
     let state = browsers
         .get_mut(&browser.id)
         .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
     let manager = state
+        .lifecycle
         .browser
         .as_mut()
         .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
@@ -774,7 +867,13 @@ async fn close_reattached_browser(
 }
 
 fn recorded_browser_process_exists(browser: &ManagedBrowserInstance) -> bool {
-    process_exists(browser.pid)
+    match browser.process_identity.as_ref() {
+        Some(identity) => crate::process_identity::VerifiedProcessTermination::open(identity)
+            .ok()
+            .flatten()
+            .is_some_and(|process| process.is_running().unwrap_or(false)),
+        None => process_exists(browser.pid),
+    }
 }
 
 fn process_exists(pid: u32) -> bool {
@@ -891,6 +990,7 @@ mod tests {
             profile_id: "work".to_string(),
             pid: std::process::id(),
             cdp_endpoint: "ws://127.0.0.1:1/devtools/browser/test".to_string(),
+            process_identity: None,
             desktop: None,
             active_session_ids: Vec::new(),
         };
@@ -923,6 +1023,7 @@ mod tests {
             profile_id: profile.id,
             pid: launch.pid,
             cdp_endpoint: launch.cdp_endpoint,
+            process_identity: launch.process_identity,
             desktop: None,
             active_session_ids: vec!["session:alice:restart-fixture:1".to_string()],
         };
@@ -972,6 +1073,106 @@ mod tests {
         assert_eq!(snapshot["success"], true);
         close.unwrap();
         assert!(!recorded_browser_process_exists(&browser));
+    }
+
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn named_sessions_keep_independent_command_reference_state() {
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "isolation-fixture".to_string(),
+            name: "Isolation fixture".to_string(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+            headless: true,
+            ..BrowserManagerRuntimeConfig::default()
+        })
+        .unwrap();
+        let launch = runtime.launch_browser(&profile, None).unwrap();
+        let browser = ManagedBrowserInstance {
+            id: launch.browser_id,
+            profile_id: profile.id,
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint,
+            process_identity: launch.process_identity,
+            desktop: None,
+            active_session_ids: vec![
+                "session:alice:isolation:1".to_string(),
+                "session:bob:isolation:2".to_string(),
+            ],
+        };
+        let alice_acquisition = runtime.acquire_initial_tab(&browser, &[]).unwrap();
+        let alice_tab = ManagedBrowserTab {
+            id: alice_acquisition.tab_id,
+            target_id: alice_acquisition.target_id,
+            browser_id: browser.id.clone(),
+            session_id: browser.active_session_ids[0].clone(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+        };
+        let bob_acquisition = runtime.create_tab(&browser).unwrap();
+        let bob_tab = ManagedBrowserTab {
+            id: bob_acquisition.tab_id,
+            target_id: bob_acquisition.target_id,
+            browser_id: browser.id.clone(),
+            session_id: browser.active_session_ids[1].clone(),
+            created_at_ms: 2,
+            last_activity_at_ms: 2,
+        };
+        runtime
+            .navigate(
+                &browser,
+                &alice_tab,
+                "data:text/html,<button onclick=\"document.title='alice-clicked'\">Alice</button>",
+            )
+            .unwrap();
+        runtime
+            .navigate(
+                &browser,
+                &bob_tab,
+                "data:text/html,<button onclick=\"document.title='bob-clicked'\">Bob</button>",
+            )
+            .unwrap();
+
+        for (tab, name) in [(&alice_tab, "alice"), (&bob_tab, "bob")] {
+            let snapshot = runtime
+                .execute_command(
+                    &browser,
+                    tab,
+                    &tab.session_id,
+                    name,
+                    &serde_json::json!({"id": format!("snapshot-{name}"), "action": "snapshot"}),
+                )
+                .unwrap();
+            assert_eq!(snapshot["success"], true, "{snapshot}");
+            assert!(snapshot["data"]["snapshot"]
+                .as_str()
+                .is_some_and(|value| value.contains("ref=e1")));
+        }
+        let alice_click = runtime
+            .execute_command(
+                &browser,
+                &alice_tab,
+                &alice_tab.session_id,
+                "alice",
+                &serde_json::json!({"id": "click-alice", "action": "click", "selector": "e1"}),
+            )
+            .unwrap();
+        assert_eq!(alice_click["success"], true, "{alice_click}");
+        let alice_title = runtime
+            .execute_command(
+                &browser,
+                &alice_tab,
+                &alice_tab.session_id,
+                "alice",
+                &serde_json::json!({"id": "title-alice", "action": "title"}),
+            )
+            .unwrap();
+        assert_eq!(alice_title["data"]["title"], "alice-clicked");
+
+        runtime.close_browser(&browser).unwrap();
     }
 
     #[test]

@@ -10,13 +10,16 @@ use serde_json::json;
 use std::collections::BTreeSet;
 use std::fs;
 use std::process::{Command, ExitStatus, Stdio};
+use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::native::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
-use crate::process_identity::{VerifiedProcessSignal, VerifiedProcessTermination};
+use crate::process_identity::{
+    ProcessObservation, RecordedProcessIdentity, VerifiedProcessSignal, VerifiedProcessTermination,
+};
 
 const WORKSTATION_USER_UNITS: [&str; 6] = [
     "agent-browser-dashboard-backend.service",
@@ -320,11 +323,58 @@ impl LiveShutdownPlatform {
         }
         Ok((changed, escalated))
     }
+
+    fn stop_exact_process_identities<'a>(
+        &self,
+        deadline: Duration,
+        identities: impl IntoIterator<Item = &'a RecordedProcessIdentity>,
+    ) -> Result<(bool, bool), String> {
+        let started = Instant::now();
+        let mut changed = false;
+        let mut escalated = false;
+        for identity in identities {
+            let Some(process) = VerifiedProcessTermination::open(identity)? else {
+                continue;
+            };
+            if !process.is_running()? {
+                continue;
+            }
+            if started.elapsed() >= deadline {
+                return Err("browser_session_shutdown_deadline_exceeded".to_string());
+            }
+            process.signal(VerifiedProcessSignal::Terminate)?;
+            changed = true;
+            let polite_deadline = deadline
+                .saturating_sub(started.elapsed())
+                .min(Duration::from_millis(500));
+            let polite_started = Instant::now();
+            while polite_started.elapsed() < polite_deadline && process.is_running()? {
+                thread::sleep(Duration::from_millis(25));
+            }
+            if process.is_running()? {
+                process.signal(VerifiedProcessSignal::Kill)?;
+                escalated = true;
+            }
+            while started.elapsed() < deadline && process.is_running()? {
+                thread::sleep(Duration::from_millis(25));
+            }
+            if process.is_running()? {
+                return Err(format!(
+                    "browser_session_shutdown_deadline_exceeded:{}",
+                    identity.pid
+                ));
+            }
+        }
+        Ok((changed, escalated))
+    }
 }
 
 impl ShutdownPlatform for LiveShutdownPlatform {
     fn close_owned_browsers(&mut self, deadline: Duration) -> Result<(bool, bool), String> {
         let state = self.repository.load_snapshot()?;
+        let manager_store =
+            crate::native::browser_session_store::BrowserSessionJsonStore::default_json()?;
+        let mut manager_state = manager_store.load_session_state()?;
         let mut sessions = BTreeSet::new();
         for browser in state.browsers.values() {
             sessions.extend(browser.active_session_ids.iter().cloned());
@@ -378,6 +428,38 @@ impl ShutdownPlatform for LiveShutdownPlatform {
             self.stop_recorded_browsers(deadline.saturating_sub(started.elapsed()), &state)?;
         changed |= browser_changed;
         escalated |= browser_escalated;
+        for browser in manager_state.browsers.values() {
+            if browser.process_identity.is_none()
+                && matches!(
+                    crate::process_identity::observe_process(browser.pid),
+                    ProcessObservation::Observed(_)
+                )
+            {
+                return Err(format!(
+                    "browser_session_shutdown_identity_missing:{}",
+                    browser.id
+                ));
+            }
+        }
+        let (manager_changed, manager_escalated) = self.stop_exact_process_identities(
+            deadline.saturating_sub(started.elapsed()),
+            manager_state
+                .browsers
+                .values()
+                .filter_map(|browser| browser.process_identity.as_ref()),
+        )?;
+        changed |= manager_changed;
+        escalated |= manager_escalated;
+        if !manager_state.browsers.is_empty()
+            || !manager_state.sessions.is_empty()
+            || !manager_state.tabs.is_empty()
+        {
+            manager_state.terminalize_after_cold_shutdown(
+                chrono::Utc::now().timestamp_millis().max(0) as u64,
+            );
+            manager_store.save_session_state(&manager_state)?;
+            changed = true;
+        }
         if !close_failures.is_empty()
             && state.browser_process_identities.values().any(|identity| {
                 VerifiedProcessTermination::open(&identity.process_identity)
@@ -491,8 +573,11 @@ impl ShutdownPlatform for LiveShutdownPlatform {
 
     fn observe_residue(&mut self, deadline: Duration) -> Result<ShutdownResidue, String> {
         let state = self.repository.load_snapshot()?;
+        let manager_state =
+            crate::native::browser_session_store::BrowserSessionJsonStore::default_json()?
+                .load_session_state()?;
         let started = Instant::now();
-        let owned_browsers = state
+        let legacy_owned_browsers = state
             .browser_process_identities
             .values()
             .filter_map(|identity| {
@@ -501,6 +586,18 @@ impl ShutdownPlatform for LiveShutdownPlatform {
             .flatten()
             .filter(|process| process.is_running().unwrap_or(true))
             .count();
+        let manager_owned_browsers = manager_state
+            .browsers
+            .values()
+            .filter(|browser| match browser.process_identity.as_ref() {
+                Some(identity) => VerifiedProcessTermination::open(identity)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|process| process.is_running().unwrap_or(true)),
+                None => true,
+            })
+            .count();
+        let owned_browsers = legacy_owned_browsers + manager_owned_browsers;
         let mut owned_user_units = 0;
         for unit in self.installed_unit_names()? {
             let status = run_bounded(
@@ -608,10 +705,30 @@ fn shutdown_phase_deadline(phase: ShutdownPhase) -> Duration {
     })
 }
 
+trait ShutdownClock {
+    fn now(&self) -> Duration;
+}
+
+struct SystemShutdownClock;
+
+impl ShutdownClock for SystemShutdownClock {
+    fn now(&self) -> Duration {
+        static ORIGIN: OnceLock<Instant> = OnceLock::new();
+        ORIGIN.get_or_init(Instant::now).elapsed()
+    }
+}
+
 /// Execute every cold-shutdown phase exactly once and always perform final
 /// verification. A failed phase cannot prevent later cleanup from running.
 pub(crate) fn execute_workstation_shutdown(
     effects: &mut impl WorkstationShutdownEffects,
+) -> WorkstationShutdownReceipt {
+    execute_workstation_shutdown_with_clock(effects, &SystemShutdownClock)
+}
+
+fn execute_workstation_shutdown_with_clock(
+    effects: &mut impl WorkstationShutdownEffects,
+    clock: &impl ShutdownClock,
 ) -> WorkstationShutdownReceipt {
     let phases = [
         ShutdownPhase::Browsers,
@@ -625,9 +742,21 @@ pub(crate) fn execute_workstation_shutdown(
     let mut residue = None;
     for phase in phases {
         let deadline = shutdown_phase_deadline(phase);
+        let started = clock.now();
         let mut result = effects.execute_phase(phase, deadline);
         result.step.phase = phase;
         result.step.deadline_ms = deadline.as_millis() as u64;
+        if clock.now().saturating_sub(started) >= deadline {
+            let phase_name = match phase {
+                ShutdownPhase::Browsers => "browsers",
+                ShutdownPhase::UserUnits => "user_units",
+                ShutdownPhase::Containers => "containers",
+                ShutdownPhase::Ownership => "ownership",
+                ShutdownPhase::TransientMetadata => "transient_metadata",
+                ShutdownPhase::Verify => "verify",
+            };
+            result.step.error = Some(format!("shutdown_{phase_name}_deadline_exceeded"));
+        }
         if phase == ShutdownPhase::Verify {
             residue = result.residue;
             if residue.is_none() && result.step.error.is_none() {
@@ -667,8 +796,10 @@ mod tests {
     use crate::native::service_store::{
         JsonServiceStateStore, LockedServiceStateRepository, ServiceStateStore,
     };
+    use std::cell::Cell;
     use std::fs;
     use std::path::PathBuf;
+    use std::rc::Rc;
 
     #[derive(Default)]
     struct FakeEffects {
@@ -751,6 +882,41 @@ mod tests {
         }
     }
 
+    struct InjectedClock(Rc<Cell<u64>>);
+
+    impl ShutdownClock for InjectedClock {
+        fn now(&self) -> Duration {
+            Duration::from_millis(self.0.get())
+        }
+    }
+
+    struct BrowserOverrunEffects {
+        calls: Vec<ShutdownPhase>,
+        clock: Rc<Cell<u64>>,
+    }
+
+    impl WorkstationShutdownEffects for BrowserOverrunEffects {
+        fn execute_phase(
+            &mut self,
+            phase: ShutdownPhase,
+            deadline: Duration,
+        ) -> ShutdownPhaseResult {
+            self.calls.push(phase);
+            if phase == ShutdownPhase::Browsers {
+                self.clock
+                    .set(self.clock.get() + deadline.as_millis() as u64);
+            }
+            if phase == ShutdownPhase::Verify {
+                ShutdownPhaseResult::verification(
+                    ShutdownStepReceipt::unchanged(phase),
+                    ShutdownResidue::default(),
+                )
+            } else {
+                ShutdownPhaseResult::step(ShutdownStepReceipt::changed(phase))
+            }
+        }
+    }
+
     #[test]
     fn shutdown_runs_the_small_fixed_sequence_without_coordination_inputs() {
         let mut effects = FakeEffects::default();
@@ -786,6 +952,26 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![5_000, 5_000, 10_000, 2_000, 2_000, 2_000]
         );
+    }
+
+    #[test]
+    fn shutdown_marks_an_overrun_and_still_executes_later_cleanup_and_verification() {
+        let now = Rc::new(Cell::new(0));
+        let clock = InjectedClock(now.clone());
+        let mut effects = BrowserOverrunEffects {
+            calls: Vec::new(),
+            clock: now,
+        };
+
+        let receipt = execute_workstation_shutdown_with_clock(&mut effects, &clock);
+
+        assert!(!receipt.success);
+        assert_eq!(
+            receipt.steps[0].error.as_deref(),
+            Some("shutdown_browsers_deadline_exceeded")
+        );
+        assert_eq!(effects.calls.len(), 6);
+        assert_eq!(effects.calls.last(), Some(&ShutdownPhase::Verify));
     }
 
     #[test]

@@ -7122,7 +7122,7 @@ mod dashboard_asset_tests {
             return;
         }
 
-        assert!(body.contains("Superuser access required"));
+        assert!(body.contains("dashboard-root"));
         assert!(body.contains(&format!(r#"initialSection\":\"{expected_section}"#)));
     }
 
