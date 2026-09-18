@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -64,15 +64,16 @@ process identity, and the absence of active drains and transactions. Those
 preconditions make the terminal operator action subordinate to stale
 coordination state.
 
-P211 is admitted from `origin/main@fb616aee`. Issues #181, #183, and #195 are
+P211 was admitted from `origin/main@fb616aee`. Issues #181, #183, and #195 are
 the primary outcome items. Issues #189 and #190 are required remote-view
 regression subcases under #195, not additional implementation lanes. P207
 remains the primary writer for overlapping CLI help,
 README, agent skill, service docs, and generated service contracts until it
 integrates; P211 will rebase before editing those shared documentation
-surfaces. P205 owns its service-model extraction and associated Service State
-files. P211 will initially keep its state rewrite behind a narrow adapter and
-reconcile the final model location after P205 publishes a checkpoint.
+surfaces. P205 completed as Plan 0216 and merged its service-model extraction
+into `main`; the extracted Service Model and Lease Authority crates now own the
+pure cold-shutdown state transitions, while the CLI retains repository and
+effect adapters.
 
 Graphiti discovery was healthy but returned no source-backed prior decision
 for a simple cold upgrade. Plan 0116 and the current hot-upgrade implementation
@@ -91,6 +92,26 @@ Checkpoint `b36bf40b` removes the prior daemon-shutdown exception that detached
 a live browser when owner-authority metadata was stale. Daemon termination now
 always selects browser close. Its focused stale-owner regression, the four
 controller tests, strict workspace Clippy, and formatting pass.
+
+P211 merged `origin/main@a3848e16` at checkpoint `0e28e44c` after Plan 0216
+landed. The only source conflict was the stale-owner daemon-shutdown regression;
+the resolution retains P211's terminal close behavior while using the extracted
+Service Model types. Focused validation for
+`shutdown_closes_browser_when_owner_authority_is_stale` passes. P207 remains
+open in pull request #184, so P211 still excludes its help and documentation
+surfaces.
+
+Checkpoint `6b04975b` adds the first post-extraction shutdown adapter seam.
+Lease Authority can now atomically fence and release every active resource
+claim while retaining events and fencing high-water marks. Its runtime-owner
+kernel can remove all current owners and principal bindings while terminalizing
+retained lifecycle history. Service Model joins those operations with session,
+viewer-lease, and pending-acquisition release without deleting profile records
+or profile paths. The CLI repository adapter commits that pure transition under
+the canonical Service State lock. Two focused Lease Authority tests, one
+Service Model test, one CLI repository test, formatting, and diff hygiene pass.
+Process, user-unit, container, transient-metadata, verification, and public
+command adapters remain in Slice 2.
 
 The fresh-context startup readback on 2026-09-17 found the P211 worktree clean
 and synchronized with `origin/platform/p211-simple-cold-upgrade@4b9edcca`.
@@ -154,8 +175,9 @@ This packet declares the following disjoint write scopes before fan-out:
   `cli/src/native/presentation_requalification.rs` only, including its local
   unit tests. The primary owns module registration and later integration with
   presentation inventory and route selection.
-- P207-controlled help and documentation files and P205-controlled Service
-  State files remain excluded from this packet.
+- The former P205 Service State exclusion ended when Plan 0216 merged. P211 may
+  now add narrowly scoped cold-shutdown transitions to the extracted crates,
+  while P207-controlled help and documentation files remain excluded.
 
 The first packet completed its bounded fan-out. Fixture worker
 `/root/p211_fixture_contracts` added only the two declared contract-test files.
@@ -326,7 +348,7 @@ overlapping surfaces.
 | One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | controller implemented; public command pending |
 | Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | not implemented |
 | Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | browser-on-daemon-stop invariant green; remaining adapters pending |
-| Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | not implemented |
+| Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels, Service Model join, repository adapter, and focused persistence fixture green; process-exit ordering and public command integration pending |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller green; adapters pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | not implemented |

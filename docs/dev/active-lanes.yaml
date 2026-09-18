@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: b36bf40b
-    remote_ref: null
+    checkpoint: 6b04975b
+    remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: cold-shutdown controller has four passing focused tests; stale-owner daemon shutdown now closes the browser and its focused test passes; strict workspace Clippy and formatting pass; remaining platform adapters and public routing remain
-    validation_ref: b36bf40b
+    validation_status: P216 is reconciled; cold-shutdown authority release atomically fences resource claims, removes runtime owners, terminalizes sessions and presentation leases, and preserves profile paths; focused Lease Authority, Service Model, CLI repository, and stale-owner daemon tests pass; process, unit, container, verification, and public routing remain
+    validation_ref: 6b04975b
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: [P205, P207]
     overlaps: [P205:Service-State-model, P207:cli-help-and-user-docs, P211:remote-view-regression-subcases-189-190]
