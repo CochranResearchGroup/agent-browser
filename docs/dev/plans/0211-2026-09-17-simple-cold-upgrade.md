@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 17
+Plan version: 18
 
 State: OPEN
 
@@ -286,6 +286,23 @@ second worker, and closed the exact process. The focused restart test, fourteen
 CLI browser-session tests, formatting, strict workspace Clippy, diff hygiene,
 and a fresh residue readback pass; the readback found no remaining fixture
 browser process.
+
+Checkpoint `8c9b181c` implements the first simple presentation calculation and
+joins it to browser launch. The provider-free selector accepts only configured
+desktop routes and current live-browser display placements. It excludes `:0`,
+excludes routes whose startup health probe failed, chooses the smallest live
+browser count, breaks ties by configured route order, and rejects duplicate
+route or display identities. Retained route leases, prior allocations, and
+display-owner history are not inputs. The Service host derives candidates from
+the existing RDP route inventory and display-socket probe. The manager stores
+the chosen route, display, and selection count on the independent browser
+record; the BrowserManager adapter launches headed on that exact display.
+Four selector tests and a nineteenth manager lifecycle test prove `:10` then
+`:11` assignment for distinct profile browsers, deterministic ties, local and
+unhealthy exclusion, and duplicate rejection. Fourteen CLI browser-session
+tests, formatting, strict workspace Clippy, and diff hygiene also pass.
+Dashboard projection, focus-on-selection, and durable remote-view handoff are
+still open.
 
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
@@ -628,7 +645,7 @@ touching overlapping documentation surfaces.
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, and concrete restart reattachment green; full daemon-process fixture pending |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, and ordinary named-session navigation and close routing green; hosted Chrome fixture and remaining ordinary commands pending |
-| Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | not implemented |
+| Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, and exact-display launch wiring green; hosted remote-view fixture pending |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | not implemented |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | not implemented |
 | Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | not implemented |
