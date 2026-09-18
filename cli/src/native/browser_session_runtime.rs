@@ -20,6 +20,8 @@ use super::action_runtime::runtime::DaemonState;
 use super::browser::{BrowserManager, WaitUntil};
 use super::cdp::chrome::LaunchOptions;
 
+const RECORDED_BROWSER_REATTACH_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct BrowserManagerRuntimeConfig {
     pub(crate) headless: bool,
@@ -839,16 +841,27 @@ async fn recorded_browser_is_live(
 async fn attach_recorded_browser(
     browser: &ManagedBrowserInstance,
 ) -> Result<BrowserManager, String> {
+    attach_recorded_browser_with_timeout(browser, RECORDED_BROWSER_REATTACH_TIMEOUT).await
+}
+
+async fn attach_recorded_browser_with_timeout(
+    browser: &ManagedBrowserInstance,
+    timeout: Duration,
+) -> Result<BrowserManager, String> {
     if !recorded_browser_process_exists(browser) {
         return Err("browser_session_recorded_process_missing".to_string());
     }
-    let manager = BrowserManager::connect_cdp(&browser.cdp_endpoint)
-        .await
-        .map_err(|error| format!("browser_session_reattach_failed:{error}"))?;
-    if !manager.is_connection_alive().await {
-        return Err("browser_session_reattach_unresponsive".to_string());
-    }
-    Ok(manager)
+    tokio::time::timeout(timeout, async {
+        let manager = BrowserManager::connect_cdp(&browser.cdp_endpoint)
+            .await
+            .map_err(|error| format!("browser_session_reattach_failed:{error}"))?;
+        if !manager.is_connection_alive().await {
+            return Err("browser_session_reattach_unresponsive".to_string());
+        }
+        Ok(manager)
+    })
+    .await
+    .map_err(|_| "browser_session_reattach_timeout".to_string())?
 }
 
 async fn close_reattached_browser(
@@ -1042,6 +1055,39 @@ mod tests {
 
         browser.pid = u32::MAX;
         assert!(!recorded_browser_process_exists(&browser));
+    }
+
+    #[test]
+    fn recorded_browser_reattach_has_an_injected_handshake_deadline() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("stalled CDP listener");
+        let address = listener.local_addr().expect("stalled CDP address");
+        let server = thread::spawn(move || {
+            let (_stream, _) = listener.accept().expect("stalled CDP connection");
+            thread::sleep(Duration::from_millis(200));
+        });
+        let browser = ManagedBrowserInstance {
+            id: "browser:stalled-reattach:1".to_string(),
+            profile_id: "stalled-reattach".to_string(),
+            pid: std::process::id(),
+            cdp_endpoint: format!("ws://{address}/devtools/browser/stalled"),
+            process_identity: None,
+            desktop: None,
+            active_session_ids: vec!["session:stalled-reattach:1".to_string()],
+        };
+        let runtime = tokio::runtime::Runtime::new().expect("test runtime");
+        let started = Instant::now();
+
+        let error = match runtime.block_on(attach_recorded_browser_with_timeout(
+            &browser,
+            Duration::from_millis(50),
+        )) {
+            Ok(_) => panic!("stalled recorded browser unexpectedly reattached"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error, "browser_session_reattach_timeout");
+        assert!(started.elapsed() < Duration::from_millis(500));
+        server.join().expect("stalled CDP server");
     }
 
     #[cfg(target_os = "linux")]
