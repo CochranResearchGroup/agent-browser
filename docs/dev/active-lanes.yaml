@@ -53,16 +53,16 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 766cde6b
+    checkpoint: 34c6a0e3
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: source-only public shutdown routing and exact bounded browser, daemon, user-unit, container, ownership, metadata, and residue adapters are implemented; 12 focused shutdown tests, all 118 Lease Authority tests, the crate architecture guard, formatting, strict workspace Clippy, and diff hygiene pass; no live shutdown ran; command-level fixture, cold install, restart, remote view, and documentation remain
-    validation_ref: 766cde6b
+    validation_status: source-only public shutdown routing and exact bounded browser, daemon, user-unit, container, ownership, metadata, and residue adapters are implemented; 12 focused shutdown tests, all 118 Lease Authority tests, the crate architecture guard, formatting, strict workspace Clippy, and diff hygiene pass; a black-box disposable-workstation fixture proves two idempotent public JSON runs with fake host commands and no live effects
+    validation_ref: 34c6a0e3
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: [P205, P207]
     overlaps: [P205:Service-State-model, P207:cli-help-and-user-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "P211 owns cold-shutdown, workstation routing, post-boot presentation requalification, and the joined remote-view acceptance; P205 retains service-model extraction; P207 retains its current help and documentation writes until integration; issues #189 and #190 remain linked subcases under primary work item #195"
-    blocker: command-level shutdown fixture, cold-install routing, restart, trusted-single-user remote-view convergence, and P207-controlled documentation remain; production shutdown, installation, and installed remote-view acceptance remain excluded until separately directed
+    blocker: populated and interrupted shutdown fixtures, cold-install routing, restart, trusted-single-user remote-view convergence, and P207-controlled documentation remain; production shutdown, installation, and installed remote-view acceptance remain excluded until separately directed
     updated_at: 2026-09-17

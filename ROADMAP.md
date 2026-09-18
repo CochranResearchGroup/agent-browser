@@ -36,8 +36,10 @@ remote-view journey for issues #181, #183, and #195. Source checkpoint
 controller with exact browser, daemon, user-unit, container, authority,
 metadata, and residue adapters. Provider-free shutdown and Lease Authority
 tests, the crate architecture guard, formatting, and strict workspace Clippy
-pass. The command was not run against an installed runtime. Command-level
-fixtures, cold-install routing, restart and remote-view convergence,
+pass. Checkpoint `34c6a0e3` adds a passing black-box fixture that executes the
+public JSON command twice in a disposable workstation with fake host tools.
+The command was not run against an installed runtime. Populated and
+interrupted shutdown fixtures, cold-install routing, restart and remote-view convergence,
 P207-controlled documentation parity, source qualification, and separately
 authorized installed acceptance remain open.
 

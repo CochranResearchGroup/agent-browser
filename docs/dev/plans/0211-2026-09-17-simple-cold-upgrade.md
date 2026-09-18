@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 7
+Plan version: 8
 
 State: OPEN
 
@@ -132,6 +132,20 @@ diff hygiene pass. This checkpoint was pushed without running the shutdown
 command or mutating an installed runtime. P207-controlled help and
 documentation, cold-install routing, joined restart acceptance, and the
 remote-view slices remain open.
+
+Checkpoint `34c6a0e3` adds a black-box CLI integration fixture for the public
+`agent-browser shutdown --json` route. The fixture runs the real candidate
+binary twice against one disposable home, workstation root, runtime directory,
+and socket directory. Its `PATH` contains only fake `docker` and `systemctl`
+commands, so it cannot reach host services or containers. Both runs return the
+same successful six-phase receipt with zero owned residue and no upgrade
+transaction fields. The only subprocess observations are the three fixed
+Agent Browser Guacamole container names in the effect and verification phases;
+no user unit is inspected when no owned unit is installed. The focused process
+fixture, formatting, and diff hygiene pass. Shutdown fixtures for populated,
+stale, failed-upgrade, and interrupted states remain open with cold install,
+restart, remote view, documentation, and separately authorized installed
+acceptance.
 
 The fresh-context startup readback on 2026-09-17 found the P211 worktree clean
 and synchronized with `origin/platform/p211-simple-cold-upgrade@4b9edcca`.
@@ -365,7 +379,7 @@ overlapping surfaces.
 
 | Requirement | Acceptance evidence | Current state |
 | --- | --- | --- |
-| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public source route and controller implemented; command-level fixture and installed acceptance pending |
+| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public route and empty-workstation idempotence fixture green; populated, failed-upgrade, partial-prior-run, and installed acceptance pending |
 | Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | fixed phase deadlines, bounded daemon/command waits, and provider-free escalation receipt mapping are green; injected-clock platform timeout fixture pending |
 | Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | exact browser/daemon, fixed user-unit, fixed container, state-release, metadata, and verification adapters implemented; installed residue proof pending |
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels, Service Model join, repository adapter, and focused persistence fixture green; process-exit ordering and public command integration pending |
