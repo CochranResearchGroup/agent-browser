@@ -776,8 +776,10 @@ pub(crate) fn apply_existing_session_profile_selection(
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
         }
-        if apply_shared_local_session_profile_continuity(options, command, &session_id, state)? {
-            return Ok(Some(ProfileSelectionReason::ExistingOwner));
+        if let Some(selection) =
+            apply_shared_local_session_profile_continuity(options, command, &session_id, state)?
+        {
+            return Ok(Some(selection));
         }
         if apply_authenticated_access_plan_profile_selection(options, command, &session_id, state)?
         {
@@ -809,12 +811,19 @@ pub(crate) fn apply_existing_session_profile_selection(
     {
         return Ok(Some(ProfileSelectionReason::ExistingOwner));
     }
+    if let Some(ProfileSelectionReason::ExplicitProfile) =
+        apply_shared_local_session_profile_continuity(options, command, &session_id, state)?
+    {
+        return Ok(Some(ProfileSelectionReason::ExplicitProfile));
+    }
     if !binding.effect_capable {
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
         }
-        if apply_shared_local_session_profile_continuity(options, command, &session_id, state)? {
-            return Ok(Some(ProfileSelectionReason::ExistingOwner));
+        if let Some(selection) =
+            apply_shared_local_session_profile_continuity(options, command, &session_id, state)?
+        {
+            return Ok(Some(selection));
         }
         return Err("existing_session_profile_identity_unproven".to_string());
     }
@@ -1731,27 +1740,39 @@ fn apply_shared_local_session_profile_continuity(
     command: &Value,
     session_id: &str,
     state: &ServiceState,
-) -> Result<bool, String> {
+) -> Result<Option<ProfileSelectionReason>, String> {
     let Some(session) = state.sessions.get(session_id) else {
-        return Ok(false);
+        return Ok(None);
     };
-    let Some(profile_id) = session.profile_id.as_deref() else {
-        return Ok(false);
+    let requested_profile_id = optional_command_or_params_string(command, "runtimeProfile")
+        .or_else(|| optional_command_or_params_string(command, "profileId"));
+    let Some(profile_id) = requested_profile_id
+        .as_deref()
+        .filter(|profile_id| state.profiles.contains_key(*profile_id))
+        .or(session.profile_id.as_deref())
+    else {
+        return Ok(None);
     };
     let Some(profile) = state.profiles.get(profile_id) else {
-        return Ok(false);
+        return Ok(None);
     };
     if !shared_local_profile_use_allowed(profile, profile_id, command) {
-        return Ok(false);
+        return Ok(None);
     }
-    if session.browser_ids.iter().any(|browser_id| {
-        state
-            .browsers
-            .get(browser_id)
-            .is_some_and(|browser| browser.profile_id.as_deref() != Some(profile_id))
-    }) {
-        return Err("existing_session_profile_identity_inconsistent".to_string());
-    }
+    let conflicting_history = session.profile_id.as_deref() != Some(profile_id)
+        || session.browser_ids.iter().any(|browser_id| {
+            state
+                .browsers
+                .get(browser_id)
+                .is_some_and(|browser| browser.profile_id.as_deref() != Some(profile_id))
+        })
+        || state.browsers.values().any(|browser| {
+            browser.profile_id.as_deref() != Some(profile_id)
+                && browser
+                    .active_session_ids
+                    .iter()
+                    .any(|active_session| active_session == session_id)
+        });
     if options
         .runtime_profile
         .as_deref()
@@ -1783,7 +1804,11 @@ fn apply_shared_local_session_profile_continuity(
     {
         options.executable_path = None;
     }
-    Ok(true)
+    Ok(Some(if conflicting_history {
+        ProfileSelectionReason::ExplicitProfile
+    } else {
+        ProfileSelectionReason::ExistingOwner
+    }))
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BrowserCapabilityLaunchSelection {

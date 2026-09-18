@@ -2349,6 +2349,7 @@ fn test_existing_session_rejects_contradictory_browser_profile() {
                 BrowserProcess {
                     id: "browser-odollo".to_string(),
                     profile_id: Some("foreign-profile".to_string()),
+                    health: ServiceBrowserHealth::Ready,
                     active_session_ids: vec!["odollo-fulfillment".to_string()],
                     ..BrowserProcess::default()
                 },
@@ -5448,6 +5449,142 @@ fn shared_local_session_continuity_does_not_require_runtime_owner_proof() {
     .expect("shared-local continuity should remain usable without a strict owner binding");
 
     assert_eq!(reason, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+}
+
+#[test]
+fn shared_local_live_collision_selects_the_valid_profile_for_fresh_connection() {
+    let profile_id = "valid-profile";
+    let session_id = "valid-profile";
+    let browser_id = "session:valid-profile";
+    let profile_path = unique_socket_dir("shared-local-live-collision-profile");
+    fs::create_dir_all(&profile_path).unwrap();
+    let profile_digest =
+        agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "historical-valid-profile-owner".to_string(),
+        profile_identity_digest: profile_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 4,
+        browser_id: browser_id.to_string(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "4".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "5".repeat(64),
+        target_set_digest: "6".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(profile_path.display().to_string()),
+                access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(profile_id)),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                browser_ids: vec![browser_id.to_string()],
+                ..BrowserSession::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            browser_id.to_string(),
+            BrowserProcess {
+                id: browser_id.to_string(),
+                profile_id: Some("conflicting-history".to_string()),
+                health: ServiceBrowserHealth::Ready,
+                active_session_ids: vec![session_id.to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+            owner,
+        ),
+        ..ServiceState::default()
+    };
+    let mut options = LaunchOptions::default();
+
+    let reason = apply_existing_session_profile_selection(
+        &mut options,
+        &json!({
+            "action": "remote_view_open",
+            "runtimeProfile": profile_id,
+            "clientSubjectId": "client:single-user",
+            "identityAssurance": "self-declared"
+        }),
+        Some(session_id),
+        &state,
+    )
+    .expect("valid shared-local profile must remain connectable");
+
+    assert_eq!(reason, Some(ProfileSelectionReason::ExplicitProfile));
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), profile_path.to_str());
+    fs::remove_dir_all(profile_path).unwrap();
+}
+
+#[test]
+fn cold_shutdown_terminal_browser_mismatch_cannot_block_shared_local_profile_reuse() {
+    let profile_id = "soylei-website";
+    let session_id = "soylei-website";
+    let stale_browser_id = "session:soylei-website";
+    let mut state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                name: "SoyLei Website".to_string(),
+                access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(profile_id)),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                browser_ids: vec![stale_browser_id.to_string()],
+                ..BrowserSession::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            stale_browser_id.to_string(),
+            BrowserProcess {
+                id: stale_browser_id.to_string(),
+                profile_id: Some("prior-boot-profile".to_string()),
+                health: ServiceBrowserHealth::ProcessExited,
+                active_session_ids: vec![session_id.to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    state
+        .release_local_authority_for_cold_shutdown("2026-09-17T18:00:00Z")
+        .unwrap();
+    let mut options = LaunchOptions::default();
+
+    let reason = apply_existing_session_profile_selection(
+        &mut options,
+        &json!({
+            "action": "remote_view_open",
+            "runtimeProfile": profile_id,
+            "clientSubjectId": "client:soylei-website",
+            "identityAssurance": "self-declared"
+        }),
+        Some(session_id),
+        &state,
+    )
+    .expect("cold-shutdown history must not block trusted single-user profile reuse");
+
+    assert_eq!(reason, Some(ProfileSelectionReason::ExplicitProfile));
     assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
 }
 
