@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 22
+Plan version: 23
 
 State: OPEN
 
@@ -356,6 +356,17 @@ routing test, all 17 executed CLI browser-session tests, formatting, strict
 workspace Clippy, and diff hygiene pass. Static viewer lookup and durable
 handoff issuance remain open.
 
+Checkpoint `4177d983` completes static viewer selection for manager-owned
+browser tiles. The dashboard treats the persisted desktop `routeId` as the
+configured route-pool entry identity, resolves that entry's concrete route,
+and attaches the already-published Service view stream to the browser read
+model. The join is read-only, deterministic, and preserves the route-pool
+entry identity for diagnostics; it neither checks out a legacy lease nor
+constructs a provider URL. Workspace nodes, view projection, selected-context,
+and navigator tests plus the optimized dashboard build pass. The tile can now
+select its desktop viewer and route focus through the manager; creation of a
+ready durable opaque handoff for a newly opened manager browser remains open.
+
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
 `--session` is the caller-visible attribution identity rather than a daemon
@@ -698,7 +709,7 @@ touching overlapping documentation surfaces.
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, and ordinary named-session navigation and close routing green; hosted Chrome fixture and remaining ordinary commands pending |
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, and exact-display launch wiring green; hosted remote-view fixture pending |
-| Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, and manager-owned focus and maximize routing green; viewer selection pending |
+| Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | not implemented |
 | Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | not implemented |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | not implemented |
