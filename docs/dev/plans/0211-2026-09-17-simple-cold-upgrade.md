@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 23
+Plan version: 24
 
 State: OPEN
 
@@ -367,6 +367,24 @@ and navigator tests plus the optimized dashboard build pass. The tile can now
 select its desktop viewer and route focus through the manager; creation of a
 ready durable opaque handoff for a newly opened manager browser remains open.
 
+Checkpoint `95b5758f` routes both ordinary workstation apply and reviewed
+candidate apply through the concrete cold controller before any prior upgrade
+transaction convergence. Stop executes the public owned shutdown adapter;
+replace stages and atomically selects one immutable generation; start performs
+transaction-free workstation reconciliation; readiness proves the selected
+generation and binary digest, then runs the final doctors on a real host.
+Reviewed-candidate artifact identity is stored in the immutable generation
+manifest and contributes to its generation identity without creating a hot
+upgrade transaction. A black-box isolated apply succeeds with contradictory
+retained transaction and admission-drain files present, emits only stop,
+replace, start, and readiness, and leaves those diagnostic files untouched. A
+second injected selector-commit failure executes one rollback and restores the
+exact prior selector. The four controller fixtures, two reviewed-candidate
+tests, 181 installer tests, both shutdown process fixtures, formatting, strict
+workspace Clippy, and diff hygiene pass. Filesystem replacement is not yet an
+interruptible operation, so hard deadline enforcement and installed readiness
+acceptance remain open.
+
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
 `--session` is the caller-visible attribution identity rather than a daemon
@@ -699,7 +717,7 @@ touching overlapping documentation surfaces.
 | Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | exact browser/daemon, fixed user-unit, fixed container, state-release, metadata, and verification adapters implemented; installed residue proof pending |
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixture releases the retained session and preserves the profile record and physical data; active protected-claim process coverage remains |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
-| Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
+| Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | ordinary and reviewed-candidate source routes plus isolated success and rollback fixtures green; installed acceptance pending |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization, provider-free restart reuse, and concrete disposable-Chrome worker reattachment green; full daemon-process and client fixture pending |
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, and public named-session navigation and close routing green; hosted Chrome fixture pending |
@@ -713,7 +731,7 @@ touching overlapping documentation surfaces.
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | not implemented |
 | Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | not implemented |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | not implemented |
-| Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | routing change pending |
+| Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | not implemented |
 
 Exit requires all rows green against one frozen source candidate. Provider-free
