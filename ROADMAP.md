@@ -25,6 +25,22 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P211 | Simple Install, Upgrade, And Remote View
+
+State: OPEN
+
+Current state: [Plan 0211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md)
+owns the `PL-PLATFORM` cold-shutdown, cold-install, and trusted single-user
+remote-view journey for issues #181, #183, and #195. Source checkpoint
+`766cde6b` exposes `agent-browser shutdown` through a fixed six-phase
+controller with exact browser, daemon, user-unit, container, authority,
+metadata, and residue adapters. Provider-free shutdown and Lease Authority
+tests, the crate architecture guard, formatting, and strict workspace Clippy
+pass. The command was not run against an installed runtime. Command-level
+fixtures, cold-install routing, restart and remote-view convergence,
+P207-controlled documentation parity, source qualification, and separately
+authorized installed acceptance remain open.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

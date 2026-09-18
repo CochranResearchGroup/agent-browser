@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 6
+Plan version: 7
 
 State: OPEN
 
@@ -112,6 +112,26 @@ the canonical Service State lock. Two focused Lease Authority tests, one
 Service Model test, one CLI repository test, formatting, and diff hygiene pass.
 Process, user-unit, container, transient-metadata, verification, and public
 command adapters remain in Slice 2.
+
+Checkpoint `766cde6b` completes the source-only Slice 2 platform adapter and
+public routing boundary. `agent-browser shutdown` now enters the fixed
+six-phase controller without accepting transaction, admission, census, digest,
+rollback, or target-selection input. The live adapter uses only exact
+Service-State browser identities, authenticated daemon lanes, the fixed
+workstation user-unit set, and the three fixed Agent Browser Guacamole
+container names. Every daemon and subprocess wait consumes the controller's
+phase deadline; terminal verification reloads Service State and independently
+checks recorded browsers, installed units, running containers, runtime owners,
+and active resource claims. Stale close-command errors do not veto a shutdown
+whose exact process postcondition is already terminal. Two provider-free
+adapter tests prove phase mapping, escalation receipt propagation, and
+continuation through ownership release and verification after an effect
+failure. All 12 focused shutdown tests, all 118 Lease Authority tests, the
+Lease Authority architecture guard, formatting, strict workspace Clippy, and
+diff hygiene pass. This checkpoint was pushed without running the shutdown
+command or mutating an installed runtime. P207-controlled help and
+documentation, cold-install routing, joined restart acceptance, and the
+remote-view slices remain open.
 
 The fresh-context startup readback on 2026-09-17 found the P211 worktree clean
 and synchronized with `origin/platform/p211-simple-cold-upgrade@4b9edcca`.
@@ -345,11 +365,11 @@ overlapping surfaces.
 
 | Requirement | Acceptance evidence | Current state |
 | --- | --- | --- |
-| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | controller implemented; public command pending |
-| Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | not implemented |
-| Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | browser-on-daemon-stop invariant green; remaining adapters pending |
+| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public source route and controller implemented; command-level fixture and installed acceptance pending |
+| Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | fixed phase deadlines, bounded daemon/command waits, and provider-free escalation receipt mapping are green; injected-clock platform timeout fixture pending |
+| Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | exact browser/daemon, fixed user-unit, fixed container, state-release, metadata, and verification adapters implemented; installed residue proof pending |
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels, Service Model join, repository adapter, and focused persistence fixture green; process-exit ordering and public command integration pending |
-| Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller green; adapters pending |
+| Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | not implemented |
 | Current-boot presentation | startup fixture invalidates prior-boot claims, re-observes configured routes and displays, and admits each healthy current-boot route without repair input | not implemented |
