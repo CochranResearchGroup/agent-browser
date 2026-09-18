@@ -3,7 +3,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use crate::{BrowserProfileCatalog, BrowserProfileCatalogEntry};
+use crate::{
+    BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserProfileCatalogEntry,
+    BrowserProfileKind,
+};
 
 pub const BROWSER_SESSION_STATE_SCHEMA_V1: &str = "agent-browser.browser-session-state.v1";
 
@@ -44,6 +47,18 @@ pub trait BrowserSessionEffects {
         browser: &ManagedBrowserInstance,
         tab: &ManagedBrowserTab,
     ) -> Result<(), String>;
+
+    fn allocate_disposable_profile(
+        &mut self,
+        policy: &BrowserDisposableProfilePolicy,
+        allocation_id: &str,
+        session_name: &str,
+    ) -> Result<BrowserProfileCatalogEntry, String>;
+
+    fn delete_disposable_profile(
+        &mut self,
+        allocation: &ManagedDisposableProfile,
+    ) -> Result<(), String>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +85,7 @@ pub struct CloseBrowserTabResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserProfileIntent {
     Exact { profile_id: String },
+    Disposable { policy_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,6 +105,20 @@ impl OpenBrowserSession {
             session_name: session_name.into(),
             profile_intent: BrowserProfileIntent::Exact {
                 profile_id: profile_id.into(),
+            },
+            activity_at_ms,
+        }
+    }
+
+    pub fn disposable(
+        session_name: impl Into<String>,
+        policy_id: impl Into<String>,
+        activity_at_ms: u64,
+    ) -> Self {
+        Self {
+            session_name: session_name.into(),
+            profile_intent: BrowserProfileIntent::Disposable {
+                policy_id: policy_id.into(),
             },
             activity_at_ms,
         }
@@ -133,6 +163,7 @@ pub struct CloseBrowserSessionResult {
 pub struct ReapBrowserSessionsResult {
     pub expired_session_ids: Vec<String>,
     pub closed_browser_ids: Vec<String>,
+    pub deleted_disposable_profile_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,6 +201,17 @@ pub struct ManagedBrowserInstance {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ManagedDisposableProfile {
+    pub profile: BrowserProfileCatalogEntry,
+    pub policy_id: String,
+    pub session_name: String,
+    pub created_at_ms: u64,
+    pub cleanup_delay_ms: u64,
+    pub cleanup_eligible_at_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ManagedBrowserTab {
     pub id: String,
     pub target_id: String,
@@ -177,6 +219,41 @@ pub struct ManagedBrowserTab {
     pub session_id: String,
     pub created_at_ms: u64,
     pub last_activity_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserTabEndReason {
+    ExplicitClose,
+    SessionEnded,
+    BrowserEnded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalBrowserTab {
+    pub id: String,
+    pub target_id: String,
+    pub browser_id: String,
+    pub session_id: String,
+    pub profile_id: String,
+    pub created_at_ms: u64,
+    pub last_activity_at_ms: u64,
+    pub closed_at_ms: u64,
+    pub reason: BrowserTabEndReason,
+    pub session_end_reason: Option<SessionEndReason>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserNavigationRecord {
+    pub profile_id: String,
+    pub session_id: String,
+    pub browser_id: String,
+    pub tab_id: String,
+    pub target_id: String,
+    pub url: String,
+    pub visited_at_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -197,9 +274,13 @@ pub struct TerminalBrowserSession {
 pub struct BrowserSessionState {
     pub schema_version: String,
     pub next_session_sequence: u64,
+    pub next_disposable_sequence: u64,
     pub browsers: BTreeMap<String, ManagedBrowserInstance>,
     pub sessions: BTreeMap<String, ManagedBrowserSession>,
+    pub disposable_profiles: BTreeMap<String, ManagedDisposableProfile>,
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
+    pub tab_history: Vec<TerminalBrowserTab>,
+    pub navigation_history: Vec<BrowserNavigationRecord>,
     pub session_history: Vec<TerminalBrowserSession>,
 }
 
@@ -208,9 +289,13 @@ impl Default for BrowserSessionState {
         Self {
             schema_version: BROWSER_SESSION_STATE_SCHEMA_V1.to_string(),
             next_session_sequence: 0,
+            next_disposable_sequence: 0,
             browsers: BTreeMap::new(),
             sessions: BTreeMap::new(),
+            disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),
+            tab_history: Vec::new(),
+            navigation_history: Vec::new(),
             session_history: Vec::new(),
         }
     }
@@ -242,15 +327,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         &mut self,
         request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
-        let profile_id = match &request.profile_intent {
-            BrowserProfileIntent::Exact { profile_id } => profile_id,
-        };
-        let profile = self
-            .catalog
-            .profiles
-            .get(profile_id)
-            .cloned()
-            .ok_or_else(|| format!("browser_profile_not_found:{profile_id}"))?;
+        let profile = self.resolve_profile_for_open(&request)?;
         let expired_matching_sessions = self
             .state
             .sessions
@@ -389,6 +466,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 current_tab_id: None,
             },
         );
+        if let Some(allocation) = self.state.disposable_profiles.get_mut(&profile.id) {
+            allocation.cleanup_eligible_at_ms = None;
+        }
 
         Ok(OpenBrowserSessionResult {
             session_id,
@@ -398,6 +478,82 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             disposition,
             session_disposition: SessionRecordDisposition::Created,
         })
+    }
+
+    fn resolve_profile_for_open(
+        &mut self,
+        request: &OpenBrowserSession,
+    ) -> Result<BrowserProfileCatalogEntry, String> {
+        match &request.profile_intent {
+            BrowserProfileIntent::Exact { profile_id } => {
+                let profile = self
+                    .catalog
+                    .profiles
+                    .get(profile_id)
+                    .cloned()
+                    .ok_or_else(|| format!("browser_profile_not_found:{profile_id}"))?;
+                if profile.kind != BrowserProfileKind::Named {
+                    return Err(format!(
+                        "browser_profile_requires_disposable_intent:{profile_id}"
+                    ));
+                }
+                Ok(profile)
+            }
+            BrowserProfileIntent::Disposable { policy_id } => {
+                let policy = self
+                    .catalog
+                    .disposable_policies
+                    .get(policy_id)
+                    .cloned()
+                    .ok_or_else(|| format!("browser_disposable_policy_not_found:{policy_id}"))?;
+                if let Some(allocation) =
+                    self.state.disposable_profiles.values().find(|allocation| {
+                        allocation.policy_id == policy.id
+                            && allocation.session_name == request.session_name
+                    })
+                {
+                    return Ok(allocation.profile.clone());
+                }
+                self.state.next_disposable_sequence = self
+                    .state
+                    .next_disposable_sequence
+                    .checked_add(1)
+                    .ok_or_else(|| "browser_disposable_sequence_exhausted".to_string())?;
+                let allocation_id = format!(
+                    "disposable:{}:{}",
+                    policy.id, self.state.next_disposable_sequence
+                );
+                let cleanup_eligible_at_ms = request
+                    .activity_at_ms
+                    .checked_add(policy.cleanup_delay_ms)
+                    .ok_or_else(|| "browser_disposable_cleanup_expiry_exhausted".to_string())?;
+                let profile = self.effects.allocate_disposable_profile(
+                    &policy,
+                    &allocation_id,
+                    &request.session_name,
+                )?;
+                if profile.id != allocation_id || profile.kind != BrowserProfileKind::Disposable {
+                    return Err("browser_disposable_allocation_identity_invalid".to_string());
+                }
+                let root = std::path::Path::new(&policy.user_data_root);
+                let allocated_path = std::path::Path::new(&profile.user_data_dir);
+                if allocated_path == root || !allocated_path.starts_with(root) {
+                    return Err("browser_disposable_allocation_path_invalid".to_string());
+                }
+                self.state.disposable_profiles.insert(
+                    profile.id.clone(),
+                    ManagedDisposableProfile {
+                        profile: profile.clone(),
+                        policy_id: policy.id,
+                        session_name: request.session_name.clone(),
+                        created_at_ms: request.activity_at_ms,
+                        cleanup_delay_ms: policy.cleanup_delay_ms,
+                        cleanup_eligible_at_ms: Some(cleanup_eligible_at_ms),
+                    },
+                );
+                Ok(profile)
+            }
+        }
     }
 
     pub fn close_session(
@@ -420,29 +576,41 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .ok_or_else(|| "browser_session_browser_missing".to_string())?;
         let final_session =
             browser.active_session_ids.len() == 1 && browser.active_session_ids[0] == session.id;
+        let tabs = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.session_id == session.id)
+            .cloned()
+            .collect::<Vec<_>>();
         if final_session {
             self.effects.close_browser(&browser)?;
         } else {
-            let tabs = self
-                .state
-                .tabs
-                .values()
-                .filter(|tab| tab.session_id == session.id)
-                .cloned()
-                .collect::<Vec<_>>();
             for tab in &tabs {
                 self.effects.close_tab(&browser, tab)?;
             }
         }
 
         self.state.sessions.remove(session_id);
-        self.state
-            .tabs
-            .retain(|_, tab| tab.session_id != session.id);
+        for tab in tabs {
+            self.state.tabs.remove(&tab.id);
+            self.state.tab_history.push(TerminalBrowserTab {
+                id: tab.id,
+                target_id: tab.target_id,
+                browser_id: tab.browser_id,
+                session_id: tab.session_id,
+                profile_id: session.profile_id.clone(),
+                created_at_ms: tab.created_at_ms,
+                last_activity_at_ms: tab.last_activity_at_ms,
+                closed_at_ms: ended_at_ms,
+                reason: BrowserTabEndReason::SessionEnded,
+                session_end_reason: Some(reason),
+            });
+        }
         self.state.session_history.push(TerminalBrowserSession {
             id: session.id.clone(),
             name: session.name,
-            profile_id: session.profile_id,
+            profile_id: session.profile_id.clone(),
             browser_id: session.browser_id.clone(),
             created_at_ms: session.created_at_ms,
             last_activity_at_ms: session.last_activity_at_ms,
@@ -464,6 +632,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .retain(|active_id| active_id != session_id);
             SessionCloseDisposition::BrowserPreserved
         };
+        self.mark_disposable_cleanup_eligible(&session.profile_id, ended_at_ms)?;
 
         Ok(CloseBrowserSessionResult {
             session_id: session.id,
@@ -625,6 +794,18 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
         self.effects.close_tab(&browser, &tab)?;
         self.state.tabs.remove(&tab.id);
+        self.state.tab_history.push(TerminalBrowserTab {
+            id: tab.id.clone(),
+            target_id: tab.target_id.clone(),
+            browser_id: tab.browser_id.clone(),
+            session_id: tab.session_id.clone(),
+            profile_id: session.profile_id.clone(),
+            created_at_ms: tab.created_at_ms,
+            last_activity_at_ms: tab.last_activity_at_ms,
+            closed_at_ms: activity_at_ms,
+            reason: BrowserTabEndReason::ExplicitClose,
+            session_end_reason: None,
+        });
         let current_tab_id = self
             .state
             .tabs
@@ -652,6 +833,62 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         })
     }
 
+    pub fn record_navigation(
+        &mut self,
+        session_id: &str,
+        url: &str,
+        visited_at_ms: u64,
+    ) -> Result<BrowserNavigationRecord, String> {
+        if url.trim().is_empty() {
+            return Err("browser_navigation_url_empty".to_string());
+        }
+        let session = self
+            .state
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+        let tab_id = session
+            .current_tab_id
+            .as_deref()
+            .ok_or_else(|| "browser_session_current_tab_absent".to_string())?;
+        let tab = self
+            .state
+            .tabs
+            .get(tab_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+        if tab.session_id != session.id {
+            return Err("browser_tab_session_attribution_mismatch".to_string());
+        }
+        let expires_at_ms = visited_at_ms
+            .checked_add(self.config.session_idle_timeout_ms)
+            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        let record = BrowserNavigationRecord {
+            profile_id: session.profile_id,
+            session_id: session.id,
+            browser_id: session.browser_id,
+            tab_id: tab.id.clone(),
+            target_id: tab.target_id,
+            url: url.to_string(),
+            visited_at_ms,
+        };
+        self.state.navigation_history.push(record.clone());
+        let stored_tab =
+            self.state.tabs.get_mut(&tab.id).ok_or_else(|| {
+                "browser_session_current_tab_missing_during_navigation".to_string()
+            })?;
+        stored_tab.last_activity_at_ms = visited_at_ms;
+        let stored_session = self
+            .state
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| "browser_session_missing_during_navigation".to_string())?;
+        stored_session.last_activity_at_ms = visited_at_ms;
+        stored_session.expires_at_ms = expires_at_ms;
+        Ok(record)
+    }
+
     pub fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
         let expired_session_ids = self
             .state
@@ -669,7 +906,55 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 result.closed_browser_ids.push(closed.browser_id);
             }
         }
+        let disposable_profile_ids = self
+            .state
+            .disposable_profiles
+            .values()
+            .filter(|allocation| {
+                allocation
+                    .cleanup_eligible_at_ms
+                    .is_some_and(|eligible_at_ms| eligible_at_ms <= now_ms)
+                    && !self
+                        .state
+                        .sessions
+                        .values()
+                        .any(|session| session.profile_id == allocation.profile.id)
+                    && !self
+                        .state
+                        .browsers
+                        .values()
+                        .any(|browser| browser.profile_id == allocation.profile.id)
+            })
+            .map(|allocation| allocation.profile.id.clone())
+            .collect::<Vec<_>>();
+        for profile_id in disposable_profile_ids {
+            let allocation = self
+                .state
+                .disposable_profiles
+                .get(&profile_id)
+                .cloned()
+                .ok_or_else(|| "browser_disposable_profile_missing_during_reap".to_string())?;
+            self.effects.delete_disposable_profile(&allocation)?;
+            self.state.disposable_profiles.remove(&profile_id);
+            result.deleted_disposable_profile_ids.push(profile_id);
+        }
         Ok(result)
+    }
+
+    fn mark_disposable_cleanup_eligible(
+        &mut self,
+        profile_id: &str,
+        ended_at_ms: u64,
+    ) -> Result<(), String> {
+        let Some(allocation) = self.state.disposable_profiles.get_mut(profile_id) else {
+            return Ok(());
+        };
+        allocation.cleanup_eligible_at_ms = Some(
+            ended_at_ms
+                .checked_add(allocation.cleanup_delay_ms)
+                .ok_or_else(|| "browser_disposable_cleanup_expiry_exhausted".to_string())?,
+        );
+        Ok(())
     }
 
     fn retire_browser(
@@ -682,19 +967,39 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         let session_ids = browser.active_session_ids.clone();
         for session_id in session_ids {
             if let Some(session) = self.state.sessions.remove(&session_id) {
-                self.state
+                let tabs = self
+                    .state
                     .tabs
-                    .retain(|_, tab| tab.session_id != session.id);
+                    .values()
+                    .filter(|tab| tab.session_id == session.id)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                for tab in tabs {
+                    self.state.tabs.remove(&tab.id);
+                    self.state.tab_history.push(TerminalBrowserTab {
+                        id: tab.id,
+                        target_id: tab.target_id,
+                        browser_id: tab.browser_id,
+                        session_id: tab.session_id,
+                        profile_id: session.profile_id.clone(),
+                        created_at_ms: tab.created_at_ms,
+                        last_activity_at_ms: tab.last_activity_at_ms,
+                        closed_at_ms: ended_at_ms,
+                        reason: BrowserTabEndReason::BrowserEnded,
+                        session_end_reason: Some(reason),
+                    });
+                }
                 self.state.session_history.push(TerminalBrowserSession {
                     id: session.id,
                     name: session.name,
-                    profile_id: session.profile_id,
+                    profile_id: session.profile_id.clone(),
                     browser_id: session.browser_id,
                     created_at_ms: session.created_at_ms,
                     last_activity_at_ms: session.last_activity_at_ms,
                     ended_at_ms,
                     reason,
                 });
+                self.mark_disposable_cleanup_eligible(&session.profile_id, ended_at_ms)?;
             }
         }
         self.state.browsers.remove(&browser.id);

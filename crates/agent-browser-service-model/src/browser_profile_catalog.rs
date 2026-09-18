@@ -26,9 +26,19 @@ pub struct BrowserProfileCatalogEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BrowserDisposableProfilePolicy {
+    pub id: String,
+    pub user_data_root: String,
+    pub cleanup_delay_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BrowserProfileCatalog {
     pub schema_version: String,
     pub profiles: BTreeMap<String, BrowserProfileCatalogEntry>,
+    #[serde(default)]
+    pub disposable_policies: BTreeMap<String, BrowserDisposableProfilePolicy>,
 }
 
 /// A non-fatal observation made while importing the legacy profile map.
@@ -60,6 +70,7 @@ impl Default for BrowserProfileCatalog {
         Self {
             schema_version: BROWSER_PROFILE_CATALOG_SCHEMA_V1.to_string(),
             profiles: BTreeMap::new(),
+            disposable_policies: BTreeMap::new(),
         }
     }
 }

@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
 use agent_browser_service_model::{
-    BrowserLaunch, BrowserProfileCatalog, BrowserProfileCatalogEntry, BrowserProfileKind,
-    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
-    BrowserTabAcquisition, BrowserTabSource, OpenBrowserSession, SessionBrowserDisposition,
-    SessionCloseDisposition, SessionEndReason, SessionRecordDisposition,
+    BrowserDisposableProfilePolicy, BrowserLaunch, BrowserProfileCatalog,
+    BrowserProfileCatalogEntry, BrowserProfileKind, BrowserSessionEffects, BrowserSessionManager,
+    BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition, BrowserTabSource,
+    OpenBrowserSession, SessionBrowserDisposition, SessionCloseDisposition, SessionEndReason,
+    SessionRecordDisposition,
 };
 
 #[derive(Default)]
@@ -18,6 +19,8 @@ struct FixtureEffects {
     new_tab: Option<BrowserTabAcquisition>,
     new_tab_requests: Vec<String>,
     tab_closes: Vec<(String, String)>,
+    disposable_allocations: Vec<String>,
+    disposable_deletions: Vec<String>,
 }
 
 #[test]
@@ -169,6 +172,30 @@ impl BrowserSessionEffects for FixtureEffects {
     ) -> Result<(), String> {
         self.tab_closes
             .push((browser.id.clone(), tab.target_id.clone()));
+        Ok(())
+    }
+
+    fn allocate_disposable_profile(
+        &mut self,
+        policy: &BrowserDisposableProfilePolicy,
+        allocation_id: &str,
+        _session_name: &str,
+    ) -> Result<BrowserProfileCatalogEntry, String> {
+        self.disposable_allocations.push(allocation_id.to_string());
+        Ok(BrowserProfileCatalogEntry {
+            id: allocation_id.to_string(),
+            name: allocation_id.to_string(),
+            user_data_dir: format!("{}/{}", policy.user_data_root, allocation_id),
+            kind: BrowserProfileKind::Disposable,
+        })
+    }
+
+    fn delete_disposable_profile(
+        &mut self,
+        allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    ) -> Result<(), String> {
+        self.disposable_deletions
+            .push(allocation.profile.id.clone());
         Ok(())
     }
 }
@@ -507,8 +534,60 @@ fn closing_shared_session_closes_only_its_attributed_tabs() {
         [(alice.browser_id.clone(), "target-alice".to_string())]
     );
     assert!(state.tabs.is_empty());
+    assert_eq!(state.tab_history.len(), 1);
+    assert_eq!(state.tab_history[0].session_id, alice.session_id);
+    assert_eq!(state.tab_history[0].profile_id, "profile-a");
+    assert_eq!(state.tab_history[0].target_id, "target-alice");
+    assert_eq!(state.tab_history[0].closed_at_ms, 4_000);
     assert!(state.sessions.contains_key(&bob.session_id));
     assert!(state.browsers.contains_key(&alice.browser_id));
+}
+
+#[test]
+fn navigation_history_remains_queryable_after_session_close() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "tab-alice".to_string(),
+            target_id: "target-alice".to_string(),
+            source: BrowserTabSource::Bootstrap,
+        }),
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+        },
+    );
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    manager
+        .tab_for_navigation(&alice.session_id, 2_000)
+        .unwrap();
+    manager
+        .record_navigation(&alice.session_id, "https://example.test/path", 3_000)
+        .unwrap();
+    manager
+        .close_session(&alice.session_id, SessionEndReason::ExplicitClose, 4_000)
+        .unwrap();
+    drop(manager);
+
+    assert_eq!(state.navigation_history.len(), 1);
+    let navigation = &state.navigation_history[0];
+    assert_eq!(navigation.profile_id, "profile-a");
+    assert_eq!(navigation.session_id, alice.session_id);
+    assert_eq!(navigation.tab_id, "tab-alice");
+    assert_eq!(navigation.url, "https://example.test/path");
+    assert_eq!(navigation.visited_at_ms, 3_000);
 }
 
 #[test]
@@ -557,6 +636,7 @@ fn catalog_with_named_profile() -> BrowserProfileCatalog {
     BrowserProfileCatalog {
         schema_version: "agent-browser.browser-profile-catalog.v1".to_string(),
         profiles: BTreeMap::from([(profile.id.clone(), profile)]),
+        disposable_policies: BTreeMap::new(),
     }
 }
 
@@ -681,4 +761,157 @@ fn same_session_name_can_open_a_different_exact_profile() {
     assert_eq!(effects.launches, ["profile-a", "profile-b"]);
     assert_eq!(state.sessions.len(), 2);
     assert_eq!(state.browsers.len(), 2);
+}
+
+#[test]
+fn disposable_profiles_are_session_scoped_reused_and_reaped() {
+    let catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+        },
+    );
+
+    let alice = manager
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+        .unwrap();
+    let alice_again = manager
+        .open(OpenBrowserSession::disposable("alice", "default", 2_000))
+        .unwrap();
+    let bob = manager
+        .open(OpenBrowserSession::disposable("bob", "default", 3_000))
+        .unwrap();
+
+    assert_eq!(alice_again.session_id, alice.session_id);
+    assert_eq!(alice_again.browser_id, alice.browser_id);
+    assert_ne!(bob.profile_id, alice.profile_id);
+    assert_ne!(bob.browser_id, alice.browser_id);
+    manager
+        .close_session(&alice.session_id, SessionEndReason::ExplicitClose, 4_000)
+        .unwrap();
+    let reaped = manager.reap(4_000).unwrap();
+    drop(manager);
+
+    assert_eq!(effects.disposable_allocations.len(), 2);
+    assert_eq!(effects.disposable_deletions, [alice.profile_id.clone()]);
+    assert_eq!(reaped.deleted_disposable_profile_ids, [alice.profile_id]);
+    assert!(state.sessions.contains_key(&bob.session_id));
+    assert!(state.disposable_profiles.contains_key(&bob.profile_id));
+}
+
+#[test]
+fn exact_intent_rejects_disposable_profile_definition() {
+    let profile = BrowserProfileCatalogEntry {
+        id: "legacy-one-time".to_string(),
+        name: "Legacy One Time".to_string(),
+        user_data_dir: "/managed/legacy-one-time".to_string(),
+        kind: BrowserProfileKind::Disposable,
+    };
+    let catalog = BrowserProfileCatalog {
+        schema_version: "agent-browser.browser-profile-catalog.v1".to_string(),
+        profiles: BTreeMap::from([(profile.id.clone(), profile)]),
+        disposable_policies: BTreeMap::new(),
+    };
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects::default();
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+        },
+    );
+
+    let error = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "legacy-one-time",
+            1_000,
+        ))
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        "browser_profile_requires_disposable_intent:legacy-one-time"
+    );
+    assert!(state.sessions.is_empty());
+    assert!(effects.launches.is_empty());
+}
+
+fn catalog_with_disposable_policy() -> BrowserProfileCatalog {
+    BrowserProfileCatalog {
+        schema_version: "agent-browser.browser-profile-catalog.v1".to_string(),
+        profiles: BTreeMap::new(),
+        disposable_policies: BTreeMap::from([(
+            "default".to_string(),
+            BrowserDisposableProfilePolicy {
+                id: "default".to_string(),
+                user_data_root: "/managed/disposable".to_string(),
+                cleanup_delay_ms: 0,
+            },
+        )]),
+    }
+}
+
+#[test]
+fn serialized_state_reuses_healthy_session_after_service_restart() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let first = {
+        let mut effects = FixtureEffects::default();
+        let mut manager = BrowserSessionManager::new(
+            &mut state,
+            &catalog,
+            &mut effects,
+            BrowserSessionManagerConfig {
+                session_idle_timeout_ms: 300_000,
+            },
+        );
+        manager
+            .open(OpenBrowserSession::exact_profile(
+                "alice",
+                "profile-a",
+                1_000,
+            ))
+            .unwrap()
+    };
+    let encoded = serde_json::to_string(&state).unwrap();
+    let mut restarted_state: BrowserSessionState = serde_json::from_str(&encoded).unwrap();
+    let mut restarted_effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let mut restarted_manager = BrowserSessionManager::new(
+        &mut restarted_state,
+        &catalog,
+        &mut restarted_effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+        },
+    );
+
+    let resumed = restarted_manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            2_000,
+        ))
+        .unwrap();
+
+    assert_eq!(resumed.session_id, first.session_id);
+    assert_eq!(resumed.browser_id, first.browser_id);
+    assert_eq!(
+        resumed.session_disposition,
+        SessionRecordDisposition::Reused
+    );
+    assert!(restarted_effects.launches.is_empty());
 }
