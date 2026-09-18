@@ -96,10 +96,27 @@ const managedSessionSources = browserSessionManagerWorkspaceSources({
     { tabId: "target-a", url: "https://example.test/old", visitedAtMs: 1 },
     { tabId: "target-a", url: "https://example.test/current", visitedAtMs: 2 },
   ],
+}, {
+  routePool: {
+    "guacamole-rdp-a": { routeId: "route-a" },
+  },
+  remoteViewRoutes: {
+    "route-a": {
+      id: "route-a",
+      provider: "rdp_gateway",
+      routeId: "route-a",
+      frameUrl: "/remote-view/handoff-a",
+      readOnly: false,
+    },
+  },
 });
 assert.equal(managedSessionSources.serviceBrowsers.length, 1);
 assert.equal(managedSessionSources.serviceBrowsers[0].displayName, ":10");
 assert.equal(managedSessionSources.serviceBrowsers[0].host, "remote_headed");
+assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams.length, 1);
+assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams[0].routeId, "route-a");
+assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams[0].routePoolEntryId, "guacamole-rdp-a");
+assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams[0].frameUrl, "/remote-view/handoff-a");
 assert.deepEqual(managedSessionSources.serviceSessions[0].browserIds, ["browser:work:1"]);
 assert.equal(managedSessionSources.serviceSessions[0].agentName, "alice");
 assert.equal(managedSessionSources.serviceTabs[0].url, "https://example.test/current");

@@ -130,6 +130,8 @@ type ServiceStatusData = {
     incidents?: WorkspaceServiceIncident[];
     profiles?: Record<string, LauncherProfileRecord>;
     browserCapabilityRegistry?: LauncherBrowserCapabilityRegistry;
+    routePool?: Record<string, { routeId?: string | null }>;
+    remoteViewRoutes?: Record<string, WorkspaceServiceViewStream>;
   };
   browserSessionState?: BrowserSessionManagerState | null;
   profileAllocations?: WorkspaceServiceProfileAllocation[];
@@ -1510,7 +1512,10 @@ export function WorkspaceNavigator() {
       serviceBrowsers: Object.values(serviceState?.browsers ?? {}),
       serviceSessions: Object.values(serviceState?.sessions ?? {}),
       serviceTabs: Object.values(serviceState?.tabs ?? {}),
-    }, serviceStatus?.browserSessionState);
+    }, serviceStatus?.browserSessionState, {
+      routePool: serviceStatus?.service_state?.routePool,
+      remoteViewRoutes: serviceStatus?.service_state?.remoteViewRoutes,
+    });
     return {
       daemonSessions: sessions,
       daemonTabsByPort,
@@ -1518,6 +1523,7 @@ export function WorkspaceNavigator() {
       serviceBrowsers: browserSessionSources.serviceBrowsers,
       serviceSessions: browserSessionSources.serviceSessions,
       serviceTabs: browserSessionSources.serviceTabs,
+      remoteViewRoutes: serviceStatus?.service_state?.remoteViewRoutes ?? {},
       profileAllocations: serviceStatus?.profileAllocations ?? [],
       manualBrowsers: serviceStatus?.manualBrowsers ?? [],
       jobs: Object.values(serviceState?.jobs ?? {}),

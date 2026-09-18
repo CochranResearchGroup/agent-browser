@@ -376,9 +376,26 @@ export type BrowserSessionManagerWorkspaceSources = {
   serviceTabs: WorkspaceServiceTab[];
 };
 
+export type BrowserSessionManagerViewerInventory = {
+  routePool?: Record<string, { routeId?: string | null }>;
+  remoteViewRoutes?: Record<string, WorkspaceServiceViewStream>;
+};
+
+function browserSessionManagerViewStreams(
+  routePoolEntryId: string | null | undefined,
+  inventory?: BrowserSessionManagerViewerInventory,
+): WorkspaceServiceViewStream[] {
+  if (!routePoolEntryId) return [];
+  const routeId = inventory?.routePool?.[routePoolEntryId]?.routeId?.trim() || routePoolEntryId;
+  const stream = inventory?.remoteViewRoutes?.[routeId]
+    ?? Object.values(inventory?.remoteViewRoutes ?? {}).find((candidate) => candidate.routeId === routeId);
+  return stream ? [{ ...stream, routeId, routePoolEntryId }] : [];
+}
+
 /** Project the independent simple-session state into dashboard read models. */
 export function browserSessionManagerWorkspaceSources(
   state?: BrowserSessionManagerState | null,
+  viewerInventory?: BrowserSessionManagerViewerInventory,
 ): BrowserSessionManagerWorkspaceSources {
   const browsers = Object.values(state?.browsers ?? {});
   const sessions = Object.values(state?.sessions ?? {});
@@ -406,6 +423,7 @@ export function browserSessionManagerWorkspaceSources(
       pid: browser.pid,
       cdpEndpoint: browser.cdpEndpoint,
       activeSessionIds: browser.activeSessionIds ?? [],
+      viewStreams: browserSessionManagerViewStreams(browser.desktop?.routeId, viewerInventory),
       lifecycleState: "active",
       inventoryClass: "service-owned-controllable-browser",
     })),
@@ -433,8 +451,9 @@ export function browserSessionManagerWorkspaceSources(
 export function mergeBrowserSessionManagerWorkspaceSources(
   legacy: BrowserSessionManagerWorkspaceSources,
   state?: BrowserSessionManagerState | null,
+  viewerInventory?: BrowserSessionManagerViewerInventory,
 ): BrowserSessionManagerWorkspaceSources {
-  const managed = browserSessionManagerWorkspaceSources(state);
+  const managed = browserSessionManagerWorkspaceSources(state, viewerInventory);
   const mergeById = <T extends { id: string }>(left: T[], right: T[]): T[] =>
     [...new Map([...left, ...right].map((record) => [record.id, record])).values()];
   return {

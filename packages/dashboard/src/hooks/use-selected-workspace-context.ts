@@ -52,6 +52,7 @@ type ServiceStatusData = {
     jobs?: Record<string, WorkspaceServiceJob>;
     incidents?: WorkspaceServiceIncident[];
     remoteViewRoutes?: Record<string, ServiceViewStream>;
+    routePool?: Record<string, { routeId?: string | null }>;
   };
   browserSessionState?: BrowserSessionManagerState | null;
   profileAllocations?: WorkspaceServiceProfileAllocation[];
@@ -161,7 +162,10 @@ export function useSelectedWorkspaceContext(
       serviceBrowsers: Object.values(serviceStatus?.service_state?.browsers ?? {}),
       serviceSessions: Object.values(serviceStatus?.service_state?.sessions ?? {}),
       serviceTabs: Object.values(serviceStatus?.service_state?.tabs ?? {}),
-    }, serviceStatus?.browserSessionState);
+    }, serviceStatus?.browserSessionState, {
+      routePool: serviceStatus?.service_state?.routePool,
+      remoteViewRoutes: serviceStatus?.service_state?.remoteViewRoutes,
+    });
     const serviceBrowsers = browserSessionSources.serviceBrowsers;
     const serviceTabs = browserSessionSources.serviceTabs;
     const nodeInput = {
