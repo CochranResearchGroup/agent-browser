@@ -1,5 +1,7 @@
 #![cfg(unix)]
 
+use agent_browser_lease_authority::{AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey};
+use agent_browser_service_model::ServiceState;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -556,6 +558,212 @@ fn shutdown_json_releases_a_retained_session_without_deleting_profile_data() {
         fs::read(&marker_path).expect("retained profile marker"),
         b"keep"
     );
+    assert!(!systemctl_log.exists());
+}
+
+#[test]
+fn shutdown_json_releases_an_active_resource_claim_without_recovery_input() {
+    let fixture = TempWorkstation::new();
+    let docker_log = fixture.root.join("docker.log");
+    let systemctl_log = fixture.root.join("systemctl.log");
+    fixture.install_fake_command("docker", "AGENT_BROWSER_FAKE_DOCKER_LOG");
+    fixture.install_fake_command("systemctl", "AGENT_BROWSER_FAKE_SYSTEMCTL_LOG");
+
+    let mut state = ServiceState::default();
+    state
+        .acquire_lease_claim(AcquireLeaseClaimRequest {
+            resource: LeaseResourceKey::profile("protected-profile"),
+            parent_claim_id: None,
+            principal_id: "protected-principal".to_string(),
+            capability_id: "protected-capability".to_string(),
+            capability_revision: 1,
+            mode: LeaseClaimMode::Ephemeral,
+            expected_claim_revision: 0,
+            idempotency_key: "protected-acquire".to_string(),
+            now: "2026-09-17T12:00:00Z".to_string(),
+            expires_at: "2026-09-17T12:05:00Z".to_string(),
+            transition_deadline: None,
+            recovery_controller_id: None,
+            boot_epoch: None,
+            owner_generation: None,
+        })
+        .expect("active protected claim");
+
+    let state_path = fixture.root.join("home/.agent-browser/service/state.json");
+    fs::create_dir_all(state_path.parent().expect("service directory")).expect("service directory");
+    fs::write(
+        &state_path,
+        serde_json::to_vec_pretty(&state).expect("service state JSON"),
+    )
+    .expect("service state");
+
+    let first = run_shutdown(&fixture, &docker_log, &systemctl_log);
+    assert!(
+        first.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let first_receipt: serde_json::Value =
+        serde_json::from_slice(&first.stdout).expect("first shutdown receipt");
+    assert_eq!(first_receipt["success"], true);
+    assert_eq!(first_receipt["changed"], true);
+    assert_eq!(first_receipt["residue"]["activeLeases"], 0);
+
+    let persisted: ServiceState =
+        serde_json::from_slice(&fs::read(&state_path).expect("persisted service state"))
+            .expect("persisted service state JSON");
+    assert_eq!(persisted.lease_authority().active_claim_count(), 0);
+
+    let replay = run_shutdown(&fixture, &docker_log, &systemctl_log);
+    assert!(
+        replay.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&replay.stdout),
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    let replay_receipt: serde_json::Value =
+        serde_json::from_slice(&replay.stdout).expect("replay shutdown receipt");
+    assert_eq!(replay_receipt["success"], true);
+    assert_eq!(replay_receipt["changed"], false);
+    assert_eq!(replay_receipt["residue"]["activeLeases"], 0);
+    assert!(!systemctl_log.exists());
+}
+
+#[test]
+fn shutdown_json_ignores_failed_upgrade_coordination_residue() {
+    let fixture = TempWorkstation::new();
+    let docker_log = fixture.root.join("docker.log");
+    let systemctl_log = fixture.root.join("systemctl.log");
+    fixture.install_fake_command("docker", "AGENT_BROWSER_FAKE_DOCKER_LOG");
+    fixture.install_fake_command("systemctl", "AGENT_BROWSER_FAKE_SYSTEMCTL_LOG");
+
+    let coordination_root = fixture
+        .root
+        .join("workstation/.agent-browser/runtime-adoption");
+    let transaction_path = coordination_root.join("upgrade-transactions/interrupted.json");
+    let admission_path = coordination_root.join("admission-drain.json");
+    fs::create_dir_all(transaction_path.parent().expect("transaction directory"))
+        .expect("transaction directory");
+    fs::write(
+        &transaction_path,
+        b"contradictory retained transaction metadata",
+    )
+    .expect("failed transaction residue");
+    fs::write(&admission_path, b"stale admission drain").expect("admission drain residue");
+
+    for run in 1..=2 {
+        let output = run_shutdown(&fixture, &docker_log, &systemctl_log);
+        assert!(
+            output.status.success(),
+            "run {run}: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let receipt: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("shutdown receipt");
+        assert_eq!(receipt["success"], true);
+        assert_eq!(receipt["changed"], false);
+        assert_eq!(receipt["residue"]["activeLeases"], 0);
+        assert!(
+            !String::from_utf8_lossy(&output.stdout).contains("transaction"),
+            "shutdown receipt exposed upgrade coordination state"
+        );
+    }
+
+    assert_eq!(
+        fs::read(&transaction_path).expect("retained failed transaction residue"),
+        b"contradictory retained transaction metadata"
+    );
+    assert_eq!(
+        fs::read(&admission_path).expect("retained admission drain residue"),
+        b"stale admission drain"
+    );
+    assert!(!systemctl_log.exists());
+}
+
+#[test]
+fn shutdown_json_completes_a_prior_run_interrupted_after_ownership_release() {
+    let fixture = TempWorkstation::new();
+    let docker_log = fixture.root.join("docker.log");
+    let systemctl_log = fixture.root.join("systemctl.log");
+    fixture.install_fake_command("docker", "AGENT_BROWSER_FAKE_DOCKER_LOG");
+    fixture.install_fake_command("systemctl", "AGENT_BROWSER_FAKE_SYSTEMCTL_LOG");
+
+    let profile_dir = fixture.root.join("profiles/prior-run");
+    fs::create_dir_all(&profile_dir).expect("profile directory");
+    let profile_marker = profile_dir.join("retained-profile-data");
+    fs::write(&profile_marker, b"keep").expect("profile marker");
+
+    let state_path = fixture.root.join("home/.agent-browser/service/state.json");
+    fs::create_dir_all(state_path.parent().expect("service directory")).expect("service directory");
+    fs::write(
+        &state_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schemaVersion": "agent-browser.service-state.v2",
+            "profiles": {
+                "prior-run": {
+                    "id": "prior-run",
+                    "userDataDir": profile_dir,
+                    "persistent": true
+                }
+            },
+            "sessions": {
+                "session-1": {
+                    "id": "session-1",
+                    "lease": "released",
+                    "profileId": "prior-run"
+                }
+            }
+        }))
+        .expect("service state JSON"),
+    )
+    .expect("service state");
+
+    let socket_dir = fixture.root.join("runtime/sockets");
+    fs::create_dir_all(&socket_dir).expect("socket directory");
+    for name in ["session-1.stream", "dashboard.pid", "dashboard-backend.pid"] {
+        fs::write(socket_dir.join(name), b"stale prior-run metadata")
+            .expect("prior-run transient metadata");
+    }
+
+    let first = run_shutdown(&fixture, &docker_log, &systemctl_log);
+    assert!(
+        first.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let first_receipt: serde_json::Value =
+        serde_json::from_slice(&first.stdout).expect("first shutdown receipt");
+    assert_eq!(first_receipt["success"], true);
+    assert_eq!(first_receipt["changed"], true);
+    assert_eq!(first_receipt["steps"][3]["changed"], false);
+    assert_eq!(first_receipt["steps"][4]["changed"], true);
+    assert_eq!(first_receipt["residue"]["runtimeOwners"], 0);
+    assert_eq!(first_receipt["residue"]["activeLeases"], 0);
+    for name in ["session-1.stream", "dashboard.pid", "dashboard-backend.pid"] {
+        assert!(
+            !socket_dir.join(name).exists(),
+            "stale metadata remained: {name}"
+        );
+    }
+    assert_eq!(
+        fs::read(&profile_marker).expect("retained profile marker"),
+        b"keep"
+    );
+
+    let replay = run_shutdown(&fixture, &docker_log, &systemctl_log);
+    assert!(
+        replay.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&replay.stdout),
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    let replay_receipt: serde_json::Value =
+        serde_json::from_slice(&replay.stdout).expect("replay shutdown receipt");
+    assert_eq!(replay_receipt["success"], true);
+    assert_eq!(replay_receipt["changed"], false);
     assert!(!systemctl_log.exists());
 }
 

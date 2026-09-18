@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 30
+Plan version: 31
 
 State: OPEN
 
@@ -651,6 +651,22 @@ invocation also failed before compilation in the optional compiler-cache
 wrapper; the same manager test and subsequent Rust gates passed with compiler
 caching disabled.
 
+The version 31 continuation closes the remaining provider-free input variants
+for the public shutdown fixture without changing production logic. A compiled
+CLI case now persists an active protected profile claim, invokes
+`agent-browser shutdown --json`, proves zero active claims in both the receipt
+and reloaded Service State, and proves an unchanged successful replay. A second
+case retains contradictory failed-upgrade transaction and admission-drain
+sidecars while proving that they neither veto shutdown nor enter its receipt.
+A third case represents a prior shutdown interrupted after ownership release:
+the session is already released, profile data remains present, and stale
+session-stream and dashboard PID metadata remain. The next public shutdown
+removes only that transient metadata, preserves the profile marker, and then
+replays without changes. All seven nonignored workstation shutdown integration
+tests pass; the disposable Chrome/Xvfb browser journey remains intentionally
+ignored in this provider-free batch. Formatting passes. Installed shutdown
+acceptance remains open and no installed or shared runtime was mutated.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -937,10 +953,10 @@ touching overlapping documentation surfaces.
 
 | Requirement | Acceptance evidence | Current state |
 | --- | --- | --- |
-| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public route, empty-workstation idempotence, retained-profile release, manager-only state, exact process termination, foreign-process preservation, and replay fixtures green; protected-claim, failed-upgrade, partial-prior-run, and installed acceptance pending |
+| One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public route, empty-workstation idempotence, retained-profile release, protected-claim release, failed-upgrade independence, partial-prior-run completion, manager-only state, exact process termination, foreign-process preservation, and replay fixtures green; installed acceptance pending |
 | Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | fixed phase deadlines, bounded daemon/command waits, and provider-free escalation receipt mapping are green; injected-clock platform timeout fixture pending |
 | Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | exact browser/daemon, fixed user-unit, fixed container, state-release, metadata, and verification adapters implemented; installed residue proof pending |
-| Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixture releases the retained session and preserves the profile record and physical data; active protected-claim process coverage remains |
+| Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixtures release retained sessions and an active protected claim while preserving profile records and physical data |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | ordinary and reviewed-candidate source routes plus isolated success and rollback fixtures green; installed acceptance pending |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization, provider-free restart reuse, concrete disposable-Chrome worker reattachment, and the compiled-CLI shared-daemon title, snapshot, click, redirect, and close journey are green; joined cold-install-to-dashboard restart acceptance remains pending |
