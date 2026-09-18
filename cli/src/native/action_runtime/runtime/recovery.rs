@@ -201,6 +201,11 @@ pub(crate) struct DaemonState {
     /// browser owner transfer. Browser effects then fail closed against the
     /// locked service-state owner generation.
     pub(crate) runtime_owner_binding: Option<crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+    /// True when the ordinary Browser Session Manager owns the browser
+    /// lifecycle and target attribution for this command state. Manager-owned
+    /// commands bypass the legacy runtime-owner registry and must never fall
+    /// back to the legacy auto-launch path.
+    pub(crate) browser_session_manager_owned: bool,
     /// In-memory custody for a browser committed by the protected lease
     /// authority. The capability is secret and is never projected to Service
     /// State, command JSON, logs, or responses.
@@ -269,6 +274,7 @@ impl DaemonState {
             current_cancellation: None,
             pending_shared_profile_acquisition: None,
             runtime_owner_binding: None,
+            browser_session_manager_owned: false,
             #[cfg(target_os = "linux")]
             protected_browser_owner: None,
             tracked_origin_storage: HashMap::new(),
