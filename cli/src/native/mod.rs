@@ -30,6 +30,8 @@ pub mod browser_navigation;
 #[allow(dead_code)]
 pub mod browser_session_authority;
 #[allow(dead_code)]
+pub(crate) mod browser_session_runtime;
+#[allow(dead_code)]
 pub(crate) mod browser_session_store;
 #[allow(dead_code)]
 pub mod browser_tabs;
