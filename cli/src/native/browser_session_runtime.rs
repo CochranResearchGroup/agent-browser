@@ -53,6 +53,11 @@ pub(crate) trait BrowserRuntimeDriver {
         tab: &ManagedBrowserTab,
         url: &str,
     ) -> Result<(), String>;
+    fn focus_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String>;
 }
 
 pub(crate) struct BrowserSessionEffectAdapter<D> {
@@ -113,6 +118,14 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         url: &str,
     ) -> Result<(), String> {
         self.runtime.navigate(browser, tab, url)
+    }
+
+    fn focus_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        self.runtime.focus_browser(browser, tab)
     }
 
     fn allocate_disposable_profile(
@@ -208,6 +221,11 @@ enum BrowserRuntimeCommand {
         browser: ManagedBrowserInstance,
         tab: ManagedBrowserTab,
         url: String,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    Focus {
+        browser: ManagedBrowserInstance,
+        tab: Option<ManagedBrowserTab>,
         reply: mpsc::Sender<Result<(), String>>,
     },
     Shutdown,
@@ -366,6 +384,22 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
+
+    fn focus_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::Focus {
+                browser: browser.clone(),
+                tab: tab.cloned(),
+                reply,
+            },
+        )
+    }
 }
 
 impl Drop for BrowserManagerRuntime {
@@ -512,6 +546,23 @@ fn run_browser_worker(
                     Some(manager) => runtime.block_on(async {
                         manager.tab_switch_target_id(&tab.target_id).await?;
                         manager.navigate(&url, WaitUntil::Load).await?;
+                        Ok(())
+                    }),
+                    None => Err("browser_session_runtime_browser_missing".to_string()),
+                };
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::Focus {
+                browser,
+                tab,
+                reply,
+            } => {
+                let result = match browsers.get_mut(&browser.id) {
+                    Some(manager) => runtime.block_on(async {
+                        if let Some(tab) = tab {
+                            manager.tab_switch_target_id(&tab.target_id).await?;
+                        }
+                        manager.focus_for_view(true).await?;
                         Ok(())
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
@@ -675,6 +726,14 @@ mod tests {
             _browser: &ManagedBrowserInstance,
             _tab: &ManagedBrowserTab,
             _url: &str,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn focus_browser(
+            &mut self,
+            _browser: &ManagedBrowserInstance,
+            _tab: Option<&ManagedBrowserTab>,
         ) -> Result<(), String> {
             Ok(())
         }

@@ -24,6 +24,7 @@ struct FixtureEffects {
     disposable_allocations: Vec<String>,
     disposable_deletions: Vec<String>,
     navigations: Vec<(String, String, String)>,
+    focuses: Vec<(String, Option<String>)>,
 }
 
 #[test]
@@ -197,6 +198,16 @@ impl BrowserSessionEffects for FixtureEffects {
         Ok(())
     }
 
+    fn focus_browser(
+        &mut self,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+        tab: Option<&agent_browser_service_model::ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        self.focuses
+            .push((browser.id.clone(), tab.map(|tab| tab.target_id.clone())));
+        Ok(())
+    }
+
     fn allocate_disposable_profile(
         &mut self,
         policy: &BrowserDisposableProfilePolicy,
@@ -310,6 +321,58 @@ fn repeated_navigation_reuses_current_tab_without_another_acquisition() {
     assert_eq!(state.tabs.len(), 1);
     assert_eq!(state.tabs["tab-bootstrap"].last_activity_at_ms, 3_000);
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 3_000);
+}
+
+#[test]
+fn dashboard_focus_selects_attributed_target_and_refreshes_its_session() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "tab-bootstrap".to_string(),
+            target_id: "target-bootstrap".to_string(),
+            source: BrowserTabSource::Bootstrap,
+        }),
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+        },
+    );
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    manager
+        .tab_for_navigation(&alice.session_id, 2_000)
+        .unwrap();
+
+    let focused = manager
+        .focus_browser(&alice.browser_id, Some("target-bootstrap"), 3_000)
+        .unwrap();
+    drop(manager);
+
+    assert_eq!(focused.browser_id, alice.browser_id);
+    assert_eq!(focused.tab_id.as_deref(), Some("tab-bootstrap"));
+    assert_eq!(focused.target_id.as_deref(), Some("target-bootstrap"));
+    assert_eq!(
+        effects.focuses,
+        [(
+            "browser:profile-a".to_string(),
+            Some("target-bootstrap".to_string())
+        )]
+    );
+    assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 3_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 303_000);
 }
 
 #[test]

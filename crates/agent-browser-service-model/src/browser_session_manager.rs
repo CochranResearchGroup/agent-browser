@@ -60,6 +60,12 @@ pub trait BrowserSessionEffects {
         url: &str,
     ) -> Result<(), String>;
 
+    fn focus_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String>;
+
     fn allocate_disposable_profile(
         &mut self,
         policy: &BrowserDisposableProfilePolicy,
@@ -270,6 +276,13 @@ pub struct BrowserNavigationRecord {
     pub target_id: String,
     pub url: String,
     pub visited_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FocusBrowserResult {
+    pub browser_id: String,
+    pub tab_id: Option<String>,
+    pub target_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1031,6 +1044,58 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
         self.effects.navigate(&browser, &tab, url)?;
         self.record_navigation(session_id, url, activity_at_ms)
+    }
+
+    pub fn focus_browser(
+        &mut self,
+        browser_id: &str,
+        target_id: Option<&str>,
+        activity_at_ms: u64,
+    ) -> Result<FocusBrowserResult, String> {
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .cloned()
+            .ok_or_else(|| format!("browser_session_browser_not_found:{browser_id}"))?;
+        if !self.effects.browser_is_live(&browser)? {
+            return Err(format!("browser_session_browser_not_live:{browser_id}"));
+        }
+        let tab = match target_id {
+            Some(target_id) => Some(
+                self.state
+                    .tabs
+                    .values()
+                    .find(|tab| tab.browser_id == browser_id && tab.target_id == target_id)
+                    .cloned()
+                    .ok_or_else(|| format!("browser_session_target_not_found:{target_id}"))?,
+            ),
+            None => self
+                .state
+                .tabs
+                .values()
+                .filter(|tab| tab.browser_id == browser_id)
+                .max_by_key(|tab| (tab.last_activity_at_ms, tab.created_at_ms))
+                .cloned(),
+        };
+        self.effects.focus_browser(&browser, tab.as_ref())?;
+        if let Some(tab) = tab.as_ref() {
+            if let Some(current) = self.state.tabs.get_mut(&tab.id) {
+                current.last_activity_at_ms = activity_at_ms;
+            }
+            if let Some(session) = self.state.sessions.get_mut(&tab.session_id) {
+                session.current_tab_id = Some(tab.id.clone());
+                session.last_activity_at_ms = activity_at_ms;
+                session.expires_at_ms = activity_at_ms
+                    .checked_add(self.config.session_idle_timeout_ms)
+                    .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+            }
+        }
+        Ok(FocusBrowserResult {
+            browser_id: browser.id,
+            tab_id: tab.as_ref().map(|tab| tab.id.clone()),
+            target_id: tab.map(|tab| tab.target_id),
+        })
     }
 
     pub fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {

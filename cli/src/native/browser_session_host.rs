@@ -222,6 +222,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(result)
     }
 
+    pub(crate) fn focus_browser(
+        &mut self,
+        browser_id: &str,
+        target_id: Option<&str>,
+        activity_at_ms: u64,
+    ) -> Result<agent_browser_service_model::FocusBrowserResult, String> {
+        let result = self
+            .manager()
+            .focus_browser(browser_id, target_id, activity_at_ms)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
     pub(crate) fn new_tab(
         &mut self,
         session_id: &str,
@@ -362,6 +375,18 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "closed": true,
                     "closedTabId": closed.closed_tab_id,
                     "currentTabId": closed.current_tab_id,
+                }))
+            }
+            "browser_session_focus" => {
+                let browser_id = required_string(command, "browserId")?;
+                let focused =
+                    self.focus_browser(browser_id, optional_string(command, "targetId"), now_ms)?;
+                Ok(serde_json::json!({
+                    "browserId": focused.browser_id,
+                    "tabId": focused.tab_id,
+                    "targetId": focused.target_id,
+                    "focused": true,
+                    "maximized": true,
                 }))
             }
             "browser_session_reap" => {
@@ -544,6 +569,14 @@ mod tests {
         ) -> Result<(), String> {
             Ok(())
         }
+
+        fn focus_browser(
+            &mut self,
+            _browser: &ManagedBrowserInstance,
+            _tab: Option<&ManagedBrowserTab>,
+        ) -> Result<(), String> {
+            Ok(())
+        }
     }
 
     struct TempDirectory(PathBuf);
@@ -628,6 +661,18 @@ mod tests {
         assert_eq!(new_tab["data"]["url"], "https://example.test/next");
         assert_eq!(restarted.state().tabs.len(), 1);
         assert_eq!(restarted.state().navigation_history.len(), 1);
+
+        let focus = restarted.handle_command(&serde_json::json!({
+            "id": "focus-alice-browser",
+            "action": "browser_session_focus",
+            "browserId": resumed.browser_id,
+            "targetId": "target-1",
+            "activityAtMs": 2_600
+        }));
+        assert_eq!(focus["success"], true);
+        assert_eq!(focus["data"]["focused"], true);
+        assert_eq!(focus["data"]["maximized"], true);
+        assert_eq!(focus["data"]["targetId"], "target-1");
 
         let close_tab = restarted.handle_command(&serde_json::json!({
             "id": "close-alice-tab",
