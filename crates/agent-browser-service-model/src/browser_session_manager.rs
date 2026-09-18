@@ -49,6 +49,13 @@ pub trait BrowserSessionEffects {
         tab: &ManagedBrowserTab,
     ) -> Result<(), String>;
 
+    fn navigate(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        url: &str,
+    ) -> Result<(), String>;
+
     fn allocate_disposable_profile(
         &mut self,
         policy: &BrowserDisposableProfilePolicy,
@@ -957,6 +964,35 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         stored_session.last_activity_at_ms = visited_at_ms;
         stored_session.expires_at_ms = expires_at_ms;
         Ok(record)
+    }
+
+    pub fn navigate(
+        &mut self,
+        session_id: &str,
+        url: &str,
+        activity_at_ms: u64,
+    ) -> Result<BrowserNavigationRecord, String> {
+        let acquisition = self.tab_for_navigation(session_id, activity_at_ms)?;
+        let session = self
+            .state
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_browser_missing".to_string())?;
+        let tab = self
+            .state
+            .tabs
+            .get(&acquisition.tab_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+        self.effects.navigate(&browser, &tab, url)?;
+        self.record_navigation(session_id, url, activity_at_ms)
     }
 
     pub fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {

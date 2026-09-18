@@ -212,6 +212,9 @@ macro_rules! race_renderer_crash {
 }
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
+    if action.starts_with("browser_session_") {
+        return true;
+    }
     matches!(
         action,
         "" | "launch"

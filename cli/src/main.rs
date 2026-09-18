@@ -725,6 +725,61 @@ fn attribute_native_request_identity(command: &mut serde_json::Value, session: &
     }
 }
 
+fn apply_browser_session_manager_route(command: &mut serde_json::Value, flags: &Flags) -> bool {
+    let Some(action) = command.get("action").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    if !matches!(action, "navigate" | "close")
+        || !flags.cli_session
+        || !crate::runtime_host::admission_enabled()
+    {
+        return false;
+    }
+    if action == "navigate"
+        && (flags.cdp.is_some()
+            || flags.provider.is_some()
+            || flags.auto_connect
+            || !flags.extensions.is_empty()
+            || flags.state.is_some()
+            || flags.proxy.is_some()
+            || flags.args.is_some()
+            || flags.headers.is_some()
+            || flags.allowed_domains.is_some()
+            || flags.action_policy.is_some()
+            || flags.confirm_actions.is_some()
+            || flags.headed
+            || flags.browser_host.is_some()
+            || flags.view_stream_provider.is_some()
+            || flags.control_input_provider.is_some()
+            || flags.display_isolation.is_some()
+            || flags.ignore_https_errors
+            || flags.allow_file_access
+            || flags
+                .engine
+                .as_deref()
+                .is_some_and(|engine| engine != "chrome"))
+    {
+        return false;
+    }
+    let explicit_profile = flags.cli_profile || flags.cli_runtime_profile;
+    let profile_id = explicit_profile
+        .then_some(flags.runtime_profile.as_deref())
+        .flatten();
+    if explicit_profile && profile_id.is_none() {
+        return false;
+    }
+    command["action"] = json!(match action {
+        "navigate" => "browser_session_navigate",
+        "close" => "browser_session_close",
+        _ => unreachable!("action was validated above"),
+    });
+    command["sessionName"] = json!(&flags.session);
+    if let Some(profile_id) = profile_id {
+        command["profileId"] = json!(profile_id);
+    }
+    true
+}
+
 fn attribute_prestart_launch(
     launch: &mut serde_json::Value,
     command: &serde_json::Value,
@@ -2290,6 +2345,7 @@ fn main() {
     } {
         flags.session = session;
     }
+    apply_browser_session_manager_route(&mut cmd, &flags);
 
     // Handle --password-stdin for auth save
     if cmd.get("action").and_then(|v| v.as_str()) == Some("auth_save") {
@@ -4313,6 +4369,71 @@ mod tests {
             .as_deref(),
             Some("work")
         );
+    }
+
+    #[test]
+    fn explicit_named_session_navigation_routes_to_shared_browser_service() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "alice".to_string(),
+            "--runtime-profile".to_string(),
+            "work".to_string(),
+            "open".to_string(),
+            "https://example.test".to_string(),
+        ]);
+        let mut command = json!({
+            "action": "navigate",
+            "url": "https://example.test"
+        });
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert_eq!(command["action"], "browser_session_navigate");
+        assert_eq!(command["sessionName"], "alice");
+        assert_eq!(command["profileId"], "work");
+    }
+
+    #[test]
+    fn unprofiled_named_session_routes_to_disposable_policy() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "alice".to_string(),
+            "open".to_string(),
+            "https://example.test".to_string(),
+        ]);
+        let mut command = json!({
+            "action": "navigate",
+            "url": "https://example.test"
+        });
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert_eq!(command["action"], "browser_session_navigate");
+        assert!(command.get("profileId").is_none());
+    }
+
+    #[test]
+    fn explicit_named_session_close_routes_without_stopping_shared_daemon() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "alice".to_string(),
+            "--runtime-profile".to_string(),
+            "work".to_string(),
+            "close".to_string(),
+        ]);
+        let mut command = json!({ "action": "close" });
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert_eq!(command["action"], "browser_session_close");
+        assert_eq!(command["sessionName"], "alice");
+        assert_eq!(command["profileId"], "work");
     }
 
     #[test]

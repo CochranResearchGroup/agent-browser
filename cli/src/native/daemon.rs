@@ -408,6 +408,8 @@ struct RuntimeLane {
 #[derive(Clone)]
 struct RuntimeHostRouter {
     lanes: Arc<crate::runtime_host::RuntimeLaneRegistry<RuntimeLane>>,
+    browser_sessions:
+        Arc<std::sync::Mutex<Option<super::browser_session_host::DefaultBrowserSessionHost>>>,
     creation_lock: Arc<Mutex<()>>,
     socket_dir: PathBuf,
     service_reconcile_interval_ms: Option<u64>,
@@ -474,6 +476,7 @@ impl RuntimeHostRouter {
         )?;
         Ok(Self {
             lanes,
+            browser_sessions: Arc::new(std::sync::Mutex::new(None)),
             creation_lock: Arc::new(Mutex::new(())),
             socket_dir,
             service_reconcile_interval_ms: options.service_reconcile_interval_ms,
@@ -615,6 +618,37 @@ impl RuntimeHostRouter {
             if let Some(path) = lane.stream_file {
                 let _ = fs::remove_file(path);
             }
+        }
+        let browser_sessions = self.browser_sessions.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            if let Ok(mut host) = browser_sessions.lock() {
+                host.take();
+            }
+        })
+        .await;
+    }
+
+    async fn handle_browser_session_command(&self, command: Value) -> Value {
+        let browser_sessions = self.browser_sessions.clone();
+        match tokio::task::spawn_blocking(move || {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if host.is_none() {
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            host.as_mut()
+                .ok_or_else(|| "browser_session_host_missing".to_string())
+                .map(|host| host.handle_command(&command))
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => serde_json::json!({ "success": false, "error": error }),
+            Err(error) => serde_json::json!({
+                "success": false,
+                "error": format!("browser_session_host_join_failed:{error}"),
+            }),
         }
     }
 }
@@ -936,6 +970,25 @@ async fn handle_connection<S>(
                         continue;
                     }
                 };
+                let action = cmd
+                    .get("action")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned);
+                if action
+                    .as_deref()
+                    .is_some_and(|action| action.starts_with("browser_session_"))
+                {
+                    if let Some(ref tx) = idle_reset_tx {
+                        let _ = tx.try_send(());
+                    }
+                    let response = router.handle_browser_session_command(cmd).await;
+                    let mut serialized = serialize_daemon_response(response).await;
+                    serialized.push('\n');
+                    if writer.write_all(serialized.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
                 let lane = match router.lane(&lane_session, lane_config).await {
                     Ok(lane) => lane,
                     Err(error) => {
@@ -967,10 +1020,6 @@ async fn handle_connection<S>(
                     let _ = tx.try_send(());
                 }
 
-                let action = cmd
-                    .get("action")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned);
                 let exits_daemon = matches!(
                     action.as_deref(),
                     Some("close" | "runtime_handoff_finalize" | "runtime_handoff_rollback")

@@ -13,7 +13,7 @@ use agent_browser_service_model::{
 };
 use serde_json::Value;
 
-use super::browser::BrowserManager;
+use super::browser::{BrowserManager, WaitUntil};
 use super::cdp::chrome::LaunchOptions;
 
 #[derive(Debug, Clone, Default)]
@@ -44,6 +44,12 @@ pub(crate) trait BrowserRuntimeDriver {
         &mut self,
         browser: &ManagedBrowserInstance,
         tab: &ManagedBrowserTab,
+    ) -> Result<(), String>;
+    fn navigate(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        url: &str,
     ) -> Result<(), String>;
 }
 
@@ -95,6 +101,15 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         tab: &ManagedBrowserTab,
     ) -> Result<(), String> {
         self.runtime.close_tab(browser, tab)
+    }
+
+    fn navigate(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        url: &str,
+    ) -> Result<(), String> {
+        self.runtime.navigate(browser, tab, url)
     }
 
     fn allocate_disposable_profile(
@@ -183,6 +198,12 @@ enum BrowserRuntimeCommand {
     CloseTab {
         browser: ManagedBrowserInstance,
         tab: ManagedBrowserTab,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    Navigate {
+        browser: ManagedBrowserInstance,
+        tab: ManagedBrowserTab,
+        url: String,
         reply: mpsc::Sender<Result<(), String>>,
     },
     Shutdown,
@@ -321,6 +342,24 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
+
+    fn navigate(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        url: &str,
+    ) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::Navigate {
+                browser: browser.clone(),
+                tab: tab.clone(),
+                url: url.to_string(),
+                reply,
+            },
+        )
+    }
 }
 
 impl Drop for BrowserManagerRuntime {
@@ -451,6 +490,22 @@ fn run_browser_worker(
                 };
                 let _ = reply.send(result);
             }
+            BrowserRuntimeCommand::Navigate {
+                browser,
+                tab,
+                url,
+                reply,
+            } => {
+                let result = match browsers.get_mut(&browser.id) {
+                    Some(manager) => runtime.block_on(async {
+                        manager.tab_switch_target_id(&tab.target_id).await?;
+                        manager.navigate(&url, WaitUntil::Load).await?;
+                        Ok(())
+                    }),
+                    None => Err("browser_session_runtime_browser_missing".to_string()),
+                };
+                let _ = reply.send(result);
+            }
             BrowserRuntimeCommand::Shutdown => break,
         }
     }
@@ -519,6 +574,15 @@ mod tests {
             &mut self,
             _browser: &ManagedBrowserInstance,
             _tab: &ManagedBrowserTab,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn navigate(
+            &mut self,
+            _browser: &ManagedBrowserInstance,
+            _tab: &ManagedBrowserTab,
+            _url: &str,
         ) -> Result<(), String> {
             Ok(())
         }

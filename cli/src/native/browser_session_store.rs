@@ -104,6 +104,14 @@ impl BrowserSessionJsonStore {
             imported_legacy_profiles: true,
         })
     }
+
+    pub(crate) fn save_profile_catalog(
+        &self,
+        catalog: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        validate_catalog_schema(catalog)?;
+        write_private_json_atomic(&self.profile_catalog_path, catalog)
+    }
 }
 
 fn validate_catalog_schema(catalog: &BrowserProfileCatalog) -> Result<(), String> {

@@ -23,6 +23,7 @@ struct FixtureEffects {
     tab_closes: Vec<(String, String)>,
     disposable_allocations: Vec<String>,
     disposable_deletions: Vec<String>,
+    navigations: Vec<(String, String, String)>,
 }
 
 #[test]
@@ -178,6 +179,17 @@ impl BrowserSessionEffects for FixtureEffects {
     ) -> Result<(), String> {
         self.tab_closes
             .push((browser.id.clone(), tab.target_id.clone()));
+        Ok(())
+    }
+
+    fn navigate(
+        &mut self,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+        tab: &agent_browser_service_model::ManagedBrowserTab,
+        url: &str,
+    ) -> Result<(), String> {
+        self.navigations
+            .push((browser.id.clone(), tab.target_id.clone(), url.to_string()));
         Ok(())
     }
 
@@ -645,7 +657,7 @@ fn navigation_history_remains_queryable_after_session_close() {
         .tab_for_navigation(&alice.session_id, 2_000)
         .unwrap();
     manager
-        .record_navigation(&alice.session_id, "https://example.test/path", 3_000)
+        .navigate(&alice.session_id, "https://example.test/path", 3_000)
         .unwrap();
     manager
         .close_session(&alice.session_id, SessionEndReason::ExplicitClose, 4_000)
@@ -659,6 +671,14 @@ fn navigation_history_remains_queryable_after_session_close() {
     assert_eq!(navigation.tab_id, "tab-alice");
     assert_eq!(navigation.url, "https://example.test/path");
     assert_eq!(navigation.visited_at_ms, 3_000);
+    assert_eq!(
+        effects.navigations,
+        [(
+            alice.browser_id,
+            "target-alice".to_string(),
+            "https://example.test/path".to_string()
+        )]
+    );
 }
 
 #[test]
