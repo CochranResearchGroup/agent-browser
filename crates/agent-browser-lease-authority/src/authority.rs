@@ -2002,6 +2002,11 @@ impl LeaseAuthorityState {
         self.revision
     }
 
+    /// Number of claims that can currently authorize resource effects.
+    pub fn active_claim_count(&self) -> usize {
+        self.active_claims.len()
+    }
+
     /// Release every current resource claim after an explicit workstation cold
     /// shutdown has removed the corresponding local effects. Historical events
     /// and fencing high-water marks remain durable, so a later startup cannot
@@ -3675,6 +3680,7 @@ mod tests {
         second_request.idempotency_key = "acquire:other:tick-1".to_string();
         let second = authority.acquire(second_request).unwrap();
         let revision_before = authority.revision();
+        assert_eq!(authority.active_claim_count(), 2);
 
         assert_eq!(
             authority
@@ -3683,6 +3689,7 @@ mod tests {
             2
         );
         assert!(authority.active_claims.is_empty());
+        assert_eq!(authority.active_claim_count(), 0);
         assert_eq!(authority.revision(), revision_before + 2);
         for claim in [&first, &second] {
             assert!(authority.events.iter().any(|event| {

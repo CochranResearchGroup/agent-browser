@@ -2040,6 +2040,12 @@ fn main() {
         return;
     }
 
+    if clean.first().map(String::as_str) == Some("shutdown") {
+        exit(workstation_shutdown::run_workstation_shutdown_command(
+            flags.json,
+        ));
+    }
+
     // Candidate inspection is read-only and must never launch a browser daemon.
     if clean.first().map(|s| s.as_str()) == Some("candidate") {
         candidate::run_candidate_command(&clean, flags.json);
