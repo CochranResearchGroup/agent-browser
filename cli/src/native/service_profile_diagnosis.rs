@@ -69,7 +69,10 @@ pub(crate) fn diagnose_service_profile(
         .get(profile_id)
         .ok_or_else(|| "service_profile_diagnosis_profile_missing".to_string())?;
     let profile_identity_digest = super::recovery::recovery_profile_identity_digest(profile)?;
-    let owner = state.runtime_owner_registry.owner(&profile_identity_digest);
+    let runtime_authority = state.profile_runtime_authority(&profile_identity_digest);
+    let owner = runtime_authority.owner;
+    let binding = runtime_authority.principal_binding;
+    let runtime_owner_registry_revision = runtime_authority.registry_revision;
     let logical_browser_id = owner.map(|owner| owner.browser_id.as_str());
     let browser = logical_browser_id.and_then(|browser_id| state.browsers.get(browser_id));
     let process_identity =
@@ -116,10 +119,6 @@ pub(crate) fn diagnose_service_profile(
     target_ids.sort();
     target_ids.dedup();
 
-    let binding = state
-        .runtime_owner_registry
-        .principal_bindings
-        .get(&profile_identity_digest);
     let leases = profile_leases_for_state(state, observed_at)
         .into_iter()
         .filter(|lease| lease.profile_id == profile_id)
@@ -304,8 +303,8 @@ pub(crate) fn diagnose_service_profile(
     let diagnosis_id = digest_json(&(
         PROFILE_DIAGNOSIS_SCHEMA_V1,
         profile_id,
-        state.state_revision,
-        state.runtime_owner_registry.revision,
+        state.state_revision(),
+        runtime_owner_registry_revision,
         observed_at,
         correlation_id,
     ))?;
@@ -317,7 +316,7 @@ pub(crate) fn diagnose_service_profile(
         state: diagnosis_state,
         profile: json!({
             "id": profile.id,
-            "stateRevision": state.state_revision,
+            "stateRevision": state.state_revision(),
             "policyRevision": profile.access_policy.as_ref().map(|policy| policy.revision),
             "userDataPathDigest": profile_identity_digest,
             "allocation": profile.allocation,
@@ -381,8 +380,8 @@ pub(crate) fn diagnose_service_profile(
         trace: json!({
             "correlationId": correlation_id,
             "sourceComponent": "service_profile_diagnosis.rs::diagnose_service_profile",
-            "serviceStateRevision": state.state_revision,
-            "runtimeOwnerRegistryRevision": state.runtime_owner_registry.revision,
+            "serviceStateRevision": state.state_revision(),
+            "runtimeOwnerRegistryRevision": runtime_owner_registry_revision,
             "buildIdentity": Value::Null,
             "buildIdentityUnavailableReason": "producer_build_identity_not_exposed_to_profile_diagnosis",
         }),

@@ -28,15 +28,11 @@ use super::service_model::{
     ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
     ProfileSeedingMode, ServiceState,
 };
-use super::service_principal::{
-    authenticate_profile_capability, AuthenticatedServicePrincipal, ServicePrincipalProvenance,
-};
+use super::service_principal::{AuthenticatedServicePrincipal, ServicePrincipalProvenance};
 use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
-use crate::runtime_owner_transfer::{
-    CleanupObligationState, ProfileOwnerState, RuntimeLaneLifecycleState,
-};
+use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
 #[cfg(target_os = "linux")]
 use agent_browser_lease_authority::{
     acquire_protected_ephemeral_profile_claim, authorize_protected_browser_launch,
@@ -50,16 +46,20 @@ use agent_browser_lease_authority::{
     AcquireLeaseClaimRequest, LeaseClaimAcquisitionOutcome, LeaseClaimMode,
     LeaseEffectAuthorization, LeaseResourceKey,
 };
+pub(crate) use agent_browser_service_model::{
+    ProfileAcquisitionState, ProfileResetReceipt, ProfileResetScope, RecoveryReceipt,
+    PROFILE_RECOVERY_RECEIPT_SCHEMA_V1, PROFILE_RESET_RECEIPT_SCHEMA_V1,
+};
+use agent_browser_service_model::{
+    ProfileReceiptReplayError, ProfileRecoveryReceiptIdentity, ProfileResetReceiptIdentity,
+};
 
 pub(crate) const PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1: &str =
     "agent-browser.profile-acquisition-outcome.v1";
 pub(crate) const PROFILE_RECOVERY_PLAN_SCHEMA_V1: &str = "agent-browser.profile-recovery-plan.v1";
-pub(crate) const PROFILE_RECOVERY_RECEIPT_SCHEMA_V1: &str =
-    "agent-browser.profile-recovery-receipt.v1";
 pub(crate) const PROFILE_MITIGATION_ACTION_SCHEMA_V1: &str =
     "agent-browser.profile-mitigation-action.v1";
 pub(crate) const PROFILE_RESET_PLAN_SCHEMA_V1: &str = "agent-browser.profile-reset-plan.v1";
-pub(crate) const PROFILE_RESET_RECEIPT_SCHEMA_V1: &str = "agent-browser.profile-reset-receipt.v1";
 
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,14 +120,6 @@ pub(crate) fn recovery_profile_identity_digest(profile: &BrowserProfile) -> Resu
         .as_deref()
         .ok_or_else(|| "profile_recovery_identity_unavailable".to_string())?;
     crate::runtime_profile::resolved_profile_identity_digest(profile_hint, &profile.id)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ProfileAcquisitionState {
-    Acquired,
-    RecoveryAvailable,
-    Blocked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -261,34 +253,6 @@ pub(crate) struct RecoveryPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RecoveryReceipt {
-    pub(crate) schema_version: String,
-    pub(crate) recovery_id: String,
-    pub(crate) plan_id: String,
-    pub(crate) principal_id: String,
-    pub(crate) profile_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) producer_build_identity: Option<Value>,
-    pub(crate) terminal_result: String,
-    pub(crate) precondition_comparison: String,
-    pub(crate) attempted_operation_ids: Vec<String>,
-    pub(crate) compensation_result: String,
-    pub(crate) final_state_revision: u64,
-    pub(crate) acquisition_retry_state: ProfileAcquisitionState,
-    pub(crate) browser_id: String,
-    pub(crate) daemon_session_route: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ProfileResetScope {
-    Runtime,
-    Authentication,
-    ProfileData,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ProfileResetPlan {
     pub(crate) schema_version: String,
     pub(crate) plan_id: String,
@@ -315,26 +279,6 @@ pub(crate) struct ProfileResetPlan {
     pub(crate) proposed_effects: Vec<String>,
     pub(crate) preserved_data: Vec<String>,
     pub(crate) integrity_seal: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfileResetReceipt {
-    pub(crate) schema_version: String,
-    pub(crate) reset_id: String,
-    pub(crate) plan_id: String,
-    pub(crate) principal_id: String,
-    pub(crate) profile_id: String,
-    pub(crate) producer_build_identity: Value,
-    pub(crate) scope: ProfileResetScope,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) target_service_id: Option<String>,
-    pub(crate) terminal_result: String,
-    pub(crate) applied_at: String,
-    pub(crate) final_state_revision: u64,
-    pub(crate) browser_cookies_erased: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) seeding_handoff: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -438,12 +382,9 @@ pub(crate) fn profile_acquisition_daemon_route(command: &Value) -> Result<String
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let authority = authenticate_profile_capability(
-            &snapshot.service_principals,
-            &raw_capability,
-            Some(profile_id),
-        )
-        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+        let authority = snapshot
+            .authenticate_profile_capability(&raw_capability, Some(profile_id))
+            .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
         let profile = snapshot
             .profiles
             .get(&authority.profile_id)
@@ -505,12 +446,9 @@ pub(crate) fn profile_recovery_apply_daemon_route(command: &Value) -> Result<Str
     verify_plan_integrity(&plan, raw_capability.as_bytes())?;
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(&plan.identities.profile_id),
-    )
-    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let authority = snapshot
+        .authenticate_profile_capability(&raw_capability, Some(&plan.identities.profile_id))
+        .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
     if authority.principal_id != plan.identities.principal_id
         || authority.principal_id != plan.original_intent.principal_id
     {
@@ -549,7 +487,7 @@ fn bind_acquired_profile_principal<R: ServiceStateRepository>(
         };
         let existing_binding = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .get(&profile_identity_digest);
         let same_capability_authority = existing_binding.is_some_and(|binding| {
             binding.principal_id == principal_binding.principal_id
@@ -865,7 +803,7 @@ pub(crate) fn plan_profile_acquisition(
     };
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&owner.browser_id);
     let Some(lifecycle) = lifecycle else {
         return Ok(blocked_outcome_with_recourse(
@@ -886,7 +824,7 @@ pub(crate) fn plan_profile_acquisition(
         .is_some();
     let binding = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .get(&profile_identity_digest);
 
     if process_proven && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready {
@@ -1045,12 +983,9 @@ fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
 ) -> Result<LeaseClaimAcquisitionOutcome, String> {
     let boot_epoch = crate::process_identity::current_boot_epoch();
     repository.mutate(|state| {
-        let authority = authenticate_profile_capability(
-            &state.service_principals,
-            raw_capability,
-            Some(&intent.profile_id),
-        )
-        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+        let authority = state
+            .authenticate_profile_capability(raw_capability, Some(&intent.profile_id))
+            .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
         if authority.principal_id != intent.principal_id {
             return Err("profile_acquisition_principal_mismatch".to_string());
         }
@@ -1122,12 +1057,9 @@ fn replay_profile_claim_for_intent<R: ServiceStateRepository>(
     idempotency_key: &str,
 ) -> Result<Option<LeaseClaimAcquisitionOutcome>, String> {
     let state = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &state.service_principals,
-        raw_capability,
-        Some(&intent.profile_id),
-    )
-    .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+    let authority = state
+        .authenticate_profile_capability(raw_capability, Some(&intent.profile_id))
+        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
     if authority.principal_id != intent.principal_id {
         return Err("profile_acquisition_principal_mismatch".to_string());
     }
@@ -1455,12 +1387,9 @@ async fn acquire_profile_command(
     let snapshot = repository.load_snapshot()?;
     let profile_id = required_command_string(command, "profileId")?;
     let raw_capability = profile_capability_from_command(command)?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(profile_id),
-    )
-    .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+    let authority = snapshot
+        .authenticate_profile_capability(&raw_capability, Some(profile_id))
+        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
     let retry_authority = authority.clone();
     let intent = ProfileAcquisitionIntent {
         principal_id: authority.principal_id,
@@ -1735,12 +1664,9 @@ fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
     let state = load_service_state_for_maintenance(command)?;
     let profile_id = required_command_string(command, "profileId")?;
     let raw_capability = profile_capability_from_command(command)?;
-    let authority = authenticate_profile_capability(
-        &state.service_principals,
-        &raw_capability,
-        Some(profile_id),
-    )
-    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let authority = state
+        .authenticate_profile_capability(&raw_capability, Some(profile_id))
+        .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
     let intent = ProfileAcquisitionIntent {
         principal_id: authority.principal_id,
         profile_id: authority.profile_id,
@@ -1782,7 +1708,7 @@ fn status_profile_recovery_command(command: &Value) -> Result<Value, String> {
     let raw_capability = profile_capability_from_command(command)?;
     let repository = LockedServiceStateRepository::default_json()?;
     let state = repository.load_snapshot()?;
-    let receipt = state.profile_recovery_receipts.get(recovery_id).cloned();
+    let receipt = state.profile_recovery_receipt(recovery_id).cloned();
     let Some(receipt) = receipt else {
         return Ok(json!({
             "recoveryId": recovery_id,
@@ -1790,12 +1716,9 @@ fn status_profile_recovery_command(command: &Value) -> Result<Value, String> {
             "receipt": null,
         }));
     };
-    let authority = authenticate_profile_capability(
-        &state.service_principals,
-        &raw_capability,
-        Some(&receipt.profile_id),
-    )
-    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let authority = state
+        .authenticate_profile_capability(&raw_capability, Some(&receipt.profile_id))
+        .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
     if authority.principal_id != receipt.principal_id {
         return Err("profile_recovery_principal_mismatch".to_string());
     }
@@ -1839,12 +1762,9 @@ async fn apply_profile_recovery_command(
     let raw_capability = profile_capability_from_command(command)?;
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(&plan.identities.profile_id),
-    )
-    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let authority = snapshot
+        .authenticate_profile_capability(&raw_capability, Some(&plan.identities.profile_id))
+        .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
     if authority.principal_id != plan.identities.principal_id
         || authority.principal_id != plan.original_intent.principal_id
     {
@@ -1908,12 +1828,9 @@ fn plan_profile_reset_command(command: &Value) -> Result<Value, String> {
     let state = load_service_state_for_maintenance(command)?;
     let profile_id = required_command_string(command, "profileId")?;
     let raw_capability = profile_capability_from_command(command)?;
-    let authority = authenticate_profile_capability(
-        &state.service_principals,
-        &raw_capability,
-        Some(profile_id),
-    )
-    .map_err(|error| format!("profile_reset_principal_{}", error.code.as_str()))?;
+    let authority = state
+        .authenticate_profile_capability(&raw_capability, Some(profile_id))
+        .map_err(|error| format!("profile_reset_principal_{}", error.code.as_str()))?;
     let scope = profile_reset_scope(command)?;
     if scope == ProfileResetScope::ProfileData {
         return Ok(json!({
@@ -1958,12 +1875,9 @@ fn apply_profile_reset_command(command: &Value) -> Result<Value, String> {
     let raw_capability = profile_capability_from_command(command)?;
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(&plan.profile_id),
-    )
-    .map_err(|error| format!("profile_reset_principal_{}", error.code.as_str()))?;
+    let authority = snapshot
+        .authenticate_profile_capability(&raw_capability, Some(&plan.profile_id))
+        .map_err(|error| format!("profile_reset_principal_{}", error.code.as_str()))?;
     if authority.principal_id != plan.principal_id {
         return Err("profile_reset_principal_mismatch".to_string());
     }
@@ -2088,8 +2002,8 @@ fn plan_profile_reset(
     let plan_id = digest_json(&(
         PROFILE_RESET_PLAN_SCHEMA_V1,
         &reset_id,
-        state.state_revision,
-        state.runtime_owner_registry.revision,
+        state.state_revision(),
+        state.runtime_owner_registry.revision(),
         &authority.principal_id,
         &authority.profile_id,
         &profile_identity_digest,
@@ -2109,8 +2023,8 @@ fn plan_profile_reset(
         created_at: created_at.to_string(),
         expires_at: expires_at.to_string(),
         idempotency_key_digest,
-        service_state_revision: state.state_revision,
-        runtime_owner_revision: state.runtime_owner_registry.revision,
+        service_state_revision: state.state_revision(),
+        runtime_owner_revision: state.runtime_owner_registry.revision(),
         producer_build_identity,
         principal_id: authority.principal_id.clone(),
         profile_id: authority.profile_id.clone(),
@@ -2141,7 +2055,7 @@ fn validate_runtime_reset_owner(
 ) -> Result<(), String> {
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&owner.browser_id)
         .ok_or_else(|| "profile_reset_runtime_lifecycle_missing".to_string())?;
     let browser_inert = state
@@ -2182,7 +2096,7 @@ fn runtime_reset_evidence_digest(
         owner,
         state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(&owner.browser_id),
         state.browsers.get(&owner.browser_id),
         state.browser_process_identities.get(&owner.browser_id),
@@ -2199,13 +2113,19 @@ fn apply_profile_reset(
 ) -> Result<(ProfileResetReceipt, bool), String> {
     verify_profile_reset_plan(plan, seal_key)?;
     let snapshot = repository.load_snapshot()?;
-    if let Some(receipt) = snapshot.profile_reset_receipts.get(&plan.reset_id) {
-        return profile_reset_replay(plan, receipt);
+    if let Some(receipt) = snapshot
+        .replay_profile_reset(profile_reset_receipt_identity(plan))
+        .map_err(profile_reset_receipt_replay_error)?
+    {
+        return Ok((receipt, true));
     }
     validate_profile_reset_preconditions(&snapshot, plan, now)?;
     repository.mutate(|state| {
-        if let Some(receipt) = state.profile_reset_receipts.get(&plan.reset_id) {
-            return profile_reset_replay(plan, receipt);
+        if let Some(receipt) = state
+            .replay_profile_reset(profile_reset_receipt_identity(plan))
+            .map_err(profile_reset_receipt_replay_error)?
+        {
+            return Ok((receipt, true));
         }
         validate_profile_reset_preconditions(state, plan, now)?;
         let seeding_handoff = match plan.scope {
@@ -2231,13 +2151,11 @@ fn apply_profile_reset(
             target_service_id: plan.target_service_id.clone(),
             terminal_result: "applied".to_string(),
             applied_at: now.to_string(),
-            final_state_revision: state.state_revision,
+            final_state_revision: state.state_revision(),
             browser_cookies_erased: false,
             seeding_handoff,
         };
-        state
-            .profile_reset_receipts
-            .insert(plan.reset_id.clone(), receipt.clone());
+        state.record_profile_reset(receipt.clone());
         Ok((receipt, false))
     })
 }
@@ -2254,7 +2172,7 @@ fn validate_profile_reset_preconditions(
     if now >= expires_at {
         return Err("profile_reset_plan_expired".to_string());
     }
-    if state.runtime_owner_registry.revision != plan.runtime_owner_revision {
+    if state.runtime_owner_registry.revision() != plan.runtime_owner_revision {
         return Err("profile_reset_plan_stale".to_string());
     }
     let profile = state
@@ -2318,11 +2236,11 @@ fn apply_runtime_reset_state(
         .ok_or_else(|| "profile_reset_plan_stale".to_string())?;
     if !state
         .runtime_owner_registry
-        .owners
+        .owners()
         .contains_key(&plan.profile_identity_digest)
         || !state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key(browser_id)
     {
         return Err("profile_reset_plan_stale".to_string());
@@ -2350,29 +2268,9 @@ fn apply_runtime_reset_state(
     });
     state.browsers.remove(browser_id);
     state.browser_process_identities.remove(browser_id);
-    let owner = state
+    state
         .runtime_owner_registry
-        .owners
-        .get_mut(&plan.profile_identity_digest)
-        .expect("runtime reset owner was validated before effects");
-    owner.state = ProfileOwnerState::Orphaned;
-    let lifecycle = state
-        .runtime_owner_registry
-        .lifecycle_records
-        .get_mut(browser_id)
-        .expect("runtime reset lifecycle was validated before effects");
-    lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Terminal;
-    lifecycle.cleanup_obligation_state = CleanupObligationState::Satisfied;
-    if !lifecycle
-        .terminal_evidence
-        .iter()
-        .any(|evidence| evidence == "profile_runtime_reset_applied")
-    {
-        lifecycle
-            .terminal_evidence
-            .push("profile_runtime_reset_applied".to_string());
-    }
-    state.runtime_owner_registry.revision = state.runtime_owner_registry.revision.saturating_add(1);
+        .apply_runtime_reset_terminalization(&plan.profile_identity_digest, browser_id);
     Ok(())
 }
 
@@ -2504,22 +2402,16 @@ fn seal_profile_reset_plan(plan: &ProfileResetPlan, seal_key: &[u8]) -> Result<S
     Ok(format!("sha256:{:x}", hasher.finalize()))
 }
 
-fn profile_reset_replay(
-    plan: &ProfileResetPlan,
-    receipt: &ProfileResetReceipt,
-) -> Result<(ProfileResetReceipt, bool), String> {
-    if receipt.plan_id != plan.plan_id
-        || receipt.reset_id != plan.reset_id
-        || receipt.principal_id != plan.principal_id
-        || receipt.profile_id != plan.profile_id
-        || receipt.producer_build_identity != plan.producer_build_identity
-        || receipt.scope != plan.scope
-        || receipt.target_service_id != plan.target_service_id
-        || receipt.terminal_result != "applied"
-    {
-        return Err("profile_reset_receipt_conflict".to_string());
+fn profile_reset_receipt_identity(plan: &ProfileResetPlan) -> ProfileResetReceiptIdentity<'_> {
+    ProfileResetReceiptIdentity {
+        reset_id: &plan.reset_id,
+        plan_id: &plan.plan_id,
+        principal_id: &plan.principal_id,
+        profile_id: &plan.profile_id,
+        producer_build_identity: &plan.producer_build_identity,
+        scope: plan.scope,
+        target_service_id: plan.target_service_id.as_deref(),
     }
-    Ok((receipt.clone(), true))
 }
 
 fn profile_reset_plan_from_command(command: &Value) -> Result<ProfileResetPlan, String> {
@@ -2668,7 +2560,7 @@ fn plan_principal_reconciliation(
         schema_version: PROFILE_MITIGATION_ACTION_SCHEMA_V1.to_string(),
         action_id: digest_json(&(
             "reconcile_exact_principal_profile_identity",
-            state.runtime_owner_registry.revision,
+            state.runtime_owner_registry.revision(),
             &identities,
         ))?,
         action_type: MitigationActionType::ReconcileExactPrincipalProfileIdentity,
@@ -2698,8 +2590,8 @@ fn plan_principal_reconciliation(
     let plan_id = digest_json(&(
         PROFILE_RECOVERY_PLAN_SCHEMA_V1,
         &recovery_id,
-        state.state_revision,
-        state.runtime_owner_registry.revision,
+        state.state_revision(),
+        state.runtime_owner_registry.revision(),
         &identities,
         &blocker,
         &action,
@@ -2715,8 +2607,8 @@ fn plan_principal_reconciliation(
         created_at: created_at.to_string(),
         expires_at: expires_at.to_string(),
         idempotency_key_digest,
-        service_state_revision: state.state_revision,
-        runtime_owner_revision: state.runtime_owner_registry.revision,
+        service_state_revision: state.state_revision(),
+        runtime_owner_revision: state.runtime_owner_registry.revision(),
         producer_build_identity,
         identities,
         dominant_blocker: blocker.clone(),
@@ -2761,7 +2653,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         .ok_or_else(|| "profile_recovery_owner_missing".to_string())?;
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&owner.browser_id)
         .ok_or_else(|| "profile_recovery_lifecycle_missing".to_string())?;
     let active_profile_lease_session_ids =
@@ -2867,7 +2759,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         schema_version: PROFILE_MITIGATION_ACTION_SCHEMA_V1.to_string(),
         action_id: digest_json(&(
             action_name,
-            state.runtime_owner_registry.revision,
+            state.runtime_owner_registry.revision(),
             &identities,
         ))?,
         action_type,
@@ -2904,8 +2796,8 @@ pub(crate) fn plan_terminal_owner_recovery(
     let plan_id = digest_json(&(
         PROFILE_RECOVERY_PLAN_SCHEMA_V1,
         &recovery_id,
-        state.state_revision,
-        state.runtime_owner_registry.revision,
+        state.state_revision(),
+        state.runtime_owner_registry.revision(),
         &identities,
         &blocker,
         &action,
@@ -2921,8 +2813,8 @@ pub(crate) fn plan_terminal_owner_recovery(
         created_at: created_at.to_string(),
         expires_at: expires_at.to_string(),
         idempotency_key_digest,
-        service_state_revision: state.state_revision,
-        runtime_owner_revision: state.runtime_owner_registry.revision,
+        service_state_revision: state.state_revision(),
+        runtime_owner_revision: state.runtime_owner_registry.revision(),
         producer_build_identity,
         identities,
         dominant_blocker: blocker.clone(),
@@ -2959,15 +2851,21 @@ where
 {
     verify_plan_integrity(plan, seal_key)?;
     let snapshot = repository.load_snapshot()?;
-    if let Some(receipt) = snapshot.profile_recovery_receipts.get(&plan.recovery_id) {
-        return replay_outcome(plan, receipt);
+    if let Some(receipt) = snapshot
+        .replay_profile_recovery(profile_recovery_receipt_identity(plan))
+        .map_err(profile_recovery_receipt_replay_error)?
+    {
+        return Ok(replay_outcome(receipt));
     }
     validate_plan_preconditions(&snapshot, plan, now)?;
 
     let acquired = retry_acquisition(plan.original_intent.clone()).await?;
     repository.mutate(|state| {
-        if let Some(receipt) = state.profile_recovery_receipts.get(&plan.recovery_id) {
-            return replay_outcome(plan, receipt);
+        if let Some(receipt) = state
+            .replay_profile_recovery(profile_recovery_receipt_identity(plan))
+            .map_err(profile_recovery_receipt_replay_error)?
+        {
+            return Ok(replay_outcome(receipt));
         }
         let owner = state
             .runtime_owner_registry
@@ -2980,12 +2878,12 @@ where
             .ok_or_else(|| "profile_recovery_owner_generation_exhausted".to_string())?;
         let lifecycle = state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(&owner.browser_id)
             .ok_or_else(|| "profile_recovery_postcondition_lifecycle_missing".to_string())?;
         let principal_binding = state
             .runtime_owner_registry
-            .principal_bindings
+            .principal_bindings()
             .get(&plan.identities.profile_identity_digest);
         if owner.owner_generation != expected_generation
             || owner.browser_id != acquired.browser_id
@@ -3025,14 +2923,12 @@ where
                 .map(|action| action.action_id.clone())
                 .collect(),
             compensation_result: "not_required".to_string(),
-            final_state_revision: state.runtime_owner_registry.revision,
+            final_state_revision: state.runtime_owner_registry.revision(),
             acquisition_retry_state: ProfileAcquisitionState::Acquired,
             browser_id: acquired.browser_id.clone(),
             daemon_session_route: acquired.daemon_session_route.clone(),
         };
-        state
-            .profile_recovery_receipts
-            .insert(plan.recovery_id.clone(), receipt.clone());
+        state.record_profile_recovery(receipt.clone());
         Ok(RecoveryApplyOutcome {
             acquisition: acquired_outcome(&receipt),
             receipt,
@@ -3118,7 +3014,7 @@ fn validate_plan_preconditions(
     // between a plan response and its subsequent apply request. The recovery
     // authority is the exact profile graph below plus the independently
     // revisioned runtime-owner registry, not unrelated control-plane history.
-    if state.runtime_owner_registry.revision != plan.runtime_owner_revision {
+    if state.runtime_owner_registry.revision() != plan.runtime_owner_revision {
         return Err("profile_recovery_plan_stale".to_string());
     }
     let profile = state
@@ -3133,7 +3029,7 @@ fn validate_plan_preconditions(
         .ok_or_else(|| "profile_recovery_plan_stale".to_string())?;
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&plan.identities.durable_browser_id)
         .ok_or_else(|| "profile_recovery_plan_stale".to_string())?;
     let active_profile_lease_session_ids = active_conflicting_profile_lease_session_ids(
@@ -3316,24 +3212,46 @@ fn seal_recovery_plan(plan: &RecoveryPlan, seal_key: &[u8]) -> Result<String, St
     Ok(format!("sha256:{:x}", hasher.finalize()))
 }
 
-fn replay_outcome(
-    plan: &RecoveryPlan,
-    receipt: &RecoveryReceipt,
-) -> Result<RecoveryApplyOutcome, String> {
-    if receipt.plan_id != plan.plan_id
-        || receipt.recovery_id != plan.recovery_id
-        || receipt.principal_id != plan.identities.principal_id
-        || receipt.profile_id != plan.identities.profile_id
-        || receipt.producer_build_identity.as_ref() != Some(&plan.producer_build_identity)
-        || receipt.terminal_result != "applied"
-    {
-        return Err("profile_recovery_receipt_conflict".to_string());
+fn profile_recovery_receipt_identity(plan: &RecoveryPlan) -> ProfileRecoveryReceiptIdentity<'_> {
+    ProfileRecoveryReceiptIdentity {
+        recovery_id: &plan.recovery_id,
+        plan_id: &plan.plan_id,
+        principal_id: &plan.identities.principal_id,
+        profile_id: &plan.identities.profile_id,
+        producer_build_identity: &plan.producer_build_identity,
     }
-    Ok(RecoveryApplyOutcome {
-        acquisition: acquired_outcome(receipt),
-        receipt: receipt.clone(),
+}
+
+fn profile_recovery_receipt_replay_error(error: ProfileReceiptReplayError) -> String {
+    match error {
+        ProfileReceiptReplayError::RecoveryReceiptConflict => {
+            "profile_recovery_receipt_conflict".to_string()
+        }
+        ProfileReceiptReplayError::LeaseAuthorityMismatch
+        | ProfileReceiptReplayError::ResetReceiptConflict => {
+            unreachable!("recovery replay returned an unrelated receipt error")
+        }
+    }
+}
+
+fn profile_reset_receipt_replay_error(error: ProfileReceiptReplayError) -> String {
+    match error {
+        ProfileReceiptReplayError::ResetReceiptConflict => {
+            "profile_reset_receipt_conflict".to_string()
+        }
+        ProfileReceiptReplayError::LeaseAuthorityMismatch
+        | ProfileReceiptReplayError::RecoveryReceiptConflict => {
+            unreachable!("reset replay returned an unrelated receipt error")
+        }
+    }
+}
+
+fn replay_outcome(receipt: RecoveryReceipt) -> RecoveryApplyOutcome {
+    RecoveryApplyOutcome {
+        acquisition: acquired_outcome(&receipt),
+        receipt,
         replayed: true,
-    })
+    }
 }
 
 fn acquired_outcome(receipt: &RecoveryReceipt) -> ProfileAcquisitionOutcome {
@@ -3481,9 +3399,9 @@ mod tests {
                     ..BrowserProfile::default()
                 },
             )]),
-            runtime_owner_registry: RuntimeOwnerRegistry {
-                revision: 55,
-                owners: BTreeMap::from([(
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+                registry_revision: 55,
+                owner_records: BTreeMap::from([(
                     profile_identity_digest.clone(),
                     ProfileOwner {
                         owner_id: "owner:generation-55".to_string(),
@@ -3500,7 +3418,7 @@ mod tests {
                         last_transition: None,
                     },
                 )]),
-                lifecycle_records: BTreeMap::from([(
+                lifecycle_rows: BTreeMap::from([(
                     browser_id.clone(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: browser_id,
@@ -3515,8 +3433,9 @@ mod tests {
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
-                ..RuntimeOwnerRegistry::default()
-            },
+                ..crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture::default()
+            }
+            .into_registry(),
             ..ServiceState::default()
         }
     }
@@ -3570,29 +3489,34 @@ mod tests {
         let mut initial = state();
         let profile_identity_digest = initial
             .runtime_owner_registry
-            .owners
+            .owners()
             .keys()
             .next()
             .unwrap()
             .clone();
-        initial.runtime_owner_registry.principal_bindings.insert(
-            profile_identity_digest.clone(),
-            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
-                principal_id: "principal:last30days".to_string(),
-                profile_id: "last30days-facebook".to_string(),
-                profile_identity_digest: profile_identity_digest.clone(),
-                capability_id: "capability:test".to_string(),
-                provenance: ServicePrincipalProvenance::RegisteredCapability,
-                owner_generation: 55,
-            },
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut initial.runtime_owner_registry)
+            .principal_records
+            .insert(
+                profile_identity_digest.clone(),
+                crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                    principal_id: "principal:last30days".to_string(),
+                    profile_id: "last30days-facebook".to_string(),
+                    profile_identity_digest: profile_identity_digest.clone(),
+                    capability_id: "capability:test".to_string(),
+                    provenance: ServicePrincipalProvenance::RegisteredCapability,
+                    owner_generation: 55,
+                },
+            );
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
         );
-        let owner = initial
-            .runtime_owner_registry
-            .owners
+        let owner = registry_fixture
+            .owner_records
             .get_mut(&profile_identity_digest)
             .unwrap();
         owner.owner_generation = 56;
         owner.daemon_session_route = "replacement-route".to_string();
+        drop(registry_fixture);
         initial.sessions.insert(
             "replacement-route".to_string(),
             BrowserSession {
@@ -3607,7 +3531,7 @@ mod tests {
 
         let current = repository.load_snapshot().unwrap();
         assert_eq!(
-            current.runtime_owner_registry.principal_bindings[&profile_identity_digest]
+            current.runtime_owner_registry.principal_bindings()[&profile_identity_digest]
                 .owner_generation,
             56
         );
@@ -3816,25 +3740,27 @@ mod tests {
         let mut state = state();
         let profile_identity_digest = state
             .runtime_owner_registry
-            .owners
+            .owners()
             .keys()
             .next()
             .unwrap()
             .clone();
         let owner = state
             .runtime_owner_registry
-            .owners
+            .owners()
             .get(&profile_identity_digest)
             .unwrap()
             .clone();
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture
+            .lifecycle_rows
             .get_mut(&owner.browser_id)
             .unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence.clear();
+        drop(registry_fixture);
         state.browsers.insert(
             owner.browser_id.clone(),
             BrowserProcess {
@@ -3844,7 +3770,7 @@ mod tests {
             },
         );
         if include_binding {
-            state.runtime_owner_registry.principal_bindings.insert(
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry).principal_records.insert(
                 profile_identity_digest.clone(),
                 crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
                     principal_id: principal_id.to_string(),
@@ -4046,18 +3972,16 @@ mod tests {
     #[test]
     fn ready_owner_with_proven_absent_runtime_gets_preserving_repair_plan() {
         let mut state = state();
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence = vec![
             "service_reconcile_process_group_absent:14768".to_string(),
             "service_reconcile_profile_lock_absent".to_string(),
         ];
+        drop(registry_fixture);
         let before = state.clone();
 
         let outcome = plan_terminal_owner_recovery(
@@ -4090,18 +4014,17 @@ mod tests {
     #[tokio::test]
     async fn ready_inert_owner_repair_launches_once_and_replays_without_effect() {
         let mut initial = state();
-        let lifecycle = initial
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
+        );
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence = vec![
             "service_reconcile_process_group_absent:14768".to_string(),
             "service_reconcile_profile_lock_absent".to_string(),
         ];
+        drop(registry_fixture);
         let repository = MemoryRepository::new(initial);
         let plan = plan_terminal_owner_recovery(
             &repository.load_snapshot().unwrap(),
@@ -4203,23 +4126,27 @@ mod tests {
         profile.user_data_dir = Some(profile_root.to_string_lossy().to_string());
         profile.authenticated_service_ids = vec!["bill".to_string()];
         let profile_identity_digest = recovery_profile_identity_digest(profile).unwrap();
-        let mut owner = initial.runtime_owner_registry.owners.pop_first().unwrap().1;
+        let mut owner = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
+        )
+        .owner_records
+        .pop_first()
+        .unwrap()
+        .1;
         owner.profile_identity_digest = profile_identity_digest.clone();
-        initial
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut initial.runtime_owner_registry)
+            .owner_records
             .insert(profile_identity_digest.clone(), owner);
-        let lifecycle = initial
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
+        );
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.profile_identity_digest = profile_identity_digest;
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence =
             vec!["service_reconcile_process_group_absent:4294967295".to_string()];
+        drop(registry_fixture);
         initial.browsers.insert(
             "session:durable-browser".to_string(),
             BrowserProcess {
@@ -4345,18 +4272,17 @@ mod tests {
     #[tokio::test]
     async fn ready_inert_owner_repair_refuses_new_browser_before_launch() {
         let mut initial = state();
-        let lifecycle = initial
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut initial.runtime_owner_registry,
+        );
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence = vec![
             "service_reconcile_process_group_absent:14768".to_string(),
             "service_reconcile_profile_lock_absent".to_string(),
         ];
+        drop(registry_fixture);
         let repository = MemoryRepository::new(initial);
         let plan = plan_terminal_owner_recovery(
             &repository.load_snapshot().unwrap(),
@@ -4415,29 +4341,27 @@ mod tests {
         let profile = state.profiles.get_mut("last30days-facebook").unwrap();
         profile.user_data_dir = Some(profile_root.to_string_lossy().to_string());
         let profile_identity_digest = recovery_profile_identity_digest(profile).unwrap();
-        let owner = state
-            .runtime_owner_registry
-            .owners
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.profile_identity_digest = profile_identity_digest.clone();
-        let owner = state.runtime_owner_registry.owners.pop_first().unwrap().1;
-        state
-            .runtime_owner_registry
-            .owners
+        drop(registry_fixture);
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.pop_first().unwrap().1;
+        registry_fixture
+            .owner_records
             .insert(profile_identity_digest.clone(), owner);
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap();
+        drop(registry_fixture);
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture.lifecycle_rows.values_mut().next().unwrap();
         lifecycle.profile_identity_digest = profile_identity_digest;
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
         lifecycle.terminal_evidence =
             vec!["service_reconcile_process_group_absent:4294967295".to_string()];
+        drop(registry_fixture);
 
         let outcome = plan_terminal_owner_recovery(
             &state,
@@ -4463,9 +4387,8 @@ mod tests {
     #[test]
     fn terminal_owner_plan_preserves_secondary_evidence_when_blocked() {
         let mut state = state();
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .values_mut()
             .next()
             .unwrap()
@@ -4493,13 +4416,14 @@ mod tests {
     #[tokio::test]
     async fn apply_retries_once_persists_receipt_and_replays_without_effect() {
         let mut reconciled_state = state();
-        reconciled_state
-            .runtime_owner_registry
-            .lifecycle_records
-            .values_mut()
-            .next()
-            .unwrap()
-            .terminal_evidence = vec![
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut reconciled_state.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .values_mut()
+        .next()
+        .unwrap()
+        .terminal_evidence = vec![
             "service_reconcile_process_group_absent:7136".to_string(),
             "service_reconcile_profile_lock_absent".to_string(),
         ];
@@ -4938,7 +4862,10 @@ mod tests {
         .unwrap();
         repository
             .mutate(|state| {
-                state.runtime_owner_registry.revision += 1;
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .registry_revision += 1;
                 Ok(())
             })
             .unwrap();
@@ -5232,7 +5159,7 @@ mod tests {
         assert!(current.tabs.contains_key("peer-tab"));
         assert!(current.profiles.contains_key("last30days-facebook"));
         assert_eq!(
-            current.runtime_owner_registry.lifecycle_records["session:durable-browser"]
+            current.runtime_owner_registry.lifecycle_records()["session:durable-browser"]
                 .cleanup_obligation_state,
             CleanupObligationState::Satisfied
         );
@@ -5263,7 +5190,7 @@ mod tests {
                 .load_snapshot()
                 .unwrap()
                 .runtime_owner_registry
-                .owners[&plan.profile_identity_digest]
+                .owners()[&plan.profile_identity_digest]
                 .state,
             ProfileOwnerState::Orphaned
         );
@@ -5284,7 +5211,10 @@ mod tests {
         )
         .unwrap();
         let mut changed = initial;
-        changed.runtime_owner_registry.revision += 1;
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut changed.runtime_owner_registry,
+        )
+        .registry_revision += 1;
         let repository = MemoryRepository::new(changed);
 
         let error = apply_profile_reset(&repository, &plan, "2026-09-10T12:01:00Z", seal_key())

@@ -7,7 +7,99 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
-- [P209](docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md)
+- [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
+
+## Turn 387 | 2026-09-17
+
+P216 source candidate `6ff7bc0d` and candidate-freeze receipt `3fdfc147`
+entered the single protected integration path through PR #200. The canonical
+provider-free Service State model now lives in `agent-browser-service-model`;
+the CLI retains every filesystem, process, browser, runtime-owner, HTTP, MCP,
+and platform effect. Complete local changed-surface qualification passes. The
+build claim is limited to the measured cold pure-model loop, from 171.01
+seconds to 4.08 seconds, not general CLI or workspace acceleration. Issue #178
+and Plan 0216 close with the protected merge. P211 remains separate and must
+reconcile the integrated model boundary before continuing overlapping urgent
+bug-fix work. GitHub Actions remained disabled, and no browser, provider,
+credential, install, runtime, staging, production, or release effect occurred.
+
+## Turn 386 | 2026-09-17
+
+P213 exact head `c8012bd0` merged through PR #196 as `7e56d9c7`; issue #194
+closed and no GitHub Actions branch or merge-head run started. P214 is admitted
+from that canonical baseline in the clean reassigned P213 worktree; no checkout
+was created or removed. It owns only an effect-free desktop-services planner
+that accounts every raw pointer move, down and up against the P212 permit
+budget. P205 retains the root Cargo manifest and lockfile, P211 source remains
+disjoint, and shared planning projections are an explicit reconciliation
+overlap. Source checkpoint `f90ef7a7` implements canonical permit validation,
+exact-budget interpolation, monotonic checked scheduling and deterministic
+plan digests. All 18 desktop-services tests, all 58 challenge-control tests,
+the strengthened architecture guard, workspace formatting, strict workspace
+Clippy, documentation links, planning audit, selection and diff hygiene pass
+locally. GitHub CI remains disabled and was not restored or run. Publication
+and protected integration remain. No browser, capture, provider, credential,
+CAPTCHA, route claim, desktop input, runtime or production effect occurred.
+
+## Turn 385 | 2026-09-17
+
+P212 exact head `dc20155e` merged through PR #193 as `ddae1897`. No GitHub
+Actions branch or merge-head run started. P213 is admitted from that canonical
+baseline in the clean reassigned P212 worktree; no checkout was created or
+removed. It owns only a pure challenge-control adapter that proves a visual
+intent is the current state-machine-authorized intent before mapping it to the
+P212 desktop permit. P205 retains the root Cargo manifest and lockfile; P213
+avoids both. P211's source remains disjoint and shared planning projections are
+an explicit reconciliation overlap. Source checkpoint `1bad68e3` implements
+the exact join and bounds permit expiry by the earlier evidence or visual
+policy deadline. All 58 challenge-control tests, all 12 desktop-services tests,
+the strengthened architecture guard, workspace formatting, strict workspace
+Clippy, documentation links, planning audit, selection and diff hygiene pass
+locally. GitHub CI remains disabled and was not restored or run. Publication
+and protected integration remain. No browser, capture, provider, credential,
+CAPTCHA, route-claim, desktop-input, runtime or production effect occurred.
+
+## Turn 384 | 2026-09-17
+
+P210 exact head `343a61b9` merged through PR #192 as `06972a5e`. P212 is
+admitted from that canonical baseline in the clean reassigned worktree; no new
+worktree was created. It owns only an effect-free desktop-services candidate
+geometry and controller-authority contract plus provider-free fixtures. P211's
+active cold-upgrade branch touches CLI shutdown and workstation routing, not
+the P212 source surface; shared planning files are an explicit reconciliation
+overlap. Source checkpoint `00f41715` now binds exact observation and ordered
+candidate geometry to current controller authority and checked effect budgets.
+All 12 desktop-services tests, the strengthened architecture guard, workspace
+formatting, strict workspace Clippy, documentation links and diff hygiene pass
+locally. GitHub CI remains disabled and was not restored or run. Publication
+and protected integration remain. No browser, capture, provider, CAPTCHA,
+desktop-input, runtime or production effect occurred.
+
+## Turn 383 | 2026-09-17
+
+P210 source checkpoint `0729b63d` adds the pure visual artifact and one-shot
+injected transport adapter. Ten adapter fixtures prove exact payload custody,
+deterministic digests, zero-call invalid input, explicit byte ceilings,
+one-call transport and malformed-output failure, strict effect-smuggling
+rejection, typed abstention, delayed response receipt time and raw-byte
+redaction. Review repaired exact artifact/request expiry binding and separated
+request time from transport receipt time. All 52 challenge-control tests, 10
+adapter tests, both architecture guards, workspace formatting, strict
+workspace Clippy and diff hygiene pass. GitHub CI remains disabled and was not
+restored or run. Publication and protected integration remain. No browser,
+image capture, real provider, credential, CAPTCHA, desktop-input, runtime or
+production effect occurred.
+
+## Turn 382 | 2026-09-17
+
+P209 exact head `27cd5342` merged through PR #188 as `fb616aee`. P210 is
+admitted from that exact canonical baseline on
+`challenge/p210-visual-artifact-adapter` in the clean reassigned challenge
+worktree. No new worktree was created. The baseline selector reports no
+changed files and only diff hygiene. P210 owns a new pure visual-adapter crate,
+repository-owned synthetic bytes and one injected fake transport; it owns no
+real provider, network, browser, capture, credential, CAPTCHA, desktop-input,
+runtime, production or CI effect.
 
 ## Turn 381 | 2026-09-17
 

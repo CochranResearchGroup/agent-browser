@@ -40,7 +40,9 @@ use super::service_model::{
 use super::service_monitors::{
     persisted_due_monitor_work_pending, SERVICE_MONITORS_RUN_DUE_ACTION,
 };
-use super::service_request_provenance::ServiceRequestProvenance;
+use super::service_request_provenance::{
+    capture_service_request_provenance, ServiceRequestProvenance,
+};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_terminal_outcome::{
     ServiceTerminalOutcome, ServiceTerminalPhase, ServiceTerminalState,
@@ -478,7 +480,7 @@ impl ControlPlaneHandle {
             agent_name.as_deref(),
             task_name.as_deref(),
         );
-        let provenance = ServiceRequestProvenance::capture(
+        let provenance = capture_service_request_provenance(
             &command,
             if id.is_empty() { &job_id } else { &id },
             &job_id,
@@ -971,24 +973,8 @@ fn persist_process_exited_browser_health_in_repository(
                 &observed_at,
             )
             .and_then(|_| {
-                let binding = service_state
-                    .runtime_owner_registry
-                    .binding_for_session(&state.session_id)
-                    .ok()
-                    .flatten()?;
-                if !binding.effect_capable {
-                    return None;
-                }
                 let revoked_owner =
-                    crate::native::runtime_lifecycle::revoke_legacy_owner_in_registry(
-                        &mut service_state.runtime_owner_registry,
-                        binding.claim.profile_identity_digest.clone(),
-                        binding.claim.logical_browser_id.clone(),
-                        binding.claim.daemon_session_route.clone(),
-                        binding.claim.owner_id.clone(),
-                        binding.claim.owner_generation,
-                    )
-                    .ok()?;
+                    service_state.revoke_process_exited_session_owner(&state.session_id)?;
                 let session = service_state.sessions.get(&state.session_id).cloned()?;
                 Some((revoked_owner, session))
             });
@@ -1519,7 +1505,7 @@ fn enqueue_due_monitor_run(
         "action": SERVICE_MONITORS_RUN_DUE_ACTION,
     });
     let connection_instance_id = super::service_connection_lifetime::new_connection_id();
-    let provenance = ServiceRequestProvenance::capture(
+    let provenance = capture_service_request_provenance(
         &command,
         &id,
         &id,
@@ -2972,7 +2958,7 @@ mod tests {
 
     fn control_request_for_mode_test(command: Value) -> ControlRequest {
         let (response_tx, _response_rx) = oneshot::channel();
-        let provenance = ServiceRequestProvenance::capture(
+        let provenance = capture_service_request_provenance(
             &command,
             "mode-test",
             "mode-test",
@@ -3918,17 +3904,22 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    #[test]
-    fn process_exited_browser_health_preserves_registered_session_work() {
-        let home = temp_home("control-plane-registered-process-exit");
-        let profile_path = home.join("registered-profile");
+    struct RegisteredProcessExitFixture {
+        service_state: ServiceState,
+        session_id: String,
+        profile_id: String,
+        principal_id: String,
+        browser_id: String,
+        profile_digest: String,
+    }
+
+    fn registered_process_exit_fixture(home: &std::path::Path) -> RegisteredProcessExitFixture {
+        let session_id = "registered-session".to_string();
+        let profile_id = "registered-profile".to_string();
+        let principal_id = "principal:registered-session".to_string();
+        let browser_id = service_browser_id(&session_id);
+        let profile_path = home.join(&profile_id);
         std::fs::create_dir_all(&profile_path).unwrap();
-        let store = JsonServiceStateStore::new(home.join("state.json"));
-        let repository = LockedServiceStateRepository::new(store.clone());
-        let session_id = "registered-session";
-        let profile_id = "registered-profile";
-        let principal_id = "principal:registered-session";
-        let browser_id = service_browser_id(session_id);
         let profile_digest =
             agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path)
                 .unwrap();
@@ -3937,17 +3928,17 @@ mod tests {
                 browser_id.clone(),
                 BrowserProcess {
                     id: browser_id.clone(),
-                    profile_id: Some(profile_id.to_string()),
+                    profile_id: Some(profile_id.clone()),
                     health: ServiceBrowserHealth::Ready,
-                    active_session_ids: vec![session_id.to_string()],
+                    active_session_ids: vec![session_id.clone()],
                     ..BrowserProcess::default()
                 },
             )]),
             sessions: std::collections::BTreeMap::from([(
-                session_id.to_string(),
+                session_id.clone(),
                 crate::native::service_model::BrowserSession {
-                    id: session_id.to_string(),
-                    profile_id: Some(profile_id.to_string()),
+                    id: session_id.clone(),
+                    profile_id: Some(profile_id.clone()),
                     browser_ids: vec![browser_id.clone()],
                     tab_ids: vec!["target:old".to_string()],
                     lease: crate::native::service_model::LeaseState::Exclusive,
@@ -3959,7 +3950,7 @@ mod tests {
                 crate::native::service_model::BrowserTab {
                     id: "target:old".to_string(),
                     browser_id: browser_id.clone(),
-                    session_id: Some(session_id.to_string()),
+                    session_id: Some(session_id.clone()),
                     ..crate::native::service_model::BrowserTab::default()
                 },
             )]),
@@ -3970,7 +3961,7 @@ mod tests {
                     state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
                     owner_generation: 1,
                     browser_id: browser_id.clone(),
-                    daemon_session_route: session_id.to_string(),
+                    daemon_session_route: session_id.clone(),
                     process_instance_digest: "1".repeat(64),
                     browser_family: "chrome".to_string(),
                     cdp_endpoint_identity_digest: "2".repeat(64),
@@ -3985,9 +3976,9 @@ mod tests {
         let registered = crate::native::service_principal::register_profile_capability(
             &mut service_state.service_principals,
             crate::native::service_principal::ServicePrincipalRegistrationRequest {
-                principal_id: principal_id.to_string(),
+                principal_id: principal_id.clone(),
                 display_name: None,
-                profile_id: profile_id.to_string(),
+                profile_id: profile_id.clone(),
                 registered_at: Some("2026-08-27T17:00:00Z".to_string()),
                 registered_by: Some("test".to_string()),
             },
@@ -3998,8 +3989,8 @@ mod tests {
             .runtime_owner_registry
             .bind_principal_authority(
                 crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
-                    principal_id: principal_id.to_string(),
-                    profile_id: profile_id.to_string(),
+                    principal_id: principal_id.clone(),
+                    profile_id: profile_id.clone(),
                     profile_identity_digest: profile_digest.clone(),
                     capability_id: registered.capability.capability_id,
                     provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
@@ -4010,33 +4001,56 @@ mod tests {
         let authority = crate::native::service_principal::authenticate_profile_capability(
             &service_state.service_principals,
             capability,
-            Some(profile_id),
+            Some(&profile_id),
         )
         .unwrap();
         crate::native::service_principal::bind_session_work_lease(
             &mut service_state,
-            session_id,
+            &session_id,
             &authority,
             "2099-08-27T19:00:00Z".to_string(),
         )
         .unwrap();
+        RegisteredProcessExitFixture {
+            service_state,
+            session_id,
+            profile_id,
+            principal_id,
+            browser_id,
+            profile_digest,
+        }
+    }
+
+    #[test]
+    fn process_exited_browser_health_preserves_registered_session_work() {
+        let home = temp_home("control-plane-registered-process-exit");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let RegisteredProcessExitFixture {
+            service_state,
+            session_id,
+            profile_id,
+            principal_id,
+            browser_id,
+            profile_digest,
+        } = registered_process_exit_fixture(&home);
         store.save(&service_state).unwrap();
         let mut state = DaemonState::new();
-        state.session_id = session_id.to_string();
+        state.session_id = session_id.clone();
 
         persist_process_exited_browser_health_in_repository(&repository, &state).unwrap();
 
         let persisted = store.load().unwrap();
-        let session = &persisted.sessions[session_id];
-        assert_eq!(session.principal_id.as_deref(), Some(principal_id));
-        assert_eq!(session.profile_id.as_deref(), Some(profile_id));
+        let session = &persisted.sessions[session_id.as_str()];
+        assert_eq!(session.principal_id.as_deref(), Some(principal_id.as_str()));
+        assert_eq!(session.profile_id.as_deref(), Some(profile_id.as_str()));
         assert!(session.browser_ids.is_empty());
         assert!(session.tab_ids.is_empty());
         assert!(!persisted.browsers.contains_key(&browser_id));
         assert!(!persisted.tabs.contains_key("target:old"));
         let owner = persisted
             .runtime_owner_registry
-            .owners
+            .owners()
             .get(&profile_digest)
             .unwrap();
         assert_eq!(
@@ -4044,7 +4058,7 @@ mod tests {
             crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
         );
         assert_eq!(owner.owner_generation, 2);
-        let lifecycle = &persisted.runtime_owner_registry.lifecycle_records[&browser_id];
+        let lifecycle = &persisted.runtime_owner_registry.lifecycle_records()[&browser_id];
         assert_eq!(lifecycle.owner_generation, 2);
         assert_eq!(
             lifecycle.lifecycle_state,
@@ -4054,6 +4068,74 @@ mod tests {
             lifecycle.cleanup_obligation_state,
             crate::runtime_owner_transfer::CleanupObligationState::Owned
         );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn process_exit_retains_partial_owner_revocation_when_lifecycle_is_malformed() {
+        let home = temp_home("control-plane-malformed-lifecycle-process-exit");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let RegisteredProcessExitFixture {
+            mut service_state,
+            session_id,
+            browser_id,
+            profile_digest,
+            ..
+        } = registered_process_exit_fixture(&home);
+        let lifecycle = crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+            logical_browser_id: browser_id.clone(),
+            profile_identity_digest: profile_digest.clone(),
+            owner_generation: 1,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Ready,
+            cleanup_obligation_state: crate::runtime_owner_transfer::CleanupObligationState::Owned,
+            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+        };
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut service_state.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .extend([
+            (browser_id.clone(), lifecycle.clone()),
+            ("historical-browser".to_string(), lifecycle),
+        ]);
+        store.save(&service_state).unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = session_id.clone();
+
+        assert!(
+            persist_process_exited_browser_health_in_repository(&repository, &state)
+                .unwrap()
+                .is_none()
+        );
+
+        let persisted = store.load().unwrap();
+        let owner = persisted
+            .runtime_owner_registry
+            .owners()
+            .get(&profile_digest)
+            .unwrap();
+        assert_eq!(
+            owner.state,
+            crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+        );
+        assert_eq!(owner.owner_generation, 2);
+        assert_eq!(
+            persisted.runtime_owner_registry.lifecycle_records().len(),
+            2
+        );
+        assert!(persisted
+            .runtime_owner_registry
+            .lifecycle_records()
+            .values()
+            .all(|record| record.owner_generation == 1));
+        assert!(!persisted.browsers.contains_key(&browser_id));
+        assert!(!persisted.tabs.contains_key("target:old"));
+        assert!(!persisted.sessions.contains_key(&session_id));
+        assert!(persisted.events.iter().any(|event| {
+            event.browser_id.as_deref() == Some(browser_id.as_str())
+                && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+        }));
         let _ = std::fs::remove_dir_all(&home);
     }
 

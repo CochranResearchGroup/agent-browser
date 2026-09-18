@@ -24,9 +24,13 @@ requireCondition(manifest.includes('name = "agent-browser-challenge-control"'), 
 requireCondition(manifest.includes('agent-browser-desktop-services = { path = "../agent-browser-desktop-services" }'), 'challenge control may consume only the shared desktop contract for effect execution');
 requireCondition(/\bpub\s+fn\s+decide\b/.test(sources), 'challenge-control must own one pure decision entrypoint');
 requireCondition(/\bpub\s+enum\s+ChallengeState\b/.test(sources), 'challenge-control must own the lifecycle state vocabulary');
+requireCondition(/\bpub\s+fn\s+validate_visual_round_intent\b/.test(sources), 'challenge-control must validate one exact current visual intent');
+requireCondition(/\bpub\s+fn\s+admit_visual_desktop_candidate_intent\b/.test(sources), 'challenge-control must own one effect-free visual desktop adapter');
 for (const forbidden of [
   'crate::native::', 'agent_browser::', 'ServiceState', 'std::fs', 'std::process',
-  'tokio::', 'reqwest::', 'image::', 'desktop_locator', 'controlled_x11', 'Command::',
+  'std::net', 'tokio::', 'reqwest::', 'image::', 'desktop_locator', 'controlled_x11',
+  'run_desktop_interaction', 'DesktopInteractionProvider', 'DesktopControlCoordinator',
+  'InputEvent', 'Command::',
 ]) {
   requireCondition(!sources.includes(forbidden), `challenge-control source contains forbidden dependency: ${forbidden}`);
 }

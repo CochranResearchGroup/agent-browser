@@ -784,35 +784,38 @@ fn orphan_adoption_follows_the_revoked_owner_logical_browser() {
     use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
 
     let mut service_state = ServiceState::default();
-    service_state.runtime_owner_registry.owners.insert(
-        "profile-digest".to_string(),
-        ProfileOwner {
-            owner_id: "owner-revoked".to_string(),
-            profile_identity_digest: "profile-digest".to_string(),
-            state: ProfileOwnerState::Orphaned,
-            owner_generation: 3,
-            browser_id: "session:logical-browser".to_string(),
-            daemon_session_route: "handoff-source".to_string(),
-            process_instance_digest: "process-digest".to_string(),
-            browser_family: "chrome".to_string(),
-            cdp_endpoint_identity_digest: "cdp-digest".to_string(),
-            target_set_digest: "targets-digest".to_string(),
-            pending_transfer: None,
-            last_transition: None,
-        },
-    );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut service_state.runtime_owner_registry)
+        .owner_records
+        .insert(
+            "profile-digest".to_string(),
+            ProfileOwner {
+                owner_id: "owner-revoked".to_string(),
+                profile_identity_digest: "profile-digest".to_string(),
+                state: ProfileOwnerState::Orphaned,
+                owner_generation: 3,
+                browser_id: "session:logical-browser".to_string(),
+                daemon_session_route: "handoff-source".to_string(),
+                process_instance_digest: "process-digest".to_string(),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                target_set_digest: "targets-digest".to_string(),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        );
 
     assert_eq!(
         orphan_logical_browser_id(&service_state, "handoff-source").unwrap(),
         "session:logical-browser"
     );
     let mut mapped_state = service_state.clone();
-    mapped_state
-        .runtime_owner_registry
-        .owners
-        .get_mut("profile-digest")
-        .unwrap()
-        .daemon_session_route = "registry-alias".to_string();
+    crate::runtime_owner_transfer::edit_registry_fixture(
+        &mut mapped_state.runtime_owner_registry,
+    )
+    .owner_records
+    .get_mut("profile-digest")
+    .unwrap()
+    .daemon_session_route = "registry-alias".to_string();
     mapped_state.sessions.insert(
         "handoff-source".to_string(),
         BrowserSession {
@@ -872,23 +875,25 @@ fn missing_service_projection_requires_exact_durable_handoff_for_orphan_recovery
     let profile_digest = "1".repeat(64);
     let process_digest = "2".repeat(64);
     let mut snapshot = ServiceState::default();
-    snapshot.runtime_owner_registry.owners.insert(
-        profile_digest.clone(),
-        ProfileOwner {
-            owner_id: "owner-bill-orphan".to_string(),
-            profile_identity_digest: profile_digest,
-            state: ProfileOwnerState::Orphaned,
-            owner_generation: 2,
-            browser_id: logical_browser_id.to_string(),
-            daemon_session_route: source_session.to_string(),
-            process_instance_digest: process_digest.clone(),
-            browser_family: "chrome".to_string(),
-            cdp_endpoint_identity_digest: "3".repeat(64),
-            target_set_digest: "4".repeat(64),
-            pending_transfer: None,
-            last_transition: None,
-        },
-    );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut snapshot.runtime_owner_registry)
+        .owner_records
+        .insert(
+            profile_digest.clone(),
+            ProfileOwner {
+                owner_id: "owner-bill-orphan".to_string(),
+                profile_identity_digest: profile_digest,
+                state: ProfileOwnerState::Orphaned,
+                owner_generation: 2,
+                browser_id: logical_browser_id.to_string(),
+                daemon_session_route: source_session.to_string(),
+                process_instance_digest: process_digest.clone(),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "3".repeat(64),
+                target_set_digest: "4".repeat(64),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        );
     snapshot.remote_view_handoffs.insert(
         "bill-handoff".to_string(),
         RemoteViewHandoff {

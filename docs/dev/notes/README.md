@@ -94,6 +94,7 @@ reuse after those contracts are frozen.
 - [Lease Authority invariant ledger](0181-2-2026-09-13-lease-authority-invariant-ledger.md)
 - [Lease Authority build measurement](0181-3-2026-09-14-lease-authority-build-measurement.md)
 - [Candidate executable-input inventory](0190-1-2026-09-15-candidate-executable-input-inventory.md)
+- [Service Model extraction landing handoff](0216-2026-09-17-service-model-extraction-landing-handoff.md)
 - [Shared runtime effect custody policy feedback](2026-09-14-runtime-effect-custody-policy-feedback.md)
 - [Session and worktree admission policy feedback](2026-09-14-session-worktree-admission-policy-feedback.md)
 

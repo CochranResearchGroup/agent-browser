@@ -1,7 +1,7 @@
 use super::*;
 use crate::runtime_owner_transfer::{
     CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-    RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+    RuntimeLifecycleRecord,
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -66,9 +66,9 @@ fn state_for_fixture(fixture: &TerminalOwnerFixture) -> ServiceState {
                 ..BrowserProfile::default()
             },
         )]),
-        runtime_owner_registry: RuntimeOwnerRegistry {
-            revision: 137,
-            owners: BTreeMap::from([(
+        runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+            registry_revision: 137,
+            owner_records: BTreeMap::from([(
                 profile_identity_digest.clone(),
                 ProfileOwner {
                     owner_id: fixture.owner_id.clone(),
@@ -85,8 +85,8 @@ fn state_for_fixture(fixture: &TerminalOwnerFixture) -> ServiceState {
                     last_transition: None,
                 },
             )]),
-            principal_bindings: BTreeMap::new(),
-            lifecycle_records: BTreeMap::from([(
+            principal_records: BTreeMap::new(),
+            lifecycle_rows: BTreeMap::from([(
                 fixture.durable_browser_id.clone(),
                 RuntimeLifecycleRecord {
                     logical_browser_id: fixture.durable_browser_id.clone(),
@@ -98,7 +98,8 @@ fn state_for_fixture(fixture: &TerminalOwnerFixture) -> ServiceState {
                     ..RuntimeLifecycleRecord::default()
                 },
             )]),
-        },
+        }
+        .into_registry(),
         ..ServiceState::default()
     }
 }
@@ -210,9 +211,8 @@ fn p137_generation_55_transferred_terminal_owner_plans_without_mutating_state() 
 fn p137_terminal_replacement_requires_exact_process_exit_evidence() {
     let fixture = fixture();
     let mut state = state_for_fixture(&fixture);
-    state
-        .runtime_owner_registry
-        .lifecycle_records
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .lifecycle_rows
         .get_mut(&fixture.durable_browser_id)
         .unwrap()
         .terminal_evidence = vec!["profile_lock_released".to_string()];
@@ -240,7 +240,9 @@ fn p137_terminal_replacement_requires_exact_process_exit_evidence() {
 fn p137_terminal_history_without_current_owner_cannot_emit_a_replacement_route() {
     let fixture = fixture();
     let mut state = state_for_fixture(&fixture);
-    state.runtime_owner_registry.owners.clear();
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .owner_records
+        .clear();
 
     let plan = service_access_plan_for_state(
         &state,
@@ -276,9 +278,8 @@ fn p137_terminal_history_without_current_owner_cannot_emit_a_replacement_route()
 fn p137_terminal_replacement_accepts_reconciled_absent_process_and_stale_lock() {
     let fixture = fixture();
     let mut state = state_for_fixture(&fixture);
-    state
-        .runtime_owner_registry
-        .lifecycle_records
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .lifecycle_rows
         .get_mut(&fixture.durable_browser_id)
         .unwrap()
         .terminal_evidence = vec![

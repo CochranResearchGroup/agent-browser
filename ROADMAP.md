@@ -25,6 +25,26 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P216 | Service Model Extraction Landing
+
+State: CLOSED
+
+Current state: [Plan 0216](docs/dev/plans/0216-2026-09-17-service-model-extraction-landing.md),
+[issue #178](https://github.com/CochranResearchGroup/agent-browser/issues/178),
+and [PR #200](https://github.com/CochranResearchGroup/agent-browser/pull/200)
+record the completed `PL-PLATFORM` extraction. Source candidate `6ff7bc0d`
+places the canonical provider-free Service State aggregate, codecs, records,
+pure transitions, projections, and deterministic wire behavior in
+`agent-browser-service-model` while the CLI retains filesystem, process,
+browser, runtime-owner, HTTP, MCP, and platform effects. Complete local
+changed-surface qualification passes. The measured acceleration is limited to
+the cold pure-model loop, from 171.01 seconds to 4.08 seconds; no general CLI
+or workspace build-time reduction is claimed. P211 remains a separate urgent
+bug-fix lane and must reconcile this integrated boundary before extending the
+overlapping adapters. GitHub Actions remained disabled, and no browser,
+provider, credential, install, runtime, staging, production, or release effect
+occurred.
+
 ## P208 | Worktree Closeout And Candidate Custody
 
 State: CLOSED
@@ -305,9 +325,57 @@ P206 exact head `82e25624` merged through PR #180 as `d3f923a1`; P209 joined
 that canonical result at `3ef2ad9e` without a Rust or Cargo dependency change.
 The reconciled head passes all 52 challenge-control tests. The crate
 architecture, formatting, strict Clippy and diff-hygiene evidence remains
-source-identical. P209 is ready for publication and normal protected
-integration while GitHub CI remains operator-disabled. It creates no provider,
-browser, credential, CAPTCHA, runtime or production authority.
+source-identical. P209 exact head `27cd5342` merged through PR #188 as
+`fb616aee`. W7-C is admitted through
+[Plan 0210](docs/dev/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md)
+on `challenge/p210-visual-artifact-adapter` from that exact canonical baseline.
+It owns only a pure artifact-custody and one-shot injected fake-provider
+adapter. GitHub CI remains operator-disabled. The packet creates no real
+provider, browser, credential, CAPTCHA, runtime or production authority. P210
+source checkpoint `0729b63d` now implements that boundary with 10 adapter
+fixtures. All 52 challenge-control tests, both architecture guards, workspace
+formatting and strict workspace Clippy pass. Review repaired exact
+artifact/request expiry binding and delayed provider receipt-time
+adjudication. Publication and protected integration remain.
+P210 exact head `343a61b9` merged through PR #192 as `06972a5e`. The next
+platform dependency is admitted through
+[Plan 0212](docs/dev/plans/0212-2026-09-17-desktop-candidate-intent-contract.md)
+on `platform/p212-desktop-candidate-intent-contract`. P212 freezes an
+effect-free candidate geometry and controller-authority admission contract in
+desktop services without importing challenge types or emitting input. P211's
+active cold-upgrade source is disjoint; shared planning projections reconcile
+at integration. Source checkpoint `00f41715` implements exact observation,
+ordered selection, physical-pixel geometry, authority and checked-budget
+binding. All 12 desktop-services tests, the strengthened architecture guard,
+workspace formatting and strict workspace Clippy pass locally. Publication and
+protected integration remain. GitHub CI remains operator-disabled.
+P212 exact head `dc20155e` merged through PR #193 as `ddae1897`. The
+challenge-side consumer is admitted through
+[Plan 0213](docs/dev/plans/0213-2026-09-17-visual-desktop-candidate-adapter.md)
+on `challenge/p213-visual-desktop-adapter`. P213 proves the visual intent is
+the current state-machine-authorized intent, binds it to exact desktop
+observation geometry and current controller authority, and returns the P212
+effect-free permit. It adds no executor, browser, provider, CAPTCHA, route
+claim, input, runtime or production authority and avoids P205's Cargo manifest
+and lockfile surfaces. Source checkpoint `1bad68e3` implements the exact
+state-machine, ordered-candidate, observation, effective-expiry and controller
+authority join. All 58 challenge-control tests, all 12 desktop-services tests,
+the strengthened architecture guard, workspace formatting and strict workspace
+Clippy pass locally. Publication and protected integration remain. GitHub CI
+remains operator-disabled.
+P213 exact head `c8012bd0` merged through PR #196 as `7e56d9c7`. The next
+platform boundary is admitted through
+[Plan 0214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
+on `platform/p214-candidate-event-plan`. P214 defines exact raw pointer-event
+budget semantics and a deterministic effect-free plan before any executor is
+introduced. Every move, down and up consumes the permit budget; key semantics,
+provider calls, route claims and event emission remain excluded. P214 avoids
+P205's Cargo manifest and lockfile surfaces. GitHub CI remains
+operator-disabled. Source checkpoint `f90ef7a7` now produces exact-budget,
+checked, deterministic raw pointer plans without an executor. All 18
+desktop-services tests, all 58 challenge-control tests, the strengthened
+architecture guard, workspace formatting and strict workspace Clippy pass
+locally. Publication and protected integration remain.
 
 ## P186 | Route Viewer Admission Drain Recovery
 

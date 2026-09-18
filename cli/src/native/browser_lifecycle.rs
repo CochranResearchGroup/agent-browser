@@ -74,14 +74,13 @@ pub(crate) mod action_commands {
             return Err("service_navigation_tab_identity_conflict".to_string());
         }
         let binding = state
-            .runtime_owner_registry
-            .binding_for_session(session_id)
+            .runtime_owner_binding_for_session(session_id)
             .ok()
             .flatten()
             .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
         let owner = state
-            .runtime_owner_registry
-            .owner(&binding.claim.profile_identity_digest)
+            .profile_runtime_authority(&binding.claim.profile_identity_digest)
+            .owner
             .filter(|owner| {
                 crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(owner)
                     == binding.claim

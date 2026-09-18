@@ -47,10 +47,11 @@ where
         let Some(mut capacity) = state.presentation_capacity.take() else {
             return Ok(None);
         };
-        let pressure = PressureAdmission::admit(capacity.config.hard_maximum);
+        let pressure = PressureAdmission::admit(capacity.config().hard_maximum);
         let request = PresentationRequest::recovery(request_id.clone()).for_browser(browser_id);
         let decision = if route_switch {
-            capacity.request_bound_route_switch_recovery(
+            crate::native::presentation_capacity::request_bound_route_switch_recovery(
+                &mut capacity,
                 request,
                 pressure,
                 state,
@@ -58,7 +59,8 @@ where
                 display_allocation_id,
             )
         } else {
-            capacity.request_bound_recovery(
+            crate::native::presentation_capacity::request_bound_recovery(
+                &mut capacity,
                 request,
                 pressure,
                 state,
@@ -116,7 +118,8 @@ where
         let Some(mut capacity) = state.presentation_capacity.take() else {
             return Err("presentation_capacity_unavailable".to_string());
         };
-        let result = capacity.release_bound_presentation(
+        let result = crate::native::presentation_capacity::release_bound_presentation(
+            &mut capacity,
             &reservation.slot_id,
             &reservation.request_id,
             reservation.pressure,

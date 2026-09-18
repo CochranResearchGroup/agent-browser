@@ -1,11 +1,14 @@
 [workspace]
 members = [
     "cli",
+    "crates/agent-browser-authentication-control",
     "crates/agent-browser-cdp",
     "crates/agent-browser-candidate",
     "crates/agent-browser-challenge-control",
+    "crates/agent-browser-challenge-visual-adapter",
     "crates/agent-browser-desktop-services",
     "crates/agent-browser-lease-authority",
+    "crates/agent-browser-service-model",
 ]
 resolver = "2"
 

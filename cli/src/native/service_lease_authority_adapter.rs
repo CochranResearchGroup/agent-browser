@@ -32,19 +32,12 @@ pub(crate) fn release_lease_claim_in_repository<R: ServiceStateRepository>(
 ) -> Result<LeaseClaimReleaseOutcome, String> {
     if let Some(replayed) = repository
         .load_snapshot()?
-        .lease_authority()
-        .replay_release(&request)
+        .replay_lease_claim_release(&request)
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?
     {
         return Ok(replayed);
     }
-    repository.mutate(|state| {
-        release_lease_claim(
-            &mut state.lease_authority,
-            &state.service_principals,
-            request.clone(),
-        )
-    })
+    repository.mutate(|state| state.release_lease_claim(request.clone()))
 }
 
 pub(crate) fn recover_lease_claim_in_repository<R: ServiceStateRepository>(
@@ -53,19 +46,12 @@ pub(crate) fn recover_lease_claim_in_repository<R: ServiceStateRepository>(
 ) -> Result<LeaseClaimRecoveryOutcome, String> {
     if let Some(replayed) = repository
         .load_snapshot()?
-        .lease_authority()
-        .replay_recovery(&request)
+        .replay_lease_claim_recovery(&request)
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?
     {
         return Ok(replayed);
     }
-    repository.mutate(|state| {
-        recover_lease_claim(
-            &mut state.lease_authority,
-            &state.service_principals,
-            request.clone(),
-        )
-    })
+    repository.mutate(|state| state.recover_lease_claim(request.clone()))
 }
 
 pub(crate) fn revoke_lease_claim_in_repository<R: ServiceStateRepository>(
@@ -74,13 +60,12 @@ pub(crate) fn revoke_lease_claim_in_repository<R: ServiceStateRepository>(
 ) -> Result<LeaseClaimRevocationOutcome, String> {
     if let Some(replayed) = repository
         .load_snapshot()?
-        .lease_authority()
-        .replay_revocation(&request)
+        .replay_lease_claim_revocation(&request)
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?
     {
         return Ok(replayed);
     }
-    repository.mutate(|state| revoke_lease_claim(&mut state.lease_authority, request.clone()))
+    repository.mutate(|state| state.revoke_lease_claim(request.clone()))
 }
 
 pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
@@ -93,12 +78,7 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
         .validate_schema()
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
     let state = repository.load_snapshot()?;
-    let claim = authorize_lease_effect(
-        &LeaseAuthorityView::new(state.lease_authority(), &state.service_principals),
-        authorization,
-        now,
-        context,
-    )?;
+    let claim = authorize_lease_effect(&state.lease_authority_view(), authorization, now, context)?;
     if claim.resource().kind == LeaseResourceKind::Profile {
         let profile = state
             .profiles
@@ -114,22 +94,18 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
             agent_browser_lease_authority::canonical_profile_identity_digest(
                 &resolved.user_data_dir,
             )?;
-        let current_owner = state.runtime_owner_registry.owner(&profile_identity_digest);
-        let owner_matches = match (claim.owner_generation(), current_owner) {
+        let runtime_authority = state.profile_runtime_authority(&profile_identity_digest);
+        let owner_matches = match (claim.owner_generation(), runtime_authority.owner) {
             (None, None) => true,
             (Some(expected), Some(owner)) => {
                 owner.owner_generation == expected
                     && owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
-                    && state
-                        .runtime_owner_registry
-                        .principal_bindings
-                        .get(&profile_identity_digest)
-                        .is_some_and(|binding| {
-                            binding.owner_generation == expected
-                                && binding.profile_id == claim.resource().id
-                                && binding.principal_id == claim.principal_id()
-                                && binding.capability_id == claim.capability_id()
-                        })
+                    && runtime_authority.principal_binding.is_some_and(|binding| {
+                        binding.owner_generation == expected
+                            && binding.profile_id == claim.resource().id
+                            && binding.principal_id == claim.principal_id()
+                            && binding.capability_id == claim.capability_id()
+                    })
             }
             _ => false,
         };
@@ -146,12 +122,7 @@ pub(crate) fn issue_lease_effect_authorization_for_state(
     intent: &LeaseEffectIntent,
     raw_capability: &[u8],
 ) -> Result<LeaseEffectAuthorization, String> {
-    issue_lease_effect_authorization(
-        &LeaseAuthorityView::new(state.lease_authority(), &state.service_principals),
-        claim,
-        intent,
-        raw_capability,
-    )
+    issue_lease_effect_authorization(&state.lease_authority_view(), claim, intent, raw_capability)
 }
 
 pub(crate) fn release_lease_claim_for_authenticated_state(
@@ -164,15 +135,11 @@ pub(crate) fn release_lease_claim_for_authenticated_state(
 ) -> Result<LeaseClaimReleaseOutcome, String> {
     let authorization =
         issue_lease_effect_authorization_for_state(state, claim, intent, raw_capability)?;
-    release_lease_claim(
-        &mut state.lease_authority,
-        &state.service_principals,
-        ReleaseLeaseClaimRequest {
-            authorization,
-            idempotency_key,
-            now,
-        },
-    )
+    state.release_lease_claim(ReleaseLeaseClaimRequest {
+        authorization,
+        idempotency_key,
+        now,
+    })
 }
 
 #[cfg(test)]
@@ -346,6 +313,78 @@ mod tests {
     }
 
     #[test]
+    fn effect_boundary_ignores_orphan_binding_without_owner_generation() {
+        let profile_path = "/tmp/agent-browser-lease-orphan-binding";
+        let resolved =
+            crate::runtime_profile::resolve_profile(Some(profile_path), Some("last30days-social"))
+                .unwrap();
+        let profile_identity_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(
+                &resolved.user_data_dir,
+            )
+            .unwrap();
+        let mut registry = crate::runtime_owner_transfer::RuntimeOwnerRegistry::default();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry).principal_records.insert(
+            profile_identity_digest.clone(),
+            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                principal_id: "principal:last30days".to_string(),
+                profile_id: "last30days-social".to_string(),
+                profile_identity_digest,
+                capability_id: "capability:last30days-social".to_string(),
+                provenance:
+                    agent_browser_lease_authority::ServicePrincipalProvenance::RegisteredCapability,
+                owner_generation: 7,
+            },
+        );
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "last30days-social".to_string(),
+                crate::native::service_model::BrowserProfile {
+                    id: "last30days-social".to_string(),
+                    user_data_dir: Some(profile_path.to_string()),
+                    ..crate::native::service_model::BrowserProfile::default()
+                },
+            )]),
+            service_principals: principal_registry(),
+            runtime_owner_registry: registry,
+            ..ServiceState::default()
+        };
+        let claim = state.acquire_lease_claim(request()).unwrap();
+        assert_eq!(claim.owner_generation(), None);
+
+        let guard = crate::test_utils::EnvGuard::new(&["HOME", "USERPROFILE"]);
+        let test_home = std::env::temp_dir().join(format!(
+            "agent-browser-authority-orphan-binding-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&test_home).unwrap();
+        guard.set("HOME", test_home.to_str().unwrap());
+        guard.set("USERPROFILE", test_home.to_str().unwrap());
+        let intent = effect_intent("browser_launch", "session:last30days", "launch:tick-1");
+        let context = LeaseEffectContext {
+            action_class: "browser_launch",
+            audience: "session:last30days",
+            operation_idempotency_key: "launch:tick-1",
+        };
+        let authorization = issue_lease_effect_authorization_for_state(
+            &state,
+            &claim,
+            &intent,
+            CAPABILITY.as_bytes(),
+        )
+        .unwrap();
+        let repository = MemoryRepository {
+            state: Arc::new(Mutex::new(state)),
+        };
+
+        let authorized =
+            authorize_lease_effect_in_repository(&repository, &authorization, NOW, &context)
+                .unwrap();
+        assert_eq!(authorized.claim_id(), claim.claim_id());
+        fs::remove_dir_all(test_home).unwrap();
+    }
+
+    #[test]
     fn effect_boundary_rejects_diverged_owner_principal_binding() {
         let profile_path = "/tmp/agent-browser-lease-owner-fence";
         let resolved =
@@ -372,7 +411,7 @@ mod tests {
                 last_transition: None,
             },
         );
-        registry.principal_bindings.insert(
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry).principal_records.insert(
             profile_identity_digest.clone(),
             crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
                 principal_id: "principal:last30days".to_string(),
@@ -505,12 +544,13 @@ mod tests {
                     .get_mut("capability:last30days-social")
                     .unwrap()
                     .state = agent_browser_lease_authority::ServiceProfileCapabilityState::Active;
-                state
-                    .runtime_owner_registry
-                    .principal_bindings
-                    .get_mut(&profile_identity_digest)
-                    .unwrap()
-                    .principal_id = "principal:foreign".to_string();
+                crate::runtime_owner_transfer::edit_registry_fixture(
+                    &mut state.runtime_owner_registry,
+                )
+                .principal_records
+                .get_mut(&profile_identity_digest)
+                .unwrap()
+                .principal_id = "principal:foreign".to_string();
                 Ok(())
             })
             .unwrap();

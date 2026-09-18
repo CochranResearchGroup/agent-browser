@@ -1188,7 +1188,7 @@ pub(crate) fn orphan_logical_browser_id(
 ) -> Result<String, String> {
     let matches = snapshot
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .filter(|owner| {
             owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
@@ -1211,7 +1211,7 @@ pub(crate) fn orphan_logical_browser_id(
         .filter(|browser_id| {
             snapshot
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .values()
                 .any(|owner| {
                     owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
@@ -1252,7 +1252,7 @@ fn orphan_logical_browser_id_with_hint(
         });
     let owner_bound = snapshot
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .any(|owner| {
             owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
@@ -1278,7 +1278,7 @@ pub(crate) fn durable_orphan_runtime_profile(
 ) -> Result<String, String> {
     let owner = snapshot
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .find(|owner| {
             owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
@@ -2835,23 +2835,25 @@ mod tests {
         let logical_browser_id = "session:payment";
         let process_digest = "2".repeat(64);
         let mut state = crate::native::service_model::ServiceState::default();
-        state.runtime_owner_registry.owners.insert(
-            "1".repeat(64),
-            ProfileOwner {
-                owner_id: "owner-payment".to_string(),
-                profile_identity_digest: "1".repeat(64),
-                state: ProfileOwnerState::Orphaned,
-                owner_generation: 10,
-                browser_id: logical_browser_id.to_string(),
-                daemon_session_route: source_session.to_string(),
-                process_instance_digest: process_digest.clone(),
-                browser_family: "chrome".to_string(),
-                cdp_endpoint_identity_digest: "3".repeat(64),
-                target_set_digest: "4".repeat(64),
-                pending_transfer: None,
-                last_transition: None,
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
+            .insert(
+                "1".repeat(64),
+                ProfileOwner {
+                    owner_id: "owner-payment".to_string(),
+                    profile_identity_digest: "1".repeat(64),
+                    state: ProfileOwnerState::Orphaned,
+                    owner_generation: 10,
+                    browser_id: logical_browser_id.to_string(),
+                    daemon_session_route: source_session.to_string(),
+                    process_instance_digest: process_digest.clone(),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "3".repeat(64),
+                    target_set_digest: "4".repeat(64),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
         state.remote_view_handoffs.insert(
             "r-payment".to_string(),
             RemoteViewHandoff {

@@ -16,10 +16,10 @@ use super::service_lifecycle::{
     rank_service_profiles_for_request, ProfileSelection, ProfileSelectionRequest,
 };
 use super::service_model::{
-    browser_profile_compatibility_matches, builtin_site_policy, service_profile_seeding_handoff,
-    service_site_policy_id_for_url, BrowserBuild, BrowserHost, BrowserProfile, Challenge,
-    ChallengeKind, ChallengePolicy, ChallengeState, ControlInputProvider, InteractionMode,
-    ProfileSelectionReason, ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation,
+    browser_profile_compatibility_matches, builtin_site_policy, interaction_decision,
+    provider_decision, service_profile_seeding_handoff, service_site_policy_id_for_url,
+    BrowserBuild, BrowserHost, BrowserProfile, Challenge, ChallengePolicy, ChallengeState,
+    ControlInputProvider, ProfileSelectionReason, ServiceEntitySource, ServiceIncidentEscalation,
     ServiceIncidentState, ServiceProvider, ServiceState, SitePolicy, ViewStreamProvider,
     SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
     SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
@@ -2662,210 +2662,6 @@ fn browser_build_from_selected_preference_binding(
         .and_then(|label| BrowserBuild::parse_label(&label))
 }
 
-#[derive(Debug, Default)]
-struct InteractionDecision {
-    interaction_risk: &'static str,
-    pacing: Value,
-}
-
-fn interaction_decision(site_policy: Option<&SitePolicy>) -> InteractionDecision {
-    let Some(site_policy) = site_policy else {
-        return InteractionDecision {
-            interaction_risk: "standard",
-            pacing: json!({
-                "minActionDelayMs": 0,
-                "jitterMs": 0,
-                "cooldownMs": null,
-                "maxParallelSessions": null,
-                "retryBudget": null,
-                "rateLimited": false,
-                "jittered": false,
-                "singleSessionRecommended": false,
-            }),
-        };
-    };
-    let min_action_delay_ms = site_policy.rate_limit.min_action_delay_ms.unwrap_or(0);
-    let jitter_ms = site_policy.rate_limit.jitter_ms.unwrap_or(0);
-    let cooldown_ms = site_policy.rate_limit.cooldown_ms;
-    let max_parallel_sessions = site_policy.rate_limit.max_parallel_sessions;
-    let retry_budget = site_policy.rate_limit.retry_budget;
-    let rate_limited = min_action_delay_ms > 0 || cooldown_ms.unwrap_or(0) > 0;
-    let jittered = jitter_ms > 0;
-    let single_session_recommended = max_parallel_sessions == Some(1);
-    let interaction_risk = if site_policy.manual_login_preferred
-        || matches!(site_policy.interaction_mode, InteractionMode::Manual)
-    {
-        "manual"
-    } else if matches!(
-        site_policy.interaction_mode,
-        InteractionMode::HumanLikeInput
-    ) || rate_limited
-        || jittered
-        || single_session_recommended
-    {
-        "hardened"
-    } else {
-        "standard"
-    };
-
-    InteractionDecision {
-        interaction_risk,
-        pacing: json!({
-            "minActionDelayMs": min_action_delay_ms,
-            "jitterMs": jitter_ms,
-            "cooldownMs": cooldown_ms,
-            "maxParallelSessions": max_parallel_sessions,
-            "retryBudget": retry_budget,
-            "rateLimited": rate_limited,
-            "jittered": jittered,
-            "singleSessionRecommended": single_session_recommended,
-        }),
-    }
-}
-
-#[derive(Debug, Default)]
-struct ProviderDecision {
-    auth_provider_ids: Vec<String>,
-    challenge_provider_ids: Vec<String>,
-    missing_challenge_capabilities: Vec<&'static str>,
-    challenge_strategy: &'static str,
-}
-
-fn provider_decision(
-    selected_profile: Option<&BrowserProfile>,
-    site_policy: Option<&SitePolicy>,
-    challenges: &[Challenge],
-    providers: &[ServiceProvider],
-) -> ProviderDecision {
-    let mut auth_provider_ids = providers
-        .iter()
-        .filter(|provider| {
-            selected_profile
-                .is_some_and(|profile| profile.credential_provider_ids.contains(&provider.id))
-                || site_policy.is_some_and(|policy| policy.auth_providers.contains(&provider.id))
-        })
-        .map(|provider| provider.id.clone())
-        .collect::<Vec<_>>();
-    let active_challenges = challenges
-        .iter()
-        .filter(|challenge| !matches!(challenge.state, ChallengeState::Resolved))
-        .collect::<Vec<_>>();
-    let required_capabilities = active_challenges
-        .iter()
-        .flat_map(|challenge| challenge_required_capabilities(challenge.kind))
-        .collect::<Vec<_>>();
-    let mut challenge_provider_ids = providers
-        .iter()
-        .filter(|provider| {
-            required_capabilities
-                .iter()
-                .any(|capability| provider.capabilities.contains(capability))
-        })
-        .filter(|provider| {
-            site_policy
-                .filter(|policy| !policy.allowed_challenge_providers.is_empty())
-                .is_none_or(|policy| policy.allowed_challenge_providers.contains(&provider.id))
-        })
-        .map(|provider| provider.id.clone())
-        .collect::<Vec<_>>();
-    let mut missing_challenge_capabilities = active_challenges
-        .iter()
-        .filter(|challenge| {
-            let capabilities = challenge_required_capabilities(challenge.kind);
-            !providers.iter().any(|provider| {
-                provider_allowed_for_challenge(provider, site_policy)
-                    && capabilities
-                        .iter()
-                        .any(|capability| provider.capabilities.contains(capability))
-            })
-        })
-        .flat_map(|challenge| {
-            challenge_required_capabilities(challenge.kind)
-                .into_iter()
-                .map(provider_capability_wire_name)
-        })
-        .collect::<Vec<_>>();
-
-    auth_provider_ids.sort();
-    auth_provider_ids.dedup();
-    challenge_provider_ids.sort();
-    challenge_provider_ids.dedup();
-    missing_challenge_capabilities.sort();
-    missing_challenge_capabilities.dedup();
-
-    let challenge_strategy = match site_policy.map(|policy| policy.challenge_policy) {
-        Some(ChallengePolicy::Deny) => "deny",
-        _ if active_challenges.is_empty() => "none",
-        Some(ChallengePolicy::ManualOnly) => "manual_only",
-        Some(ChallengePolicy::ProviderPreferred) if !challenge_provider_ids.is_empty() => {
-            "provider_preferred"
-        }
-        Some(ChallengePolicy::ProviderAllowed) if !challenge_provider_ids.is_empty() => {
-            "provider_allowed"
-        }
-        Some(ChallengePolicy::AvoidFirst) => "avoid_first",
-        _ if !missing_challenge_capabilities.is_empty() => "missing_provider",
-        _ => "manual_review",
-    };
-
-    ProviderDecision {
-        auth_provider_ids,
-        challenge_provider_ids,
-        missing_challenge_capabilities,
-        challenge_strategy,
-    }
-}
-
-fn provider_allowed_for_challenge(
-    provider: &ServiceProvider,
-    site_policy: Option<&SitePolicy>,
-) -> bool {
-    site_policy
-        .filter(|policy| !policy.allowed_challenge_providers.is_empty())
-        .is_none_or(|policy| policy.allowed_challenge_providers.contains(&provider.id))
-}
-
-fn challenge_required_capabilities(kind: ChallengeKind) -> Vec<ProviderCapability> {
-    match kind {
-        ChallengeKind::Captcha => vec![
-            ProviderCapability::CaptchaSolve,
-            ProviderCapability::VisualReasoning,
-            ProviderCapability::HumanApproval,
-        ],
-        ChallengeKind::TwoFactor => vec![
-            ProviderCapability::TotpCode,
-            ProviderCapability::SmsCode,
-            ProviderCapability::EmailCode,
-            ProviderCapability::HumanApproval,
-        ],
-        ChallengeKind::Passkey => {
-            vec![
-                ProviderCapability::Passkey,
-                ProviderCapability::HumanApproval,
-            ]
-        }
-        ChallengeKind::SuspiciousLogin | ChallengeKind::BlockedFlow | ChallengeKind::Unknown => {
-            vec![
-                ProviderCapability::VisualReasoning,
-                ProviderCapability::HumanApproval,
-            ]
-        }
-    }
-}
-
-fn provider_capability_wire_name(capability: ProviderCapability) -> &'static str {
-    match capability {
-        ProviderCapability::PasswordFill => "password_fill",
-        ProviderCapability::Passkey => "passkey",
-        ProviderCapability::TotpCode => "totp_code",
-        ProviderCapability::SmsCode => "sms_code",
-        ProviderCapability::EmailCode => "email_code",
-        ProviderCapability::VisualReasoning => "visual_reasoning",
-        ProviderCapability::CaptchaSolve => "captcha_solve",
-        ProviderCapability::HumanApproval => "human_approval",
-    }
-}
-
 fn service_profile_match_details(
     profile: &BrowserProfile,
     request: &ProfileSelectionRequest,
@@ -4465,7 +4261,7 @@ mod tests {
     fn service_access_plan_reuses_ready_transferred_owner_for_tab_acquisition() {
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+            RuntimeLifecycleRecord,
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-transferred-owner";
@@ -4531,11 +4327,11 @@ mod tests {
                     ..BrowserSession::default()
                 },
             )]),
-            runtime_owner_registry: RuntimeOwnerRegistry {
-                revision: 659,
-                owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
-                principal_bindings: BTreeMap::new(),
-                lifecycle_records: BTreeMap::from([(
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+                registry_revision: 659,
+                owner_records: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_records: BTreeMap::new(),
+                lifecycle_rows: BTreeMap::from([(
                     browser_id.to_string(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: browser_id.to_string(),
@@ -4546,7 +4342,8 @@ mod tests {
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
-            },
+            }
+            .into_registry(),
             ..ServiceState::default()
         };
 
@@ -4598,7 +4395,7 @@ mod tests {
     fn stale_transferring_owner_without_live_authority_does_not_block_cold_launch() {
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+            RuntimeLifecycleRecord,
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-incompatible-ready-owner";
@@ -4644,11 +4441,11 @@ mod tests {
                     ..BrowserProcess::default()
                 },
             )]),
-            runtime_owner_registry: RuntimeOwnerRegistry {
-                revision: 21,
-                owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
-                principal_bindings: BTreeMap::new(),
-                lifecycle_records: BTreeMap::from([(
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+                registry_revision: 21,
+                owner_records: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_records: BTreeMap::new(),
+                lifecycle_rows: BTreeMap::from([(
                     browser_id.to_string(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: browser_id.to_string(),
@@ -4659,7 +4456,8 @@ mod tests {
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
-            },
+            }
+            .into_registry(),
             ..ServiceState::default()
         };
 
@@ -4670,7 +4468,8 @@ mod tests {
         };
         let plan = service_access_plan_for_state(&state, request.clone());
         let mut without_history = state.clone();
-        without_history.runtime_owner_registry = RuntimeOwnerRegistry::default();
+        without_history.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::default();
         let clean_plan = service_access_plan_for_state(&without_history, request);
 
         assert_eq!(
@@ -6061,7 +5860,7 @@ mod tests {
         };
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+            RuntimeLifecycleRecord,
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-terminal-profile";
@@ -6100,11 +5899,11 @@ mod tests {
                     ..BrowserProfile::default()
                 },
             )]),
-            runtime_owner_registry: RuntimeOwnerRegistry {
-                revision: 11,
-                owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
-                principal_bindings: BTreeMap::new(),
-                lifecycle_records: BTreeMap::from([(
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+                registry_revision: 11,
+                owner_records: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_records: BTreeMap::new(),
+                lifecycle_rows: BTreeMap::from([(
                     "session:terminal-lane".to_string(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: "session:terminal-lane".to_string(),
@@ -6119,7 +5918,8 @@ mod tests {
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
-            },
+            }
+            .into_registry(),
             ..ServiceState::default()
         };
         let authority = AuthenticatedServicePrincipal {

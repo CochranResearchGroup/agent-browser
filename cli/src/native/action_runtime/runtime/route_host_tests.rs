@@ -790,7 +790,7 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
     let mut state = state;
     let digest = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .keys()
         .next()
         .unwrap()
@@ -804,9 +804,8 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
             crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
         owner_generation: 3,
     };
-    state
-        .runtime_owner_registry
-        .principal_bindings
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .principal_records
         .insert(digest.clone(), historical.clone());
     let shared_command = json!({
         "action": "tab_new", "sessionName": session_id,
@@ -823,7 +822,7 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
         Some(ProfileSelectionReason::ExistingOwner)
     );
     assert_eq!(
-        state.runtime_owner_registry.principal_bindings[&digest],
+        state.runtime_owner_registry.principal_bindings()[&digest],
         historical
     );
     assert!(!state
@@ -843,9 +842,8 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
         )
         .is_err());
     }
-    state
-        .runtime_owner_registry
-        .principal_bindings
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .principal_records
         .get_mut(&digest)
         .unwrap()
         .owner_generation = 5;
@@ -857,14 +855,13 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
     )
     .is_err());
     for generation in [4, 5] {
-        let binding = state
-            .runtime_owner_registry
-            .principal_bindings
-            .get_mut(&digest)
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let binding = registry_fixture.principal_records.get_mut(&digest).unwrap();
         binding.owner_generation = generation;
         // A binding claiming another profile is always inconsistent, even when current.
         binding.profile_id = "different-profile".to_string();
+        drop(registry_fixture);
         assert!(apply_existing_session_profile_selection(
             &mut LaunchOptions::default(),
             &shared_command,
@@ -873,9 +870,8 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
         )
         .is_err());
     }
-    state
-        .runtime_owner_registry
-        .principal_bindings
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .principal_records
         .insert(digest.clone(), historical);
     state.profiles.get_mut(profile_id).unwrap().access_policy = Some(ServiceProfileAccessPolicy {
         mode: crate::native::service_profile_access_policy::ProfileAccessMode::Restricted,
@@ -1439,22 +1435,24 @@ fn exact_terminal_custom_profile_can_reopen_after_proven_close() {
     };
     let mut runtime_owner_registry =
         crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
-    runtime_owner_registry.lifecycle_records.insert(
-        browser_id.clone(),
-        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-            logical_browser_id: browser_id.clone(),
-            profile_identity_digest,
-            owner_generation: 5,
-            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
-            cleanup_obligation_state:
-                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
-            terminal_evidence: vec![
-                "service_reconcile_process_group_absent:62232".to_string(),
-                "service_reconcile_profile_lock_stale_pid_absent:62232".to_string(),
-            ],
-            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
-        },
-    );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut runtime_owner_registry)
+        .lifecycle_rows
+        .insert(
+            browser_id.clone(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: browser_id.clone(),
+                profile_identity_digest,
+                owner_generation: 5,
+                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state:
+                    crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "service_reconcile_process_group_absent:62232".to_string(),
+                    "service_reconcile_profile_lock_stale_pid_absent:62232".to_string(),
+                ],
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
     let state = ServiceState {
         profiles: BTreeMap::from([(
             profile_id.to_string(),
@@ -1525,22 +1523,24 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     };
     let mut runtime_owner_registry =
         crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
-    runtime_owner_registry.lifecycle_records.insert(
-        browser_id.clone(),
-        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-            logical_browser_id: browser_id,
-            profile_identity_digest,
-            owner_generation: 5,
-            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
-            cleanup_obligation_state:
-                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
-            terminal_evidence: vec![
-                "service_reconcile_process_group_absent:62232".to_string(),
-                "service_reconcile_profile_lock_stale_pid_absent:62232".to_string(),
-            ],
-            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
-        },
-    );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut runtime_owner_registry)
+        .lifecycle_rows
+        .insert(
+            browser_id.clone(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: browser_id,
+                profile_identity_digest,
+                owner_generation: 5,
+                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state:
+                    crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "service_reconcile_process_group_absent:62232".to_string(),
+                    "service_reconcile_profile_lock_stale_pid_absent:62232".to_string(),
+                ],
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
     let mut state = ServiceState {
         profiles: BTreeMap::from([(
             profile_id.to_string(),
@@ -1796,9 +1796,8 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     );
     state.sessions.get_mut(session_id).unwrap().lease = LeaseState::Released;
 
-    state
-        .runtime_owner_registry
-        .lifecycle_records
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .lifecycle_rows
         .get_mut(&format!("session:{session_id}"))
         .unwrap()
         .terminal_evidence = vec!["service_reconcile_process_group_absent:62232".to_string()];
@@ -1815,9 +1814,8 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         "existing_session_profile_identity_inconsistent"
     );
 
-    state
-        .runtime_owner_registry
-        .lifecycle_records
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .lifecycle_rows
         .get_mut(&format!("session:{session_id}"))
         .unwrap()
         .terminal_evidence = vec![
@@ -1886,22 +1884,24 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
     };
     let mut runtime_owner_registry =
         crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
-    runtime_owner_registry.lifecycle_records.insert(
-        browser_id.clone(),
-        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-            logical_browser_id: browser_id.clone(),
-            profile_identity_digest: legacy_profile_digest.clone(),
-            owner_generation: 1,
-            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
-            cleanup_obligation_state:
-                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
-            terminal_evidence: vec![
-                "exact_process_exited".to_string(),
-                "profile_lock_released".to_string(),
-            ],
-            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
-        },
-    );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut runtime_owner_registry)
+        .lifecycle_rows
+        .insert(
+            browser_id.clone(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: browser_id.clone(),
+                profile_identity_digest: legacy_profile_digest.clone(),
+                owner_generation: 1,
+                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state:
+                    crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
     let state = ServiceState {
         profiles: BTreeMap::from([(
             profile_id.to_string(),
@@ -2004,24 +2004,29 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
     let current_profile_digest =
         agent_browser_lease_authority::canonical_profile_identity_digest(&current_user_data_dir)
             .unwrap();
-    let mut current_owner = partially_migrated
-        .runtime_owner_registry
-        .owners
-        .remove(&legacy_profile_digest)
-        .unwrap();
+    let mut current_owner = crate::runtime_owner_transfer::edit_registry_fixture(
+        &mut partially_migrated.runtime_owner_registry,
+    )
+    .owner_records
+    .remove(&legacy_profile_digest)
+    .unwrap();
     current_owner.profile_identity_digest = current_profile_digest.clone();
     current_owner.owner_generation += 1;
-    partially_migrated
-        .runtime_owner_registry
-        .owners
-        .insert(current_profile_digest.clone(), current_owner);
-    let lifecycle = partially_migrated
-        .runtime_owner_registry
-        .lifecycle_records
+    crate::runtime_owner_transfer::edit_registry_fixture(
+        &mut partially_migrated.runtime_owner_registry,
+    )
+    .owner_records
+    .insert(current_profile_digest.clone(), current_owner);
+    let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+        &mut partially_migrated.runtime_owner_registry,
+    );
+    let lifecycle = registry_fixture
+        .lifecycle_rows
         .get_mut(&browser_id)
         .unwrap();
     lifecycle.profile_identity_digest = current_profile_digest;
     lifecycle.owner_generation += 1;
+    drop(registry_fixture);
     let mut options = LaunchOptions {
         runtime_profile: Some(profile_id.to_string()),
         ..LaunchOptions::default()
@@ -2091,23 +2096,25 @@ fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_b
     };
     let mut runtime_owner_registry =
         crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
-    runtime_owner_registry.lifecycle_records.insert(
-        browser_id.clone(),
-        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-            logical_browser_id: browser_id,
-            profile_identity_digest: profile_identity_digest.clone(),
-            owner_generation,
-            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
-            cleanup_obligation_state:
-                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
-            terminal_evidence: vec![
-                "exact_process_exited".to_string(),
-                "profile_lock_released".to_string(),
-            ],
-            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
-        },
-    );
-    runtime_owner_registry.principal_bindings.insert(
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut runtime_owner_registry)
+        .lifecycle_rows
+        .insert(
+            browser_id.clone(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: browser_id,
+                profile_identity_digest: profile_identity_digest.clone(),
+                owner_generation,
+                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state:
+                    crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut runtime_owner_registry).principal_records.insert(
         profile_identity_digest,
         crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
             principal_id: "principal:registered-old-owner".to_string(),
@@ -2268,9 +2275,8 @@ fn test_registered_work_lease_preserves_profile_selection_after_owner_exit() {
         "2099-08-27T18:00:00Z".to_string(),
     )
     .unwrap();
-    state
-        .runtime_owner_registry
-        .owners
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .owner_records
         .get_mut(&profile_digest)
         .unwrap()
         .state = crate::runtime_owner_transfer::ProfileOwnerState::Orphaned;
@@ -5071,21 +5077,23 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         pending_transfer: None,
         last_transition: None,
     });
-    snapshot.runtime_owner_registry.lifecycle_records.insert(
-        "session:cold-native".into(),
-        RuntimeLifecycleRecord {
-            logical_browser_id: "session:cold-native".into(),
-            profile_identity_digest: digest,
-            owner_generation: 1,
-            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
-            cleanup_obligation_state: CleanupObligationState::Satisfied,
-            terminal_evidence: vec![
-                "exact_process_exited".into(),
-                "profile_lock_released".into(),
-            ],
-            ..RuntimeLifecycleRecord::default()
-        },
-    );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut snapshot.runtime_owner_registry)
+        .lifecycle_rows
+        .insert(
+            "session:cold-native".into(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: "session:cold-native".into(),
+                profile_identity_digest: digest,
+                owner_generation: 1,
+                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state: CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".into(),
+                    "profile_lock_released".into(),
+                ],
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
     store.save(&snapshot).unwrap();
     assert!(
         bind_native_service_tab_command(&command, &daemon).is_ok(),
@@ -5138,9 +5146,8 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
     store.save(&snapshot).unwrap();
     assert!(bind_native_service_tab_command(&session_only, &daemon).is_err());
     snapshot.profiles.remove("same-directory");
-    snapshot
-        .runtime_owner_registry
-        .lifecycle_records
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut snapshot.runtime_owner_registry)
+        .lifecycle_rows
         .get_mut("session:cold-native")
         .unwrap()
         .cleanup_obligation_state = CleanupObligationState::Owned;
@@ -5225,7 +5232,9 @@ fn configured_runtime_alias_preserves_exact_owner_selection() {
             );
         }
         let mut unowned = state.clone();
-        unowned.runtime_owner_registry.owners.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut unowned.runtime_owner_registry)
+            .owner_records
+            .clear();
         assert!(!accepts(&command, &path, Some(4242), endpoint, &unowned));
         let mut options = LaunchOptions {
             runtime_profile: Some(selector.into()),
@@ -5638,37 +5647,41 @@ fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profi
     };
     state.runtime_owner_registry =
         crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(retained_owner.clone());
-    state.runtime_owner_registry.lifecycle_records.insert(
-        retained_owner.browser_id.clone(),
-        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-            logical_browser_id: retained_owner.browser_id.clone(),
-            boot_epoch: None,
-            profile_identity_digest,
-            owner_generation: retained_owner.owner_generation,
-            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
-            cleanup_obligation_state:
-                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
-            process_group_id: None,
-            package_launch_identity_digest: None,
-            terminal_evidence: vec![
-                "exact_process_exited".to_string(),
-                "profile_lock_released".to_string(),
-            ],
-        },
-    );
-    state.runtime_owner_registry.principal_bindings.insert(
-        retained_owner.profile_identity_digest.clone(),
-        crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
-            principal_id: authority.principal_id.clone(),
-            profile_id: profile_id.to_string(),
-            profile_identity_digest: retained_owner.profile_identity_digest.clone(),
-            capability_id: authority.capability_id.clone(),
-            provenance: authority.provenance,
-            owner_generation: retained_owner.owner_generation - 1,
-        },
-    );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .lifecycle_rows
+        .insert(
+            retained_owner.browser_id.clone(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: retained_owner.browser_id.clone(),
+                boot_epoch: None,
+                profile_identity_digest,
+                owner_generation: retained_owner.owner_generation,
+                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state:
+                    crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+                process_group_id: None,
+                package_launch_identity_digest: None,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+            },
+        );
+    crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+        .principal_records
+        .insert(
+            retained_owner.profile_identity_digest.clone(),
+            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                principal_id: authority.principal_id.clone(),
+                profile_id: profile_id.to_string(),
+                profile_identity_digest: retained_owner.profile_identity_digest.clone(),
+                capability_id: authority.capability_id.clone(),
+                provenance: authority.provenance,
+                owner_generation: retained_owner.owner_generation - 1,
+            },
+        );
     command["serviceProfileRouteAuthorization"]["runtimeOwnerRegistryRevision"] =
-        json!(state.runtime_owner_registry.revision);
+        json!(state.runtime_owner_registry.revision());
     command["serviceProfileRouteAuthorization"]["ownerId"] = json!(retained_owner.owner_id);
     command["serviceProfileRouteAuthorization"]["ownerGeneration"] =
         json!(retained_owner.owner_generation);

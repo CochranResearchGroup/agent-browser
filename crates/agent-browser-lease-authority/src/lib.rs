@@ -9,6 +9,7 @@
 mod authority;
 mod principal;
 mod profile_identity;
+mod runtime_owner;
 
 pub use authority::*;
 pub use principal::{
@@ -22,3 +23,4 @@ pub use principal::{
     SERVICE_PROFILE_CAPABILITY_SCHEMA_VERSION,
 };
 pub use profile_identity::{canonical_profile_identity_digest, validate_runtime_profile_name};
+pub use runtime_owner::*;

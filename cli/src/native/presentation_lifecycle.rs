@@ -4,8 +4,11 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 use super::presentation_capacity::{
-    PresentationCapacityAuthority, PresentationSlot, PresentationSlotState, PressureAdmission,
+    PresentationCapacityAuthority, PresentationSlotState, PressureAdmission,
 };
+
+#[cfg(test)]
+use super::presentation_capacity::PresentationSlot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -219,32 +222,13 @@ impl PresentationLifecycleAuthority {
         pressure: PressureAdmission,
         provisioner: &mut dyn PresentationProvisioningAdapter,
     ) -> ScaleOutDecision {
-        if capacity
-            .slots
-            .iter()
-            .any(|slot| slot.state == PresentationSlotState::Provisioning)
-        {
-            return ScaleOutDecision::Deferred {
-                reason: "provisioning_in_flight",
-            };
+        let next_generation = self.next_generation.saturating_add(1);
+        let slot_id = format!("slot-elastic-{next_generation}");
+        let lifecycle_generation = format!("lifecycle-{next_generation}");
+        if let Err(reason) = capacity.begin_provisioning(&slot_id, pressure) {
+            return ScaleOutDecision::Deferred { reason };
         }
-        if capacity.slots.len() >= capacity.config.hard_maximum {
-            return ScaleOutDecision::Deferred {
-                reason: "configured_hard_maximum",
-            };
-        }
-        if capacity.slots.len() >= pressure.admitted_maximum() {
-            return ScaleOutDecision::Deferred {
-                reason: "pressure_admission",
-            };
-        }
-
-        self.next_generation = self.next_generation.saturating_add(1);
-        let slot_id = format!("slot-elastic-{}", self.next_generation);
-        let lifecycle_generation = format!("lifecycle-{}", self.next_generation);
-        let mut slot = PresentationSlot::warm_idle(&slot_id);
-        slot.state = PresentationSlotState::Provisioning;
-        capacity.slots.push(slot);
+        self.next_generation = next_generation;
 
         match provisioner.provision_one(&slot_id, &lifecycle_generation) {
             Ok(provisioned)
@@ -258,14 +242,11 @@ impl PresentationLifecycleAuthority {
                             && !resource.ownership_identity.trim().is_empty()
                     }) =>
             {
-                let slot = capacity
-                    .slots
-                    .iter_mut()
-                    .find(|slot| slot.id == slot_id)
-                    .expect("provisioning slot must remain present");
-                slot.route_id = Some(provisioned.route_id);
-                slot.display_allocation_id = Some(provisioned.display_allocation_id);
-                slot.state = PresentationSlotState::WarmIdle;
+                capacity.complete_provisioning(
+                    &slot_id,
+                    provisioned.route_id,
+                    provisioned.display_allocation_id,
+                );
                 self.elastic_resources
                     .insert(slot_id.clone(), provisioned.owned_resources);
                 self.lifecycle_generations
@@ -300,15 +281,8 @@ impl PresentationLifecycleAuthority {
         owned_resources: Vec<OwnedResource>,
         reason: String,
     ) -> ScaleOutDecision {
-        let cleanup_obligation_id = format!("cleanup:{slot_id}:{lifecycle_generation}");
-        let slot = capacity
-            .slots
-            .iter_mut()
-            .find(|slot| slot.id == slot_id)
-            .expect("failed provisioning slot must remain present");
-        slot.state = PresentationSlotState::Quarantined;
-        slot.cleanup_obligation_ids
-            .push(cleanup_obligation_id.clone());
+        let cleanup_obligation_id =
+            capacity.quarantine_failed_provisioning(&slot_id, &lifecycle_generation);
         self.elastic_resources
             .insert(slot_id.clone(), owned_resources);
         self.lifecycle_generations
@@ -329,15 +303,7 @@ impl PresentationLifecycleAuthority {
         if !self.elastic_resources.contains_key(slot_id) {
             return Err("presentation_slot_not_elastic".to_string());
         }
-        let slot = capacity
-            .slots
-            .iter_mut()
-            .find(|slot| slot.id == slot_id)
-            .ok_or_else(|| "presentation_slot_not_found".to_string())?;
-        if slot.state != PresentationSlotState::WarmIdle {
-            return Err("presentation_slot_not_idle".to_string());
-        }
-        slot.state = PresentationSlotState::Cooling;
+        capacity.begin_cooldown(slot_id)?;
         self.cooling_since.insert(slot_id.to_string(), now);
         Ok(())
     }
@@ -349,7 +315,7 @@ impl PresentationLifecycleAuthority {
         references: &mut dyn PresentationReferenceAdapter,
         garbage_collector: &mut dyn PresentationGarbageCollectorAdapter,
     ) -> ScaleInDecision {
-        if capacity.slots.len() <= self.warm_minimum {
+        if capacity.slots().len() <= self.warm_minimum {
             return ScaleInDecision::Deferred {
                 slot_id: None,
                 blockers: Vec::new(),
@@ -361,7 +327,7 @@ impl PresentationLifecycleAuthority {
             .iter()
             .filter(|(slot_id, since)| {
                 now.saturating_sub(**since) >= self.cooldown_ticks
-                    && capacity.slots.iter().any(|slot| {
+                    && capacity.slots().iter().any(|slot| {
                         slot.id == slot_id.as_str() && slot.state == PresentationSlotState::Cooling
                     })
             })
@@ -418,7 +384,7 @@ impl PresentationLifecycleAuthority {
                 deleted_resource_ids,
             );
         }
-        capacity.slots.retain(|slot| slot.id != slot_id);
+        capacity.complete_reclamation(&slot_id);
         self.elastic_resources.remove(&slot_id);
         self.lifecycle_generations.remove(&slot_id);
         self.cooling_since.remove(&slot_id);
@@ -446,13 +412,7 @@ impl PresentationLifecycleAuthority {
             .get(&slot_id)
             .cloned()
             .unwrap_or_else(|| "unknown".to_string());
-        if let Some(slot) = capacity.slots.iter_mut().find(|slot| slot.id == slot_id) {
-            slot.state = PresentationSlotState::Quarantined;
-            let obligation = format!("cleanup:{slot_id}:scale-in");
-            if !slot.cleanup_obligation_ids.contains(&obligation) {
-                slot.cleanup_obligation_ids.push(obligation);
-            }
-        }
+        capacity.quarantine_failed_reclamation(&slot_id);
         ScaleInDecision::Quarantined {
             receipt: ReclaimReceipt {
                 slot_id,
@@ -591,10 +551,10 @@ mod tests {
 
         assert!(matches!(decision, ScaleOutDecision::Provisioned { .. }));
         assert_eq!(provisioner.calls, 1);
-        assert_eq!(capacity.slots.len(), 3);
+        assert_eq!(capacity.slots().len(), 3);
         assert_eq!(
             capacity
-                .slots
+                .slots()
                 .iter()
                 .filter(|slot| slot.id.starts_with("slot-elastic-"))
                 .count(),
@@ -621,7 +581,7 @@ mod tests {
             }
         );
         assert_eq!(provisioner.calls, 0);
-        assert_eq!(capacity.slots.len(), 2);
+        assert_eq!(capacity.slots().len(), 2);
     }
 
     #[test]
@@ -637,7 +597,7 @@ mod tests {
             lifecycle.scale_out_one(&mut capacity, PressureAdmission::admit(6), &mut provisioner);
 
         assert!(matches!(decision, ScaleOutDecision::Quarantined { .. }));
-        let slot = capacity.slots.last().unwrap();
+        let slot = capacity.slots().last().unwrap();
         assert_eq!(slot.state, PresentationSlotState::Quarantined);
         assert_eq!(slot.cleanup_obligation_ids.len(), 1);
     }
@@ -684,7 +644,7 @@ mod tests {
         let decision = lifecycle.reclaim_one_due(&mut capacity, 15, &mut references, &mut gc);
         assert!(matches!(decision, ScaleInDecision::Reclaimed { .. }));
         assert_eq!(gc.reclaimed.len(), 2);
-        assert_eq!(capacity.slots.len(), 2);
+        assert_eq!(capacity.slots().len(), 2);
     }
 
     #[test]
@@ -715,7 +675,7 @@ mod tests {
             ));
         }
 
-        assert_eq!(capacity.slots.len(), 2);
+        assert_eq!(capacity.slots().len(), 2);
         assert!(lifecycle.elastic_resources.is_empty());
         assert!(lifecycle.lifecycle_generations.is_empty());
         assert!(lifecycle.cooling_since.is_empty());

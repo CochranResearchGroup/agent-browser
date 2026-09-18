@@ -324,7 +324,7 @@ pub(crate) struct ServiceStatusResponse {
     pub(crate) control_plane: StatusControlPlaneAuthority,
     pub(crate) service_state: Value,
     #[serde(rename = "challengeTaskSummary")]
-    pub(crate) challenge_task_summary: super::service_challenge_task::ServiceChallengeTaskSummary,
+    pub(crate) challenge_task_summary: agent_browser_service_model::ServiceChallengeTaskSummary,
     #[serde(rename = "serviceStateProjection")]
     pub(crate) service_state_projection: ServiceStateProjectionMetadata,
     #[serde(rename = "profileAllocations")]
@@ -355,7 +355,7 @@ pub(crate) struct ServiceStatusResponse {
     pub(crate) runtime_lifecycle: Value,
     #[serde(rename = "crashRegenerationTransactions")]
     pub(crate) crash_regeneration_transactions:
-        Vec<super::service_crash_regeneration::CrashRegenerationStatus>,
+        Vec<agent_browser_service_model::CrashRegenerationStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -549,19 +549,22 @@ impl ServiceStatusProjector {
                 .presentation_capacity
                 .as_ref()
                 .map(|capacity| {
-                    capacity.projection_with_service_state(
+                    super::presentation_capacity::projection_with_service_state(
+                        capacity,
                         super::presentation_capacity::PressureAdmission::admit(
-                            capacity.config.hard_maximum,
+                            capacity.config().hard_maximum,
                         ),
                         Some(&authority_state),
                     )
                 });
+        let current_boot_epoch = crate::process_identity::current_boot_epoch();
         let response = ServiceStatusResponse {
             control_plane: input.control_plane,
             profile_allocations,
             manual_browsers,
             retained_display_allocations: super::service_model::retained_display_allocation_summary(
                 &authority_state,
+                current_boot_epoch.as_deref(),
             ),
             presentation_capacity,
             desktop_evidence_policy:
@@ -570,9 +573,7 @@ impl ServiceStatusProjector {
             closed_tab_projection,
             launch_config: input.launch_config,
             service_state: response_state,
-            challenge_task_summary: super::service_challenge_task::challenge_task_summary(
-                &authority_state,
-            ),
+            challenge_task_summary: authority_state.service_challenge_task_summary(),
             service_state_projection,
             status_projection: StatusProjection {
                 schema_version: 1,
@@ -584,10 +585,7 @@ impl ServiceStatusProjector {
             },
             service_state_lock_diagnostics: super::service_store::service_state_lock_diagnostics(),
             runtime_lifecycle: input.runtime_lifecycle,
-            crash_regeneration_transactions:
-                super::service_crash_regeneration::crash_regeneration_statuses(
-                    &authority_state.crash_regeneration_transactions,
-                ),
+            crash_regeneration_transactions: authority_state.crash_regeneration_statuses(),
         };
         if input.service_state_projection == ServiceStateProjectionMode::DashboardSummary {
             let serialized_bytes = serde_json::to_vec(&response)
@@ -614,9 +612,7 @@ pub(crate) async fn project_status_with_launch_configuration(
     service_state_projection: ServiceStateProjectionMode,
 ) -> Result<ServiceStatusResponse, ServiceStatusProjectionError> {
     let launch_config = StatusLaunchConfiguration::try_from(launch_config)?;
-    let runtime_lifecycle = crate::install::runtime_lifecycle_status_json_for_registry(
-        &service_state.runtime_owner_registry,
-    );
+    let runtime_lifecycle = crate::install::runtime_lifecycle_status_json_for_state(&service_state);
     projector
         .project(StatusAuthorityInput {
             service_state,
@@ -1262,10 +1258,9 @@ pub(crate) mod action_commands {
             .cloned()
             .collect::<std::collections::BTreeSet<_>>();
         let managed = state
-            .runtime_owner_registry
-            .lifecycle_records
-            .keys()
-            .cloned()
+            .runtime_resource_lanes()
+            .into_iter()
+            .map(|lane| lane.browser_id.to_string())
             .collect::<std::collections::BTreeSet<_>>();
         let session_references = state
             .sessions
