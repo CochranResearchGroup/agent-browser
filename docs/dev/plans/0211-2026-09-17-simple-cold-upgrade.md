@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 16
+Plan version: 17
 
 State: OPEN
 
@@ -269,6 +269,23 @@ with workspace formatting, diff hygiene, and strict Clippy. No live browser or
 installed runtime was used. Concrete process-restart CDP reattachment remains
 open because the new BrowserManager worker does not yet adopt a recorded live
 endpoint after its own process restarts.
+
+Checkpoint `c3ce1b97` closes the concrete restart gap. A graceful runtime-worker
+shutdown now relinquishes its launched Chrome process instead of treating
+Service lifetime as browser lifetime. The replacement worker first verifies
+the persisted PID, reconnects to the recorded browser-wide CDP endpoint,
+rediscovers current targets, and requires a responsive CDP command before
+reusing the browser. Final session close sends `Browser.close` through the
+reattached manager and requires the recorded PID to disappear within five
+seconds. If a live recorded process cannot be requalified through its recorded
+endpoint, the worker reports it as nonresponsive but will not claim it was
+closed or launch a competing profile browser after an unproven close. A real
+ignored acceptance test launched Chrome against a disposable profile,
+relinquished it with the first worker, reattached from persisted identity in a
+second worker, and closed the exact process. The focused restart test, fourteen
+CLI browser-session tests, formatting, strict workspace Clippy, diff hygiene,
+and a fresh residue readback pass; the readback found no remaining fixture
+browser process.
 
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
@@ -603,12 +620,12 @@ touching overlapping documentation surfaces.
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixture releases the retained session and preserves the profile record and physical data; active protected-claim process coverage remains |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
-| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization and provider-free restart reuse green; concrete process restart and client fixture pending |
+| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization, provider-free restart reuse, and concrete disposable-Chrome worker reattachment green; full daemon-process and client fixture pending |
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, and public named-session navigation and close routing green; hosted Chrome fixture pending |
 | Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, exact recorded deletion, filesystem adapter, and default host policy green; hosted Chrome fixture pending |
 | Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle and concrete BrowserManager tab adapter green; hosted CDP fixture pending |
-| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, and recorded-PID plus CDP adapter green; Service hosting and restart reattachment pending |
+| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, and concrete restart reattachment green; full daemon-process fixture pending |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, and ordinary named-session navigation and close routing green; hosted Chrome fixture and remaining ordinary commands pending |
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | not implemented |
