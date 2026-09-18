@@ -339,6 +339,35 @@ fn fresh_cold_install_starts_one_runtime_host_and_dashboard_for_service_use() {
         "fresh service status",
     );
     assert_eq!(status["success"], true);
+    assert_eq!(
+        status["data"]["browserSessionState"]["schemaVersion"],
+        "agent-browser.browser-session-state.v1"
+    );
+    let profile_catalog: serde_json::Value = serde_json::from_slice(
+        &fs::read(
+            fixture
+                .root
+                .join("home/.agent-browser/service/browser-profile-catalog.json"),
+        )
+        .expect("startup browser profile catalog"),
+    )
+    .expect("startup browser profile catalog JSON");
+    assert_eq!(
+        profile_catalog["schemaVersion"],
+        "agent-browser.browser-profile-catalog.v1"
+    );
+    assert!(profile_catalog["profiles"]
+        .as_object()
+        .is_some_and(serde_json::Map::is_empty));
+    assert_eq!(
+        profile_catalog["disposablePolicies"]["default"]["id"],
+        "default"
+    );
+    assert!(
+        profile_catalog["disposablePolicies"]["default"]["userDataRoot"]
+            .as_str()
+            .is_some_and(|path| Path::new(path).is_absolute())
+    );
 
     let socket_dir = fixture.root.join("runtime/sockets");
     let process_metadata = [socket_dir.join("runtime-host.pid")];

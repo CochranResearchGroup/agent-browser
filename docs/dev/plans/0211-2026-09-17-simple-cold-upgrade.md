@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 35
+Plan version: 36
 
 State: OPEN
 
@@ -720,6 +720,17 @@ configured order, assigning `:10` and then `:11`. A restarted host reloads the
 same independent browser and desktop assignments, while the legacy diagnostic
 file remains semantically unchanged and never participates in selection.
 
+The version 36 continuation closes Service startup joining for the independent
+Browser Session State and Profile Catalog. `service status` remains a local
+no-launch read when no daemon exists. When the selected runtime host is already
+ready, the same command now joins that host instead of bypassing it, so status
+is serialized with the live Browser Session Manager. The joined disposable
+cold-install fixture first failed with a missing `browserSessionState`; after
+the routing repair it returns `browser-session-state.v1`, persists
+`browser-profile-catalog.v1` with the default disposable policy and no invented
+named profiles, retains the same host identity and dashboard endpoint on a
+second read, and shuts down without process or filesystem residue.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -1013,7 +1024,7 @@ touching overlapping documentation surfaces.
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | ordinary and reviewed-candidate source routes plus isolated success and rollback fixtures green; installed acceptance pending |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | joined disposable cold-install-to-first-use proves the selected generation, one reused runtime-host identity, one reachable reused dashboard endpoint, repeated fresh Service requests, and exact installed shutdown; independent host serialization, provider-free restart reuse, concrete disposable-Chrome worker reattachment, and the compiled-CLI shared-daemon title, snapshot, click, redirect, and close journey are also green |
-| Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
+| Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import, independent atomic first-startup persistence, and public status joining through an already-ready Service host are green; no-daemon status remains local and no-launch |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, public named-session lifecycle routing, generic current-tab command routing, and the two-session compiled-CLI/runtime-host Chrome fixture are green |
 | Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, hosted exact recorded filesystem deletion with foreign-sibling preservation, default host policy, and exact hosted-Chrome final-process termination are green |
 | Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle, concrete adapter, real-Chrome restart and ordinary-command fixture, public named-session new/current-close routing, and the two-session daemon-process tab and close fixture are green |

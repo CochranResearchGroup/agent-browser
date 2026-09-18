@@ -2512,7 +2512,9 @@ fn main() {
         cmd["serviceState"] = json!(flags.service_state.clone());
     }
 
-    if command_executes_locally_before_daemon(&cmd) {
+    let ready_daemon_should_handle_command =
+        command_prefers_existing_daemon(&cmd, connection::daemon_startup_ready(&flags.session));
+    if command_executes_locally_before_daemon(&cmd) && !ready_daemon_should_handle_command {
         let action = cmd.get("action").and_then(|value| value.as_str());
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
         let mut state = native::action_runtime::DaemonState::new();
@@ -3763,6 +3765,10 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
         })
 }
 
+fn command_prefers_existing_daemon(cmd: &serde_json::Value, daemon_ready: bool) -> bool {
+    daemon_ready && cmd.get("action").and_then(serde_json::Value::as_str) == Some("service_status")
+}
+
 fn command_targets_existing_daemon_before_prestart(cmd: &serde_json::Value) -> bool {
     cmd.get("action")
         .and_then(|value| value.as_str())
@@ -4074,6 +4080,18 @@ mod tests {
         assert!(command_executes_locally_before_daemon(&json!({
             "action": "service_status"
         })));
+        assert!(!command_prefers_existing_daemon(
+            &json!({ "action": "service_status" }),
+            false
+        ));
+        assert!(command_prefers_existing_daemon(
+            &json!({ "action": "service_status" }),
+            true
+        ));
+        assert!(!command_prefers_existing_daemon(
+            &json!({ "action": "service_access_plan" }),
+            true
+        ));
     }
 
     #[test]
