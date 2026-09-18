@@ -101,6 +101,19 @@ pub enum ProfileReceiptReplayError {
     ResetReceiptConflict,
 }
 
+/// Pure durable-state result for an explicit workstation cold shutdown.
+/// Filesystem profile data and historical terminal evidence are intentionally
+/// outside the released counts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColdShutdownStateReceipt {
+    pub released_runtime_owners: usize,
+    pub released_resource_claims: usize,
+    pub released_sessions: usize,
+    pub released_viewer_leases: usize,
+    pub failed_pending_acquisitions: usize,
+}
+
 /// Explicit configuration input for constructing the configured Service State
 /// overlay. Durable compatibility metadata and runtime-owned records are not
 /// accepted through this interface.
@@ -760,6 +773,62 @@ impl ServiceState {
 
     pub fn state_revision(&self) -> u64 {
         self.state_revision
+    }
+
+    /// Remove all current local effect authority after process and provider
+    /// adapters have completed an explicit cold shutdown. Durable profiles and
+    /// lifecycle history remain intact, while replay is idempotent.
+    pub fn release_local_authority_for_cold_shutdown(
+        &mut self,
+        observed_at: &str,
+    ) -> Result<ColdShutdownStateReceipt, String> {
+        let released_resource_claims = self
+            .lease_authority
+            .release_all_for_cold_shutdown(observed_at)
+            .map_err(|error| format!("cold_shutdown_lease_release_failed:{error:?}"))?;
+        let released_runtime_owners = self.runtime_owner_registry.release_all_for_cold_shutdown();
+
+        let mut released_sessions = 0;
+        for session in self.sessions.values_mut() {
+            if !session.lease.is_inactive()
+                || session.work_lease_id.is_some()
+                || session.work_lease_revision != 0
+            {
+                released_sessions += 1;
+            }
+            session.lease = LeaseState::Released;
+            session.work_lease_id = None;
+            session.work_lease_revision = 0;
+        }
+
+        let mut released_viewer_leases = 0;
+        for lease in self.viewer_leases.values_mut() {
+            if lease.state != "released" {
+                lease.state = "released".to_string();
+                lease.updated_at = Some(observed_at.to_string());
+                released_viewer_leases += 1;
+            }
+        }
+
+        let mut failed_pending_acquisitions = 0;
+        for lease in self.remote_view_acquisition_leases.values_mut() {
+            if lease.state == "pending" {
+                lease.state = "failed".to_string();
+                lease.phase = "workstation_cold_shutdown".to_string();
+                lease.updated_at = Some(observed_at.to_string());
+                lease.failed_at = Some(observed_at.to_string());
+                lease.failure_reason = Some("workstation_cold_shutdown".to_string());
+                failed_pending_acquisitions += 1;
+            }
+        }
+
+        Ok(ColdShutdownStateReceipt {
+            released_runtime_owners,
+            released_resource_claims,
+            released_sessions,
+            released_viewer_leases,
+            failed_pending_acquisitions,
+        })
     }
     /// Return a fully cloned next-revision candidate before an adapter applies
     /// any mutation. Persistence adapters retain their own CAS and locks.
@@ -5282,6 +5351,114 @@ mod tests {
         assert!(state.current_lease_claim(&resource, expires_at).is_none());
         assert!(state.current_lease_claim(&resource, "invalid").is_none());
         assert_eq!(state, before);
+    }
+
+    #[test]
+    fn cold_shutdown_releases_local_authority_without_deleting_profiles() {
+        use agent_browser_lease_authority::{
+            AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey, ProfileOwner,
+            ProfileOwnerState, RuntimeOwnerRegistry,
+        };
+
+        let digest = "a".repeat(64);
+        let mut state = ServiceState::default();
+        state.profiles.insert(
+            "profile-1".to_string(),
+            BrowserProfile {
+                id: "profile-1".to_string(),
+                user_data_dir: Some("/profiles/profile-1".to_string()),
+                ..BrowserProfile::default()
+            },
+        );
+        state.sessions.insert(
+            "session-1".to_string(),
+            BrowserSession {
+                id: "session-1".to_string(),
+                work_lease_id: Some("claim-1".to_string()),
+                work_lease_revision: 4,
+                ..BrowserSession::default()
+            },
+        );
+        state.viewer_leases.insert(
+            "viewer-1".to_string(),
+            ViewerLease {
+                id: "viewer-1".to_string(),
+                state: "active".to_string(),
+                ..ViewerLease::default()
+            },
+        );
+        state.remote_view_acquisition_leases.insert(
+            "acquisition-1".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "acquisition-1".to_string(),
+                state: "pending".to_string(),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        );
+        state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(ProfileOwner {
+            owner_id: "owner-1".to_string(),
+            profile_identity_digest: digest.clone(),
+            state: ProfileOwnerState::Ready,
+            owner_generation: 1,
+            browser_id: "browser-1".to_string(),
+            daemon_session_route: "session-1".to_string(),
+            process_instance_digest: digest.clone(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: digest.clone(),
+            target_set_digest: digest,
+            pending_transfer: None,
+            last_transition: None,
+        });
+        state
+            .acquire_lease_claim(AcquireLeaseClaimRequest {
+                resource: LeaseResourceKey::profile("profile-1"),
+                parent_claim_id: None,
+                principal_id: "principal-1".to_string(),
+                capability_id: "capability-1".to_string(),
+                capability_revision: 1,
+                mode: LeaseClaimMode::Ephemeral,
+                expected_claim_revision: 0,
+                idempotency_key: "acquire-1".to_string(),
+                now: "2026-09-17T12:00:00Z".to_string(),
+                expires_at: "2026-09-17T12:05:00Z".to_string(),
+                transition_deadline: None,
+                recovery_controller_id: None,
+                boot_epoch: None,
+                owner_generation: None,
+            })
+            .unwrap();
+
+        let before_invalid = state.clone();
+        assert!(state
+            .release_local_authority_for_cold_shutdown("invalid")
+            .is_err());
+        assert_eq!(state, before_invalid);
+
+        let receipt = state
+            .release_local_authority_for_cold_shutdown("2026-09-17T12:01:00Z")
+            .unwrap();
+        assert_eq!(receipt.released_runtime_owners, 1);
+        assert_eq!(receipt.released_resource_claims, 1);
+        assert_eq!(receipt.released_sessions, 1);
+        assert_eq!(receipt.released_viewer_leases, 1);
+        assert_eq!(receipt.failed_pending_acquisitions, 1);
+        assert!(state.runtime_owner_registry.owners().is_empty());
+        assert_eq!(state.sessions["session-1"].lease, LeaseState::Released);
+        assert_eq!(state.sessions["session-1"].work_lease_id, None);
+        assert_eq!(state.viewer_leases["viewer-1"].state, "released");
+        assert_eq!(
+            state.remote_view_acquisition_leases["acquisition-1"].state,
+            "failed"
+        );
+        assert_eq!(
+            state.profiles["profile-1"].user_data_dir.as_deref(),
+            Some("/profiles/profile-1")
+        );
+
+        let replay = state
+            .release_local_authority_for_cold_shutdown("2026-09-17T12:01:01Z")
+            .unwrap();
+        assert_eq!(replay, ColdShutdownStateReceipt::default());
     }
 
     #[test]

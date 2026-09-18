@@ -8,6 +8,8 @@
 use serde::Serialize;
 use std::time::Duration;
 
+use crate::native::service_store::ServiceStateRepository;
+
 pub(crate) const SHUTDOWN_SCHEMA_VERSION: &str = "agent-browser.workstation-shutdown.v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -179,9 +181,25 @@ pub(crate) fn execute_workstation_shutdown(
     }
 }
 
+/// Commit the state-only shutdown boundary under the canonical repository
+/// lock. Process, unit, and container adapters must finish before calling this
+/// helper so durable authority never claims an effect is gone prematurely.
+pub(crate) fn release_service_authority_for_cold_shutdown(
+    repository: &impl ServiceStateRepository,
+    observed_at: &str,
+) -> Result<agent_browser_service_model::ColdShutdownStateReceipt, String> {
+    repository.mutate(|state| state.release_local_authority_for_cold_shutdown(observed_at))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_model::{BrowserProfile, BrowserSession, LeaseState};
+    use crate::native::service_store::{
+        JsonServiceStateStore, LockedServiceStateRepository, ServiceStateStore,
+    };
+    use std::fs;
+    use std::path::PathBuf;
 
     #[derive(Default)]
     struct FakeEffects {
@@ -306,5 +324,54 @@ mod tests {
         assert_eq!(receipt.residue.owned_browsers, 1);
         assert_eq!(receipt.residue.active_leases, 2);
         assert_eq!(receipt.steps.len(), 6);
+    }
+
+    #[test]
+    fn repository_shutdown_release_preserves_profile_data_and_replays_cleanly() {
+        let directory = std::env::temp_dir().join(format!(
+            "agent-browser-cold-shutdown-state-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("state.json");
+        let store = JsonServiceStateStore::new(&path);
+        let mut state = agent_browser_service_model::ServiceState::default();
+        state.profiles.insert(
+            "named".to_string(),
+            BrowserProfile {
+                id: "named".to_string(),
+                user_data_dir: Some("/profiles/named".to_string()),
+                ..BrowserProfile::default()
+            },
+        );
+        state.sessions.insert(
+            "session-1".to_string(),
+            BrowserSession {
+                id: "session-1".to_string(),
+                ..BrowserSession::default()
+            },
+        );
+        store.save(&state).unwrap();
+        let repository = LockedServiceStateRepository::new(store);
+
+        let first =
+            release_service_authority_for_cold_shutdown(&repository, "2026-09-17T12:00:00Z")
+                .unwrap();
+        assert_eq!(first.released_sessions, 1);
+        let persisted = repository.load_snapshot().unwrap();
+        assert_eq!(persisted.sessions["session-1"].lease, LeaseState::Released);
+        assert_eq!(
+            persisted.profiles["named"].user_data_dir.as_deref(),
+            Some("/profiles/named")
+        );
+
+        let replay =
+            release_service_authority_for_cold_shutdown(&repository, "2026-09-17T12:00:01Z")
+                .unwrap();
+        assert_eq!(
+            replay,
+            agent_browser_service_model::ColdShutdownStateReceipt::default()
+        );
+        fs::remove_dir_all(PathBuf::from(directory)).unwrap();
     }
 }

@@ -562,6 +562,42 @@ impl RuntimeOwnerRegistry {
         self.revision = self.revision.saturating_add(1);
     }
 
+    /// Release every current runtime owner after an explicit workstation cold
+    /// shutdown has proven the owned processes absent. Profile definitions and
+    /// lifecycle history remain available for the next clean startup, while no
+    /// retained owner or principal binding can authorize effects.
+    ///
+    /// Replaying the operation against an already unowned registry is a no-op.
+    pub fn release_all_for_cold_shutdown(&mut self) -> usize {
+        let owners = self.owners.values().cloned().collect::<Vec<_>>();
+        if owners.is_empty() && self.principal_bindings.is_empty() {
+            return 0;
+        }
+
+        for owner in &owners {
+            if let Some(lifecycle) = self.lifecycle_records.get_mut(&owner.browser_id) {
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Terminal;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Satisfied;
+                lifecycle.process_group_id = None;
+                lifecycle.package_launch_identity_digest = None;
+                if !lifecycle
+                    .terminal_evidence
+                    .iter()
+                    .any(|evidence| evidence == "workstation_cold_shutdown")
+                {
+                    lifecycle
+                        .terminal_evidence
+                        .push("workstation_cold_shutdown".to_string());
+                }
+            }
+        }
+        let released = owners.len();
+        self.owners.clear();
+        self.principal_bindings.clear();
+        self.revision = self.revision.saturating_add(1);
+        released
+    }
+
     /// Apply one pure lifecycle intention, preserving ordered partial mutations.
     /// Repository callers own transactional rollback by applying to a cloned registry.
     pub fn apply_lifecycle_transition(
@@ -2054,6 +2090,53 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn cold_shutdown_releases_owner_authority_and_preserves_terminal_history() {
+        let owner = owner();
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner.clone());
+        registry.restore_lifecycle_records(BTreeMap::from([(
+            owner.browser_id.clone(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: owner.browser_id.clone(),
+                profile_identity_digest: owner.profile_identity_digest.clone(),
+                owner_generation: owner.owner_generation,
+                lifecycle_state: RuntimeLaneLifecycleState::Ready,
+                cleanup_obligation_state: CleanupObligationState::Owned,
+                process_group_id: Some(4100),
+                package_launch_identity_digest: Some(digest("package-launch")),
+                terminal_evidence: vec!["prior-evidence".to_string()],
+                ..RuntimeLifecycleRecord::default()
+            },
+        )]));
+
+        assert_eq!(registry.release_all_for_cold_shutdown(), 1);
+        assert!(registry.owners().is_empty());
+        assert!(registry.principal_bindings().is_empty());
+        assert_eq!(registry.revision(), 2);
+        let lifecycle = &registry.lifecycle_records()[&owner.browser_id];
+        assert_eq!(
+            lifecycle.lifecycle_state,
+            RuntimeLaneLifecycleState::Terminal
+        );
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Satisfied
+        );
+        assert_eq!(lifecycle.process_group_id, None);
+        assert_eq!(lifecycle.package_launch_identity_digest, None);
+        assert_eq!(
+            lifecycle.terminal_evidence,
+            vec![
+                "prior-evidence".to_string(),
+                "workstation_cold_shutdown".to_string()
+            ]
+        );
+
+        let after_first = registry.clone();
+        assert_eq!(registry.release_all_for_cold_shutdown(), 0);
+        assert_eq!(registry, after_first);
     }
 
     #[test]
