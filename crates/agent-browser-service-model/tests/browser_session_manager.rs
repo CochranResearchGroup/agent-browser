@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use agent_browser_service_model::{
     BrowserDisposableProfilePolicy, BrowserLaunch, BrowserProfileCatalog,
@@ -15,7 +15,9 @@ struct FixtureEffects {
     browser_live: bool,
     closes: Vec<String>,
     initial_tab: Option<BrowserTabAcquisition>,
+    initial_tabs: VecDeque<BrowserTabAcquisition>,
     initial_tab_requests: Vec<String>,
+    initial_tab_attributed_targets: Vec<Vec<String>>,
     new_tab: Option<BrowserTabAcquisition>,
     new_tab_requests: Vec<String>,
     tab_closes: Vec<(String, String)>,
@@ -148,10 +150,14 @@ impl BrowserSessionEffects for FixtureEffects {
     fn acquire_initial_tab(
         &mut self,
         browser: &agent_browser_service_model::ManagedBrowserInstance,
+        attributed_target_ids: &[String],
     ) -> Result<BrowserTabAcquisition, String> {
         self.initial_tab_requests.push(browser.id.clone());
-        self.initial_tab
-            .clone()
+        self.initial_tab_attributed_targets
+            .push(attributed_target_ids.to_vec());
+        self.initial_tabs
+            .pop_front()
+            .or_else(|| self.initial_tab.clone())
             .ok_or_else(|| "fixture_initial_tab_missing".to_string())
     }
 
@@ -286,6 +292,63 @@ fn repeated_navigation_reuses_current_tab_without_another_acquisition() {
     assert_eq!(state.tabs.len(), 1);
     assert_eq!(state.tabs["tab-bootstrap"].last_activity_at_ms, 3_000);
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 3_000);
+}
+
+#[test]
+fn second_session_gets_one_initial_tab_when_bootstrap_is_already_attributed() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tabs: VecDeque::from([
+            BrowserTabAcquisition {
+                tab_id: "tab-alice".to_string(),
+                target_id: "target-alice".to_string(),
+                source: BrowserTabSource::Bootstrap,
+            },
+            BrowserTabAcquisition {
+                tab_id: "tab-bob".to_string(),
+                target_id: "target-bob".to_string(),
+                source: BrowserTabSource::SessionInitial,
+            },
+        ]),
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+        },
+    );
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    let bob = manager
+        .open(OpenBrowserSession::exact_profile("bob", "profile-a", 2_000))
+        .unwrap();
+
+    manager
+        .tab_for_navigation(&alice.session_id, 3_000)
+        .unwrap();
+    let bob_tab = manager.tab_for_navigation(&bob.session_id, 4_000).unwrap();
+    drop(manager);
+
+    assert_eq!(bob_tab.source, BrowserTabSource::SessionInitial);
+    assert_eq!(state.tabs.len(), 2);
+    assert_eq!(
+        effects.initial_tab_attributed_targets[0],
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        effects.initial_tab_attributed_targets[1],
+        ["target-alice".to_string()]
+    );
 }
 
 #[test]
@@ -491,11 +554,18 @@ fn closing_shared_session_closes_only_its_attributed_tabs() {
     let mut state = BrowserSessionState::default();
     let mut effects = FixtureEffects {
         browser_live: true,
-        initial_tab: Some(BrowserTabAcquisition {
-            tab_id: "tab-alice".to_string(),
-            target_id: "target-alice".to_string(),
-            source: BrowserTabSource::Bootstrap,
-        }),
+        initial_tabs: VecDeque::from([
+            BrowserTabAcquisition {
+                tab_id: "tab-alice".to_string(),
+                target_id: "target-alice".to_string(),
+                source: BrowserTabSource::Bootstrap,
+            },
+            BrowserTabAcquisition {
+                tab_id: "tab-bob".to_string(),
+                target_id: "target-bob".to_string(),
+                source: BrowserTabSource::SessionInitial,
+            },
+        ]),
         ..FixtureEffects::default()
     };
     let mut manager = BrowserSessionManager::new(
@@ -533,7 +603,8 @@ fn closing_shared_session_closes_only_its_attributed_tabs() {
         effects.tab_closes,
         [(alice.browser_id.clone(), "target-alice".to_string())]
     );
-    assert!(state.tabs.is_empty());
+    assert_eq!(state.tabs.len(), 1);
+    assert_eq!(state.tabs["tab-bob"].session_id, bob.session_id);
     assert_eq!(state.tab_history.len(), 1);
     assert_eq!(state.tab_history[0].session_id, alice.session_id);
     assert_eq!(state.tab_history[0].profile_id, "profile-a");

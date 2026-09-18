@@ -35,6 +35,7 @@ pub trait BrowserSessionEffects {
     fn acquire_initial_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
+        attributed_target_ids: &[String],
     ) -> Result<BrowserTabAcquisition, String>;
 
     fn create_tab(
@@ -65,6 +66,7 @@ pub trait BrowserSessionEffects {
 #[serde(rename_all = "snake_case")]
 pub enum BrowserTabSource {
     Bootstrap,
+    SessionInitial,
     Current,
     ExplicitNew,
 }
@@ -205,6 +207,7 @@ pub struct ManagedDisposableProfile {
     pub profile: BrowserProfileCatalogEntry,
     pub policy_id: String,
     pub session_name: String,
+    pub user_data_root: String,
     pub created_at_ms: u64,
     pub cleanup_delay_ms: u64,
     pub cleanup_eligible_at_ms: Option<u64>,
@@ -546,6 +549,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                         profile: profile.clone(),
                         policy_id: policy.id,
                         session_name: request.session_name.clone(),
+                        user_data_root: policy.user_data_root,
                         created_at_ms: request.activity_at_ms,
                         cleanup_delay_ms: policy.cleanup_delay_ms,
                         cleanup_eligible_at_ms: Some(cleanup_eligible_at_ms),
@@ -583,6 +587,57 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter(|tab| tab.session_id == session.id)
             .cloned()
             .collect::<Vec<_>>();
+        if !final_session && !tabs.is_empty() {
+            let remaining_session_id = browser
+                .active_session_ids
+                .iter()
+                .find(|active_id| active_id.as_str() != session.id)
+                .cloned()
+                .ok_or_else(|| "browser_session_remaining_session_missing".to_string())?;
+            let remaining_has_tab = self
+                .state
+                .tabs
+                .values()
+                .any(|tab| tab.session_id == remaining_session_id);
+            if !remaining_has_tab {
+                let attributed_target_ids = self
+                    .state
+                    .tabs
+                    .values()
+                    .filter(|tab| tab.browser_id == browser.id)
+                    .map(|tab| tab.target_id.clone())
+                    .collect::<Vec<_>>();
+                let acquisition = self
+                    .effects
+                    .acquire_initial_tab(&browser, &attributed_target_ids)?;
+                if !matches!(
+                    acquisition.source,
+                    BrowserTabSource::Bootstrap | BrowserTabSource::SessionInitial
+                ) {
+                    return Err("browser_tab_initial_source_invalid".to_string());
+                }
+                if self.state.tabs.contains_key(&acquisition.tab_id) {
+                    return Err("browser_tab_already_attributed".to_string());
+                }
+                self.state.tabs.insert(
+                    acquisition.tab_id.clone(),
+                    ManagedBrowserTab {
+                        id: acquisition.tab_id.clone(),
+                        target_id: acquisition.target_id,
+                        browser_id: browser.id.clone(),
+                        session_id: remaining_session_id.clone(),
+                        created_at_ms: ended_at_ms,
+                        last_activity_at_ms: ended_at_ms,
+                    },
+                );
+                let remaining_session = self
+                    .state
+                    .sessions
+                    .get_mut(&remaining_session_id)
+                    .ok_or_else(|| "browser_session_remaining_session_missing".to_string())?;
+                remaining_session.current_tab_id = Some(acquisition.tab_id);
+            }
+        }
         if final_session {
             self.effects.close_browser(&browser)?;
         } else {
@@ -684,7 +739,22 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(&session.browser_id)
             .cloned()
             .ok_or_else(|| "browser_session_browser_missing".to_string())?;
-        let acquisition = self.effects.acquire_initial_tab(&browser)?;
+        let attributed_target_ids = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == browser.id)
+            .map(|tab| tab.target_id.clone())
+            .collect::<Vec<_>>();
+        let acquisition = self
+            .effects
+            .acquire_initial_tab(&browser, &attributed_target_ids)?;
+        if !matches!(
+            acquisition.source,
+            BrowserTabSource::Bootstrap | BrowserTabSource::SessionInitial
+        ) {
+            return Err("browser_tab_initial_source_invalid".to_string());
+        }
         if self.state.tabs.contains_key(&acquisition.tab_id) {
             return Err("browser_tab_already_attributed".to_string());
         }
