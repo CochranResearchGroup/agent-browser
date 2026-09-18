@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 8
+Plan version: 9
 
 State: OPEN
 
@@ -146,6 +146,15 @@ fixture, formatting, and diff hygiene pass. Shutdown fixtures for populated,
 stale, failed-upgrade, and interrupted states remain open with cold install,
 restart, remote view, documentation, and separately authorized installed
 acceptance.
+
+Checkpoint `839f8cf8` extends the same black-box boundary with a populated
+retained-profile case. The public command changes an exclusive retained
+session to `released`, reports zero runtime-owner and active-lease residue,
+preserves the named profile record and a physical marker inside its profile
+directory, then succeeds without changes on replay. Both disposable process
+fixtures pass with formatting and diff hygiene. Active protected authority
+claims, interrupted phases, and stale upgrade-sidecar cases remain to be added
+before the shutdown acceptance row is complete.
 
 The fresh-context startup readback on 2026-09-17 found the P211 worktree clean
 and synchronized with `origin/platform/p211-simple-cold-upgrade@4b9edcca`.
@@ -382,7 +391,7 @@ overlapping surfaces.
 | One-command shutdown | `agent-browser shutdown` fixture returns success from healthy, drained, failed-upgrade, and partial-prior-run inputs | public route and empty-workstation idempotence fixture green; populated, failed-upgrade, partial-prior-run, and installed acceptance pending |
 | Bounded completion | injected-clock tests prove fixed phase deadlines and exact escalation without production-scale sleeps | fixed phase deadlines, bounded daemon/command waits, and provider-free escalation receipt mapping are green; injected-clock platform timeout fixture pending |
 | Complete owned shutdown | receipt proves owned units, timers, browsers, runtime hosts, dashboard, MCP, and owned containers are stopped | exact browser/daemon, fixed user-unit, fixed container, state-release, metadata, and verification adapters implemented; installed residue proof pending |
-| Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels, Service Model join, repository adapter, and focused persistence fixture green; process-exit ordering and public command integration pending |
+| Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixture releases the retained session and preserves the profile record and physical data; active protected-claim process coverage remains |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | not implemented |

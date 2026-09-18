@@ -38,8 +38,12 @@ metadata, and residue adapters. Provider-free shutdown and Lease Authority
 tests, the crate architecture guard, formatting, and strict workspace Clippy
 pass. Checkpoint `34c6a0e3` adds a passing black-box fixture that executes the
 public JSON command twice in a disposable workstation with fake host tools.
-The command was not run against an installed runtime. Populated and
-interrupted shutdown fixtures, cold-install routing, restart and remote-view convergence,
+Checkpoint `839f8cf8` proves the same public command releases a retained
+exclusive session while preserving its named profile record and physical data,
+then replays as a no-op.
+The command was not run against an installed runtime. Protected-claim,
+interrupted, and stale-sidecar shutdown fixtures, cold-install routing, restart
+and remote-view convergence,
 P207-controlled documentation parity, source qualification, and separately
 authorized installed acceptance remain open.
 

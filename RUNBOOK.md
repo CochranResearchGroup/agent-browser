@@ -9,6 +9,18 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 390 | 2026-09-17
+
+P211 checkpoint `839f8cf8` extends the black-box public shutdown boundary with
+a populated retained-profile case. `agent-browser shutdown --json` changes an
+exclusive retained session to `released`, preserves the named profile record
+and a physical profile-data marker, reports zero runtime-owner and active-lease
+residue, and succeeds without changes on replay. Both disposable process
+fixtures, formatting, and diff hygiene pass. No installed shutdown, service,
+container, browser, Service State, provider, credential, production, or
+release effect occurred. Protected-claim, interrupted, and stale-sidecar
+fixtures remain with cold install, restart, remote view, and documentation.
+
 ## Turn 389 | 2026-09-17
 
 P211 checkpoint `34c6a0e3` adds a passing black-box fixture for the public
