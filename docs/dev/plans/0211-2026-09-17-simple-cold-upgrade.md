@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 37
+Plan version: 38
 
 State: OPEN
 
@@ -740,6 +740,27 @@ production deadline. A deterministic stalled-handshake fixture injects a
 50-millisecond allowance and receives the typed
 `browser_session_reattach_timeout` result in under 500 milliseconds. Ordinary
 CDP connection behavior outside manager recovery is unchanged.
+
+The version 38 checkpoint freezes the completed continuation at its current
+provider-free boundary. The repository selector chose the focused tier from
+checkpoint `8ee0d806`: formatting, strict workspace Clippy, active planning
+audit, diff hygiene, the source-free workstation-install fixture, workstation
+host-provision contract, fresh-workstation VM harness, Guacamole asset and
+PostgreSQL durability contracts, and route-specific Guacamole user-sync
+contract all pass. The compartmented Rust runner's `browser_session` filter
+passes 30 tests; only the two explicit disposable-Chrome cases remain ignored
+there, and their dedicated acceptance evidence predates this continuation.
+The current worktree and remote branch are synchronized with no uncommitted
+changes before this plan-only checkpoint.
+
+Three gates remain intentionally outside this provider-free continuation.
+P207 PR #184 is still draft, merge-conflicted, and owns the overlapping help,
+README, skill, docs-site, and generated-client surfaces. The authenticated
+dashboard rendering/control replay exhausted its bounded attempt and cannot be
+reconstructed from the repaired teardown regression. Production or staging
+install, shutdown, provider, credential, and installed acceptance effects
+still require explicit live-effect custody. None of those gates is promoted to
+success by the provider-free receipts above.
 
 ## Frozen Interface Packet
 
