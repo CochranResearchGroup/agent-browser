@@ -4,15 +4,17 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::{
+    select_least_crowded_browser_desktop, BrowserDesktopAssignment, BrowserDesktopRoute,
     BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserProfileCatalogEntry,
     BrowserProfileKind,
 };
 
 pub const BROWSER_SESSION_STATE_SCHEMA_V1: &str = "agent-browser.browser-session-state.v1";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BrowserSessionManagerConfig {
     pub session_idle_timeout_ms: u64,
+    pub remote_desktop_routes: Vec<BrowserDesktopRoute>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +22,7 @@ pub struct BrowserLaunch {
     pub browser_id: String,
     pub pid: u32,
     pub cdp_endpoint: String,
+    pub desktop: Option<BrowserDesktopAssignment>,
 }
 
 pub trait BrowserSessionEffects {
@@ -28,6 +31,7 @@ pub trait BrowserSessionEffects {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&BrowserDesktopAssignment>,
     ) -> Result<BrowserLaunch, String>;
 
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
@@ -205,6 +209,8 @@ pub struct ManagedBrowserInstance {
     pub profile_id: String,
     pub pid: u32,
     pub cdp_endpoint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub desktop: Option<BrowserDesktopAssignment>,
     pub active_session_ids: Vec<String>,
 }
 
@@ -415,7 +421,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     SessionEndReason::BrowserUnresponsive,
                     request.activity_at_ms,
                 )?;
-                let launch = self.effects.launch_browser(&profile)?;
+                let launch = self.launch_browser(&profile)?;
                 (
                     launch.browser_id.clone(),
                     SessionBrowserDisposition::Launched,
@@ -423,7 +429,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 )
             }
         } else {
-            let launch = self.effects.launch_browser(&profile)?;
+            let launch = self.launch_browser(&profile)?;
             (
                 launch.browser_id.clone(),
                 SessionBrowserDisposition::Launched,
@@ -453,6 +459,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     profile_id: profile.id.clone(),
                     pid: launch.pid,
                     cdp_endpoint: launch.cdp_endpoint,
+                    desktop: launch.desktop,
                     active_session_ids: Vec::new(),
                 },
             );
@@ -488,6 +495,37 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             disposition,
             session_disposition: SessionRecordDisposition::Created,
         })
+    }
+
+    fn launch_browser(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+    ) -> Result<BrowserLaunch, String> {
+        let desktop = if self.config.remote_desktop_routes.is_empty() {
+            None
+        } else {
+            let live_display_names = self
+                .state
+                .browsers
+                .values()
+                .filter_map(|browser| {
+                    browser
+                        .desktop
+                        .as_ref()
+                        .map(|desktop| desktop.display_name.clone())
+                })
+                .collect::<Vec<_>>();
+            Some(select_least_crowded_browser_desktop(
+                &self.config.remote_desktop_routes,
+                &live_display_names,
+            )?)
+        };
+        let mut launch = self.effects.launch_browser(profile, desktop.as_ref())?;
+        if launch.desktop != desktop {
+            return Err("browser_session_launch_desktop_mismatch".to_string());
+        }
+        launch.desktop = desktop;
+        Ok(launch)
     }
 
     fn resolve_profile_for_open(
