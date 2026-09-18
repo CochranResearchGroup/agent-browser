@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 13
+Plan version: 14
 
 State: OPEN
 
@@ -216,6 +216,24 @@ confirmed that no least-crowded selector or third route exists yet.
 `/root/profile_catalog_inventory` implemented only the catalog importer and its
 five tests after the manager gate passed. The primary owned the manager
 interface, integrated the disjoint catalog patch, and ran the combined gates.
+
+Checkpoint `d510a054` completes the provider-free persistence and disposable
+lifecycle portion of Slice 4. Browser Session State and the Browser Profile
+Catalog now use private atomic JSON files that are separate from legacy
+`state.json`; the first catalog load imports legacy profile fields once, after
+which the independent catalog is authoritative. Repeated replacement uses the
+repository's Unix rename and Windows replace-existing patterns. Live tab
+removal appends terminal tab metadata, and completed
+navigation records retain profile, session, browser, tab, target, URL, and
+timestamp attribution. Serialized state resumes the same healthy session and
+browser after a simulated Service restart. Disposable intent allocates one
+managed profile per named session and policy, reuses it for that session,
+isolates another named session, closes its final browser, and deletes only the
+recorded managed directory through the reaper after the policy-configured
+delay. Exact-profile intent rejects a disposable definition. Seventeen manager
+tests, five catalog tests, two CLI store tests, workspace formatting, strict
+workspace Clippy, and diff hygiene pass. Service hosting, concrete browser and
+filesystem effects, CLI routing, and process-restart fixtures remain open.
 
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
@@ -480,9 +498,10 @@ calculation.
 - Overall effort ceiling: 360 active minutes through a provider-free qualified
   candidate. Installed-runtime validation is excluded until separately
   directed.
-- Next outcome artifact: provider-free Browser Session Manager interface tests
-  proving shared named-profile use and complete nondependence on legacy Lease
-  Authority state.
+- Next outcome artifact: a concrete Browser Session Manager effect adapter and
+  Service host fixture proving PID and CDP liveness, launch and close, tab
+  operations, disposable directory custody, and atomic state commit without
+  consulting legacy Lease Authority state.
 
 ## Worker Assignments
 
@@ -546,11 +565,11 @@ touching overlapping documentation surfaces.
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixture releases the retained session and preserves the profile record and physical data; active protected-claim process coverage remains |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
-| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | not implemented |
-| Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | provider-free catalog and tolerant field-level import green; filesystem persistence and first-startup adapter pending |
+| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | model serialization and independent store restart reuse green; process and client fixture pending |
+| Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | provider-free manager behavior green; Service hosting, persistence, and browser adapter pending |
-| Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | not implemented |
-| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts the bootstrap tab; explicit new-tab is the only normal growth path; close selects the most recently used remainder; session end removes live tabs | provider-free live-tab behavior green; terminal tab history, persistence, and CDP adapter pending |
+| Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, and exact recorded deletion green; filesystem effect adapter pending |
+| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts the bootstrap tab; explicit new-tab is the only normal growth path; close selects the most recently used remainder; session end removes live tabs | provider-free live-tab behavior, terminal tab metadata, navigation attribution, and persistence green; CDP adapter pending |
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat and abstract bounded-recovery behavior green; concrete PID and CDP observation adapter pending |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions and independent provider-free manager proof green; CLI routing pending |
