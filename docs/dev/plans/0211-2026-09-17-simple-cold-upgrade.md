@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 19
+Plan version: 20
 
 State: OPEN
 
@@ -318,6 +318,18 @@ workspace-view, and navigator tests, the production dashboard build,
 formatting, strict workspace Clippy, and diff hygiene pass. The tile has its
 configured route and display identity, but focus-on-selection and a ready
 durable handoff remain open.
+
+Checkpoint `a4c08010` routes the explicit tab-growth operations through the
+same public named-session boundary. `--session <name> tab new [url]` creates
+exactly one explicitly attributed tab, optionally navigates that tab, and
+records its history. `--session <name> tab close` closes only the session's
+current tab and selects its most-recent remaining tab through the existing
+manager rule. Indexed tab close stays on the legacy path because the simple
+prototype does not reinterpret a legacy numeric index as attributed identity.
+The host restart fixture now proves open, explicit new tab, navigation,
+current-tab close, and final session close in sequence. The focused host and
+public-routing tests, formatting, strict workspace Clippy, and diff hygiene
+pass.
 
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
@@ -656,7 +668,7 @@ touching overlapping documentation surfaces.
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, and public named-session navigation and close routing green; hosted Chrome fixture pending |
 | Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, exact recorded deletion, filesystem adapter, and default host policy green; hosted Chrome fixture pending |
-| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle and concrete BrowserManager tab adapter green; hosted CDP fixture pending |
+| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle, concrete adapter, hosted restart fixture, and public named-session new/current-close routing green; hosted Chrome tab fixture pending |
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, and concrete restart reattachment green; full daemon-process fixture pending |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, and ordinary named-session navigation and close routing green; hosted Chrome fixture and remaining ordinary commands pending |
