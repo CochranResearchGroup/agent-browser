@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 38
+Plan version: 39
 
 State: OPEN
 
@@ -762,6 +762,24 @@ install, shutdown, provider, credential, and installed acceptance effects
 still require explicit live-effect custody. None of those gates is promoted to
 success by the provider-free receipts above.
 
+The version 39 continuation closes the provider-free doctor disagreement for
+ordinary Browser Session Manager handoffs. Before the repair, a ready opaque
+manager handoff could be selected and resolved through its static route while
+`doctor remote-view --session <name> --runtime-profile <profile>` returned
+`unavailable`: the doctor consulted only legacy session bindings and treated a
+stale legacy route-pool allocation as authority. The new requested-scope join
+accepts only an exact ready manager handoff whose opaque URL, concrete route,
+display, configured static route entry, profile, browser, and latest
+`operatorVisible.state=ready` resolution agree. It then reports that same
+session, profile, browser, display, and route as ready without promoting the
+legacy allocation state. Missing or non-ready manager resolution still fails
+closed. The regression was red with `unavailable` before the repair and green
+afterward; all 54 remote-view doctor module tests, strict workspace Clippy,
+workspace formatting, diff hygiene, and every focused workstation contract
+selected for the changed doctor surface pass. No installed or shared runtime
+was inspected or mutated. Installed doctor agreement and authenticated
+dashboard rendering and control remain open.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -1065,7 +1083,7 @@ touching overlapping documentation surfaces.
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, hosted two-display least-crowded assignment, persisted browser assignment across host restart, existing-inventory adapter, exact-display launch wiring, and a hosted static-route Xvfb handoff are green |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | the compiled-CLI Chrome fixture follows a same-site `/protected` to `/login` redirect and retains the same ready opaque handoff through `/account`; the dashboard same-origin post-auth return contract is green; one authenticated dashboard replay ended without a terminal verdict and its teardown-hang regression is repaired, so authenticated rendering remains pending |
-| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | compiled ordinary opens now return ready opaque handoffs from exact static route readiness without leasing, and host resolution focuses and heartbeats the target; the manager presentation receipt is focused-test green, but the bounded dashboard replay produced no terminal verdict, so authenticated rendering, control, and doctor agreement remain pending |
+| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | compiled ordinary opens now return ready opaque handoffs from exact static route readiness without leasing, host resolution focuses and heartbeats the target, and requested doctor scope joins the exact ready manager handoff without allowing stale legacy pool allocation to veto it; the manager presentation receipt and provider-free doctor agreement are green, but the bounded dashboard replay produced no terminal verdict, so authenticated rendering, control, and installed doctor agreement remain pending |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | the full compiled CLI and runtime-host journey shares one browser, drives independent commands, returns the ready handoff, and closes cleanly with none of those inputs; documentation remains pending |
 | Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | not implemented |
