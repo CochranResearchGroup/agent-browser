@@ -44,24 +44,3 @@ lanes:
     overlap_disposition: P211 owns CLI shutdown and workstation routing; P214 owns only desktop-services candidate-plan source and fixtures; shared planning projections reconcile at integration
     blocker: publication and protected integration remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, route-claim, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17
-  - id: P216
-    product_lane: PL-PLATFORM
-    objective: Qualify and integrate the accepted Service Model crate extraction without resuming expression-count burn-down
-    plan: docs/dev/plans/0216-2026-09-17-service-model-extraction-landing.md
-    plan_ref: refs/heads/platform/p205-service-model-crate
-    branch: platform/p205-service-model-crate
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 6ff7bc0d
-    remote_ref: refs/remotes/origin/platform/p205-service-model-crate
-    integration_receipt: null
-    integration: one protected pull request after a single final local qualification batch without restoring or dispatching operator-disabled GitHub CI
-    validation_status: final candidate passes Service Model and Lease Authority crates, focused CLI adapter and health filters, architecture guards, workstation and route fixtures, service contracts, formatting, strict workspace Clippy, version sync and diff hygiene locally
-    validation_ref: 6ff7bc0d
-    work_items: [CochranResearchGroup/agent-browser#178]
-    dependencies: []
-    overlaps: [P204:docs/dev/active-lanes.yaml, P211:ROADMAP.md, P211:RUNBOOK.md, P211:docs/dev/active-lanes.yaml, P215:ROADMAP.md, P215:RUNBOOK.md, P215:docs/dev/active-lanes.yaml]
-    reconciled_overlaps: [P216 retains the inherited P205 source branch and does not independently rewrite P204, P211 or P215 source or shared planning sections]
-    blocker: pull request publication and canonical integration remain
-    updated_at: 2026-09-17

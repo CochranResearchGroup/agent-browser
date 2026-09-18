@@ -2,7 +2,7 @@
 
 Product lane: PL-PLATFORM
 
-Disposition: active-input
+Disposition: closed-evidence
 
 Owning plan or work item: Plan 0216 and `CochranResearchGroup/agent-browser#178`
 
@@ -10,12 +10,14 @@ Related lanes: P204, P211, P215
 
 ## Purpose
 
-Continue from the accepted Service Model extraction and land it without
-resuming the expression-by-expression privacy loop. The governing plan is
+This note preserves the restart state used to land the accepted Service Model
+extraction without resuming the expression-by-expression privacy loop. The
+governing plan is
 [Plan 0216](../plans/0216-2026-09-17-service-model-extraction-landing.md).
-Plan 0205 is closed historical evidence, not the active execution backlog.
+Plans 0205 and 0216 are closed historical evidence, not an active execution
+backlog.
 
-## Exact Restart State
+## Admission Snapshot
 
 - Worktree: `/home/ecochran76/workspace.local/agent-browser-p205`
 - Branch: `platform/p205-service-model-crate`
@@ -59,7 +61,9 @@ Current files and Git state override this note if they differ. Re-read policies
 The complete evidence history is in Plan 0205. Do not replay every historical
 gate before evaluating reconciliation impact.
 
-## First Actions
+## Executed Landing Sequence
+
+The landing session completed the following sequence:
 
 1. Confirm the exact worktree, branch, clean or expected-doc-only status, HEAD,
    remote divergence, active Cargo claims, and open PR state.
@@ -98,8 +102,11 @@ gate before evaluating reconciliation impact.
 - `handoff` only if Plan 0216 cannot reach its terminal integration state in
   the fresh session.
 
-## Recommended Disposition
+## Terminal Disposition
 
-Continue in the existing worktree under Plan 0216. The next outcome is an
-issue-acceptance map and one integration candidate, not another extraction
-checkpoint.
+Treat this note as historical evidence after PR #200 merges and issue #178
+closes. P211 owns the next urgent bug-fix work in its existing worktree and
+must first reconcile the integrated P216 boundary, including the known
+`control_plane.rs` test conflict. Do not reopen P216 for the residual 155
+expressions, full field privacy, fixture migration, or optional facade
+deletion.

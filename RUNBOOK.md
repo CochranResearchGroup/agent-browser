@@ -9,6 +9,20 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 387 | 2026-09-17
+
+P216 source candidate `6ff7bc0d` and candidate-freeze receipt `3fdfc147`
+entered the single protected integration path through PR #200. The canonical
+provider-free Service State model now lives in `agent-browser-service-model`;
+the CLI retains every filesystem, process, browser, runtime-owner, HTTP, MCP,
+and platform effect. Complete local changed-surface qualification passes. The
+build claim is limited to the measured cold pure-model loop, from 171.01
+seconds to 4.08 seconds, not general CLI or workspace acceleration. Issue #178
+and Plan 0216 close with the protected merge. P211 remains separate and must
+reconcile the integrated model boundary before continuing overlapping urgent
+bug-fix work. GitHub Actions remained disabled, and no browser, provider,
+credential, install, runtime, staging, production, or release effect occurred.
+
 ## Turn 386 | 2026-09-17
 
 P213 exact head `c8012bd0` merged through PR #196 as `7e56d9c7`; issue #194

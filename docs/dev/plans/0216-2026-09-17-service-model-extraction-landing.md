@@ -2,9 +2,9 @@
 
 Date: 2026-09-17
 
-Plan version: 3
+Plan version: 4
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -265,6 +265,28 @@ feedback loop improved from 171.01 seconds to 4.08 seconds. The affected cold
 CLI loop remained 132 seconds and the warm compatibility loop was 0.44 seconds,
 so P216 does not claim a general workspace or CLI build-time reduction.
 
+## Protected Integration Closeout
+
+[PR #200](https://github.com/CochranResearchGroup/agent-browser/pull/200) is
+the single protected integration vehicle. It carries source candidate
+`6ff7bc0d`, candidate-freeze receipt `3fdfc147`, this final documentation-only
+closeout, and `Closes #178`. The pull request was read back as mergeable with a
+clean merge state against unchanged `main@bea09376`; its only reported check
+was a skipped external review-app check. GitHub Actions remained disabled and
+was neither restored nor dispatched.
+
+This `CLOSED` state and removal from the active-lane catalog become effective
+only when PR #200 merges. If protected merge does not succeed, this branch
+remains an integration-ready proposal and P216 must be treated as open. The
+post-merge readback must prove that canonical `main` contains `6ff7bc0d` and
+this closeout, that PR #200 is merged, and that issue #178 is closed. That
+provider readback is the terminal receipt; it does not authorize a second
+source or documentation pull request.
+
+P211 remains open and separate. It may resume its urgent bug-fix work only
+after reconciling the integrated P216 boundary and preserving the consumer
+handoff recorded above.
+
 ## Delivery Sequence And Budget
 
 ### Gate 1 | Acceptance Map
@@ -363,7 +385,7 @@ condition before assignment. The primary must inspect its diff.
 | Focused correctness | retained crate and affected CLI tests | final local qualification passes at `6ff7bc0d` |
 | Build acceleration evidence | Plan 0205 baseline and focused-loop measurements | recorded; no new benchmark authorized |
 | P211 dependent-consumer readiness | current P211 branch, read-only merge preview, exact candidate handoff | three overlaps, one known test conflict, and the post-merge reconciliation contract are recorded against `6ff7bc0d` |
-| Canonical integration | protected PR merge and `origin/main` readback | incomplete |
+| Canonical integration | protected PR #200 and post-merge `origin/main` readback | closeout prepared in the single integration PR; effective on successful merge |
 | GitHub CI | none | explicitly excluded by operator direction |
 | Runtime or production effects | none | explicitly excluded |
 

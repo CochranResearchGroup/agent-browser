@@ -25,6 +25,26 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P216 | Service Model Extraction Landing
+
+State: CLOSED
+
+Current state: [Plan 0216](docs/dev/plans/0216-2026-09-17-service-model-extraction-landing.md),
+[issue #178](https://github.com/CochranResearchGroup/agent-browser/issues/178),
+and [PR #200](https://github.com/CochranResearchGroup/agent-browser/pull/200)
+record the completed `PL-PLATFORM` extraction. Source candidate `6ff7bc0d`
+places the canonical provider-free Service State aggregate, codecs, records,
+pure transitions, projections, and deterministic wire behavior in
+`agent-browser-service-model` while the CLI retains filesystem, process,
+browser, runtime-owner, HTTP, MCP, and platform effects. Complete local
+changed-surface qualification passes. The measured acceleration is limited to
+the cold pure-model loop, from 171.01 seconds to 4.08 seconds; no general CLI
+or workspace build-time reduction is claimed. P211 remains a separate urgent
+bug-fix lane and must reconcile this integrated boundary before extending the
+overlapping adapters. GitHub Actions remained disabled, and no browser,
+provider, credential, install, runtime, staging, production, or release effect
+occurred.
+
 ## P208 | Worktree Closeout And Candidate Custody
 
 State: CLOSED
