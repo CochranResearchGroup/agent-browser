@@ -417,10 +417,11 @@ converging response and never falls through to legacy retained-browser
 adoption. The dashboard accepts the manager-specific receipt from its
 authenticated Service response while preserving the stricter legacy receipt
 checks for legacy handoffs. Both manager handoff fixtures, all 19 other
-executed browser-session tests, all 14 durable-handoff regressions, the
-optimized dashboard build, formatting, strict workspace Clippy, and diff
-hygiene pass. A real login redirect and full daemon-to-dashboard acceptance
-remain open.
+executed browser-session tests, all 14 durable-handoff regressions, the route
+confusion gates, dashboard durable-handoff, workspace-navigator, and inspector
+action smokes, the optimized dashboard build, formatting, strict workspace
+Clippy, and diff hygiene pass. A real login redirect and full
+daemon-to-dashboard acceptance remain open.
 
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
