@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 18
+Plan version: 19
 
 State: OPEN
 
@@ -303,6 +303,21 @@ unhealthy exclusion, and duplicate rejection. Fourteen CLI browser-session
 tests, formatting, strict workspace Clippy, and diff hygiene also pass.
 Dashboard projection, focus-on-selection, and durable remote-view handoff are
 still open.
+
+Checkpoint `26743c65` makes independent Browser Session State visible without
+making legacy state authoritative. Service Status now adds a top-level
+`browserSessionState` snapshot from the live host or independent atomic store.
+An unreadable snapshot adds `browserSessionStateError` while preserving the
+successful legacy status response. The dashboard converts those browser,
+session, tab, desktop, and navigation records into its existing read model and
+merges by stable ID. One concrete browser process produces one live parent
+tile; named sessions and tabs contribute attribution and counts rather than
+extra browser tiles. Latest navigation history supplies the tab URL. Two Rust
+status-join tests, the dashboard workspace-node smoke, selected-context,
+workspace-view, and navigator tests, the production dashboard build,
+formatting, strict workspace Clippy, and diff hygiene pass. The tile has its
+configured route and display identity, but focus-on-selection and a ready
+durable handoff remain open.
 
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
@@ -646,7 +661,7 @@ touching overlapping documentation surfaces.
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, and ordinary named-session navigation and close routing green; hosted Chrome fixture and remaining ordinary commands pending |
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, and exact-display launch wiring green; hosted remote-view fixture pending |
-| Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | not implemented |
+| Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection and browser-parent dashboard tile identity green; viewer selection and focus effect pending |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | not implemented |
 | Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | not implemented |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | not implemented |
