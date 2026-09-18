@@ -565,8 +565,8 @@ fn run_bounded(command: &str, args: &[&str], deadline: Duration) -> Result<ExitS
 /// Execute the installed cold-shutdown command without accepting coordination
 /// state, transaction identifiers, or destructive target selection.
 pub(crate) fn run_workstation_shutdown_command(json_mode: bool) -> i32 {
-    let platform = match LiveShutdownPlatform::new() {
-        Ok(platform) => platform,
+    let receipt = match execute_live_workstation_shutdown() {
+        Ok(receipt) => receipt,
         Err(error) => {
             if json_mode {
                 println!("{}", json!({"success": false, "error": error}));
@@ -576,7 +576,6 @@ pub(crate) fn run_workstation_shutdown_command(json_mode: bool) -> i32 {
             return 1;
         }
     };
-    let receipt = execute_workstation_shutdown(&mut PlatformShutdownEffects::new(platform));
     if json_mode {
         println!(
             "{}",
@@ -590,6 +589,13 @@ pub(crate) fn run_workstation_shutdown_command(json_mode: bool) -> i32 {
         eprintln!("Agent Browser shutdown incomplete; rerun with --json for phase receipts");
     }
     i32::from(!receipt.success)
+}
+
+pub(crate) fn execute_live_workstation_shutdown() -> Result<WorkstationShutdownReceipt, String> {
+    let platform = LiveShutdownPlatform::new()?;
+    Ok(execute_workstation_shutdown(
+        &mut PlatformShutdownEffects::new(platform),
+    ))
 }
 
 fn shutdown_phase_deadline(phase: ShutdownPhase) -> Duration {

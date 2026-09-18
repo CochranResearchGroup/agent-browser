@@ -3084,6 +3084,181 @@ pub(crate) fn run_reviewed_candidate_install(
     std::process::exit(0);
 }
 
+struct ColdWorkstationInstallEffects<'a> {
+    root: &'a Path,
+    paths: InstallPaths,
+    args: &'a WorkstationInstallArgs,
+    source: WorkstationPayloadSource,
+    candidate_binding: Option<CandidateArtifactTransactionBinding>,
+    isolated_root: bool,
+    staged: Option<StagedWorkstationGeneration>,
+    previous_selector: Option<PathBuf>,
+    reconcile_receipt: Option<String>,
+}
+
+impl ColdWorkstationInstallEffects<'_> {
+    fn step(
+        phase: crate::workstation_cold_install::ColdInstallPhase,
+        deadline: std::time::Duration,
+        effect: impl FnOnce(&mut Self) -> Result<(bool, bool), String>,
+        this: &mut Self,
+    ) -> crate::workstation_cold_install::ColdInstallStepReceipt {
+        let result = effect(this);
+        match result {
+            Ok((changed, ready)) => crate::workstation_cold_install::ColdInstallStepReceipt {
+                phase,
+                changed,
+                ready,
+                deadline_ms: deadline.as_millis() as u64,
+                error: None,
+            },
+            Err(error) => crate::workstation_cold_install::ColdInstallStepReceipt {
+                phase,
+                changed: false,
+                ready: false,
+                deadline_ms: deadline.as_millis() as u64,
+                error: Some(error),
+            },
+        }
+    }
+
+    fn replace(&mut self) -> Result<(bool, bool), String> {
+        self.previous_selector = fs::read_link(&self.paths.current_selector).ok();
+        let staged = stage_payload_generation_from_source(
+            &self.paths,
+            self.args,
+            &self.source,
+            self.candidate_binding.as_ref(),
+        )?;
+        commit_staged_payload_generation(&self.paths, self.args, &staged)?;
+        self.paths = install_paths(self.root);
+        self.staged = Some(staged);
+        Ok((true, false))
+    }
+
+    fn start(&mut self) -> Result<(bool, bool), String> {
+        if self.isolated_root {
+            validate_selected_generation_if_present(&self.paths)?;
+            return Ok((true, false));
+        }
+        let report = reconcile_workstation_locked_for_upgrade(self.root, &self.paths, None, &[])?;
+        self.reconcile_receipt = Some(report.receipt_path);
+        Ok((true, false))
+    }
+
+    fn readiness(&mut self) -> Result<(bool, bool), String> {
+        validate_selected_generation_if_present(&self.paths)?;
+        let staged = self
+            .staged
+            .as_ref()
+            .ok_or_else(|| "cold_install_staged_generation_missing".to_string())?;
+        if selected_generation_id(&self.paths).as_deref() != Some(staged.generation_id.as_str()) {
+            return Err("cold_install_selected_generation_mismatch".to_string());
+        }
+        if workstation_file_sha256(&self.paths.binary)? != staged.binary_sha256 {
+            return Err("cold_install_selected_binary_digest_mismatch".to_string());
+        }
+        if !self.isolated_root {
+            let command_env = workstation_reconcile_command_env(&self.paths, None);
+            verify_final_doctors(
+                &self.paths,
+                &self.paths.support_dir,
+                &command_env,
+                None,
+                &[],
+            )?;
+        }
+        Ok((false, true))
+    }
+
+    fn rollback(&mut self) -> Result<(bool, bool), String> {
+        restore_generation_selector(&self.paths, self.previous_selector.as_deref())?;
+        self.paths = install_paths(self.root);
+        if !self.isolated_root && self.previous_selector.is_some() {
+            reconcile_workstation_locked_for_upgrade(self.root, &self.paths, None, &[])?;
+        }
+        Ok((true, false))
+    }
+}
+
+impl crate::workstation_cold_install::ColdInstallEffects for ColdWorkstationInstallEffects<'_> {
+    fn execute_phase(
+        &mut self,
+        phase: crate::workstation_cold_install::ColdInstallPhase,
+        deadline: std::time::Duration,
+    ) -> crate::workstation_cold_install::ColdInstallStepReceipt {
+        use crate::workstation_cold_install::ColdInstallPhase;
+        Self::step(
+            phase,
+            deadline,
+            |this| match phase {
+                ColdInstallPhase::Stop => {
+                    let receipt = crate::workstation_shutdown::execute_live_workstation_shutdown()?;
+                    if !receipt.success {
+                        return Err("cold_install_shutdown_incomplete".to_string());
+                    }
+                    Ok((receipt.changed, false))
+                }
+                ColdInstallPhase::Replace => this.replace(),
+                ColdInstallPhase::Start => this.start(),
+                ColdInstallPhase::Readiness => this.readiness(),
+                ColdInstallPhase::Rollback => this.rollback(),
+            },
+            self,
+        )
+    }
+}
+
+fn run_cold_workstation_apply(
+    root: &Path,
+    paths: InstallPaths,
+    parsed: &WorkstationInstallArgs,
+    reviewed_candidate: Option<&ReviewedCandidatePayload>,
+    isolated_root: bool,
+) -> crate::workstation_cold_install::WorkstationColdInstallReceipt {
+    if !isolated_root {
+        crate::install::install_remote_view_privileges(true, parsed.json)
+            .unwrap_or_else(|error| fail(&error, parsed.json));
+    }
+    let source = reviewed_candidate
+        .map(|candidate| candidate.source.clone())
+        .map(Ok)
+        .unwrap_or_else(WorkstationPayloadSource::current)
+        .unwrap_or_else(|error| fail(&error, parsed.json));
+    let mut effects = ColdWorkstationInstallEffects {
+        root,
+        paths,
+        args: parsed,
+        source,
+        candidate_binding: reviewed_candidate.map(|candidate| candidate.binding.clone()),
+        isolated_root,
+        staged: None,
+        previous_selector: None,
+        reconcile_receipt: None,
+    };
+    crate::workstation_cold_install::execute_workstation_cold_install(&mut effects)
+}
+
+fn emit_cold_workstation_install_receipt(
+    receipt: &crate::workstation_cold_install::WorkstationColdInstallReceipt,
+    json: bool,
+) {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&receipt).unwrap_or_else(|_| {
+                r#"{"success":false,"error":"serialization failed"}"#.to_string()
+            })
+        );
+    } else if receipt.success {
+        println!("Agent Browser workstation cold install complete");
+    } else {
+        eprintln!(
+            "Agent Browser workstation cold install failed; rerun with --json for phase receipts"
+        );
+    }
+}
+
 fn run_workstation_install_with_candidate(
     args: &[String],
     reviewed_candidate: Option<ReviewedCandidatePayload>,
@@ -3225,6 +3400,20 @@ fn run_workstation_install_with_candidate(
     } else {
         None
     };
+    if parsed.mode == InstallMode::Apply {
+        let receipt = run_cold_workstation_apply(
+            &root,
+            paths,
+            &parsed,
+            reviewed_candidate.as_ref(),
+            isolated_root,
+        );
+        emit_cold_workstation_install_receipt(&receipt, parsed.json);
+        if !receipt.success {
+            std::process::exit(1);
+        }
+        return;
+    }
     let prior_install_convergence = if parsed.mode == InstallMode::Apply {
         match converge_prior_install_before_new_apply(&root, isolated_root) {
             Ok(report) => report,
@@ -7449,7 +7638,7 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
         ));
     }
 
-    let staged = match stage_payload_generation_from_source(paths, args, source) {
+    let staged = match stage_payload_generation_from_source(paths, args, source, None) {
         Ok(staged) => staged,
         Err(error) => {
             transaction.stop_reason = Some("candidate_staging_failed".to_string());
@@ -12417,6 +12606,7 @@ fn stage_payload_generation_from_source(
     paths: &InstallPaths,
     args: &WorkstationInstallArgs,
     source: &WorkstationPayloadSource,
+    candidate_binding: Option<&CandidateArtifactTransactionBinding>,
 ) -> Result<StagedWorkstationGeneration, String> {
     validate_generation_install_preconditions(paths)?;
     let source_binary_sha256 = source.verify()?;
@@ -12482,14 +12672,25 @@ fn stage_payload_generation_from_source(
 
         let support_manifest_sha256 =
             workstation_file_sha256(&staged_support.join("manifest.json"))?;
-        let generation_id = format!(
+        let candidate_binding_sha256 = candidate_binding
+            .map(|binding| {
+                serde_json::to_vec(binding)
+                    .map(|bytes| workstation_bytes_sha256(&bytes))
+                    .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))
+            })
+            .transpose()?;
+        let mut generation_id = format!(
             "{}-{}-{}",
             env!("CARGO_PKG_VERSION"),
             &binary_sha256[..12],
             &support_manifest_sha256[..12]
         );
+        if let Some(digest) = candidate_binding_sha256.as_deref() {
+            generation_id.push('-');
+            generation_id.push_str(&digest[..12]);
+        }
         let generation_path = paths.generations_dir.join(&generation_id);
-        let generation_manifest = serde_json::to_string_pretty(&serde_json::json!({
+        let mut generation_manifest = serde_json::json!({
             "schemaVersion": "agent-browser.runtime-generation.v1",
             "environment": "production",
             "generationId": generation_id,
@@ -12506,8 +12707,13 @@ fn stage_payload_generation_from_source(
                 "recipeId": "p131-controlled-x11-v1",
                 "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"],
             },
-        }))
-        .expect("runtime generation manifest must serialize");
+        });
+        if let Some(binding) = candidate_binding {
+            generation_manifest["candidateArtifact"] = serde_json::to_value(binding)
+                .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))?;
+        }
+        let generation_manifest = serde_json::to_string_pretty(&generation_manifest)
+            .expect("runtime generation manifest must serialize");
         fs::write(staging.join("generation.json"), generation_manifest)
             .map_err(display_io("stage runtime generation manifest", &staging))?;
         preflight_staged_generation(
@@ -15956,34 +16162,22 @@ mod tests {
             Some(reviewed),
         );
 
-        let transaction =
-            latest_upgrade_transaction(&root.join(".agent-browser/runtime-adoption/transactions"))
-                .unwrap()
+        assert!(latest_upgrade_transaction(
+            &root.join(".agent-browser/runtime-adoption/transactions")
+        )
+        .unwrap()
+        .is_none());
+        let paths = install_paths(&root);
+        let generation_id = selected_generation_id(&paths).unwrap();
+        let generation_path = paths.generations_dir.join(generation_id);
+        let generation_manifest: Value =
+            serde_json::from_slice(&fs::read(generation_path.join("generation.json")).unwrap())
                 .unwrap();
         assert_eq!(
-            transaction.state,
-            crate::runtime_adoption::UpgradeTransactionState::Accepted
-        );
-        assert_eq!(
-            transaction.successor_fields["candidateArtifact"]["candidateId"],
+            generation_manifest["candidateArtifact"]["candidateId"],
             manifest.candidate_id
         );
-        let coordination =
-            crate::candidate_coordination::CandidateCoordinationStore::production(&root)
-                .read()
-                .unwrap();
-        assert!(coordination.active().is_none());
-        assert_eq!(
-            coordination
-                .receipts()
-                .last()
-                .map(|receipt| receipt.outcome),
-            Some(agent_browser_candidate::CoordinationOutcome::Completed)
-        );
-        let selected = install_paths(&root)
-            .generations_dir
-            .join(transaction.candidate_generation_id)
-            .join("bin/agent-browser");
+        let selected = generation_path.join("bin/agent-browser");
         assert_eq!(
             fs::read(selected).unwrap(),
             b"sealed production candidate bytes"
