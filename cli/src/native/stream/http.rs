@@ -39,9 +39,7 @@ use crate::native::service_model::{
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
 };
-use crate::native::service_principal::{
-    authenticate_profile_capability, AuthenticatedServicePrincipal,
-};
+use crate::native::service_principal::AuthenticatedServicePrincipal;
 use crate::native::service_profile_acquisition::diagnose_service_profile;
 use crate::native::service_profile_lease::{
     doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
@@ -3623,7 +3621,8 @@ fn optional_profile_capability_authority(
         return Ok(None);
     }
     let capability = profile_capability_bearer(headers)?;
-    authenticate_profile_capability(&service_state.service_principals, capability.as_str(), None)
+    service_state
+        .authenticate_profile_capability(capability.as_str(), None)
         .map(Some)
         .map_err(|error| {
             format!(
@@ -5840,7 +5839,7 @@ mod tests {
         dashboard_auth::verify_operator_focus(&state, &command).unwrap();
         assert_eq!(serde_json::to_value(&state).unwrap(), original);
         let provenance =
-            crate::native::service_request_provenance::ServiceRequestProvenance::capture(
+            crate::native::service_request_provenance::capture_service_request_provenance(
                 &command,
                 "request",
                 "job",

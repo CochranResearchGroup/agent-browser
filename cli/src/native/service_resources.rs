@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+pub(crate) use agent_browser_service_model::ResourceRetirementPolicy;
+
 use super::service_model::{
     BrowserHealth, LeaseState, ServiceEvent, ServiceEventKind, ServiceState,
 };
@@ -21,90 +23,52 @@ const TEMP_PROFILE_MIN_AGE_SECONDS: u64 = 30 * 60;
 const OWNED_CLOSING_GRACE_SECONDS: u64 = 5;
 const GC_REVIEW_TOKEN_TTL_SECONDS: u64 = 10 * 60;
 const GC_TERM_WAIT_MS: u64 = 1_500;
-const DEFAULT_ABANDONED_LANE_INACTIVITY_SECONDS: u64 = 5 * 60;
-const DEFAULT_PER_BROWSER_RSS_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-const DEFAULT_PER_BROWSER_DESCENDANTS: usize = 64;
-const DEFAULT_PER_BROWSER_TABS: usize = 128;
-const DEFAULT_WORKSTATION_LANES: usize = 16;
-const DEFAULT_WORKSTATION_PROCESSES: usize = 256;
-const DEFAULT_WORKSTATION_RSS_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 
-/// Bounded, read-only thresholds used by the resource projection. A policy is
-/// deliberately not effect authority: retirement still revalidates the exact
-/// owner, process, and activity observation immediately before any shutdown.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub(crate) struct ResourceRetirementPolicy {
-    pub(crate) inactivity_minimum_seconds: u64,
-    pub(crate) per_browser_max_rss_bytes: u64,
-    pub(crate) per_browser_max_descendants: usize,
-    pub(crate) per_browser_max_tabs: usize,
-    pub(crate) workstation_max_lanes: usize,
-    pub(crate) workstation_max_processes: usize,
-    pub(crate) workstation_max_rss_bytes: u64,
-}
-
-impl Default for ResourceRetirementPolicy {
-    fn default() -> Self {
-        Self {
-            inactivity_minimum_seconds: DEFAULT_ABANDONED_LANE_INACTIVITY_SECONDS,
-            per_browser_max_rss_bytes: DEFAULT_PER_BROWSER_RSS_BYTES,
-            per_browser_max_descendants: DEFAULT_PER_BROWSER_DESCENDANTS,
-            per_browser_max_tabs: DEFAULT_PER_BROWSER_TABS,
-            workstation_max_lanes: DEFAULT_WORKSTATION_LANES,
-            workstation_max_processes: DEFAULT_WORKSTATION_PROCESSES,
-            workstation_max_rss_bytes: DEFAULT_WORKSTATION_RSS_BYTES,
-        }
-    }
-}
-
-impl ResourceRetirementPolicy {
-    pub(crate) fn from_environment() -> Self {
-        let defaults = Self::default();
-        Self {
-            inactivity_minimum_seconds: bounded_env_u64(
-                "AGENT_BROWSER_RESOURCE_INACTIVITY_MIN_SECONDS",
-                defaults.inactivity_minimum_seconds,
-                60,
-                24 * 60 * 60,
-            ),
-            per_browser_max_rss_bytes: bounded_env_u64(
-                "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_RSS_BYTES",
-                defaults.per_browser_max_rss_bytes,
-                64 * 1024 * 1024,
-                64 * 1024 * 1024 * 1024,
-            ),
-            per_browser_max_descendants: bounded_env_usize(
-                "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_DESCENDANTS",
-                defaults.per_browser_max_descendants,
-                1,
-                4096,
-            ),
-            per_browser_max_tabs: bounded_env_usize(
-                "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_TABS",
-                defaults.per_browser_max_tabs,
-                1,
-                16384,
-            ),
-            workstation_max_lanes: bounded_env_usize(
-                "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_LANES",
-                defaults.workstation_max_lanes,
-                1,
-                4096,
-            ),
-            workstation_max_processes: bounded_env_usize(
-                "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_PROCESSES",
-                defaults.workstation_max_processes,
-                1,
-                65536,
-            ),
-            workstation_max_rss_bytes: bounded_env_u64(
-                "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_RSS_BYTES",
-                defaults.workstation_max_rss_bytes,
-                64 * 1024 * 1024,
-                1024 * 1024 * 1024 * 1024,
-            ),
-        }
+fn resource_retirement_policy_from_environment() -> ResourceRetirementPolicy {
+    let defaults = ResourceRetirementPolicy::default();
+    ResourceRetirementPolicy {
+        inactivity_minimum_seconds: bounded_env_u64(
+            "AGENT_BROWSER_RESOURCE_INACTIVITY_MIN_SECONDS",
+            defaults.inactivity_minimum_seconds,
+            60,
+            24 * 60 * 60,
+        ),
+        per_browser_max_rss_bytes: bounded_env_u64(
+            "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_RSS_BYTES",
+            defaults.per_browser_max_rss_bytes,
+            64 * 1024 * 1024,
+            64 * 1024 * 1024 * 1024,
+        ),
+        per_browser_max_descendants: bounded_env_usize(
+            "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_DESCENDANTS",
+            defaults.per_browser_max_descendants,
+            1,
+            4096,
+        ),
+        per_browser_max_tabs: bounded_env_usize(
+            "AGENT_BROWSER_RESOURCE_PER_BROWSER_MAX_TABS",
+            defaults.per_browser_max_tabs,
+            1,
+            16384,
+        ),
+        workstation_max_lanes: bounded_env_usize(
+            "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_LANES",
+            defaults.workstation_max_lanes,
+            1,
+            4096,
+        ),
+        workstation_max_processes: bounded_env_usize(
+            "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_PROCESSES",
+            defaults.workstation_max_processes,
+            1,
+            65536,
+        ),
+        workstation_max_rss_bytes: bounded_env_u64(
+            "AGENT_BROWSER_RESOURCE_WORKSTATION_MAX_RSS_BYTES",
+            defaults.workstation_max_rss_bytes,
+            64 * 1024 * 1024,
+            1024 * 1024 * 1024 * 1024,
+        ),
     }
 }
 
@@ -265,7 +229,7 @@ pub(crate) struct ResourceSummary {
     pub(crate) cleanup_obligations_transferring: usize,
     pub(crate) cleanup_obligations_satisfied: usize,
     pub(crate) cleanup_obligations_unknown: usize,
-    pub(crate) challenge_tasks: super::service_challenge_task::ServiceChallengeTaskSummary,
+    pub(crate) challenge_tasks: agent_browser_service_model::ServiceChallengeTaskSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -516,7 +480,7 @@ fn service_resources_response_from_samples_for_environment(
     collection_warnings: Vec<String>,
     environment: ResourceRuntimeEnvironment,
 ) -> Value {
-    let policy = ResourceRetirementPolicy::from_environment();
+    let policy = resource_retirement_policy_from_environment();
     let observed_at = chrono::Utc::now().to_rfc3339();
     let snapshot = service_resource_authority_snapshot_from_samples_with_policy(
         state,
@@ -526,7 +490,14 @@ fn service_resources_response_from_samples_for_environment(
         &policy,
         &observed_at,
     );
-    let lanes = resource_lane_projections(state, &snapshot.resources, &policy, &observed_at);
+    let runtime_lanes = state.runtime_resource_lanes();
+    let lanes = resource_lane_projections(
+        state,
+        &runtime_lanes,
+        &snapshot.resources,
+        &policy,
+        &observed_at,
+    );
     let workstation = workstation_resource_projection(&snapshot.resources, &lanes, &policy);
     let current_boot_epoch = crate::process_identity::current_boot_epoch();
     let boot_epoch_findings = super::service_boot_epoch::service_boot_epoch_findings(
@@ -538,7 +509,7 @@ fn service_resources_response_from_samples_for_environment(
         "resources": snapshot.resources,
         "lanes": lanes,
         "workstation": workstation,
-        "runtimeLanes": state.runtime_owner_registry.lifecycle_records.values().collect::<Vec<_>>(),
+        "runtimeLanes": runtime_lanes.iter().map(|lane| lane.lifecycle).collect::<Vec<_>>(),
         "bootEpoch": current_boot_epoch,
         "bootEpochFindings": boot_epoch_findings,
         "warnings": snapshot.warnings,
@@ -579,7 +550,7 @@ fn service_resource_authority_snapshot_from_samples_for_environment(
         processes,
         collection_warnings,
         environment,
-        &ResourceRetirementPolicy::from_environment(),
+        &resource_retirement_policy_from_environment(),
         &chrono::Utc::now().to_rfc3339(),
     )
 }
@@ -937,14 +908,11 @@ pub(crate) fn classify_abandoned_browser_lane_with_profile_identity_at(
         return lane_protected("runtime_lifecycle_profile_identity_changed");
     }
     let profile_identity_digest = observed_profile_identity_digest.to_string();
-    let Some(owner) = state.runtime_owner_registry.owner(&profile_identity_digest) else {
+    let runtime_authority = state.runtime_lane_authority(&profile_identity_digest, browser_id);
+    let Some(owner) = runtime_authority.owner else {
         return lane_protected("runtime_lifecycle_owner_unproven");
     };
-    let Some(lifecycle) = state
-        .runtime_owner_registry
-        .lifecycle_records
-        .get(browser_id)
-    else {
+    let Some(lifecycle) = runtime_authority.lifecycle else {
         return lane_protected("runtime_lifecycle_record_unproven");
     };
     let Some(process_group_id) = root.process_group_id else {
@@ -1071,7 +1039,7 @@ fn resource_lane_activity_at(
     )];
     if let Some(profile_id) = browser.profile_id.as_deref() {
         let resource = agent_browser_lease_authority::LeaseResourceKey::profile(profile_id);
-        if let Some(claim) = state.lease_authority.current_claim(&resource, now) {
+        if let Some(claim) = state.current_lease_claim(&resource, now) {
             reasons.insert(format!("active_profile_claim:{}", claim.claim_id()));
             digest_facts.push(format!(
                 "profileClaim:{}:revision={}:expires={}",
@@ -1083,7 +1051,7 @@ fn resource_lane_activity_at(
     }
     if let Some(capacity) = state.presentation_capacity.as_ref() {
         for slot in capacity
-            .slots
+            .slots()
             .iter()
             .filter(|slot| slot.browser_id.as_deref() == Some(browser_id))
         {
@@ -1384,19 +1352,17 @@ fn apply_abandoned_lane_candidates(
 
 fn resource_lane_projections(
     state: &ServiceState,
+    runtime_lanes: &[agent_browser_service_model::RuntimeResourceLane<'_>],
     records: &[ResourceRecord],
     policy: &ResourceRetirementPolicy,
     observed_at: &str,
 ) -> Vec<ResourceLaneProjection> {
-    state
-        .runtime_owner_registry
-        .lifecycle_records
+    runtime_lanes
         .iter()
-        .map(|(browser_id, lifecycle)| {
-            let browser_pid = state
-                .browsers
-                .get(browser_id)
-                .and_then(|browser| browser.pid);
+        .map(|lane| {
+            let browser_id = lane.browser_id;
+            let lifecycle = lane.lifecycle;
+            let browser_pid = lane.browser_pid;
             let lane_records = records
                 .iter()
                 .filter(|record| record.correlation.browser_id.as_deref() == Some(browser_id));
@@ -1406,11 +1372,7 @@ fn resource_lane_projections(
                 .filter(|record| Some(record.pid) == browser_pid)
                 .count();
             let descendant_count = lane_records.len().saturating_sub(browser_root_count);
-            let tab_count = state
-                .tabs
-                .values()
-                .filter(|tab| tab.browser_id == *browser_id)
-                .count();
+            let tab_count = lane.tab_count;
             let rss_bytes = lane_records
                 .iter()
                 .filter_map(|record| record.rss_bytes)
@@ -1435,7 +1397,7 @@ fn resource_lane_projections(
                 .unwrap_or_else(|| "observed".to_string());
             let current_activity = resource_lane_activity_at(state, browser_id, observed_at);
             ResourceLaneProjection {
-                browser_id: browser_id.clone(),
+                browser_id: browser_id.to_string(),
                 browser_root_count,
                 descendant_count,
                 tab_count,
@@ -1655,7 +1617,8 @@ fn classify_process(
 }
 
 fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> ResourceSummary {
-    let lifecycle_records = state.runtime_owner_registry.lifecycle_records.values();
+    let lifecycle_summary = state.runtime_lifecycle_authority_summary();
+    let cleanup_counts = &lifecycle_summary.cleanup_obligation_state_counts;
     ResourceSummary {
         total_processes: records.len(),
         correlated_processes: records
@@ -1694,35 +1657,12 @@ fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> Reso
             .filter_map(|record| record.rss_bytes)
             .sum(),
         total_rss_bytes: records.iter().filter_map(|record| record.rss_bytes).sum(),
-        managed_lane_count: state.runtime_owner_registry.lifecycle_records.len(),
-        cleanup_obligations_owned: lifecycle_records
-            .clone()
-            .filter(|record| {
-                record.cleanup_obligation_state
-                    == crate::runtime_owner_transfer::CleanupObligationState::Owned
-            })
-            .count(),
-        cleanup_obligations_transferring: lifecycle_records
-            .clone()
-            .filter(|record| {
-                record.cleanup_obligation_state
-                    == crate::runtime_owner_transfer::CleanupObligationState::Transferring
-            })
-            .count(),
-        cleanup_obligations_satisfied: lifecycle_records
-            .clone()
-            .filter(|record| {
-                record.cleanup_obligation_state
-                    == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
-            })
-            .count(),
-        cleanup_obligations_unknown: lifecycle_records
-            .filter(|record| {
-                record.cleanup_obligation_state
-                    == crate::runtime_owner_transfer::CleanupObligationState::Unknown
-            })
-            .count(),
-        challenge_tasks: super::service_challenge_task::challenge_task_summary(state),
+        managed_lane_count: lifecycle_summary.record_count,
+        cleanup_obligations_owned: cleanup_counts.get("owned").copied().unwrap_or(0),
+        cleanup_obligations_transferring: cleanup_counts.get("transferring").copied().unwrap_or(0),
+        cleanup_obligations_satisfied: cleanup_counts.get("satisfied").copied().unwrap_or(0),
+        cleanup_obligations_unknown: cleanup_counts.get("unknown").copied().unwrap_or(0),
+        challenge_tasks: state.service_challenge_task_summary(),
     }
 }
 
@@ -2715,7 +2655,7 @@ fn service_gc_apply_abandoned_response(
         validate_review_token(&candidates, token, unix_now_seconds())?;
     }
 
-    let policy = ResourceRetirementPolicy::from_environment();
+    let policy = resource_retirement_policy_from_environment();
     let mut receipts = Vec::new();
     for candidate in abandoned {
         let browser_id = candidate
@@ -3422,21 +3362,24 @@ mod tests {
         let mut state = ServiceState::default();
         state.runtime_owner_registry =
             crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner.clone());
-        state.runtime_owner_registry.lifecycle_records.insert(
-            owner.browser_id.clone(),
-            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-                logical_browser_id: owner.browser_id.clone(),
-                boot_epoch: None,
-                profile_identity_digest,
-                owner_generation: owner.owner_generation,
-                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing,
-                cleanup_obligation_state:
-                    crate::runtime_owner_transfer::CleanupObligationState::Owned,
-                process_group_id: Some(pid),
-                package_launch_identity_digest: Some(package_launch_identity_digest),
-                terminal_evidence: Vec::new(),
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                owner.browser_id.clone(),
+                crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                    logical_browser_id: owner.browser_id.clone(),
+                    boot_epoch: None,
+                    profile_identity_digest,
+                    owner_generation: owner.owner_generation,
+                    lifecycle_state:
+                        crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing,
+                    cleanup_obligation_state:
+                        crate::runtime_owner_transfer::CleanupObligationState::Owned,
+                    process_group_id: Some(pid),
+                    package_launch_identity_digest: Some(package_launch_identity_digest),
+                    terminal_evidence: Vec::new(),
+                },
+            );
         state.browsers.insert(
             owner.browser_id.clone(),
             BrowserProcess {
@@ -3481,9 +3424,8 @@ mod tests {
         let display_id = "display:private_virtual_display:session-abandoned".to_string();
         let (mut state, candidate) = owned_closing_candidate(pid, profile_root);
 
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .get_mut(&browser_id)
             .unwrap()
             .lifecycle_state = crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained;
@@ -3539,13 +3481,13 @@ mod tests {
         let session_id = "session-matrix".to_string();
         let profile_digest = base
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .get(&browser_id)
             .unwrap()
             .profile_identity_digest
             .clone();
-        base.runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut base.runtime_owner_registry)
+            .lifecycle_rows
             .get_mut(&browser_id)
             .unwrap()
             .lifecycle_state = crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained;
@@ -3790,7 +3732,7 @@ mod tests {
         let mut replacement_state = reviewed_state;
         let mut replacement_root = reviewed_root;
         replacement_root.start_token = Some("linux:fixture:replacement".to_string());
-        let profile_identity_digest = replacement_state.runtime_owner_registry.lifecycle_records
+        let profile_identity_digest = replacement_state.runtime_owner_registry.lifecycle_records()
             [&browser_id]
             .profile_identity_digest
             .clone();
@@ -3801,21 +3743,25 @@ mod tests {
         recorded.process_identity.start_token = "linux:fixture:replacement".to_string();
         let process_instance_digest =
             crate::native::runtime_lifecycle::digest_json(&recorded.process_identity).unwrap();
-        let owner = replacement_state
-            .runtime_owner_registry
-            .owners
+        let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut replacement_state.runtime_owner_registry,
+        );
+        let owner = registry_fixture
+            .owner_records
             .get_mut(&profile_identity_digest)
             .unwrap();
         owner.process_instance_digest = process_instance_digest;
         let package_launch_identity_digest =
             crate::native::runtime_lifecycle::package_launch_identity_digest(owner, Some(pid))
                 .unwrap();
-        replacement_state
-            .runtime_owner_registry
-            .lifecycle_records
-            .get_mut(&browser_id)
-            .unwrap()
-            .package_launch_identity_digest = Some(package_launch_identity_digest);
+        drop(registry_fixture);
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut replacement_state.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .get_mut(&browser_id)
+        .unwrap()
+        .package_launch_identity_digest = Some(package_launch_identity_digest);
         let replacement_response = service_resources_response_from_samples(
             &replacement_state,
             vec![replacement_root.clone(), reviewed_child.clone()],
@@ -3893,12 +3839,9 @@ mod tests {
             .unwrap()
             .process_identity;
         recorded.start_token = root.start_token.clone().unwrap();
-        let owner = state
-            .runtime_owner_registry
-            .owners
-            .values_mut()
-            .next()
-            .unwrap();
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.process_instance_digest =
             crate::native::runtime_lifecycle::digest_json(recorded).unwrap();
         let launch_digest = crate::native::runtime_lifecycle::package_launch_identity_digest(
@@ -3906,14 +3849,17 @@ mod tests {
             root.process_group_id,
         )
         .unwrap();
-        let lifecycle = state
-            .runtime_owner_registry
-            .lifecycle_records
+        drop(registry_fixture);
+        let mut registry_fixture =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        let lifecycle = registry_fixture
+            .lifecycle_rows
             .get_mut("browser-101")
             .unwrap();
         lifecycle.boot_epoch = Some(boot.clone());
         lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
         lifecycle.package_launch_identity_digest = Some(launch_digest);
+        drop(registry_fixture);
         let child = ProcessSample {
             pid: 102,
             ppid: Some(101),
@@ -3957,9 +3903,11 @@ mod tests {
         for case in 0..12 {
             let mut changed_state = state.clone();
             let mut changed = samples.clone();
-            let lifecycle = changed_state
-                .runtime_owner_registry
-                .lifecycle_records
+            let mut registry_fixture = crate::runtime_owner_transfer::edit_registry_fixture(
+                &mut changed_state.runtime_owner_registry,
+            );
+            let lifecycle = registry_fixture
+                .lifecycle_rows
                 .get_mut("browser-101")
                 .unwrap();
             match case {
@@ -3979,6 +3927,7 @@ mod tests {
                 11 => changed[1].ppid = Some(103),
                 _ => unreachable!(),
             }
+            drop(registry_fixture);
             let response = project(&changed_state, changed);
             assert_eq!(response["summary"]["candidateCount"], 0, "case {case}");
             let descendant = response["resources"]
@@ -4114,21 +4063,24 @@ mod tests {
     #[test]
     fn resources_project_lifecycle_cleanup_accountability() {
         let mut state = ServiceState::default();
-        state.runtime_owner_registry.lifecycle_records.insert(
-            "browser-owned".to_string(),
-            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
-                logical_browser_id: "browser-owned".to_string(),
-                boot_epoch: None,
-                profile_identity_digest: "a".repeat(64),
-                owner_generation: 3,
-                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained,
-                cleanup_obligation_state:
-                    crate::runtime_owner_transfer::CleanupObligationState::Owned,
-                process_group_id: Some(4100),
-                package_launch_identity_digest: Some("b".repeat(64)),
-                terminal_evidence: Vec::new(),
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                "browser-owned".to_string(),
+                crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                    logical_browser_id: "browser-owned".to_string(),
+                    boot_epoch: None,
+                    profile_identity_digest: "a".repeat(64),
+                    owner_generation: 3,
+                    lifecycle_state:
+                        crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained,
+                    cleanup_obligation_state:
+                        crate::runtime_owner_transfer::CleanupObligationState::Owned,
+                    process_group_id: Some(4100),
+                    package_launch_identity_digest: Some("b".repeat(64)),
+                    terminal_evidence: Vec::new(),
+                },
+            );
 
         let response = service_resources_response_from_samples(&state, Vec::new(), Vec::new());
 
@@ -4139,6 +4091,41 @@ mod tests {
             "browser-owned"
         );
         assert_eq!(response["runtimeLanes"][0]["lifecycleState"], "retained");
+    }
+
+    #[test]
+    fn runtime_lanes_preserve_registry_key_order_separately_from_embedded_ids() {
+        let mut state = ServiceState::default();
+        let mut registry =
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry);
+        registry.lifecycle_rows.insert(
+            "z-map-key".to_string(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: "embedded-a".to_string(),
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
+        registry.lifecycle_rows.insert(
+            "a-map-key".to_string(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: "embedded-z".to_string(),
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
+        drop(registry);
+
+        let response = service_resources_response_from_samples(&state, Vec::new(), Vec::new());
+
+        assert_eq!(response["lanes"][0]["browserId"], "a-map-key");
+        assert_eq!(response["lanes"][1]["browserId"], "z-map-key");
+        assert_eq!(
+            response["runtimeLanes"][0]["logicalBrowserId"],
+            "embedded-z"
+        );
+        assert_eq!(
+            response["runtimeLanes"][1]["logicalBrowserId"],
+            "embedded-a"
+        );
     }
 
     #[test]

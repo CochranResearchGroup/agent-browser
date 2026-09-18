@@ -5,7 +5,7 @@
 //! replayable repository mutation. A repeated reservation requires recovery;
 //! it does not authorize repeating an uncertain process effect.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
@@ -19,122 +19,20 @@ use crate::runtime_owner_transfer::{
     CleanupObligationState, OwnerAuthorityClaim, RuntimeLaneLifecycleState,
 };
 
-const PLAN_SCHEMA: &str = "agent-browser.abandoned-browser-retirement-plan.v1";
+#[cfg(test)]
+use agent_browser_service_model::blocks_profile_claim;
+pub(crate) use agent_browser_service_model::{
+    AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
+    AbandonedBrowserRetirementTransaction, RetirementExitEvidence, RetirementExitFailure,
+    RetirementRecourse, RetirementTerminalProjection,
+    ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1 as PLAN_SCHEMA,
+};
 
 /// External observation prepared before entering a replayable mutation.
 #[derive(Debug, Clone)]
 pub(crate) struct RetirementObservation {
     pub(crate) processes: Vec<ProcessSample>,
     pub(crate) profile_identity_digest: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AbandonedBrowserRetirementPlan {
-    pub(crate) schema_version: String,
-    pub(crate) plan_id: String,
-    pub(crate) state_revision: u64,
-    pub(crate) browser_id: String,
-    pub(crate) browser_record_digest: String,
-    pub(crate) root: RecordedProcessIdentity,
-    pub(crate) descendants: Vec<RecordedProcessIdentity>,
-    pub(crate) process_group_id: u32,
-    pub(crate) profile_path: String,
-    pub(crate) profile_id: Option<String>,
-    pub(crate) profile_identity_digest: String,
-    pub(crate) owner_generation: u64,
-    pub(crate) owner_digest: String,
-    pub(crate) package_launch_identity_digest: String,
-    pub(crate) activity_digest: String,
-    pub(crate) policy: ResourceRetirementPolicy,
-    pub(crate) created_at: String,
-    pub(crate) expires_at: String,
-    pub(crate) expected_terminal: RetirementTerminalProjection,
-}
-
-/// Exact public-state postcondition. Profile records and profile files survive.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RetirementTerminalProjection {
-    pub(crate) browser_health: BrowserHealth,
-    pub(crate) lifecycle_state: RuntimeLaneLifecycleState,
-    pub(crate) cleanup_obligation_state: CleanupObligationState,
-    pub(crate) detached_session_ids: Vec<String>,
-    pub(crate) closed_tab_ids: Vec<String>,
-    pub(crate) released_display_allocation_ids: Vec<String>,
-    pub(crate) released_route_ids: Vec<String>,
-    pub(crate) released_viewer_lease_ids: Vec<String>,
-    pub(crate) released_acquisition_lease_ids: Vec<String>,
-    pub(crate) released_route_pool_entry_ids: Vec<String>,
-    pub(crate) preserved_profile_digest: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AbandonedBrowserRetirementTransaction {
-    pub(crate) plan: AbandonedBrowserRetirementPlan,
-    pub(crate) reserved_revision: u64,
-    pub(crate) reserved_browser_digest: String,
-    pub(crate) receipt: Option<AbandonedBrowserRetirementReceipt>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AbandonedBrowserRetirementReceipt {
-    pub(crate) plan_id: String,
-    pub(crate) browser_id: String,
-    pub(crate) completed_at: String,
-    pub(crate) terminal_revision: u64,
-    pub(crate) effect_evidence: RetirementExitEvidence,
-    pub(crate) terminal_projection: RetirementTerminalProjection,
-}
-
-/// Adapter-observed proof, tied to the exact reservation and process group.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RetirementExitEvidence {
-    pub(crate) plan_id: String,
-    pub(crate) reserved_revision: u64,
-    pub(crate) process_group_id: u32,
-    pub(crate) observed_at: String,
-    pub(crate) root_exited: bool,
-    pub(crate) descendants_exited: bool,
-    pub(crate) process_group_empty: bool,
-    pub(crate) profile_lock_released: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RetirementExitFailure {
-    pub(crate) failed_conditions: Vec<String>,
-    pub(crate) evidence: RetirementExitEvidence,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "code", content = "detail", rename_all = "snake_case")]
-pub(crate) enum RetirementRecourse {
-    InvalidPlan,
-    Expired,
-    StateRevisionChanged,
-    BrowserRecordChanged,
-    RootChanged,
-    DescendantsChanged,
-    ProcessGroupChanged,
-    ProfileChanged,
-    OwnerChanged,
-    ActivityChanged,
-    Ineligible(String),
-    ReservationMissing,
-    RecoveryRequired,
-    ExitUnproven(Box<RetirementExitFailure>),
-    TerminalCompareAndSwapFailed,
-    ObservationFailed(String),
-}
-
-impl std::fmt::Display for RetirementRecourse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "abandoned_browser_retirement:{self:?}")
-    }
 }
 
 type RetirementResult<T> = Result<T, RetirementRecourse>;
@@ -373,7 +271,7 @@ pub(crate) fn plan_abandoned_browser_retirement(
     let mut plan = AbandonedBrowserRetirementPlan {
         schema_version: PLAN_SCHEMA.to_string(),
         plan_id: String::new(),
-        state_revision: state.state_revision,
+        state_revision: state.state_revision(),
         browser_id: browser_id.to_string(),
         browser_record_digest: digest(browser)?,
         root: identity.process_identity.clone(),
@@ -423,7 +321,7 @@ fn recheck_identity(
     }
     let lifecycle = state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .get(&plan.browser_id)
         .ok_or(RetirementRecourse::OwnerChanged)?;
     if lifecycle.logical_browser_id != plan.browser_id
@@ -463,7 +361,7 @@ pub(crate) fn reserve_abandoned_browser_retirement(
         .state_revision
         .checked_add(1)
         .ok_or(RetirementRecourse::StateRevisionChanged)?;
-    if state.state_revision != revision {
+    if state.state_revision() != revision {
         return Err(RetirementRecourse::StateRevisionChanged);
     }
     recheck_identity(state, plan)?;
@@ -487,7 +385,7 @@ pub(crate) fn reserve_abandoned_browser_retirement(
         &plan.expires_at,
     )?;
     compare_observation(plan, &fresh)?;
-    let lifecycle = &state.runtime_owner_registry.lifecycle_records[&plan.browser_id];
+    let lifecycle = &state.runtime_owner_registry.lifecycle_records()[&plan.browser_id];
     if !matches!(
         lifecycle.lifecycle_state,
         RuntimeLaneLifecycleState::Ready | RuntimeLaneLifecycleState::Retained
@@ -582,22 +480,6 @@ fn recheck_processes(
     Ok(())
 }
 
-/// New claims must not race a pending exact-profile retirement reservation.
-/// Failed effects retain this fence until explicit recovery or finalization.
-pub(crate) fn blocks_profile_claim(
-    state: &ServiceState,
-    resource: &agent_browser_lease_authority::LeaseResourceKey,
-) -> bool {
-    resource.kind == agent_browser_lease_authority::LeaseResourceKind::Profile
-        && state
-            .abandoned_browser_retirements
-            .values()
-            .any(|transaction| {
-                transaction.receipt.is_none()
-                    && transaction.plan.profile_id.as_deref() == Some(resource.id.as_str())
-            })
-}
-
 /// Validate a fresh observation immediately before each external signal.
 pub(crate) fn revalidate_abandoned_browser_retirement(
     state: &ServiceState,
@@ -651,14 +533,14 @@ pub(crate) fn revalidate_abandoned_browser_retirement_reservation(
     if transaction.plan != *plan {
         return Err(RetirementRecourse::InvalidPlan);
     }
-    if state.state_revision != transaction.reserved_revision {
+    if state.state_revision() != transaction.reserved_revision {
         return Err(RetirementRecourse::StateRevisionChanged);
     }
     recheck_identity(state, plan)?;
     if digest(&state.browsers[&plan.browser_id])? != transaction.reserved_browser_digest {
         return Err(RetirementRecourse::BrowserRecordChanged);
     }
-    let lifecycle = &state.runtime_owner_registry.lifecycle_records[&plan.browser_id];
+    let lifecycle = &state.runtime_owner_registry.lifecycle_records()[&plan.browser_id];
     if lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Closing
         || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
     {
@@ -691,7 +573,7 @@ pub(crate) fn finalize_abandoned_browser_retirement(
         .reserved_revision
         .checked_add(1)
         .ok_or(RetirementRecourse::TerminalCompareAndSwapFailed)?;
-    if state.state_revision != terminal_revision {
+    if state.state_revision() != terminal_revision {
         return Err(RetirementRecourse::TerminalCompareAndSwapFailed);
     }
     recheck_identity(state, plan)?;
@@ -737,18 +619,18 @@ pub(crate) fn finalize_abandoned_browser_retirement(
             },
         )));
     }
-    if state
-        .presentation_capacity
-        .as_ref()
-        .is_some_and(|capacity| {
-            capacity.slots.iter().any(|slot| {
-                slot.browser_id.as_deref() == Some(plan.browser_id.as_str())
-                    && slot.lease_request_id.is_some()
-            })
-        })
-    {
-        return Err(RetirementRecourse::TerminalCompareAndSwapFailed);
-    }
+    let prepared_presentation_capacity = match state.presentation_capacity.as_ref() {
+        Some(capacity) => {
+            let mut prepared = capacity.clone();
+            match prepared.retire_browser(&plan.browser_id) {
+                Ok(()) => Some(prepared),
+                Err(
+                    agent_browser_service_model::PresentationRetirementConflict::ActivePresentationLease,
+                ) => return Err(RetirementRecourse::TerminalCompareAndSwapFailed),
+            }
+        }
+        None => None,
+    };
     let mut registry = state.runtime_owner_registry.clone();
     super::runtime_lifecycle::complete_reconciled_close(
         &mut registry,
@@ -843,16 +725,7 @@ pub(crate) fn finalize_abandoned_browser_retirement(
             entry.state = "ready".to_string();
         }
     }
-    if let Some(capacity) = state.presentation_capacity.as_mut() {
-        for slot in &mut capacity.slots {
-            if slot.browser_id.as_deref() == Some(plan.browser_id.as_str()) {
-                slot.browser_id = None;
-                slot.state = super::presentation_capacity::PresentationSlotState::WarmIdle;
-                slot.lease_priority = None;
-                slot.restoration_pending = false;
-            }
-        }
-    }
+    state.presentation_capacity = prepared_presentation_capacity;
     state
         .abandoned_browser_retirements
         .get_mut(&plan.plan_id)
@@ -890,7 +763,8 @@ mod tests {
     };
     use super::*;
     use crate::native::presentation_capacity::{
-        PresentationCapacityAuthority, PresentationSlot, PresentationSlotState,
+        PresentationCapacityAuthority, PresentationCapacityConfig, PresentationSlot,
+        PresentationSlotState,
     };
     use crate::runtime_owner_transfer::{
         ProfileOwner, ProfileOwnerState, RuntimeLifecycleRecord, RuntimeOwnerRegistry,
@@ -899,6 +773,23 @@ mod tests {
     const NOW: &str = "2026-09-16T12:00:00Z";
     const EXPIRES: &str = "2026-09-16T12:05:00Z";
     const BROWSER: &str = "retirement-fixture";
+
+    fn mutate_capacity_slots(
+        state: &mut ServiceState,
+        mutate: impl FnOnce(&mut Vec<PresentationSlot>),
+    ) {
+        let capacity = state
+            .presentation_capacity
+            .as_ref()
+            .expect("retirement fixture must retain presentation capacity");
+        let config = *capacity.config();
+        let mut slots = capacity.slots().to_vec();
+        mutate(&mut slots);
+        state.presentation_capacity = Some(
+            PresentationCapacityAuthority::new(config, slots)
+                .expect("retirement fixture capacity must remain valid"),
+        );
+    }
 
     fn fixture() -> (ServiceState, RetirementObservation) {
         let profile_digest = agent_browser_lease_authority::canonical_profile_identity_digest(
@@ -933,19 +824,21 @@ mod tests {
             runtime_owner_registry: RuntimeOwnerRegistry::from_owner(owner),
             ..ServiceState::default()
         };
-        state.runtime_owner_registry.lifecycle_records.insert(
-            BROWSER.into(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: BROWSER.into(),
-                profile_identity_digest: profile_digest.clone(),
-                owner_generation: 4,
-                lifecycle_state: RuntimeLaneLifecycleState::Retained,
-                cleanup_obligation_state: CleanupObligationState::Owned,
-                process_group_id: Some(4100),
-                package_launch_identity_digest: Some(launch),
-                ..RuntimeLifecycleRecord::default()
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
+            .insert(
+                BROWSER.into(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: BROWSER.into(),
+                    profile_identity_digest: profile_digest.clone(),
+                    owner_generation: 4,
+                    lifecycle_state: RuntimeLaneLifecycleState::Retained,
+                    cleanup_obligation_state: CleanupObligationState::Owned,
+                    process_group_id: Some(4100),
+                    package_launch_identity_digest: Some(launch),
+                    ..RuntimeLifecycleRecord::default()
+                },
+            );
         state.profiles.insert(
             "fixture-profile".into(),
             BrowserProfile {
@@ -1026,10 +919,19 @@ mod tests {
         slot.route_id = Some("fixture-route".into());
         slot.display_allocation_id = Some("fixture-display".into());
         slot.browser_id = Some(BROWSER.into());
-        state.presentation_capacity = Some(PresentationCapacityAuthority {
-            slots: vec![slot],
-            ..PresentationCapacityAuthority::default()
-        });
+        state.presentation_capacity = Some(
+            PresentationCapacityAuthority::new(
+                PresentationCapacityConfig {
+                    warm_minimum: 0,
+                    hard_maximum: 1,
+                    human_priority_reserve: 0,
+                    recovery_reserve: 0,
+                    max_queue_depth: 64,
+                },
+                vec![slot],
+            )
+            .unwrap(),
+        );
         state.browser_process_identities.insert(
             BROWSER.into(),
             ServiceBrowserProcessIdentity {
@@ -1132,7 +1034,7 @@ mod tests {
         );
         reserve(&mut state, &plan, &observed);
         assert_eq!(
-            state.runtime_owner_registry.lifecycle_records[BROWSER].lifecycle_state,
+            state.runtime_owner_registry.lifecycle_records()[BROWSER].lifecycle_state,
             RuntimeLaneLifecycleState::Closing
         );
         revalidate_abandoned_browser_retirement(&state, &plan, &observed, NOW).unwrap();
@@ -1161,15 +1063,15 @@ mod tests {
         );
         assert_eq!(state.route_pool["fixture-pool"].state, "ready");
         assert_eq!(
-            state.presentation_capacity.as_ref().unwrap().slots[0].state,
+            state.presentation_capacity.as_ref().unwrap().slots()[0].state,
             PresentationSlotState::WarmIdle
         );
         assert_eq!(
-            state.presentation_capacity.as_ref().unwrap().slots[0].browser_id,
+            state.presentation_capacity.as_ref().unwrap().slots()[0].browser_id,
             None
         );
         assert_eq!(
-            state.runtime_owner_registry.lifecycle_records[BROWSER].cleanup_obligation_state,
+            state.runtime_owner_registry.lifecycle_records()[BROWSER].cleanup_obligation_state,
             CleanupObligationState::Satisfied
         );
         assert_eq!(
@@ -1199,12 +1101,13 @@ mod tests {
         );
 
         let mut changed_owner = state;
-        changed_owner
-            .runtime_owner_registry
-            .lifecycle_records
-            .get_mut(BROWSER)
-            .unwrap()
-            .cleanup_obligation_state = CleanupObligationState::Reclaimable;
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut changed_owner.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .get_mut(BROWSER)
+        .unwrap()
+        .cleanup_obligation_state = CleanupObligationState::Reclaimable;
         assert_eq!(
             revalidate_abandoned_browser_retirement_reservation(&changed_owner, &plan),
             Err(RetirementRecourse::OwnerChanged)
@@ -1252,8 +1155,9 @@ mod tests {
         ));
 
         let mut occupied_slot = state;
-        occupied_slot.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
-            Some("active-presentation-request".into());
+        mutate_capacity_slots(&mut occupied_slot, |slots| {
+            slots[0].lease_request_id = Some("active-presentation-request".into());
+        });
         assert!(matches!(
             plan_abandoned_browser_retirement(
                 &occupied_slot,
@@ -1317,8 +1221,9 @@ mod tests {
         let (mut state, observed) = fixture();
         let plan = plan(&state, &observed);
         state.state_revision += 1;
-        state.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
-            Some("late-presentation-request".into());
+        mutate_capacity_slots(&mut state, |slots| {
+            slots[0].lease_request_id = Some("late-presentation-request".into());
+        });
         let before = state.clone();
         assert!(matches!(
             reserve_abandoned_browser_retirement(&mut state, &plan, &observed, NOW),
@@ -1374,9 +1279,8 @@ mod tests {
     #[test]
     fn retirement_ready_lane_and_census_order_share_the_same_sealed_contract() {
         let (mut state, mut observed) = fixture();
-        state
-            .runtime_owner_registry
-            .lifecycle_records
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .lifecycle_rows
             .get_mut(BROWSER)
             .unwrap()
             .lifecycle_state = RuntimeLaneLifecycleState::Ready;
@@ -1418,12 +1322,13 @@ mod tests {
                 1 => state.state_revision += 1,
                 2 => state.browsers.get_mut(BROWSER).unwrap().last_error = Some("changed".into()),
                 _ => {
-                    state
-                        .runtime_owner_registry
-                        .lifecycle_records
-                        .get_mut(BROWSER)
-                        .unwrap()
-                        .lifecycle_state = RuntimeLaneLifecycleState::Closing
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut state.runtime_owner_registry,
+                    )
+                    .lifecycle_rows
+                    .get_mut(BROWSER)
+                    .unwrap()
+                    .lifecycle_state = RuntimeLaneLifecycleState::Closing
                 }
             }
             let before = state.clone();
@@ -1468,13 +1373,14 @@ mod tests {
                     RetirementRecourse::ProfileChanged
                 }
                 6 => {
-                    state
-                        .runtime_owner_registry
-                        .owners
-                        .values_mut()
-                        .next()
-                        .unwrap()
-                        .owner_generation += 1;
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut state.runtime_owner_registry,
+                    )
+                    .owner_records
+                    .values_mut()
+                    .next()
+                    .unwrap()
+                    .owner_generation += 1;
                     RetirementRecourse::OwnerChanged
                 }
                 _ => {
@@ -1496,7 +1402,7 @@ mod tests {
         let (mut state, observed) = fixture();
         let plan = plan(&state, &observed);
         reserve(&mut state, &plan, &observed);
-        for case in 0..6 {
+        for case in 0..7 {
             let mut state = state.clone();
             let mut evidence = exit(&plan);
             state.state_revision += 1;
@@ -1506,19 +1412,25 @@ mod tests {
                 2 => evidence.descendants_exited = false,
                 3 => evidence.process_group_empty = false,
                 4 => evidence.profile_lock_released = false,
+                5 => mutate_capacity_slots(&mut state, |slots| {
+                    slots[0].lease_request_id = Some("late-presentation-request".into());
+                }),
                 _ => {
-                    state
-                        .runtime_owner_registry
-                        .lifecycle_records
-                        .get_mut(BROWSER)
-                        .unwrap()
-                        .owner_generation += 1
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut state.runtime_owner_registry,
+                    )
+                    .lifecycle_rows
+                    .get_mut(BROWSER)
+                    .unwrap()
+                    .owner_generation += 1
                 }
             }
             let before = state.clone();
-            assert!(
-                finalize_abandoned_browser_retirement(&mut state, &plan, &evidence, NOW).is_err()
-            );
+            let error = finalize_abandoned_browser_retirement(&mut state, &plan, &evidence, NOW)
+                .expect_err("terminal drift must fail without mutation");
+            if case == 5 {
+                assert_eq!(error, RetirementRecourse::TerminalCompareAndSwapFailed);
+            }
             assert_eq!(state, before);
         }
     }
@@ -1590,7 +1502,7 @@ mod tests {
             assert_eq!(failure.evidence, evidence, "case {case}");
             assert_eq!(state, before, "case {case}");
             assert_eq!(
-                state.runtime_owner_registry.lifecycle_records[BROWSER].cleanup_obligation_state,
+                state.runtime_owner_registry.lifecycle_records()[BROWSER].cleanup_obligation_state,
                 CleanupObligationState::Owned,
                 "case {case}"
             );
@@ -1607,11 +1519,17 @@ mod tests {
         let (mut state, observed) = fixture();
         let plan = plan(&state, &observed);
         let key = LeaseResourceKey::profile("fixture-profile");
-        assert!(!blocks_profile_claim(&state, &key));
-        reserve(&mut state, &plan, &observed);
-        assert!(blocks_profile_claim(&state, &key));
         assert!(!blocks_profile_claim(
-            &state,
+            &state.abandoned_browser_retirements,
+            &key
+        ));
+        reserve(&mut state, &plan, &observed);
+        assert!(blocks_profile_claim(
+            &state.abandoned_browser_retirements,
+            &key
+        ));
+        assert!(!blocks_profile_claim(
+            &state.abandoned_browser_retirements,
             &LeaseResourceKey::profile("another-profile")
         ));
         let request = AcquireLeaseClaimRequest {
@@ -1641,7 +1559,7 @@ mod tests {
         state.state_revision += 1;
         finalize_abandoned_browser_retirement(&mut state, &plan, &exit(&plan), NOW).unwrap();
         assert!(!blocks_profile_claim(
-            &state,
+            &state.abandoned_browser_retirements,
             &LeaseResourceKey::profile("fixture-profile")
         ));
     }
@@ -1691,8 +1609,9 @@ mod tests {
         let (mut state, observed) = fixture();
         let plan = plan(&state, &observed);
         reserve(&mut state, &plan, &observed);
-        state.presentation_capacity.as_mut().unwrap().slots[0].lease_request_id =
-            Some("late-presentation-request".into());
+        mutate_capacity_slots(&mut state, |slots| {
+            slots[0].lease_request_id = Some("late-presentation-request".into());
+        });
         let mut runtime = FakeRuntime {
             state,
             observed,

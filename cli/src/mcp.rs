@@ -29,9 +29,7 @@ use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     service_site_policy_sources, ServiceState,
 };
-use crate::native::service_principal::{
-    authenticate_profile_capability, AuthenticatedServicePrincipal,
-};
+use crate::native::service_principal::AuthenticatedServicePrincipal;
 use crate::native::service_profile_acquisition::diagnose_service_profile;
 use crate::native::service_profile_lease::{
     doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
@@ -6726,7 +6724,8 @@ fn profile_authority_from_mcp_arguments(
     let Some(capability) = optional_string_argument(arguments, "profileCapability")? else {
         return Ok(None);
     };
-    authenticate_profile_capability(&state.service_principals, capability, None)
+    state
+        .authenticate_profile_capability(capability, None)
         .map(Some)
         .map_err(|error| {
             JsonRpcError::invalid_params(&format!(
@@ -11608,6 +11607,49 @@ fn profile_lease_resource(uri: &str) -> Option<(String, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_capability_arguments_use_the_service_state_authority_boundary() {
+        const CAPABILITY: &str = "synthetic-mcp-profile-capability-at-least-thirty-two-characters";
+        let mut state = ServiceState::default();
+        let registered = state
+            .register_profile_capability(
+                crate::native::service_principal::ServicePrincipalRegistrationRequest {
+                    principal_id: "principal:mcp-test".to_string(),
+                    display_name: Some("MCP test principal".to_string()),
+                    profile_id: "profile:mcp-test".to_string(),
+                    registered_at: Some("2026-09-17T12:00:00Z".to_string()),
+                    registered_by: Some("test".to_string()),
+                },
+                CAPABILITY,
+            )
+            .unwrap();
+
+        assert!(profile_authority_from_mcp_arguments(&json!({}), &state)
+            .unwrap()
+            .is_none());
+        let authority = profile_authority_from_mcp_arguments(
+            &json!({ "profileCapability": CAPABILITY }),
+            &state,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(authority.principal_id, registered.principal.principal_id);
+        assert_eq!(authority.profile_id, registered.capability.profile_id);
+
+        let error = profile_authority_from_mcp_arguments(
+            &json!({ "profileCapability": "wrong-capability" }),
+            &state,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, -32602);
+        assert_eq!(
+            error.data,
+            Some(json!({
+                "message": "profile_capability_authentication_failed:capability_mismatch"
+            }))
+        );
+    }
 
     fn assert_static_service_resource_uris(resources: &Value) {
         let uris = resources

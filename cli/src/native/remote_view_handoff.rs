@@ -745,7 +745,7 @@ pub(crate) fn remote_view_handoff_recoverable_pending_owner_session(
     );
     let mut owners = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .filter(|owner| {
             let pending = owner.pending_transfer.as_ref();
@@ -837,7 +837,7 @@ fn unique_ready_handoff_owner_session(
     let browser = state.browsers.get(browser_id)?;
     let mut owners = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .filter(|owner| {
             owner.state == ProfileOwnerState::Ready
@@ -2184,11 +2184,16 @@ fn finalize_route_bound_handoff_atomic(
                     .and_then(|existing| existing.presentation_receipt.as_ref())
                     .map(|receipt| receipt.generation.saturating_add(1))
                     .unwrap_or(1);
-                if let Some(owner) = state.runtime_owner_registry.owners.values().find(|owner| {
-                    runtime_owner_controls_browser(state, owner, &receipt.logical_browser_id)
-                        && owner.daemon_session_route
-                            == handoff.session_name.as_deref().unwrap_or("")
-                }) {
+                if let Some(owner) = state
+                    .runtime_owner_registry
+                    .owners()
+                    .values()
+                    .find(|owner| {
+                        runtime_owner_controls_browser(state, owner, &receipt.logical_browser_id)
+                            && owner.daemon_session_route
+                                == handoff.session_name.as_deref().unwrap_or("")
+                    })
+                {
                     receipt.daemon_owner_generation = Some(owner.owner_generation);
                     receipt.process_instance_digest = Some(owner.process_instance_digest.clone());
                 }

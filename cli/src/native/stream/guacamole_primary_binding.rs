@@ -96,7 +96,7 @@ impl PrimaryBinding {
             .ok_or("guacamole_primary_browser_unavailable")?;
         let mut owners = snapshot
             .runtime_owner_registry
-            .owners
+            .owners()
             .values()
             .filter(|owner| owner.browser_id == browser.id);
         let owner = owners.next().ok_or("guacamole_primary_owner_unavailable")?;
@@ -104,8 +104,7 @@ impl PrimaryBinding {
             return Err("guacamole_primary_owner_ambiguous");
         }
         let mut binding = snapshot
-            .runtime_owner_registry
-            .binding_for_session(&owner.daemon_session_route)
+            .runtime_owner_binding_for_session(&owner.daemon_session_route)
             .map_err(|_| "guacamole_primary_owner_unavailable")?
             .ok_or("guacamole_primary_owner_unavailable")?;
         let expected_claim = OwnerAuthorityClaim::from_owner(owner);
@@ -404,10 +403,17 @@ mod tests {
         capacity_slot.scene_generation = 13;
         capacity_slot.lease_request_id = Some("retained-recovery".into());
         initial.presentation_capacity = Some(
-            crate::native::presentation_capacity::PresentationCapacityAuthority {
-                slots: vec![capacity_slot],
-                ..Default::default()
-            },
+            crate::native::presentation_capacity::PresentationCapacityAuthority::new(
+                crate::native::presentation_capacity::PresentationCapacityConfig {
+                    warm_minimum: 0,
+                    hard_maximum: 1,
+                    human_priority_reserve: 0,
+                    recovery_reserve: 0,
+                    max_queue_depth: 64,
+                },
+                vec![capacity_slot],
+            )
+            .unwrap(),
         );
         initial.route_pool.insert(
             "slot".into(),
@@ -489,14 +495,14 @@ mod tests {
                         .owner_browser_id = Some("peer".into())
                 }
                 "changed_owner" => {
-                    changed
-                        .0
-                        .runtime_owner_registry
-                        .owners
-                        .values_mut()
-                        .next()
-                        .unwrap()
-                        .owner_generation += 1
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut changed.0.runtime_owner_registry,
+                    )
+                    .owner_records
+                    .values_mut()
+                    .next()
+                    .unwrap()
+                    .owner_generation += 1
                 }
                 "released_route" => {
                     changed.0.remote_view_routes.get_mut("route").unwrap().state = "released".into()
@@ -547,7 +553,7 @@ mod tests {
             .unwrap()
             .activate_bound_browser("route", "display", "browser")
             .expect("inventory refresh lost the slot needed by route checkout");
-        let retained_slot = &overlaid.0.presentation_capacity.as_ref().unwrap().slots[0];
+        let retained_slot = &overlaid.0.presentation_capacity.as_ref().unwrap().slots()[0];
         assert_eq!(retained_slot.scene_generation, 13);
         assert_eq!(
             retained_slot.lease_request_id.as_deref(),
@@ -561,20 +567,29 @@ mod tests {
             "foreign_slot",
         ] {
             let mut changed = pending.clone();
-            let capacity = changed.presentation_capacity.as_mut().unwrap();
+            let capacity = changed.presentation_capacity.as_ref().unwrap();
+            let capacity_config = *capacity.config();
+            let mut slots = capacity.slots().to_vec();
             match case {
-                "missing_capacity" => capacity.slots.clear(),
-                "foreign_browser" => capacity.slots[0].browser_id = Some("peer".into()),
-                "foreign_display" => capacity.slots[0].display_allocation_id = Some("peer".into()),
-                "foreign_route" => capacity.slots[0].route_id = Some("peer".into()),
-                "foreign_slot" => capacity.slots[0].id = "peer".into(),
+                "missing_capacity" => slots.clear(),
+                "foreign_browser" => slots[0].browser_id = Some("peer".into()),
+                "foreign_display" => slots[0].display_allocation_id = Some("peer".into()),
+                "foreign_route" => slots[0].route_id = Some("peer".into()),
+                "foreign_slot" => slots[0].id = "peer".into(),
                 _ => unreachable!(),
             }
+            changed.presentation_capacity = Some(
+                crate::native::presentation_capacity::PresentationCapacityAuthority::new(
+                    capacity_config,
+                    slots,
+                )
+                .unwrap(),
+            );
             inventory
                 .overlay_service_state(&mut changed, config.clone())
                 .unwrap();
             assert!(
-                changed.presentation_capacity.unwrap().slots.is_empty(),
+                changed.presentation_capacity.unwrap().slots().is_empty(),
                 "overlay manufactured or borrowed {case}"
             );
         }
@@ -744,17 +759,21 @@ mod tests {
             .owner_browser_id = Some("peer".into());
         assert!(!binding.is_current(&repository));
         repository.0 = original.clone();
-        repository
-            .0
-            .runtime_owner_registry
-            .lifecycle_records
-            .clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut repository.0.runtime_owner_registry,
+        )
+        .lifecycle_rows
+        .clear();
         assert_eq!(
             PrimaryBinding::resolve(&repository, "route", "1").err(),
             Some("guacamole_primary_owner_stale")
         );
         repository.0 = original.clone();
-        repository.0.runtime_owner_registry.owners.clear();
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut repository.0.runtime_owner_registry,
+        )
+        .owner_records
+        .clear();
         assert_eq!(
             PrimaryBinding::resolve(&repository, "route", "1").err(),
             Some("guacamole_primary_owner_unavailable")

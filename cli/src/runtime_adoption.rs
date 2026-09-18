@@ -11,6 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub(crate) use agent_browser_lease_authority::BrowserAdoptionMode;
+
 pub(crate) const RUNTIME_ADOPTION_SCHEMA_VERSION: &str = "agent-browser.runtime-adoption.v1";
 pub(crate) const RUNTIME_ADMISSION_TRANSACTION_ID_ENV: &str =
     "AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID";
@@ -805,14 +807,6 @@ fn upgrade_transition_allowed(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum BrowserAdoptionMode {
-    CooperativeTransfer,
-    OrphanAdoption,
-    ManualPreservation,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub(crate) enum BrowserAdoptionDecision {
     Authorized,
     PreservedWithoutAutomation,
@@ -1545,7 +1539,7 @@ fn profile_owner_readback(
 ) -> Result<RuntimeCensusSourceReadback, String> {
     let mut observations = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .map(|owner| {
             let mut evidence = base_fragment();
@@ -1611,7 +1605,8 @@ fn profile_owner_readback(
         })
         .collect::<Vec<_>>();
     observations.extend(legacy_observations);
-    let source_revision = source_revision(&(state.runtime_owner_registry.revision, &observations))?;
+    let source_revision =
+        source_revision(&(state.runtime_owner_registry.revision(), &observations))?;
     Ok(RuntimeCensusSourceReadback {
         source: RuntimeCensusSource::ProfileOwnerReservations,
         source_revision,
@@ -1774,7 +1769,7 @@ fn owner_route_daemon_observations_with_probe(
 ) -> Vec<RuntimeCensusObservation> {
     state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .filter(|owner| {
             owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
@@ -2271,7 +2266,7 @@ fn canonical_handoff_browser_id(
     }
     if let Some(owner) = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .find(|owner| owner.browser_id == *browser_id)
     {
@@ -4177,23 +4172,25 @@ mod tests {
 
         let profile_digest = canonical_profile_digest("/tmp/reused-profile").unwrap();
         let mut state = ServiceState::default();
-        state.runtime_owner_registry.owners.insert(
-            profile_digest.clone(),
-            ProfileOwner {
-                owner_id: "stale-owner".to_string(),
-                profile_identity_digest: profile_digest.clone(),
-                state: ProfileOwnerState::Ready,
-                owner_generation: 4,
-                browser_id: "session:old-browser".to_string(),
-                daemon_session_route: "old-browser".to_string(),
-                process_instance_digest: digest_text("old-process"),
-                browser_family: "chrome".to_string(),
-                cdp_endpoint_identity_digest: digest_text("old-cdp"),
-                target_set_digest: digest_text("old-targets"),
-                pending_transfer: None,
-                last_transition: None,
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
+            .insert(
+                profile_digest.clone(),
+                ProfileOwner {
+                    owner_id: "stale-owner".to_string(),
+                    profile_identity_digest: profile_digest.clone(),
+                    state: ProfileOwnerState::Ready,
+                    owner_generation: 4,
+                    browser_id: "session:old-browser".to_string(),
+                    daemon_session_route: "old-browser".to_string(),
+                    process_instance_digest: digest_text("old-process"),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: digest_text("old-cdp"),
+                    target_set_digest: digest_text("old-targets"),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
 
         let observation = profile_owner_readback(&state)
             .unwrap()
@@ -4216,23 +4213,25 @@ mod tests {
 
         let profile_digest = canonical_profile_digest("/tmp/shared-lane-profile").unwrap();
         let mut state = ServiceState::default();
-        state.runtime_owner_registry.owners.insert(
-            profile_digest.clone(),
-            ProfileOwner {
-                owner_id: "shared-owner".to_string(),
-                profile_identity_digest: profile_digest,
-                state: ProfileOwnerState::Ready,
-                owner_generation: 8,
-                browser_id: "session:shared-lane".to_string(),
-                daemon_session_route: "shared-lane".to_string(),
-                process_instance_digest: digest_text("shared-process"),
-                browser_family: "chrome".to_string(),
-                cdp_endpoint_identity_digest: digest_text("shared-cdp"),
-                target_set_digest: digest_text("shared-targets"),
-                pending_transfer: None,
-                last_transition: None,
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
+            .insert(
+                profile_digest.clone(),
+                ProfileOwner {
+                    owner_id: "shared-owner".to_string(),
+                    profile_identity_digest: profile_digest,
+                    state: ProfileOwnerState::Ready,
+                    owner_generation: 8,
+                    browser_id: "session:shared-lane".to_string(),
+                    daemon_session_route: "shared-lane".to_string(),
+                    process_instance_digest: digest_text("shared-process"),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: digest_text("shared-cdp"),
+                    target_set_digest: digest_text("shared-targets"),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
 
         let observations =
             owner_route_daemon_observations_with_probe(&state, |session| session == "shared-lane");
@@ -4403,23 +4402,25 @@ mod tests {
             ("browser-a", digest_text("profile-a")),
             ("browser-b", digest_text("profile-b")),
         ] {
-            state.runtime_owner_registry.owners.insert(
-                profile_digest.clone(),
-                ProfileOwner {
-                    owner_id: format!("owner-{browser_id}"),
-                    profile_identity_digest: profile_digest,
-                    state: ProfileOwnerState::Orphaned,
-                    owner_generation: 2,
-                    browser_id: browser_id.to_string(),
-                    daemon_session_route: "orphan-observation".to_string(),
-                    process_instance_digest: digest_text(&format!("process-{browser_id}")),
-                    browser_family: "chrome".to_string(),
-                    cdp_endpoint_identity_digest: digest_text(&format!("cdp-{browser_id}")),
-                    target_set_digest: digest_text(&format!("targets-{browser_id}")),
-                    pending_transfer: None,
-                    last_transition: None,
-                },
-            );
+            crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+                .owner_records
+                .insert(
+                    profile_digest.clone(),
+                    ProfileOwner {
+                        owner_id: format!("owner-{browser_id}"),
+                        profile_identity_digest: profile_digest,
+                        state: ProfileOwnerState::Orphaned,
+                        owner_generation: 2,
+                        browser_id: browser_id.to_string(),
+                        daemon_session_route: "orphan-observation".to_string(),
+                        process_instance_digest: digest_text(&format!("process-{browser_id}")),
+                        browser_family: "chrome".to_string(),
+                        cdp_endpoint_identity_digest: digest_text(&format!("cdp-{browser_id}")),
+                        target_set_digest: digest_text(&format!("targets-{browser_id}")),
+                        pending_transfer: None,
+                        last_transition: None,
+                    },
+                );
         }
 
         let readback = profile_owner_readback(&state).unwrap();
@@ -4483,23 +4484,25 @@ mod tests {
                 runtime_profile: Some("default".to_string()),
             },
         );
-        state.runtime_owner_registry.owners.insert(
-            profile_digest.clone(),
-            ProfileOwner {
-                owner_id: "owner-current".to_string(),
-                profile_identity_digest: profile_digest.clone(),
-                state: ProfileOwnerState::Ready,
-                owner_generation: 9,
-                browser_id: "session:historical-route".to_string(),
-                daemon_session_route: route.to_string(),
-                process_instance_digest: process_digest,
-                browser_family: "chrome".to_string(),
-                cdp_endpoint_identity_digest: digest_text("cdp"),
-                target_set_digest: digest_text("targets"),
-                pending_transfer: None,
-                last_transition: None,
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
+            .insert(
+                profile_digest.clone(),
+                ProfileOwner {
+                    owner_id: "owner-current".to_string(),
+                    profile_identity_digest: profile_digest.clone(),
+                    state: ProfileOwnerState::Ready,
+                    owner_generation: 9,
+                    browser_id: "session:historical-route".to_string(),
+                    daemon_session_route: route.to_string(),
+                    process_instance_digest: process_digest,
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: digest_text("cdp"),
+                    target_set_digest: digest_text("targets"),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
         state.remote_view_handoffs.insert(
             "retained-handoff".to_string(),
             RemoteViewHandoff {
@@ -4545,9 +4548,8 @@ mod tests {
             Some(current_browser_id.as_str())
         );
 
-        state
-            .runtime_owner_registry
-            .owners
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .owner_records
             .get_mut(&profile_digest)
             .unwrap()
             .state = ProfileOwnerState::Orphaned;

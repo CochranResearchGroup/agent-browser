@@ -14,8 +14,14 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use agent_browser_service_model::{
+    RuntimeOwnerPersistenceParts, RuntimeOwnerPersistenceRestore, RuntimeOwnerPersistenceSnapshot,
+};
+
 use crate::process_identity::{observe_process, ProcessObservation};
-use crate::runtime_owner_transfer::{RuntimeLifecycleRecord, RuntimeOwnerRegistry};
+use crate::runtime_owner_transfer::RuntimeLifecycleRecord;
+#[cfg(test)]
+use crate::runtime_owner_transfer::RuntimeOwnerRegistry;
 
 use super::service_model::{RemoteViewHandoff, ServiceState};
 
@@ -133,11 +139,22 @@ struct RemoteViewHandoffRegistry {
 /// Upgrade-safe authority state stored outside the legacy-compatible primary
 /// service snapshot. Older binaries can rewrite `state.json`, but they cannot
 /// erase the current effect-capable owner generation from this sidecar.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 struct DurableRuntimeOwnerRegistry {
     schema_version: String,
-    registry: RuntimeOwnerRegistry,
+    registry: RuntimeOwnerPersistenceSnapshot,
+}
+
+impl Default for DurableRuntimeOwnerRegistry {
+    fn default() -> Self {
+        Self {
+            schema_version: String::new(),
+            registry: ServiceState::default()
+                .runtime_owner_persistence_parts()
+                .owner_registry,
+        }
+    }
 }
 
 /// New lifecycle evidence is isolated from the legacy owner-registry shape so
@@ -196,7 +213,7 @@ pub trait ServiceStateStore {
     /// without a cheaper durable revision projection.
     fn load_revision_without_recovery(&self) -> Result<u64, String> {
         self.load_without_recovery()
-            .map(|state| state.state_revision)
+            .map(|state| state.state_revision())
     }
 
     fn recovery_required(&self) -> bool {
@@ -408,12 +425,12 @@ impl ServiceStateStore for JsonServiceStateStore {
             },
         )
         .handoffs;
-        if !owner_registry.schema_version.is_empty() {
-            state.runtime_owner_registry = owner_registry.registry;
-        }
-        if !lifecycle_registry.schema_version.is_empty() {
-            state.runtime_owner_registry.lifecycle_records = lifecycle_registry.records;
-        }
+        state.restore_runtime_owner_persistence(RuntimeOwnerPersistenceRestore {
+            owner_registry: (!owner_registry.schema_version.is_empty())
+                .then_some(owner_registry.registry),
+            lifecycle_records: (!lifecycle_registry.schema_version.is_empty())
+                .then_some(lifecycle_registry.records),
+        });
         state.mark_persisted_entity_sources();
         if let Err(error) =
             super::presentation_inventory::overlay_provider_inventory_from_environment(&mut state)
@@ -426,7 +443,7 @@ impl ServiceStateStore for JsonServiceStateStore {
             state
                 .presentation_capacity
                 .get_or_insert_with(Default::default)
-                .admission_error = Some(error);
+                .record_inventory_failure(error);
         }
         state.refresh_derived_views();
         Ok(state)
@@ -624,18 +641,22 @@ fn prepare_service_state_transaction(
                 super::service_state_migration::prepare_service_state_for_persistence(&mut state)?;
                 state.refresh_derived_views();
                 state.remove_builtin_entity_defaults_for_persistence();
+                let runtime_owner_persistence = state.runtime_owner_persistence_parts();
                 let lifecycle_registry_payload =
-                    runtime_lifecycle_registry_payload(&state.runtime_owner_registry)?;
-                state.runtime_owner_registry.lifecycle_records.clear();
-                let serialized = serde_json::to_string_pretty(&state)
-                    .map_err(|err| format!("Failed to serialize service state: {err}"))?;
+                    runtime_lifecycle_registry_payload(&runtime_owner_persistence)?;
+                state.strip_runtime_lifecycle_for_persistence();
+                let state_payload = String::from_utf8(
+                    agent_browser_service_model::encode_prepared_service_state_pretty(&state)
+                        .map_err(|err| format!("Failed to serialize service state: {err}"))?,
+                )
+                .map_err(|err| format!("Failed to encode service state as UTF-8: {err}"))?;
                 Ok(ServiceStateTransaction {
-                    state_payload: format!("{serialized}\n"),
+                    state_payload,
                     handoff_payload: remote_view_handoff_registry_payload(
                         &state.remote_view_handoffs,
                     )?,
                     owner_registry_payload: Some(runtime_owner_registry_payload(
-                        &state.runtime_owner_registry,
+                        &runtime_owner_persistence.owner_registry,
                     )?),
                     lifecycle_registry_payload: Some(lifecycle_registry_payload),
                 })
@@ -778,15 +799,12 @@ where
                 if !predicate(&baseline) {
                     return Ok(None);
                 }
-                let baseline_revision = baseline.state_revision;
-                let mut candidate = baseline.clone();
-                candidate.state_revision = baseline_revision
-                    .checked_add(1)
-                    .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+                let baseline_revision = baseline.state_revision();
+                let mut candidate = baseline
+                    .checked_successor()
+                    .map_err(|error| error.to_string())?;
                 let result = mutator(&mut candidate)?;
-                let candidate_revision = candidate.state_revision;
-                candidate.state_revision = baseline_revision;
-                if candidate == baseline {
+                if candidate.payload_eq_ignoring_revision(&baseline) {
                     let commit_deadline = Instant::now() + timeout.max(Duration::from_millis(1));
                     let mut file_guard = acquire_service_state_file_lock_until(
                         path,
@@ -802,7 +820,7 @@ where
                     file_guard.set_state_summary(&baseline, None);
                     file_guard.set_phase("load_current");
                     let current_revision = if self.store.recovery_required() {
-                        self.store.load()?.state_revision
+                        self.store.load()?.state_revision()
                     } else {
                         self.store.load_revision_without_recovery()?
                     };
@@ -824,7 +842,6 @@ where
                     }
                     return Ok(Some(result));
                 }
-                candidate.state_revision = candidate_revision;
                 let transaction = self
                     .store
                     .prepare_save(&candidate)?
@@ -847,7 +864,7 @@ where
                 #[cfg(test)]
                 wait_for_production_scale_load_current_barrier()?;
                 let current_revision = if self.store.recovery_required() {
-                    self.store.load()?.state_revision
+                    self.store.load()?.state_revision()
                 } else {
                     self.store.load_revision_without_recovery()?
                 };
@@ -938,19 +955,14 @@ where
             return Ok(None);
         }
 
-        let baseline_revision = baseline.state_revision;
-        let mut candidate = baseline.clone();
-        candidate.state_revision = baseline_revision
-            .checked_add(1)
-            .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+        let mut candidate = baseline
+            .checked_successor()
+            .map_err(|error| error.to_string())?;
         file_guard.set_phase("mutate");
         let result = mutator(&mut candidate)?;
-        let candidate_revision = candidate.state_revision;
-        candidate.state_revision = baseline_revision;
-        if candidate == baseline {
+        if candidate.payload_eq_ignoring_revision(&baseline) {
             return Ok(Some(result));
         }
-        candidate.state_revision = candidate_revision;
 
         drop(process_guard);
         file_guard.set_phase("prepare_contended");
@@ -1440,7 +1452,9 @@ fn load_runtime_owner_registry(state_path: &Path) -> Result<DurableRuntimeOwnerR
     })
 }
 
-fn runtime_owner_registry_payload(registry: &RuntimeOwnerRegistry) -> Result<String, String> {
+fn runtime_owner_registry_payload(
+    registry: &RuntimeOwnerPersistenceSnapshot,
+) -> Result<String, String> {
     let registry = DurableRuntimeOwnerRegistry {
         schema_version: RUNTIME_OWNER_REGISTRY_SCHEMA_VERSION.to_string(),
         registry: registry.clone(),
@@ -1478,11 +1492,13 @@ fn load_runtime_lifecycle_registry(
     })
 }
 
-fn runtime_lifecycle_registry_payload(registry: &RuntimeOwnerRegistry) -> Result<String, String> {
+fn runtime_lifecycle_registry_payload(
+    persistence: &RuntimeOwnerPersistenceParts,
+) -> Result<String, String> {
     let registry = DurableRuntimeLifecycleRegistry {
         schema_version: RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION.to_string(),
-        registry_revision: registry.revision,
-        records: registry.lifecycle_records.clone(),
+        registry_revision: persistence.lifecycle_registry_revision,
+        records: persistence.lifecycle_records.clone(),
     };
     Ok(format!(
         "{}\n",
@@ -1894,7 +1910,7 @@ impl ServiceStateFileGuard {
         };
         holder.hold_elapsed_ms = elapsed_millis(self.acquired_at.elapsed());
         holder.state_bytes = state_bytes.map(|value| value.min(u64::MAX as usize) as u64);
-        holder.state_revision = Some(state.state_revision);
+        holder.state_revision = Some(state.state_revision());
         holder.job_count = Some(state.jobs.len().min(u64::MAX as usize) as u64);
         holder.session_count = Some(state.sessions.len().min(u64::MAX as usize) as u64);
         holder.profile_count = Some(state.profiles.len().min(u64::MAX as usize) as u64);
@@ -2272,8 +2288,8 @@ mod tests {
     #[test]
     fn unavailable_production_inventory_preserves_readable_state_and_fences_capacity() {
         use crate::native::presentation_capacity::{
-            CapacityLimitingResource, PresentationCapacityAuthority, PresentationRequest,
-            PresentationSlot, PresentationSlotState, PressureAdmission,
+            CapacityLimitingResource, PresentationCapacityAuthority, PresentationCapacityConfig,
+            PresentationRequest, PresentationSlot, PresentationSlotState, PressureAdmission,
         };
         let guard = EnvGuard::new(&[
             "AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH",
@@ -2292,10 +2308,19 @@ mod tests {
         slot.state = PresentationSlotState::Active;
         slot.browser_id = Some("incumbent".into());
         let mut initial = ServiceState::default();
-        initial.presentation_capacity = Some(PresentationCapacityAuthority {
-            slots: vec![slot.clone()],
-            ..Default::default()
-        });
+        initial.presentation_capacity = Some(
+            PresentationCapacityAuthority::new(
+                PresentationCapacityConfig {
+                    warm_minimum: 0,
+                    hard_maximum: 1,
+                    human_priority_reserve: 0,
+                    recovery_reserve: 0,
+                    max_queue_depth: 64,
+                },
+                vec![slot.clone()],
+            )
+            .unwrap(),
+        );
         let bytes = serde_json::to_vec(&initial).unwrap();
         fs::write(&path, &bytes).unwrap();
         let store = JsonServiceStateStore::new(&path);
@@ -2308,21 +2333,30 @@ mod tests {
             "read must not write custody"
         );
         let mut capacity = state.presentation_capacity.clone().unwrap();
-        assert!(capacity.admission_error.is_some());
-        assert_eq!(capacity.slots, vec![slot]);
-        assert_eq!(capacity.reconcile_authoritative_bindings(&state), 0);
+        assert!(capacity.admission_error().is_some());
+        assert_eq!(capacity.slots(), [slot]);
+        assert_eq!(
+            crate::native::presentation_capacity::reconcile_authoritative_bindings(
+                &mut capacity,
+                &state,
+            ),
+            0
+        );
         assert_eq!(
             capacity
                 .projection(PressureAdmission::admit(2))
                 .pressure_admitted_maximum,
             0
         );
-        assert!(!capacity.binding_warnings(&state).is_empty());
+        assert!(
+            !crate::native::presentation_capacity::binding_warnings(&capacity, &state).is_empty()
+        );
         let before = capacity.clone();
         for bound in [false, true] {
             let request = PresentationRequest::recovery("recover").for_browser("incumbent");
             let decision = if bound {
-                capacity.request_bound_recovery(
+                crate::native::presentation_capacity::request_bound_recovery(
+                    &mut capacity,
                     request,
                     PressureAdmission::admit(2),
                     &state,
@@ -2417,15 +2451,17 @@ mod tests {
     fn runtime_registry(label: &str) -> RuntimeOwnerRegistry {
         let owner = runtime_owner(label);
         let mut registry = RuntimeOwnerRegistry::from_owner(owner.clone());
-        registry.lifecycle_records.insert(
-            owner.browser_id.clone(),
-            RuntimeLifecycleRecord {
-                logical_browser_id: owner.browser_id,
-                profile_identity_digest: owner.profile_identity_digest,
-                owner_generation: owner.owner_generation,
-                ..RuntimeLifecycleRecord::default()
-            },
-        );
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut registry)
+            .lifecycle_rows
+            .insert(
+                owner.browser_id.clone(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: owner.browser_id,
+                    profile_identity_digest: owner.profile_identity_digest,
+                    owner_generation: owner.owner_generation,
+                    ..RuntimeLifecycleRecord::default()
+                },
+            );
         registry
     }
 
@@ -4481,13 +4517,45 @@ mod tests {
         let legacy_owner_registry: LegacyRuntimeOwnerRegistry =
             serde_json::from_value(owner_json["registry"].clone())
                 .expect("legacy owner reader should accept the durable registry");
-        assert_eq!(legacy_state_registry.revision, registry.revision);
-        assert_eq!(legacy_state_registry.owners, registry.owners);
-        assert_eq!(legacy_owner_registry.revision, registry.revision);
-        assert_eq!(legacy_owner_registry.owners, registry.owners);
+        assert_eq!(legacy_state_registry.revision, registry.revision());
+        assert_eq!(&legacy_state_registry.owners, registry.owners());
+        assert_eq!(legacy_owner_registry.revision, registry.revision());
+        assert_eq!(&legacy_owner_registry.owners, registry.owners());
 
         let loaded = store.load().expect("new reader should merge the sidecar");
         assert_eq!(loaded.runtime_owner_registry, registry);
+
+        // A present lifecycle sidecar replaces even conflicting owner-sidecar
+        // evidence. Its historical revision does not advance owner authority.
+        let mut owner_sidecar = registry.clone();
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut owner_sidecar)
+            .registry_revision += 7;
+        let owner_sidecar_snapshot: RuntimeOwnerPersistenceSnapshot = serde_json::from_value(
+            serde_json::to_value(&owner_sidecar).expect("owner fixture should serialize"),
+        )
+        .expect("owner fixture should retain the persistence wire shape");
+        fs::write(
+            runtime_owner_registry_path(&path),
+            runtime_owner_registry_payload(&owner_sidecar_snapshot).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            runtime_lifecycle_registry_path(&path),
+            serde_json::to_string(&DurableRuntimeLifecycleRegistry {
+                schema_version: RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION.to_string(),
+                registry_revision: u64::MAX,
+                records: BTreeMap::new(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let loaded = store
+            .load()
+            .expect("present empty lifecycle sidecar should win");
+        assert_eq!(
+            loaded.runtime_owner_registry,
+            owner_sidecar.persistence_projection_without_lifecycle_records()
+        );
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -4559,11 +4627,11 @@ mod tests {
                 .is_none());
             assert!(loaded
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .contains_key("browser-before"));
             assert!(!loaded
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .contains_key("browser-after"));
             assert!(!loaded.browsers.contains_key("browser-after"));
             assert!(!service_state_transaction_path(&path).exists());

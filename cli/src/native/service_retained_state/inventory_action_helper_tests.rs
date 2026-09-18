@@ -404,9 +404,9 @@ fn test_prune_retained_degraded_browser_preserves_terminal_lifecycle_alias_evide
                 ..BrowserProcess::default()
             },
         )]),
-        runtime_owner_registry: RuntimeOwnerRegistry {
-            revision: 6,
-            lifecycle_records: BTreeMap::from([(
+        runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
+            registry_revision: 6,
+            lifecycle_rows: BTreeMap::from([(
                 "session:plan0233-qbo-owned".to_string(),
                 RuntimeLifecycleRecord {
                     logical_browser_id: "session:plan0233-qbo-owned".to_string(),
@@ -421,8 +421,9 @@ fn test_prune_retained_degraded_browser_preserves_terminal_lifecycle_alias_evide
                     ..RuntimeLifecycleRecord::default()
                 },
             )]),
-            ..RuntimeOwnerRegistry::default()
-        },
+            ..crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture::default()
+        }
+        .into_registry(),
         ..ServiceState::default()
     };
     let result = prune_retained_service_state(
@@ -452,7 +453,7 @@ fn test_prune_retained_degraded_browser_preserves_terminal_lifecycle_alias_evide
     assert!(service_state.browsers.is_empty());
     assert!(service_state
         .runtime_owner_registry
-        .lifecycle_records
+        .lifecycle_records()
         .contains_key("session:plan0233-qbo-owned"));
 }
 #[test]

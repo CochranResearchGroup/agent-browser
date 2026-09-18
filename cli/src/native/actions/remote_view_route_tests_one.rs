@@ -305,7 +305,7 @@ async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
         .presentation_capacity
         .as_ref()
         .unwrap()
-        .slots[0];
+        .slots()[0];
     assert_eq!(checked_out_slot.state, PresentationSlotState::Active);
     assert_eq!(
         checked_out_slot.browser_id.as_deref(),
@@ -387,7 +387,7 @@ async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
         None
     );
     assert_eq!(persisted.route_pool["pool-a"].state, "available");
-    let released_slot = &persisted.presentation_capacity.as_ref().unwrap().slots[0];
+    let released_slot = &persisted.presentation_capacity.as_ref().unwrap().slots()[0];
     assert_eq!(released_slot.state, PresentationSlotState::WarmIdle);
     assert_eq!(released_slot.browser_id, None);
     assert_eq!(
@@ -694,7 +694,7 @@ async fn test_remote_view_browser_reattach_blocks_without_live_process_and_prese
         Some("display-stale")
     );
     assert_eq!(persisted.remote_view_routes["route-a"].state, "orphaned");
-    let slot = &persisted.presentation_capacity.as_ref().unwrap().slots[0];
+    let slot = &persisted.presentation_capacity.as_ref().unwrap().slots()[0];
     assert_eq!(slot.state, PresentationSlotState::Active);
     assert_eq!(slot.browser_id.as_deref(), Some("session:rdp-a"));
     assert_eq!(slot.lease_request_id, None);
@@ -908,7 +908,7 @@ async fn test_remote_view_route_switch_releases_previous_route_and_checks_out_ne
             .as_deref(),
         Some("display-b")
     );
-    let slots = &persisted.presentation_capacity.as_ref().unwrap().slots;
+    let slots = persisted.presentation_capacity.as_ref().unwrap().slots();
     assert_eq!(slots[0].state, PresentationSlotState::WarmIdle);
     assert_eq!(slots[0].browser_id, None);
     assert_eq!(slots[1].state, PresentationSlotState::Active);
@@ -1439,7 +1439,7 @@ async fn test_remote_view_route_switch_parks_occupied_route_when_no_route_availa
             .as_deref(),
         Some("route-c")
     );
-    let slots = &persisted.presentation_capacity.as_ref().unwrap().slots;
+    let slots = persisted.presentation_capacity.as_ref().unwrap().slots();
     assert_eq!(slots[0].state, PresentationSlotState::Active);
     assert_eq!(slots[0].browser_id.as_deref(), Some("session:rdp-a"));
     assert_eq!(slots[0].lease_request_id, None);

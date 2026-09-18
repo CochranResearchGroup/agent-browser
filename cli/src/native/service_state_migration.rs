@@ -8,43 +8,16 @@
 use super::service_model::{
     BrowserProcess, BrowserProfile, BrowserSession, LeaseState, ServiceState,
 };
-use super::service_profile_access_policy::{
-    ProfileAccessGrant, ProfileAccessMode, ProfileAccessPreset, ProfileIdentityAssurance,
-    ServiceProfileAccessPolicy,
-};
+#[cfg(test)]
+use super::service_profile_access_policy::{ProfileAccessMode, ProfileIdentityAssurance};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-pub(crate) const SERVICE_STATE_SCHEMA_VERSION: &str = "agent-browser.service-state.v2";
-pub(crate) const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str =
-    "agent-browser.service-state.unversioned";
-const PROFILE_POLICY_MIGRATION_SCHEMA_VERSION: &str = "agent-browser.profile-policy-migration.v1";
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfilePolicyMigrationEntry {
-    pub(crate) profile_id: String,
-    pub(crate) classification: String,
-    pub(crate) target_mode: ProfileAccessMode,
-    pub(crate) ambiguity: bool,
-    pub(crate) blocking: bool,
-    pub(crate) reason: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ProfilePolicyMigrationReport {
-    pub(crate) schema_version: String,
-    pub(crate) migration_id: String,
-    pub(crate) source_revision: u64,
-    pub(crate) target_revision: u64,
-    pub(crate) entries: Vec<ProfilePolicyMigrationEntry>,
-    pub(crate) blocking_issue_count: usize,
-}
-
+pub(crate) use agent_browser_service_model::{
+    LEGACY_SERVICE_STATE_SCHEMA_VERSION, SERVICE_STATE_SCHEMA_VERSION,
+};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ServiceStateMigrationStatus {
@@ -129,135 +102,15 @@ pub(crate) struct RecoveryArtifactCompatibility {
 }
 
 pub(crate) fn read_service_state(raw: &str) -> Result<ServiceState, serde_json::Error> {
-    let value: Value = serde_json::from_str(raw)?;
-    let source_schema = value.get("schemaVersion").and_then(Value::as_str);
-    if let Some(schema) = source_schema {
-        if schema != SERVICE_STATE_SCHEMA_VERSION {
-            return Err(custom_json_error(format!(
-                "service_state_schema_unsupported:{schema}"
-            )));
-        }
-    }
-    if let Some(schema) = value
-        .get("profileLeaseSchemaVersion")
-        .and_then(Value::as_str)
-    {
-        if schema != super::service_profile_lease::PROFILE_LEASE_SCHEMA_VERSION {
-            return Err(custom_json_error(format!(
-                "profile_lease_schema_unsupported:{schema}"
-            )));
-        }
-    }
-    let mut state: ServiceState = serde_json::from_value(value)?;
-    materialize_legacy_profile_access_policies(&mut state);
-    stamp_current_versions(&mut state);
-    Ok(state)
+    agent_browser_service_model::decode_persisted_service_state_json(raw)
+        .map_err(|error| custom_json_error(error.to_string()))
 }
 
 pub(crate) fn prepare_service_state_for_persistence(
     state: &mut ServiceState,
 ) -> Result<(), String> {
-    materialize_legacy_profile_access_policies(state);
-    stamp_current_versions(state);
-    Ok(())
-}
-
-fn materialize_legacy_profile_access_policies(state: &mut ServiceState) {
-    let source_revision = state.state_revision;
-    let profile_ids = state
-        .profiles
-        .iter()
-        .filter_map(|(profile_id, profile)| profile.access_policy.is_none().then_some(profile_id))
-        .cloned()
-        .collect::<Vec<_>>();
-    if profile_ids.is_empty() {
-        return;
-    }
-
-    let mut entries = Vec::new();
-    for profile_id in profile_ids {
-        let matching_sessions = state
-            .sessions
-            .values()
-            .filter(|session| session.profile_id.as_deref() == Some(profile_id.as_str()))
-            .collect::<Vec<_>>();
-        let proven_principal = matching_sessions
-            .first()
-            .and_then(|session| session.principal_id.as_deref())
-            .filter(|principal| {
-                !matching_sessions.is_empty()
-                    && matching_sessions.iter().all(|session| {
-                        session.lease == LeaseState::Exclusive
-                            && session.principal_id.as_deref() == Some(principal)
-                            && session.principal_provenance.is_some()
-                    })
-            })
-            .map(str::to_string);
-
-        let (policy, entry) = if let Some(principal_id) = proven_principal {
-            let mut policy = ServiceProfileAccessPolicy::shared_local_default(&profile_id);
-            policy.mode = ProfileAccessMode::Exclusive;
-            policy.default_permissions.clear();
-            policy.grants = vec![ProfileAccessGrant {
-                subject_id: principal_id,
-                minimum_assurance: ProfileIdentityAssurance::RegisteredCapability,
-                permissions: ProfileAccessPreset::Administrator.permissions(),
-            }];
-            (
-                policy,
-                ProfilePolicyMigrationEntry {
-                    profile_id: profile_id.clone(),
-                    classification: "proven-strict-compatibility".to_string(),
-                    target_mode: ProfileAccessMode::Exclusive,
-                    ambiguity: false,
-                    blocking: false,
-                    reason: "One provenance-backed principal held every exclusive legacy session."
-                        .to_string(),
-                },
-            )
-        } else {
-            let profile = &state.profiles[&profile_id];
-            let ordinary_shared = matching_sessions.is_empty()
-                && (profile.shared_service_ids.len() > 1
-                    || profile.allocation
-                        == super::service_model::ProfileAllocationPolicy::SharedService);
-            let classification = if ordinary_shared {
-                "shared-local-default"
-            } else {
-                "ambiguous-legacy"
-            };
-            let reason = if ordinary_shared {
-                "Legacy sharing configuration maps to the trusted local participant preset."
-            } else {
-                "Legacy identity evidence is insufficient for strict access and remains a nonblocking observation."
-            };
-            (
-                ServiceProfileAccessPolicy::shared_local_default(&profile_id),
-                ProfilePolicyMigrationEntry {
-                    profile_id: profile_id.clone(),
-                    classification: classification.to_string(),
-                    target_mode: ProfileAccessMode::SharedLocal,
-                    ambiguity: !ordinary_shared,
-                    blocking: false,
-                    reason: reason.to_string(),
-                },
-            )
-        };
-        if let Some(profile) = state.profiles.get_mut(&profile_id) {
-            profile.access_policy = Some(policy);
-        }
-        entries.push(entry);
-    }
-    let material = serde_json::to_vec(&(source_revision, &entries)).unwrap_or_default();
-    let migration_id = format!("profile-policy-migration-{:x}", Sha256::digest(material));
-    state.profile_policy_migration = Some(ProfilePolicyMigrationReport {
-        schema_version: PROFILE_POLICY_MIGRATION_SCHEMA_VERSION.to_string(),
-        migration_id,
-        source_revision,
-        target_revision: source_revision.saturating_add(1),
-        entries,
-        blocking_issue_count: 0,
-    });
+    agent_browser_service_model::prepare_service_state_for_persistence(state)
+        .map_err(|error| error.to_string())
 }
 
 pub(crate) fn plan_service_state_migration(raw: &str) -> Result<ServiceStateMigrationPlan, String> {
@@ -727,7 +580,7 @@ fn retained_browser_reference_exists(state: &ServiceState, browser_id: &str) -> 
     retained_browser_projection_reference_exists(state, browser_id)
         || state
             .runtime_owner_registry
-            .owners
+            .owners()
             .values()
             .any(|owner| owner.browser_id == browser_id)
 }
@@ -773,7 +626,7 @@ fn retained_browser_projection_reference_exists(state: &ServiceState, browser_id
 fn materialize_inert_owner_only_process_placeholders(state: &mut ServiceState) {
     let missing_browsers = state
         .runtime_owner_registry
-        .owners
+        .owners()
         .values()
         .filter(|owner| !owner.browser_id.trim().is_empty())
         .filter(|owner| !state.browsers.contains_key(&owner.browser_id))
@@ -781,13 +634,13 @@ fn materialize_inert_owner_only_process_placeholders(state: &mut ServiceState) {
         .filter(|owner| {
             !state
                 .runtime_owner_registry
-                .principal_bindings
+                .principal_bindings()
                 .contains_key(&owner.profile_identity_digest)
         })
         .filter(|owner| {
             state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .values()
                 .filter(|candidate| candidate.browser_id == owner.browser_id)
                 .count()
@@ -854,7 +707,7 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
         .filter(|browser_id| {
             let owners = state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .values()
                 .filter(|owner| owner.browser_id == ***browser_id)
                 .collect::<Vec<_>>();
@@ -1016,7 +869,7 @@ fn owner_principal_binding_is_migration_safe(
 ) -> bool {
     let Some(binding) = state
         .runtime_owner_registry
-        .principal_bindings
+        .principal_bindings()
         .get(&owner.profile_identity_digest)
     else {
         return true;
@@ -1026,9 +879,7 @@ fn owner_principal_binding_is_migration_safe(
         && binding.provenance
             == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
         && state
-            .service_principals
-            .principals
-            .get(&binding.principal_id)
+            .service_principal(&binding.principal_id)
             .is_some_and(|principal| {
                 principal.state
                     == crate::native::service_principal::ServicePrincipalState::Active
@@ -1036,9 +887,7 @@ fn owner_principal_binding_is_migration_safe(
                         == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
             })
         && state
-            .service_principals
-            .profile_capabilities
-            .get(&binding.capability_id)
+            .profile_capability(&binding.capability_id)
             .is_some_and(|capability| {
                 capability.principal_id == binding.principal_id
                     && capability.profile_id == binding.profile_id
@@ -1111,7 +960,7 @@ fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
         .filter(|browser_id| {
             let owners = state
                 .runtime_owner_registry
-                .owners
+                .owners()
                 .values()
                 .filter(|owner| owner.browser_id == **browser_id)
                 .collect::<Vec<_>>();
@@ -1120,7 +969,7 @@ fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
                     && owners[0].pending_transfer.is_none()
                     && state
                         .runtime_owner_registry
-                        .principal_bindings
+                        .principal_bindings()
                         .contains_key(&owners[0].profile_identity_digest)
                     && owner_principal_binding_is_migration_safe(state, owners[0]))
         })
@@ -1217,235 +1066,11 @@ fn materialize_inert_legacy_session_placeholders(state: &mut ServiceState) {
     }
 }
 
-fn stamp_current_versions(state: &mut ServiceState) {
-    state.schema_version = SERVICE_STATE_SCHEMA_VERSION.to_string();
-    state.profile_lease_schema_version =
-        super::service_profile_lease::PROFILE_LEASE_SCHEMA_VERSION.to_string();
-}
-
 /// Validate the cross-record relationships required by a persisted Service
 /// State document without modifying the decoded snapshot or durable storage.
 pub(crate) fn validate_service_state_invariants(state: &ServiceState) -> Result<(), String> {
-    for (key, profile) in &state.profiles {
-        if profile.id.trim().is_empty() || profile.id != *key {
-            return Err(format!("service_state_profile_key_mismatch:{key}"));
-        }
-    }
-    for (key, browser) in &state.browsers {
-        if browser.id.trim().is_empty() || browser.id != *key {
-            return Err(format!("service_state_browser_key_mismatch:{key}"));
-        }
-        if let Some(profile_id) = &browser.profile_id {
-            if !state.profiles.contains_key(profile_id) {
-                return Err(format!(
-                    "service_state_browser_profile_missing:{key}:{profile_id}"
-                ));
-            }
-        }
-        if let Some(allocation_id) = &browser.display_allocation_id {
-            if !state.display_allocations.contains_key(allocation_id) {
-                return Err(format!(
-                    "service_state_browser_display_missing:{key}:{allocation_id}"
-                ));
-            }
-        }
-        for session_id in &browser.active_session_ids {
-            if !state.sessions.contains_key(session_id) {
-                return Err(format!(
-                    "service_state_browser_session_missing:{key}:{session_id}"
-                ));
-            }
-        }
-    }
-    for (key, session) in &state.sessions {
-        if session.id.trim().is_empty() || session.id != *key {
-            return Err(format!("service_state_session_key_mismatch:{key}"));
-        }
-        if let Some(profile_id) = &session.profile_id {
-            if !state.profiles.contains_key(profile_id) {
-                return Err(format!(
-                    "service_state_session_profile_missing:{key}:{profile_id}"
-                ));
-            }
-        }
-        for browser_id in &session.browser_ids {
-            if !state.browsers.contains_key(browser_id) {
-                return Err(format!(
-                    "service_state_session_browser_missing:{key}:{browser_id}"
-                ));
-            }
-        }
-        for tab_id in &session.tab_ids {
-            if !state.tabs.contains_key(tab_id) {
-                return Err(format!("service_state_session_tab_missing:{key}:{tab_id}"));
-            }
-        }
-    }
-    for (key, tab) in &state.tabs {
-        if tab.id.trim().is_empty() || tab.id != *key {
-            return Err(format!("service_state_tab_key_mismatch:{key}"));
-        }
-        if !tab.browser_id.trim().is_empty() && !state.browsers.contains_key(&tab.browser_id) {
-            return Err(format!(
-                "service_state_tab_browser_missing:{key}:{}",
-                tab.browser_id
-            ));
-        }
-        if let Some(session_id) = &tab.owner_session_id {
-            if !state.sessions.contains_key(session_id) {
-                return Err(format!(
-                    "service_state_tab_session_missing:{key}:{session_id}"
-                ));
-            }
-        }
-        if let Some(session_id) = &tab.session_id {
-            if !state.sessions.contains_key(session_id) {
-                return Err(format!(
-                    "service_state_tab_routed_session_missing:{key}:{session_id}"
-                ));
-            }
-        }
-    }
-    for key in state.browser_process_identities.keys() {
-        if !state.browsers.contains_key(key) {
-            return Err(format!("service_state_process_browser_missing:{key}"));
-        }
-    }
-    for (key, allocation) in &state.display_allocations {
-        if allocation.id.trim().is_empty() || allocation.id != *key {
-            return Err(format!("service_state_display_key_mismatch:{key}"));
-        }
-        if let Some(browser_id) = &allocation.owner_browser_id {
-            if !state.browsers.contains_key(browser_id) {
-                return Err(format!(
-                    "service_state_display_browser_missing:{key}:{browser_id}"
-                ));
-            }
-        }
-        if let Some(session_id) = &allocation.owner_session_id {
-            if !state.sessions.contains_key(session_id) {
-                return Err(format!(
-                    "service_state_display_session_missing:{key}:{session_id}"
-                ));
-            }
-        }
-        if let Some(profile_id) = &allocation.profile_id {
-            if !state.profiles.contains_key(profile_id) {
-                return Err(format!(
-                    "service_state_display_profile_missing:{key}:{profile_id}"
-                ));
-            }
-        }
-        for route_id in &allocation.route_ids {
-            if !state.remote_view_routes.contains_key(route_id) {
-                return Err(format!(
-                    "service_state_display_route_missing:{key}:{route_id}"
-                ));
-            }
-        }
-    }
-    for (key, route) in &state.remote_view_routes {
-        if route.id.trim().is_empty() || route.id != *key {
-            return Err(format!("service_state_route_key_mismatch:{key}"));
-        }
-        if let Some(allocation_id) = &route.display_allocation_id {
-            if !state.display_allocations.contains_key(allocation_id) {
-                return Err(format!(
-                    "service_state_route_display_missing:{key}:{allocation_id}"
-                ));
-            }
-        }
-        if let Some(browser_id) = &route.browser_id {
-            if !state.browsers.contains_key(browser_id) {
-                return Err(format!(
-                    "service_state_route_browser_missing:{key}:{browser_id}"
-                ));
-            }
-        }
-        if let Some(session_id) = &route.session_id {
-            if !state.sessions.contains_key(session_id) {
-                return Err(format!(
-                    "service_state_route_session_missing:{key}:{session_id}"
-                ));
-            }
-        }
-        for lease_id in &route.viewer_lease_ids {
-            if !state.viewer_leases.contains_key(lease_id) {
-                return Err(format!(
-                    "service_state_route_viewer_lease_missing:{key}:{lease_id}"
-                ));
-            }
-        }
-        if let Some(lease_id) = &route.controller_lease_id {
-            if !state.viewer_leases.contains_key(lease_id) {
-                return Err(format!(
-                    "service_state_route_controller_lease_missing:{key}:{lease_id}"
-                ));
-            }
-        }
-    }
-    for (key, entry) in &state.route_pool {
-        if entry.id.trim().is_empty() || entry.id != *key {
-            return Err(format!("service_state_route_pool_key_mismatch:{key}"));
-        }
-    }
-    for (key, lease) in &state.remote_view_acquisition_leases {
-        if lease.id.trim().is_empty() || lease.id != *key {
-            return Err(format!(
-                "service_state_acquisition_lease_key_mismatch:{key}"
-            ));
-        }
-    }
-    for (key, lease) in &state.viewer_leases {
-        if lease.id.trim().is_empty() || lease.id != *key {
-            return Err(format!("service_state_viewer_lease_key_mismatch:{key}"));
-        }
-    }
-    for (key, handoff) in &state.remote_view_handoffs {
-        if handoff.id.trim().is_empty() || handoff.id != *key {
-            return Err(format!("service_state_handoff_key_mismatch:{key}"));
-        }
-    }
-    for (key, handoff) in &state.profile_seeding_handoffs {
-        if handoff.id.trim().is_empty() || handoff.id != *key {
-            return Err(format!("service_state_seeding_handoff_key_mismatch:{key}"));
-        }
-        if !state.profiles.contains_key(&handoff.profile_id) {
-            return Err(format!(
-                "service_state_seeding_handoff_profile_missing:{key}:{}",
-                handoff.profile_id
-            ));
-        }
-    }
-    for (profile_digest, binding) in &state.runtime_owner_registry.principal_bindings {
-        if profile_digest != &binding.profile_identity_digest
-            || !state
-                .runtime_owner_registry
-                .owners
-                .contains_key(profile_digest)
-        {
-            return Err(format!(
-                "service_state_principal_owner_binding_mismatch:{profile_digest}"
-            ));
-        }
-        if !state.profiles.contains_key(&binding.profile_id) {
-            return Err(format!(
-                "service_state_principal_profile_missing:{}",
-                binding.profile_id
-            ));
-        }
-        if !state
-            .service_principals
-            .profile_capabilities
-            .contains_key(&binding.capability_id)
-        {
-            return Err(format!(
-                "service_state_principal_capability_missing:{}",
-                binding.capability_id
-            ));
-        }
-    }
-    Ok(())
+    agent_browser_service_model::validate_service_state_invariants(state)
+        .map_err(|error| error.to_string())
 }
 
 fn custom_json_error(message: String) -> serde_json::Error {
@@ -1839,16 +1464,15 @@ mod tests {
         let expected_error = "service_state_tab_browser_missing:target:tab-a:session:last30days";
 
         let mut unbound = state.clone();
-        unbound
-            .runtime_owner_registry
-            .principal_bindings
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut unbound.runtime_owner_registry)
+            .principal_records
             .remove(&profile_identity_digest);
         assert_eq!(
             stage_service_state_migration(&serde_json::to_string(&unbound).unwrap()).unwrap_err(),
             expected_error
         );
 
-        let capability_id = state.runtime_owner_registry.principal_bindings
+        let capability_id = state.runtime_owner_registry.principal_bindings()
             [&profile_identity_digest]
             .capability_id
             .clone();
@@ -1865,12 +1489,13 @@ mod tests {
         );
 
         let mut generation_ahead = state.clone();
-        generation_ahead
-            .runtime_owner_registry
-            .principal_bindings
-            .get_mut(&profile_identity_digest)
-            .unwrap()
-            .owner_generation += 1;
+        crate::runtime_owner_transfer::edit_registry_fixture(
+            &mut generation_ahead.runtime_owner_registry,
+        )
+        .principal_records
+        .get_mut(&profile_identity_digest)
+        .unwrap()
+        .owner_generation += 1;
         assert_eq!(
             stage_service_state_migration(&serde_json::to_string(&generation_ahead).unwrap())
                 .unwrap_err(),
@@ -2355,9 +1980,8 @@ mod tests {
                 },
             )
             .unwrap();
-        state
-            .runtime_owner_registry
-            .principal_bindings
+        crate::runtime_owner_transfer::edit_registry_fixture(&mut state.runtime_owner_registry)
+            .principal_records
             .get_mut(&profile_identity_digest)
             .unwrap()
             .owner_generation = 1;

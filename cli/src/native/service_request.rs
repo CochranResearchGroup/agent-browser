@@ -2728,7 +2728,7 @@ mod tests {
         );
         assert!(normalized.command.get("profileCapability").is_none());
         let provenance =
-            crate::native::service_request_provenance::ServiceRequestProvenance::capture(
+            crate::native::service_request_provenance::capture_service_request_provenance(
                 &normalized.command,
                 "request-with-registered-authority",
                 "job-with-registered-authority",

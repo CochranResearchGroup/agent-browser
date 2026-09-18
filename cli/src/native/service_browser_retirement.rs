@@ -6,53 +6,17 @@
 //! revision and evidence digest before removing that one browser row.
 
 use chrono::DateTime;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::service_model::{BrowserProcess, ServiceState};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
+pub(crate) use agent_browser_service_model::{
+    BrowserContaminationReport, BrowserRetirementPlan, BrowserRetirementReceipt,
+    BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
+};
 use serde_json::{json, Value};
-
-pub(crate) const BROWSER_RETIREMENT_PLAN_SCHEMA_V1: &str =
-    "agent-browser.browser-retirement-plan.v1";
-pub(crate) const BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1: &str =
-    "agent-browser.browser-retirement-receipt.v1";
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct BrowserRetirementPlan {
-    pub(crate) schema_version: String,
-    pub(crate) plan_id: String,
-    pub(crate) browser_id: String,
-    pub(crate) record_revision: u64,
-    pub(crate) evidence_digest: String,
-    pub(crate) created_at: String,
-    pub(crate) expires_at: String,
-    pub(crate) reasons: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct BrowserRetirementReceipt {
-    pub(crate) schema_version: String,
-    pub(crate) plan_id: String,
-    pub(crate) browser_id: String,
-    pub(crate) record_revision: u64,
-    pub(crate) evidence_digest: String,
-    pub(crate) terminal_result: String,
-    pub(crate) applied_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct BrowserContaminationReport {
-    pub(crate) schema_version: String,
-    pub(crate) inert_browser_ids: Vec<String>,
-    pub(crate) review_browser_ids: Vec<String>,
-    pub(crate) diagnostic_display_allocation_count: usize,
-    pub(crate) default_effect: String,
-}
 
 pub(crate) fn handle_service_browser_retirement_command(command: &Value) -> Result<Value, String> {
     let action = command
@@ -211,7 +175,7 @@ fn require_inert_browser(state: &ServiceState, browser: &BrowserProcess) -> Resu
         || state.browser_process_identities.contains_key(&browser.id)
         || state
             .runtime_owner_registry
-            .lifecycle_records
+            .lifecycle_records()
             .contains_key(&browser.id)
     {
         return Err("browser_retirement_live_authority_present".to_string());

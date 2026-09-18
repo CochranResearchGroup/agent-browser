@@ -758,7 +758,7 @@ pub(crate) mod service_commands {
             .presentation_capacity
             .as_ref()
             .is_some_and(|capacity| {
-                capacity.slots.iter().any(|slot| {
+                capacity.slots().iter().any(|slot| {
                     slot.browser_id.as_deref() == Some(lease.browser_id.as_str())
                         || (slot.browser_id.is_none()
                             && ((route_belongs_to_lease
@@ -913,7 +913,7 @@ pub(crate) mod service_commands {
             .presentation_capacity
             .as_ref()
             .is_some_and(|capacity| {
-                capacity.slots.iter().any(|slot| {
+                capacity.slots().iter().any(|slot| {
                     slot.route_id.as_deref() == Some(lease.route_id.as_str())
                         || slot.display_allocation_id.as_deref()
                             == Some(lease.display_allocation_id.as_str())
@@ -1203,7 +1203,7 @@ pub(crate) mod service_commands {
             .presentation_capacity
             .as_ref()
             .is_some_and(|capacity| {
-                capacity.slots.iter().any(|slot| {
+                capacity.slots().iter().any(|slot| {
                     slot.route_id.as_deref() == Some(lease.route_id.as_str())
                         || slot.display_allocation_id.as_deref()
                             == Some(lease.display_allocation_id.as_str())
@@ -1383,7 +1383,7 @@ pub(crate) mod service_commands {
                 });
             let mut lifecycle_aliases = state
                 .runtime_owner_registry
-                .lifecycle_records
+                .lifecycle_records()
                 .values()
                 .filter(|record| {
                     profile_identity_digest
@@ -1483,7 +1483,8 @@ pub(crate) mod service_commands {
             )
         });
         let display_allocation_candidates = if options.display_allocations {
-            retained_display_allocation_candidates(state)
+            let current_boot_epoch = crate::process_identity::current_boot_epoch();
+            retained_display_allocation_candidates(state, current_boot_epoch.as_deref())
         } else {
             Vec::new()
         };

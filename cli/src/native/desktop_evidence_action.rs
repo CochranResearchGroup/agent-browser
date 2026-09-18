@@ -286,7 +286,7 @@ where
     let admitted_maximum = initial_state
         .presentation_capacity
         .as_ref()
-        .map(|capacity| capacity.config.hard_maximum)
+        .map(|capacity| capacity.config().hard_maximum)
         .ok_or_else(|| "presentation_capacity_unavailable".to_string())?;
     let surface_name = request.evidence.surface_name();
     let (evidence, mut cdp, mut trigger): (
