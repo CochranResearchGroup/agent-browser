@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 25
+Plan version: 26
 
 State: OPEN
 
@@ -404,6 +404,24 @@ browser-session tests, the one opt-in real-Chrome test, formatting, strict
 workspace Clippy, and diff hygiene pass. Durable opaque handoff publication
 and a full daemon-process client journey remain open.
 
+Checkpoint `ca74617e` publishes and resolves a durable opaque handoff for a
+manager-owned browser without creating a route lease or consulting legacy
+browser ownership. A successful managed navigation on a ready assigned static
+desktop persists one stable UUID handoff, returns only the authenticated
+dashboard `/remote-view/<handoff-id>` URL, and updates the desired URL while
+retaining that handoff across later same-session navigation. Resolution
+revalidates the live session record, heartbeat, exact PID, responsive CDP
+endpoint, attributed target, static display binding, route-pool readiness, and
+route readiness before raising the browser. A stale proof returns a typed
+converging response and never falls through to legacy retained-browser
+adoption. The dashboard accepts the manager-specific receipt from its
+authenticated Service response while preserving the stricter legacy receipt
+checks for legacy handoffs. Both manager handoff fixtures, all 19 other
+executed browser-session tests, all 14 durable-handoff regressions, the
+optimized dashboard build, formatting, strict workspace Clippy, and diff
+hygiene pass. A real login redirect and full daemon-to-dashboard acceptance
+remain open.
+
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
 `--session` is the caller-visible attribution identity rather than a daemon
@@ -747,9 +765,9 @@ touching overlapping documentation surfaces.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, and real-Chrome title and snapshot calls green; full daemon-process journey pending |
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, and exact-display launch wiring green; hosted remote-view fixture pending |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
-| Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | not implemented |
-| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | not implemented |
-| Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | not implemented |
+| Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | stable manager handoff identity now survives desired-URL changes on the same attributed target; real redirect regression pending |
+| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | managed navigation now publishes and resolves a ready opaque handoff from exact static route readiness without leasing; full daemon/dashboard and doctor agreement pending |
+| Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | source path now returns the ready handoff from ordinary named-session navigation with none of those inputs; full process journey and documentation pending |
 | Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | not implemented |
 
