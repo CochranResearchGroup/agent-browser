@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 11
+Plan version: 12
 
 State: OPEN
 
@@ -212,6 +212,16 @@ processes. Selecting a tile chooses the viewer for that browser's desktop and
 raises its primary browser window. Tree expansion from browser to sessions to
 tabs remains a later UX improvement.
 
+The tab follow-up closes the accidental-growth loophole. Each session has at
+most one current tab. Its first tab-requiring command adopts Chrome's existing
+bootstrap tab when one is available. Ordinary `open` and navigation commands
+reuse the current tab; only an explicit new-tab operation increases the tab
+count. Closing the current tab selects the session's most recently used
+remaining tab, or leaves the session tabless until another command needs one.
+Session termination closes its live tabs, while historical tab metadata
+remains queryable. The prototype records tab-count and cleanup telemetry but
+does not add a tab cap or silent least-recently-used eviction.
+
 The fresh-context startup readback on 2026-09-17 found the P211 worktree clean
 and synchronized with `origin/platform/p211-simple-cold-upgrade@4b9edcca`.
 Current `origin/main` is 17 commits ahead and P211 is 6 commits ahead of its
@@ -265,13 +275,18 @@ a warning and backlog item but cannot reject a browser command.
 An active browser is one concrete process attached to one profile. Multiple
 named sessions may share it and route requests through its one CDP endpoint.
 Each session owns attribution, not permanent tab control. Every live tab has at
-least one active session reference. Tab sharing, tab handoff, authenticated
-principals, identity-restricted profiles, desktop-exclusive leases, and
-per-session timeout overrides are deferred. `session_idle_timeout_ms` defaults
-to `300000`; activity is a heartbeat. Explicit close, heartbeat expiry, browser
-termination, or failed bounded liveness recovery ends a session. The browser
-closes when its last session ends. Interrupted commands are never replayed
-automatically.
+least one active session reference and one session-current pointer is retained
+when that session has tabs. The first session adopts an available Chrome
+bootstrap tab. Ordinary navigation reuses the current tab; explicit new-tab is
+the only normal tab-creation command. Closing the current tab selects the most
+recently used remaining tab without eagerly creating a replacement. Session
+termination closes its live tabs and preserves only historical metadata. Tab
+sharing, tab handoff, authenticated principals, identity-restricted profiles,
+desktop-exclusive leases, per-session timeout overrides, tab caps, and silent
+tab eviction are deferred. `session_idle_timeout_ms` defaults to `300000`;
+activity is a heartbeat. Explicit close, heartbeat expiry, browser termination,
+or failed bounded liveness recovery ends a session. The browser closes when its
+last session ends. Interrupted commands are never replayed automatically.
 
 Presentation uses a configured display-to-viewer map rather than dynamic route
 and display leases. Remote-view browsers are assigned to the healthy configured
@@ -352,15 +367,19 @@ open.
    session-scoped allocation for disposable profile intent, refresh heartbeats
    from activity, and proactively reap expired sessions, sessionless browsers,
    and exactly proven disposable profile directories.
-9. Replace dynamic presentation leasing on the ordinary path with configured
+9. Give each session one current tab. Adopt Chrome's bootstrap tab, reuse the
+   current tab for ordinary navigation, create additional tabs only on explicit
+   request, select the most recently used remaining tab after close, and close
+   live tabs when their session ends without deleting historical metadata.
+10. Replace dynamic presentation leasing on the ordinary path with configured
    display-to-viewer lookup. Assign remotely viewable browsers to the least
    crowded healthy virtual desktop, reserve `:0` for explicit local-screen
    work, and make a dashboard tile select the desktop viewer and raise the
    browser's primary window.
-10. Return success only when `operatorVisible.state=ready` and the durable
+11. Return success only when `operatorVisible.state=ready` and the durable
    opaque handoff resolves. Doctor, service status, capacity, preflight, and
    checkout must agree on the same effective readiness result.
-11. Update CLI help, README, agent skill, documentation site, and inline docs to
+12. Update CLI help, README, agent skill, documentation site, and inline docs to
    present the one-command workflow and remove hot-upgrade ceremony from the
    ordinary path.
 
@@ -392,10 +411,11 @@ ownership behavior for a future multi-user mode.
 The first prototype explicitly defers authenticated principals,
 identity-restricted profiles, adversarial or distributed fencing, tab sharing
 and handoff, desktop-exclusive leases, per-session idle-timeout overrides,
-multi-window management, browser-to-session-to-tab tree expansion, a viewer for
-`:0`, and implementation of the third Guacamole route. Extension points may be
-retained, but no deferred concept may appear in the prototype's ordinary
-interface or live authority calculation.
+tab caps and silent eviction, multi-window management,
+browser-to-session-to-tab tree expansion, a viewer for `:0`, and implementation
+of the third Guacamole route. Extension points may be retained, but no deferred
+concept may appear in the prototype's ordinary interface or live authority
+calculation.
 
 ## Delivery Sequence And Budget
 
@@ -507,6 +527,7 @@ touching overlapping documentation surfaces.
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | not implemented |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | not implemented |
 | Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | not implemented |
+| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts the bootstrap tab; explicit new-tab is the only normal growth path; close selects the most recently used remainder; session end removes live tabs | not implemented |
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | not implemented |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | not implemented |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | source selector and provider-free collision regressions green; Browser Session Manager proof pending |
@@ -523,11 +544,13 @@ tests must include idempotent replay, a shutdown interrupted after each phase,
 stale PID metadata, exact foreign-process preservation, owned container
 cleanup, browser close escalation, ownership release, and restart readiness.
 It must also include two named sessions sharing one browser, exact and
-disposable profile intent, heartbeat expiry, join-versus-final-close
-serialization, Service restart recovery, unresponsive PID and CDP recovery,
-nonblocking legacy projection failure, exact disposable cleanup, deterministic
-least-crowded display assignment, a protected URL redirecting to login, and
-runtime-host survival during reattach.
+disposable profile intent, bootstrap-tab adoption, repeated navigation without
+tab growth, explicit tab creation, current-tab close selection, session tab
+cleanup, heartbeat expiry, join-versus-final-close serialization, Service
+restart recovery, unresponsive PID and CDP recovery, nonblocking legacy
+projection failure, exact disposable cleanup, deterministic least-crowded
+display assignment, a protected URL redirecting to login, and runtime-host
+survival during reattach.
 
 The final installed acceptance is one ordinary user journey against one frozen
 candidate: clean install; bounded start and passing doctor; named-profile open
