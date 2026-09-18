@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 10
+Plan version: 11
 
 State: OPEN
 
@@ -52,6 +52,16 @@ a fresh or requalified connection. Reject only an invalid profile request or a
 case where the product truly cannot choose a concrete profile. Collision
 telemetry must help improve reconciliation without turning Agent Browser into
 a denial-only machine.
+
+Replace the ordinary-path lease-management design rather than continuing to
+repair each failure signature independently. The SoyLei Website failure is one
+reproducer in a larger issue corpus, not the design target. A new Browser
+Session Manager owns the simple profile, browser, session, tab-attribution,
+heartbeat, and cleanup lifecycle inside the extracted Service Model crate.
+Legacy Lease Authority, principal, owner-generation, sealed-recovery, and
+boot-bound coordination modules remain available for historical readback and
+deferred hardened modes, but they are not consulted as authority or fallback
+by the default trusted single-user path.
 
 ## Current State
 
@@ -179,6 +189,29 @@ existing-session tests, nine shared-local tests, formatting, strict workspace
 Clippy, and diff hygiene pass. End-to-end connection proof and a typed
 collision-observation surface remain open.
 
+The 2026-09-18 design interview generalized that repair into the first Browser
+Session Manager prototype. One Service process owns browser-session decisions;
+`--session` is the caller-visible attribution identity rather than a daemon
+routing alias or authenticated principal. Multiple named sessions may share
+one browser for one exact named profile. Exact-profile requests compare
+profile identity, while disposable requests compare allocation policy and
+reuse only the current compatible allocation for that named session. Activity
+refreshes a configurable five-minute idle heartbeat. A session is live only
+while that heartbeat is fresh, its browser PID exists, and its CDP endpoint
+responds. The last ended session closes its browser, and a proactive reaper
+removes eligible disposable profile data. Browser Session State and the Browser
+Profile Catalog are independent of legacy Service State so retained lease or
+owner records cannot veto current work.
+
+The same checkpoint simplified presentation. Configured Guacamole routes map
+directly to virtual desktops: Guac A to `:10`, Guac B to `:11`, and a future
+third route to `:12`. A remotely viewable browser launches on the healthy
+virtual desktop with the fewest live browsers; `:0` is reserved for explicitly
+local on-screen browsers. Dashboard active tiles represent concrete browser
+processes. Selecting a tile chooses the viewer for that browser's desktop and
+raises its primary browser window. Tree expansion from browser to sessions to
+tabs remains a later UX improvement.
+
 The fresh-context startup readback on 2026-09-17 found the P211 worktree clean
 and synchronized with `origin/platform/p211-simple-cold-upgrade@4b9edcca`.
 Current `origin/main` is 17 commits ahead and P211 is 6 commits ahead of its
@@ -210,22 +243,46 @@ rollback integrity. A successful result requires all four phases and a ready
 probe from the newly selected generation. Legacy hot-upgrade transaction state
 is not an input to this interface.
 
-The post-boot presentation module accepts stable configured route and display
-descriptors, prior transient claims, the current boot epoch, and one observation
-adapter. It returns admitted current-boot bindings and typed exclusions.
-Prior-boot claims are historical evidence only. A route is admitted only when
-the current observation proves its configured route, display, and ownership
-relationship; quarantined, orphaned, or mismatched inventory is excluded.
+The Browser Session Manager is a deep module inside the extracted Service
+Model crate. Its interface admits a named session against an exact-profile or
+disposable-profile intent, records activity and tab attribution, closes a
+session, reconciles current PID and CDP observations, and runs one reaper tick.
+The existing user-scoped Service process hosts it. CLI commands automatically
+start that Service once when needed and never fall back to legacy lease
+authority. Existing browser launch, termination, PID and CDP observation,
+atomic persistence, and event adapters remain mechanisms behind the new seam.
 
-Trusted single-user acquisition keeps the existing named-profile request seam.
-A stable self-declared subject is sufficient in shared-local mode. One healthy
-retained browser is reused; otherwise one browser is launched. Failure releases
-tentative ownership so the profile and browser are immediately reusable.
-Remote-view success requires both `operatorVisible.state=ready` and a resolving
-opaque `/remote-view/<handoff-id>`. A normal same-site authentication redirect
-retains that durable handoff and returns a typed authentication-required state.
-Raw provider, route-binding, embed, dashboard, or health URLs are never the
-operator result.
+The manager persists `browser-session-state.v1`, containing only browser
+instances, named sessions, tab attribution, heartbeat timestamps, and terminal
+history. A separate `browser-profile-catalog.v1` contains named profile
+definitions and disposable allocation policy. On first startup, an absent
+catalog is populated by a tolerant field-level import of legacy profile
+definitions; unrelated legacy fields are neither validated nor migrated. The
+new catalog is authoritative after that import. Legacy Service State receives
+best-effort diagnostic projections only. Failure to mirror a projection emits
+a warning and backlog item but cannot reject a browser command.
+
+An active browser is one concrete process attached to one profile. Multiple
+named sessions may share it and route requests through its one CDP endpoint.
+Each session owns attribution, not permanent tab control. Every live tab has at
+least one active session reference. Tab sharing, tab handoff, authenticated
+principals, identity-restricted profiles, desktop-exclusive leases, and
+per-session timeout overrides are deferred. `session_idle_timeout_ms` defaults
+to `300000`; activity is a heartbeat. Explicit close, heartbeat expiry, browser
+termination, or failed bounded liveness recovery ends a session. The browser
+closes when its last session ends. Interrupted commands are never replayed
+automatically.
+
+Presentation uses a configured display-to-viewer map rather than dynamic route
+and display leases. Remote-view browsers are assigned to the healthy configured
+virtual desktop with the fewest live browsers, using deterministic route order
+for ties. Local-screen browsers use `:0`, which is excluded from remote-view
+selection until a viewer is deliberately configured for it. Each browser has
+one primary window with many tabs. Dashboard active tiles derive only from
+manager-owned browser instances; tile selection opens the viewer for the
+browser's desktop and serializes a raise-and-maximize request. A normal
+same-site authentication redirect retains the durable handoff. Raw provider,
+route-binding, embed, dashboard, or health URLs are never the operator result.
 
 This packet declares the following disjoint write scopes before fan-out:
 
@@ -283,25 +340,27 @@ open.
 5. Park hot-upgrade mutation commands as legacy recovery/readback surfaces.
    They may inspect or close old transactions but are not selected by the
    default install or upgrade command.
-6. On startup, treat prior-boot process, lease, browser-owner, route, display,
-   controller, and viewer claims as historical. Re-observe stable configured
-   presentation resources and admit each independently healthy route for the
-   current boot without reinstalling or editing primary Service State.
-7. In trusted single-user mode, accept the caller's stable self-declared
-   identity for a named profile. Reuse one healthy matching retained browser
-   when present; otherwise launch or requalify one. Retained identity
-   collisions are diagnostic observations, not denials: select the valid
-   requested profile explicitly, preserve the conflicting evidence, and
-   continue. A failed attempt must leave the profile and browser immediately
-   reusable rather than retaining an unmatched owner.
-8. Make ordinary route selection exclude orphaned, quarantined, or
-   route/display-mismatched inventory. A normal same-site authentication
-   redirect must preserve a usable login handoff or return a typed
-   authentication-required handoff rather than closing the browser.
-9. Return success only when `operatorVisible.state=ready` and the durable
+6. Add the Browser Session Manager, independent Browser Session State, and
+   independent Browser Profile Catalog. The ordinary path must not call Lease
+   Authority, principal, owner-generation, sealed-recovery, or boot-identity
+   modules as authority or fallback.
+7. Import only valid legacy profile definitions when the new catalog is absent.
+   Keep all other legacy state as diagnostic history. Make Service State
+   projection best effort and nonblocking.
+8. Route all ordinary CLI requests through the one user-scoped Service. Share
+   one live browser per exact named profile across named sessions, use a
+   session-scoped allocation for disposable profile intent, refresh heartbeats
+   from activity, and proactively reap expired sessions, sessionless browsers,
+   and exactly proven disposable profile directories.
+9. Replace dynamic presentation leasing on the ordinary path with configured
+   display-to-viewer lookup. Assign remotely viewable browsers to the least
+   crowded healthy virtual desktop, reserve `:0` for explicit local-screen
+   work, and make a dashboard tile select the desktop viewer and raise the
+   browser's primary window.
+10. Return success only when `operatorVisible.state=ready` and the durable
    opaque handoff resolves. Doctor, service status, capacity, preflight, and
    checkout must agree on the same effective readiness result.
-10. Update CLI help, README, agent skill, documentation site, and inline docs to
+11. Update CLI help, README, agent skill, documentation site, and inline docs to
    present the one-command workflow and remove hot-upgrade ceremony from the
    ordinary path.
 
@@ -309,8 +368,10 @@ open.
 
 Expected implementation writes are limited to the CLI command router and help,
 a focused cold-shutdown/cold-install module, the smallest required adapters in
-the workstation installer, native runtime, profile acquisition, presentation
-inventory, route selection, and remote-view handoff paths, provider-free
+the workstation installer, a new Browser Session Manager and Browser Profile
+Catalog in the extracted Service Model crate, their CLI persistence and effect
+adapters, native runtime, profile acquisition, display selection, dashboard
+workspace projection, and remote-view handoff paths, provider-free
 fixtures, README, the Agent Browser skill, installation and remote-view
 documentation, this plan, and P211's active-lane projection.
 
@@ -328,14 +389,23 @@ separate user-directed effect after source qualification. The product contract
 is intentionally single trusted user; this plan does not weaken identity or
 ownership behavior for a future multi-user mode.
 
+The first prototype explicitly defers authenticated principals,
+identity-restricted profiles, adversarial or distributed fencing, tab sharing
+and handoff, desktop-exclusive leases, per-session idle-timeout overrides,
+multi-window management, browser-to-session-to-tab tree expansion, a viewer for
+`:0`, and implementation of the third Guacamole route. Extension points may be
+retained, but no deferred concept may appear in the prototype's ordinary
+interface or live authority calculation.
+
 ## Delivery Sequence And Budget
 
 - Optimization target: balanced wall-clock and token efficiency.
 - Active-agent concurrency: at most 3 total, including the primary. Delegation
   is one level deep; workers cannot spawn workers.
 - Critical path: frozen lifecycle and trusted-single-user contracts, public
-  shutdown, profile release, cold installer routing, restart requalification,
-  ordinary remote-view open, installed acceptance, documentation.
+  shutdown, profile release, Browser Session Manager prototype, profile-catalog
+  import, cold installer routing, simple display selection, ordinary
+  remote-view open, installed acceptance, documentation.
 - Slice 1: freeze the shutdown and cold-upgrade result contracts and add red
   provider-free fixtures for broken transaction state, active drain, stale
   metadata, partial retry, and a clean machine.
@@ -343,14 +413,21 @@ ownership behavior for a future multi-user mode.
   adapters.
 - Slice 3: route workstation and reviewed-candidate apply through
   stop-replace-start while leaving legacy hot transaction inspection intact.
-- Slice 4: implement startup requalification, single-user named-profile
-  acquisition, healthy-browser reuse, safe route selection, and durable
-  remote-view handoff fixtures for #195, including #189 and #190.
-- Slice 5: join the cold-install and remote-view paths in one provider-free
+- Slice 4: implement the provider-free Browser Session Manager and Profile
+  Catalog interfaces first. Prove two named sessions sharing one named-profile
+  browser, session-scoped disposable allocation, heartbeat expiration,
+  last-session browser closure, service restart recovery, nonresponsive-browser
+  recovery without command replay, legacy-state noninterference, and exact
+  disposable-profile garbage collection.
+- Slice 5: host the manager in the existing user-scoped Service, route ordinary
+  CLI commands through it, project browser-only dashboard tiles, implement
+  least-crowded virtual-desktop selection and static display-to-viewer lookup,
+  and add durable remote-view fixtures for #195, including #189 and #190.
+- Slice 6: join the cold-install and Browser Session Manager paths in one provider-free
   fresh-install and reboot acceptance fixture.
-- Slice 6: synchronize all required documentation and run changed-surface
+- Slice 7: synchronize all required documentation and run changed-surface
   validation once against the consolidated candidate.
-- Slice 7, separately authorized after source qualification: run one installed
+- Slice 8, separately authorized after source qualification: run one installed
   clean-state journey and one replacement-upgrade journey through a ready
   remote-view handoff.
 - Maximum work-unit attempts: 3 per slice.
@@ -360,8 +437,9 @@ ownership behavior for a future multi-user mode.
 - Overall effort ceiling: 360 active minutes through a provider-free qualified
   candidate. Installed-runtime validation is excluded until separately
   directed.
-- First outcome artifact: a provider-free fixture proving stale drain and
-  failed transaction metadata cannot block shutdown.
+- Next outcome artifact: provider-free Browser Session Manager interface tests
+  proving shared named-profile use and complete nondependence on legacy Lease
+  Authority state.
 
 ## Worker Assignments
 
@@ -371,9 +449,13 @@ and final acceptance. The primary uses the strongest available tier for
 consequential architecture and integration, currently `gpt-6-astra` at high
 reasoning. Deterministic repository and test tools remain the first choice.
 
-After the primary freezes the shutdown result, cold-install sequencing,
-startup-requalification, trusted-single-user identity, and remote-view
-readiness contracts, it may fan out two disjoint workers:
+The Browser Session Manager prototype is a serialized primary-owned packet.
+Its interface, persistence model, and legacy-authority exclusion are one
+architectural decision and are not delegated. No worker is assigned until its
+provider-free interface tests pass and one exact adapter slice can be separated
+without duplicating state ownership.
+
+The earlier shutdown packet used these completed disjoint assignments:
 
 | Worker | Initial route | Exact scope | Return and stop condition |
 | --- | --- | --- | --- |
@@ -387,9 +469,9 @@ at most one repair handback per worker. If interface churn makes either lane
 coordination-heavy, cancel that worker and absorb the work into the critical
 path.
 
-After P205 and P207 integrate, all workers pause while the primary refreshes
-the worktree inventory, rebases, and reconciles shared Service State and
-documentation surfaces. One freed slot may then run a documentation-parity
+After P207 integrates, all workers pause while the primary refreshes the
+worktree inventory, rebases, and reconciles shared documentation surfaces. One
+freed slot may then run a documentation-parity
 worker on `gpt-5.6-luna` at low reasoning, limited to `cli/src/output.rs`,
 `README.md`, `skills/agent-browser/SKILL.md`, and the relevant installation and
 remote-view MDX pages. It gets 25 active minutes and one correction pass.
@@ -402,13 +484,14 @@ stable finding IDs. The reviewer may return no findings and cannot broaden
 scope or claim acceptance. No worker receives an auxiliary worktree,
 independent branch, commit authority, production effect, or nested delegation.
 
-P205 remains primary writer for the service-model extraction and its migrated
-Service State types. P207 remains primary writer for its current CLI help,
-README, skill, service documentation, and generated-client changes. P211 owns
-the new cold-shutdown module, workstation-install routing, post-boot
-requalification adapter, trusted-single-user acquisition, remote-view joining
-logic, and its tests; it will rebase after those checkpoints before touching
-overlapping surfaces.
+P205 completed the Service Model extraction and its integrated result is the
+starting seam for this packet. P207 remains primary writer for its current CLI
+help, README, skill, service documentation, and generated-client changes. P211
+owns the new Browser Session Manager, Browser Profile Catalog, independent
+state codec, CLI and process adapters, cold-shutdown module,
+workstation-install routing, display selection, dashboard projection,
+remote-view joining logic, and their tests; it will rebase after P207 before
+touching overlapping documentation surfaces.
 
 ## Evidence And Exit
 
@@ -421,29 +504,37 @@ overlapping surfaces.
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | not implemented |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | not implemented |
-| Current-boot presentation | startup fixture invalidates prior-boot claims, re-observes configured routes and displays, and admits each healthy current-boot route without repair input | not implemented |
-| Trusted single-user profile | a named profile accepts stable self-identification, reuses one healthy matching browser, and requires no hash, capability, sealed plan, or repair token; retained identity collisions choose the valid profile and remain observable | source selector and provider-free collision regressions green; joined launch and remote-view proof plus typed collision telemetry pending |
-| Safe route selection | #189 regression proves quarantined, orphaned, and mismatched routes are repaired or excluded before preflight reports ready | not implemented |
+| Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | not implemented |
+| Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | not implemented |
+| Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | not implemented |
+| Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | not implemented |
+| Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | not implemented |
+| Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | source selector and provider-free collision regressions green; Browser Session Manager proof pending |
+| Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | not implemented |
+| Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | not implemented |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | not implemented |
 | Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | not implemented |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | not implemented |
-| Legacy containment | hot transaction mutation is not reachable from the default install or upgrade path | routing change pending |
+| Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | routing change pending |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | not implemented |
 
 Exit requires all rows green against one frozen source candidate. Provider-free
 tests must include idempotent replay, a shutdown interrupted after each phase,
 stale PID metadata, exact foreign-process preservation, owned container
 cleanup, browser close escalation, ownership release, and restart readiness.
-It must also include changed-boot requalification, partial route recovery,
-healthy retained-browser reuse, unmatched-owner rollback prevention,
-quarantined-route exclusion, a protected URL redirecting to login, and
+It must also include two named sessions sharing one browser, exact and
+disposable profile intent, heartbeat expiry, join-versus-final-close
+serialization, Service restart recovery, unresponsive PID and CDP recovery,
+nonblocking legacy projection failure, exact disposable cleanup, deterministic
+least-crowded display assignment, a protected URL redirecting to login, and
 runtime-host survival during reattach.
 
 The final installed acceptance is one ordinary user journey against one frozen
 candidate: clean install; bounded start and passing doctor; named-profile open
-using self-identification; ready durable remote view; one-command shutdown with
-profiles unowned; replacement install; bounded restart; and a second ready
-remote view from the same named profile. It fails if the operator must choose a
+using `--session alice`; a second `--session bob` request sharing the same
+browser; ready durable remote view; one-command shutdown with profiles
+unowned; replacement install; bounded restart; and a second ready remote view
+from the same named profile. It fails if the operator must choose a
 route, desktop, or display; generate or copy a hash, capability, token, code,
 or sealed plan; edit Service State; run a repair command; or interpret raw
 Guacamole state.
