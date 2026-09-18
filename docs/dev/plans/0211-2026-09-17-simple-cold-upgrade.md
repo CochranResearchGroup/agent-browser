@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 20
+Plan version: 21
 
 State: OPEN
 
@@ -330,6 +330,18 @@ The host restart fixture now proves open, explicit new tab, navigation,
 current-tab close, and final session close in sequence. The focused host and
 public-routing tests, formatting, strict workspace Clippy, and diff hygiene
 pass.
+
+Checkpoint `a9d3887e` activates the Browser Session Manager's existing bounded
+cleanup policy instead of requiring an operator command to trigger it. Each
+Unix and Windows runtime-host server starts one lazy reaper on the existing
+Service reconciliation cadence, defaulting to 30 seconds. The task does not
+initialize an unused Browser Session host, skips missed ticks rather than
+bursting, and is aborted and joined when the server exits. Once the host has
+been used, each tick expires idle sessions, closes newly sessionless browsers,
+and applies the manager's exact disposable-profile eligibility rules. The
+focused interval test, all 17 executed CLI browser-session tests, formatting,
+strict workspace Clippy, and diff hygiene pass; the disposable real-Chrome
+restart test remains intentionally ignored in this provider-free lane.
 
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
