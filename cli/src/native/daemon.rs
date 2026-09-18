@@ -634,16 +634,35 @@ impl RuntimeHostRouter {
 
     async fn handle_browser_session_command(&self, command: Value) -> Value {
         let browser_sessions = self.browser_sessions.clone();
-        match tokio::task::spawn_blocking(move || {
+        match tokio::task::spawn_blocking(move || -> Result<Value, String> {
             let mut host = browser_sessions
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
             if host.is_none() {
                 *host = Some(super::browser_session_host::load_default_browser_session_host()?);
             }
-            host.as_mut()
+            let response = host
+                .as_mut()
                 .ok_or_else(|| "browser_session_host_missing".to_string())
-                .map(|host| host.handle_command(&command))
+                .map(|host| host.handle_command(&command))?;
+            let state = host
+                .as_ref()
+                .ok_or_else(|| "browser_session_host_missing".to_string())?
+                .state()
+                .clone();
+            drop(host);
+            let mut response = response;
+            if command.get("action").and_then(Value::as_str) == Some("browser_session_navigate") {
+                if let Err(error) =
+                    super::browser_session_handoff::attach_manager_handoff(&mut response, &state)
+                {
+                    response["data"]["operatorVisible"] = serde_json::json!({
+                        "state": "unavailable",
+                        "reason": error,
+                    });
+                }
+            }
+            Ok(response)
         })
         .await
         {

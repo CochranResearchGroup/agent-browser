@@ -91,6 +91,7 @@ type RemoteViewHandoffResolution = {
   sessionName?: string | null;
   tabId?: string | null;
   targetId?: string | null;
+  browserSessionManager?: boolean;
   viewStreamProvider?: string | null;
   requiredViewStreamProvider?: string | null;
   presentationGeneration?: number | null;
@@ -104,6 +105,7 @@ type RemoteViewHandoffResolution = {
     requiredStreamProvider?: string | null;
     observedStreamProvider?: string | null;
     state?: string | null;
+    browserSessionManager?: boolean;
   } | null;
   message?: string | null;
   tab?: Record<string, unknown> | null;
@@ -113,6 +115,20 @@ type RemoteViewHandoffResolution = {
 function durableHandoffPresentationReady(resolution: RemoteViewHandoffResolution): boolean {
   const receipt = resolution.presentationReceipt;
   if (!receipt) return false;
+  if (resolution.browserSessionManager === true && receipt.browserSessionManager === true) {
+    return resolution.resolved === true
+      && resolution.status === "ready"
+      && Number.isInteger(resolution.presentationGeneration)
+      && Number(resolution.presentationGeneration) > 0
+      && receipt.generation === resolution.presentationGeneration
+      && receipt.logicalBrowserId === resolution.browserId
+      && Boolean(resolution.targetId)
+      && receipt.targetId === resolution.targetId
+      && Boolean(resolution.viewStreamProvider)
+      && receipt.requiredStreamProvider === resolution.viewStreamProvider
+      && receipt.observedStreamProvider === receipt.requiredStreamProvider
+      && receipt.state === "ready";
+  }
   return resolution.resolved === true
     && resolution.status === "ready"
     && Number.isInteger(resolution.presentationGeneration)

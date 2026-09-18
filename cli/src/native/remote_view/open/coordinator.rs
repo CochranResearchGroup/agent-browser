@@ -1427,6 +1427,31 @@ pub(crate) async fn execute_durable_resolution<
             ))?,
         });
     };
+    match crate::native::browser_session_handoff::resolve_manager_handoff(&handoff, &service_state)
+        .await
+    {
+        Ok(Some(opened)) => {
+            return Ok(RouteBoundOpenOutcome::Opened {
+                opened: RouteBoundOpenDocument::from_compatibility(opened)?,
+            });
+        }
+        Ok(None) => {}
+        Err(error) => {
+            return Ok(RouteBoundOpenOutcome::Converging {
+                result: RouteBoundOpenDocument::from_compatibility(json!({
+                    "status": "converging",
+                    "resolved": false,
+                    "handoffId": handoff.id,
+                    "handoffUrl": handoff.handoff_url,
+                    "browserId": handoff.browser_id,
+                    "sessionName": handoff.session_name,
+                    "message": error,
+                    "retryable": true,
+                    "browserSessionManager": true,
+                }))?,
+            });
+        }
+    }
     let service_state = &service_state;
     if !allow_reopen_closed && remote_view_handoff_was_explicitly_closed(service_state, &handoff) {
         return Ok(RouteBoundOpenOutcome::ExplicitlyClosed {
