@@ -415,6 +415,7 @@ struct RuntimeHostRouter {
     service_reconcile_interval_ms: Option<u64>,
     service_job_timeout_ms: Option<u64>,
     service_monitor_interval_ms: Option<u64>,
+    browser_session_reap_interval_ms: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -482,6 +483,9 @@ impl RuntimeHostRouter {
             service_reconcile_interval_ms: options.service_reconcile_interval_ms,
             service_job_timeout_ms: options.service_job_timeout_ms,
             service_monitor_interval_ms: options.service_monitor_interval_ms,
+            browser_session_reap_interval_ms: browser_session_reap_interval_ms(
+                options.service_reconcile_interval_ms,
+            ),
         })
     }
 
@@ -672,6 +676,44 @@ impl RuntimeHostRouter {
         .and_then(|snapshot| snapshot);
         attach_browser_session_state_to_status(response, snapshot)
     }
+
+    async fn reap_browser_sessions_if_loaded(&self) -> Result<(), String> {
+        let browser_sessions = self.browser_sessions.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if let Some(host) = host.as_mut() {
+                host.reap_current()?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|error| format!("browser_session_reap_join_failed:{error}"))?
+    }
+}
+
+fn browser_session_reap_interval_ms(service_reconcile_interval_ms: Option<u64>) -> u64 {
+    const DEFAULT_REAP_INTERVAL_MS: u64 = 30_000;
+    service_reconcile_interval_ms
+        .unwrap_or(DEFAULT_REAP_INTERVAL_MS)
+        .max(1)
+}
+
+fn spawn_browser_session_reaper(router: RuntimeHostRouter) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(
+            router.browser_session_reap_interval_ms,
+        ));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            if let Err(error) = router.reap_browser_sessions_if_loaded().await {
+                let _ = writeln!(std::io::stderr(), "Browser session reaper error: {error}");
+            }
+        }
+    })
 }
 
 fn attach_browser_session_state_to_status(
@@ -730,6 +772,7 @@ async fn run_socket_server(
         },
     )?;
     router.preload_supervised_lanes(session).await?;
+    let browser_session_reaper = spawn_browser_session_reaper(router.clone());
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -790,6 +833,9 @@ async fn run_socket_server(
         }
     }
 
+    browser_session_reaper.abort();
+    let _ = browser_session_reaper.await;
+
     Ok(())
 }
 
@@ -846,6 +892,7 @@ async fn run_socket_server(
         },
     )?;
     router.preload_supervised_lanes(session).await?;
+    let browser_session_reaper = spawn_browser_session_reaper(router.clone());
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -902,6 +949,9 @@ async fn run_socket_server(
             }
         }
     }
+
+    browser_session_reaper.abort();
+    let _ = browser_session_reaper.await;
 
     Ok(())
 }
@@ -1720,5 +1770,12 @@ mod tests {
             joined["data"]["browserSessionStateError"],
             "browser-session-state unreadable"
         );
+    }
+
+    #[test]
+    fn browser_session_reaper_uses_service_reconcile_interval() {
+        assert_eq!(browser_session_reap_interval_ms(None), 30_000);
+        assert_eq!(browser_session_reap_interval_ms(Some(1_250)), 1_250);
+        assert_eq!(browser_session_reap_interval_ms(Some(0)), 1);
     }
 }

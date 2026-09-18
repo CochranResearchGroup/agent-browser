@@ -267,6 +267,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &self.state
     }
 
+    pub(crate) fn reap_current(&mut self) -> Result<ReapBrowserSessionsResult, String> {
+        self.reap(current_unix_ms())
+    }
+
     pub(crate) fn handle_command(&mut self, command: &serde_json::Value) -> serde_json::Value {
         let id = command
             .get("id")
