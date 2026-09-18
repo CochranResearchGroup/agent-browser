@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 24
+Plan version: 25
 
 State: OPEN
 
@@ -379,11 +379,30 @@ upgrade transaction. A black-box isolated apply succeeds with contradictory
 retained transaction and admission-drain files present, emits only stop,
 replace, start, and readiness, and leaves those diagnostic files untouched. A
 second injected selector-commit failure executes one rollback and restores the
-exact prior selector. The four controller fixtures, two reviewed-candidate
-tests, 181 installer tests, both shutdown process fixtures, formatting, strict
-workspace Clippy, and diff hygiene pass. Filesystem replacement is not yet an
+exact prior selector. The four controller fixtures, both reviewed-candidate
+tests, both shutdown process fixtures, formatting, strict workspace Clippy,
+and diff hygiene pass. A broad 181-test installer filter completed before the
+final success-return refactor; the two directly affected reviewed-candidate
+tests were rerun after that refactor. Filesystem replacement is not yet an
 interruptible operation, so hard deadline enforcement and installed readiness
 acceptance remain open.
+
+Checkpoint `c754180f` routes ordinary tab-bound commands through the Browser
+Session Manager after a simple named-session open. Each managed browser now
+retains one full command state beside its BrowserManager, preserving snapshot
+references and other per-session command context across separate CLI calls.
+The runtime selects the session's attributed current target before each
+command, refreshes the session heartbeat, and bypasses only the legacy
+runtime-owner, admission-drain, manual-seeding, and profile-mismatch gates that
+the independent manager replaces. A manager-owned state cannot fall back to
+legacy auto-launch when its browser is unavailable. Browser and tab lifecycle
+operations remain manager-owned rather than entering the generic dispatcher.
+The host fixture proves exact Alice routing and Bob noncapture. A disposable
+real-Chrome restart fixture proves PID/CDP reattachment, navigation, ordinary
+title and snapshot calls, and exact browser close. All 19 executed focused
+browser-session tests, the one opt-in real-Chrome test, formatting, strict
+workspace Clippy, and diff hygiene pass. Durable opaque handoff publication
+and a full daemon-process client journey remain open.
 
 The 2026-09-18 design interview generalized that repair into the first Browser
 Session Manager prototype. One Service process owns browser-session decisions;
@@ -718,14 +737,14 @@ touching overlapping documentation surfaces.
 | Profiles become unowned | fixture proves profile data remains while runtime owners and leases are released | authority kernels and repository fixture green; public process fixture releases the retained session and preserves the profile record and physical data; active protected-claim process coverage remains |
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, replace, start, and readiness in that order | ordinary and reviewed-candidate source routes plus isolated success and rollback fixtures green; installed acceptance pending |
-| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization, provider-free restart reuse, and concrete disposable-Chrome worker reattachment green; full daemon-process and client fixture pending |
+| Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | independent host serialization, provider-free restart reuse, and concrete disposable-Chrome worker reattachment plus ordinary title and snapshot calls green; full daemon-process client fixture pending |
 | Independent profile catalog | first startup imports only legacy profile definitions into `browser-profile-catalog.v1`; malformed or contradictory legacy lease state cannot block lookup | tolerant field-level import and independent atomic first-startup persistence green; Service startup joining pending |
-| Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, and public named-session navigation and close routing green; hosted Chrome fixture pending |
+| Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, public named-session lifecycle routing, and generic current-tab command routing green; two-session daemon-process Chrome fixture pending |
 | Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, exact recorded deletion, filesystem adapter, and default host policy green; hosted Chrome fixture pending |
-| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle, concrete adapter, hosted restart fixture, and public named-session new/current-close routing green; hosted Chrome tab fixture pending |
+| Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle, concrete adapter, real-Chrome restart and ordinary-command fixture, and public named-session new/current-close routing green; two-session daemon-process tab fixture pending |
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, and concrete restart reattachment green; full daemon-process fixture pending |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state and manager has no legacy-authority input; persistence and display paths pending |
-| Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, and ordinary named-session navigation and close routing green; hosted Chrome fixture and remaining ordinary commands pending |
+| Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, and real-Chrome title and snapshot calls green; full daemon-process journey pending |
 | Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | provider-free selection, persisted browser assignment, existing-inventory adapter, and exact-display launch wiring green; hosted remote-view fixture pending |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | not implemented |
