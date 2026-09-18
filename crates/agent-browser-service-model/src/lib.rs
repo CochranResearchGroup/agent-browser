@@ -5,6 +5,7 @@
 
 mod abandoned_browser_retirement;
 mod browser_capability_registry;
+mod browser_desktop_selector;
 mod browser_process;
 mod browser_profile;
 mod browser_profile_catalog;
@@ -45,6 +46,9 @@ pub use abandoned_browser_retirement::{
 };
 pub use browser_capability_registry::{
     browser_profile_compatibility_matches, BrowserCapabilityRegistry,
+};
+pub use browser_desktop_selector::{
+    select_least_crowded_browser_desktop, BrowserDesktopAssignment, BrowserDesktopRoute,
 };
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,

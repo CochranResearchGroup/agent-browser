@@ -40,6 +40,7 @@ fn repeated_command_reuses_and_refreshes_named_session() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
 
@@ -84,6 +85,7 @@ fn open_after_expiry_ends_old_session_before_new_epoch() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 1_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let first = manager
@@ -126,6 +128,7 @@ impl BrowserSessionEffects for FixtureEffects {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&agent_browser_service_model::BrowserDesktopAssignment>,
     ) -> Result<BrowserLaunch, String> {
         self.launches.push(profile.id.clone());
         let sequence = self.launches.len();
@@ -137,6 +140,7 @@ impl BrowserSessionEffects for FixtureEffects {
             },
             pid: 4242,
             cdp_endpoint: "http://127.0.0.1:9422".to_string(),
+            desktop: desktop.cloned(),
         })
     }
 
@@ -236,6 +240,7 @@ fn first_navigation_adopts_bootstrap_tab_without_creating_another() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -280,6 +285,7 @@ fn repeated_navigation_reuses_current_tab_without_another_acquisition() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -332,6 +338,7 @@ fn second_session_gets_one_initial_tab_when_bootstrap_is_already_attributed() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -386,6 +393,7 @@ fn explicit_new_tab_is_the_only_ordinary_tab_growth_path() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -435,6 +443,7 @@ fn closing_current_tab_selects_most_recent_remaining_tab() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -476,6 +485,7 @@ fn unresponsive_browser_ends_old_session_before_replacement_launch() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let first = manager
@@ -527,6 +537,7 @@ fn closing_one_shared_session_preserves_browser_for_other_session() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -586,6 +597,7 @@ fn closing_shared_session_closes_only_its_attributed_tabs() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -644,6 +656,7 @@ fn navigation_history_remains_queryable_after_session_close() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -692,6 +705,7 @@ fn reaper_expires_idle_session_and_closes_sessionless_browser() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
     let alice = manager
@@ -732,6 +746,69 @@ fn catalog_with_named_profile() -> BrowserProfileCatalog {
 }
 
 #[test]
+fn distinct_profile_browsers_use_least_crowded_configured_desktops() {
+    let mut catalog = catalog_with_named_profile();
+    catalog.profiles.insert(
+        "profile-b".to_string(),
+        BrowserProfileCatalogEntry {
+            id: "profile-b".to_string(),
+            name: "Profile B".to_string(),
+            user_data_dir: "/managed/profiles/profile-b".to_string(),
+            kind: BrowserProfileKind::Named,
+        },
+    );
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects::default();
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![
+                agent_browser_service_model::BrowserDesktopRoute {
+                    id: "guac-a".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                },
+                agent_browser_service_model::BrowserDesktopRoute {
+                    id: "guac-b".to_string(),
+                    display_name: ":11".to_string(),
+                    healthy: true,
+                },
+            ],
+        },
+    );
+
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    let bob = manager
+        .open(OpenBrowserSession::exact_profile("bob", "profile-b", 2_000))
+        .unwrap();
+    drop(manager);
+
+    assert_eq!(
+        state.browsers[&alice.browser_id]
+            .desktop
+            .as_ref()
+            .map(|desktop| (desktop.route_id.as_str(), desktop.display_name.as_str())),
+        Some(("guac-a", ":10"))
+    );
+    assert_eq!(
+        state.browsers[&bob.browser_id]
+            .desktop
+            .as_ref()
+            .map(|desktop| (desktop.route_id.as_str(), desktop.display_name.as_str())),
+        Some(("guac-b", ":11"))
+    );
+}
+
+#[test]
 fn first_named_session_launches_one_browser_for_exact_profile() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
@@ -742,6 +819,7 @@ fn first_named_session_launches_one_browser_for_exact_profile() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
 
@@ -780,6 +858,7 @@ fn second_named_session_reuses_live_browser_for_exact_profile() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
 
@@ -828,6 +907,7 @@ fn same_session_name_can_open_a_different_exact_profile() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
 
@@ -868,6 +948,7 @@ fn disposable_profiles_are_session_scoped_reused_and_reaped() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
 
@@ -919,6 +1000,7 @@ fn exact_intent_rejects_disposable_profile_definition() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
 
@@ -965,6 +1047,7 @@ fn serialized_state_reuses_healthy_session_after_service_restart() {
             &mut effects,
             BrowserSessionManagerConfig {
                 session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
             },
         );
         manager
@@ -987,6 +1070,7 @@ fn serialized_state_reuses_healthy_session_after_service_restart() {
         &mut restarted_effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
         },
     );
 

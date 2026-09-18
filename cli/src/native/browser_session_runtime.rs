@@ -8,9 +8,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use agent_browser_service_model::{
-    BrowserDisposableProfilePolicy, BrowserLaunch, BrowserProfileCatalogEntry, BrowserProfileKind,
-    BrowserSessionEffects, BrowserTabAcquisition, BrowserTabSource, ManagedBrowserInstance,
-    ManagedBrowserTab, ManagedDisposableProfile,
+    BrowserDesktopAssignment, BrowserDisposableProfilePolicy, BrowserLaunch,
+    BrowserProfileCatalogEntry, BrowserProfileKind, BrowserSessionEffects, BrowserTabAcquisition,
+    BrowserTabSource, ManagedBrowserInstance, ManagedBrowserTab, ManagedDisposableProfile,
 };
 use serde_json::Value;
 
@@ -30,6 +30,7 @@ pub(crate) trait BrowserRuntimeDriver {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&BrowserDesktopAssignment>,
     ) -> Result<BrowserLaunch, String>;
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
     fn acquire_initial_tab(
@@ -72,8 +73,9 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&BrowserDesktopAssignment>,
     ) -> Result<BrowserLaunch, String> {
-        self.runtime.launch_browser(profile)
+        self.runtime.launch_browser(profile, desktop)
     }
 
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
@@ -181,6 +183,7 @@ enum BrowserRuntimeCommand {
     },
     Launch {
         profile: BrowserProfileCatalogEntry,
+        desktop: Option<BrowserDesktopAssignment>,
         reply: mpsc::Sender<Result<BrowserLaunch, String>>,
     },
     Close {
@@ -276,12 +279,14 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&BrowserDesktopAssignment>,
     ) -> Result<BrowserLaunch, String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
             receiver,
             BrowserRuntimeCommand::Launch {
                 profile: profile.clone(),
+                desktop: desktop.cloned(),
                 reply,
             },
         )
@@ -385,15 +390,23 @@ fn run_browser_worker(
                 let result = runtime.block_on(recorded_browser_is_live(&mut browsers, &browser));
                 let _ = reply.send(result);
             }
-            BrowserRuntimeCommand::Launch { profile, reply } => {
+            BrowserRuntimeCommand::Launch {
+                profile,
+                desktop,
+                reply,
+            } => {
                 let result = runtime.block_on(async {
+                    let display = desktop
+                        .as_ref()
+                        .map(|desktop| desktop.display_name.clone())
+                        .or_else(|| config.display.clone());
                     let mut manager = BrowserManager::launch(
                         LaunchOptions {
-                            headless: config.headless,
+                            headless: config.headless && display.is_none(),
                             executable_path: config.executable_path.clone(),
                             profile: Some(profile.user_data_dir.clone()),
-                            display: config.display.clone(),
-                            remote_headed: config.remote_headed,
+                            display,
+                            remote_headed: config.remote_headed || desktop.is_some(),
                             ..LaunchOptions::default()
                         },
                         Some("chrome"),
@@ -411,6 +424,7 @@ fn run_browser_worker(
                         browser_id: browser_id.clone(),
                         pid,
                         cdp_endpoint: manager.get_cdp_url().to_string(),
+                        desktop,
                     };
                     browsers.insert(browser_id, manager);
                     Ok(launch)
@@ -624,6 +638,7 @@ mod tests {
         fn launch_browser(
             &mut self,
             _profile: &BrowserProfileCatalogEntry,
+            _desktop: Option<&BrowserDesktopAssignment>,
         ) -> Result<BrowserLaunch, String> {
             Err("unused".to_string())
         }
@@ -690,6 +705,7 @@ mod tests {
             profile_id: "work".to_string(),
             pid: std::process::id(),
             cdp_endpoint: "ws://127.0.0.1:1/devtools/browser/test".to_string(),
+            desktop: None,
             active_session_ids: Vec::new(),
         };
         assert!(recorded_browser_process_exists(&browser));
@@ -714,13 +730,14 @@ mod tests {
         };
         let launch = {
             let mut first = BrowserManagerRuntime::start(config.clone()).unwrap();
-            first.launch_browser(&profile).unwrap()
+            first.launch_browser(&profile, None).unwrap()
         };
         let browser = ManagedBrowserInstance {
             id: launch.browser_id,
             profile_id: profile.id,
             pid: launch.pid,
             cdp_endpoint: launch.cdp_endpoint,
+            desktop: None,
             active_session_ids: vec!["session:alice:restart-fixture:1".to_string()],
         };
         assert!(recorded_browser_process_exists(&browser));
