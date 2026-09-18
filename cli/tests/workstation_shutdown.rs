@@ -146,3 +146,84 @@ fn shutdown_json_is_idempotent_in_an_empty_disposable_workstation() {
         "shutdown inspected user units that were not installed"
     );
 }
+
+#[test]
+fn shutdown_json_releases_a_retained_session_without_deleting_profile_data() {
+    let fixture = TempWorkstation::new();
+    let docker_log = fixture.root.join("docker.log");
+    let systemctl_log = fixture.root.join("systemctl.log");
+    fixture.install_fake_command("docker", "AGENT_BROWSER_FAKE_DOCKER_LOG");
+    fixture.install_fake_command("systemctl", "AGENT_BROWSER_FAKE_SYSTEMCTL_LOG");
+
+    let profile_dir = fixture.root.join("profiles/named");
+    fs::create_dir_all(&profile_dir).expect("profile directory");
+    let marker_path = profile_dir.join("retained-profile-data");
+    fs::write(&marker_path, b"keep").expect("profile marker");
+
+    let state_path = fixture.root.join("home/.agent-browser/service/state.json");
+    fs::create_dir_all(state_path.parent().expect("service directory")).expect("service directory");
+    fs::write(
+        &state_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schemaVersion": "agent-browser.service-state.v2",
+            "profiles": {
+                "named": {
+                    "id": "named",
+                    "userDataDir": profile_dir,
+                    "persistent": true
+                }
+            },
+            "sessions": {
+                "session-1": {
+                    "id": "session-1",
+                    "lease": "exclusive",
+                    "profileId": "named"
+                }
+            }
+        }))
+        .expect("service state JSON"),
+    )
+    .expect("service state");
+
+    let first = run_shutdown(&fixture, &docker_log, &systemctl_log);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let first_receipt: serde_json::Value =
+        serde_json::from_slice(&first.stdout).expect("first shutdown receipt");
+    assert_eq!(first_receipt["success"], true);
+    assert_eq!(first_receipt["changed"], true);
+    assert_eq!(first_receipt["residue"]["runtimeOwners"], 0);
+    assert_eq!(first_receipt["residue"]["activeLeases"], 0);
+
+    let persisted: serde_json::Value =
+        serde_json::from_slice(&fs::read(&state_path).expect("persisted service state"))
+            .expect("persisted service state JSON");
+    assert_eq!(persisted["sessions"]["session-1"]["lease"], "released");
+    assert_eq!(
+        persisted["profiles"]["named"]["userDataDir"],
+        profile_dir.to_string_lossy().as_ref()
+    );
+    assert_eq!(
+        fs::read(&marker_path).expect("retained profile marker"),
+        b"keep"
+    );
+
+    let replay = run_shutdown(&fixture, &docker_log, &systemctl_log);
+    assert!(
+        replay.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    let replay_receipt: serde_json::Value =
+        serde_json::from_slice(&replay.stdout).expect("replay shutdown receipt");
+    assert_eq!(replay_receipt["success"], true);
+    assert_eq!(replay_receipt["changed"], false);
+    assert_eq!(
+        fs::read(&marker_path).expect("retained profile marker"),
+        b"keep"
+    );
+    assert!(!systemctl_log.exists());
+}
