@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use agent_browser_service_model::{
     BrowserDisposableProfilePolicy, BrowserLaunch, BrowserProfileCatalogEntry, BrowserProfileKind,
@@ -381,18 +382,7 @@ fn run_browser_worker(
     while let Ok(command) = receiver.recv() {
         match command {
             BrowserRuntimeCommand::IsLive { browser, reply } => {
-                let result = match browsers.get_mut(&browser.id) {
-                    Some(manager) => {
-                        let process_matches = manager.browser_pid() == Some(browser.pid);
-                        let process_is_live = manager.poll_process_exit().is_none();
-                        if process_matches && process_is_live {
-                            Ok(runtime.block_on(manager.is_connection_alive()))
-                        } else {
-                            Ok(false)
-                        }
-                    }
-                    _ => Ok(false),
-                };
+                let result = runtime.block_on(recorded_browser_is_live(&mut browsers, &browser));
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Launch { profile, reply } => {
@@ -430,14 +420,22 @@ fn run_browser_worker(
             BrowserRuntimeCommand::Close { browser, reply } => {
                 let result = match browsers.remove(&browser.id) {
                     Some(mut manager) => runtime.block_on(async {
-                        manager.approve_lifecycle_close();
-                        let outcome = manager.close_with_outcome().await?;
-                        if !outcome.exact_process_exited {
-                            return Err("browser_session_close_exit_unproven".to_string());
+                        if manager.owns_launched_browser_process() {
+                            manager.approve_lifecycle_close();
+                            let outcome = manager.close_with_outcome().await?;
+                            if !outcome.exact_process_exited {
+                                return Err("browser_session_close_exit_unproven".to_string());
+                            }
+                            Ok(())
+                        } else {
+                            close_reattached_browser(&manager, browser.pid).await
                         }
-                        Ok(())
                     }),
-                    None => Ok(()),
+                    None if !recorded_browser_process_exists(&browser) => Ok(()),
+                    None => runtime.block_on(async {
+                        let manager = attach_recorded_browser(&browser).await?;
+                        close_reattached_browser(&manager, browser.pid).await
+                    }),
                 };
                 let _ = reply.send(result);
             }
@@ -509,10 +507,89 @@ fn run_browser_worker(
             BrowserRuntimeCommand::Shutdown => break,
         }
     }
-    for (_, mut manager) in browsers {
-        manager.approve_lifecycle_close();
-        let _ = runtime.block_on(manager.close_with_outcome());
+    for manager in browsers.values_mut() {
+        manager.relinquish_browser_for_handoff();
     }
+}
+
+async fn recorded_browser_is_live(
+    browsers: &mut HashMap<String, BrowserManager>,
+    browser: &ManagedBrowserInstance,
+) -> Result<bool, String> {
+    if !recorded_browser_process_exists(browser) {
+        browsers.remove(&browser.id);
+        return Ok(false);
+    }
+    if !browsers.contains_key(&browser.id) {
+        let manager = match attach_recorded_browser(browser).await {
+            Ok(manager) => manager,
+            Err(_) => return Ok(false),
+        };
+        browsers.insert(browser.id.clone(), manager);
+    }
+    let manager = browsers
+        .get_mut(&browser.id)
+        .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+    let process_matches = if manager.owns_launched_browser_process() {
+        manager.browser_pid() == Some(browser.pid) && manager.poll_process_exit().is_none()
+    } else {
+        recorded_browser_process_exists(browser)
+    };
+    if !process_matches {
+        browsers.remove(&browser.id);
+        return Ok(false);
+    }
+    Ok(manager.is_connection_alive().await)
+}
+
+async fn attach_recorded_browser(
+    browser: &ManagedBrowserInstance,
+) -> Result<BrowserManager, String> {
+    if !recorded_browser_process_exists(browser) {
+        return Err("browser_session_recorded_process_missing".to_string());
+    }
+    let manager = BrowserManager::connect_cdp(&browser.cdp_endpoint)
+        .await
+        .map_err(|error| format!("browser_session_reattach_failed:{error}"))?;
+    if !manager.is_connection_alive().await {
+        return Err("browser_session_reattach_unresponsive".to_string());
+    }
+    Ok(manager)
+}
+
+async fn close_reattached_browser(
+    manager: &BrowserManager,
+    recorded_pid: u32,
+) -> Result<(), String> {
+    let close_error = manager
+        .client
+        .send_command_no_params("Browser.close", None)
+        .await
+        .err();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while process_exists(recorded_pid) {
+        if Instant::now() >= deadline {
+            return Err(match close_error {
+                Some(error) => {
+                    format!("browser_session_close_exit_unproven:close_request_failed:{error}")
+                }
+                None => "browser_session_close_exit_unproven".to_string(),
+            });
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Ok(())
+}
+
+fn recorded_browser_process_exists(browser: &ManagedBrowserInstance) -> bool {
+    process_exists(browser.pid)
+}
+
+fn process_exists(pid: u32) -> bool {
+    matches!(
+        crate::process_identity::observe_process(pid),
+        crate::process_identity::ProcessObservation::Observed(_)
+    )
 }
 
 fn tab_acquisition(
@@ -604,6 +681,57 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn recorded_browser_liveness_uses_the_persisted_pid() {
+        let mut browser = ManagedBrowserInstance {
+            id: "browser:work:1".to_string(),
+            profile_id: "work".to_string(),
+            pid: std::process::id(),
+            cdp_endpoint: "ws://127.0.0.1:1/devtools/browser/test".to_string(),
+            active_session_ids: Vec::new(),
+        };
+        assert!(recorded_browser_process_exists(&browser));
+
+        browser.pid = u32::MAX;
+        assert!(!recorded_browser_process_exists(&browser));
+    }
+
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn runtime_restart_reattaches_and_closes_recorded_browser() {
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "restart-fixture".to_string(),
+            name: "Restart fixture".to_string(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let config = BrowserManagerRuntimeConfig {
+            headless: true,
+            ..BrowserManagerRuntimeConfig::default()
+        };
+        let launch = {
+            let mut first = BrowserManagerRuntime::start(config.clone()).unwrap();
+            first.launch_browser(&profile).unwrap()
+        };
+        let browser = ManagedBrowserInstance {
+            id: launch.browser_id,
+            profile_id: profile.id,
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint,
+            active_session_ids: vec!["session:alice:restart-fixture:1".to_string()],
+        };
+        assert!(recorded_browser_process_exists(&browser));
+
+        let mut restarted = BrowserManagerRuntime::start(config).unwrap();
+        let live = restarted.browser_is_live(&browser).unwrap();
+        let close = restarted.close_browser(&browser);
+
+        assert!(live);
+        close.unwrap();
+        assert!(!recorded_browser_process_exists(&browser));
     }
 
     #[test]
