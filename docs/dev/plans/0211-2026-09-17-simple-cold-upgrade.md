@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 42
+Plan version: 43
 
 State: OPEN
 
@@ -835,6 +835,33 @@ only after focused, formatting, strict Clippy, and changed-surface validation
 pass. The original quarantine receipt and exact process residue remain
 evidence until replacement install or exact task-owned cleanup proves them
 gone. Production and shared user-scoped runtime effects remain excluded.
+
+The version 43 continuation records the first repaired candidate and the
+second bounded provider blocker. Source `8e31daf2` built as development
+generation `0.28.0-c40bd61ec18f` with SHA-256
+`c40bd61ec18f3c63f8e63c97a0936219f682e9af85529f4be9b40b19372d7601`.
+Replacement install removed the exact Chrome residue from the first
+quarantine, restored all three development units, kept the development skill
+current, and again proved production unchanged. The development browser smoke
+then exposed a stale pre-manager harness assumption; checkpoint `2d0eb8ca`
+now uses disposable manager sessions, accepts only the typed missing-desktop
+visibility result while the optional provider is absent, and proves three
+open, URL-read, exact-close, no-process-residue iterations with production
+unchanged. The second provider plan, stage, and preflight passed, but the one
+post-fix deferred-ingress apply quarantined on request `r152796` with
+`CDP command timed out: Page.navigate`. Its receipt is
+`~/.local/share/agent-browser-dev/presentation-provider/receipts/apply-1789783822885-83753.json`.
+The manager recorded and exactly closed the route-1 browser, which proves the
+first routing defect stayed repaired. Diagnosis found that attached
+session-command state enabled Fetch interception for origin headers without
+starting its paused-request consumer. The accepted repair initializes event,
+Fetch, and dialog handlers for each manager-owned command context. The ignored
+real-Chrome restart fixture now proves a header-bearing navigation after
+manager reattachment reaches a local HTTP server with `Remote-User: operator`
+and closes the exact browser. Two of the plan's maximum three provider attempts
+have been consumed. One final candidate build, replacement install, preflight,
+and apply are allowed after focused and strict validation; another quarantine
+ends the live acceptance packet without retry.
 
 ## Frozen Interface Packet
 

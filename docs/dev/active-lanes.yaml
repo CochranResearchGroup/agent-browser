@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 07d9e93c
+    checkpoint: 2d0eb8ca
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: provider-free qualification and documentation parity pass through 07d9e93c; isolated development generation 0.28.0-8682d4748725 installed with production unchanged, but first provider apply quarantined at r488783; narrow header-bearing managed-navigation repair is in focused validation before one rebuilt-candidate replay
-    validation_ref: 07d9e93c
+    validation_status: provider-free qualification and documentation parity pass; development generation 0.28.0-c40bd61ec18f and corrected three-pass browser smoke are green with production unchanged; second provider apply quarantined at r152796 after fixing the original routing defect, and the missing Fetch-handler repair passes a real-Chrome header fixture before one final bounded candidate
+    validation_ref: 2d0eb8ca
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: development provider replay and the joined installed shutdown and replacement journey remain; authenticated dashboard rendering and control still lack a terminal verdict; production and shared user-scoped runtime effects remain excluded
+    blocker: one final development provider candidate and apply remain after two consumed attempts, followed by the joined installed shutdown and replacement journey; authenticated dashboard rendering and control still lack a terminal verdict; production and shared user-scoped runtime effects remain excluded
     updated_at: 2026-09-18

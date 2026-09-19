@@ -9,6 +9,23 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 395 | 2026-09-18
+
+P211 installed repaired development generation `0.28.0-c40bd61ec18f`; the
+first quarantine's exact Chrome residue disappeared during replacement, all
+development units became ready, and production remained unchanged. The
+corrected three-pass browser smoke is green through disposable manager
+sessions. A second fully green provider preflight was followed by the single
+post-fix apply, which quarantined at request `r152796` with
+`CDP command timed out: Page.navigate`; receipt
+`apply-1789783822885-83753.json` proves production unchanged and exact route-1
+browser cleanup. Diagnosis found an unstarted Fetch paused-request handler in
+the manager's attached session-command context. The narrow initialization
+repair is green in a real-Chrome restart fixture that observes
+`Remote-User: operator` at a local HTTP server and closes the exact browser.
+Two of three bounded provider attempts are consumed. One final validated
+candidate and apply remain; production remains excluded.
+
 ## Turn 394 | 2026-09-18
 
 The operator authorized P211 isolated development-runtime acceptance. Candidate

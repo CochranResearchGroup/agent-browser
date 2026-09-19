@@ -758,6 +758,9 @@ async fn session_command_state<'a>(
         state.browser_session_manager_owned = true;
         state.session_id = session_id.to_string();
         state.session_name = Some(session_name.to_string());
+        state.subscribe_to_browser_events();
+        state.start_fetch_handler();
+        state.start_dialog_handler();
         runtime_state.command_sessions.insert(
             session_id.to_string(),
             SessionCommandRuntimeState {
@@ -956,7 +959,7 @@ fn tab_acquisition(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::path::PathBuf;
     use std::process::Command;
@@ -1226,6 +1229,44 @@ mod tests {
                 "data:text/html,<title>managed-session</title><main>ready</main>",
             )
             .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").expect("header fixture listener");
+        let address = listener.local_addr().expect("header fixture address");
+        let (request_tx, request_rx) = std::sync::mpsc::channel();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("header fixture connection");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .expect("header fixture read timeout");
+            let mut request = vec![0_u8; 8192];
+            let read = stream.read(&mut request).expect("header fixture request");
+            request.truncate(read);
+            request_tx
+                .send(String::from_utf8_lossy(&request).into_owned())
+                .expect("header fixture request receipt");
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 21\r\nConnection: close\r\n\r\n<title>header</title>",
+                )
+                .expect("header fixture response");
+        });
+        let header_navigation = restarted
+            .execute_command(
+                &browser,
+                &managed_tab,
+                &managed_tab.session_id,
+                "alice",
+                &serde_json::json!({
+                    "id": "header-navigation-1",
+                    "action": "navigate",
+                    "url": format!("http://{address}/guacamole/"),
+                    "headers": {"Remote-User": "operator"}
+                }),
+            )
+            .unwrap();
+        let request = request_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("header fixture observed request");
+        server.join().expect("header fixture server");
         let title = restarted
             .execute_command(
                 &browser,
@@ -1247,8 +1288,12 @@ mod tests {
         let close = restarted.close_browser(&browser);
 
         assert!(live);
+        assert_eq!(header_navigation["success"], true, "{header_navigation}");
+        assert!(request
+            .to_ascii_lowercase()
+            .contains("remote-user: operator"));
         assert_eq!(title["success"], true);
-        assert_eq!(title["data"]["title"], "managed-session");
+        assert_eq!(title["data"]["title"], "header");
         assert_eq!(snapshot["success"], true);
         close.unwrap();
         assert!(!recorded_browser_process_exists(&browser));
