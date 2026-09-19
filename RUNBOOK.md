@@ -9,6 +9,28 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 414 | 2026-09-19
+
+P211 checkpoint `d402f55b` advances the route-keeper authority to v2 with a
+SQLite-owned connection catalog. Each binding retains an exact slot, stable
+connection key and name, and positive numeric Guacamole connection ID. A
+canonical SHA-256 catalog digest is carried by every operation fence and thus
+every action and receipt. Empty or undersized catalogs block new starts, and a
+catalog can change only while every keeper slot is absent. The concrete primary
+factory resolves the exact numeric ID from the fenced SQLite snapshot before
+provider access; its fresh guard rechecks the same authority. Absent v1 state
+upgrades in place through an exact-document compare-and-swap. Active v1 state
+fails closed without rewriting readiness or manufacturing catalog provenance.
+Independent review found and verified correction of both stale-migration
+overwrite and active-v1 readiness hazards. The full 221-test Service Model
+package and all integration tests, 26 focused keeper/store/connector tests,
+thirteen Browser Session Host tests, formatting, strict workspace Clippy, diff
+hygiene, changed-surface selection, and closed-world re-review pass. Provider
+catalog population from stable connection names, exact XRDP observation and
+stop, RuntimeHostRouter installation, keeper-backed handoff resolution, and
+live readiness remain open. No provider, browser, installed-runtime,
+production, ingress, or release effect occurred.
+
 ## Turn 413 | 2026-09-19
 
 P211 checkpoint `18c790bd` removes the legacy hidden-viewer bootstrap from the

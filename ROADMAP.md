@@ -153,6 +153,16 @@ before mutation on the same missing runtime-host integration. Forward-only
 cold-install wording is aligned across help, README, the repository skill, and
 the docs site. Authoritative catalog population, exact XRDP ownership and stop,
 the handoff join, and live readiness remain open.
+Checkpoint `d402f55b` advances the SQLite keeper authority to v2 with exact
+slot, stable connection-key and name, and numeric Guacamole connection-ID
+bindings. The canonical catalog digest is part of every fence, action, and
+receipt; empty or undersized catalogs block starts, and catalog replacement
+requires every keeper slot to be absent. The concrete primary factory resolves
+the numeric ID from the fenced SQLite snapshot before provider access. Absent
+v1 authorities upgrade through exact-document compare-and-swap, while active
+v1 evidence fails closed without being relabeled as catalog-proven readiness.
+Provider-side stable-name population, exact XRDP ownership and stop, runtime
+installation, the handoff join, and live readiness remain open.
 
 ## P216 | Service Model Extraction Landing
 
