@@ -9,6 +9,19 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 399 | 2026-09-18
+
+P211 version 46 installed development generation
+`0.28.0-30cfdf91ee18`, but its one ordinary retry again failed closed with
+`browser_session_handoff_desktop_missing`. Exact close removed the test session
+and browser. The remaining defect is now exact: Browser Session Manager's
+refresh reads `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` or the legacy two-route
+adapter, while the development runtime publishes its healthy `:13` through
+`:16` routes through `AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH`.
+Version 47 records the required typed adapter and ends this packet without
+another build or retry. The provider remains ready, ingress remains deferred,
+and production remained unchanged.
+
 ## Turn 398 | 2026-09-18
 
 P211 version 45 repaired the bootstrap recursion and its one provider apply

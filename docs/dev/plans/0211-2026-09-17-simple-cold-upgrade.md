@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 46
+Plan version: 47
 
 State: OPEN
 
@@ -925,6 +925,26 @@ install are authorized, followed by an ordinary open that must return a ready
 opaque handoff and exact session cleanup. The already-ready provider must not
 be reapplied or published through ingress. A failed ordinary retry ends this
 packet.
+
+Version 46 installed development generation `0.28.0-30cfdf91ee18` with binary
+SHA-256 `30cfdf91ee18414f2925e9d445ac6c21af3d094659b380b15a77341225281cef`.
+Its single ordinary retry again failed closed with
+`browser_session_handoff_desktop_missing`, and exact close removed the test
+session and browser. Readback isolated the remaining adapter mismatch:
+`load_current_remote_desktop_routes()` reads `AGENT_BROWSER_RDP_ROUTE_POOL_JSON`
+or the legacy two-route environment, while the development unit intentionally
+publishes the ready provider through
+`AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH`. The current provider
+inventory contains ready `development-route-1` through
+`development-route-4` on `:13` through `:16`, but that typed inventory never
+reaches Browser Session Manager's launch choices. A successor repair must
+adapt only ready entries from `PresentationProviderInventory` into
+`BrowserDesktopRoute` choices, preserve the explicit empty choice for internal
+viewer bootstrap, and retain the legacy static adapter when no provider path is
+configured. No further build, install, provider apply, ingress publication, or
+ordinary retry is authorized by this packet. The development provider remains
+ready with all three containers and ports healthy; production remained
+unchanged.
 
 ## Frozen Interface Packet
 
