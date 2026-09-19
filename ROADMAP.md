@@ -79,6 +79,9 @@ accurate missing-source history, and the revisioned SQLite configuration
 aggregate with the frozen capacity and retention defaults. Host timeouts no
 longer depend on ad hoc environment variables. Public config mutation and live
 refresh remain open with the rest of the provider path.
+Checkpoint `759f12e9` adds the durable operation journal and owner-local
+generation fencing. It proves replay and stale-effect rejection at the SQLite
+seam; browser, display, handoff, and recovery integration remain open.
 
 ## P216 | Service Model Extraction Landing
 

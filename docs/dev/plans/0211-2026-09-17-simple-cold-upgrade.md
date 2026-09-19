@@ -1372,6 +1372,15 @@ session/disposable environment variables. The Service API and CLI mutation
 surface plus live in-process refresh remain pending, so this is not yet public
 configuration acceptance.
 
+Checkpoint `759f12e9` adds the durable operation-journal kernel. An exact
+operation ID and request replay the same prepared or committed record. Each
+logical owner advances its own generation, so a later reservation fences an
+earlier effect from committing while unrelated owners remain independent.
+Exact committed results replay after database reopen; changed requests or
+results fail closed. Browser open, presentation allocation, and handoff code
+do not consume this kernel yet, so crash-consistent open remains an integration
+gate rather than an accepted behavior.
+
 ## Worker Assignments
 
 Version 49 has one worker: the P211 lane owner. The operator explicitly stated
@@ -1450,7 +1459,7 @@ integrating any P207 implementation.
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
-| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | version 49 contract frozen; implementation pending |
+| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoint `759f12e9` proves durable idempotent reservation, per-owner generations, exact result replay, and stale-effect rejection; browser, display, and handoff integration plus pending-phase recovery remain pending |
 | Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |
 | Bounded persistence and history | live SQLite stays within 96 MiB, exact URL history within 64 MiB, routine database/WAL/backup within 128 MiB, summaries retain long-term lifecycle evidence, and verified backup recovery is automatic | version 49 contract frozen; development size and corruption tests pending |
 | Disposable retention | default 24-hour inactivity, 20 profiles, and 10 GiB are live settings; oldest inactive sessions expire first and active or named profiles are never evicted | version 49 contract frozen; implementation and quota tests pending |
