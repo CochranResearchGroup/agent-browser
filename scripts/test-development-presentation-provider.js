@@ -354,6 +354,10 @@ try {
     resolvedKeeperCatalog.bindings.map((binding) => binding.guacamoleConnectionId),
     descriptor.routes.map((_, index) => index + 101),
   );
+  assert.deepEqual(
+    resolvedKeeperCatalog.bindings.map((binding) => binding.routeUser),
+    descriptor.routes.map((route) => route.user),
+  );
   assert.throws(
     () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map((route, index) => ({
         connectionId: String(index + 101),

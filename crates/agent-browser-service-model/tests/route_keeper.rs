@@ -3,6 +3,7 @@ use agent_browser_service_model::{
     RouteKeeperConnectionCatalog, RouteKeeperFence, RouteKeeperPhase, RouteKeeperPolicy,
     RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState, RouteKeeperReconcileAction,
     RouteKeeperStartPriority, RouteKeeperStopDisposition, RouteKeeperStopReceipt,
+    RouteKeeperXrdpOwnershipWitness,
 };
 
 fn connection_catalog(maximum_slots: u32) -> RouteKeeperConnectionCatalog {
@@ -11,6 +12,7 @@ fn connection_catalog(maximum_slots: u32) -> RouteKeeperConnectionCatalog {
             slot_id: format!("route-slot-{sequence:02}"),
             connection_key: format!("route-{sequence:02}"),
             connection_name: format!("Agent Browser Route {sequence:02}"),
+            route_user: format!("agent-browser-rdp-{sequence}"),
             guacamole_connection_id: u64::from(sequence),
         }
     }))
@@ -57,17 +59,39 @@ fn catalog_rejects_duplicate_provider_identities_and_unknown_slots() {
             slot_id: "route-slot-01".to_string(),
             connection_key: "route".to_string(),
             connection_name: "Route 1".to_string(),
+            route_user: "agent-browser-rdp-1".to_string(),
             guacamole_connection_id: 1,
         },
         RouteKeeperConnectionBinding {
             slot_id: "route-slot-02".to_string(),
             connection_key: "route".to_string(),
             connection_name: "Route 2".to_string(),
+            route_user: "agent-browser-rdp-2".to_string(),
             guacamole_connection_id: 2,
         },
     ]);
     assert_eq!(
         duplicate,
+        Err("route_keeper_connection_catalog_identity_duplicate".to_string())
+    );
+    let duplicate_route_user = RouteKeeperConnectionCatalog::new([
+        RouteKeeperConnectionBinding {
+            slot_id: "route-slot-01".to_string(),
+            connection_key: "route-01".to_string(),
+            connection_name: "Route 1".to_string(),
+            route_user: "agent-browser-rdp-1".to_string(),
+            guacamole_connection_id: 1,
+        },
+        RouteKeeperConnectionBinding {
+            slot_id: "route-slot-02".to_string(),
+            connection_key: "route-02".to_string(),
+            connection_name: "Route 2".to_string(),
+            route_user: "agent-browser-rdp-1".to_string(),
+            guacamole_connection_id: 2,
+        },
+    ]);
+    assert_eq!(
+        duplicate_route_user,
         Err("route_keeper_connection_catalog_identity_duplicate".to_string())
     );
 
@@ -76,6 +100,7 @@ fn catalog_rejects_duplicate_provider_identities_and_unknown_slots() {
         slot_id: "route-slot-99".to_string(),
         connection_key: "route-99".to_string(),
         connection_name: "Route 99".to_string(),
+        route_user: "agent-browser-rdp-99".to_string(),
         guacamole_connection_id: 99,
     }])
     .unwrap();
@@ -119,13 +144,34 @@ fn ready_receipt(
     keeper_id: &str,
     fence: RouteKeeperFence,
 ) -> RouteKeeperProtocolReadyReceipt {
+    let xrdp_session_id = format!("xrdp-{slot_id}");
+    let display_name = format!(":{}", slot_id.trim_start_matches("route-slot-"));
     RouteKeeperProtocolReadyReceipt {
         slot_id: slot_id.to_string(),
         keeper_id: keeper_id.to_string(),
         fence,
         guacamole_connection_uuid: format!("connection-{slot_id}"),
-        xrdp_session_id: format!("xrdp-{slot_id}"),
-        display_name: format!(":{}", slot_id.trim_start_matches("route-slot-")),
+        xrdp_session_id: xrdp_session_id.clone(),
+        display_name: display_name.clone(),
+        xrdp_ownership: Some(RouteKeeperXrdpOwnershipWitness {
+            schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
+            boot_id: "boot-fixture".to_string(),
+            route_user: "agent-browser-rdp-1".to_string(),
+            route_uid: 2001,
+            session_id: xrdp_session_id.clone(),
+            session_service: "xrdp-sesman".to_string(),
+            session_scope: format!("session-{xrdp_session_id}.scope"),
+            scope_invocation_id: "invocation-fixture".to_string(),
+            cgroup_path: format!("/user.slice/user-2001.slice/session-{xrdp_session_id}.scope"),
+            cgroup_device: 28,
+            cgroup_inode: 1001,
+            leader_pid: 4101,
+            leader_start_ticks: 5101,
+            x_server_pid: 4102,
+            x_server_start_ticks: 5102,
+            display_name,
+            x11_socket_inode: 6101,
+        }),
         observed_at: "2026-09-19T12:00:00Z".to_string(),
     }
 }
@@ -267,12 +313,16 @@ fn disconnect_restarts_and_exact_adoption_fences_stale_generation() {
         observed_at: "2026-09-19T12:01:00Z".to_string(),
         ..original_ready.clone()
     };
-    let bypass_ready = RouteKeeperProtocolReadyReceipt {
-        guacamole_connection_uuid: "different-connection".to_string(),
-        xrdp_session_id: "different-xrdp".to_string(),
-        display_name: ":99".to_string(),
-        ..adopted_ready.clone()
-    };
+    let mut bypass_ready = adopted_ready.clone();
+    bypass_ready.guacamole_connection_uuid = "different-connection".to_string();
+    bypass_ready.xrdp_session_id = "different-xrdp".to_string();
+    bypass_ready.display_name = ":99".to_string();
+    let bypass_ownership = bypass_ready.xrdp_ownership.as_mut().unwrap();
+    bypass_ownership.session_id = "different-xrdp".to_string();
+    bypass_ownership.session_scope = "session-different-xrdp.scope".to_string();
+    bypass_ownership.cgroup_path =
+        "/user.slice/user-2001.slice/session-different-xrdp.scope".to_string();
+    bypass_ownership.display_name = ":99".to_string();
     assert_eq!(
         authority.record_protocol_ready(bypass_ready),
         Err("route_keeper_phase_not_observing".to_string())
@@ -432,5 +482,23 @@ fn invalid_ready_record_cannot_project_or_persist_false_capacity() {
     assert_eq!(
         authority.projection(),
         Err("route_keeper_ready_receipt_missing".to_string())
+    );
+}
+
+#[test]
+fn legacy_ready_receipt_without_exact_xrdp_ownership_fails_closed() {
+    let (mut authority, _) = make_one_ready();
+    authority
+        .records
+        .get_mut("route-slot-01")
+        .unwrap()
+        .protocol_ready
+        .as_mut()
+        .unwrap()
+        .xrdp_ownership = None;
+
+    assert_eq!(
+        authority.projection(),
+        Err("route_keeper_ready_xrdp_ownership_missing".to_string())
     );
 }

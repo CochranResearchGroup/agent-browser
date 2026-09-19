@@ -71,6 +71,7 @@ export function resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, datab
       slotId: `route-slot-${String(index + 1).padStart(2, '0')}`,
       connectionKey: route.connectionKey,
       connectionName: route.connectionName,
+      routeUser: route.user,
       guacamoleConnectionId: positiveCanonicalSafeInteger(
         observed.connectionId,
         `Development Guacamole connection ID for ${route.connectionName}`,

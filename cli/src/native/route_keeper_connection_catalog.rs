@@ -131,6 +131,7 @@ mod tests {
                 "slotId": format!("route-slot-{sequence:02}"),
                 "connectionKey": format!("route-{sequence:02}"),
                 "connectionName": format!("Agent Browser Route {sequence:02}"),
+                "routeUser": format!("agent-browser-rdp-{sequence}"),
                 "guacamoleConnectionId": sequence,
             })).collect::<Vec<_>>()
         });

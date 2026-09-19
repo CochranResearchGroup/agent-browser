@@ -1712,6 +1712,7 @@ mod tests {
                 slot_id: format!("route-slot-{sequence:02}"),
                 connection_key: format!("route-{sequence:02}"),
                 connection_name: format!("Agent Browser Route {sequence:02}"),
+                route_user: format!("agent-browser-rdp-{sequence}"),
                 guacamole_connection_id: u64::from(sequence),
             }
         }))
@@ -2248,6 +2249,29 @@ mod tests {
                     guacamole_connection_uuid: "guacamole-01".to_string(),
                     xrdp_session_id: "xrdp-01".to_string(),
                     display_name: ":10".to_string(),
+                    xrdp_ownership: Some(
+                        agent_browser_service_model::RouteKeeperXrdpOwnershipWitness {
+                            schema_version: "agent-browser.route-keeper-xrdp-ownership.v1"
+                                .to_string(),
+                            boot_id: "boot-fixture".to_string(),
+                            route_user: "agent-browser-rdp-1".to_string(),
+                            route_uid: 2001,
+                            session_id: "xrdp-01".to_string(),
+                            session_service: "xrdp-sesman".to_string(),
+                            session_scope: "session-xrdp-01.scope".to_string(),
+                            scope_invocation_id: "invocation-fixture".to_string(),
+                            cgroup_path: "/user.slice/user-2001.slice/session-xrdp-01.scope"
+                                .to_string(),
+                            cgroup_device: 28,
+                            cgroup_inode: 1001,
+                            leader_pid: 4101,
+                            leader_start_ticks: 5101,
+                            x_server_pid: 4102,
+                            x_server_start_ticks: 5102,
+                            display_name: ":10".to_string(),
+                            x11_socket_inode: 6101,
+                        },
+                    ),
                     observed_at: "2026-09-19T23:00:00Z".to_string(),
                 },
             )

@@ -13,6 +13,7 @@ pub struct RouteKeeperConnectionBinding {
     pub slot_id: String,
     pub connection_key: String,
     pub connection_name: String,
+    pub route_user: String,
     pub guacamole_connection_id: u64,
 }
 
@@ -50,12 +51,14 @@ impl RouteKeeperConnectionCatalog {
     fn validate(&self) -> Result<(), String> {
         let mut connection_keys = BTreeMap::new();
         let mut connection_names = BTreeMap::new();
+        let mut route_users = BTreeMap::new();
         let mut connection_ids = BTreeMap::new();
         for (slot_id, binding) in &self.bindings {
             if slot_id.is_empty()
                 || binding.slot_id != *slot_id
                 || binding.connection_key.is_empty()
                 || binding.connection_name.is_empty()
+                || binding.route_user.is_empty()
                 || binding.guacamole_connection_id == 0
             {
                 return Err("route_keeper_connection_catalog_binding_invalid".to_string());
@@ -65,6 +68,9 @@ impl RouteKeeperConnectionCatalog {
                 .is_some()
                 || connection_names
                     .insert(binding.connection_name.as_str(), slot_id)
+                    .is_some()
+                || route_users
+                    .insert(binding.route_user.as_str(), slot_id)
                     .is_some()
                 || connection_ids
                     .insert(binding.guacamole_connection_id, slot_id)
@@ -121,6 +127,28 @@ pub struct RouteKeeperFence {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RouteKeeperXrdpOwnershipWitness {
+    pub schema_version: String,
+    pub boot_id: String,
+    pub route_user: String,
+    pub route_uid: u32,
+    pub session_id: String,
+    pub session_service: String,
+    pub session_scope: String,
+    pub scope_invocation_id: String,
+    pub cgroup_path: String,
+    pub cgroup_device: u64,
+    pub cgroup_inode: u64,
+    pub leader_pid: u32,
+    pub leader_start_ticks: u64,
+    pub x_server_pid: u32,
+    pub x_server_start_ticks: u64,
+    pub display_name: String,
+    pub x11_socket_inode: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RouteKeeperProtocolReadyReceipt {
     pub slot_id: String,
     pub keeper_id: String,
@@ -128,6 +156,8 @@ pub struct RouteKeeperProtocolReadyReceipt {
     pub guacamole_connection_uuid: String,
     pub xrdp_session_id: String,
     pub display_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xrdp_ownership: Option<RouteKeeperXrdpOwnershipWitness>,
     pub observed_at: String,
 }
 
@@ -829,7 +859,42 @@ fn validate_ready_receipt(receipt: &RouteKeeperProtocolReadyReceipt) -> Result<(
     {
         return Err("route_keeper_ready_receipt_invalid".to_string());
     }
+    let ownership = receipt
+        .xrdp_ownership
+        .as_ref()
+        .ok_or_else(|| "route_keeper_ready_xrdp_ownership_missing".to_string())?;
+    if ownership.schema_version != "agent-browser.route-keeper-xrdp-ownership.v1"
+        || ownership.boot_id.is_empty()
+        || ownership.route_user.is_empty()
+        || ownership.route_uid == 0
+        || ownership.session_id != receipt.xrdp_session_id
+        || ownership.session_service != "xrdp-sesman"
+        || ownership.session_scope != format!("session-{}.scope", ownership.session_id)
+        || ownership.scope_invocation_id.is_empty()
+        || ownership.cgroup_path
+            != format!(
+                "/user.slice/user-{}.slice/{}",
+                ownership.route_uid, ownership.session_scope
+            )
+        || ownership.cgroup_device == 0
+        || ownership.cgroup_inode == 0
+        || ownership.leader_pid == 0
+        || ownership.leader_start_ticks == 0
+        || ownership.x_server_pid == 0
+        || ownership.x_server_start_ticks == 0
+        || ownership.display_name != receipt.display_name
+        || !valid_x11_display_name(&ownership.display_name)
+        || ownership.x11_socket_inode == 0
+    {
+        return Err("route_keeper_ready_xrdp_ownership_invalid".to_string());
+    }
     Ok(())
+}
+
+fn valid_x11_display_name(value: &str) -> bool {
+    value.strip_prefix(':').is_some_and(|number| {
+        !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+    })
 }
 
 fn validate_record(

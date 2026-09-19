@@ -522,7 +522,7 @@ mod tests {
     use super::*;
     use agent_browser_service_model::{
         RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperPhase,
-        RouteKeeperStartPriority, RouteKeeperStopReceipt,
+        RouteKeeperStartPriority, RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
     };
     use std::collections::BTreeMap;
     use std::fs;
@@ -572,6 +572,7 @@ mod tests {
                         slot_id: format!("route-slot-{sequence:02}"),
                         connection_key: format!("route-{sequence:02}"),
                         connection_name: format!("Agent Browser Route {sequence:02}"),
+                        route_user: format!("agent-browser-rdp-{sequence}"),
                         guacamole_connection_id: u64::from(sequence),
                     }
                 }))
@@ -604,13 +605,36 @@ mod tests {
             action: &RouteKeeperReconcileAction,
         ) -> RouteKeeperProtocolReadyReceipt {
             let (slot_id, keeper_id, fence) = action_identity(action);
+            let xrdp_session_id = format!("xrdp-{slot_id}");
+            let display_name = format!(":{}", slot_id.trim_start_matches("route-slot-"));
             RouteKeeperProtocolReadyReceipt {
                 slot_id: slot_id.to_string(),
                 keeper_id: keeper_id.to_string(),
                 fence: fence.clone(),
                 guacamole_connection_uuid: format!("connection-{slot_id}"),
-                xrdp_session_id: format!("xrdp-{slot_id}"),
-                display_name: format!(":{}", slot_id.trim_start_matches("route-slot-")),
+                xrdp_session_id: xrdp_session_id.clone(),
+                display_name: display_name.clone(),
+                xrdp_ownership: Some(RouteKeeperXrdpOwnershipWitness {
+                    schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
+                    boot_id: "boot-fixture".to_string(),
+                    route_user: "agent-browser-rdp-1".to_string(),
+                    route_uid: 2001,
+                    session_id: xrdp_session_id.clone(),
+                    session_service: "xrdp-sesman".to_string(),
+                    session_scope: format!("session-{xrdp_session_id}.scope"),
+                    scope_invocation_id: "invocation-fixture".to_string(),
+                    cgroup_path: format!(
+                        "/user.slice/user-2001.slice/session-{xrdp_session_id}.scope"
+                    ),
+                    cgroup_device: 28,
+                    cgroup_inode: 1001,
+                    leader_pid: 4101,
+                    leader_start_ticks: 5101,
+                    x_server_pid: 4102,
+                    x_server_start_ticks: 5102,
+                    display_name,
+                    x11_socket_inode: 6101,
+                }),
                 observed_at: "2026-09-19T18:00:00Z".to_string(),
             }
         }
@@ -1001,6 +1025,26 @@ mod tests {
             guacamole_connection_uuid: "connection-route-slot-02".to_string(),
             xrdp_session_id: "xrdp-route-slot-02".to_string(),
             display_name: ":02".to_string(),
+            xrdp_ownership: Some(RouteKeeperXrdpOwnershipWitness {
+                schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
+                boot_id: "boot-fixture".to_string(),
+                route_user: "agent-browser-rdp-2".to_string(),
+                route_uid: 2002,
+                session_id: "xrdp-route-slot-02".to_string(),
+                session_service: "xrdp-sesman".to_string(),
+                session_scope: "session-xrdp-route-slot-02.scope".to_string(),
+                scope_invocation_id: "invocation-fixture".to_string(),
+                cgroup_path: "/user.slice/user-2002.slice/session-xrdp-route-slot-02.scope"
+                    .to_string(),
+                cgroup_device: 28,
+                cgroup_inode: 1002,
+                leader_pid: 4201,
+                leader_start_ticks: 5201,
+                x_server_pid: 4202,
+                x_server_start_ticks: 5202,
+                display_name: ":02".to_string(),
+                x11_socket_inode: 6201,
+            }),
             observed_at: "2026-09-19T18:03:00Z".to_string(),
         };
         assert_eq!(
