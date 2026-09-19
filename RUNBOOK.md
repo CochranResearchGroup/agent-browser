@@ -9,6 +9,29 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 410 | 2026-09-19
+
+P211 checkpoint `a481d7e1` adds process-local custody for real route-keeper
+`PrimaryTask` instances behind injected provider and XRDP seams. Start retains
+the task synchronously before any asynchronous wait, exact replay reuses that
+occurrence, and a changed keeper or fence cannot replace it. Readiness requires
+both the Guacamole connection UUID and an exact XRDP session and display
+receipt; the task status and UUID are rechecked after XRDP observation before
+SQLite may publish ready. Stop retains task custody across cancellation or
+observer errors, freshly proves the exact durable `Stopping` fence before the
+destructive observer, and caches the exact terminal receipt so a final
+compare-and-swap conflict cannot close twice or become an ownership
+quarantine. Terminal callbacks only enqueue bounded slot, keeper, fence,
+occurrence, code, and elapsed-time evidence. Cold-process adoption returns an
+explicit unsupported result because a `PrimaryTask` cannot survive process
+loss; no continuity is synthesized from stale records. Seven connector tests,
+seven durable adapter tests, all 21 Guacamole-primary tests, formatting, strict
+workspace Clippy, diff hygiene, and independent closed-world review pass. The
+concrete provider-authenticated task factory, XRDP observer and exact stop
+implementation, terminal-event host reconciliation, scheduler, and provider
+readiness remain open. No provider, browser, installed-runtime, production,
+ingress, or release effect occurred.
+
 ## Turn 409 | 2026-09-19
 
 P211 checkpoint `ab05e2d3` removes the generic `PrimaryGuard` and fresh

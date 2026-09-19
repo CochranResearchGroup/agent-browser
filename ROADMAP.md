@@ -120,6 +120,14 @@ proves a real in-process Guacamole `PrimaryTask` is fenced directly by the
 exact SQLite keeper slot, identity, and generation. Superseding the fence
 closes the task before another frame is acknowledged. Task retention, XRDP
 observation, connector scheduling, and live provider readiness remain open.
+Checkpoint `a481d7e1` adds the provider-free process-local connector that
+retains exact `PrimaryTask` occurrences, joins Guacamole readiness with an
+injected XRDP receipt, freshly fences destructive stop, and replays a completed
+stop after a final SQLite conflict without a second close. Cold-process
+adoption fails explicitly rather than synthesizing task continuity. Concrete
+provider authentication and connection creation, XRDP and stop effects,
+terminal-event reconciliation, host scheduling, and live readiness remain
+open.
 
 ## P216 | Service Model Extraction Landing
 
