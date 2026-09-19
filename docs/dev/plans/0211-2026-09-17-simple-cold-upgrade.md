@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 45
+Plan version: 46
 
 State: OPEN
 
@@ -907,8 +907,24 @@ fails, the exact internal viewer bootstrap skips only handoff publication,
 production cannot request the marker, and both warm and elastic provider
 launch paths set it. One optimized candidate build, replacement development
 install, green plan, stage, and preflight, and one deferred-ingress apply are
-authorized. Any
-new quarantine stops without retry.
+authorized. Any new quarantine stops without retry.
+
+Version 45's authorized provider apply succeeded with receipt
+`apply-1789788918798-73459.json`: isolated warm displays `:13` through `:16`
+became ready, provider doctor passed, ingress remained deferred, and the receipt
+proved production unchanged. The first ordinary post-bootstrap open then
+failed closed with `browser_session_handoff_desktop_missing`. The runtime host
+had initialized Browser Session Manager while the provider inventory was still
+empty and retained that startup snapshot after bootstrap published the four
+routes. Version 46 therefore authorizes one provider-free repair that refreshes
+the manager's route choices from the current authoritative inventory before an
+ordinary new browser allocation, while forcing the exact typed internal viewer
+bootstrap to use no desktop route. Existing browser custody and display
+assignments must remain unchanged. One replacement development candidate and
+install are authorized, followed by an ordinary open that must return a ready
+opaque handoff and exact session cleanup. The already-ready provider must not
+be reapplied or published through ingress. A failed ordinary retry ends this
+packet.
 
 ## Frozen Interface Packet
 

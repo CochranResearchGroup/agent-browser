@@ -49,18 +49,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
     let remote_desktop_routes = if display.is_some() {
         Vec::new()
     } else {
-        super::presentation_inventory::StaticRouteInventory::from_environment()?
-            .routes()
-            .iter()
-            .filter_map(|route| {
-                let display_name = route.display_name.as_ref()?;
-                Some(BrowserDesktopRoute {
-                    id: route.id.clone(),
-                    display_name: display_name.clone(),
-                    healthy: super::remote_view::route_display_socket_available(display_name),
-                })
-            })
-            .collect()
+        load_current_remote_desktop_routes()?
     };
     let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
         headless: display.is_none(),
@@ -81,6 +70,23 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
                 cleanup_delay_ms,
             }),
         },
+    )
+}
+
+pub(crate) fn load_current_remote_desktop_routes() -> Result<Vec<BrowserDesktopRoute>, String> {
+    Ok(
+        super::presentation_inventory::StaticRouteInventory::from_environment()?
+            .routes()
+            .iter()
+            .filter_map(|route| {
+                let display_name = route.display_name.as_ref()?;
+                Some(BrowserDesktopRoute {
+                    id: route.id.clone(),
+                    display_name: display_name.clone(),
+                    healthy: super::remote_view::route_display_socket_available(display_name),
+                })
+            })
+            .collect(),
     )
 }
 
@@ -227,6 +233,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 remote_desktop_routes: config.remote_desktop_routes,
             },
         })
+    }
+
+    /// Replace route choices for future browser launches without changing any
+    /// persisted browser desktop assignment or existing session custody.
+    pub(crate) fn replace_remote_desktop_routes(&mut self, routes: Vec<BrowserDesktopRoute>) {
+        self.manager_config.remote_desktop_routes = routes;
     }
 
     pub(crate) fn open(
@@ -1360,6 +1372,66 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&fs::read(&legacy_path).unwrap()).unwrap(),
             legacy_state
+        );
+    }
+
+    #[test]
+    fn route_choices_can_refresh_after_provider_bootstrap_without_rebinding_existing_browsers() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "viewer": {
+                        "id": "viewer",
+                        "name": "Viewer",
+                        "userDataDir": directory.0.join("viewer"),
+                        "profileClass": "durable_named"
+                    },
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+
+        let viewer = host
+            .open(OpenBrowserSession::exact_profile("viewer", "viewer", 1_000))
+            .unwrap();
+        assert!(host.state().browsers[&viewer.browser_id].desktop.is_none());
+
+        host.replace_remote_desktop_routes(vec![BrowserDesktopRoute {
+            id: "development-route-1".to_string(),
+            display_name: ":13".to_string(),
+            healthy: true,
+        }]);
+        let work = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_100))
+            .unwrap();
+        assert!(host.state().browsers[&viewer.browser_id].desktop.is_none());
+        assert_eq!(
+            host.state().browsers[&work.browser_id]
+                .desktop
+                .as_ref()
+                .map(|desktop| desktop.display_name.as_str()),
+            Some(":13")
         );
     }
 

@@ -651,6 +651,14 @@ impl RuntimeHostRouter {
             let host = host
                 .as_mut()
                 .ok_or_else(|| "browser_session_host_missing".to_string())?;
+            if command.get("action").and_then(Value::as_str) == Some("browser_session_navigate") {
+                let routes = if publish_manager_handoff {
+                    super::browser_session_host::load_current_remote_desktop_routes()?
+                } else {
+                    Vec::new()
+                };
+                host.replace_remote_desktop_routes(routes);
+            }
             let mut response = if command.get("action").and_then(Value::as_str)
                 == Some("browser_session_navigate")
                 && command.get("headers").is_some()
