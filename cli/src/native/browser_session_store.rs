@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
     BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState, RemoteViewHandoff,
-    RouteKeeperAuthority, BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+    RouteKeeperAuthority, RouteKeeperConnectionCatalog, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+    BROWSER_SESSION_STATE_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -126,6 +127,12 @@ pub(crate) struct BrowserRuntimeMigrationReceipt {
     pub(crate) rejected_record_count: usize,
     pub(crate) rejection_codes: Vec<String>,
     pub(crate) archive_directory: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RouteKeeperConnectionCatalogPublication {
+    Published,
+    Unchanged,
 }
 
 struct BrowserRuntimeMigrationRejection {
@@ -472,6 +479,24 @@ impl BrowserRuntimeSqliteStore {
 
     pub(crate) fn load_route_keeper_authority(&self) -> Result<RouteKeeperAuthority, String> {
         load_route_keeper_authority_document(&self.connection)
+    }
+
+    pub(crate) fn publish_route_keeper_connection_catalog(
+        &mut self,
+        catalog: RouteKeeperConnectionCatalog,
+    ) -> Result<RouteKeeperConnectionCatalogPublication, String> {
+        let current = self.load_route_keeper_authority()?;
+        if current.records.keys().collect::<Vec<_>>() != catalog.bindings.keys().collect::<Vec<_>>()
+        {
+            return Err("route_keeper_connection_catalog_slots_incomplete".to_string());
+        }
+        if current.connection_catalog == catalog {
+            return Ok(RouteKeeperConnectionCatalogPublication::Unchanged);
+        }
+        let mut next = current.clone();
+        next.replace_connection_catalog(catalog)?;
+        self.compare_and_swap_route_keeper_authority(&current, &next)?;
+        Ok(RouteKeeperConnectionCatalogPublication::Published)
     }
 
     pub(crate) fn compare_and_swap_route_keeper_authority(
@@ -1876,6 +1901,192 @@ mod tests {
 
         let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(reopened.load_route_keeper_authority().unwrap(), authority);
+    }
+
+    #[test]
+    fn route_keeper_catalog_publication_atomically_updates_the_complete_authority() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-catalog-publish");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let catalog = route_keeper_catalog();
+
+        assert_eq!(
+            store
+                .publish_route_keeper_connection_catalog(catalog.clone())
+                .unwrap(),
+            RouteKeeperConnectionCatalogPublication::Published
+        );
+        let authority = store.load_route_keeper_authority().unwrap();
+        assert_eq!(authority.connection_catalog, catalog);
+        let digest = authority.connection_catalog.digest().unwrap();
+        assert!(authority
+            .records
+            .values()
+            .all(|record| record.fence.connection_catalog_digest == digest));
+    }
+
+    #[test]
+    fn exact_catalog_replay_is_unchanged_while_a_keeper_is_active() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-catalog-replay");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let catalog = route_keeper_catalog();
+        store
+            .publish_route_keeper_connection_catalog(catalog.clone())
+            .unwrap();
+        let before_start = store.load_route_keeper_authority().unwrap();
+        let mut active = before_start.clone();
+        active.next_reconcile_action().unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&before_start, &active)
+            .unwrap();
+
+        assert_eq!(
+            store
+                .publish_route_keeper_connection_catalog(catalog)
+                .unwrap(),
+            RouteKeeperConnectionCatalogPublication::Unchanged
+        );
+        assert_eq!(store.load_route_keeper_authority().unwrap(), active);
+    }
+
+    #[test]
+    fn changed_catalog_is_rejected_while_a_keeper_is_active() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-catalog-active");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let catalog = route_keeper_catalog();
+        store
+            .publish_route_keeper_connection_catalog(catalog.clone())
+            .unwrap();
+        let before_start = store.load_route_keeper_authority().unwrap();
+        let mut active = before_start.clone();
+        active.next_reconcile_action().unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&before_start, &active)
+            .unwrap();
+        let mut changed = catalog;
+        changed
+            .bindings
+            .get_mut("route-slot-01")
+            .unwrap()
+            .guacamole_connection_id = 101;
+
+        assert_eq!(
+            store.publish_route_keeper_connection_catalog(changed),
+            Err("route_keeper_connection_catalog_active".to_string())
+        );
+        assert_eq!(store.load_route_keeper_authority().unwrap(), active);
+    }
+
+    #[test]
+    fn catalog_publication_rejects_an_incomplete_slot_set() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-catalog-incomplete");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let before = store.load_route_keeper_authority().unwrap();
+        let mut bindings = route_keeper_catalog().bindings;
+        bindings.remove("route-slot-06");
+        let incomplete = RouteKeeperConnectionCatalog::new(bindings.into_values()).unwrap();
+
+        assert_eq!(
+            store.publish_route_keeper_connection_catalog(incomplete),
+            Err("route_keeper_connection_catalog_slots_incomplete".to_string())
+        );
+        assert_eq!(store.load_route_keeper_authority().unwrap(), before);
+    }
+
+    #[test]
+    fn empty_catalog_replay_is_rejected_when_the_authority_has_slots() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-catalog-empty-replay");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+
+        assert_eq!(
+            store.publish_route_keeper_connection_catalog(RouteKeeperConnectionCatalog::default()),
+            Err("route_keeper_connection_catalog_slots_incomplete".to_string())
+        );
+    }
+
+    #[test]
+    fn equal_partial_catalog_replay_is_rejected() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-catalog-partial-replay");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let before = store.load_route_keeper_authority().unwrap();
+        let mut bindings = route_keeper_catalog().bindings;
+        bindings.remove("route-slot-06");
+        let partial = RouteKeeperConnectionCatalog::new(bindings.into_values()).unwrap();
+        let mut partial_authority = before.clone();
+        partial_authority
+            .replace_connection_catalog(partial.clone())
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&before, &partial_authority)
+            .unwrap();
+
+        assert_eq!(
+            store.publish_route_keeper_connection_catalog(partial),
+            Err("route_keeper_connection_catalog_slots_incomplete".to_string())
+        );
+        assert_eq!(
+            store.load_route_keeper_authority().unwrap(),
+            partial_authority
+        );
     }
 
     #[test]

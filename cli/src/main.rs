@@ -1964,6 +1964,16 @@ fn main() {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
+    if let Some(result) =
+        native::route_keeper_connection_catalog::run_entry(&env::args().collect::<Vec<_>>())
+    {
+        if let Err(error) = result {
+            eprintln!("{error}");
+            exit(1);
+        }
+        return;
+    }
+
     // The one-shot authority bootstrap is entered only by the interactive
     // privileged installer. It is deliberately not exposed through the
     // passwordless helper and runs before user-scoped environment loading.

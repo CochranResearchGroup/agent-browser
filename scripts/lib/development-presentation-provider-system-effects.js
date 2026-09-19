@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   accessSync,
   constants as fsConstants,
@@ -18,6 +19,7 @@ import {
 } from './development-presentation-provider.js';
 import {
   probeDevelopmentPresentationProvider,
+  readDevelopmentRouteKeeperConnections,
   renderDevelopmentPresentationProviderBundle,
 } from './development-presentation-provider-deployment.js';
 import {
@@ -271,6 +273,56 @@ export function createDevelopmentPresentationProviderSystemEffects({
         '-c',
         'CHECKPOINT;',
       ], {}, 'checkpoint development Guacamole database');
+    },
+    readRouteKeeperConnections(descriptor) {
+      return readDevelopmentRouteKeeperConnections(descriptor, { run });
+    },
+    publishRouteKeeperConnectionCatalog(publication, descriptor) {
+      const canonicalBindings = Object.fromEntries(
+        [...publication.bindings]
+          .sort((left, right) => left.slotId.localeCompare(right.slotId))
+          .map((binding) => [binding.slotId, binding]),
+      );
+      const expectedDigest = createHash('sha256')
+        .update(JSON.stringify({ bindings: canonicalBindings }))
+        .digest('hex');
+      const command = join(
+        descriptor.userHome,
+        '.local',
+        'bin',
+        `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`,
+      );
+      const result = runRequired(
+        run,
+        command,
+        ['--internal-route-keeper-connection-catalog-publish'],
+        {
+          input: JSON.stringify(publication),
+          env: {
+            ...env,
+            HOME: descriptor.pseudoHome,
+            AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
+          },
+          timeout: 30000,
+        },
+        'publish development route-keeper connection catalog',
+      );
+      let receipt;
+      try {
+        receipt = JSON.parse(result.stdout);
+      } catch {
+        throw new Error('Development route-keeper catalog publisher returned invalid JSON');
+      }
+      if (
+        receipt.schemaVersion !==
+          'agent-browser.route-keeper-connection-catalog-publication-receipt.v1' ||
+        !['published', 'unchanged'].includes(receipt.outcome) ||
+        receipt.catalogDigest !== expectedDigest ||
+        receipt.bindingCount !== descriptor.hardMaxSlots
+      ) {
+        throw new Error('Development route-keeper catalog publisher returned an invalid receipt');
+      }
+      return receipt;
     },
     startProvider(descriptor) {
       composeRequired(run, descriptor, [

@@ -2,6 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,6 +27,7 @@ import {
   probeDevelopmentPresentationProvider,
   prepareDevelopmentPresentationProviderSecrets,
   renderDevelopmentPresentationProviderBundle,
+  resolveDevelopmentRouteKeeperConnectionCatalog,
   stageDevelopmentPresentationProviderBundle,
 } from './lib/development-presentation-provider-deployment.js';
 import {
@@ -50,6 +52,35 @@ const env = {
   AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: 'https://agent-browser-dev.example.test/',
   AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
 };
+
+function routeKeeperDatabaseRoutes(descriptor) {
+  return descriptor.routes.map((route, index) => ({
+    connectionId: String(index + 201),
+    connectionName: route.connectionName,
+    user: route.user,
+  }));
+}
+
+function routeKeeperPublicationDigest(publication) {
+  const bindings = Object.fromEntries(
+    [...publication.bindings]
+      .sort((left, right) => left.slotId.localeCompare(right.slotId))
+      .map((binding) => [binding.slotId, binding]),
+  );
+  return createHash('sha256').update(JSON.stringify({ bindings })).digest('hex');
+}
+
+function routeKeeperPublicationEffects(descriptor) {
+  return {
+    readRouteKeeperConnections: () => routeKeeperDatabaseRoutes(descriptor),
+    publishRouteKeeperConnectionCatalog: (publication) => ({
+      schemaVersion: 'agent-browser.route-keeper-connection-catalog-publication-receipt.v1',
+      outcome: 'published',
+      catalogDigest: routeKeeperPublicationDigest(publication),
+      bindingCount: publication.bindings.length,
+    }),
+  };
+}
 
 function readExtensionArchive(path) {
   const result = spawnSync('python3', ['-c', `
@@ -154,10 +185,79 @@ try {
     effects: routeKeeperBlockedEffects,
   }), /requires runtime-host route-keeper integration/);
   assert.deepEqual(systemEffectCalls, []);
+  let legacyAdapterEffects = 0;
+  assert.throws(() => applyDevelopmentPresentationProvider({
+    env: namespaceEnv,
+    authorizeEffects: true,
+    deferIngress: true,
+    effects: {
+      snapshotProduction: () => { legacyAdapterEffects += 1; return {}; },
+    },
+  }), /require route-keeper catalog publication/);
+  assert.equal(legacyAdapterEffects, 0);
+  const catalogEffectCalls = [];
+  let corruptCatalogReceipt = false;
+  const catalogSystemEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    run: (command, args, options = {}) => {
+      catalogEffectCalls.push([command, args, options]);
+      if (command === 'docker' && args[0] === 'exec') {
+        return {
+          status: 0,
+          stdout: JSON.stringify(namespaced.routes.map((route, index) => ({
+            connectionId: String(index + 201),
+            connectionName: route.connectionName,
+            user: route.user,
+          }))),
+          stderr: '',
+        };
+      }
+      if (command.endsWith('/agent-browser-dev-p158')) {
+        assert.deepEqual(args, ['--internal-route-keeper-connection-catalog-publish']);
+        assert.equal(options.env.HOME, namespaced.pseudoHome);
+        const publication = JSON.parse(options.input);
+        assert.equal(publication.bindings.length, namespaced.hardMaxSlots);
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            schemaVersion: 'agent-browser.route-keeper-connection-catalog-publication-receipt.v1',
+            outcome: 'published',
+            catalogDigest: corruptCatalogReceipt
+              ? 'ab'.repeat(32)
+              : routeKeeperPublicationDigest(publication),
+            bindingCount: namespaced.hardMaxSlots,
+          }),
+          stderr: '',
+        };
+      }
+      throw new Error(`Unexpected catalog effect command: ${command} ${args.join(' ')}`);
+    },
+  });
+  const catalogPublication = resolveDevelopmentRouteKeeperConnectionCatalog(
+    namespaced,
+    catalogSystemEffects.readRouteKeeperConnections(namespaced),
+  );
+  assert.equal(
+    catalogSystemEffects.publishRouteKeeperConnectionCatalog(catalogPublication, namespaced).outcome,
+    'published',
+  );
+  assert.equal(catalogEffectCalls.length, 2);
+  corruptCatalogReceipt = true;
+  assert.throws(
+    () => catalogSystemEffects.publishRouteKeeperConnectionCatalog(catalogPublication, namespaced),
+    /invalid receipt/,
+  );
+  corruptCatalogReceipt = false;
+  assert.equal(catalogEffectCalls.length, 3);
   const bootstrapOrder = [];
   assert.throws(() => applyDevelopmentPresentationProvider({
     env: namespaceEnv, authorizeEffects: true,
     effects: {
+      ...routeKeeperPublicationEffects(namespaced),
       snapshotProduction: () => ({}), assertProductionUnchanged: assert.deepEqual,
       createVolume: () => {}, startDatabase: () => {}, ensureRouteUser: () => {},
       syncConnections: () => {}, startProvider: () => {},
@@ -234,6 +334,88 @@ try {
   assert.equal(new Set(descriptor.routes.map((route) => route.user)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.connectionKey)).size, 6);
   assert.deepEqual(descriptor.routes.map((route) => route.connectionId), Array(6).fill(null));
+  const resolvedKeeperCatalog = resolveDevelopmentRouteKeeperConnectionCatalog(
+    descriptor,
+    descriptor.routes.map((route, index) => ({
+      connectionId: String(index + 101),
+      connectionName: route.connectionName,
+      user: route.user,
+    })).reverse(),
+  );
+  assert.equal(
+    resolvedKeeperCatalog.schemaVersion,
+    'agent-browser.route-keeper-connection-catalog-publication.v1',
+  );
+  assert.deepEqual(
+    resolvedKeeperCatalog.bindings.map((binding) => binding.slotId),
+    descriptor.routes.map((_, index) => `route-slot-${String(index + 1).padStart(2, '0')}`),
+  );
+  assert.deepEqual(
+    resolvedKeeperCatalog.bindings.map((binding) => binding.guacamoleConnectionId),
+    descriptor.routes.map((_, index) => index + 101),
+  );
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map((route, index) => ({
+        connectionId: String(index + 101),
+        connectionName: index === descriptor.routes.length - 1
+          ? descriptor.routes[0].connectionName
+          : route.connectionName,
+        user: index === descriptor.routes.length - 1 ? descriptor.routes[0].user : route.user,
+      }))),
+    /duplicate stable name/,
+  );
+  for (const invalidConnectionId of ['0', '-1', '+1', '01', '1.0', '1e2', ' 1', '1 ', 'not-a-number', '9007199254740992']) {
+    assert.throws(
+      () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map(
+        (route, index) => ({
+          connectionId: index === 0 ? invalidConnectionId : String(index + 101),
+          connectionName: route.connectionName,
+          user: route.user,
+        }),
+      )),
+      /positive canonical safe integer/,
+      invalidConnectionId,
+    );
+  }
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map(
+      (route, index) => ({
+        connectionId: String(index + 101),
+        connectionName: route.connectionName,
+        user: index === 0 ? descriptor.routes[1].user : route.user,
+      }),
+    )),
+    /route user mismatch/,
+  );
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map((route, index) => ({
+        connectionId: String(index + 101),
+        connectionName: index === descriptor.routes.length - 1 ? 'Foreign Route' : route.connectionName,
+        user: index === descriptor.routes.length - 1 ? 'foreign-user' : route.user,
+      }))),
+    /unexpected stable name/,
+  );
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map(
+      (route, index) => ({
+        connectionId: String(index === 1 ? 101 : index + 101),
+        connectionName: route.connectionName,
+        user: route.user,
+      }),
+    )),
+    /duplicate numeric ID/,
+  );
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(
+      { ...descriptor, routes: descriptor.routes.slice(0, -1) },
+      descriptor.routes.slice(0, -1).map((route, index) => ({
+        connectionId: String(index + 101),
+        connectionName: route.connectionName,
+        user: route.user,
+      })),
+    ),
+    /complete hard maximum/,
+  );
   assert.equal(new Set(descriptor.routes.map((route) => route.displayReservationId)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.viewerSession)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.viewerProfile)).size, 6);
@@ -485,6 +667,12 @@ try {
   assert.equal(plan.requiresExplicitApply, true);
   assert.equal(plan.productionPosture, 'read_only');
   assert.equal(plan.steps.at(-1).id, 'publish-ingress');
+  assert.ok(
+    plan.steps.findIndex((item) => item.id === 'sync-connections') <
+      plan.steps.findIndex((item) => item.id === 'publish-route-keeper-catalog') &&
+      plan.steps.findIndex((item) => item.id === 'publish-route-keeper-catalog') <
+      plan.steps.findIndex((item) => item.id === 'start-provider'),
+  );
 
   const bundle = renderDevelopmentPresentationProviderBundle(descriptor);
   assert.match(bundle.files['compose.yml'], /^name: agent-browser-dev-presentation$/m);
@@ -856,6 +1044,14 @@ try {
       startDatabase: () => effectCalls.push('start-database'),
       ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
       syncConnections: () => effectCalls.push('sync-connections'),
+      readRouteKeeperConnections: () => {
+        effectCalls.push('read-route-keeper-connections');
+        return readyObservation.database.routes;
+      },
+      publishRouteKeeperConnectionCatalog: (publication) => {
+        assert.equal(publication.bindings.length, descriptor.hardMaxSlots);
+        effectCalls.push('publish-route-keeper-catalog');
+      },
       startProvider: () => effectCalls.push('start-provider'),
       grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
       openWarmRoutes: () => {
@@ -894,6 +1090,8 @@ try {
     'start-database',
     ...descriptor.routes.map((route) => `ensure-user:${route.routeId}`),
     'sync-connections',
+    'read-route-keeper-connections',
+    'publish-route-keeper-catalog',
     'start-provider',
     'grant-operator-route-access',
     'open-warm-routes',
@@ -970,6 +1168,7 @@ try {
     authorizeEffects: true,
     deferIngress: true,
     effects: {
+      ...routeKeeperPublicationEffects(descriptor),
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
       createVolume: () => effectCalls.push('create-volume'),
@@ -997,6 +1196,7 @@ try {
     authorizeEffects: true,
     deferIngress: true,
     effects: {
+      ...routeKeeperPublicationEffects(descriptor),
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
       observe: () => readyObservation,
@@ -1004,7 +1204,10 @@ try {
     },
   });
   assert.equal(reconciled.state, 'provider_ready_ingress_pending');
-  assert.deepEqual(reconciled.completedSteps, ['reconcile-provider-authority']);
+  assert.deepEqual(reconciled.completedSteps, [
+    'publish-route-keeper-catalog',
+    'reconcile-provider-authority',
+  ]);
   assert.deepEqual(effectCalls, []);
 
   const staleExtension = structuredClone(readyObservation);
@@ -1020,6 +1223,7 @@ try {
     authorizeEffects: true,
     deferIngress: true,
     effects: {
+      ...routeKeeperPublicationEffects(descriptor),
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
       createVolume: () => effectCalls.push('create-volume'),
@@ -1056,6 +1260,7 @@ try {
       authorizeEffects: true,
       deferIngress: true,
       effects: {
+        ...routeKeeperPublicationEffects(descriptor),
         snapshotProduction: () => ({ identity: 'production-fixture' }),
         assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
         createVolume: () => effectCalls.push('create-volume'),
@@ -1096,6 +1301,7 @@ try {
       authorizeEffects: true,
       deferIngress: true,
       effects: {
+        ...routeKeeperPublicationEffects(descriptor),
         snapshotProduction: () => ({ identity: 'production-fixture' }),
         assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
         createVolume: () => effectCalls.push('create-volume'),
@@ -1397,6 +1603,7 @@ try {
       env,
       authorizeEffects: true,
       effects: {
+        ...routeKeeperPublicationEffects(descriptor),
         snapshotProduction: () => ({ identity: 'production-fixture' }),
         assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
         createVolume: () => {},

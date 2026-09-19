@@ -127,6 +127,7 @@ pub mod remote_view_handoff;
 pub mod remote_view_lease;
 #[allow(dead_code)]
 pub mod remote_view_proof;
+pub(crate) mod route_keeper_connection_catalog;
 #[allow(dead_code)]
 pub(crate) mod runtime_lifecycle;
 #[allow(dead_code)]
