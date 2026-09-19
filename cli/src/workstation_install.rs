@@ -1,33 +1,17 @@
 //! Source-free Linux workstation installation.
 //!
-//! The workstation installer stages the release binary, support assets,
-//! manifests, and rendered unit templates in a sealed generation before
-//! atomically selecting it. Stable command and unit links resolve through that
-//! selector without relying on a repository checkout or package manager at
-//! runtime. Host provisioning stops with a resumable status when a fresh login
-//! is required. Runtime reconciliation consumes the selected generation and
-//! activates services only after canonical route projection and final doctor
-//! readiness. Real-host apply requires a stable two-round runtime census before
-//! unit quiescence or payload staging. Preflight also requires enough free disk
-//! capacity before sudo or payload mutation begins. Fresh install and upgrade
-//! share one durable transaction: census precedes candidate staging, host gates
-//! precede admission drain, runtime ownership is receipted before selector
-//! commit, and failures reverse to the prior selected generation when proven.
-//! A first upgrade from the legacy mutable layout imports and seals the exact
-//! installed binary, support tree, and unit files as the rollback generation
-//! before converting stable entrypoints to generation-backed symlinks. Unit
-//! types introduced after that legacy install remain inert until candidate
-//! selection. On Linux, exact daemon identities are reconciled after that
-//! controlled relocation only when the process start token and imported binary
-//! digest still match. A schema-v1 live daemon without an owner record can
-//! bootstrap the first receipted owner only from the explicit census reason
-//! and only after exact daemon revocation. Historical presentation identifiers
-//! remain scoped to their browser owner during census joins.
-//! Failed reconciliation restores the exact prior active state of managed user
-//! units and writes a private diagnostic receipt.
-//! Operator recovery closes an exact retained admission drain only after the
-//! old selector, candidate process absence, dashboard route, and stable census
-//! prove that the failed transaction preserved its rollback generation.
+//! The ordinary apply path runs one bounded cold sequence: stop owned
+//! workstation machinery, stage and select the replacement payload, start the
+//! installed services, and verify readiness. It accepts no hot-upgrade
+//! transaction, census, handoff, or replacement-plan authority. If replacement
+//! has begun and a later phase fails, the controller attempts one bounded
+//! selector rollback while preserving the original failure.
+//!
+//! Payload generations remain sealed and source-free. Stable command and unit
+//! links resolve through the selected generation without a repository checkout
+//! or package manager at runtime. Legacy transaction functions in this module
+//! remain explicit inspection and recovery surfaces for preexisting records;
+//! the default apply route does not enter them.
 
 use serde::Serialize;
 use serde_json::Value;

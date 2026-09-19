@@ -33,8 +33,9 @@ agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
 agent-browser install doctor  # Check user-scoped binary drift and launch readiness
 agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Guacamole desktop setup
 agent-browser install workstation --dry-run --json  # Preview source-free workstation payload
-agent-browser install workstation --apply --json  # Install and reconcile a fresh Ubuntu workstation
-agent-browser install workstation status --json  # Read the latest redacted upgrade transaction
+agent-browser install workstation --apply --json  # Cold stop, replace, start, and verify
+agent-browser shutdown --json  # Stop owned machinery and preserve profile data
+agent-browser install workstation status --json  # Read legacy transaction recovery state
 agent-browser install workstation finalize --json  # Retire rollback only after accepted readiness review
 agent-browser install workstation gc --dry-run --json  # Preview safe old-generation cleanup
 pnpm test:wsl-windows-chromium-profile-live  # Validate WSL Windows profile writes when doctor says available
@@ -42,6 +43,31 @@ pnpm test:wsl-windows-chromium-profile-live  # Validate WSL Windows profile writ
 
 npm, Homebrew, and Cargo are not authoritative release channels for this fork.
 Use GitHub release binaries or build from source.
+
+### Ordinary workstation lifecycle
+
+Use one command for a first workstation install or a replacement upgrade:
+
+```bash
+agent-browser install workstation --apply --json
+```
+
+The command stops Agent Browser-owned machinery, replaces the selected payload,
+starts the installed services, and verifies readiness. It uses bounded phase
+deadlines and attempts one rollback if a phase after replacement fails. You do
+not supply a transaction ID, revision, census digest, replacement-plan hash,
+route ID, display ID, or rollback choice.
+
+Use one command to stop the workstation without removing named profile data:
+
+```bash
+agent-browser shutdown --json
+```
+
+Shutdown closes exact owned browsers, stops Agent Browser user units and
+presentation containers, releases runtime ownership and active claims, removes
+transient metadata, and verifies residue. It reports foreign or uncertain
+processes without terminating them. Repeating the command is safe.
 
 ### From Source
 
@@ -279,6 +305,21 @@ pnpm reference:
 ```bash
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
+agent-browser shutdown --json
+```
+
+Apply uses the ordinary cold workflow. It runs stop, payload replacement,
+service start, and readiness in fixed order. Named profiles remain on disk and
+become available to the restarted Browser Session Manager. The JSON receipt
+reports each bounded phase and any rollback attempt.
+
+### Legacy hot-upgrade recovery
+
+The commands below inspect or recover transaction records created by the
+legacy hot-upgrade path. Ordinary `install workstation --apply` does not select
+this path and does not require its digests, revisions, or recovery choices.
+
+```bash
 agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json
 agent-browser install workstation status --json
 agent-browser install workstation recover --transaction-id upgrade-... --json
@@ -288,8 +329,8 @@ agent-browser install transactions list --json
 agent-browser install transactions inspect --transaction-id upgrade-... --json
 ```
 
-Every dry-run includes `serviceStateMigrationPreview`. It reads the current
-Service State without writing and reports the exact added, changed, and removed
+The legacy planner's dry-run includes `serviceStateMigrationPreview`. It reads
+the current Service State without writing and reports the exact added, changed, and removed
 IDs by record class, candidate-led browser contamination findings, preserved
 unknown fields, recovery-artifact compatibility, and the paths that apply would
 use. Dry-run creates neither a backup nor a migration receipt. Apply stages the
@@ -303,19 +344,13 @@ preserved without effect authority, so rollback readers can retain newer
 terminal bookkeeping. An already advertised recovery action does not require
 an upgrade merely to apply it.
 
-Cooperative continuity remains the default replacement policy. If an old
-managed runtime cannot complete handoff, first run a dry-run with
-`--runtime-replacement-policy full-shutdown`. Review the returned
-`runtimeReplacementPlan`, including every close target, the profile-preservation
-claim, the live-state consequence, and `planDigest`. Apply requires that exact
-digest through `--expected-runtime-replacement-plan-digest`. The transaction
-closes only the reviewed managed session lanes, leaves profile directories and
-stored credentials intact, proves a stable browserless census, retires only the
-recorded source process identity, then starts the candidate generation. Open
-tabs and other in-memory browser state are intentionally lost. Once a close is
-receipted the transaction is forward-only; inspect and resume or recover it
-instead of attempting rollback. External, manual-preservation, ambiguous, and
-unproven processes are never selected for forced termination.
+The legacy dry-run can still display a historical full-shutdown plan for
+diagnosis. Do not pass that plan or its digest to ordinary apply. For an
+existing transaction, run `install transactions inspect`, then use only the
+advertised `resume`, `rollback`, or `close` action with its exact revision,
+candidate generation, and census digest. Existing transaction recovery
+preserves profile directories and leaves external, ambiguous, or unproven
+processes untouched.
 
 The first apply uses one `sudo -v` authorization boundary for host preparation.
 After that bootstrap, recurring workstation, route-user, XRDP restart, and
@@ -330,8 +365,8 @@ browser-profile `basic_password_store` remains a separate Chrome launch policy.
 Before acquiring that authorization or staging the payload, the real-host
 preflight requires at least 6 GiB of free disk capacity. JSON output exposes
 `hostPlan.availableDiskBytes`, `minimumDiskBytes`, and `diskSpaceReady`.
-Fresh install and upgrade use one durable transaction engine. Real-host apply
-records two read-only runtime census rounds before it stages a candidate or
+Legacy hot-upgrade recovery uses one durable transaction engine. Its real-host
+apply records two read-only runtime census rounds before it stages a candidate or
 stops user units. The census joins service browser and
 profile reservations, runtime-profile state, named supervisors, daemon and
 process-instance evidence, bounded CDP browser and target digests, displays,
@@ -652,17 +687,26 @@ and no unexplained retained generation. The selected generation plus one
 healthy rollback generation inside its retention window is the only expected
 two-generation disk state.
 
-### Updating
+### Updating an installed workstation
 
-Upgrade to the latest version:
+After you replace the reviewed binary, run the same cold workstation apply used
+for a first install:
+
+```bash
+agent-browser install workstation --apply --json
+agent-browser install doctor --json
+```
+
+The older package-manager helper remains available for upstream-compatible
+installations:
 
 ```bash
 agent-browser upgrade
 ```
 
-For this fork, prefer replacing the binary from the latest GitHub release. The
-legacy `upgrade` command may still know about upstream package-manager installs,
-but those channels are not authoritative here.
+For this fork, prefer replacing the binary from the latest GitHub release.
+The legacy `upgrade` helper knows about upstream package-manager installs, but
+those channels are not authoritative here.
 
 ### Requirements
 
@@ -696,15 +740,21 @@ the dashboard preserves that tab's identity and waits for it to reappear before
 enabling its view or controls. It does not rewrite the selection to another tab
 based only on an incomplete inventory.
 
-Use `remote-view open` when an operator must see or control a browser through
-RDP or Guacamole:
+For the ordinary trusted single-user path, name the work session and select the
+exact configured runtime profile:
 
 ```bash
-agent-browser --json remote-view open https://example.com/secure \
+agent-browser --json --session alice \
   --runtime-profile operator-review \
-  --browser-build stealthcdp_chromium \
-  --view-stream-provider rdp_gateway
+  open https://example.com/secure
 ```
+
+Two named sessions that select `operator-review` share one healthy browser and
+retain separate current tabs and command state. If you omit
+`--runtime-profile`, the session receives a disposable profile that Agent
+Browser can reap after the session ends. The ordinary path selects a healthy
+configured virtual desktop and static viewer without route, display, lease,
+hash, or recovery-token input.
 
 Require `operatorVisible.state` to be `ready`. Give the operator only the
 returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same
@@ -732,6 +782,10 @@ Do not hand off `providerExternalUrl`, a raw Guacamole URL, or any URL under
 expire when the route changes. Software clients should use
 `requestServiceRemoteViewHandoff()`, which returns only `handoffId` and
 `handoffUrl`.
+
+Use `remote-view open` only when a service client needs the advanced explicit
+route-bound request surface. Its route and display selectors are diagnostic
+and compatibility controls, not steps in the ordinary operator workflow.
 
 After resolving a stored handoff, pass the response to
 `deriveServiceRemoteViewHandoffResumeIntent()`. It returns the exact caller
@@ -1548,6 +1602,8 @@ agent-browser reload                  # Reload page
 ```bash
 agent-browser install                 # Download Chrome from Chrome for Testing (Google's official automation channel)
 agent-browser install stealthcdp-chromium  # Download the preferred patched Chromium release when available
+agent-browser shutdown                # Stop owned workstation machinery and preserve profile data
+agent-browser install workstation --apply --json  # Cold stop, replace, start, and verify
 agent-browser install doctor          # Check binary drift, launch readiness, and remote-view privilege state
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall  # Scan bounded ports and query Windows firewall state
@@ -1557,7 +1613,7 @@ agent-browser setup windows-browser --print-powershell  # Print reviewed Windows
 agent-browser setup windows-browser --print-powershell --doctor  # Embed current route diagnostics in the script
 agent-browser install --with-deps     # Also install system deps (Linux)
 agent-browser install --with-deps --with-remote-view-privileges  # Install Linux RDP/Guacamole privilege helper
-agent-browser upgrade                 # Upgrade agent-browser to the latest version
+agent-browser upgrade                 # Legacy package-manager update helper
 ```
 
 ## Authentication
@@ -1625,7 +1681,7 @@ CLI, durable run state, and public status projections.
 
 ## Sessions
 
-Run multiple isolated browser instances.
+Run independent named sessions through the ordinary Browser Session Manager.
 
 Native browser commands without attribution use `serviceName=agent-browser-cli`
 and the session name as `agentName`. This gives successive CLI connections a
@@ -1636,9 +1692,12 @@ Owned-tab binding preserves native `eval` arguments and its per-command deadline
 Explicit Service API evaluation still requires `timeoutMs` and `maxReturnBytes`.
 
 ```bash
-# Different sessions
-agent-browser --session agent1 open site-a.com
-agent-browser --session agent2 open site-b.com
+# Separate sessions share one exact named-profile browser
+agent-browser --session agent1 --runtime-profile work open site-a.com
+agent-browser --session agent2 --runtime-profile work open site-b.com
+
+# Omitting a profile creates a session-scoped disposable profile
+agent-browser --session scratch open https://example.com
 
 # Or via environment variable
 AGENT_BROWSER_SESSION=agent1 agent-browser click "#btn"
@@ -1654,32 +1713,25 @@ agent-browser session list
 agent-browser session
 ```
 
-The guarded runtime-host foundation can route several named sessions through
-one authenticated daemon process while keeping each session in an independent
-serialized lane. Set `AGENT_BROWSER_RUNTIME_HOST=1` for disposable validation.
-Closing one lane leaves the other lanes running. Workstation installation
-selects this shared host for ordinary CLI sessions. A current binary can still
-connect to an existing legacy per-session daemon for an explicit handoff, but
-it will not create a new legacy daemon. If no runtime host is selected, run
-`agent-browser install workstation --apply --json` before launching a lane.
+The user-scoped runtime host serializes several named sessions. Each session
+owns its current tab, command state, and heartbeat. Sessions that select the
+same exact named profile reuse one healthy browser. Closing one session leaves
+that browser running while another session still uses it. The final close ends
+the browser. Disposable profiles are session-scoped and are deleted only after
+their exact cleanup delay and ownership checks pass.
 
-For an intentionally browserless upgrade blocked only by stale presentation
-history, close managed browsers and run
-`agent-browser install workstation --apply --force-browserless-upgrade --json`.
-The override proceeds only when two adjacent runtime census rounds each prove
-that no cooperative, adoptable, conflicting, or insufficiently identified
-owned browser remains. Churn confined to external or manual-preservation
-processes stays preserved and does not block the browserless install. The
-transaction records both-round census evidence and its browserless validation
-reason; ambiguous or live-owned runtimes still block.
+Set `AGENT_BROWSER_RUNTIME_HOST=1` only for disposable source validation. The
+installed workstation selects the shared host automatically. A current binary
+can connect to an existing legacy per-session daemon for an explicit handoff,
+but it does not create a new legacy daemon. If no runtime host is selected, run
+`agent-browser install workstation --apply --json` before launching a session.
 
-If the old managed runtime is still live and cannot hand off coherently, use
-the separate reviewed replacement flow. Dry-run
-`agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json`,
-then pass its current `planDigest` to apply with
-`--expected-runtime-replacement-plan-digest`. This ends live tabs while
-preserving the managed profile and its stored credentials. It never broadens
-the reviewed process or session targets during apply.
+Do not pass `--force-browserless-upgrade`,
+`--runtime-replacement-policy`, or
+`--expected-runtime-replacement-plan-digest` to ordinary apply. Those options
+remain parser-compatible inputs for legacy planning artifacts, but they do not
+select the current cold workflow. Inspect and recover an existing transaction
+through `install transactions` with its exact guard fields.
 
 On Linux, named sessions can run as lanes under one bounded user-scoped runtime
 host service without launching a browser. Each install records the exact
@@ -2389,7 +2441,7 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 
 | Option | Description |
 |--------|-------------|
-| `--session <name>` | Use isolated session (or `AGENT_BROWSER_SESSION` env) |
+| `--session <name>` | Use a named Browser Session Manager session (or `AGENT_BROWSER_SESSION` env) |
 | `--session-name <name>` | Auto-save/restore session state (or `AGENT_BROWSER_SESSION_NAME` env) |
 | `--runtime-profile <name>` | Managed runtime profile name (or `AGENT_BROWSER_RUNTIME_PROFILE` env) |
 | `--profile <path>` | Persistent custom user-data-dir path (or `AGENT_BROWSER_PROFILE` env) |
@@ -4570,13 +4622,18 @@ than retrying or reconstructing a grant from a returned handle.
 Dry runs return `operatorVisible.state=not_checked`. A typical HTTP
 request is:
 
-Global flags may appear before or after `remote-view open`. Use `--session`
-for the agent-browser daemon session, and use `--session-name` for saved
-browser state. For a Facebook-style operator handoff, the durable one-liner is:
+Global flags may appear before or after a command. On the ordinary path,
+`--session` identifies the Browser Session Manager session and
+`--runtime-profile` selects the exact named profile. Use `--session-name` only
+for legacy saved browser state. For a Facebook-style operator handoff, the
+ordinary one-liner is:
 
 ```bash
-agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway
+agent-browser --json --session facebook-review --runtime-profile last30days-facebook open https://www.facebook.com/
 ```
+
+The advanced `remote-view open` command remains available for explicit
+route-bound service requests and infrastructure diagnostics.
 
 ```json
 {

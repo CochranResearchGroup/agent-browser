@@ -15,14 +15,40 @@ agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
 agent-browser install doctor  # Check binary drift and launch readiness
 agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Guacamole desktop setup
 agent-browser install workstation --dry-run --json  # Preview source-free workstation payload
-agent-browser install workstation --apply --json  # Install and reconcile a fresh Ubuntu workstation
-agent-browser install workstation status --json  # Read the latest redacted upgrade transaction
+agent-browser install workstation --apply --json  # Cold stop, replace, start, and verify
+agent-browser shutdown --json  # Stop owned machinery and preserve profile data
+agent-browser install workstation status --json  # Read legacy transaction recovery state
 agent-browser install workstation finalize --json  # Retire rollback only after accepted readiness review
 agent-browser install workstation gc --dry-run --json  # Preview safe old-generation cleanup
 ```
 
 This is the fastest option. Commands run through the native Rust CLI directly
 with sub-millisecond parsing overhead.
+
+## Install or replace a workstation
+
+Use the same command for a first workstation install and a replacement upgrade:
+
+```bash
+agent-browser install workstation --apply --json
+```
+
+The command stops Agent Browser-owned machinery, replaces the selected payload,
+starts the installed services, and verifies readiness. Each phase has a bounded
+deadline. If a phase after replacement fails, the command attempts one bounded
+rollback. You do not supply transaction revisions, census digests, replacement
+plan hashes, route IDs, display IDs, or rollback choices.
+
+To stop the workstation while preserving named profile data, run:
+
+```bash
+agent-browser shutdown --json
+```
+
+Shutdown closes exact owned browsers, stops Agent Browser user units and
+presentation containers, releases runtime ownership and active claims, removes
+transient metadata, and verifies residue. It reports foreign or uncertain
+processes without terminating them. You can repeat the command safely.
 
 For source-checkout capacity work, `AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON` may declare an arbitrary bounded list of route users and Guacamole connection names. This source configuration does not change the installed production runtime until a separately authorized workstation reconciliation applies it.
 
@@ -96,6 +122,22 @@ checkout or pnpm reference:
 ```bash
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
+agent-browser shutdown --json
+```
+
+Apply runs the ordinary cold workflow in fixed order: stop, replace, start,
+and readiness. Named profiles remain on disk and become available to the
+restarted Browser Session Manager. The JSON response includes a receipt for
+each bounded phase and any rollback attempt.
+
+## Inspect legacy hot-upgrade recovery state
+
+Use the commands below only to inspect or recover records created by the legacy
+hot-upgrade path. Ordinary <code>install workstation --apply</code> does not
+select this path and does not require its digests, revisions, or recovery
+choices.
+
+```bash
 agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json
 agent-browser install workstation status --json
 agent-browser install workstation recover --transaction-id upgrade-... --json
@@ -105,8 +147,8 @@ agent-browser install transactions list --json
 agent-browser install transactions inspect --transaction-id upgrade-... --json
 ```
 
-Every dry-run includes <code>serviceStateMigrationPreview</code>. It reads the
-current Service State without writing and reports exact added, changed, and
+The legacy planner's dry-run includes <code>serviceStateMigrationPreview</code>.
+It reads the current Service State without writing and reports exact added, changed, and
 removed IDs by record class, candidate-led browser contamination findings,
 preserved unknown fields, recovery-artifact compatibility, and the paths that
 apply would use. Dry-run creates neither a backup nor a migration receipt.
@@ -120,27 +162,20 @@ successor fields and action types are preserved without effect authority, so
 rollback readers retain newer terminal bookkeeping. An already advertised
 recovery action does not require an upgrade merely to apply it.
 
-Cooperative continuity is the default runtime replacement policy. When an old
-managed runtime cannot complete handoff, run a dry-run with
-<code>--runtime-replacement-policy full-shutdown</code> and review the returned
-<code>runtimeReplacementPlan</code>. It identifies the exact managed session
-lanes and source process, states that live browser state will end, confirms
-profile preservation, and supplies a <code>planDigest</code>. Apply requires the
-same digest through
-<code>--expected-runtime-replacement-plan-digest &lt;sha256&gt;</code>. The
-transaction closes only those reviewed lanes, preserves the profile directory
-and stored credentials, proves a stable browserless census, retires only the
-recorded source process identity, and starts the candidate generation. Open
-tabs and in-memory state are lost. After the first close receipt, recovery is
-forward-only through transaction inspect and resume or recover. External,
-manual-preservation, ambiguous, and unproven processes remain untouched.
+The legacy dry-run can still display a historical full-shutdown plan for
+diagnosis. Do not pass that plan or its digest to ordinary apply. For an
+existing transaction, run <code>install transactions inspect</code>, then use
+only its advertised <code>resume</code>, <code>rollback</code>, or
+<code>close</code> action with the exact revision, candidate generation, and
+census digest. Existing transaction recovery preserves profile directories and
+leaves external, ambiguous, or unproven processes untouched.
 
 The first apply uses one <code>sudo -v</code> authorization boundary for host
 preparation. Before authorization or payload staging, real-host preflight
 requires at least 6 GiB of free disk capacity. JSON output exposes
 <code>hostPlan.availableDiskBytes</code>, <code>minimumDiskBytes</code>, and
-<code>diskSpaceReady</code>. Fresh install and upgrade share one durable
-transaction engine. Real-host apply records two matching read-only runtime
+<code>diskSpaceReady</code>. Legacy hot-upgrade recovery uses one durable
+transaction engine. Its real-host apply records two matching read-only runtime
 census rounds before stopping user units or staging a candidate. The
 census joins service state, runtime-profile state, named supervisors, daemon
 and process-instance evidence, bounded CDP browser and target digests,
@@ -548,17 +583,26 @@ smoke uses an isolated daemon socket, expects profile files to be written,
 checks Chrome stderr for <code>/mnt/...</code> path or write-failure evidence,
 and closes the test browser.
 
-## Updating
+## Update an installed workstation
 
-Upgrade to the latest version:
+After you replace the reviewed binary, run the same cold workstation apply used
+for a first install:
+
+```bash
+agent-browser install workstation --apply --json
+agent-browser install doctor --json
+```
+
+The older package-manager helper remains available for upstream-compatible
+installations:
 
 ```bash
 agent-browser upgrade
 ```
 
 For this fork, prefer replacing the binary from the latest GitHub release. The
-legacy `upgrade` command may still know about upstream package-manager installs,
-but those channels are not authoritative here.
+legacy `upgrade` helper knows about upstream package-manager installs, but those
+channels are not authoritative here.
 
 Run <code>agent-browser install doctor</code> after replacing the user-scoped
 binary or changing a custom browser manifest. It does not launch Chrome. The
