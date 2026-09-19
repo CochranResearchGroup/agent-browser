@@ -642,15 +642,19 @@ impl RuntimeHostRouter {
             if host.is_none() {
                 *host = Some(super::browser_session_host::load_default_browser_session_host()?);
             }
-            let mut response = host
+            let host = host
                 .as_mut()
-                .ok_or_else(|| "browser_session_host_missing".to_string())
-                .map(|host| host.handle_command(&command))?;
+                .ok_or_else(|| "browser_session_host_missing".to_string())?;
+            let mut response = if command.get("action").and_then(Value::as_str)
+                == Some("browser_session_navigate")
+                && command.get("headers").is_some()
+            {
+                host.handle_managed_navigation_command(&command)
+            } else {
+                host.handle_command(&command)
+            };
             if command.get("action").and_then(Value::as_str) == Some("browser_session_navigate") {
-                let state = host
-                    .as_ref()
-                    .ok_or_else(|| "browser_session_host_missing".to_string())?
-                    .state();
+                let state = host.state();
                 if let Err(error) =
                     super::browser_session_handoff::attach_manager_handoff(&mut response, state)
                 {

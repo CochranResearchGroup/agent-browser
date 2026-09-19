@@ -595,6 +595,75 @@ where
     P: BrowserSessionPersistence,
     E: BrowserSessionEffects + ManagedBrowserCommandEffects,
 {
+    /// Open or reuse a managed session, then run a header-bearing navigation
+    /// through the ordinary command executor bound to the manager-owned tab.
+    pub(crate) fn handle_managed_navigation_command(
+        &mut self,
+        command: &serde_json::Value,
+    ) -> serde_json::Value {
+        let id = command
+            .get("id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let result = (|| -> Result<serde_json::Value, String> {
+            let now_ms = command
+                .get("activityAtMs")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_else(current_unix_ms);
+            let opened = self.open_request_from_command(command, now_ms)?;
+            let tab = self.tab_for_navigation(&opened.session_id, now_ms)?;
+            let session = self
+                .state
+                .sessions
+                .get(&opened.session_id)
+                .cloned()
+                .ok_or_else(|| format!("browser_session_not_found:{}", opened.session_id))?;
+            let browser = self
+                .state
+                .browsers
+                .get(&session.browser_id)
+                .cloned()
+                .ok_or_else(|| "browser_session_browser_missing".to_string())?;
+            let tab = self
+                .state
+                .tabs
+                .get(&tab.tab_id)
+                .cloned()
+                .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+            let url = required_string(command, "url")?;
+            let mut navigate_command = command.clone();
+            navigate_command["action"] = serde_json::json!("navigate");
+            let response = self.effects.execute_command(
+                &browser,
+                &tab,
+                &session.id,
+                &session.name,
+                &navigate_command,
+            )?;
+            if response.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
+                return Err(response
+                    .get("error")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("browser_session_navigation_failed")
+                    .to_string());
+            }
+            let navigation = self.record_navigation(&session.id, url, now_ms)?;
+            Ok(serde_json::json!({
+                "sessionId": session.id,
+                "profileId": navigation.profile_id,
+                "browserId": navigation.browser_id,
+                "tabId": navigation.tab_id,
+                "targetId": navigation.target_id,
+                "url": navigation.url,
+                "visitedAtMs": navigation.visited_at_ms,
+            }))
+        })();
+        match result {
+            Ok(data) => serde_json::json!({ "id": id, "success": true, "data": data }),
+            Err(error) => serde_json::json!({ "id": id, "success": false, "error": error }),
+        }
+    }
+
     /// Route an ordinary browser command through an already active managed
     /// session. `Ok(None)` means this lane has no manager-owned session and the
     /// caller may continue through the legacy lane.
@@ -730,7 +799,12 @@ mod tests {
             _browser: &ManagedBrowserInstance,
             _attributed_target_ids: &[String],
         ) -> Result<BrowserTabAcquisition, String> {
-            Err("unused".to_string())
+            self.next_tab += 1;
+            Ok(BrowserTabAcquisition {
+                tab_id: format!("tab-{}", self.next_tab),
+                target_id: format!("target-{}", self.next_tab),
+                source: agent_browser_service_model::BrowserTabSource::Bootstrap,
+            })
         }
 
         fn create_tab(
@@ -778,6 +852,12 @@ mod tests {
             session_name: &str,
             command: &serde_json::Value,
         ) -> Result<serde_json::Value, String> {
+            if command.get("id").and_then(serde_json::Value::as_str)
+                == Some("navigate-with-headers")
+                && command.get("headers") != Some(&serde_json::json!({"Remote-User": "operator"}))
+            {
+                return Err("fixture_navigation_headers_missing".to_string());
+            }
             Ok(serde_json::json!({
                 "id": command.get("id").cloned().unwrap_or_default(),
                 "success": true,
@@ -791,6 +871,60 @@ mod tests {
                 }
             }))
         }
+    }
+
+    #[test]
+    fn managed_navigation_executes_headers_on_the_manager_owned_tab() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+
+        let response = host.handle_managed_navigation_command(&serde_json::json!({
+            "id": "navigate-with-headers",
+            "action": "browser_session_navigate",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://guacamole.example.test/guacamole/",
+            "headers": {"Remote-User": "operator"},
+            "activityAtMs": 1_000
+        }));
+
+        assert_eq!(response["success"], true);
+        assert_eq!(response["data"]["profileId"], "work");
+        assert_eq!(
+            response["data"]["url"],
+            "https://guacamole.example.test/guacamole/"
+        );
+        assert_eq!(host.state().sessions.len(), 1);
+        assert_eq!(host.state().tabs.len(), 1);
+        assert_eq!(host.state().navigation_history.len(), 1);
     }
 
     struct TempDirectory(PathBuf);

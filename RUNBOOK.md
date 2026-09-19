@@ -9,6 +9,24 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 394 | 2026-09-18
+
+The operator authorized P211 isolated development-runtime acceptance. Candidate
+`8682d4748725` installed with all development units ready and production
+unchanged. The reviewed provider binding passed plan, stage, and preflight,
+but its first deferred-ingress apply quarantined at request `r488783` with
+`service_tab_target_unproven`; the receipt remains at
+`~/.local/share/agent-browser-dev/presentation-provider/receipts/apply-1789782627538-20403.json`.
+Diagnosis proved that `--headers` and the provider's redundant launch argument
+forced initial navigation out of Browser Session Manager routing. A red public
+routing regression now passes after admitting header-bearing managed
+navigation, executing the required `Remote-User` header on the manager-owned
+tab, and removing the redundant provider argument. The host-level header
+fixture and provider fixture also pass. No blind provider retry occurred;
+formatting, strict Clippy, changed-surface selection, a rebuilt candidate, and
+replacement development install are the next gates. Production remains
+unchanged and out of scope.
+
 ## Turn 393 | 2026-09-18
 
 P211 checkpoint `3758f8df` completes repository documentation parity under

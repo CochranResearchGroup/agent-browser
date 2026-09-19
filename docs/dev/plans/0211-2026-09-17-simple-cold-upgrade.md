@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 41
+Plan version: 42
 
 State: OPEN
 
@@ -808,6 +808,33 @@ strict workspace Clippy pass. The goal-scoped planning audit passes. The
 repo-wide active-plan audit remains red on pre-existing historical plan wiring
 and state findings and reports no P211 finding. The shared user-scoped skill
 was not overwritten from this experimental checkout.
+
+The version 42 continuation records the operator-authorized isolated
+development-runtime acceptance and its first installed blocker. Candidate
+SHA-256 `8682d47487252e77e07c7eeeff28f97b5ff1b4b069673c14f1f6efb2bd5e4534`
+installed as generation `0.28.0-8682d4748725`; all development units became
+ready, the development pseudo-home skill matched repository source, and the
+installer's before-and-after guard proved production unchanged. Provider
+planning, staging, and preflight passed with reviewed public origin
+`https://agent-browser-dev.ecochran.dyndns.org`, Cooper revision
+`e70368ddbb2e61ae26a25072975c2953754b7479`, and binding digest
+`4f24eefcac1008871c90c8e41804029aff8747c9ee0bc13ad7ebe58ad0539c4d`.
+The first deferred-ingress apply then quarantined at request `r488783` with
+`service_tab_target_unproven`; its durable receipt is
+`~/.local/share/agent-browser-dev/presentation-provider/receipts/apply-1789782627538-20403.json`.
+No blind retry is permitted. Source diagnosis proved that the provider's
+header-bearing initial navigation was excluded from Browser Session Manager
+routing, which launched a legacy browser while independent manager state
+remained empty. The accepted remediation keeps arbitrary launch arguments
+excluded, removes the provider's redundant `--no-sandbox` override, and sends
+the required `Remote-User` header through the manager-owned tab. A public
+routing regression was red before the repair and is green afterward; a host
+fixture also proves that the header reaches the managed command executor.
+One new candidate build, development install, and provider apply are allowed
+only after focused, formatting, strict Clippy, and changed-surface validation
+pass. The original quarantine receipt and exact process residue remain
+evidence until replacement install or exact task-owned cleanup proves them
+gone. Production and shared user-scoped runtime effects remain excluded.
 
 ## Frozen Interface Packet
 

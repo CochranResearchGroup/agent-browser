@@ -746,7 +746,6 @@ fn apply_browser_session_manager_route(command: &mut serde_json::Value, flags: &
             || flags.state.is_some()
             || flags.proxy.is_some()
             || flags.args.is_some()
-            || flags.headers.is_some()
             || flags.allowed_domains.is_some()
             || flags.action_policy.is_some()
             || flags.confirm_actions.is_some()
@@ -4463,6 +4462,43 @@ mod tests {
         assert_eq!(command["action"], "browser_session_navigate");
         assert_eq!(command["sessionName"], "alice");
         assert_eq!(command["profileId"], "work");
+    }
+
+    #[test]
+    fn explicit_named_session_navigation_with_headers_routes_to_shared_browser_service() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "development-presentation-provider-v5-1".to_string(),
+            "--runtime-profile".to_string(),
+            "development-presentation-provider-v5-1".to_string(),
+            "open".to_string(),
+            "https://guacamole.example.test/guacamole/".to_string(),
+            "--headers".to_string(),
+            r#"{"Remote-User":"operator"}"#.to_string(),
+        ]);
+        let mut command = parse_command(
+            &[
+                "open".to_string(),
+                "https://guacamole.example.test/guacamole/".to_string(),
+            ],
+            &flags,
+        )
+        .unwrap();
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert_eq!(command["action"], "browser_session_navigate");
+        assert_eq!(command["headers"], json!({"Remote-User": "operator"}));
+        assert_eq!(
+            command["sessionName"],
+            "development-presentation-provider-v5-1"
+        );
+        assert_eq!(
+            command["profileId"],
+            "development-presentation-provider-v5-1"
+        );
     }
 
     #[test]
