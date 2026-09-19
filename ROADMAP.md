@@ -67,6 +67,13 @@ control fencing, and forward-only migration now define the repair. The next
 gate is provider-free schema and state-machine qualification, followed by the
 operator-authorized isolated development cold-start matrix. Production and
 external ingress remain excluded.
+Checkpoint `726563fb` completes the first provider-free version 49 slice:
+Browser Session State and Browser Profile Catalog runtime reads and writes now
+use SQLite, cold install includes an atomic forward-only migration phase, and
+the legacy JSON reader is confined to pre-database cold shutdown. The remaining
+SQLite domains, typed rejection archive, provider cleanup, protocol keeper,
+capacity, control, handoff-recovery, retention, backup, and development matrix
+are still open.
 
 ## P216 | Service Model Extraction Landing
 

@@ -9,6 +9,25 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 402 | 2026-09-19
+
+P211 checkpoint `726563fb` completes the first version 49 provider-free
+implementation slice. The ordinary runtime host now uses one private SQLite
+database for Browser Session State and Browser Profile Catalog persistence.
+Cold install has an explicit migration phase after shutdown and is
+forward-only after that boundary. Migration hashes and archives the legacy
+JSON sources, atomically publishes a checkpointed database from a staged path,
+and never falls back to JSON when a database is present. Only the cold-upgrade
+shutdown adapter can read pre-database JSON. Store, host, shutdown,
+cold-install, extracted-crate, workstation fixture, format, and strict Clippy
+gates pass, including all 181 affected installer tests. The selector's CDP
+architecture script remains unrunnable because it hardcodes the intentionally
+disabled `.github/workflows/ci.yml`; its crate tests pass. No browser,
+provider, installed-runtime, Service State, production, ingress, or release
+effect occurred. Typed migration rejects, remaining SQLite domains, protocol
+keepers, capacity, control leasing, handoff recovery, bounded history, backup,
+and development acceptance remain open.
+
 ## Turn 401 | 2026-09-19
 
 The operator completed a one-question-at-a-time architecture review and froze

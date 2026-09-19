@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 93268e4c
+    checkpoint: 726563fb
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: version 49 freezes a forward-only SQLite authority, in-process Guacamole tunnel keepers with no infrastructure Chrome viewers, configurable minimum-ready and overflow capacity, shared Desktop Services control fencing, bounded history and disposable retention, and an isolated development cold-start and failure matrix; implementation is pending
-    validation_ref: 93268e4c
+    validation_status: checkpoint 726563fb makes Browser Session State and Browser Profile Catalog runtime persistence SQLite-only and adds atomic forward-only cold migration with no old-generation rollback; affected provider-free gates pass, while remaining SQLite domains, typed rejects, provider cleanup, route keepers, capacity, control, handoff recovery, retention, backup, and development acceptance remain pending
+    validation_ref: 726563fb
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
