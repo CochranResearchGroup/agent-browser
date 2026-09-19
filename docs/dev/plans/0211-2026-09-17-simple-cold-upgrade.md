@@ -1381,14 +1381,38 @@ results fail closed. Browser open, presentation allocation, and handoff code
 do not consume this kernel yet, so crash-consistent open remains an integration
 gate rather than an accepted behavior.
 
+Checkpoint `56a0558e` completes the first journal-to-browser transaction
+slice. A named-profile remote open now persists its exact session, browser,
+display-slot, and handoff intent before browser effects. Durable observations
+advance through `launch_started`, `browser_opened`, `tab_acquired`, and `ready`;
+ready Browser Session State and the logical handoff publish in one immediate
+SQLite transaction. Exact replay returns the committed response without
+reselecting from multiple routes. Recovery resumes a current `Prepared`
+operation, reuses a positively observed browser without another launch, and
+fails closed with `browser_runtime_open_effect_recovery_required` when launch
+started but its outcome is ambiguous. The operation captures its exact base
+session state, checks it before resumed effects, and checks it again inside the
+publish transaction, so an intervening ordinary manager write cannot be
+overwritten. Fresh explicit-display opens retain the preexisting path, while
+an already journaled operation remains recoverable. Legacy Service State
+projection occurs only after the SQLite commit and is not transaction
+authority. Automatic reconciliation of an ambiguous launch, protocol keepers,
+provider-owned route authority, full handoff recovery, and the development
+cold-start matrix remain open.
+
 ## Worker Assignments
 
-Version 49 has one worker: the P211 lane owner. The operator explicitly stated
-that this is the only agent working. The primary retains architecture, source
-custody, Git transitions, contracts, implementation, runtime effects, finding
-disposition, integration, and final acceptance. No subagent, auxiliary
-worktree, independent reviewer, or parallel implementation assignment is
-authorized. Deterministic repository and test tools remain the first choice.
+The operator explicitly authorized subagents for Plan 0211 parallelism and
+model-choice optimization for the current packet. The primary retains
+architecture, overlapping-source custody, Git transitions, runtime effects,
+finding disposition, integration, and final acceptance. Bounded workers used
+the shared admitted P211 worktree: `gpt-5.6-luna` at low effort audited
+acceptance text, `gpt-5.6-sol` at medium effort designed red cases and wrote the
+disjoint SQLite transaction surface, `gpt-5.6-terra` at medium effort wrote the
+disjoint pure handoff preparation surface, and `gpt-6-astra` at high effort
+performed the closed-world transaction review. The primary integrated and
+reworked the packet, and the original reviewer verified the four exact
+findings once. No worker received Git or runtime-effect authority.
 
 The assignments below are completed historical packets and grant no current
 worker or write custody.
@@ -1421,9 +1445,9 @@ pages, inline documentation, RUNBOOK, this plan, and P211's catalog entry.
 P207's feature-specific prose remains evidence for later reconciliation, not
 content to publish before its corresponding source integrates.
 
-Version 49 uses no delegated review. The primary performs the closed-world
-conformance check against the accepted design and the development evidence
-matrix without opening another worktree or agent session.
+Version 49 normally keeps review primary-owned, but the operator's newer
+instruction authorized the bounded closed-world review above. It did not
+authorize another worktree, live runtime effects, or broader discovery.
 
 P205 completed the Service Model extraction and its integrated result is the
 starting seam for this packet. P211 owns CLI help, README, the Agent Browser
@@ -1446,7 +1470,7 @@ integrating any P207 implementation.
 | Metadata cannot veto | the controller interface accepts no coordination inputs and the fixed-sequence test passes | controller and platform adapter green; installed stale-metadata acceptance pending |
 | Cold replacement | workstation and reviewed-candidate apply execute stop, migrate, replace, start, and readiness in that order | checkpoint `726563fb` makes both source routes forward-only after migration; all 181 affected installer tests and the source-free apply fixture are green; installed acceptance pending |
 | Clean restart | post-start fixture proves one selected generation, one runtime host, one dashboard, and clients can make a fresh service request | joined disposable cold-install-to-first-use proves the selected generation, one reused runtime-host identity, one reachable reused dashboard endpoint, repeated fresh Service requests, and exact installed shutdown; independent host serialization, provider-free restart reuse, concrete disposable-Chrome worker reattachment, and the compiled-CLI shared-daemon title, snapshot, click, redirect, and close journey are also green |
-| Independent profile catalog | cold migration imports only legacy profile definitions into the SQLite authority; malformed or contradictory legacy lease state cannot block lookup | the tolerant field-level importer is retained at the migration boundary, and checkpoint `726563fb` makes SQLite authoritative for subsequent host loads and saves; typed rejection archival remains pending |
+| Independent profile catalog | cold migration imports only legacy profile definitions into the SQLite authority; malformed or contradictory legacy lease state cannot block lookup | the tolerant field-level importer is retained at the migration boundary, checkpoint `726563fb` makes SQLite authoritative for subsequent host loads and saves, and checkpoint `c0ff2768` durably archives typed non-vetoing rejection records |
 | Shared browser sessions | Alice and Bob use one named-profile browser through independent named sessions; activity refreshes each heartbeat and ending either session preserves the other | manager, independent persistence, concrete adapter, lazy Service host, public named-session lifecycle routing, generic current-tab command routing, and the two-session compiled-CLI/runtime-host Chrome fixture are green |
 | Disposable lifecycle | one named session reuses its compatible disposable allocation; another session receives another allocation; the final session closes the browser and the reaper removes only an exactly proven managed disposable directory | provider-free allocation, reuse, isolation, final close, configurable-delay reaping, hosted exact recorded filesystem deletion with foreign-sibling preservation, default host policy, and exact hosted-Chrome final-process termination are green |
 | Bounded tab lifecycle | ordinary navigation reuses one session-current tab; first use adopts an unattributed bootstrap or creates one session-initial tab; explicit new-tab is the only further growth path within that session; close selects the most recently used remainder; session end removes live tabs | provider-free lifecycle, concrete adapter, real-Chrome restart and ordinary-command fixture, public named-session new/current-close routing, and the two-session daemon-process tab and close fixture are green |
@@ -1459,7 +1483,7 @@ integrating any P207 implementation.
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
-| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoint `759f12e9` proves durable idempotent reservation, per-owner generations, exact result replay, and stale-effect rejection; browser, display, and handoff integration plus pending-phase recovery remain pending |
+| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9` and `56a0558e` prove durable exact intent, per-owner fencing, browser and tab observations, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, no relaunch after positive browser observation, and base-state conflict rejection; ambiguous `launch_started` reconciliation remains a retained recovery obligation, and provider-owned route readiness is still pending |
 | Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |
 | Bounded persistence and history | live SQLite stays within 96 MiB, exact URL history within 64 MiB, routine database/WAL/backup within 128 MiB, summaries retain long-term lifecycle evidence, and verified backup recovery is automatic | version 49 contract frozen; development size and corruption tests pending |
 | Disposable retention | default 24-hour inactivity, 20 profiles, and 10 GiB are live settings; oldest inactive sessions expire first and active or named profiles are never evicted | version 49 contract frozen; implementation and quota tests pending |

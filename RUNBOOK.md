@@ -9,6 +9,28 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 405 | 2026-09-19
+
+P211 checkpoint `56a0558e` wires named-profile remote browser open through the
+SQLite journal. The operation persists exact session, browser, display-slot,
+and handoff intent before effects, checkpoints `launch_started`,
+`browser_opened`, `tab_acquired`, and `ready`, then atomically publishes
+Browser Session State and the opaque handoff. Exact replay survives multiple
+eligible routes without recomputing the slot. Recovery resumes durable
+`Prepared` work, reuses a positively observed browser without relaunching, and
+fails closed on an ambiguous launch outcome. An exact base-state precondition,
+rechecked inside the immediate SQLite publish transaction, prevents an
+intervening ordinary session mutation from being overwritten. Explicit-display
+fresh opens retain their existing route, while an already journaled operation
+continues to replay or recover. Focused browser-session tests pass 49 with two
+real-browser tests intentionally ignored; all 22 service-model manager tests,
+formatting, strict workspace Clippy, validation selection, and diff hygiene
+pass. The branch and remote both resolve to `56a0558e`. No browser, provider,
+installed-runtime, production, ingress, or release effect occurred. Automatic
+ambiguous-launch reconciliation, protocol keepers, public live configuration,
+capacity, shared control, remaining recovery, history, backup, and the
+development cold-start matrix remain open.
+
 ## Turn 404 | 2026-09-19
 
 P211 checkpoint `759f12e9` adds the SQLite operation-journal kernel. Exact

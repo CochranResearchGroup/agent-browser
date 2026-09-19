@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-17
+Updated: 2026-09-19
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -82,6 +82,16 @@ refresh remain open with the rest of the provider path.
 Checkpoint `759f12e9` adds the durable operation journal and owner-local
 generation fencing. It proves replay and stale-effect rejection at the SQLite
 seam; browser, display, handoff, and recovery integration remain open.
+Checkpoint `56a0558e` connects named-profile remote browser opens to that
+journal. Exact session, browser, display-slot, and handoff intent persist before
+effects; observed browser and tab phases recover without a duplicate launch;
+ready session state and the opaque handoff publish atomically; and exact replay
+does not recompute display choice. Recovery rejects an intervening ordinary
+session-state write through an in-transaction base-state check. A restart from
+durable `Prepared` resumes, while an ambiguous `launch_started` outcome fails
+closed with a retained recovery obligation. Protocol keepers, automatic
+ambiguous-launch reconciliation, public configuration, capacity, shared
+control, remaining SQLite domains, and the development matrix remain open.
 
 ## P216 | Service Model Extraction Landing
 
