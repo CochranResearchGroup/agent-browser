@@ -94,6 +94,56 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
     }
 }
 
+pub(crate) fn validate_internal_presentation_bootstrap(
+    command: &serde_json::Value,
+    runtime_environment: Option<&str>,
+) -> Result<bool, String> {
+    match command.get("internalPresentationBootstrap") {
+        None | Some(serde_json::Value::Bool(false)) => return Ok(false),
+        Some(serde_json::Value::Bool(true)) => {}
+        Some(_) => return Err("internal_presentation_bootstrap_scope_invalid".to_string()),
+    }
+
+    let session_name = command
+        .get("sessionName")
+        .and_then(serde_json::Value::as_str);
+    let profile_id = command.get("profileId").and_then(serde_json::Value::as_str);
+    if runtime_environment != Some("development")
+        || command.get("action").and_then(serde_json::Value::as_str)
+            != Some("browser_session_navigate")
+        || session_name.is_none()
+        || session_name != profile_id
+        || !session_name.is_some_and(is_development_presentation_viewer_identity)
+    {
+        return Err("internal_presentation_bootstrap_scope_invalid".to_string());
+    }
+
+    Ok(true)
+}
+
+pub(crate) fn browser_session_navigation_requires_handoff(
+    command: &serde_json::Value,
+    runtime_environment: Option<&str>,
+) -> Result<bool, String> {
+    Ok(command.get("action").and_then(serde_json::Value::as_str)
+        == Some("browser_session_navigate")
+        && !validate_internal_presentation_bootstrap(command, runtime_environment)?)
+}
+
+fn is_development_presentation_viewer_identity(value: &str) -> bool {
+    let Some((scope, ordinal)) = value.rsplit_once("-presentation-provider-v5-") else {
+        return false;
+    };
+    let valid_scope = scope == "development"
+        || scope.strip_prefix("development-").is_some_and(|namespace| {
+            !namespace.is_empty()
+                && namespace
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        });
+    valid_scope && ordinal.parse::<u32>().is_ok_and(|ordinal| ordinal > 0)
+}
+
 pub(crate) trait BrowserSessionPersistence {
     fn load_session_state(&self) -> Result<BrowserSessionState, String>;
     fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String>;
@@ -762,6 +812,75 @@ mod tests {
     };
     use std::fs;
     use std::path::PathBuf;
+
+    #[test]
+    fn internal_presentation_bootstrap_requires_exact_development_viewer_identity() {
+        let exact = serde_json::json!({
+            "action": "browser_session_navigate",
+            "sessionName": "development-presentation-provider-v5-1",
+            "profileId": "development-presentation-provider-v5-1",
+            "internalPresentationBootstrap": true
+        });
+        assert_eq!(
+            validate_internal_presentation_bootstrap(&exact, Some("development")),
+            Ok(true)
+        );
+
+        let namespaced = serde_json::json!({
+            "action": "browser_session_navigate",
+            "sessionName": "development-p211-presentation-provider-v5-4",
+            "profileId": "development-p211-presentation-provider-v5-4",
+            "internalPresentationBootstrap": true
+        });
+        assert_eq!(
+            validate_internal_presentation_bootstrap(&namespaced, Some("development")),
+            Ok(true)
+        );
+
+        assert_eq!(
+            browser_session_navigation_requires_handoff(&exact, Some("development")),
+            Ok(false)
+        );
+        assert_eq!(
+            browser_session_navigation_requires_handoff(
+                &serde_json::json!({"action": "browser_session_navigate"}),
+                Some("development")
+            ),
+            Ok(true)
+        );
+
+        assert_eq!(
+            validate_internal_presentation_bootstrap(&exact, Some("production")),
+            Err("internal_presentation_bootstrap_scope_invalid".to_string())
+        );
+        for invalid in [
+            serde_json::json!({
+                "action": "browser_session_navigate",
+                "sessionName": "development-presentation-provider-v5-1",
+                "profileId": "different-profile",
+                "internalPresentationBootstrap": true
+            }),
+            serde_json::json!({
+                "action": "browser_session_navigate",
+                "sessionName": "ordinary-session",
+                "profileId": "ordinary-session",
+                "internalPresentationBootstrap": true
+            }),
+        ] {
+            assert_eq!(
+                validate_internal_presentation_bootstrap(&invalid, Some("development")),
+                Err("internal_presentation_bootstrap_scope_invalid".to_string())
+            );
+        }
+
+        assert_eq!(
+            validate_internal_presentation_bootstrap(
+                &serde_json::json!({"action": "browser_session_navigate"}),
+                Some("development")
+            ),
+            Ok(false)
+        );
+    }
 
     #[derive(Default)]
     struct FixtureRuntime {

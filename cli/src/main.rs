@@ -781,6 +781,22 @@ fn apply_browser_session_manager_route(command: &mut serde_json::Value, flags: &
     if let Some(profile_id) = profile_id {
         command["profileId"] = json!(profile_id);
     }
+    if std::env::var("AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP").as_deref() == Ok("1")
+        && std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").as_deref() == Ok("development")
+    {
+        command["internalPresentationBootstrap"] = json!(true);
+        if native::browser_session_host::validate_internal_presentation_bootstrap(
+            command,
+            Some("development"),
+        )
+        .is_err()
+        {
+            command
+                .as_object_mut()
+                .expect("browser session command must be an object")
+                .remove("internalPresentationBootstrap");
+        }
+    }
     true
 }
 
@@ -4466,8 +4482,14 @@ mod tests {
 
     #[test]
     fn explicit_named_session_navigation_with_headers_routes_to_shared_browser_service() {
-        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        let guard = EnvGuard::new(&[
+            crate::runtime_host::RUNTIME_HOST_ENV,
+            "AGENT_BROWSER_RUNTIME_ENVIRONMENT",
+            "AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP",
+        ]);
         guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        guard.set("AGENT_BROWSER_RUNTIME_ENVIRONMENT", "development");
+        guard.set("AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP", "1");
         let flags = parse_flags(&[
             "agent-browser".to_string(),
             "--session".to_string(),
@@ -4491,6 +4513,7 @@ mod tests {
         assert!(apply_browser_session_manager_route(&mut command, &flags));
         assert_eq!(command["action"], "browser_session_navigate");
         assert_eq!(command["headers"], json!({"Remote-User": "operator"}));
+        assert_eq!(command["internalPresentationBootstrap"], true);
         assert_eq!(
             command["sessionName"],
             "development-presentation-provider-v5-1"
@@ -4499,6 +4522,34 @@ mod tests {
             command["profileId"],
             "development-presentation-provider-v5-1"
         );
+    }
+
+    #[test]
+    fn production_navigation_cannot_request_internal_presentation_bootstrap() {
+        let guard = EnvGuard::new(&[
+            crate::runtime_host::RUNTIME_HOST_ENV,
+            "AGENT_BROWSER_RUNTIME_ENVIRONMENT",
+            "AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP",
+        ]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        guard.set("AGENT_BROWSER_RUNTIME_ENVIRONMENT", "production");
+        guard.set("AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP", "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "development-presentation-provider-v5-1".to_string(),
+            "--runtime-profile".to_string(),
+            "development-presentation-provider-v5-1".to_string(),
+            "open".to_string(),
+            "https://guacamole.example.test/guacamole/".to_string(),
+        ]);
+        let mut command = json!({
+            "action": "navigate",
+            "url": "https://guacamole.example.test/guacamole/"
+        });
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert!(command.get("internalPresentationBootstrap").is_none());
     }
 
     #[test]

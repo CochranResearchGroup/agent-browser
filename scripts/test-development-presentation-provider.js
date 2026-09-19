@@ -194,6 +194,11 @@ try {
     'scripts/lib/development-presentation-provider-system-effects.js',
     'utf8',
   );
+  assert.equal(
+    [...providerEffectsSource.matchAll(/AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP:\s*'1'/g)].length,
+    2,
+    'warm and elastic development viewer bootstrap must use the internal marker',
+  );
   assert.doesNotMatch(
     providerEffectsSource,
     /'--profile',\s*route\.viewerProfile/,

@@ -636,6 +636,12 @@ impl RuntimeHostRouter {
     async fn handle_browser_session_command(&self, command: Value) -> Value {
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || -> Result<Value, String> {
+            let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").ok();
+            let publish_manager_handoff =
+                super::browser_session_host::browser_session_navigation_requires_handoff(
+                    &command,
+                    runtime_environment.as_deref(),
+                )?;
             let mut host = browser_sessions
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
@@ -653,7 +659,7 @@ impl RuntimeHostRouter {
             } else {
                 host.handle_command(&command)
             };
-            if command.get("action").and_then(Value::as_str) == Some("browser_session_navigate") {
+            if publish_manager_handoff {
                 let state = host.state();
                 if let Err(error) =
                     super::browser_session_handoff::attach_manager_handoff(&mut response, state)

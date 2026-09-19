@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: all three bounded provider attempts are consumed; internal Guacamole viewer bootstrap must be separated from ordinary ready-handoff publication before provider and joined installed shutdown and replacement acceptance can continue; authenticated dashboard rendering and control still lack a terminal verdict; production and shared user-scoped runtime effects remain excluded
+    blocker: operator-authorized version 45 permits one development-only retry after separating exact internal Guacamole viewer bootstrap from ordinary ready-handoff publication; ordinary lookup and focus remains strict, production remains excluded, and any new quarantine ends the packet
     updated_at: 2026-09-18

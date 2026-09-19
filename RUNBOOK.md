@@ -9,6 +9,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 397 | 2026-09-18
+
+The operator reopened P211 for one explicit development-only retry. Current
+readback confirms the ordinary handoff model is already route lookup plus exact
+tab focus and browser raise/maximize; production routes A, B, and C currently
+map to `:10`, `:11`, and `:12`. The remaining defect is isolated-provider
+bootstrap: its internal Guacamole browser creates a development XRDP display
+before that display can appear in provider inventory, so it must not request a
+handoff to itself. Version 45 authorizes one typed development-only bootstrap
+marker for exact provider viewer identity. Manager ownership, header
+navigation, and exact cleanup remain mandatory; only handoff publication is
+deferred until display observation. Ordinary opens remain fail-closed. One
+provider-free red-green batch, one candidate and install, and one
+deferred-ingress apply are authorized; another quarantine ends the packet.
+
 ## Turn 396 | 2026-09-18
 
 P211's third and final bounded development-provider apply used generation

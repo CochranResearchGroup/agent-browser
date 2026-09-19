@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 44
+Plan version: 45
 
 State: OPEN
 
@@ -884,6 +884,31 @@ process, and reported `productionUnchanged: true`. All three allowed provider
 attempts are consumed. Further provider apply, candidate rebuild, installed
 shutdown, or replacement-journey execution requires a new reconciled plan
 version and explicit continuation; no blind retry is allowed.
+
+The operator explicitly authorized version 45 to amend the plan, repair the
+presentation bootstrap boundary, and perform one additional development-only
+retry. The ordinary handoff remains a lookup and focus operation: resolve the
+session's current tab and browser, read the browser's configured display,
+select the Guacamole route for that display, focus the tab, raise and maximize
+the browser, and return the opaque handoff URL. Production routes A, B, and C
+currently resolve to `:10`, `:11`, and `:12`; the isolated development provider
+must continue using its own route users and displays rather than borrowing
+those production resources. Development provider startup alone receives one
+typed internal bootstrap marker. It still opens the exact registered viewer
+profile through Browser Session Manager, applies the header-auth navigation,
+records exact process and tab custody, and closes exactly on failure, but it
+does not publish a remote-view handoff for the infrastructure viewer that is
+creating the route display. After the display is observed and written into the
+configured provider inventory, every ordinary open retains the strict ready
+handoff requirement. The marker must fail closed outside the development
+runtime and outside exact provider viewer session/profile identity.
+Provider-free tests must prove ordinary missing-display navigation still
+fails, the exact internal viewer bootstrap skips only handoff publication,
+production cannot request the marker, and both warm and elastic provider
+launch paths set it. One optimized candidate build, replacement development
+install, green plan, stage, and preflight, and one deferred-ingress apply are
+authorized. Any
+new quarantine stops without retry.
 
 ## Frozen Interface Packet
 
