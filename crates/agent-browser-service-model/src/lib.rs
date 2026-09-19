@@ -71,11 +71,11 @@ pub use browser_retirement::{
     BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
 };
 pub use browser_session_manager::{
-    BrowserLaunch, BrowserNavigationRecord, BrowserProfileIntent, BrowserSessionEffects,
-    BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition,
-    BrowserTabEndReason, BrowserTabSource, CloseBrowserSessionResult, CloseBrowserTabResult,
-    FocusBrowserResult, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
-    ManagedDisposableProfile, OpenBrowserSession, OpenBrowserSessionResult,
+    BrowserLaunch, BrowserNavigationRecord, BrowserOpenReservation, BrowserProfileIntent,
+    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
+    BrowserTabAcquisition, BrowserTabEndReason, BrowserTabSource, CloseBrowserSessionResult,
+    CloseBrowserTabResult, FocusBrowserResult, ManagedBrowserInstance, ManagedBrowserSession,
+    ManagedBrowserTab, ManagedDisposableProfile, OpenBrowserSession, OpenBrowserSessionResult,
     ReapBrowserSessionsResult, SessionBrowserDisposition, SessionCloseDisposition,
     SessionEndReason, SessionRecordDisposition, TerminalBrowserSession, TerminalBrowserTab,
     BROWSER_SESSION_STATE_SCHEMA_V1,

@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use agent_browser_service_model::{
-    BrowserDisposableProfilePolicy, BrowserLaunch, BrowserProfileCatalog,
-    BrowserProfileCatalogEntry, BrowserProfileKind, BrowserSessionEffects, BrowserSessionManager,
-    BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition, BrowserTabSource,
-    OpenBrowserSession, SessionBrowserDisposition, SessionCloseDisposition, SessionEndReason,
-    SessionRecordDisposition,
+    BrowserDesktopAssignment, BrowserDisposableProfilePolicy, BrowserLaunch,
+    BrowserOpenReservation, BrowserProfileCatalog, BrowserProfileCatalogEntry, BrowserProfileKind,
+    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
+    BrowserTabAcquisition, BrowserTabSource, OpenBrowserSession, SessionBrowserDisposition,
+    SessionCloseDisposition, SessionEndReason, SessionRecordDisposition,
 };
 
 #[derive(Default)]
@@ -115,6 +115,89 @@ fn open_after_expiry_ends_old_session_before_new_epoch() {
         state.session_history[0].reason,
         SessionEndReason::HeartbeatExpired
     );
+}
+
+#[test]
+fn reserved_open_uses_exact_session_browser_and_desktop_identity() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects::default();
+    let desktop = BrowserDesktopAssignment {
+        route_id: "route-a".to_string(),
+        display_name: ":21".to_string(),
+        live_browser_count: 0,
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![agent_browser_service_model::BrowserDesktopRoute {
+                id: desktop.route_id.clone(),
+                display_name: desktop.display_name.clone(),
+                healthy: true,
+            }],
+        },
+    );
+
+    let opened = manager
+        .open_reserved(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 1_000),
+            BrowserOpenReservation {
+                session_id: "session:alice:profile-a:1".to_string(),
+                browser_id: "browser:profile-a".to_string(),
+                desktop: desktop.clone(),
+            },
+        )
+        .unwrap();
+    drop(manager);
+
+    assert_eq!(opened.session_id, "session:alice:profile-a:1");
+    assert_eq!(opened.browser_id, "browser:profile-a");
+    assert_eq!(state.browsers[&opened.browser_id].desktop, Some(desktop));
+    assert_eq!(effects.launches, ["profile-a"]);
+}
+
+#[test]
+fn invalid_reserved_session_identity_is_rejected_before_launch() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects::default();
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![agent_browser_service_model::BrowserDesktopRoute {
+                id: "route-a".to_string(),
+                display_name: ":21".to_string(),
+                healthy: true,
+            }],
+        },
+    );
+
+    let error = manager
+        .open_reserved(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 1_000),
+            BrowserOpenReservation {
+                session_id: "session:wrong".to_string(),
+                browser_id: "browser:profile-a".to_string(),
+                desktop: BrowserDesktopAssignment {
+                    route_id: "route-a".to_string(),
+                    display_name: ":21".to_string(),
+                    live_browser_count: 0,
+                },
+            },
+        )
+        .unwrap_err();
+    drop(manager);
+
+    assert_eq!(error, "browser_session_reserved_session_identity_mismatch");
+    assert!(effects.launches.is_empty());
+    assert!(state.sessions.is_empty());
+    assert!(state.browsers.is_empty());
 }
 
 impl BrowserSessionEffects for FixtureEffects {

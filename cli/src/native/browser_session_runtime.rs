@@ -37,6 +37,18 @@ pub(crate) trait BrowserRuntimeDriver {
         profile: &BrowserProfileCatalogEntry,
         desktop: Option<&BrowserDesktopAssignment>,
     ) -> Result<BrowserLaunch, String>;
+    fn launch_browser_reserved(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&BrowserDesktopAssignment>,
+        browser_id: &str,
+    ) -> Result<BrowserLaunch, String> {
+        let launch = self.launch_browser(profile, desktop)?;
+        if launch.browser_id != browser_id {
+            return Err("browser_session_reserved_browser_identity_mismatch".to_string());
+        }
+        Ok(launch)
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
     fn acquire_initial_tab(
         &mut self,
@@ -123,6 +135,16 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         desktop: Option<&BrowserDesktopAssignment>,
     ) -> Result<BrowserLaunch, String> {
         self.runtime.launch_browser(profile, desktop)
+    }
+
+    fn launch_browser_reserved(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&BrowserDesktopAssignment>,
+        browser_id: &str,
+    ) -> Result<BrowserLaunch, String> {
+        self.runtime
+            .launch_browser_reserved(profile, desktop, browser_id)
     }
 
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
@@ -239,6 +261,7 @@ enum BrowserRuntimeCommand {
     Launch {
         profile: BrowserProfileCatalogEntry,
         desktop: Option<BrowserDesktopAssignment>,
+        browser_id: Option<String>,
         reply: mpsc::Sender<Result<BrowserLaunch, String>>,
     },
     Close {
@@ -355,6 +378,25 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             BrowserRuntimeCommand::Launch {
                 profile: profile.clone(),
                 desktop: desktop.cloned(),
+                browser_id: None,
+                reply,
+            },
+        )
+    }
+
+    fn launch_browser_reserved(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&BrowserDesktopAssignment>,
+        browser_id: &str,
+    ) -> Result<BrowserLaunch, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::Launch {
+                profile: profile.clone(),
+                desktop: desktop.cloned(),
+                browser_id: Some(browser_id.to_string()),
                 reply,
             },
         )
@@ -499,6 +541,7 @@ fn run_browser_worker(
             BrowserRuntimeCommand::Launch {
                 profile,
                 desktop,
+                browser_id,
                 reply,
             } => {
                 let result = runtime.block_on(async {
@@ -528,10 +571,16 @@ fn run_browser_worker(
                         Some("chrome"),
                     )
                     .ok_or_else(|| "browser_session_launch_process_identity_missing".to_string())?;
-                    next_browser_sequence = next_browser_sequence
-                        .checked_add(1)
-                        .ok_or_else(|| "browser_session_browser_sequence_exhausted".to_string())?;
-                    let browser_id = format!("browser:{}:{next_browser_sequence}", profile.id);
+                    let browser_id = match browser_id {
+                        Some(browser_id) => browser_id,
+                        None => {
+                            next_browser_sequence =
+                                next_browser_sequence.checked_add(1).ok_or_else(|| {
+                                    "browser_session_browser_sequence_exhausted".to_string()
+                                })?;
+                            format!("browser:{}:{next_browser_sequence}", profile.id)
+                        }
+                    };
                     let launch = BrowserLaunch {
                         browser_id: browser_id.clone(),
                         pid,

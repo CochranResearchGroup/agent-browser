@@ -1,11 +1,12 @@
 //! Independent durable storage for the ordinary Browser Session Manager path.
 
+use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
-    BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState,
+    BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState, RemoteViewHandoff,
     BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
@@ -20,6 +21,8 @@ const BROWSER_RUNTIME_DATABASE_SCHEMA: i64 = 1;
 const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
 const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
+const MANAGER_HANDOFF_REGISTRY_DOCUMENT: &str = "manager_handoff_registry";
+const MANAGER_HANDOFF_REGISTRY_SCHEMA_V1: &str = "agent-browser.manager-handoffs.v1";
 const RUNTIME_CONFIG_KEY: &str = "runtime";
 const BROWSER_RUNTIME_CONFIG_SCHEMA_V1: &str = "agent-browser.runtime-config.v1";
 
@@ -70,6 +73,7 @@ impl Default for BrowserRuntimeConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BrowserRuntimeOperationState {
     Prepared,
+    Observed,
     Committed,
 }
 
@@ -77,6 +81,7 @@ impl BrowserRuntimeOperationState {
     fn as_str(self) -> &'static str {
         match self {
             Self::Prepared => "prepared",
+            Self::Observed => "observed",
             Self::Committed => "committed",
         }
     }
@@ -84,10 +89,17 @@ impl BrowserRuntimeOperationState {
     fn parse(value: &str) -> Result<Self, String> {
         match value {
             "prepared" => Ok(Self::Prepared),
+            "observed" => Ok(Self::Observed),
             "committed" => Ok(Self::Committed),
             other => Err(format!("browser_runtime_operation_state_invalid:{other}")),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub(crate) struct BrowserManagerHandoffRegistry {
+    pub(crate) handoffs: BTreeMap<String, RemoteViewHandoff>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,6 +301,12 @@ impl BrowserRuntimeSqliteStore {
                 BROWSER_PROFILE_CATALOG_SCHEMA_V1,
                 &catalog,
             )?;
+            save_document(
+                &transaction,
+                MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+                MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+                &BrowserManagerHandoffRegistry::default(),
+            )?;
             save_runtime_config_row(&transaction, &BrowserRuntimeConfig::default())?;
             for (source_path, bytes, imported) in &source_records {
                 transaction
@@ -436,6 +454,14 @@ impl BrowserRuntimeSqliteStore {
         )
     }
 
+    pub(crate) fn load_handoff_registry(&self) -> Result<BrowserManagerHandoffRegistry, String> {
+        load_optional_document(
+            &self.connection,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )
+    }
+
     pub(crate) fn load_runtime_config(&self) -> Result<BrowserRuntimeConfig, String> {
         load_runtime_config_row(&self.connection)
     }
@@ -561,6 +587,13 @@ impl BrowserRuntimeSqliteStore {
                 "browser_runtime_operation_replay_mismatch:{operation_id}"
             ));
         }
+        if operation.state == BrowserRuntimeOperationState::Observed
+            && operation.result.as_ref() != Some(&result)
+        {
+            return Err(format!(
+                "browser_runtime_operation_replay_mismatch:{operation_id}"
+            ));
+        }
         let current_generation = load_owner_generation(&transaction, &operation.owner_key)?;
         if current_generation != generation {
             return Err(format!(
@@ -587,12 +620,211 @@ impl BrowserRuntimeSqliteStore {
         Ok(operation)
     }
 
+    pub(crate) fn record_operation_observation(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        observation: serde_json::Value,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_operation_begin_failed:{error}"))?;
+        let mut operation = load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))?;
+        if operation.generation != generation {
+            return Err(format!(
+                "browser_runtime_operation_generation_mismatch:{operation_id}:{generation}:{}",
+                operation.generation
+            ));
+        }
+        if operation.state == BrowserRuntimeOperationState::Committed {
+            if operation.result.as_ref() == Some(&observation) {
+                return Ok(operation);
+            }
+            return Err(format!(
+                "browser_runtime_operation_replay_mismatch:{operation_id}"
+            ));
+        }
+        let current_generation = load_owner_generation(&transaction, &operation.owner_key)?;
+        if current_generation != generation {
+            return Err(format!(
+                "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
+            ));
+        }
+        if operation.state == BrowserRuntimeOperationState::Observed
+            && operation.result.as_ref() == Some(&observation)
+        {
+            return Ok(operation);
+        }
+        let observation_json = serde_json::to_string(&observation)
+            .map_err(|error| format!("browser_runtime_operation_serialize_failed:{error}"))?;
+        transaction
+            .execute(
+                "UPDATE operation_records SET state = ?2, result_json = ?3 WHERE operation_id = ?1",
+                params![
+                    operation_id,
+                    BrowserRuntimeOperationState::Observed.as_str(),
+                    observation_json
+                ],
+            )
+            .map_err(|error| format!("browser_runtime_operation_save_failed:{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_operation_commit_failed:{error}"))?;
+        operation.state = BrowserRuntimeOperationState::Observed;
+        operation.result = Some(observation);
+        Ok(operation)
+    }
+
+    pub(crate) fn list_pending_operations(&self) -> Result<Vec<BrowserRuntimeOperation>, String> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT operation_id, owner_key, generation, state, request_json, result_json
+                 FROM operation_records WHERE state IN ('prepared', 'observed')
+                 ORDER BY owner_key, generation, operation_id",
+            )
+            .map_err(|error| format!("browser_runtime_operation_read_failed:{error}"))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                ))
+            })
+            .map_err(|error| format!("browser_runtime_operation_read_failed:{error}"))?;
+        rows.map(|row| {
+            let (operation_id, owner_key, generation, state, request_json, result_json) =
+                row.map_err(|error| format!("browser_runtime_operation_read_failed:{error}"))?;
+            decode_operation(
+                operation_id,
+                owner_key,
+                generation,
+                state,
+                request_json,
+                result_json,
+            )
+        })
+        .collect()
+    }
+
+    pub(crate) fn commit_browser_open(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        expected_base_state: &BrowserSessionState,
+        session_state: &BrowserSessionState,
+        handoff: &RemoteViewHandoff,
+        result: serde_json::Value,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_operation_begin_failed:{error}"))?;
+        let mut operation = load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))?;
+        if operation.generation != generation {
+            return Err(format!(
+                "browser_runtime_operation_generation_mismatch:{operation_id}:{generation}:{}",
+                operation.generation
+            ));
+        }
+        if operation.state == BrowserRuntimeOperationState::Committed {
+            if operation.result.as_ref() == Some(&result) {
+                return Ok(operation);
+            }
+            return Err(format!(
+                "browser_runtime_operation_replay_mismatch:{operation_id}"
+            ));
+        }
+        if operation.state == BrowserRuntimeOperationState::Observed
+            && operation.result.as_ref() != Some(&result)
+        {
+            return Err(format!(
+                "browser_runtime_operation_replay_mismatch:{operation_id}"
+            ));
+        }
+        let current_generation = load_owner_generation(&transaction, &operation.owner_key)?;
+        if current_generation != generation {
+            return Err(format!(
+                "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
+            ));
+        }
+        if session_state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+            return Err(format!(
+                "browser_session_state_schema_unsupported:{}",
+                session_state.schema_version
+            ));
+        }
+        if handoff.id.is_empty() {
+            return Err("browser_runtime_handoff_identity_invalid".to_string());
+        }
+        let current_session_state: BrowserSessionState = load_optional_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        if current_session_state != *expected_base_state {
+            return Err("browser_runtime_operation_base_state_conflict".to_string());
+        }
+        let mut registry: BrowserManagerHandoffRegistry = load_optional_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )?;
+        registry
+            .handoffs
+            .insert(handoff.id.clone(), handoff.clone());
+        let result_json = serde_json::to_string(&result)
+            .map_err(|error| format!("browser_runtime_operation_serialize_failed:{error}"))?;
+        save_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            session_state,
+        )?;
+        save_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .execute(
+                "UPDATE operation_records SET state = ?2, result_json = ?3 WHERE operation_id = ?1",
+                params![
+                    operation_id,
+                    BrowserRuntimeOperationState::Committed.as_str(),
+                    result_json
+                ],
+            )
+            .map_err(|error| format!("browser_runtime_operation_save_failed:{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_operation_commit_failed:{error}"))?;
+        operation.state = BrowserRuntimeOperationState::Committed;
+        operation.result = Some(result);
+        Ok(operation)
+    }
+
     pub(crate) fn load_operation(
         &self,
         operation_id: &str,
     ) -> Result<BrowserRuntimeOperation, String> {
         load_optional_operation(&self.connection, operation_id)?
             .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))
+    }
+
+    pub(crate) fn find_operation(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        load_optional_operation(&self.connection, operation_id)
     }
 }
 
@@ -869,6 +1101,31 @@ fn load_document<T: DeserializeOwned>(
         .map_err(|error| format!("browser_runtime_document_invalid:{kind}:{error}"))
 }
 
+fn load_optional_document<T: DeserializeOwned + Default>(
+    connection: &Connection,
+    kind: &str,
+    expected_schema: &str,
+) -> Result<T, String> {
+    let row = connection
+        .query_row(
+            "SELECT schema_version, json FROM state_documents WHERE kind = ?1",
+            params![kind],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|error| format!("browser_runtime_document_read_failed:{kind}:{error}"))?;
+    let Some((schema, json)) = row else {
+        return Ok(T::default());
+    };
+    if schema != expected_schema {
+        return Err(format!(
+            "browser_runtime_document_schema_unsupported:{kind}:{schema}"
+        ));
+    }
+    serde_json::from_str(&json)
+        .map_err(|error| format!("browser_runtime_document_invalid:{kind}:{error}"))
+}
+
 fn load_runtime_config_row(connection: &Connection) -> Result<BrowserRuntimeConfig, String> {
     let json: String = connection
         .query_row(
@@ -991,6 +1248,24 @@ fn load_optional_operation(
     let Some((owner_key, generation, state, request_json, result_json)) = row else {
         return Ok(None);
     };
+    Ok(Some(decode_operation(
+        operation_id.to_string(),
+        owner_key,
+        generation,
+        state,
+        request_json,
+        result_json,
+    )?))
+}
+
+fn decode_operation(
+    operation_id: String,
+    owner_key: String,
+    generation: i64,
+    state: String,
+    request_json: String,
+    result_json: Option<String>,
+) -> Result<BrowserRuntimeOperation, String> {
     let generation = u64::try_from(generation)
         .map_err(|_| "browser_runtime_operation_generation_invalid".to_string())?;
     let request = serde_json::from_str(&request_json)
@@ -1001,14 +1276,14 @@ fn load_optional_operation(
                 .map_err(|error| format!("browser_runtime_operation_result_invalid:{error}"))
         })
         .transpose()?;
-    Ok(Some(BrowserRuntimeOperation {
-        operation_id: operation_id.to_string(),
+    Ok(BrowserRuntimeOperation {
+        operation_id,
         owner_key,
         generation,
         state: BrowserRuntimeOperationState::parse(&state)?,
         request,
         result,
-    }))
+    })
 }
 
 fn prepare_private_parent(path: &Path) -> Result<(), String> {
@@ -1658,6 +1933,251 @@ mod tests {
         drop(store);
         let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(reopened.load_operation("open-2").unwrap(), committed);
+    }
+
+    #[test]
+    fn browser_open_transaction_publishes_atomically_and_replays_exactly() {
+        let directory = TempDirectory::new("browser-runtime-open-transaction");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let reserved = store
+            .reserve_operation(
+                "open-atomic",
+                "session:atomic",
+                serde_json::json!({"url": "https://example.test"}),
+            )
+            .unwrap();
+        let browser_observation = serde_json::json!({
+            "phase": "browser_opened",
+            "browserId": "browser-atomic"
+        });
+        store
+            .record_operation_observation(
+                &reserved.operation_id,
+                reserved.generation,
+                browser_observation,
+            )
+            .unwrap();
+        let ready_observation = serde_json::json!({
+            "phase": "ready",
+            "browserId": "browser-atomic",
+            "tabId": "tab-atomic"
+        });
+        let observed = store
+            .record_operation_observation(
+                &reserved.operation_id,
+                reserved.generation,
+                ready_observation.clone(),
+            )
+            .unwrap();
+        assert_eq!(observed.state, BrowserRuntimeOperationState::Observed);
+        assert_eq!(observed.result, Some(ready_observation.clone()));
+        assert_eq!(
+            store.list_pending_operations().unwrap(),
+            vec![observed.clone()]
+        );
+        drop(store);
+
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(store.load_operation("open-atomic").unwrap(), observed);
+        let base_state = store.load_session_state().unwrap();
+        let mut published_state = base_state.clone();
+        published_state.next_session_sequence = 41;
+        let published_handoff = RemoteViewHandoff {
+            id: "handoff-atomic".to_string(),
+            state: "ready".to_string(),
+            browser_id: Some("browser-atomic".to_string()),
+            tab_id: Some("tab-atomic".to_string()),
+            ..RemoteViewHandoff::default()
+        };
+        let mut intervening_state = base_state.clone();
+        intervening_state.next_session_sequence = 7;
+        store.save_session_state(&intervening_state).unwrap();
+        assert_eq!(
+            store.commit_browser_open(
+                "open-atomic",
+                reserved.generation,
+                &base_state,
+                &published_state,
+                &published_handoff,
+                ready_observation.clone(),
+            ),
+            Err("browser_runtime_operation_base_state_conflict".to_string())
+        );
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        assert_eq!(
+            store.load_operation("open-atomic").unwrap().state,
+            BrowserRuntimeOperationState::Observed
+        );
+        store.save_session_state(&base_state).unwrap();
+        let committed = store
+            .commit_browser_open(
+                "open-atomic",
+                reserved.generation,
+                &base_state,
+                &published_state,
+                &published_handoff,
+                ready_observation.clone(),
+            )
+            .unwrap();
+        assert_eq!(committed.state, BrowserRuntimeOperationState::Committed);
+        assert_eq!(store.load_session_state().unwrap(), published_state);
+        assert_eq!(
+            store
+                .load_handoff_registry()
+                .unwrap()
+                .handoffs
+                .get("handoff-atomic"),
+            Some(&published_handoff)
+        );
+        assert!(store.list_pending_operations().unwrap().is_empty());
+
+        let mut replay_state = published_state.clone();
+        replay_state.next_session_sequence = 99;
+        let mut replay_handoff = published_handoff.clone();
+        replay_handoff.state = "must-not-republish".to_string();
+        assert_eq!(
+            store
+                .commit_browser_open(
+                    "open-atomic",
+                    reserved.generation,
+                    &published_state,
+                    &replay_state,
+                    &replay_handoff,
+                    ready_observation.clone(),
+                )
+                .unwrap(),
+            committed
+        );
+        assert_eq!(
+            store.commit_browser_open(
+                "open-atomic",
+                reserved.generation,
+                &published_state,
+                &replay_state,
+                &replay_handoff,
+                serde_json::json!({"phase": "different"}),
+            ),
+            Err("browser_runtime_operation_replay_mismatch:open-atomic".to_string())
+        );
+        assert_eq!(store.load_session_state().unwrap(), published_state);
+        assert_eq!(
+            store
+                .load_handoff_registry()
+                .unwrap()
+                .handoffs
+                .get("handoff-atomic"),
+            Some(&published_handoff)
+        );
+        drop(store);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(reopened.load_operation("open-atomic").unwrap(), committed);
+        assert_eq!(reopened.load_session_state().unwrap(), published_state);
+        assert_eq!(
+            reopened
+                .load_handoff_registry()
+                .unwrap()
+                .handoffs
+                .get("handoff-atomic"),
+            Some(&published_handoff)
+        );
+    }
+
+    #[test]
+    fn stale_browser_open_generation_cannot_observe_or_publish() {
+        let directory = TempDirectory::new("browser-runtime-open-stale-generation");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let original_state = store.load_session_state().unwrap();
+        let stale = store
+            .reserve_operation("open-stale", "session:shared", serde_json::json!({}))
+            .unwrap();
+        let current = store
+            .reserve_operation("open-current", "session:shared", serde_json::json!({}))
+            .unwrap();
+        assert_eq!(current.generation, stale.generation + 1);
+        let observation = serde_json::json!({"phase": "browser_opened"});
+        let stale_error = format!(
+            "browser_runtime_operation_generation_stale:open-stale:{}:{}",
+            stale.generation, current.generation
+        );
+        assert_eq!(
+            store.record_operation_observation("open-stale", stale.generation, observation.clone()),
+            Err(stale_error.clone())
+        );
+        let mut unpublished_state = original_state.clone();
+        unpublished_state.next_session_sequence = 77;
+        let unpublished_handoff = RemoteViewHandoff {
+            id: "handoff-stale".to_string(),
+            state: "ready".to_string(),
+            ..RemoteViewHandoff::default()
+        };
+        assert_eq!(
+            store.commit_browser_open(
+                "open-stale",
+                stale.generation,
+                &original_state,
+                &unpublished_state,
+                &unpublished_handoff,
+                observation,
+            ),
+            Err(stale_error)
+        );
+        assert_eq!(store.load_session_state().unwrap(), original_state);
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        assert_eq!(
+            store.load_operation("open-stale").unwrap().state,
+            BrowserRuntimeOperationState::Prepared
+        );
+    }
+
+    #[test]
+    fn missing_manager_handoff_document_loads_as_an_empty_registry() {
+        let directory = TempDirectory::new("browser-runtime-missing-handoff-document");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        store
+            .connection
+            .execute(
+                "DELETE FROM state_documents WHERE kind = ?1",
+                params![MANAGER_HANDOFF_REGISTRY_DOCUMENT],
+            )
+            .unwrap();
+        drop(store);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            reopened.load_handoff_registry().unwrap(),
+            BrowserManagerHandoffRegistry::default()
+        );
     }
 
     #[test]

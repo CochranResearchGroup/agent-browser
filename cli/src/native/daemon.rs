@@ -25,6 +25,17 @@ const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
 const CONNECTION_READ_AHEAD_CAPACITY: usize = 8;
 
+fn should_journal_browser_open(
+    action_is_open: bool,
+    has_named_profile: bool,
+    explicit_display: bool,
+    has_remote_desktop_routes: bool,
+    existing_operation: bool,
+) -> bool {
+    existing_operation
+        || (action_is_open && has_named_profile && !explicit_display && has_remote_desktop_routes)
+}
+
 /// Build the runtime host on the same bounded stack used for Service State
 /// serialization. Commands may own large parsed snapshots until dispatch
 /// finishes, so both decoding and value destruction need this stack budget.
@@ -642,6 +653,19 @@ impl RuntimeHostRouter {
                     &command,
                     runtime_environment.as_deref(),
                 )?;
+            let action = command.get("action").and_then(Value::as_str);
+            let action_is_open = action == Some("browser_session_open");
+            let has_named_profile = command
+                .get("profileId")
+                .or_else(|| {
+                    command
+                        .get("params")
+                        .and_then(|params| params.get("profileId"))
+                })
+                .and_then(Value::as_str)
+                .is_some();
+            let explicit_display = std::env::var_os("AGENT_BROWSER_SESSION_DISPLAY").is_some();
+            let remote_open_candidate = action_is_open && has_named_profile && !explicit_display;
             let mut host = browser_sessions
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
@@ -651,17 +675,52 @@ impl RuntimeHostRouter {
             let host = host
                 .as_mut()
                 .ok_or_else(|| "browser_session_host_missing".to_string())?;
-            if command.get("action").and_then(Value::as_str) == Some("browser_session_navigate") {
-                let routes = if publish_manager_handoff {
-                    super::browser_session_host::load_current_remote_desktop_routes()?
-                } else {
-                    Vec::new()
-                };
+            let operation_id = command.get("id").and_then(Value::as_str);
+            let existing_open_operation = operation_id
+                .map(|operation_id| host.has_operation(operation_id))
+                .transpose()?
+                .unwrap_or(false);
+            let routes = if publish_manager_handoff || remote_open_candidate {
+                super::browser_session_host::load_current_remote_desktop_routes()?
+            } else {
+                Vec::new()
+            };
+            let has_remote_desktop_routes = !routes.is_empty();
+            let journaled_open = should_journal_browser_open(
+                action_is_open,
+                has_named_profile,
+                explicit_display,
+                has_remote_desktop_routes,
+                existing_open_operation,
+            );
+            if action == Some("browser_session_navigate") || journaled_open {
                 host.replace_remote_desktop_routes(routes);
             }
-            let mut response = if command.get("action").and_then(Value::as_str)
-                == Some("browser_session_navigate")
-                && command.get("headers").is_some()
+            let mut response = if journaled_open {
+                let repository =
+                    super::service_store::LockedServiceStateRepository::default_json()?;
+                let service = repository.load_snapshot()?;
+                let inventory =
+                    super::presentation_inventory::StaticRouteInventory::from_environment()?;
+                let response =
+                    host.handle_journaled_open_with_handoff(&command, &service, &inventory);
+                if response.get("success").and_then(Value::as_bool) == Some(true) {
+                    if let Some(handoff) = response
+                        .get("data")
+                        .and_then(|data| data.get("handoffId"))
+                        .and_then(Value::as_str)
+                        .and_then(|handoff_id| host.manager_handoff(handoff_id))
+                        .cloned()
+                    {
+                        let _ =
+                            super::browser_session_handoff::project_manager_handoff_in_repository(
+                                &handoff,
+                                &repository,
+                            );
+                    }
+                }
+                response
+            } else if action == Some("browser_session_navigate") && command.get("headers").is_some()
             {
                 host.handle_managed_navigation_command(&command)
             } else {
@@ -1546,6 +1605,19 @@ mod tests {
     use super::super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     #[allow(unused_imports)]
     use super::*;
+
+    #[test]
+    fn journaled_open_routing_preserves_explicit_display_and_existing_replay() {
+        assert!(should_journal_browser_open(true, true, false, true, false));
+        assert!(!should_journal_browser_open(true, true, true, true, false));
+        assert!(!should_journal_browser_open(
+            true, false, false, true, false
+        ));
+        assert!(!should_journal_browser_open(
+            true, true, false, false, false
+        ));
+        assert!(should_journal_browser_open(true, true, true, false, true));
+    }
 
     #[tokio::test]
     async fn closing_last_runtime_lane_does_not_stop_shared_host() {

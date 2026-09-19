@@ -35,6 +35,19 @@ pub trait BrowserSessionEffects {
         desktop: Option<&BrowserDesktopAssignment>,
     ) -> Result<BrowserLaunch, String>;
 
+    fn launch_browser_reserved(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: Option<&BrowserDesktopAssignment>,
+        browser_id: &str,
+    ) -> Result<BrowserLaunch, String> {
+        let launch = self.launch_browser(profile, desktop)?;
+        if launch.browser_id != browser_id {
+            return Err("browser_session_reserved_browser_identity_mismatch".to_string());
+        }
+        Ok(launch)
+    }
+
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
 
     fn acquire_initial_tab(
@@ -391,6 +404,13 @@ pub struct BrowserSessionManager<'a, E> {
     config: BrowserSessionManagerConfig,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserOpenReservation {
+    pub session_id: String,
+    pub browser_id: String,
+    pub desktop: BrowserDesktopAssignment,
+}
+
 impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
     pub fn new(
         state: &'a mut BrowserSessionState,
@@ -409,6 +429,22 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
     pub fn open(
         &mut self,
         request: OpenBrowserSession,
+    ) -> Result<OpenBrowserSessionResult, String> {
+        self.open_internal(request, None)
+    }
+
+    pub fn open_reserved(
+        &mut self,
+        request: OpenBrowserSession,
+        reservation: BrowserOpenReservation,
+    ) -> Result<OpenBrowserSessionResult, String> {
+        self.open_internal(request, Some(reservation))
+    }
+
+    fn open_internal(
+        &mut self,
+        request: OpenBrowserSession,
+        reservation: Option<BrowserOpenReservation>,
     ) -> Result<OpenBrowserSessionResult, String> {
         let profile = self.resolve_profile_for_open(&request)?;
         let expired_matching_sessions = self
@@ -447,6 +483,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .cloned()
                 .ok_or_else(|| "browser_session_browser_missing".to_string())?;
             if self.effects.browser_is_live(&browser)? {
+                if reservation.as_ref().is_some_and(|reservation| {
+                    reservation.session_id != session.id
+                        || reservation.browser_id != browser.id
+                        || browser.desktop.as_ref() != Some(&reservation.desktop)
+                }) {
+                    return Err("browser_session_open_reservation_mismatch".to_string());
+                }
                 let expires_at_ms = request
                     .activity_at_ms
                     .checked_add(self.config.session_idle_timeout_ms)
@@ -473,6 +516,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 request.activity_at_ms,
             )?;
         }
+        let next_session_sequence = self
+            .state
+            .next_session_sequence
+            .checked_add(1)
+            .ok_or_else(|| "browser_session_sequence_exhausted".to_string())?;
+        let generated_session_id = format!(
+            "session:{}:{}:{next_session_sequence}",
+            request.session_name, profile.id
+        );
+        if reservation
+            .as_ref()
+            .is_some_and(|reservation| reservation.session_id != generated_session_id)
+        {
+            return Err("browser_session_reserved_session_identity_mismatch".to_string());
+        }
         let reusable_browser = self
             .state
             .browsers
@@ -481,6 +539,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .cloned();
         let (browser_id, disposition, launched) = if let Some(browser) = reusable_browser {
             if self.effects.browser_is_live(&browser)? {
+                if reservation.as_ref().is_some_and(|reservation| {
+                    reservation.browser_id != browser.id
+                        || browser.desktop.as_ref() != Some(&reservation.desktop)
+                }) {
+                    return Err("browser_session_open_reservation_mismatch".to_string());
+                }
                 (browser.id, SessionBrowserDisposition::Reused, None)
             } else {
                 self.retire_browser(
@@ -488,7 +552,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     SessionEndReason::BrowserUnresponsive,
                     request.activity_at_ms,
                 )?;
-                let launch = self.launch_browser(&profile)?;
+                let launch = self.launch_browser(&profile, reservation.as_ref())?;
                 (
                     launch.browser_id.clone(),
                     SessionBrowserDisposition::Launched,
@@ -496,7 +560,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 )
             }
         } else {
-            let launch = self.launch_browser(&profile)?;
+            let launch = self.launch_browser(&profile, reservation.as_ref())?;
             (
                 launch.browser_id.clone(),
                 SessionBrowserDisposition::Launched,
@@ -504,15 +568,20 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             )
         };
 
-        self.state.next_session_sequence = self
-            .state
-            .next_session_sequence
-            .checked_add(1)
-            .ok_or_else(|| "browser_session_sequence_exhausted".to_string())?;
-        let session_id = format!(
-            "session:{}:{}:{}",
-            request.session_name, profile.id, self.state.next_session_sequence
-        );
+        self.state.next_session_sequence = next_session_sequence;
+        let session_id = reservation
+            .as_ref()
+            .map(|reservation| reservation.session_id.clone())
+            .unwrap_or_else(|| generated_session_id.clone());
+        if session_id != generated_session_id {
+            return Err("browser_session_reserved_session_identity_mismatch".to_string());
+        }
+        if reservation
+            .as_ref()
+            .is_some_and(|reservation| reservation.browser_id != browser_id)
+        {
+            return Err("browser_session_reserved_browser_identity_mismatch".to_string());
+        }
         let expires_at_ms = request
             .activity_at_ms
             .checked_add(self.config.session_idle_timeout_ms)
@@ -568,8 +637,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
+        reservation: Option<&BrowserOpenReservation>,
     ) -> Result<BrowserLaunch, String> {
-        let desktop = if self.config.remote_desktop_routes.is_empty() {
+        let selected_desktop = if self.config.remote_desktop_routes.is_empty() {
             None
         } else {
             let live_display_names = self
@@ -588,7 +658,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 &live_display_names,
             )?)
         };
-        let mut launch = self.effects.launch_browser(profile, desktop.as_ref())?;
+        let desktop = reservation
+            .map(|reservation| Some(reservation.desktop.clone()))
+            .unwrap_or_else(|| selected_desktop.clone());
+        if reservation.is_some() && desktop != selected_desktop {
+            return Err("browser_session_reserved_desktop_identity_mismatch".to_string());
+        }
+        let mut launch = if let Some(reservation) = reservation {
+            self.effects.launch_browser_reserved(
+                profile,
+                desktop.as_ref(),
+                &reservation.browser_id,
+            )?
+        } else {
+            self.effects.launch_browser(profile, desktop.as_ref())?
+        };
         if launch.desktop != desktop {
             return Err("browser_session_launch_desktop_mismatch".to_string());
         }
