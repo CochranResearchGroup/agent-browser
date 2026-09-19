@@ -30,6 +30,7 @@ mod profile_recovery_receipt;
 mod profile_reset_receipt;
 mod profile_seeding;
 mod request_provenance;
+mod route_keeper;
 mod runtime_owner_projection;
 mod service_authentication_run;
 mod service_challenge_task;
@@ -176,6 +177,13 @@ pub use profile_seeding::{
 pub use request_provenance::{
     normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,
     SERVICE_REQUEST_PROVENANCE_SCHEMA_VERSION,
+};
+pub use route_keeper::{
+    RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperCleanupObligation,
+    RouteKeeperFence, RouteKeeperPhase, RouteKeeperPolicy, RouteKeeperProjection,
+    RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState, RouteKeeperReconcileAction,
+    RouteKeeperRecord, RouteKeeperStartPriority, RouteKeeperStopDisposition,
+    RouteKeeperStopReceipt, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
 };
 pub use runtime_owner_projection::{
     ProfileRuntimeAuthority, RuntimeControlPlaneAuthority, RuntimeLaneAuthority,

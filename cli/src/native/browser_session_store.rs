@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
     BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState, RemoteViewHandoff,
-    BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
+    RouteKeeperAuthority, BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -22,6 +23,7 @@ const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
 const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
 const MANAGER_HANDOFF_REGISTRY_DOCUMENT: &str = "manager_handoff_registry";
+const ROUTE_KEEPER_AUTHORITY_DOCUMENT: &str = "route_keeper_authority";
 const MANAGER_HANDOFF_REGISTRY_SCHEMA_V1: &str = "agent-browser.manager-handoffs.v1";
 const RUNTIME_CONFIG_KEY: &str = "runtime";
 const BROWSER_RUNTIME_CONFIG_SCHEMA_V1: &str = "agent-browser.runtime-config.v1";
@@ -307,6 +309,12 @@ impl BrowserRuntimeSqliteStore {
                 MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
                 &BrowserManagerHandoffRegistry::default(),
             )?;
+            save_document(
+                &transaction,
+                ROUTE_KEEPER_AUTHORITY_DOCUMENT,
+                ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+                &RouteKeeperAuthority::default(),
+            )?;
             save_runtime_config_row(&transaction, &BrowserRuntimeConfig::default())?;
             for (source_path, bytes, imported) in &source_records {
                 transaction
@@ -460,6 +468,57 @@ impl BrowserRuntimeSqliteStore {
             MANAGER_HANDOFF_REGISTRY_DOCUMENT,
             MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
         )
+    }
+
+    pub(crate) fn load_route_keeper_authority(&self) -> Result<RouteKeeperAuthority, String> {
+        load_optional_document(
+            &self.connection,
+            ROUTE_KEEPER_AUTHORITY_DOCUMENT,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+        )
+    }
+
+    pub(crate) fn compare_and_swap_route_keeper_authority(
+        &mut self,
+        expected: &RouteKeeperAuthority,
+        next: &RouteKeeperAuthority,
+    ) -> Result<(), String> {
+        expected.projection()?;
+        next.projection()?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("route_keeper_authority_begin_failed:{error}"))?;
+        let current: RouteKeeperAuthority = load_optional_document(
+            &transaction,
+            ROUTE_KEEPER_AUTHORITY_DOCUMENT,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+        )?;
+        if current != *expected {
+            return Err("route_keeper_authority_compare_and_swap_conflict".to_string());
+        }
+        for (slot_id, current_record) in &current.records {
+            let next_record = next
+                .records
+                .get(slot_id)
+                .ok_or_else(|| "route_keeper_authority_generation_regression".to_string())?;
+            if next_record.fence.host_generation < current_record.fence.host_generation
+                || (next_record.fence.host_generation == current_record.fence.host_generation
+                    && next_record.fence.operation_generation
+                        < current_record.fence.operation_generation)
+            {
+                return Err("route_keeper_authority_generation_regression".to_string());
+            }
+        }
+        save_document(
+            &transaction,
+            ROUTE_KEEPER_AUTHORITY_DOCUMENT,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+            next,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("route_keeper_authority_commit_failed:{error}"))
     }
 
     pub(crate) fn load_runtime_config(&self) -> Result<BrowserRuntimeConfig, String> {
@@ -1682,6 +1741,122 @@ mod tests {
         let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(reopened.load_session_state().unwrap(), state);
         assert_eq!(reopened.load_profile_catalog().unwrap(), catalog);
+    }
+
+    #[test]
+    fn sqlite_store_seeds_and_isolates_route_keeper_authority() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-authority");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let session_before = store.load_session_state().unwrap();
+        let handoffs_before = store.load_handoff_registry().unwrap();
+        let original_authority = store.load_route_keeper_authority().unwrap();
+        assert_eq!(original_authority, RouteKeeperAuthority::default());
+        let mut authority = original_authority.clone();
+
+        let action = authority.next_reconcile_action().unwrap();
+        let (slot_id, fence) = match action {
+            agent_browser_service_model::RouteKeeperReconcileAction::Start {
+                slot_id,
+                fence,
+                ..
+            } => (slot_id, fence),
+            other => panic!("expected start action, got {other:?}"),
+        };
+        authority.record_observing(&slot_id, &fence).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&original_authority, &authority)
+            .unwrap();
+
+        assert_eq!(store.load_route_keeper_authority().unwrap(), authority);
+        assert_eq!(store.load_session_state().unwrap(), session_before);
+        assert_eq!(store.load_handoff_registry().unwrap(), handoffs_before);
+        drop(store);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(reopened.load_route_keeper_authority().unwrap(), authority);
+    }
+
+    #[test]
+    fn route_keeper_authority_compare_and_swap_rejects_stale_and_regressing_writers() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-cas");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let stale = store.load_route_keeper_authority().unwrap();
+        let mut current = stale.clone();
+        current.next_reconcile_action().unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&stale, &current)
+            .unwrap();
+
+        let mut stale_next = stale.clone();
+        stale_next.next_reconcile_action().unwrap();
+        assert_eq!(
+            store.compare_and_swap_route_keeper_authority(&stale, &stale_next),
+            Err("route_keeper_authority_compare_and_swap_conflict".to_string())
+        );
+        assert_eq!(store.load_route_keeper_authority().unwrap(), current);
+
+        let mut regressing = current.clone();
+        let record = regressing.records.get_mut("route-slot-01").unwrap();
+        record.fence.operation_generation = 0;
+        record.fence.operation_id.clear();
+        record.phase = agent_browser_service_model::RouteKeeperPhase::Absent;
+        record.protocol_ready = None;
+        record.adoption = None;
+        record.cleanup_obligation = None;
+        assert_eq!(
+            store.compare_and_swap_route_keeper_authority(&current, &regressing),
+            Err("route_keeper_authority_generation_regression".to_string())
+        );
+        assert_eq!(store.load_route_keeper_authority().unwrap(), current);
+    }
+
+    #[test]
+    fn missing_route_keeper_document_loads_a_fresh_authority() {
+        let directory = TempDirectory::new("browser-runtime-missing-route-keeper-document");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        store
+            .connection
+            .execute(
+                "DELETE FROM state_documents WHERE kind = ?1",
+                params![ROUTE_KEEPER_AUTHORITY_DOCUMENT],
+            )
+            .unwrap();
+
+        assert_eq!(
+            store.load_route_keeper_authority().unwrap(),
+            RouteKeeperAuthority::default()
+        );
     }
 
     #[test]
