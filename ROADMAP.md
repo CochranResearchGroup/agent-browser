@@ -58,10 +58,15 @@ internal warm-route viewer has no display binding until it opens, while the
 ordinary manager path requires that binding before returning success. The
 terminal receipt is `apply-1789784327708-12563.json`; quarantine left provider
 containers and ports stopped, no viewer process, and production unchanged.
-The three-attempt bound is exhausted. A new reconciled continuation must split
-internal viewer bootstrap from ordinary ready-handoff publication before the
-joined shutdown and replacement journey can run. Production effects remain
-excluded.
+The failed bootstrap architecture is superseded by Plan version 49. Hidden
+Chrome viewers, route and inventory environment authority, fragmented runtime
+JSON, and rollback to the old installation are removed. One runtime-host-owned
+SQLite database, supervised in-process Guacamole tunnel keepers, live
+user-scoped capacity and retention configuration, shared Desktop Services
+control fencing, and forward-only migration now define the repair. The next
+gate is provider-free schema and state-machine qualification, followed by the
+operator-authorized isolated development cold-start matrix. Production and
+external ingress remain excluded.
 
 ## P216 | Service Model Extraction Landing
 

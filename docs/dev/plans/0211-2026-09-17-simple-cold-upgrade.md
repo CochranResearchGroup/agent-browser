@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 48
+Plan version: 49
 
 State: OPEN
 
@@ -65,13 +65,15 @@ by the default trusted single-user path.
 
 Make the presentation provider the sole runtime authority for display
 readiness, allocation, release, and handoff resolution. Browser Session
-Manager must use one typed internal provider API over a user-scoped local
-transport; it must not parse route inventories from environment variables or
-generated files. Persist only the minimum intent, ownership, lease, handoff,
-and cleanup journal needed for crash recovery in one transactional
-service-owned store. Treat XRDP/Xorg processes, display numbers, Guacamole
-connections, and other live process observations as ephemeral evidence that
-the provider reconciles against that durable state after every cold start.
+Manager must use one typed in-process provider API in the existing runtime
+host; outside callers continue through the existing user-scoped Service
+transport. It must not parse route inventories from environment variables or
+generated files. Persist configuration, intent, ownership, leases, handoffs,
+operations, history, and cleanup obligations in one transactional
+service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
+Guacamole connections, and other live process observations as ephemeral
+evidence that the provider reconciles against that durable state after every
+cold start.
 
 ## Current State
 
@@ -972,6 +974,31 @@ identity, local provider endpoint, capacity policy, and store location. The
 internal viewer-bootstrap exception becomes a typed private provider request,
 not a caller-set environment switch.
 
+Version 49 supersedes version 48's compatibility ingress, typed internal
+viewer request, fragmented JSON persistence, and rollback-to-old-generation
+direction. The operator completed a one-question-at-a-time architecture review
+and selected a forward-only cutover. The new runtime has no route-inventory,
+provider-inventory, or internal-viewer environment input and no legacy runtime
+fallback. A cold upgrade imports valid legacy configuration and history into
+one user-private SQLite database before the new runtime starts, archives every
+source and rejected record with typed reasons, removes the old unit wiring and
+owned processes, and proceeds with the new generation. Invalid legacy state
+cannot veto the cutover. Failure leaves the new generation diagnostic and
+repair-forward; it never restores the broken runtime architecture.
+
+Hidden Chrome viewers are removed. The existing runtime host owns supervised,
+in-process Guacamole tunnel keepers that establish and verify XRDP sessions
+through the same Guacamole path used by operator handoffs. Keepers have no
+browser profile, tab, Browser Session Manager session, or handoff. The first
+verified route satisfies `minimumReady=1`; the provider warms toward the
+user-configured target in the background and creates further displays just in
+time. One browser is placed on each display while capacity can grow. At the
+configured display maximum, additional browsers may share the least-loaded
+display up to the configured density. Desktop Services owns the single fenced
+display-control lease used by handoff activation, focus, maximize, capture,
+and input, so shared-display interference is explicit and stale commands
+cannot affect a replacement generation.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -983,13 +1010,17 @@ returns independently attributable Agent Browser-owned residue plus separately
 reported foreign-process observations. A failed phase does not suppress later
 ownership release, transient cleanup, or final verification.
 
-The cold-install module exposes one operation with the fixed sequence `stop`,
-`replace`, `start`, and `readiness`. Stop must return a successful shutdown
-receipt before replacement begins. Any replace, start, or readiness failure
-executes one bounded rollback phase and reports both the original failure and
-rollback integrity. A successful result requires all four phases and a ready
-probe from the newly selected generation. Legacy hot-upgrade transaction state
-is not an input to this interface.
+The cold-install module exposes one forward-only operation with the fixed
+sequence `stop`, `migrate`, `replace`, `start`, and `readiness`. Exact
+Agent Browser ownership evidence controls process cleanup; stale lease, owner,
+transaction, or route metadata cannot veto it. Migration imports valid fields,
+archives original sources and typed rejections, removes legacy unit inputs, and
+commits the new SQLite schema before start. A replace, start, or readiness
+failure leaves the selected new generation installed in a typed diagnostic
+state for forward repair. The operation never restores the old runtime, route
+database, unit definition, or legacy authority. Success requires all five
+phases and at least one verified presentation route. Legacy hot-upgrade
+transaction state is not an input to this interface.
 
 The Browser Session Manager is a deep module inside the extracted Service
 Model crate. Its interface admits a named session against an exact-profile or
@@ -1000,15 +1031,29 @@ start that Service once when needed and never fall back to legacy lease
 authority. Existing browser launch, termination, PID and CDP observation,
 atomic persistence, and event adapters remain mechanisms behind the new seam.
 
-The manager persists `browser-session-state.v1`, containing only browser
-instances, named sessions, tab attribution, heartbeat timestamps, and terminal
-history. A separate `browser-profile-catalog.v1` contains named profile
-definitions and disposable allocation policy. On first startup, an absent
-catalog is populated by a tolerant field-level import of legacy profile
-definitions; unrelated legacy fields are neither validated nor migrated. The
-new catalog is authoritative after that import. Legacy Service State receives
-best-effort diagnostic projections only. Failure to mirror a projection emits
-a warning and backlog item but cannot reject a browser command.
+The runtime host owns one user-private SQLite database as the only durable
+authority for browser sessions, profiles, logical tabs, handoffs, presentation
+intent, capacity policy, operation records, generations, Desktop Services
+lease joins, cleanup obligations, history, and provider credentials. WAL,
+durable transactions, integrity checks, incremental vacuum, and one rotating
+verified online backup protect it. The live database has a provisional 96 MiB
+cap, including 64 MiB of exact URL history, and database, WAL, plus compressed
+backup have a 128 MiB routine budget. Repeated URL events are coalesced; old
+exact URL events compact into daily first, last, count, session, profile, and
+recovery summaries. Material lifecycle and recovery history is retained, and
+compaction is itself auditable. Corruption preserves the damaged database and
+automatically restores the verified backup. If neither copy is valid, the
+runtime starts diagnostics and fresh presentation capacity without inventing
+browser or handoff identity.
+
+Legacy environment and JSON knowledge exists only in the cold-upgrade
+migrator. It performs tolerant field-level import in one idempotent
+transaction, records source hashes and an import receipt, archives source data
+read-only, and never dual-writes. Valid named profiles and history import
+independently. Invalid records are retained verbatim with typed reasons; safe
+capacity defaults and a disposable profile keep unrelated service available.
+The runtime itself understands only the SQLite schema and returns a typed
+installation error if obsolete inputs remain.
 
 An active browser is one concrete process attached to one profile. Multiple
 named sessions may share it and route requests through its one CDP endpoint.
@@ -1027,16 +1072,54 @@ activity is a heartbeat. Explicit close, heartbeat expiry, browser termination,
 or failed bounded liveness recovery ends a session. The browser closes when its
 last session ends. Interrupted commands are never replayed automatically.
 
-Presentation uses a configured display-to-viewer map rather than dynamic route
-and display leases. Remote-view browsers are assigned to the healthy configured
-virtual desktop with the fewest live browsers, using deterministic route order
-for ties. Local-screen browsers use `:0`, which is excluded from remote-view
-selection until a viewer is deliberately configured for it. Each browser has
-one primary window with many tabs. Dashboard active tiles derive only from
-manager-owned browser instances; tile selection opens the viewer for the
-browser's desktop and serializes a raise-and-maximize request. A normal
-same-site authentication redirect retains the durable handoff. Raw provider,
-route-binding, embed, dashboard, or health URLs are never the operator result.
+Presentation has no configured display-to-viewer inventory. User-scoped typed
+settings in SQLite provide `presentation.warm-target` (default 4),
+`presentation.maximum-displays` (default 6),
+`presentation.maximum-browsers-per-display` (default 4), queue size (default
+32), request deadline (provisionally 90 seconds), and scale-in cooldown
+(provisionally 10 minutes). `agent-browser config get/set` and the Service API
+change them transactionally and trigger live reconciliation without
+recompilation, reinstallation, or normally a restart. Lowering a limit below
+current usage is non-destructive: status becomes `over-target`, new allocation
+cannot worsen it, and the provider converges as resources become idle.
+
+The provider creates deterministic logical slots, route users, credentials,
+Guacamole connections, and supervised protocol-level keepers. Physical
+display numbers and Guacamole connection IDs are ephemeral observations. The
+provider stays diagnostic when capacity is absent, reports progress, and makes
+ordinary opens wait up to their deadline without launching Chrome before a
+verified display exists. Active-view recovery has priority, followed by access
+to an existing handoff and then aged FIFO new opens. Duplicate requests
+coalesce. Merely queued requests become retryable after restart; operations
+that began external effects are reconciled or compensated. Empty,
+reference-free displays above the warm target scale in only after cooldown and
+a final database, browser, handoff, Desktop Services, keeper, and live-process
+reference check.
+
+Each browser retains its display binding for its lifetime. New browsers receive
+unused displays first, then the least-loaded healthy display after the display
+maximum. Multiple viewers may observe a shared display, but only one holds the
+Desktop Services control lease. Activating another handoff transfers control,
+focuses and maximizes its exact browser and logical tab, and makes prior clients
+view-only. The authenticated remote-view connection and live Guacamole tunnel,
+not a stored page or flag, prove active viewing. Every host start advances a
+SQLite generation; provider work, Desktop Services leases, browser launches,
+callbacks, and operation completion carry generation plus operation ID, and
+stale effects cannot publish readiness or act on a replacement display.
+
+A durable handoff stores an opaque ID and logical session, browser, profile,
+and tab target, never a raw provider URL or absolute public URL. Repeated open
+for the same logical session and tab returns the same handoff. Resolution uses
+the current public origin and provider binding, may recreate a missing tab in
+the same healthy browser, and may launch at most one proven replacement browser
+at the last committed top-level URL. It never replays clicks, forms, downloads,
+or other commands. Active-view failure retries with bounded backoff for up to
+90 seconds while dormant recovery remains lazy. Named-profile handoffs have no
+default time expiry. Disposable handoffs, sessions, and profiles expire after
+24 hours of inactivity by default and are additionally bounded by 20 retained
+profiles and 10 GiB; all limits are live user settings. Cleanup is
+oldest-inactive-first, never affects active or named profiles, and returns a
+typed quota error if it cannot make room. Profile promotion is deferred.
 
 This packet declares the following disjoint write scopes before fan-out:
 
@@ -1111,29 +1194,53 @@ open.
    navigation, create further tabs only on explicit request, select the most
    recently used remaining tab after close, and close live tabs when their
    session ends without deleting historical metadata.
-10. Make one local presentation-provider control plane the only authority for
-   route readiness, display allocation, release, and handoff resolution.
-   Browser Session Manager calls that typed API and never parses a route JSON
-   environment variable or generated inventory file.
-11. Give the provider one transactional durable store for intent, exact
-   ownership, display leases, handoff locators, and cleanup obligations. On
-   cold start it reconciles that state against XRDP/Xorg, Guacamole, and process
-   observations, recreates missing warm capacity, and atomically returns ready
-   allocations without exposing physical display numbers to callers.
-12. Accept the legacy static route JSON only through a provider-boundary
-   compatibility adapter while current production routes migrate. Reject
-   conflicting authorities, emit migration diagnostics, and delete the legacy
-   contract, environment documentation, and tests after production cold-start
-   acceptance. Do not retain an indefinite fallback.
-13. Reserve `:0` for explicit local-screen work. Make a dashboard tile resolve
-   its opaque handoff through the provider, select the exact current viewer,
-   and raise and maximize the browser's primary window.
-14. Return success only when `operatorVisible.state=ready` and the durable
-   opaque handoff resolves. Doctor, service status, capacity, preflight, and
-   checkout must agree on the same effective readiness result.
-15. Update CLI help, README, agent skill, documentation site, and inline docs to
-   present the one-command workflow and remove hot-upgrade ceremony from the
-   ordinary path.
+10. Replace fragmented runtime JSON authorities with one user-private SQLite
+    database owned by the runtime host. Persist typed user configuration,
+    profiles, sessions, browsers, logical tabs, handoffs, provider intent,
+    operation records, generations, cleanup obligations, credentials, and
+    compact history transactionally. Keep JSON only as migration input or an
+    explicitly requested diagnostic export.
+11. Make one in-process presentation-provider control plane the only authority
+    for readiness, allocation, release, capacity, and handoff resolution.
+    Browser Session Manager calls that typed API and never parses route JSON,
+    a generated inventory, or an internal-bootstrap environment switch.
+12. Remove infrastructure viewer browsers. Supervise lightweight in-process
+    Guacamole tunnel keepers that establish XRDP sessions through the exact
+    operator presentation path without Browser Session Manager, Chrome,
+    profiles, tabs, or handoffs.
+13. Reconstruct presentation eagerly after cold start. One verified route makes
+    service usable, the provider warms toward the configured target in the
+    background, and extra displays are created only as needed. Use one browser
+    per display until maximum displays, then permit bounded least-loaded
+    overflow sharing under the single Desktop Services control lease.
+14. Make all capacity, queue, timeout, cooldown, history, and disposable-profile
+    retention limits typed user-scoped settings that apply live through Service
+    API and CLI configuration. Do not encode mutable policy in environment
+    variables, generated files, or installer-only constants.
+15. Make browser open a crash-recoverable operation: commit pending session,
+    browser, slot, and handoff intent before effects; establish display and
+    Chrome; then atomically publish the observed browser, tab, display, and
+    handoff as ready. Fence every effect by host generation and operation ID.
+16. Route display focus, maximize, capture, pointer, and keyboard through the
+    existing Desktop Services fenced control authority. Multiple clients may
+    observe a display, but only one controls it; activating a different handoff
+    transfers control and makes prior clients view-only.
+17. Persist only logical durable handoffs. Resolve current provider bindings at
+    access time, lazily recover dormant browsers, eagerly recover active views,
+    recreate a missing logical tab or at most one proven replacement browser at
+    its last committed URL, and never replay page actions.
+18. Perform one forward-only cold-upgrade migration. Import valid legacy fields
+    transactionally, archive source hashes and typed rejections, remove legacy
+    units, variables, runtime readers, docs, and tests, rebuild the owned
+    Guacamole database as derived infrastructure, and never roll back to or
+    fall back on the old architecture.
+19. Return success only when `operatorVisible.state=ready` and the durable
+    opaque handoff resolves. Doctor, service status, capacity, preflight, and
+    checkout must agree on the same effective readiness result.
+20. Update CLI help, README, agent skill, documentation site, and inline docs to
+    present the one-command workflow, typed configuration, durable-handoff
+    recovery, and forward-only migration while removing obsolete environment
+    and hot-upgrade ceremony.
 
 ## Scope And Effect Boundary
 
@@ -1146,13 +1253,13 @@ workspace projection, and remote-view handoff paths, provider-free
 fixtures, README, the Agent Browser skill, installation and remote-view
 documentation, this plan, and P211's active-lane projection.
 
-The presentation successor may add one provider-neutral local control-plane
-contract in `agent-browser-desktop-services`, one CLI-hosted Unix-socket or
-equivalent user-scoped transport adapter, and one transactional persistence
-adapter. It may remove the generated inventory and route-pool environment from
-ordinary Browser Session Manager inputs. It must not create a second daemon,
-database, coordinator, allocation authority, or operator-visible recovery
-workflow merely to preserve the legacy route format.
+The presentation successor may add one provider-neutral in-process
+control-plane contract, one SQLite persistence adapter, one Guacamole protocol
+adapter, and the smallest shared Desktop Services lease join. It removes the
+generated inventory, route-pool environment, internal bootstrap switch, and
+fragmented JSON authorities from runtime use. It must not create a second
+daemon, database, coordinator, allocation authority, infrastructure browser,
+or operator-visible recovery workflow.
 
 The command may affect only Agent Browser-owned user units, timers, browsers,
 runtime hosts, dashboard processes, MCP processes, presentation processes and
@@ -1161,92 +1268,91 @@ not kill unrelated browsers or containers. Unknown foreign processes are
 reported and left alone; stale Agent Browser bookkeeping does not block the
 owned shutdown set.
 
-This plan does not authorize a production install, production shutdown,
-credential or provider use, release, broad process cleanup, deletion of profile
-data, or mutation of unrelated worktrees. Installed validation remains a
-separate user-directed effect after source qualification. The product contract
-is intentionally single trusted user; this plan does not weaken identity or
-ownership behavior for a future multi-user mode.
+This plan authorizes isolated development provider credentials, provider
+mutation, development browser/profile effects, and development-only cold
+upgrade acceptance after source qualification. It does not authorize a
+production install, production shutdown, production credential or provider
+use, external ingress publication, release, broad process cleanup, or mutation
+of unrelated worktrees. The product contract is intentionally one private
+trusted-user runtime; this plan does not claim adversarial multi-user
+isolation.
 
-The first prototype explicitly defers authenticated principals,
-identity-restricted profiles, adversarial or distributed fencing, tab sharing
-and handoff, desktop-exclusive leases, per-session idle-timeout overrides,
-tab caps and silent eviction, multi-window management,
-browser-to-session-to-tab tree expansion, a viewer for `:0`, and implementation
-of the third Guacamole route. Extension points may be retained, but no deferred
-concept may appear in the prototype's ordinary interface or live authority
-calculation.
+The current delivery defers authenticated principals, identity-restricted
+profiles, adversarial or distributed fencing, cross-profile tab sharing,
+profile promotion, a dashboard settings editor, per-session timeout overrides,
+tab caps and silent eviction, multi-window management, and a remote viewer for
+`:0`. Extension points may be retained, but no deferred concept may appear in
+the ordinary interface or live authority calculation.
 
 ## Delivery Sequence And Budget
 
 - Optimization target: balanced wall-clock and token efficiency.
-- Active-agent concurrency: at most 3 total, including the primary. Delegation
-  is one level deep; workers cannot spawn workers.
+- Active-agent concurrency: one. The operator explicitly assigned this lane to
+  the primary alone; no subagent, auxiliary worktree, or independent reviewer
+  is part of the version 49 batch.
 - Critical path: frozen lifecycle and trusted-single-user contracts, public
-  shutdown, profile release, Browser Session Manager prototype, profile-catalog
-  import, cold installer routing, simple display selection, ordinary
-  remote-view open, installed acceptance, documentation.
-- Slice 1: freeze the shutdown and cold-upgrade result contracts and add red
-  provider-free fixtures for broken transaction state, active drain, stale
-  metadata, partial retry, and a clean machine.
-- Slice 2: implement `agent-browser shutdown` and the bounded owned-target
-  adapters.
-- Slice 3: route workstation and reviewed-candidate apply through
-  stop-replace-start while leaving legacy hot transaction inspection intact.
-- Slice 4: implement the provider-free Browser Session Manager and Profile
-  Catalog interfaces first. Prove two named sessions sharing one named-profile
-  browser, session-scoped disposable allocation, heartbeat expiration,
-  last-session browser closure, service restart recovery, nonresponsive-browser
-  recovery without command replay, legacy-state noninterference, and exact
-  disposable-profile garbage collection.
-- Slice 5: host the manager in the existing user-scoped Service, route ordinary
-  CLI commands through it, project browser-only dashboard tiles, implement
-  least-crowded virtual-desktop selection and static display-to-viewer lookup,
-  and add durable remote-view fixtures for #195, including #189 and #190.
-- Slice 6: join the cold-install and Browser Session Manager paths in one provider-free
-  fresh-install and reboot acceptance fixture.
-- Slice 7: synchronize all required documentation and run changed-surface
-  validation once against the consolidated candidate.
-- Slice 8, separately authorized after source qualification: run one installed
-  clean-state journey and one replacement-upgrade journey through a ready
-  remote-view handoff.
-- Slice 9: freeze the provider-neutral allocation, release, resolve, status,
-  bootstrap, and reconcile contracts plus the transactional recovery records.
-  Add provider-free tests proving Browser Session Manager has no inventory-file
-  or route-environment input.
-- Slice 10: implement the local provider control plane and cold-start
-  reconciliation. Prove a stopped provider with no XRDP/Xorg display processes
-  recreates warm capacity, publishes no stale ready route, allocates one
-  browser, resolves its opaque handoff, and replays idempotently after an
-  interruption at every state transition.
-- Slice 11: move existing production static-route configuration behind the
-  provider compatibility ingress, validate production-equivalent fixtures,
-  then delete `AGENT_BROWSER_RDP_ROUTE_POOL_JSON`, the legacy two-route runtime
-  reads, and their user-facing documentation. Live production cutover remains
-  separately gated.
-- Slice 12: run one development cold-start acceptance from absent display
-  processes through ordinary ready handoff, exact cleanup, provider restart,
-  and a second ready handoff without operator route selection or repair.
+  shutdown, forward-only migrator, SQLite authority, route keeper, Desktop
+  Services fencing, capacity reconciliation, durable handoff recovery, and
+  isolated development cold-upgrade acceptance.
+- Completed foundation: public shutdown, cold-install routing, Browser Session
+  Manager, profile catalog, shared named-profile browsers, logical tab
+  attribution, durable handoff projection, documentation parity, and isolated
+  development provider staging remain reusable only where their contracts do
+  not conflict with version 49.
+- Slice 1: freeze the SQLite schema, typed configuration, operation journal,
+  generation fencing, history compaction, backup, and forward-only import
+  contracts. Add provider-free red tests for migration tolerance, corruption
+  recovery, pending-operation replay, and legacy-input rejection.
+- Slice 2: implement the SQLite repository and move Browser Session Manager,
+  profiles, tabs, handoffs, presentation intent, configuration, and history
+  behind it. Retire runtime JSON reads and dual-write projections.
+- Slice 3: change cold upgrade to `stop`, `migrate`, `replace`, `start`, and
+  `readiness`; remove rollback to the old generation; delete legacy unit
+  inputs, route readers, provider inventory authority, and the caller-set
+  bootstrap switch. Prove exact owned cleanup and foreign preservation.
+- Slice 4: implement the in-process Guacamole tunnel keeper and provider state
+  machine. Prove `minimumReady=1`, background warm target, just-in-time scale
+  out, reference-free scale in, zero privileged calls on a healthy cold start,
+  and exact privileged repair receipts when drift exists.
+- Slice 5: implement one-browser-per-display preference, bounded overflow
+  sharing, capacity queueing and priority, live configuration changes, memory
+  admission, and the shared Desktop Services fenced control lease.
+- Slice 6: make handoff resolution idempotent and recovery-aware. Prove active
+  eager recovery, dormant lazy recovery, same-URL reuse, missing-tab recreation,
+  at most one browser replacement, exact last-committed URL tracking, and no
+  command replay.
+- Slice 7: implement bounded history and disposable retention: 96 MiB live
+  database, 128 MiB routine total, 24-hour inactivity, 20 retained disposable
+  profiles, 10 GiB disposable storage, and oldest-inactive cleanup. Expose
+  read-only doctor plus status, config, recovery, queue, and repair receipts.
+- Slice 8: synchronize CLI help, README, Agent Browser skill, docs site, inline
+  docs, generated service contracts, development scripts, and fixtures. Run
+  changed-surface provider-free validation once against the frozen candidate.
+- Slice 9: install the frozen candidate only in the isolated development
+  runtime and run the accepted cold-start and fault-injection matrix. Keep
+  external ingress deferred and prove production unchanged after every effect.
 - Maximum work-unit attempts: 3 per slice.
 - Maximum review and rework cycles: 1.
 - Maximum consecutive hardening checkpoints: 2.
 - Reassess after two checkpoints or 30 active minutes without outcome progress.
-- Overall effort ceiling: 360 active minutes through a provider-free qualified
-  candidate. Installed-runtime validation is excluded until separately
-  directed.
-- Next outcome artifact: a provider-neutral control-plane contract and
-  provider-free cold-start state-machine fixture proving that one API owns
-  readiness, allocation, release, resolution, reconciliation, and crash replay
-  without Browser Session Manager reading either legacy route JSON or a
-  generated provider inventory file.
+- Version 49 implementation and development-acceptance ceiling: 360 active
+  minutes. This does not erase prior P211 effort or authorize production.
+- Next outcome artifact: provider-free red tests plus a typed schema packet for
+  the SQLite authority, forward-only migrator, Guacamole keeper lifecycle, and
+  Desktop Services control join. No optimized build or provider retry occurs
+  before those cheaper seams are green.
 
 ## Worker Assignments
 
-The P211 lane owner retains architecture, source custody, Git transitions,
-shared-contract decisions, runtime effects, finding disposition, integration,
-and final acceptance. The primary uses the strongest available tier for
-consequential architecture and integration, currently `gpt-6-astra` at high
-reasoning. Deterministic repository and test tools remain the first choice.
+Version 49 has one worker: the P211 lane owner. The operator explicitly stated
+that this is the only agent working. The primary retains architecture, source
+custody, Git transitions, contracts, implementation, runtime effects, finding
+disposition, integration, and final acceptance. No subagent, auxiliary
+worktree, independent reviewer, or parallel implementation assignment is
+authorized. Deterministic repository and test tools remain the first choice.
+
+The assignments below are completed historical packets and grant no current
+worker or write custody.
 
 The Browser Session Manager prototype began as a serialized primary-owned
 packet. After its first five provider-free interface tests passed, the primary
@@ -1276,13 +1382,9 @@ pages, inline documentation, RUNBOOK, this plan, and P211's catalog entry.
 P207's feature-specific prose remains evidence for later reconciliation, not
 content to publish before its corresponding source integrates.
 
-After the candidate is frozen and deterministic validation finishes, one freed
-slot runs a fresh read-only review on `gpt-5.6-sol` at high reasoning for at
-most 20 active minutes. The packet contains the exact candidate and base,
-acceptance table, changed files, validation receipts, effect exclusions, and
-stable finding IDs. The reviewer may return no findings and cannot broaden
-scope or claim acceptance. No worker receives an auxiliary worktree,
-independent branch, commit authority, production effect, or nested delegation.
+Version 49 uses no delegated review. The primary performs the closed-world
+conformance check against the accepted design and the development evidence
+matrix without opening another worktree or agent session.
 
 P205 completed the Service Model extraction and its integrated result is the
 starting seam for this packet. P211 owns CLI help, README, the Agent Browser
@@ -1312,52 +1414,72 @@ integrating any P207 implementation.
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, five-second manager-specific reattach timeout, concrete restart reattachment, full daemon-process command routing, and bounded exact-process recovery for a verified external unresponsive-CDP browser are green; unverified processes remain untouched |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state, the manager has no legacy-authority input, and hosted persistence plus multi-display selection remain independent of contradictory legacy session, owner, and display records |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
-| Simple display selection | remote-view browsers use the least-crowded healthy configured virtual desktop; `:0` remains explicit local-screen only; retained route allocations do not participate | earlier provider-free selection and static-route fixtures remain useful mechanism evidence, but version 48 rejects their inventory input as product acceptance; provider API allocation is pending |
-| Single presentation authority | Browser Session Manager performs allocation, release, status, and handoff resolution only through the typed local provider API; no ordinary runtime path reads route JSON or a generated inventory file | planned in version 48; current dual-input implementation is rejected and remains blocking |
-| Durable cold-start reconstruction | with provider and XRDP/Xorg processes absent, durable intent and ownership survive, stale readiness is withheld, warm capacity is recreated, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; the version 45 provider bootstrap succeeded, but the version 46 ordinary allocation failed because the allocator used a separate inventory contract |
-| Legacy route removal | production-equivalent fixtures migrate through one provider-boundary adapter, after which `AGENT_BROWSER_RDP_ROUTE_POOL_JSON`, legacy two-route runtime reads, and user-facing instructions are deleted | migration and deletion planned; indefinite fallback is prohibited |
+| SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | version 49 contract frozen; implementation pending |
+| Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | version 49 contract frozen; implementation pending |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | current hidden-browser bootstrap is rejected; implementation pending |
+| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | version 49 defaults frozen subject to development measurement; implementation pending |
+| Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
+| Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
+| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | version 49 contract frozen; implementation pending |
+| Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |
+| Bounded persistence and history | live SQLite stays within 96 MiB, exact URL history within 64 MiB, routine database/WAL/backup within 128 MiB, summaries retain long-term lifecycle evidence, and verified backup recovery is automatic | version 49 contract frozen; development size and corruption tests pending |
+| Disposable retention | default 24-hour inactivity, 20 profiles, and 10 GiB are live settings; oldest inactive sessions expire first and active or named profiles are never evicted | version 49 contract frozen; implementation and quota tests pending |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | the compiled-CLI Chrome fixture follows a same-site `/protected` to `/login` redirect and retains the same ready opaque handoff through `/account`; the dashboard same-origin post-auth return contract is green; one authenticated dashboard replay ended without a terminal verdict and its teardown-hang regression is repaired, so authenticated rendering remains pending |
-| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | provider-free static-route proof is retained, but the installed version 46 ordinary open failed with `browser_session_handoff_desktop_missing`; version 48 requires the sole provider API and true cold-start acceptance before this row can become green |
+| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; repeated open is idempotent; doctor, status, capacity, preflight, and checkout agree | provider-free static-route proof is retained, but the installed version 46 ordinary open failed with `browser_session_handoff_desktop_missing`; version 49 requires the SQLite authority, protocol keeper, shared control lease, and true cold-start acceptance before this row can become green |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | the full compiled CLI and runtime-host journey shares one browser, drives independent commands, returns the ready handoff, and closes cleanly with none of those inputs; compiled help and repository documentation expose the same ordinary path |
 | Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | repository surfaces describe fixed cold apply, idempotent shutdown, ordinary session-plus-profile remote view, and explicitly bounded legacy recovery; compiled help, documentation contracts, links, and production docs build are green |
 
 Exit requires all rows green against one frozen source candidate. Provider-free
-tests must include idempotent replay, a shutdown interrupted after each phase,
-stale PID metadata, exact foreign-process preservation, owned container
-cleanup, browser close escalation, ownership release, and restart readiness.
-It must also include two named sessions sharing one browser, exact and
-disposable profile intent, bootstrap or session-initial tab acquisition,
-repeated navigation without tab growth, explicit tab creation, current-tab
-close selection, session tab
-cleanup, heartbeat expiry, join-versus-final-close serialization, Service
-restart recovery, unresponsive PID and CDP recovery, nonblocking legacy
-projection failure, exact disposable cleanup, deterministic least-crowded
-display assignment, a protected URL redirecting to login, and runtime-host
-survival during reattach.
+tests include the existing shutdown, session, browser, tab, profile, redirect,
+and foreign-process invariants plus forward-only field-level migration,
+SQLite integrity and backup recovery, history compaction, live configuration,
+operation replay at every pending-effect boundary, generation fencing,
+protocol-keeper supervision, minimum-ready versus warm-target projection,
+capacity queue priority and restart behavior, overflow display sharing,
+Desktop Services lease transfer, missing-tab recreation, single browser
+replacement, disposable quota cleanup, and proof that runtime source contains
+no legacy route, inventory, or bootstrap-variable reader.
 
-The final installed acceptance is one ordinary user journey against one frozen
-candidate from a true cold state with no provider, Guacamole, XRDP/Xorg display,
-or browser process: clean install; bounded provider reconstruction and passing
-doctor; named-profile open
-using `--session alice`; a second `--session bob` request sharing the same
-browser; ready durable remote view; one-command shutdown with profiles
-unowned; replacement install; bounded restart; and a second ready remote view
-from the same named profile. It fails if the operator must choose a
-route, desktop, or display; generate or copy a hash, capability, token, code,
-or sealed plan; edit Service State; run a repair command; or interpret raw
-Guacamole state. It also fails if Browser Session Manager reads a route-pool
-environment variable or generated provider inventory, if a stale display is
-reported ready, or if a changed physical display number requires operator
-action.
+Development acceptance uses one frozen installed candidate and includes:
+
+1. Three consecutive isolated cold starts from zero provider, Guacamole,
+   XRDP/Xorg, route-keeper, and browser processes. Each first ordinary open
+   reaches a ready opaque handoff within the provisional 90-second deadline,
+   with no manual action, stale ready state, production mutation, or unexplained
+   residue.
+2. Runtime-host restart with the same handoff; keeper disconnect; active-display
+   loss with at most one browser replacement; and a failed 90-second recovery
+   that proves no Chrome launch before display readiness.
+3. Maximum-display overflow sharing, automatic focus/control transfer through
+   Desktop Services, live capacity-setting changes, and crash recovery from
+   every pending-operation phase.
+4. Named-profile browser authentication state retained through relaunch;
+   missing-tab recovery at the last committed top-level URL; no replay of
+   clicks, forms, downloads, or other side effects; and idempotent repeated
+   `remote_view_open`.
+5. Disposable inactivity, retained-count, and byte-quota cleanup; SQLite size,
+   WAL checkpoint, compaction, backup restore, and corrupted-primary evidence.
+6. A fresh OS process and resource census after every provider or browser run,
+   with exact task-owned cleanup and production unchanged.
+
+The final journey fails if an operator must choose a route, desktop, or
+display; generate or copy a hash, capability, token, code, or sealed plan; edit
+runtime state; run a repair command; or interpret raw Guacamole state. It also
+fails if Browser Session Manager reads a legacy environment variable or
+generated inventory, an infrastructure Chrome viewer exists, a stale display
+is reported ready, a changed physical display requires operator action, or an
+old installation can veto or roll back the forward cutover.
 
 ## Stop Condition
 
-Stop before production installation or shutdown, profile-data deletion,
-unscoped process or container termination, live provider or credential use,
-release, or mutation of another lane's checkout. Stop and reconcile if P207
-publishes an overlapping interface change before P211's documentation packet
-completes. Stop the affected worker after its stated
-bound and return partial evidence; do not silently increase concurrency,
-reasoning tier, retry count, or the cumulative plan budget.
+Stop before production installation or shutdown, production profile-data
+deletion, unscoped process or container termination, external ingress
+publication, release, or mutation of another lane's checkout. Development-only
+provider credentials, processes, profiles, and isolated runtime replacement are
+authorized after the provider-free candidate freeze and current production
+readback. Stop and reconcile if P207 publishes an overlapping interface change
+before P211 integration. Stop an implementation tactic after its stated bound
+and retain partial evidence; do not silently increase concurrency, retry count,
+or the cumulative plan budget.

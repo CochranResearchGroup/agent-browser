@@ -9,6 +9,23 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 401 | 2026-09-19
+
+The operator completed a one-question-at-a-time architecture review and froze
+P211 version 49. Hidden Chrome viewers, route and inventory environment
+authority, the internal bootstrap switch, fragmented runtime JSON, and
+rollback to the old installation are rejected. The existing runtime host will
+own one SQLite authority, supervised in-process Guacamole tunnel keepers,
+generation-fenced crash recovery, live user-scoped capacity and retention
+settings, and the shared Desktop Services control lease. Cold upgrade is
+forward-only: valid legacy fields import, rejected source is archived, owned
+legacy processes and Guacamole state are removed, and the new generation
+repairs forward. Development acceptance requires three cold starts plus
+restart, failure, overflow, control-transfer, configuration, corruption, quota,
+and residue gates. Production and external ingress remain excluded. The next
+artifact is the provider-free schema and state-machine test packet; no build or
+provider retry precedes it.
+
 ## Turn 400 | 2026-09-19
 
 The operator rejected P211 version 47's direct provider-inventory adapter and
