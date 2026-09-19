@@ -1400,6 +1400,21 @@ authority. Automatic reconciliation of an ambiguous launch, protocol keepers,
 provider-owned route authority, full handoff recovery, and the development
 cold-start matrix remain open.
 
+Checkpoint `e1a3edcd` retains a durable disposition for the ambiguous interval
+between browser process creation and `browser_opened`. Reserved browser
+launches now carry the exact deterministic browser identity as a causal process
+marker. The model accepts an exact observed launch without running another
+launch effect, publishes only after session, browser, desktop, and healthy
+reserved-route validation, and does not recompute least-loaded placement. An
+unproven recovery, failed probe, or rejected observed launch records one
+`launch_cleanup_required` obligation with exact operation, generation,
+browser, profile, route, display, and reason fields. Repeated replay neither
+launches nor probes again. Provider-free fixtures prove both exact adoption and
+durable cleanup. The production runtime intentionally returns unproven until a
+cross-platform discovery adapter can bind the causal marker, canonical profile
+directory, root PID, current process identity, CDP endpoint, and listener
+ownership. Thus automatic real-process adoption and exact cleanup remain open.
+
 ## Worker Assignments
 
 The operator explicitly authorized subagents for Plan 0211 parallelism and
@@ -1483,7 +1498,7 @@ integrating any P207 implementation.
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
-| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9` and `56a0558e` prove durable exact intent, per-owner fencing, browser and tab observations, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, no relaunch after positive browser observation, and base-state conflict rejection; ambiguous `launch_started` reconciliation remains a retained recovery obligation, and provider-owned route readiness is still pending |
+| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, and `e1a3edcd` prove durable exact intent, per-owner fencing, browser and tab observations, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; cross-platform causal process discovery and provider-owned route readiness remain pending |
 | Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |
 | Bounded persistence and history | live SQLite stays within 96 MiB, exact URL history within 64 MiB, routine database/WAL/backup within 128 MiB, summaries retain long-term lifecycle evidence, and verified backup recovery is automatic | version 49 contract frozen; development size and corruption tests pending |
 | Disposable retention | default 24-hour inactivity, 20 profiles, and 10 GiB are live settings; oldest inactive sessions expire first and active or named profiles are never evicted | version 49 contract frozen; implementation and quota tests pending |

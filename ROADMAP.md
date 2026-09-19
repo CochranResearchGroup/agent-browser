@@ -92,6 +92,15 @@ durable `Prepared` resumes, while an ambiguous `launch_started` outcome fails
 closed with a retained recovery obligation. Protocol keepers, automatic
 ambiguous-launch reconciliation, public configuration, capacity, shared
 control, remaining SQLite domains, and the development matrix remain open.
+Checkpoint `e1a3edcd` makes the ambiguous-launch boundary durable. Reserved
+launches carry an exact causal process marker. A recovery adapter may publish
+an exact observed launch without another launch after validating the reserved
+session, browser, and still-healthy route. If adoption is unproven, a single
+`launch_cleanup_required` obligation persists exact operation, browser,
+profile, route, display, and reason evidence; replay neither relaunches nor
+reprobes. The provider-free adoption seam is proven, but the real runtime's
+cross-platform marker-to-process discovery remains pending and therefore
+continues to select the cleanup obligation path.
 
 ## P216 | Service Model Extraction Landing
 

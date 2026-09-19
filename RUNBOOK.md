@@ -9,6 +9,24 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 406 | 2026-09-19
+
+P211 checkpoint `e1a3edcd` hardens the ambiguous interval after browser process
+creation and before the `browser_opened` observation. Every reserved launch now
+receives an exact causal process marker. The model can adopt an exactly
+observed reserved launch without executing another launch and validates the
+session, browser, observed desktop, and persisted healthy route without
+recomputing placement. An unproven recovery, probe failure, or rejected
+observation advances once to `launch_cleanup_required` with one exact pending
+obligation; repeated replay returns the same typed failure without launching
+or probing again. The real runtime deliberately reports discovery unproven
+until cross-platform marker, profile, PID, process-identity, and CDP ownership
+proof is implemented. Focused browser-session tests pass 51 with two
+real-browser tests intentionally ignored; all 25 service-model manager tests,
+formatting, strict workspace Clippy, validation selection, and diff hygiene
+pass. No browser, provider, installed-runtime, production, ingress, or release
+effect occurred.
+
 ## Turn 405 | 2026-09-19
 
 P211 checkpoint `56a0558e` wires named-profile remote browser open through the
