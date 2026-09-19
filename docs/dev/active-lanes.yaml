@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: d402f55b
+    checkpoint: f494f273
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: checkpoint d402f55b adds the v2 SQLite route-keeper connection catalog, digest-bound fences, exact numeric-ID factory resolution, CAS-safe absent-v1 migration, and fail-closed active-v1 handling; the full Service Model package, 26 focused keeper tests, 13 host tests, formatting, strict workspace Clippy, diff hygiene, selection, and independent review pass
-    validation_ref: d402f55b
+    validation_status: checkpoint f494f273 adds mandatory provider-side PostgreSQL stable-name catalog readback and bounded SQLite publication with submitted-digest receipt binding; the provider fixture, 13 focused catalog and bridge tests, 118 Lease Authority tests, architecture guard, six selected workstation and Guacamole fixtures, formatting, strict workspace Clippy, diff hygiene, selection, and independent re-review pass
+    validation_ref: f494f273
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 49 still requires cross-platform causal process discovery for automatic ambiguous-launch adoption or cleanup, provider cleanup, provider-side stable-name route-keeper catalog population, XRDP observer and exact stop implementation, RuntimeHostRouter and keeper-backed handoff integration, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
+    blocker: version 49 still requires cross-platform causal process discovery for automatic ambiguous-launch adoption or cleanup, provider cleanup, XRDP observer and exact stop implementation, RuntimeHostRouter and keeper-backed handoff integration, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
     updated_at: 2026-09-19

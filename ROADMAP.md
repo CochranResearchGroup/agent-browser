@@ -163,6 +163,15 @@ v1 authorities upgrade through exact-document compare-and-swap, while active
 v1 evidence fails closed without being relabeled as catalog-proven readiness.
 Provider-side stable-name population, exact XRDP ownership and stop, runtime
 installation, the handoff join, and live readiness remain open.
+Checkpoint `f494f273` makes that provider-side population exact and mandatory.
+After connection sync, the development provider reads the stable name, route
+user, and positive canonical numeric ID from PostgreSQL, constructs the full
+hard-maximum slot catalog, and publishes it through a bounded stdin-only
+development CLI bridge before Guacamole starts. SQLite publication is atomic,
+exact complete replay is idempotent, changed catalogs remain absent-only, and
+the provider binds the returned digest to its submitted canonical document.
+Exact XRDP ownership and stop, RuntimeHostRouter installation, the handoff
+join, and live readiness remain open.
 
 ## P216 | Service Model Extraction Landing
 

@@ -1549,7 +1549,33 @@ as do exact XRDP observation and stop, runtime installation, keeper-backed
 handoff resolution, and live readiness. No provider, browser,
 installed-runtime, production, ingress, or release effect occurred.
 
+Checkpoint `f494f273` closes provider-side stable-name catalog population.
+After connection synchronization, the development provider reads the exact
+stable connection names, route users, and numeric IDs from PostgreSQL. It
+rejects foreign, duplicate, incomplete, noncanonical, zero, or unsafe
+identities and constructs all hard-maximum slot bindings in descriptor order.
+A bounded stdin-only development CLI bridge publishes the catalog into the
+user-private SQLite authority before Guacamole starts. Every adapter must
+provide both the readback and publication effects before any provider effect
+can run. Exact replay is unchanged only after the complete slot set is proved;
+changed catalogs remain absent-only; and the system-effects adapter verifies
+that the receipt digest equals the canonical submitted catalog. The provider
+fixture, ten focused catalog tests, three hidden-bridge tests, the 118-test
+Lease Authority package, architecture guard, six selected workstation and
+Guacamole fixtures, formatting, strict workspace Clippy, diff hygiene, and
+independent re-review pass. Exact XRDP ownership observation and stop,
+RuntimeHostRouter installation, keeper-backed handoff resolution, and live
+readiness remain absent. No provider, browser, installed-runtime, production,
+ingress, or release effect occurred.
+
 ## Worker Assignments
+
+For the catalog-population packet, one bounded read-only worker specified the
+provider readback and publication seam, one bounded read-only worker audited
+the existing XRDP ownership and exact-stop gap for the next packet, and the
+existing transaction reviewer performed one repair re-review. The primary
+retained all source writes, validation, Git transitions, and runtime-effect
+custody. No worker received live-effect authority.
 
 The operator explicitly authorized subagents for Plan 0211 parallelism and
 model-choice optimization for the current packet. The primary retains
@@ -1628,7 +1654,7 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, and `d402f55b` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider factory selection, digest-bound actions and receipts, and SQLite-only ready-route projection; provider-side stable-name catalog population, XRDP observation and exact stop effects, RuntimeHostRouter integration, keeper-backed handoff resolution, and live readiness remain pending |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, `d402f55b`, and `f494f273` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider factory selection, digest-bound actions and receipts, SQLite-only ready-route projection, and mandatory provider-side stable-name-to-numeric-ID catalog publication; XRDP observation and exact stop effects, RuntimeHostRouter integration, keeper-backed handoff resolution, and live readiness remain pending |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
