@@ -368,8 +368,6 @@ function openRoute(route, index) {
     '--runtime-profile',
     profile,
     ...(executable ? ['--executable-path', executable] : []),
-    '--args',
-    '--no-sandbox',
     'open',
     url,
     '--headers',

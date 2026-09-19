@@ -18,6 +18,29 @@ operation and does not create a replacement handoff solely for diagnostics.
 > Never share or bookmark `providerExternalUrl`, a raw Guacamole URL, or a URL
 > under `routeBinding`.
 
+## Open a remote view on the ordinary path
+
+For trusted single-user work, identify the session and select the exact named
+runtime profile:
+
+```bash
+agent-browser --json --session alice \
+  --runtime-profile operator-review \
+  open https://example.com/secure
+```
+
+Agent Browser reuses one healthy browser for all sessions that select
+<code>operator-review</code>. Alice retains her own current tab, command state,
+and heartbeat. If you omit <code>--runtime-profile</code>, Agent Browser creates
+a session-scoped disposable profile and reaps it only after exact ownership and
+cleanup checks pass.
+
+The ordinary path selects a healthy configured virtual desktop and its static
+viewer. You do not choose a route, display, lease, transaction revision, census
+digest, hash, capability, or recovery token. A successful response includes a
+durable opaque <code>handoffUrl</code> and
+<code>operatorVisible.state=ready</code>.
+
 The selected route must provide `publicOperatorUrl` for the authenticated
 dashboard origin. If it is absent, the open has no durable handoff URL. Agent
 Browser does not rewrite a provider or Guacamole origin into the dashboard-only
@@ -55,7 +78,7 @@ subject without changing it:
 
 ```bash
 agent-browser doctor remote-view \
-  --session <daemon-session> \
+  --session <browser-session> \
   --runtime-profile <profile-id> \
   --json
 ```
@@ -63,6 +86,12 @@ agent-browser doctor remote-view \
 Require `requestedScope.status` and `remoteControl.status` to be `ready`.
 Review `globalAdvisories`, but do not let unrelated stale sessions replace the
 requested-subject result.
+
+For an ordinary Browser Session Manager session, requested-scope readiness
+joins the exact ready handoff. The profile, browser, route, display, opaque URL,
+configured static viewer, and latest <code>operatorVisible.state=ready</code>
+resolution must agree. Stale legacy route-pool allocation metadata cannot veto
+that proof, and it cannot make a missing or non-ready manager handoff ready.
 
 ## Handle a checked-out route pool
 
@@ -131,9 +160,11 @@ Observer-lease acknowledgement preserves the current embedded desktop frame,
 including a frame that is still connecting. Use **Reload view** under Advanced
 connection controls for an explicit reload.
 
-## Open the browser and copy the durable link
+## Use the advanced route-bound command
 
-Follow these steps to create one operator-visible browser handoff:
+Use <code>remote-view open</code> when a service client needs the explicit
+route-bound compatibility surface. Ordinary users can use the simpler command
+above. Follow these steps for an advanced route-bound handoff:
 
 1. Open the route-bound browser:
 
@@ -433,7 +464,7 @@ Run the scoped doctor again when the handoff remains unavailable:
 
 ```bash
 agent-browser doctor remote-view \
-  --session <daemon-session> \
+  --session <browser-session> \
   --runtime-profile <profile-id> \
   --route-id <route-id> \
   --json

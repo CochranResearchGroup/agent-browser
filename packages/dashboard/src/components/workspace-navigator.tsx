@@ -25,9 +25,11 @@ import {
   X,
 } from "lucide-react";
 import {
+  mergeBrowserSessionManagerWorkspaceSources,
   deriveLiveWorkspaceNodes,
   workspaceInventoryGroupForNode,
   type WorkspaceNode,
+  type BrowserSessionManagerState,
   type WorkspaceNodeActionId,
   type WorkspaceProfileActionabilityAction,
   type WorkspaceNodeGroup,
@@ -128,7 +130,10 @@ type ServiceStatusData = {
     incidents?: WorkspaceServiceIncident[];
     profiles?: Record<string, LauncherProfileRecord>;
     browserCapabilityRegistry?: LauncherBrowserCapabilityRegistry;
+    routePool?: Record<string, { routeId?: string | null }>;
+    remoteViewRoutes?: Record<string, WorkspaceServiceViewStream>;
   };
+  browserSessionState?: BrowserSessionManagerState | null;
   profileAllocations?: WorkspaceServiceProfileAllocation[];
   manualBrowsers?: WorkspaceManualBrowser[];
   browserSessionAuthority?: WorkspaceNodeInput["browserSessionAuthority"];
@@ -1503,13 +1508,22 @@ export function WorkspaceNavigator() {
       daemonEngineByPort[session.port] = getEngineForSession(session.port);
     }
     const serviceState = serviceStatus?.service_state;
+    const browserSessionSources = mergeBrowserSessionManagerWorkspaceSources({
+      serviceBrowsers: Object.values(serviceState?.browsers ?? {}),
+      serviceSessions: Object.values(serviceState?.sessions ?? {}),
+      serviceTabs: Object.values(serviceState?.tabs ?? {}),
+    }, serviceStatus?.browserSessionState, {
+      routePool: serviceStatus?.service_state?.routePool,
+      remoteViewRoutes: serviceStatus?.service_state?.remoteViewRoutes,
+    });
     return {
       daemonSessions: sessions,
       daemonTabsByPort,
       daemonEngineByPort,
-      serviceBrowsers: Object.values(serviceState?.browsers ?? {}),
-      serviceSessions: Object.values(serviceState?.sessions ?? {}),
-      serviceTabs: Object.values(serviceState?.tabs ?? {}),
+      serviceBrowsers: browserSessionSources.serviceBrowsers,
+      serviceSessions: browserSessionSources.serviceSessions,
+      serviceTabs: browserSessionSources.serviceTabs,
+      remoteViewRoutes: serviceStatus?.service_state?.remoteViewRoutes ?? {},
       profileAllocations: serviceStatus?.profileAllocations ?? [],
       manualBrowsers: serviceStatus?.manualBrowsers ?? [],
       jobs: Object.values(serviceState?.jobs ?? {}),

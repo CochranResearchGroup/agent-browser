@@ -24,10 +24,9 @@ import {
 } from "@/lib/workspace-view-projection";
 import type { ServiceViewStream } from "@/lib/service-view-streams";
 import type { WorkspaceViewPreferenceSnapshot } from "@/hooks/use-workspace-view-preferences";
+import type { TabInfo } from "@/types";
 import type {
-  TabInfo,
-} from "@/types";
-import type {
+  BrowserSessionManagerState,
   WorkspaceServiceBrowser,
   WorkspaceManualBrowser,
   WorkspaceBrowserSessionAuthority,
@@ -39,7 +38,11 @@ import type {
   WorkspaceServiceTab,
   WorkspaceNode,
 } from "@/lib/service-workspaces";
-import { deriveWorkspaceNodes, deriveWorkspaceViewAuthorityLedger } from "@/lib/service-workspaces";
+import {
+  deriveWorkspaceNodes,
+  deriveWorkspaceViewAuthorityLedger,
+  mergeBrowserSessionManagerWorkspaceSources,
+} from "@/lib/service-workspaces";
 
 type ServiceStatusData = {
   service_state?: {
@@ -49,7 +52,9 @@ type ServiceStatusData = {
     jobs?: Record<string, WorkspaceServiceJob>;
     incidents?: WorkspaceServiceIncident[];
     remoteViewRoutes?: Record<string, ServiceViewStream>;
+    routePool?: Record<string, { routeId?: string | null }>;
   };
+  browserSessionState?: BrowserSessionManagerState | null;
   profileAllocations?: WorkspaceServiceProfileAllocation[];
   manualBrowsers?: WorkspaceManualBrowser[];
   browserSessionAuthority?: WorkspaceBrowserSessionAuthority | null;
@@ -153,14 +158,22 @@ export function useSelectedWorkspaceContext(
   }, [daemonSessions, getEngineForPort]);
 
   const { context, projection } = useMemo(() => {
-    const serviceBrowsers = Object.values(serviceStatus?.service_state?.browsers ?? {});
-    const serviceTabs = Object.values(serviceStatus?.service_state?.tabs ?? {});
+    const browserSessionSources = mergeBrowserSessionManagerWorkspaceSources({
+      serviceBrowsers: Object.values(serviceStatus?.service_state?.browsers ?? {}),
+      serviceSessions: Object.values(serviceStatus?.service_state?.sessions ?? {}),
+      serviceTabs: Object.values(serviceStatus?.service_state?.tabs ?? {}),
+    }, serviceStatus?.browserSessionState, {
+      routePool: serviceStatus?.service_state?.routePool,
+      remoteViewRoutes: serviceStatus?.service_state?.remoteViewRoutes,
+    });
+    const serviceBrowsers = browserSessionSources.serviceBrowsers;
+    const serviceTabs = browserSessionSources.serviceTabs;
     const nodeInput = {
       daemonSessions,
       daemonTabsByPort,
       daemonEngineByPort,
       serviceBrowsers,
-      serviceSessions: Object.values(serviceStatus?.service_state?.sessions ?? {}),
+      serviceSessions: browserSessionSources.serviceSessions,
       serviceTabs,
       profileAllocations: serviceStatus?.profileAllocations ?? [],
       manualBrowsers: serviceStatus?.manualBrowsers ?? [],

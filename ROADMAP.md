@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-17
+Updated: 2026-09-19
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -24,6 +24,83 @@ checkpoints. They do not define permanent product ownership. New substantive
 plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
+
+## P211 | Simple Install, Upgrade, And Remote View
+
+State: OPEN
+
+Current state: [Plan 0211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md)
+owns the `PL-PLATFORM` cold-shutdown, cold-install, and trusted single-user
+remote-view journey for issues #181, #183, and #195. Source checkpoint
+`766cde6b` exposes `agent-browser shutdown` through a fixed six-phase
+controller with exact browser, daemon, user-unit, container, authority,
+metadata, and residue adapters. Provider-free shutdown and Lease Authority
+tests, the crate architecture guard, formatting, and strict workspace Clippy
+pass. Checkpoint `34c6a0e3` adds a passing black-box fixture that executes the
+public JSON command twice in a disposable workstation with fake host tools.
+Checkpoint `839f8cf8` proves the same public command releases a retained
+exclusive session while preserving its named profile record and physical data,
+then replays as a no-op.
+Checkpoint `83e23eb2` changes trusted single-user shared-local profile
+collisions from denial into explicit valid-profile selection, preventing wrong
+browser reuse while preserving collision evidence for diagnosis. Source
+selection regressions are green; collision telemetry and joined connection
+proof remain open. Repository documentation parity is complete at `3758f8df`.
+The first operator-authorized isolated development candidate installed as
+`0.28.0-8682d4748725` with production unchanged. Its provider plan, stage, and
+preflight passed, but deferred-ingress apply quarantined at request `r488783`
+because header-bearing initial navigation bypassed Browser Session Manager and
+failed with `service_tab_target_unproven`. The red routing regression and
+host-level header fixture now pass after the narrow source repair. One
+post-validation candidate rebuild fixed the header transport itself, but the
+third and final provider apply exposed presentation-bootstrap recursion: the
+internal warm-route viewer has no display binding until it opens, while the
+ordinary manager path requires that binding before returning success. The
+terminal receipt is `apply-1789784327708-12563.json`; quarantine left provider
+containers and ports stopped, no viewer process, and production unchanged.
+The failed bootstrap architecture is superseded by Plan version 49. Hidden
+Chrome viewers, route and inventory environment authority, fragmented runtime
+JSON, and rollback to the old installation are removed. One runtime-host-owned
+SQLite database, supervised in-process Guacamole tunnel keepers, live
+user-scoped capacity and retention configuration, shared Desktop Services
+control fencing, and forward-only migration now define the repair. The next
+gate is provider-free schema and state-machine qualification, followed by the
+operator-authorized isolated development cold-start matrix. Production and
+external ingress remain excluded.
+Checkpoint `726563fb` completes the first provider-free version 49 slice:
+Browser Session State and Browser Profile Catalog runtime reads and writes now
+use SQLite, cold install includes an atomic forward-only migration phase, and
+the legacy JSON reader is confined to pre-database cold shutdown. The remaining
+SQLite domains, typed rejection archive, provider cleanup, protocol keeper,
+capacity, control, handoff-recovery, retention, backup, and development matrix
+are still open.
+Checkpoint `c0ff2768` adds non-vetoing typed migration rejection records,
+accurate missing-source history, and the revisioned SQLite configuration
+aggregate with the frozen capacity and retention defaults. Host timeouts no
+longer depend on ad hoc environment variables. Public config mutation and live
+refresh remain open with the rest of the provider path.
+Checkpoint `759f12e9` adds the durable operation journal and owner-local
+generation fencing. It proves replay and stale-effect rejection at the SQLite
+seam; browser, display, handoff, and recovery integration remain open.
+Checkpoint `56a0558e` connects named-profile remote browser opens to that
+journal. Exact session, browser, display-slot, and handoff intent persist before
+effects; observed browser and tab phases recover without a duplicate launch;
+ready session state and the opaque handoff publish atomically; and exact replay
+does not recompute display choice. Recovery rejects an intervening ordinary
+session-state write through an in-transaction base-state check. A restart from
+durable `Prepared` resumes, while an ambiguous `launch_started` outcome fails
+closed with a retained recovery obligation. Protocol keepers, automatic
+ambiguous-launch reconciliation, public configuration, capacity, shared
+control, remaining SQLite domains, and the development matrix remain open.
+Checkpoint `e1a3edcd` makes the ambiguous-launch boundary durable. Reserved
+launches carry an exact causal process marker. A recovery adapter may publish
+an exact observed launch without another launch after validating the reserved
+session, browser, and still-healthy route. If adoption is unproven, a single
+`launch_cleanup_required` obligation persists exact operation, browser,
+profile, route, display, and reason evidence; replay neither relaunches nor
+reprobes. The provider-free adoption seam is proven, but the real runtime's
+cross-platform marker-to-process discovery remains pending and therefore
+continues to select the cleanup obligation path.
 
 ## P216 | Service Model Extraction Landing
 

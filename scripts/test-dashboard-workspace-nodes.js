@@ -6,6 +6,8 @@ import {
   deriveLiveWorkspaceNodes,
   deriveWorkspaceNodes,
   deriveWorkspaceOwnershipDiagnostics,
+  browserSessionManagerWorkspaceSources,
+  mergeBrowserSessionManagerWorkspaceSources,
   workspaceInventoryGroupForNode,
   workspaceInventoryPlacementForNode,
   workspaceNodeLiveControlEligibility,
@@ -62,6 +64,82 @@ function action(node, id) {
   assert.ok(found, `Missing action ${id} on ${node.id}`);
   return found;
 }
+
+const managedSessionSources = browserSessionManagerWorkspaceSources({
+  browsers: {
+    "browser:work:1": {
+      id: "browser:work:1",
+      profileId: "work",
+      pid: 4242,
+      cdpEndpoint: "ws://127.0.0.1:9422/devtools/browser/work",
+      activeSessionIds: ["session:alice:work:1"],
+      desktop: { routeId: "guacamole-rdp-a", displayName: ":10", liveBrowserCount: 0 },
+    },
+  },
+  sessions: {
+    "session:alice:work:1": {
+      id: "session:alice:work:1",
+      name: "alice",
+      profileId: "work",
+      browserId: "browser:work:1",
+      currentTabId: "target-a",
+    },
+  },
+  tabs: {
+    "target-a": {
+      id: "target-a",
+      targetId: "target-a",
+      browserId: "browser:work:1",
+      sessionId: "session:alice:work:1",
+    },
+  },
+  navigationHistory: [
+    { tabId: "target-a", url: "https://example.test/old", visitedAtMs: 1 },
+    { tabId: "target-a", url: "https://example.test/current", visitedAtMs: 2 },
+  ],
+}, {
+  routePool: {
+    "guacamole-rdp-a": { routeId: "route-a" },
+  },
+  remoteViewRoutes: {
+    "route-a": {
+      id: "route-a",
+      provider: "rdp_gateway",
+      routeId: "route-a",
+      frameUrl: "/remote-view/handoff-a",
+      readOnly: false,
+    },
+  },
+});
+assert.equal(managedSessionSources.serviceBrowsers.length, 1);
+assert.equal(managedSessionSources.serviceBrowsers[0].displayName, ":10");
+assert.equal(managedSessionSources.serviceBrowsers[0].host, "remote_headed");
+assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams.length, 1);
+assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams[0].routeId, "route-a");
+assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams[0].routePoolEntryId, "guacamole-rdp-a");
+assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams[0].frameUrl, "/remote-view/handoff-a");
+assert.deepEqual(managedSessionSources.serviceSessions[0].browserIds, ["browser:work:1"]);
+assert.equal(managedSessionSources.serviceSessions[0].agentName, "alice");
+assert.equal(managedSessionSources.serviceTabs[0].url, "https://example.test/current");
+const managedSessionNodes = deriveLiveWorkspaceNodes(managedSessionSources);
+assert.equal(managedSessionNodes.length, 1);
+assert.equal(managedSessionNodes[0].browserId, "browser:work:1");
+assert.equal(managedSessionNodes[0].counts.serviceSessions, 1);
+assert.equal(managedSessionNodes[0].counts.tabs, 1);
+
+const managerAuthoritativeSources = mergeBrowserSessionManagerWorkspaceSources(
+  {
+    serviceBrowsers: [{ id: "legacy-ready", profileId: "legacy", health: "ready" }],
+    serviceSessions: [{ id: "legacy-session", profileId: "legacy", browserIds: ["legacy-ready"] }],
+    serviceTabs: [{ id: "legacy-tab", browserId: "legacy-ready", sessionId: "legacy-session" }],
+  },
+  { browsers: {}, sessions: {}, tabs: {} },
+);
+assert.deepEqual(
+  managerAuthoritativeSources,
+  { serviceBrowsers: [], serviceSessions: [], serviceTabs: [] },
+  "An available manager inventory must be the only source for active dashboard rows",
+);
 
 const diagnosticFixture = {
   serviceBrowsers: [

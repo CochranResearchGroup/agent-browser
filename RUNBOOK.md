@@ -7,7 +7,305 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
-- [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
+- [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
+
+## Turn 406 | 2026-09-19
+
+P211 checkpoint `e1a3edcd` hardens the ambiguous interval after browser process
+creation and before the `browser_opened` observation. Every reserved launch now
+receives an exact causal process marker. The model can adopt an exactly
+observed reserved launch without executing another launch and validates the
+session, browser, observed desktop, and persisted healthy route without
+recomputing placement. An unproven recovery, probe failure, or rejected
+observation advances once to `launch_cleanup_required` with one exact pending
+obligation; repeated replay returns the same typed failure without launching
+or probing again. The real runtime deliberately reports discovery unproven
+until cross-platform marker, profile, PID, process-identity, and CDP ownership
+proof is implemented. Focused browser-session tests pass 51 with two
+real-browser tests intentionally ignored; all 25 service-model manager tests,
+formatting, strict workspace Clippy, validation selection, and diff hygiene
+pass. No browser, provider, installed-runtime, production, ingress, or release
+effect occurred.
+
+## Turn 405 | 2026-09-19
+
+P211 checkpoint `56a0558e` wires named-profile remote browser open through the
+SQLite journal. The operation persists exact session, browser, display-slot,
+and handoff intent before effects, checkpoints `launch_started`,
+`browser_opened`, `tab_acquired`, and `ready`, then atomically publishes
+Browser Session State and the opaque handoff. Exact replay survives multiple
+eligible routes without recomputing the slot. Recovery resumes durable
+`Prepared` work, reuses a positively observed browser without relaunching, and
+fails closed on an ambiguous launch outcome. An exact base-state precondition,
+rechecked inside the immediate SQLite publish transaction, prevents an
+intervening ordinary session mutation from being overwritten. Explicit-display
+fresh opens retain their existing route, while an already journaled operation
+continues to replay or recover. Focused browser-session tests pass 49 with two
+real-browser tests intentionally ignored; all 22 service-model manager tests,
+formatting, strict workspace Clippy, validation selection, and diff hygiene
+pass. The branch and remote both resolve to `56a0558e`. No browser, provider,
+installed-runtime, production, ingress, or release effect occurred. Automatic
+ambiguous-launch reconciliation, protocol keepers, public live configuration,
+capacity, shared control, remaining recovery, history, backup, and the
+development cold-start matrix remain open.
+
+## Turn 404 | 2026-09-19
+
+P211 checkpoint `759f12e9` adds the SQLite operation-journal kernel. Exact
+request replay is idempotent, owner-local generations fence stale effects,
+unrelated owners advance independently, committed results replay after reopen,
+and changed replay payloads fail closed. All ten store tests, formatting,
+strict Clippy, and diff hygiene pass. Browser/display/handoff integration and
+pending-operation recovery remain open. No runtime or provider effect occurred.
+
+## Turn 403 | 2026-09-19
+
+P211 checkpoint `c0ff2768` extends the SQLite schema packet with tolerant,
+typed migration rejections and revisioned runtime configuration. Missing
+legacy files create defaults without synthetic source history. Present inputs
+are hashed and archived; invalid session/catalog data and rejected profile
+fields become durable typed records while valid sibling profiles import. The
+frozen capacity, deadline, cooldown, inactivity, retention, and storage limits
+now seed a validated SQLite aggregate with compare-and-swap conflict handling.
+The default host reads its timeout and disposable policy from that aggregate
+and no longer reads the three ad hoc session/disposable environment variables.
+All nine store tests, nine host tests, five cold-install tests, the source-free
+workstation fixture, formatting, strict Clippy, and diff hygiene pass. The
+public config mutation surface and live refresh remain open, as do provider
+cleanup, keepers, capacity use, control, handoff recovery, history, backup, and
+development acceptance. No runtime or provider effect occurred.
+
+## Turn 402 | 2026-09-19
+
+P211 checkpoint `726563fb` completes the first version 49 provider-free
+implementation slice. The ordinary runtime host now uses one private SQLite
+database for Browser Session State and Browser Profile Catalog persistence.
+Cold install has an explicit migration phase after shutdown and is
+forward-only after that boundary. Migration hashes and archives the legacy
+JSON sources, atomically publishes a checkpointed database from a staged path,
+and never falls back to JSON when a database is present. Only the cold-upgrade
+shutdown adapter can read pre-database JSON. Store, host, shutdown,
+cold-install, extracted-crate, workstation fixture, format, and strict Clippy
+gates pass, including all 181 affected installer tests. The selector's CDP
+architecture script remains unrunnable because it hardcodes the intentionally
+disabled `.github/workflows/ci.yml`; its crate tests pass. No browser,
+provider, installed-runtime, Service State, production, ingress, or release
+effect occurred. Typed migration rejects, remaining SQLite domains, protocol
+keepers, capacity, control leasing, handoff recovery, bounded history, backup,
+and development acceptance remain open.
+
+## Turn 401 | 2026-09-19
+
+The operator completed a one-question-at-a-time architecture review and froze
+P211 version 49. Hidden Chrome viewers, route and inventory environment
+authority, the internal bootstrap switch, fragmented runtime JSON, and
+rollback to the old installation are rejected. The existing runtime host will
+own one SQLite authority, supervised in-process Guacamole tunnel keepers,
+generation-fenced crash recovery, live user-scoped capacity and retention
+settings, and the shared Desktop Services control lease. Cold upgrade is
+forward-only: valid legacy fields import, rejected source is archived, owned
+legacy processes and Guacamole state are removed, and the new generation
+repairs forward. Development acceptance requires three cold starts plus
+restart, failure, overflow, control-transfer, configuration, corruption, quota,
+and residue gates. Production and external ingress remain excluded. The next
+artifact is the provider-free schema and state-machine test packet; no build or
+provider retry precedes it.
+
+## Turn 400 | 2026-09-19
+
+The operator rejected P211 version 47's direct provider-inventory adapter and
+required a `just works` cold-start design. Version 48 makes one local
+presentation-provider API the sole runtime authority for readiness,
+allocation, release, reconciliation, and opaque-handoff resolution. Durable
+intent, exact ownership, leases, and cleanup obligations belong in one
+transactional service-owned store; XRDP/Xorg displays and Guacamole processes
+are ephemeral observations reconstructed after cold start. Browser Session
+Manager may read neither route JSON from an environment variable nor a
+generated inventory file. Legacy static routes are admitted only through one
+provider-boundary migration adapter and must be deleted after production
+cutover acceptance. This turn changes planning only and authorizes no live
+runtime effect.
+
+## Turn 399 | 2026-09-18
+
+P211 version 46 installed development generation
+`0.28.0-30cfdf91ee18`, but its one ordinary retry again failed closed with
+`browser_session_handoff_desktop_missing`. Exact close removed the test session
+and browser. The remaining defect is now exact: Browser Session Manager's
+refresh reads `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` or the legacy two-route
+adapter, while the development runtime publishes its healthy `:13` through
+`:16` routes through `AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH`.
+Version 47 records the required typed adapter and ends this packet without
+another build or retry. The provider remains ready, ingress remains deferred,
+and production remained unchanged.
+
+## Turn 398 | 2026-09-18
+
+P211 version 45 repaired the bootstrap recursion and its one provider apply
+succeeded: warm development displays `:13` through `:16` are ready, ingress is
+still deferred, and the apply receipt proves production unchanged. The first
+ordinary open then failed closed because the long-lived runtime host retained
+the empty route inventory it read while bootstrap was still in progress.
+Version 46 authorizes one provider-free dynamic inventory refresh before an
+ordinary new browser allocation. The internal viewer bootstrap must continue
+with no desktop assignment. One replacement development install and ordinary
+ready-handoff retry are allowed; provider reapply and ingress publication are
+not.
+
+## Turn 397 | 2026-09-18
+
+The operator reopened P211 for one explicit development-only retry. Current
+readback confirms the ordinary handoff model is already route lookup plus exact
+tab focus and browser raise/maximize; production routes A, B, and C currently
+map to `:10`, `:11`, and `:12`. The remaining defect is isolated-provider
+bootstrap: its internal Guacamole browser creates a development XRDP display
+before that display can appear in provider inventory, so it must not request a
+handoff to itself. Version 45 authorizes one typed development-only bootstrap
+marker for exact provider viewer identity. Manager ownership, header
+navigation, and exact cleanup remain mandatory; only handoff publication is
+deferred until display observation. Ordinary opens remain fail-closed. One
+provider-free red-green batch, one candidate and install, and one
+deferred-ingress apply are authorized; another quarantine ends the packet.
+
+## Turn 396 | 2026-09-18
+
+P211's third and final bounded development-provider apply used generation
+`0.28.0-fae441ed9a8f` from source `975147a3`. Install, plan, stage, and
+preflight passed with production unchanged. Request `r97691` successfully
+navigated route 1 with the required header and persisted its exact manager
+browser, session, tab, target, and Guacamole URL, proving the routing and Fetch
+handler repairs. Handoff publication then failed with
+`browser_session_handoff_desktop_missing`: the internal warm-route viewer must
+open before its display binding exists, while ordinary managed navigation now
+requires that binding. Receipt `apply-1789784327708-12563.json` records the
+terminal quarantine and production guard. Fresh readback shows no viewer
+process, empty active manager browser/session maps, stopped provider
+containers, closed provider ports, and the three healthy development runtime
+units only. All three provider attempts are consumed; no further live retry is
+authorized in this packet.
+
+## Turn 395 | 2026-09-18
+
+P211 installed repaired development generation `0.28.0-c40bd61ec18f`; the
+first quarantine's exact Chrome residue disappeared during replacement, all
+development units became ready, and production remained unchanged. The
+corrected three-pass browser smoke is green through disposable manager
+sessions. A second fully green provider preflight was followed by the single
+post-fix apply, which quarantined at request `r152796` with
+`CDP command timed out: Page.navigate`; receipt
+`apply-1789783822885-83753.json` proves production unchanged and exact route-1
+browser cleanup. Diagnosis found an unstarted Fetch paused-request handler in
+the manager's attached session-command context. The narrow initialization
+repair is green in a real-Chrome restart fixture that observes
+`Remote-User: operator` at a local HTTP server and closes the exact browser.
+Two of three bounded provider attempts are consumed. One final validated
+candidate and apply remain; production remains excluded.
+
+## Turn 394 | 2026-09-18
+
+The operator authorized P211 isolated development-runtime acceptance. Candidate
+`8682d4748725` installed with all development units ready and production
+unchanged. The reviewed provider binding passed plan, stage, and preflight,
+but its first deferred-ingress apply quarantined at request `r488783` with
+`service_tab_target_unproven`; the receipt remains at
+`~/.local/share/agent-browser-dev/presentation-provider/receipts/apply-1789782627538-20403.json`.
+Diagnosis proved that `--headers` and the provider's redundant launch argument
+forced initial navigation out of Browser Session Manager routing. A red public
+routing regression now passes after admitting header-bearing managed
+navigation, executing the required `Remote-User` header on the manager-owned
+tab, and removing the redundant provider argument. The host-level header
+fixture and provider fixture also pass. No blind provider retry occurred;
+formatting, strict Clippy, changed-surface selection, a rebuilt candidate, and
+replacement development install are the next gates. Production remains
+unchanged and out of scope.
+
+## Turn 393 | 2026-09-18
+
+P211 checkpoint `3758f8df` completes repository documentation parity under
+the operator-assigned primary custody. CLI help, README, the Agent Browser
+skill, installation and remote-view docs, and inline workstation-install
+documentation now lead with fixed cold apply, idempotent shutdown, and the
+ordinary session-plus-profile remote-view path. Transaction, census, handoff,
+and explicit route controls remain documented only as legacy recovery or
+advanced compatibility surfaces. Compiled help readback, remote-view docs
+contracts, documentation links, the production docs build, workstation
+fixture suites, the 181-test focused Rust lane, formatting, and strict
+workspace Clippy pass. P207 remains untouched. The installed user-scoped skill
+also remains untouched. The goal-scoped planning audit passes; the repo-wide
+active-plan audit remains red on pre-existing historical plan wiring and state
+findings and reports no P211 finding. No shutdown, installation, browser,
+provider, credential, Service State, staging, production, or release effect
+occurred.
+
+## Turn 392 | 2026-09-18
+
+The operator assigned P211 primary write custody for the CLI help, README,
+Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211
+catalog entry that previously overlapped P207. Fresh readback proved P211 and
+P207 clean and synchronized at `4843c4e2` and `838b771a`. Pull request #191 is
+open, draft, and clean; pull request #184 is open, draft, and conflicting.
+P207's pending user-facing prose is specific to its unmerged tab-refresh
+implementation. P211 will preserve that intent for later reconciliation, will
+not publish it ahead of its source, and will not mutate or discard P207's
+checkout. This custody transition authorizes documentation work only. It does
+not authorize installed shutdown, installation, provider, credential, or
+shared-runtime effects.
+
+## Turn 391 | 2026-09-17
+
+P211 checkpoint `83e23eb2` makes the trusted single-user shared-local profile
+path recovery-first for retained identity collisions. A valid configured
+profile now returns `ExplicitProfile` instead of
+`existing_session_profile_identity_inconsistent`, so the wrong retained
+browser cannot qualify for reuse and the requested profile can continue through
+a fresh or requalified connection. Contradictory records remain intact for
+diagnosis; stricter registered-capability and non-shared-local paths remain
+unchanged. The exact SoyLei-shaped regression failed before the change and now
+passes. Six existing-session tests, nine shared-local tests, formatting, strict
+workspace Clippy, and diff hygiene pass. No installed runtime or tenant effect
+occurred. Typed collision telemetry and joined launch and remote-view proof
+remain open.
+
+## Turn 390 | 2026-09-17
+
+P211 checkpoint `839f8cf8` extends the black-box public shutdown boundary with
+a populated retained-profile case. `agent-browser shutdown --json` changes an
+exclusive retained session to `released`, preserves the named profile record
+and a physical profile-data marker, reports zero runtime-owner and active-lease
+residue, and succeeds without changes on replay. Both disposable process
+fixtures, formatting, and diff hygiene pass. No installed shutdown, service,
+container, browser, Service State, provider, credential, production, or
+release effect occurred. Protected-claim, interrupted, and stale-sidecar
+fixtures remain with cold install, restart, remote view, and documentation.
+
+## Turn 389 | 2026-09-17
+
+P211 checkpoint `34c6a0e3` adds a passing black-box fixture for the public
+`agent-browser shutdown --json` route. The real candidate binary runs twice
+against one disposable workstation whose `PATH` contains only fake `docker`
+and `systemctl` commands. Both runs return the fixed six-phase receipt with
+zero owned residue and no upgrade transaction fields. The fake-command log
+contains only the three fixed Guacamole container names, and no uninstalled
+user unit is inspected. Formatting and diff hygiene pass. No installed
+shutdown, service, container, browser, Service State, provider, credential,
+production, or release effect occurred. Populated and interrupted shutdown
+fixtures, cold-install routing, restart, remote-view convergence, and
+P207-controlled documentation remain.
+
+## Turn 388 | 2026-09-17
+
+P211 reconciled the integrated Service Model and advanced its source-only
+shutdown path at pushed checkpoint `766cde6b`. `agent-browser shutdown` now
+enters the fixed six-phase controller without transaction, admission, census,
+digest, rollback, or target-selection input. Exact browser and daemon process
+identities, the fixed workstation unit and Guacamole container sets, durable
+authority release, transient metadata cleanup, and final residue readback are
+bounded by phase deadlines. All 12 focused shutdown tests, all 118 Lease
+Authority tests, the crate architecture guard, formatting, strict workspace
+Clippy, and diff hygiene pass. No shutdown, install, browser, container,
+Service State, provider, credential, production, or release effect occurred.
+Command-level fixture coverage, cold-install routing, restart, remote-view
+convergence, and P207-controlled documentation remain.
 
 ## Turn 387 | 2026-09-17
 

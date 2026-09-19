@@ -212,6 +212,9 @@ macro_rules! race_renderer_crash {
 }
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
+    if action.starts_with("browser_session_") {
+        return true;
+    }
     matches!(
         action,
         "" | "launch"
@@ -583,7 +586,9 @@ async fn execute_command_after_navigation_admission(
             }
         }
     }
-    if crate::runtime_owner_transfer::action_requires_runtime_admission(action) {
+    if !state.browser_session_manager_owned
+        && crate::runtime_owner_transfer::action_requires_runtime_admission(action)
+    {
         let admission_drain = match crate::runtime_adoption::runtime_admission_drain_path() {
             Ok(path) => path,
             Err(error) => return error_response(&id, &error),
@@ -594,7 +599,9 @@ async fn execute_command_after_navigation_admission(
             return error_response(&id, &error);
         }
     }
-    if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
+    if !state.browser_session_manager_owned
+        && crate::runtime_owner_transfer::action_requires_owner_effect_authority(action)
+    {
         if let Err(error) = crate::native::runtime_lifecycle::admit_default_action_effect(
             &mut state.runtime_owner_binding,
             action,
@@ -780,7 +787,7 @@ async fn execute_command_after_navigation_admission(
     let skip_launch = action_skips_browser_launch(action)
         || native_handle_command
         || (action == "evaluate" && cmd.get("serviceTabHandle").is_some());
-    if !skip_launch {
+    if !skip_launch && !state.browser_session_manager_owned {
         if let Some(blocker) = active_manual_seeding_cdp_blocker(cmd, state) {
             return error_response(&id, &blocker);
         }
@@ -799,6 +806,9 @@ async fn execute_command_after_navigation_admission(
             needs_launch = false;
         }
         if needs_launch {
+            if state.browser_session_manager_owned {
+                return error_response(&id, "browser_session_managed_browser_unavailable");
+            }
             let mut recovery_persistence = BrowserRecoveryPersistence::NotRecorded;
             if state.browser.is_some() {
                 if let (Some(health), Some(reason_kind), Some(message)) = (
@@ -841,8 +851,10 @@ async fn execute_command_after_navigation_admission(
                 let _ = mgr.ensure_page().await;
             }
         }
-        if let Some(mismatch) = active_browser_profile_mismatch(cmd, state) {
-            return error_response(&id, &mismatch);
+        if !state.browser_session_manager_owned {
+            if let Some(mismatch) = active_browser_profile_mismatch(cmd, state) {
+                return error_response(&id, &mismatch);
+            }
         }
     }
     if matches!(state.backend_type, BackendType::WebDriver)

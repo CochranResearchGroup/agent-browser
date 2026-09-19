@@ -5,9 +5,12 @@
 
 mod abandoned_browser_retirement;
 mod browser_capability_registry;
+mod browser_desktop_selector;
 mod browser_process;
 mod browser_profile;
+mod browser_profile_catalog;
 mod browser_retirement;
+mod browser_session_manager;
 mod crash_regeneration;
 mod entity_source;
 mod failure_recourse;
@@ -44,6 +47,9 @@ pub use abandoned_browser_retirement::{
 pub use browser_capability_registry::{
     browser_profile_compatibility_matches, BrowserCapabilityRegistry,
 };
+pub use browser_desktop_selector::{
+    select_least_crowded_browser_desktop, BrowserDesktopAssignment, BrowserDesktopRoute,
+};
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
     BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,
@@ -55,9 +61,24 @@ pub use browser_profile::{
     ProfileSourceRecord, SitePolicySourceRecord, SERVICE_BROWSER_HOST_VALUES,
     SERVICE_PROFILE_CLASS_VALUES,
 };
+pub use browser_profile_catalog::{
+    BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserProfileCatalogDiagnostic,
+    BrowserProfileCatalogEntry, BrowserProfileCatalogImport, BrowserProfileKind,
+    BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+};
 pub use browser_retirement::{
     BrowserContaminationReport, BrowserRetirementPlan, BrowserRetirementReceipt,
     BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
+};
+pub use browser_session_manager::{
+    BrowserLaunch, BrowserNavigationRecord, BrowserOpenReservation, BrowserProfileIntent,
+    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
+    BrowserTabAcquisition, BrowserTabEndReason, BrowserTabSource, CloseBrowserSessionResult,
+    CloseBrowserTabResult, FocusBrowserResult, ManagedBrowserInstance, ManagedBrowserSession,
+    ManagedBrowserTab, ManagedDisposableProfile, OpenBrowserSession, OpenBrowserSessionResult,
+    ReapBrowserSessionsResult, SessionBrowserDisposition, SessionCloseDisposition,
+    SessionEndReason, SessionRecordDisposition, TerminalBrowserSession, TerminalBrowserTab,
+    BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 pub use crash_regeneration::{
     apply_phase_receipt, begin_or_resume, crash_regeneration_statuses, finish_ready, interrupt,
@@ -190,10 +211,11 @@ pub use service_state::{
     builtin_site_policies, builtin_site_policy, decode_persisted_service_state_json,
     default_profile_seeding_url, encode_prepared_service_state_pretty,
     prepare_service_state_for_persistence, service_profile_sources, service_site_policy_sources,
-    validate_service_state_invariants, ConfiguredServiceStateInput, ProfileReceiptReplayError,
-    ProfileRecoveryReceiptIdentity, ProfileResetReceiptIdentity, RuntimeOwnerPersistenceParts,
-    RuntimeOwnerPersistenceRestore, RuntimeOwnerPersistenceSnapshot, ServiceState,
-    ServiceStateCodecError, LEGACY_SERVICE_STATE_SCHEMA_VERSION, SERVICE_STATE_SCHEMA_VERSION,
+    validate_service_state_invariants, ColdShutdownStateReceipt, ConfiguredServiceStateInput,
+    ProfileReceiptReplayError, ProfileRecoveryReceiptIdentity, ProfileResetReceiptIdentity,
+    RuntimeOwnerPersistenceParts, RuntimeOwnerPersistenceRestore, RuntimeOwnerPersistenceSnapshot,
+    ServiceState, ServiceStateCodecError, LEGACY_SERVICE_STATE_SCHEMA_VERSION,
+    SERVICE_STATE_SCHEMA_VERSION,
 };
 pub use session_tab::{
     BrowserSession, BrowserTab, LeaseState, ProfileLeaseDisposition, ProfileSelectionReason,

@@ -32,7 +32,10 @@ enum DoctorCommandResult {
 
 /// Run the read-only remote-view doctor. This command inventories existing
 /// install, Guacamole, XRDP, user, and route-display state before setup helpers
-/// are allowed to suggest creating users or mutating configuration.
+/// are allowed to suggest creating users or mutating configuration. Requested
+/// session and profile scopes join ready Browser Session Manager handoffs to
+/// their static route evidence instead of treating legacy pool allocation state
+/// as authority for the ordinary path.
 pub fn run_remote_view_doctor(raw_args: &[String], json_mode: bool) -> i32 {
     let args = match parse_doctor_args(raw_args) {
         Ok(args) => args,
@@ -267,6 +270,16 @@ struct RequestedRouteSubject {
     route_url_ready: bool,
     display_ready: bool,
     route_pool_ready: bool,
+    manager_bindings: Vec<RequestedManagerBinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RequestedManagerBinding {
+    session: String,
+    runtime_profile: String,
+    browser_id: String,
+    display_allocation_id: String,
+    route_pool_entry_id: String,
 }
 
 fn read_persisted_service_state() -> Result<ServiceState, String> {
@@ -327,6 +340,13 @@ fn requested_route_subjects(state: &ServiceState) -> Vec<RequestedRouteSubject> 
                 route_aliases.push(pool_route_id);
             }
         }
+        let manager_bindings = state
+            .remote_view_handoffs
+            .values()
+            .filter_map(|handoff| {
+                manager_requested_scope_binding(handoff, route, display, pool_entry)
+            })
+            .collect::<Vec<_>>();
         subjects.push(RequestedRouteSubject {
             route_id: route.id.clone(),
             route_aliases,
@@ -338,10 +358,73 @@ fn requested_route_subjects(state: &ServiceState) -> Vec<RequestedRouteSubject> 
             route_url_ready: route.frame_url.is_some() || route.external_url.is_some(),
             display_ready: display.is_some_and(|value| value.state == "ready"),
             route_pool_ready: pool_entry.is_some_and(requested_route_pool_entry_ready),
+            manager_bindings,
         });
     }
     subjects.sort_by(|left, right| left.route_id.cmp(&right.route_id));
     subjects
+}
+
+fn manager_requested_scope_binding(
+    handoff: &agent_browser_service_model::RemoteViewHandoff,
+    route: &crate::native::service_model::RemoteViewRoute,
+    display: Option<&crate::native::service_model::DisplayAllocation>,
+    pool_entry: Option<&crate::native::service_model::RoutePoolEntry>,
+) -> Option<RequestedManagerBinding> {
+    if !crate::native::browser_session_handoff::is_manager_handoff(handoff)
+        || handoff.state != "ready"
+        || handoff.handoff_url.is_none()
+        || handoff.last_route_id.as_deref() != Some(route.id.as_str())
+        || handoff.last_display_allocation_id.as_deref() != route.display_allocation_id.as_deref()
+        || handoff.last_route_pool_entry_id.as_deref() != pool_entry.map(|entry| entry.id.as_str())
+    {
+        return None;
+    }
+    let session = handoff.session_name.clone()?;
+    let runtime_profile = handoff.profile_id.clone()?;
+    let browser_id = handoff.browser_id.clone()?;
+    let resolution = handoff.last_resolution.as_ref()?;
+    if resolution.get("status").and_then(Value::as_str) != Some("ready")
+        || resolution.get("resolved").and_then(Value::as_bool) != Some(true)
+        || resolution
+            .get("browserSessionManager")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || resolution.get("routeId").and_then(Value::as_str) != Some(route.id.as_str())
+        || resolution.get("browserId").and_then(Value::as_str) != Some(browser_id.as_str())
+        || resolution.get("sessionName").and_then(Value::as_str) != Some(session.as_str())
+        || resolution
+            .pointer("/operatorVisible/state")
+            .and_then(Value::as_str)
+            != Some("ready")
+    {
+        return None;
+    }
+    let display_allocation_id = display?.id.clone();
+    let route_pool_entry_id = pool_entry?.id.clone();
+    Some(RequestedManagerBinding {
+        session,
+        runtime_profile,
+        browser_id,
+        display_allocation_id,
+        route_pool_entry_id,
+    })
+}
+
+fn requested_subject_matches_session(subject: &RequestedRouteSubject, session: &str) -> bool {
+    subject.session.as_deref() == Some(session)
+        || subject
+            .manager_bindings
+            .iter()
+            .any(|binding| binding.session == session)
+}
+
+fn requested_subject_matches_profile(subject: &RequestedRouteSubject, profile: &str) -> bool {
+    subject.runtime_profile.as_deref() == Some(profile)
+        || subject
+            .manager_bindings
+            .iter()
+            .any(|binding| binding.runtime_profile == profile)
 }
 
 fn requested_route_pool_entry_ready(entry: &crate::native::service_model::RoutePoolEntry) -> bool {
@@ -391,11 +474,11 @@ fn requested_scope_report(
     let matches_selector = |subject: &RequestedRouteSubject| {
         args.session
             .as_deref()
-            .is_none_or(|value| subject.session.as_deref() == Some(value))
+            .is_none_or(|value| requested_subject_matches_session(subject, value))
             && args
                 .runtime_profile
                 .as_deref()
-                .is_none_or(|value| subject.runtime_profile.as_deref() == Some(value))
+                .is_none_or(|value| requested_subject_matches_profile(subject, value))
             && args.route_id.as_deref().is_none_or(|value| {
                 subject
                     .route_aliases
@@ -425,12 +508,12 @@ fn requested_scope_report(
             args.session.as_deref().map(|value| {
                 subjects
                     .iter()
-                    .any(|subject| subject.session.as_deref() == Some(value))
+                    .any(|subject| requested_subject_matches_session(subject, value))
             }),
             args.runtime_profile.as_deref().map(|value| {
                 subjects
                     .iter()
-                    .any(|subject| subject.runtime_profile.as_deref() == Some(value))
+                    .any(|subject| requested_subject_matches_profile(subject, value))
             }),
             args.route_id.as_deref().map(|value| {
                 subjects.iter().any(|subject| {
@@ -461,6 +544,34 @@ fn requested_scope_report(
             "subject": null,
         });
     };
+    let manager_matches = subject
+        .manager_bindings
+        .iter()
+        .filter(|binding| {
+            args.session
+                .as_deref()
+                .is_none_or(|session| binding.session == session)
+                && args
+                    .runtime_profile
+                    .as_deref()
+                    .is_none_or(|profile| binding.runtime_profile == profile)
+        })
+        .collect::<Vec<_>>();
+    let selected_manager = (manager_matches.len() == 1).then(|| manager_matches[0]);
+    let effective_session = selected_manager
+        .map(|binding| binding.session.clone())
+        .or_else(|| subject.session.clone());
+    let effective_profile = selected_manager
+        .map(|binding| binding.runtime_profile.clone())
+        .or_else(|| subject.runtime_profile.clone());
+    let effective_browser_id = selected_manager
+        .map(|binding| binding.browser_id.clone())
+        .or_else(|| subject.browser_id.clone());
+    let effective_display_allocation_id = selected_manager
+        .map(|binding| binding.display_allocation_id.clone())
+        .or_else(|| subject.display_allocation_id.clone());
+    let manager_ready = !manager_matches.is_empty();
+    let effective_route_pool_ready = subject.route_pool_ready || manager_ready;
     let mut issues = Vec::new();
     if subject.route_state != "ready" {
         issues.push(requested_scope_issue(
@@ -480,7 +591,7 @@ fn requested_scope_report(
             "The requested route display allocation is not ready.",
         ));
     }
-    if !subject.route_pool_ready {
+    if !effective_route_pool_ready {
         issues.push(requested_scope_issue(
             "requested_route_pool_entry_not_ready",
             "The requested route has no ready route-pool entry.",
@@ -506,14 +617,16 @@ fn requested_scope_report(
         "subject": {
             "routeId": subject.route_id,
             "routeAliases": subject.route_aliases,
-            "session": subject.session,
-            "runtimeProfile": subject.runtime_profile,
-            "browserId": subject.browser_id,
-            "displayAllocationId": subject.display_allocation_id,
+            "session": effective_session,
+            "runtimeProfile": effective_profile,
+            "browserId": effective_browser_id,
+            "displayAllocationId": effective_display_allocation_id,
             "routeState": subject.route_state,
             "routeUrlReady": subject.route_url_ready,
             "displayReady": subject.display_ready,
-            "routePoolReady": subject.route_pool_ready,
+            "routePoolReady": effective_route_pool_ready,
+            "browserSessionManager": manager_ready,
+            "routePoolEntryId": selected_manager.map(|binding| binding.route_pool_entry_id.clone()),
         },
     })
 }
@@ -4168,6 +4281,97 @@ EOF
 
         assert_eq!(requested["status"], "ready");
         assert_eq!(requested["subject"]["routePoolReady"], true);
+    }
+
+    #[test]
+    fn manager_handoff_session_uses_static_route_readiness_in_requested_scope() {
+        let mut state = scoped_service_state(false);
+        state.sessions.clear();
+        state.browsers.clear();
+        let route = state.remote_view_routes.get_mut("route-a").unwrap();
+        route.session_id = None;
+        route.browser_id = None;
+        let pool_entry = state.route_pool.get_mut("pool-a").unwrap();
+        pool_entry.state = "stale".to_string();
+        pool_entry.readiness = None;
+        state.remote_view_handoffs.insert(
+            "handoff-a".to_string(),
+            agent_browser_service_model::RemoteViewHandoff {
+                id: "handoff-a".to_string(),
+                state: "ready".to_string(),
+                intent: json!({
+                    "browserSessionManager": true,
+                    "sessionId": "managed-session-a",
+                }),
+                handoff_url: Some("https://dashboard.example/remote-view/handoff-a".to_string()),
+                profile_id: Some("profile-a".to_string()),
+                browser_id: Some("managed-browser-a".to_string()),
+                session_name: Some("alice".to_string()),
+                last_route_id: Some("route-a".to_string()),
+                last_route_pool_entry_id: Some("pool-a".to_string()),
+                last_display_allocation_id: Some("display-a".to_string()),
+                last_resolution: Some(json!({
+                    "status": "ready",
+                    "resolved": true,
+                    "browserSessionManager": true,
+                    "routeId": "route-a",
+                    "browserId": "managed-browser-a",
+                    "sessionName": "alice",
+                    "operatorVisible": {"state": "ready"},
+                })),
+                ..agent_browser_service_model::RemoteViewHandoff::default()
+            },
+        );
+
+        let requested = requested_scope_report(
+            &scoped_doctor_args(Some("alice"), Some("profile-a"), None),
+            Ok(state.clone()),
+            &json!({"data": {"success": true}}),
+            &json!({"ready": true}),
+        );
+
+        assert_eq!(requested["status"], "ready");
+        assert_eq!(requested["subject"]["routeId"], "route-a");
+        assert_eq!(requested["subject"]["session"], "alice");
+        assert_eq!(requested["subject"]["runtimeProfile"], "profile-a");
+        assert_eq!(requested["subject"]["browserId"], "managed-browser-a");
+        assert_eq!(requested["subject"]["routePoolReady"], true);
+        assert_eq!(requested["subject"]["browserSessionManager"], true);
+
+        state
+            .remote_view_handoffs
+            .get_mut("handoff-a")
+            .unwrap()
+            .last_resolution
+            .as_mut()
+            .unwrap()["routeId"] = json!("route-b");
+        let mismatched = requested_scope_report(
+            &scoped_doctor_args(Some("alice"), Some("profile-a"), None),
+            Ok(state.clone()),
+            &json!({"data": {"success": true}}),
+            &json!({"ready": true}),
+        );
+        assert_eq!(mismatched["status"], "unavailable");
+        assert_eq!(mismatched["issues"][0]["code"], "requested_scope_not_found");
+
+        state
+            .remote_view_handoffs
+            .get_mut("handoff-a")
+            .unwrap()
+            .last_resolution = Some(json!({
+            "status": "unavailable",
+            "resolved": false,
+            "browserSessionManager": true,
+            "operatorVisible": {"state": "unavailable"},
+        }));
+        let stale = requested_scope_report(
+            &scoped_doctor_args(Some("alice"), Some("profile-a"), None),
+            Ok(state),
+            &json!({"data": {"success": true}}),
+            &json!({"ready": true}),
+        );
+        assert_eq!(stale["status"], "unavailable");
+        assert_eq!(stale["issues"][0]["code"], "requested_scope_not_found");
     }
 
     #[test]

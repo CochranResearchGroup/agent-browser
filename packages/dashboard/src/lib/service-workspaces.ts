@@ -337,6 +337,126 @@ export type WorkspaceServiceTab = {
   ownerSessionId?: string | null;
 };
 
+export type BrowserSessionManagerState = {
+  browsers?: Record<string, {
+    id: string;
+    profileId: string;
+    pid: number;
+    cdpEndpoint: string;
+    activeSessionIds?: string[];
+    desktop?: {
+      routeId: string;
+      displayName: string;
+      liveBrowserCount?: number;
+    } | null;
+  }>;
+  sessions?: Record<string, {
+    id: string;
+    name: string;
+    profileId: string;
+    browserId: string;
+    currentTabId?: string | null;
+  }>;
+  tabs?: Record<string, {
+    id: string;
+    targetId: string;
+    browserId: string;
+    sessionId: string;
+  }>;
+  navigationHistory?: Array<{
+    tabId: string;
+    url: string;
+    visitedAtMs: number;
+  }>;
+};
+
+export type BrowserSessionManagerWorkspaceSources = {
+  serviceBrowsers: WorkspaceServiceBrowser[];
+  serviceSessions: WorkspaceServiceSession[];
+  serviceTabs: WorkspaceServiceTab[];
+};
+
+export type BrowserSessionManagerViewerInventory = {
+  routePool?: Record<string, { routeId?: string | null }>;
+  remoteViewRoutes?: Record<string, WorkspaceServiceViewStream>;
+};
+
+function browserSessionManagerViewStreams(
+  routePoolEntryId: string | null | undefined,
+  inventory?: BrowserSessionManagerViewerInventory,
+): WorkspaceServiceViewStream[] {
+  if (!routePoolEntryId) return [];
+  const routeId = inventory?.routePool?.[routePoolEntryId]?.routeId?.trim() || routePoolEntryId;
+  const stream = inventory?.remoteViewRoutes?.[routeId]
+    ?? Object.values(inventory?.remoteViewRoutes ?? {}).find((candidate) => candidate.routeId === routeId);
+  return stream ? [{ ...stream, routeId, routePoolEntryId }] : [];
+}
+
+/** Project the independent simple-session state into dashboard read models. */
+export function browserSessionManagerWorkspaceSources(
+  state?: BrowserSessionManagerState | null,
+  viewerInventory?: BrowserSessionManagerViewerInventory,
+): BrowserSessionManagerWorkspaceSources {
+  const browsers = Object.values(state?.browsers ?? {});
+  const sessions = Object.values(state?.sessions ?? {});
+  const tabs = Object.values(state?.tabs ?? {});
+  const latestUrlByTabId = new Map<string, string>();
+  for (const navigation of [...(state?.navigationHistory ?? [])]
+    .sort((left, right) => right.visitedAtMs - left.visitedAtMs)) {
+    if (!latestUrlByTabId.has(navigation.tabId)) {
+      latestUrlByTabId.set(navigation.tabId, navigation.url);
+    }
+  }
+  const tabIdsBySessionId = new Map<string, string[]>();
+  for (const tab of tabs) {
+    const ids = tabIdsBySessionId.get(tab.sessionId) ?? [];
+    ids.push(tab.id);
+    tabIdsBySessionId.set(tab.sessionId, ids);
+  }
+  return {
+    serviceBrowsers: browsers.map((browser) => ({
+      id: browser.id,
+      profileId: browser.profileId,
+      host: browser.desktop ? "remote_headed" : "local_headless",
+      health: "ready",
+      displayName: browser.desktop?.displayName ?? null,
+      pid: browser.pid,
+      cdpEndpoint: browser.cdpEndpoint,
+      activeSessionIds: browser.activeSessionIds ?? [],
+      viewStreams: browserSessionManagerViewStreams(browser.desktop?.routeId, viewerInventory),
+      lifecycleState: "active",
+      inventoryClass: "service-owned-controllable-browser",
+    })),
+    serviceSessions: sessions.map((session) => ({
+      id: session.id,
+      profileId: session.profileId,
+      serviceName: "browser-session-manager",
+      agentName: session.name,
+      browserIds: [session.browserId],
+      tabIds: tabIdsBySessionId.get(session.id) ?? [],
+      lease: "active",
+    })),
+    serviceTabs: tabs.map((tab) => ({
+      id: tab.id,
+      browserId: tab.browserId,
+      targetId: tab.targetId,
+      sessionId: tab.sessionId,
+      ownerSessionId: tab.sessionId,
+      lifecycle: "active",
+      url: latestUrlByTabId.get(tab.id) ?? null,
+    })),
+  };
+}
+
+export function mergeBrowserSessionManagerWorkspaceSources(
+  legacy: BrowserSessionManagerWorkspaceSources,
+  state?: BrowserSessionManagerState | null,
+  viewerInventory?: BrowserSessionManagerViewerInventory,
+): BrowserSessionManagerWorkspaceSources {
+  if (state == null) return legacy;
+  return browserSessionManagerWorkspaceSources(state, viewerInventory);
+}
+
 export type WorkspaceServiceProfileAllocation = {
   profileId: string;
   profileName?: string | null;

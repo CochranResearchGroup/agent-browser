@@ -183,6 +183,7 @@ try {
   assert.match(routeOpenerSource, /'open',\s*url,\s*'--headers'/);
   assert.doesNotMatch(routeOpenerSource, /'open',\s*'about:blank'/);
   assert.doesNotMatch(routeOpenerSource, /'set',\s*'headers'/);
+  assert.doesNotMatch(routeOpenerSource, /'--args',\s*'--no-sandbox'/);
   assert.match(routeOpenerSource, /'--runtime-profile',\s*profile/);
   assert.match(routeOpenerSource, /'--runtime-profile',\s*profile,\s*'close'/);
   assert.doesNotMatch(routeOpenerSource, /'--profile',\s*profile/);
@@ -192,6 +193,11 @@ try {
   const providerEffectsSource = readFileSync(
     'scripts/lib/development-presentation-provider-system-effects.js',
     'utf8',
+  );
+  assert.equal(
+    [...providerEffectsSource.matchAll(/AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP:\s*'1'/g)].length,
+    2,
+    'warm and elastic development viewer bootstrap must use the internal marker',
   );
   assert.doesNotMatch(
     providerEffectsSource,

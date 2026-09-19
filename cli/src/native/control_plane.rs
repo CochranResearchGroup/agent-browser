@@ -2219,21 +2219,13 @@ async fn close_browser(state: &mut DaemonState) {
 }
 
 fn shutdown_close_behavior(
-    binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+    _binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
 ) -> CloseBehavior {
-    let Some(binding) = binding else {
-        return CloseBehavior::CloseBrowser;
-    };
-    let current = LockedServiceStateRepository::default_json()
-        .and_then(|repository| {
-            crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)
-        })
-        .unwrap_or(false);
-    if current {
-        CloseBehavior::CloseBrowser
-    } else {
-        CloseBehavior::Detach
-    }
+    // An explicit daemon stop is terminal. Stale or missing ownership metadata
+    // may be reported during reconciliation, but it cannot turn shutdown into
+    // browser preservation. Cold upgrade relies on this invariant before the
+    // old runtime is replaced.
+    CloseBehavior::CloseBrowser
 }
 
 async fn cleanup_exited_browser(state: &mut DaemonState) {
@@ -2312,10 +2304,7 @@ mod tests {
     use crate::test_utils::EnvGuard;
 
     #[test]
-    fn shutdown_preserves_browser_when_owner_authority_is_stale() {
-        let home = temp_home("control-plane-stale-owner-shutdown");
-        let guard = EnvGuard::new(&["HOME"]);
-        guard.set("HOME", home.to_str().unwrap());
+    fn shutdown_closes_browser_when_owner_authority_is_stale() {
         let binding = crate::runtime_owner_transfer::RuntimeOwnerBinding {
             claim: crate::runtime_owner_transfer::OwnerAuthorityClaim {
                 owner_id: "retired-owner".to_string(),
@@ -2330,41 +2319,9 @@ mod tests {
 
         assert_eq!(
             shutdown_close_behavior(Some(&binding)),
-            CloseBehavior::Detach
-        );
-        let repository = LockedServiceStateRepository::default_json().unwrap();
-        repository
-            .mutate(|state| {
-                crate::runtime_owner_transfer::edit_registry_fixture(
-                    &mut state.runtime_owner_registry,
-                )
-                .owner_records
-                .insert(
-                    binding.claim.profile_identity_digest.clone(),
-                    crate::runtime_owner_transfer::ProfileOwner {
-                        owner_id: binding.claim.owner_id.clone(),
-                        profile_identity_digest: binding.claim.profile_identity_digest.clone(),
-                        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
-                        owner_generation: binding.claim.owner_generation,
-                        browser_id: binding.claim.logical_browser_id.clone(),
-                        daemon_session_route: binding.claim.daemon_session_route.clone(),
-                        process_instance_digest: binding.claim.process_instance_digest.clone(),
-                        browser_family: "chrome".to_string(),
-                        cdp_endpoint_identity_digest: "3".repeat(64),
-                        target_set_digest: "4".repeat(64),
-                        pending_transfer: None,
-                        last_transition: None,
-                    },
-                );
-                Ok(())
-            })
-            .unwrap();
-        assert_eq!(
-            shutdown_close_behavior(Some(&binding)),
             CloseBehavior::CloseBrowser
         );
         assert_eq!(shutdown_close_behavior(None), CloseBehavior::CloseBrowser);
-        let _ = std::fs::remove_dir_all(home);
     }
 
     #[test]

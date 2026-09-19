@@ -44,3 +44,26 @@ lanes:
     overlap_disposition: P211 owns CLI shutdown and workstation routing; P214 owns only desktop-services candidate-plan source and fixtures; shared planning projections reconcile at integration
     blocker: publication and protected integration remain; GitHub CI is operator-disabled and all browser, capture, provider, CAPTCHA, route-claim, desktop-input, runtime and production effects remain excluded
     updated_at: 2026-09-17
+  - id: P211
+    product_lane: PL-PLATFORM
+    objective: Make clean install, cold upgrade, and trusted single-user remote view work as one bounded operator journey
+    plan: docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md
+    plan_ref: refs/heads/platform/p211-simple-cold-upgrade
+    branch: platform/p211-simple-cold-upgrade
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: e1a3edcd
+    remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
+    integration_receipt: null
+    integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
+    validation_status: checkpoint e1a3edcd adds exact observed-launch adoption with no duplicate launch, a causal reserved-process marker, and one durable cleanup obligation for unproven recovery; 51 focused browser-session tests and 25 service-model manager tests pass with formatting, strict workspace Clippy, selection, and diff hygiene
+    validation_ref: e1a3edcd
+    work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
+    dependencies: []
+    overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
+    reconciled_overlaps:
+      - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
+      - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
+    blocker: version 49 still requires cross-platform causal process discovery for automatic ambiguous-launch adoption or cleanup, provider cleanup, protocol keepers, public live configuration, capacity, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
+    updated_at: 2026-09-19

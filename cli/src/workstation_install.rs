@@ -1,33 +1,17 @@
 //! Source-free Linux workstation installation.
 //!
-//! The workstation installer stages the release binary, support assets,
-//! manifests, and rendered unit templates in a sealed generation before
-//! atomically selecting it. Stable command and unit links resolve through that
-//! selector without relying on a repository checkout or package manager at
-//! runtime. Host provisioning stops with a resumable status when a fresh login
-//! is required. Runtime reconciliation consumes the selected generation and
-//! activates services only after canonical route projection and final doctor
-//! readiness. Real-host apply requires a stable two-round runtime census before
-//! unit quiescence or payload staging. Preflight also requires enough free disk
-//! capacity before sudo or payload mutation begins. Fresh install and upgrade
-//! share one durable transaction: census precedes candidate staging, host gates
-//! precede admission drain, runtime ownership is receipted before selector
-//! commit, and failures reverse to the prior selected generation when proven.
-//! A first upgrade from the legacy mutable layout imports and seals the exact
-//! installed binary, support tree, and unit files as the rollback generation
-//! before converting stable entrypoints to generation-backed symlinks. Unit
-//! types introduced after that legacy install remain inert until candidate
-//! selection. On Linux, exact daemon identities are reconciled after that
-//! controlled relocation only when the process start token and imported binary
-//! digest still match. A schema-v1 live daemon without an owner record can
-//! bootstrap the first receipted owner only from the explicit census reason
-//! and only after exact daemon revocation. Historical presentation identifiers
-//! remain scoped to their browser owner during census joins.
-//! Failed reconciliation restores the exact prior active state of managed user
-//! units and writes a private diagnostic receipt.
-//! Operator recovery closes an exact retained admission drain only after the
-//! old selector, candidate process absence, dashboard route, and stable census
-//! prove that the failed transaction preserved its rollback generation.
+//! The ordinary apply path runs one bounded cold sequence: stop owned
+//! workstation machinery, stage and select the replacement payload, start the
+//! installed services, and verify readiness. It accepts no hot-upgrade
+//! transaction, census, handoff, or replacement-plan authority. If replacement
+//! has begun and a later phase fails, the controller attempts one bounded
+//! selector rollback while preserving the original failure.
+//!
+//! Payload generations remain sealed and source-free. Stable command and unit
+//! links resolve through the selected generation without a repository checkout
+//! or package manager at runtime. Legacy transaction functions in this module
+//! remain explicit inspection and recovery surfaces for preexisting records;
+//! the default apply route does not enter them.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -3084,6 +3068,184 @@ pub(crate) fn run_reviewed_candidate_install(
     std::process::exit(0);
 }
 
+struct ColdWorkstationInstallEffects<'a> {
+    root: &'a Path,
+    paths: InstallPaths,
+    args: &'a WorkstationInstallArgs,
+    source: WorkstationPayloadSource,
+    candidate_binding: Option<CandidateArtifactTransactionBinding>,
+    isolated_root: bool,
+    staged: Option<StagedWorkstationGeneration>,
+    reconcile_receipt: Option<String>,
+}
+
+impl ColdWorkstationInstallEffects<'_> {
+    fn step(
+        phase: crate::workstation_cold_install::ColdInstallPhase,
+        deadline: std::time::Duration,
+        effect: impl FnOnce(&mut Self) -> Result<(bool, bool), String>,
+        this: &mut Self,
+    ) -> crate::workstation_cold_install::ColdInstallStepReceipt {
+        let result = effect(this);
+        match result {
+            Ok((changed, ready)) => crate::workstation_cold_install::ColdInstallStepReceipt {
+                phase,
+                changed,
+                ready,
+                deadline_ms: deadline.as_millis() as u64,
+                error: None,
+            },
+            Err(error) => crate::workstation_cold_install::ColdInstallStepReceipt {
+                phase,
+                changed: false,
+                ready: false,
+                deadline_ms: deadline.as_millis() as u64,
+                error: Some(error),
+            },
+        }
+    }
+
+    fn replace(&mut self) -> Result<(bool, bool), String> {
+        let staged = stage_payload_generation_from_source(
+            &self.paths,
+            self.args,
+            &self.source,
+            self.candidate_binding.as_ref(),
+        )?;
+        commit_staged_payload_generation(&self.paths, self.args, &staged)?;
+        self.paths = install_paths(self.root);
+        self.staged = Some(staged);
+        Ok((true, false))
+    }
+
+    fn migrate(&mut self) -> Result<(bool, bool), String> {
+        let service_directory = self.root.join(".agent-browser/service");
+        let database_path = service_directory.join("runtime.sqlite3");
+        let existed = database_path.is_file();
+        crate::native::browser_session_store::BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            crate::native::browser_session_store::LegacyBrowserRuntimeSources {
+                session_state_path: &service_directory.join("browser-session-state.json"),
+                profile_catalog_path: &service_directory.join("browser-profile-catalog.json"),
+                service_state_path: &service_directory.join("state.json"),
+            },
+        )?;
+        Ok((!existed, false))
+    }
+
+    fn start(&mut self) -> Result<(bool, bool), String> {
+        if self.isolated_root {
+            validate_selected_generation_if_present(&self.paths)?;
+            return Ok((true, false));
+        }
+        let report = reconcile_workstation_locked_for_upgrade(self.root, &self.paths, None, &[])?;
+        self.reconcile_receipt = Some(report.receipt_path);
+        Ok((true, false))
+    }
+
+    fn readiness(&mut self) -> Result<(bool, bool), String> {
+        validate_selected_generation_if_present(&self.paths)?;
+        let staged = self
+            .staged
+            .as_ref()
+            .ok_or_else(|| "cold_install_staged_generation_missing".to_string())?;
+        if selected_generation_id(&self.paths).as_deref() != Some(staged.generation_id.as_str()) {
+            return Err("cold_install_selected_generation_mismatch".to_string());
+        }
+        if workstation_file_sha256(&self.paths.binary)? != staged.binary_sha256 {
+            return Err("cold_install_selected_binary_digest_mismatch".to_string());
+        }
+        if !self.isolated_root {
+            let command_env = workstation_reconcile_command_env(&self.paths, None);
+            verify_final_doctors(
+                &self.paths,
+                &self.paths.support_dir,
+                &command_env,
+                None,
+                &[],
+            )?;
+        }
+        Ok((false, true))
+    }
+}
+
+impl crate::workstation_cold_install::ColdInstallEffects for ColdWorkstationInstallEffects<'_> {
+    fn execute_phase(
+        &mut self,
+        phase: crate::workstation_cold_install::ColdInstallPhase,
+        deadline: std::time::Duration,
+    ) -> crate::workstation_cold_install::ColdInstallStepReceipt {
+        use crate::workstation_cold_install::ColdInstallPhase;
+        Self::step(
+            phase,
+            deadline,
+            |this| match phase {
+                ColdInstallPhase::Stop => {
+                    let receipt = crate::workstation_shutdown::execute_live_workstation_shutdown()?;
+                    if !receipt.success {
+                        return Err("cold_install_shutdown_incomplete".to_string());
+                    }
+                    Ok((receipt.changed, false))
+                }
+                ColdInstallPhase::Migrate => this.migrate(),
+                ColdInstallPhase::Replace => this.replace(),
+                ColdInstallPhase::Start => this.start(),
+                ColdInstallPhase::Readiness => this.readiness(),
+            },
+            self,
+        )
+    }
+}
+
+fn run_cold_workstation_apply(
+    root: &Path,
+    paths: InstallPaths,
+    parsed: &WorkstationInstallArgs,
+    reviewed_candidate: Option<&ReviewedCandidatePayload>,
+    isolated_root: bool,
+) -> crate::workstation_cold_install::WorkstationColdInstallReceipt {
+    if !isolated_root {
+        crate::install::install_remote_view_privileges(true, parsed.json)
+            .unwrap_or_else(|error| fail(&error, parsed.json));
+    }
+    let source = reviewed_candidate
+        .map(|candidate| candidate.source.clone())
+        .map(Ok)
+        .unwrap_or_else(WorkstationPayloadSource::current)
+        .unwrap_or_else(|error| fail(&error, parsed.json));
+    let mut effects = ColdWorkstationInstallEffects {
+        root,
+        paths,
+        args: parsed,
+        source,
+        candidate_binding: reviewed_candidate.map(|candidate| candidate.binding.clone()),
+        isolated_root,
+        staged: None,
+        reconcile_receipt: None,
+    };
+    crate::workstation_cold_install::execute_workstation_cold_install(&mut effects)
+}
+
+fn emit_cold_workstation_install_receipt(
+    receipt: &crate::workstation_cold_install::WorkstationColdInstallReceipt,
+    json: bool,
+) {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&receipt).unwrap_or_else(|_| {
+                r#"{"success":false,"error":"serialization failed"}"#.to_string()
+            })
+        );
+    } else if receipt.success {
+        println!("Agent Browser workstation cold install complete");
+    } else {
+        eprintln!(
+            "Agent Browser workstation cold install failed; rerun with --json for phase receipts"
+        );
+    }
+}
+
 fn run_workstation_install_with_candidate(
     args: &[String],
     reviewed_candidate: Option<ReviewedCandidatePayload>,
@@ -3225,6 +3387,20 @@ fn run_workstation_install_with_candidate(
     } else {
         None
     };
+    if parsed.mode == InstallMode::Apply {
+        let receipt = run_cold_workstation_apply(
+            &root,
+            paths,
+            &parsed,
+            reviewed_candidate.as_ref(),
+            isolated_root,
+        );
+        emit_cold_workstation_install_receipt(&receipt, parsed.json);
+        if !receipt.success {
+            std::process::exit(1);
+        }
+        return;
+    }
     let prior_install_convergence = if parsed.mode == InstallMode::Apply {
         match converge_prior_install_before_new_apply(&root, isolated_root) {
             Ok(report) => report,
@@ -7449,7 +7625,7 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
         ));
     }
 
-    let staged = match stage_payload_generation_from_source(paths, args, source) {
+    let staged = match stage_payload_generation_from_source(paths, args, source, None) {
         Ok(staged) => staged,
         Err(error) => {
             transaction.stop_reason = Some("candidate_staging_failed".to_string());
@@ -12417,6 +12593,7 @@ fn stage_payload_generation_from_source(
     paths: &InstallPaths,
     args: &WorkstationInstallArgs,
     source: &WorkstationPayloadSource,
+    candidate_binding: Option<&CandidateArtifactTransactionBinding>,
 ) -> Result<StagedWorkstationGeneration, String> {
     validate_generation_install_preconditions(paths)?;
     let source_binary_sha256 = source.verify()?;
@@ -12482,14 +12659,25 @@ fn stage_payload_generation_from_source(
 
         let support_manifest_sha256 =
             workstation_file_sha256(&staged_support.join("manifest.json"))?;
-        let generation_id = format!(
+        let candidate_binding_sha256 = candidate_binding
+            .map(|binding| {
+                serde_json::to_vec(binding)
+                    .map(|bytes| workstation_bytes_sha256(&bytes))
+                    .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))
+            })
+            .transpose()?;
+        let mut generation_id = format!(
             "{}-{}-{}",
             env!("CARGO_PKG_VERSION"),
             &binary_sha256[..12],
             &support_manifest_sha256[..12]
         );
+        if let Some(digest) = candidate_binding_sha256.as_deref() {
+            generation_id.push('-');
+            generation_id.push_str(&digest[..12]);
+        }
         let generation_path = paths.generations_dir.join(&generation_id);
-        let generation_manifest = serde_json::to_string_pretty(&serde_json::json!({
+        let mut generation_manifest = serde_json::json!({
             "schemaVersion": "agent-browser.runtime-generation.v1",
             "environment": "production",
             "generationId": generation_id,
@@ -12506,8 +12694,13 @@ fn stage_payload_generation_from_source(
                 "recipeId": "p131-controlled-x11-v1",
                 "recipeIds": ["p131-controlled-x11-v1", "cloudflare-turnstile-v1", "hcaptcha-checkbox-v1"],
             },
-        }))
-        .expect("runtime generation manifest must serialize");
+        });
+        if let Some(binding) = candidate_binding {
+            generation_manifest["candidateArtifact"] = serde_json::to_value(binding)
+                .map_err(|error| format!("candidate_artifact_binding_serialize_failed:{error}"))?;
+        }
+        let generation_manifest = serde_json::to_string_pretty(&generation_manifest)
+            .expect("runtime generation manifest must serialize");
         fs::write(staging.join("generation.json"), generation_manifest)
             .map_err(display_io("stage runtime generation manifest", &staging))?;
         preflight_staged_generation(
@@ -15956,34 +16149,22 @@ mod tests {
             Some(reviewed),
         );
 
-        let transaction =
-            latest_upgrade_transaction(&root.join(".agent-browser/runtime-adoption/transactions"))
-                .unwrap()
+        assert!(latest_upgrade_transaction(
+            &root.join(".agent-browser/runtime-adoption/transactions")
+        )
+        .unwrap()
+        .is_none());
+        let paths = install_paths(&root);
+        let generation_id = selected_generation_id(&paths).unwrap();
+        let generation_path = paths.generations_dir.join(generation_id);
+        let generation_manifest: Value =
+            serde_json::from_slice(&fs::read(generation_path.join("generation.json")).unwrap())
                 .unwrap();
         assert_eq!(
-            transaction.state,
-            crate::runtime_adoption::UpgradeTransactionState::Accepted
-        );
-        assert_eq!(
-            transaction.successor_fields["candidateArtifact"]["candidateId"],
+            generation_manifest["candidateArtifact"]["candidateId"],
             manifest.candidate_id
         );
-        let coordination =
-            crate::candidate_coordination::CandidateCoordinationStore::production(&root)
-                .read()
-                .unwrap();
-        assert!(coordination.active().is_none());
-        assert_eq!(
-            coordination
-                .receipts()
-                .last()
-                .map(|receipt| receipt.outcome),
-            Some(agent_browser_candidate::CoordinationOutcome::Completed)
-        );
-        let selected = install_paths(&root)
-            .generations_dir
-            .join(transaction.candidate_generation_id)
-            .join("bin/agent-browser");
+        let selected = generation_path.join("bin/agent-browser");
         assert_eq!(
             fs::read(selected).unwrap(),
             b"sealed production candidate bytes"

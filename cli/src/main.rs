@@ -36,8 +36,16 @@ mod upgrade;
 mod validation;
 mod windows_browser_doctor;
 mod windows_browser_setup;
+#[allow(dead_code)]
+mod workstation_cold_install;
+#[cfg(test)]
+mod workstation_cold_install_contract_tests;
 mod workstation_convergence;
 mod workstation_install;
+#[allow(dead_code)]
+mod workstation_shutdown;
+#[cfg(test)]
+mod workstation_shutdown_contract_tests;
 
 use serde_json::json;
 use std::env;
@@ -715,6 +723,81 @@ fn attribute_native_request_identity(command: &mut serde_json::Value, session: &
     {
         command["identityAssurance"] = json!("self-declared");
     }
+}
+
+fn apply_browser_session_manager_route(command: &mut serde_json::Value, flags: &Flags) -> bool {
+    let Some(action) = command.get("action").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    if !matches!(action, "navigate" | "close" | "tab_new" | "tab_close")
+        || !flags.cli_session
+        || !crate::runtime_host::admission_enabled()
+    {
+        return false;
+    }
+    if action == "tab_close" && command.get("index").is_some() {
+        return false;
+    }
+    if matches!(action, "navigate" | "tab_new")
+        && (flags.cdp.is_some()
+            || flags.provider.is_some()
+            || flags.auto_connect
+            || !flags.extensions.is_empty()
+            || flags.state.is_some()
+            || flags.proxy.is_some()
+            || flags.args.is_some()
+            || flags.allowed_domains.is_some()
+            || flags.action_policy.is_some()
+            || flags.confirm_actions.is_some()
+            || flags.headed
+            || flags.browser_host.is_some()
+            || flags.view_stream_provider.is_some()
+            || flags.control_input_provider.is_some()
+            || flags.display_isolation.is_some()
+            || flags.ignore_https_errors
+            || flags.allow_file_access
+            || flags
+                .engine
+                .as_deref()
+                .is_some_and(|engine| engine != "chrome"))
+    {
+        return false;
+    }
+    let explicit_profile = flags.cli_profile || flags.cli_runtime_profile;
+    let profile_id = explicit_profile
+        .then_some(flags.runtime_profile.as_deref())
+        .flatten();
+    if explicit_profile && profile_id.is_none() {
+        return false;
+    }
+    command["action"] = json!(match action {
+        "navigate" => "browser_session_navigate",
+        "close" => "browser_session_close",
+        "tab_new" => "browser_session_tab_new",
+        "tab_close" => "browser_session_tab_close",
+        _ => unreachable!("action was validated above"),
+    });
+    command["sessionName"] = json!(&flags.session);
+    if let Some(profile_id) = profile_id {
+        command["profileId"] = json!(profile_id);
+    }
+    if std::env::var("AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP").as_deref() == Ok("1")
+        && std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").as_deref() == Ok("development")
+    {
+        command["internalPresentationBootstrap"] = json!(true);
+        if native::browser_session_host::validate_internal_presentation_bootstrap(
+            command,
+            Some("development"),
+        )
+        .is_err()
+        {
+            command
+                .as_object_mut()
+                .expect("browser session command must be an object")
+                .remove("internalPresentationBootstrap");
+        }
+    }
+    true
 }
 
 fn attribute_prestart_launch(
@@ -2032,6 +2115,12 @@ fn main() {
         return;
     }
 
+    if clean.first().map(String::as_str) == Some("shutdown") {
+        exit(workstation_shutdown::run_workstation_shutdown_command(
+            flags.json,
+        ));
+    }
+
     // Candidate inspection is read-only and must never launch a browser daemon.
     if clean.first().map(|s| s.as_str()) == Some("candidate") {
         candidate::run_candidate_command(&clean, flags.json);
@@ -2276,6 +2365,7 @@ fn main() {
     } {
         flags.session = session;
     }
+    apply_browser_session_manager_route(&mut cmd, &flags);
 
     // Handle --password-stdin for auth save
     if cmd.get("action").and_then(|v| v.as_str()) == Some("auth_save") {
@@ -2417,13 +2507,29 @@ fn main() {
         return;
     }
 
-    if !command_skips_browser_launch_for_prestart(&cmd)
+    let targets_managed_session =
+        match command_targets_managed_session_before_prestart(&cmd, &flags.session) {
+            Ok(targets) => targets,
+            Err(error) => {
+                if flags.json {
+                    print_json_error(error);
+                } else {
+                    eprintln!("{} {}", color::error_indicator(), error);
+                }
+                exit(1);
+            }
+        };
+
+    if !targets_managed_session
+        && !command_skips_browser_launch_for_prestart(&cmd)
         && !connection::daemon_startup_ready(&flags.session)
     {
         cmd["serviceState"] = json!(flags.service_state.clone());
     }
 
-    if command_executes_locally_before_daemon(&cmd) {
+    let ready_daemon_should_handle_command =
+        command_prefers_existing_daemon(&cmd, connection::daemon_startup_ready(&flags.session));
+    if command_executes_locally_before_daemon(&cmd) && !ready_daemon_should_handle_command {
         let action = cmd.get("action").and_then(|value| value.as_str());
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
         let mut state = native::action_runtime::DaemonState::new();
@@ -2494,7 +2600,9 @@ fn main() {
         }
     }
 
-    if command_targets_existing_daemon_before_prestart(&cmd) && daemon_ready(&flags.session) {
+    if (command_targets_existing_daemon_before_prestart(&cmd) || targets_managed_session)
+        && daemon_ready(&flags.session)
+    {
         let action = cmd.get("action").and_then(|value| value.as_str());
         let output_opts = OutputOptions::from_flags(&flags);
         match send_command(cmd.clone(), &flags.session) {
@@ -2551,7 +2659,7 @@ fn main() {
                 }
                 return;
             }
-            Err(_) => {
+            Err(error) => {
                 if action == Some("close") {
                     match force_close_session_from_metadata(&flags.session) {
                         Ok(true) => {
@@ -2587,6 +2695,14 @@ fn main() {
                         Err(error) => exit_close_identity_failure(&error, flags.json),
                     }
                 }
+                if targets_managed_session {
+                    if flags.json {
+                        print_json_error(error);
+                    } else {
+                        eprintln!("{} {}", color::error_indicator(), error);
+                    }
+                    exit(1);
+                }
                 // Fall through to the normal daemon prestart path. This keeps
                 // token-missing or mid-shutdown sessions repairable when there
                 // is no explicit stale metadata to clean up.
@@ -2605,7 +2721,7 @@ fn main() {
     let use_real_keychain = env::var("AGENT_BROWSER_USE_REAL_KEYCHAIN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""))
         || keychain_password.is_some();
-    if !command_skips_browser_launch_for_prestart(&cmd) {
+    if !targets_managed_session && !command_skips_browser_launch_for_prestart(&cmd) {
         use native::service_store::ServiceStateRepository;
         let continuity = native::service_store::LockedServiceStateRepository::default_json()
             .and_then(|repository| repository.load_snapshot())
@@ -3050,7 +3166,8 @@ fn main() {
             || live_runtime_status.is_some());
 
     // Launch headed browser or configure browser options (without CDP or provider).
-    if !command_skips_browser_launch_for_prestart(&cmd)
+    if !targets_managed_session
+        && !command_skips_browser_launch_for_prestart(&cmd)
         && should_send_prestart_launch
         && flags.cdp.is_none()
         && flags.provider.is_none()
@@ -3663,10 +3780,36 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
         })
 }
 
+fn command_prefers_existing_daemon(cmd: &serde_json::Value, daemon_ready: bool) -> bool {
+    daemon_ready && cmd.get("action").and_then(serde_json::Value::as_str) == Some("service_status")
+}
+
 fn command_targets_existing_daemon_before_prestart(cmd: &serde_json::Value) -> bool {
     cmd.get("action")
         .and_then(|value| value.as_str())
         .is_some_and(|action| matches!(action, "close"))
+}
+
+fn command_targets_managed_session_before_prestart(
+    cmd: &serde_json::Value,
+    session_name: &str,
+) -> Result<bool, String> {
+    let targets_manager = cmd
+        .get("action")
+        .and_then(|value| value.as_str())
+        .is_some_and(|action| {
+            !crate::native::actions::action_skips_browser_launch(action)
+                && !matches!(action, "tab_new" | "tab_switch" | "window_new")
+        });
+    if !targets_manager {
+        return Ok(false);
+    }
+    let store = native::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+    let state = store.load_session_state()?;
+    Ok(state
+        .sessions
+        .values()
+        .any(|session| session.name == session_name))
 }
 
 #[cfg(test)]
@@ -3952,6 +4095,18 @@ mod tests {
         assert!(command_executes_locally_before_daemon(&json!({
             "action": "service_status"
         })));
+        assert!(!command_prefers_existing_daemon(
+            &json!({ "action": "service_status" }),
+            false
+        ));
+        assert!(command_prefers_existing_daemon(
+            &json!({ "action": "service_status" }),
+            true
+        ));
+        assert!(!command_prefers_existing_daemon(
+            &json!({ "action": "service_access_plan" }),
+            true
+        ));
     }
 
     #[test]
@@ -4299,6 +4454,179 @@ mod tests {
             .as_deref(),
             Some("work")
         );
+    }
+
+    #[test]
+    fn explicit_named_session_navigation_routes_to_shared_browser_service() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "alice".to_string(),
+            "--runtime-profile".to_string(),
+            "work".to_string(),
+            "open".to_string(),
+            "https://example.test".to_string(),
+        ]);
+        let mut command = json!({
+            "action": "navigate",
+            "url": "https://example.test"
+        });
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert_eq!(command["action"], "browser_session_navigate");
+        assert_eq!(command["sessionName"], "alice");
+        assert_eq!(command["profileId"], "work");
+    }
+
+    #[test]
+    fn explicit_named_session_navigation_with_headers_routes_to_shared_browser_service() {
+        let guard = EnvGuard::new(&[
+            crate::runtime_host::RUNTIME_HOST_ENV,
+            "AGENT_BROWSER_RUNTIME_ENVIRONMENT",
+            "AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP",
+        ]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        guard.set("AGENT_BROWSER_RUNTIME_ENVIRONMENT", "development");
+        guard.set("AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP", "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "development-presentation-provider-v5-1".to_string(),
+            "--runtime-profile".to_string(),
+            "development-presentation-provider-v5-1".to_string(),
+            "open".to_string(),
+            "https://guacamole.example.test/guacamole/".to_string(),
+            "--headers".to_string(),
+            r#"{"Remote-User":"operator"}"#.to_string(),
+        ]);
+        let mut command = parse_command(
+            &[
+                "open".to_string(),
+                "https://guacamole.example.test/guacamole/".to_string(),
+            ],
+            &flags,
+        )
+        .unwrap();
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert_eq!(command["action"], "browser_session_navigate");
+        assert_eq!(command["headers"], json!({"Remote-User": "operator"}));
+        assert_eq!(command["internalPresentationBootstrap"], true);
+        assert_eq!(
+            command["sessionName"],
+            "development-presentation-provider-v5-1"
+        );
+        assert_eq!(
+            command["profileId"],
+            "development-presentation-provider-v5-1"
+        );
+    }
+
+    #[test]
+    fn production_navigation_cannot_request_internal_presentation_bootstrap() {
+        let guard = EnvGuard::new(&[
+            crate::runtime_host::RUNTIME_HOST_ENV,
+            "AGENT_BROWSER_RUNTIME_ENVIRONMENT",
+            "AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP",
+        ]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        guard.set("AGENT_BROWSER_RUNTIME_ENVIRONMENT", "production");
+        guard.set("AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP", "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "development-presentation-provider-v5-1".to_string(),
+            "--runtime-profile".to_string(),
+            "development-presentation-provider-v5-1".to_string(),
+            "open".to_string(),
+            "https://guacamole.example.test/guacamole/".to_string(),
+        ]);
+        let mut command = json!({
+            "action": "navigate",
+            "url": "https://guacamole.example.test/guacamole/"
+        });
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert!(command.get("internalPresentationBootstrap").is_none());
+    }
+
+    #[test]
+    fn unprofiled_named_session_routes_to_disposable_policy() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "alice".to_string(),
+            "open".to_string(),
+            "https://example.test".to_string(),
+        ]);
+        let mut command = json!({
+            "action": "navigate",
+            "url": "https://example.test"
+        });
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert_eq!(command["action"], "browser_session_navigate");
+        assert!(command.get("profileId").is_none());
+    }
+
+    #[test]
+    fn explicit_named_session_close_routes_without_stopping_shared_daemon() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "alice".to_string(),
+            "--runtime-profile".to_string(),
+            "work".to_string(),
+            "close".to_string(),
+        ]);
+        let mut command = json!({ "action": "close" });
+
+        assert!(apply_browser_session_manager_route(&mut command, &flags));
+        assert_eq!(command["action"], "browser_session_close");
+        assert_eq!(command["sessionName"], "alice");
+        assert_eq!(command["profileId"], "work");
+    }
+
+    #[test]
+    fn explicit_named_session_routes_new_and_current_tab_close() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let flags = parse_flags(&[
+            "agent-browser".to_string(),
+            "--session".to_string(),
+            "alice".to_string(),
+            "--runtime-profile".to_string(),
+            "work".to_string(),
+            "tab".to_string(),
+            "new".to_string(),
+        ]);
+        let mut new_tab = json!({
+            "action": "tab_new",
+            "url": "https://example.test/next"
+        });
+        assert!(apply_browser_session_manager_route(&mut new_tab, &flags));
+        assert_eq!(new_tab["action"], "browser_session_tab_new");
+        assert_eq!(new_tab["sessionName"], "alice");
+        assert_eq!(new_tab["profileId"], "work");
+
+        let mut close_current = json!({ "action": "tab_close" });
+        assert!(apply_browser_session_manager_route(
+            &mut close_current,
+            &flags
+        ));
+        assert_eq!(close_current["action"], "browser_session_tab_close");
+
+        let mut close_by_legacy_index = json!({ "action": "tab_close", "index": 2 });
+        assert!(!apply_browser_session_manager_route(
+            &mut close_by_legacy_index,
+            &flags
+        ));
     }
 
     #[test]

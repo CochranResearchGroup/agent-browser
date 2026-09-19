@@ -284,6 +284,9 @@ pub(crate) enum RouteBoundOpenOutcome {
     Opened {
         opened: RouteBoundOpenDocument,
     },
+    Unavailable {
+        result: RouteBoundOpenDocument,
+    },
     Converging {
         result: RouteBoundOpenDocument,
     },
@@ -299,6 +302,7 @@ impl RouteBoundOpenOutcome {
             Self::Planned { plan }
             | Self::NotFound { result: plan }
             | Self::ExplicitlyClosed { result: plan }
+            | Self::Unavailable { result: plan }
             | Self::Converging { result: plan }
             | Self::Reopened { opened: plan }
             | Self::Opened { opened: plan } => Ok(plan.into_value()),
@@ -1427,6 +1431,21 @@ pub(crate) async fn execute_durable_resolution<
             ))?,
         });
     };
+    if crate::native::browser_session_handoff::is_manager_handoff(&handoff) {
+        return Ok(RouteBoundOpenOutcome::Unavailable {
+            result: RouteBoundOpenDocument::from_compatibility(json!({
+                "status": "unavailable",
+                "resolved": false,
+                "handoffId": handoff.id,
+                "handoffUrl": handoff.handoff_url,
+                "browserId": handoff.browser_id,
+                "sessionName": handoff.session_name,
+                "message": "browser_session_handoff_host_required",
+                "retryable": false,
+                "browserSessionManager": true,
+            }))?,
+        });
+    }
     let service_state = &service_state;
     if !allow_reopen_closed && remote_view_handoff_was_explicitly_closed(service_state, &handoff) {
         return Ok(RouteBoundOpenOutcome::ExplicitlyClosed {
