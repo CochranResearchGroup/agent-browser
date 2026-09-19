@@ -9,6 +9,26 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 408 | 2026-09-19
+
+P211 checkpoint `89c05d7e` adds the provider-free runtime adapter between the
+durable route-keeper authority and an injected protocol connector. `Starting`,
+`Adopting`, and `Stopping` persist before their corresponding effect. A
+cancelled start or post-effect compare-and-swap conflict resumes through exact
+observation without another start. Connector receipts must match the
+dispatched slot and fence; ready and adoption also require the exact keeper,
+and adoption requires the prior host generation. Same-slot foreign stop
+evidence reaches the model's quarantine transition, while an unrelated slot or
+fence is rejected without mutation. Repository operations reopen SQLite for
+each load or compare-and-swap, so no connection remains held across an async
+connector wait. Seven focused adapter tests, strict workspace Clippy,
+formatting, the selected architecture guard, all 118 Lease Authority tests,
+diff hygiene, and closed-world review are green. The connector remains
+injected: this checkpoint does not start `PrimaryTask`, connect Guacamole,
+observe XRDP, supervise a running keeper, or establish provider readiness. No
+browser, provider, installed-runtime, production, ingress, or release effect
+occurred.
+
 ## Turn 407 | 2026-09-19
 
 P211 checkpoint `6390a48a` adds a provider-neutral route-keeper lifecycle

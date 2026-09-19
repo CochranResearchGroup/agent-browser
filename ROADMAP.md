@@ -109,6 +109,12 @@ ownership, and atomic compare-and-swap persistence without introducing a
 browser, profile, tab, manager session, or handoff dependency. The actual
 Guacamole tunnel and XRDP process adapter, provider readiness projection, and
 cold-start reconstruction remain open.
+Checkpoint `89c05d7e` adds a provider-free runtime adapter that publishes each
+keeper intent before its injected connector effect and resumes cancelled or
+conflicted starts through observation without duplicate start. Exact receipt
+binding, disconnect, adoption, stop quarantine, and per-operation SQLite
+reopen behavior are green. A concrete `PrimaryTask` plus Guacamole/XRDP
+connector, host scheduling, and provider readiness remain open.
 
 ## P216 | Service Model Extraction Landing
 
