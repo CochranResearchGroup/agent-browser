@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 43
+Plan version: 44
 
 State: OPEN
 
@@ -862,6 +862,28 @@ and closes the exact browser. Two of the plan's maximum three provider attempts
 have been consumed. One final candidate build, replacement install, preflight,
 and apply are allowed after focused and strict validation; another quarantine
 ends the live acceptance packet without retry.
+
+The version 44 checkpoint closes this bounded development-runtime acceptance
+packet without accepting the installed journey. Final source `975147a3` built
+as generation `0.28.0-fae441ed9a8f` with SHA-256
+`fae441ed9a8f8b324a1cbffb69e606e8e30b128b2cf200437708970bc1a794d3`.
+Replacement install and the final plan, stage, and preflight succeeded with
+production unchanged and no retained viewer process. The third and final
+deferred-ingress apply quarantined at request `r97691`; its receipt is
+`~/.local/share/agent-browser-dev/presentation-provider/receipts/apply-1789784327708-12563.json`.
+This time header-bearing navigation completed and persisted the exact route-1
+browser, session, tab, target, and Guacamole URL, proving both earlier defects
+fixed. Handoff publication then failed with
+`browser_session_handoff_desktop_missing`. The provider bootstraps each warm
+Guacamole viewer before its display binding exists, while ordinary Browser
+Session Manager navigation now requires that same display binding to publish a
+remote-view handoff. This creates presentation-bootstrap recursion for the
+internal viewer process. Quarantine exactly closed the browser and session,
+stopped all three provider containers and listeners, retained no viewer
+process, and reported `productionUnchanged: true`. All three allowed provider
+attempts are consumed. Further provider apply, candidate rebuild, installed
+shutdown, or replacement-journey execution requires a new reconciled plan
+version and explicit continuation; no blind retry is allowed.
 
 ## Frozen Interface Packet
 

@@ -9,6 +9,23 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 396 | 2026-09-18
+
+P211's third and final bounded development-provider apply used generation
+`0.28.0-fae441ed9a8f` from source `975147a3`. Install, plan, stage, and
+preflight passed with production unchanged. Request `r97691` successfully
+navigated route 1 with the required header and persisted its exact manager
+browser, session, tab, target, and Guacamole URL, proving the routing and Fetch
+handler repairs. Handoff publication then failed with
+`browser_session_handoff_desktop_missing`: the internal warm-route viewer must
+open before its display binding exists, while ordinary managed navigation now
+requires that binding. Receipt `apply-1789784327708-12563.json` records the
+terminal quarantine and production guard. Fresh readback shows no viewer
+process, empty active manager browser/session maps, stopped provider
+containers, closed provider ports, and the three healthy development runtime
+units only. All three provider attempts are consumed; no further live retry is
+authorized in this packet.
+
 ## Turn 395 | 2026-09-18
 
 P211 installed repaired development generation `0.28.0-c40bd61ec18f`; the

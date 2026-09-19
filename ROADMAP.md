@@ -52,9 +52,16 @@ preflight passed, but deferred-ingress apply quarantined at request `r488783`
 because header-bearing initial navigation bypassed Browser Session Manager and
 failed with `service_tab_target_unproven`. The red routing regression and
 host-level header fixture now pass after the narrow source repair. One
-post-validation candidate rebuild and development-provider replay remain open,
-followed by the joined shutdown and replacement journey. Production effects
-remain excluded.
+post-validation candidate rebuild fixed the header transport itself, but the
+third and final provider apply exposed presentation-bootstrap recursion: the
+internal warm-route viewer has no display binding until it opens, while the
+ordinary manager path requires that binding before returning success. The
+terminal receipt is `apply-1789784327708-12563.json`; quarantine left provider
+containers and ports stopped, no viewer process, and production unchanged.
+The three-attempt bound is exhausted. A new reconciled continuation must split
+internal viewer bootstrap from ordinary ready-handoff publication before the
+joined shutdown and replacement journey can run. Production effects remain
+excluded.
 
 ## P216 | Service Model Extraction Landing
 
