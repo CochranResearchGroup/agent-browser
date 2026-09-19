@@ -54,7 +54,7 @@ impl RouteKeeperRepository for SqliteRouteKeeperRepository {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RouteKeeperConnectorObservation {
     Pending,
-    Ready(RouteKeeperProtocolReadyReceipt),
+    Ready(Box<RouteKeeperProtocolReadyReceipt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -403,7 +403,7 @@ fn apply_ready_observation(
         return expected.projection();
     };
     let mut ready = expected.clone();
-    ready.record_protocol_ready(receipt)?;
+    ready.record_protocol_ready(*receipt)?;
     repository.compare_and_swap_route_keeper_authority(&expected, &ready)?;
     ready.projection()
 }
@@ -521,7 +521,8 @@ fn require_stop_matches_action(
 mod tests {
     use super::*;
     use agent_browser_service_model::{
-        RouteKeeperPhase, RouteKeeperStartPriority, RouteKeeperStopReceipt,
+        RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperPhase,
+        RouteKeeperStartPriority, RouteKeeperStopReceipt,
     };
     use std::collections::BTreeMap;
     use std::fs;
@@ -561,6 +562,25 @@ mod tests {
             },
         )
         .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let original = store.load_route_keeper_authority().unwrap();
+        let mut configured = original.clone();
+        configured
+            .replace_connection_catalog(
+                RouteKeeperConnectionCatalog::new((1_u32..=6).map(|sequence| {
+                    RouteKeeperConnectionBinding {
+                        slot_id: format!("route-slot-{sequence:02}"),
+                        connection_key: format!("route-{sequence:02}"),
+                        connection_name: format!("Agent Browser Route {sequence:02}"),
+                        guacamole_connection_id: u64::from(sequence),
+                    }
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&original, &configured)
+            .unwrap();
         SqliteRouteKeeperRepository::new(&database_path)
     }
 
@@ -617,7 +637,7 @@ mod tests {
                 .cloned()
                 .ok_or_else(|| "fixture_route_missing".to_string())?;
             receipt.fence = fence.clone();
-            Ok(RouteKeeperConnectorObservation::Ready(receipt))
+            Ok(RouteKeeperConnectorObservation::Ready(Box::new(receipt)))
         }
 
         async fn adopt(
@@ -965,6 +985,7 @@ mod tests {
                 host_generation: 2,
                 operation_id: "route-keeper:2:route-slot-01:2".to_string(),
                 operation_generation: 2,
+                connection_catalog_digest: "0".repeat(64),
             },
             previous_host_generation: 1,
         };
@@ -975,6 +996,7 @@ mod tests {
                 host_generation: 2,
                 operation_id: "route-keeper:2:route-slot-02:2".to_string(),
                 operation_generation: 2,
+                connection_catalog_digest: "0".repeat(64),
             },
             guacamole_connection_uuid: "connection-route-slot-02".to_string(),
             xrdp_session_id: "xrdp-route-slot-02".to_string(),

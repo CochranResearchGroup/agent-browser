@@ -1,9 +1,81 @@
 //! Pure lifecycle authority for provider-neutral presentation route keepers.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V1: &str = "agent-browser.route-keeper-authority.v1";
+pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V2: &str = "agent-browser.route-keeper-authority.v2";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteKeeperConnectionBinding {
+    pub slot_id: String,
+    pub connection_key: String,
+    pub connection_name: String,
+    pub guacamole_connection_id: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteKeeperConnectionCatalog {
+    pub bindings: BTreeMap<String, RouteKeeperConnectionBinding>,
+}
+
+impl RouteKeeperConnectionCatalog {
+    pub fn new(
+        bindings: impl IntoIterator<Item = RouteKeeperConnectionBinding>,
+    ) -> Result<Self, String> {
+        let mut catalog = Self::default();
+        for binding in bindings {
+            if catalog
+                .bindings
+                .insert(binding.slot_id.clone(), binding)
+                .is_some()
+            {
+                return Err("route_keeper_connection_catalog_slot_duplicate".to_string());
+            }
+        }
+        catalog.validate()?;
+        Ok(catalog)
+    }
+
+    pub fn digest(&self) -> Result<String, String> {
+        self.validate()?;
+        let canonical = serde_json::to_vec(self)
+            .map_err(|error| format!("route_keeper_connection_catalog_serialize_failed:{error}"))?;
+        Ok(format!("{:x}", Sha256::digest(canonical)))
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        let mut connection_keys = BTreeMap::new();
+        let mut connection_names = BTreeMap::new();
+        let mut connection_ids = BTreeMap::new();
+        for (slot_id, binding) in &self.bindings {
+            if slot_id.is_empty()
+                || binding.slot_id != *slot_id
+                || binding.connection_key.is_empty()
+                || binding.connection_name.is_empty()
+                || binding.guacamole_connection_id == 0
+            {
+                return Err("route_keeper_connection_catalog_binding_invalid".to_string());
+            }
+            if connection_keys
+                .insert(binding.connection_key.as_str(), slot_id)
+                .is_some()
+                || connection_names
+                    .insert(binding.connection_name.as_str(), slot_id)
+                    .is_some()
+                || connection_ids
+                    .insert(binding.guacamole_connection_id, slot_id)
+                    .is_some()
+            {
+                return Err("route_keeper_connection_catalog_identity_duplicate".to_string());
+            }
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -43,6 +115,8 @@ pub struct RouteKeeperFence {
     pub host_generation: u64,
     pub operation_id: String,
     pub operation_generation: u64,
+    #[serde(default)]
+    pub connection_catalog_digest: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +223,8 @@ pub enum RouteKeeperReconcileAction {
 pub struct RouteKeeperAuthority {
     pub schema_version: String,
     pub policy: RouteKeeperPolicy,
+    #[serde(default)]
+    pub connection_catalog: RouteKeeperConnectionCatalog,
     pub records: BTreeMap<String, RouteKeeperRecord>,
 }
 
@@ -190,6 +266,8 @@ impl RouteKeeperAuthority {
             return Err("route_keeper_host_generation_invalid".to_string());
         }
         validate_policy(&policy)?;
+        let connection_catalog = RouteKeeperConnectionCatalog::default();
+        let connection_catalog_digest = connection_catalog.digest()?;
         let records = (1..=policy.maximum_slots)
             .map(|sequence| {
                 let slot_id = format!("route-slot-{sequence:02}");
@@ -204,6 +282,7 @@ impl RouteKeeperAuthority {
                             host_generation,
                             operation_id: String::new(),
                             operation_generation: 0,
+                            connection_catalog_digest: connection_catalog_digest.clone(),
                         },
                         protocol_ready: None,
                         adoption: None,
@@ -214,10 +293,60 @@ impl RouteKeeperAuthority {
             })
             .collect();
         Ok(Self {
-            schema_version: ROUTE_KEEPER_AUTHORITY_SCHEMA_V1.to_string(),
+            schema_version: ROUTE_KEEPER_AUTHORITY_SCHEMA_V2.to_string(),
             policy,
+            connection_catalog,
             records,
         })
+    }
+
+    pub fn replace_connection_catalog(
+        &mut self,
+        connection_catalog: RouteKeeperConnectionCatalog,
+    ) -> Result<(), String> {
+        connection_catalog.validate()?;
+        for slot_id in connection_catalog.bindings.keys() {
+            if !self.records.contains_key(slot_id) {
+                return Err("route_keeper_connection_catalog_slot_unknown".to_string());
+            }
+        }
+        if self.connection_catalog == connection_catalog {
+            return Ok(());
+        }
+        if self
+            .records
+            .values()
+            .any(|record| record.phase != RouteKeeperPhase::Absent)
+        {
+            return Err("route_keeper_connection_catalog_active".to_string());
+        }
+        let digest = connection_catalog.digest()?;
+        self.connection_catalog = connection_catalog;
+        for record in self.records.values_mut() {
+            set_record_catalog_digest(record, &digest);
+        }
+        self.validate()
+    }
+
+    pub fn upgrade_from_v1(mut self) -> Result<Self, String> {
+        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V1 {
+            return Err("route_keeper_schema_upgrade_source_invalid".to_string());
+        }
+        if self
+            .records
+            .values()
+            .any(|record| record.phase != RouteKeeperPhase::Absent)
+        {
+            return Err("route_keeper_v1_active_migration_unproven".to_string());
+        }
+        self.schema_version = ROUTE_KEEPER_AUTHORITY_SCHEMA_V2.to_string();
+        self.connection_catalog = RouteKeeperConnectionCatalog::default();
+        let digest = self.connection_catalog.digest()?;
+        for record in self.records.values_mut() {
+            set_record_catalog_digest(record, &digest);
+        }
+        self.validate()?;
+        Ok(self)
     }
 
     pub fn projection(&self) -> Result<RouteKeeperProjection, String> {
@@ -349,6 +478,9 @@ impl RouteKeeperAuthority {
         if ready_count >= self.policy.warm_target {
             return Ok(RouteKeeperReconcileAction::Noop);
         }
+        if self.connection_catalog.bindings.is_empty() {
+            return Err("route_keeper_connection_catalog_empty".to_string());
+        }
         let priority = if ready_count < self.policy.minimum_ready {
             RouteKeeperStartPriority::Minimum
         } else {
@@ -358,20 +490,29 @@ impl RouteKeeperAuthority {
             .records
             .values()
             .find(|record| {
-                matches!(
-                    record.phase,
-                    RouteKeeperPhase::Degraded | RouteKeeperPhase::RecoveryFailed
-                )
+                self.connection_catalog
+                    .bindings
+                    .contains_key(&record.slot_id)
+                    && matches!(
+                        record.phase,
+                        RouteKeeperPhase::Degraded | RouteKeeperPhase::RecoveryFailed
+                    )
             })
             .map(|record| record.slot_id.clone())
             .or_else(|| {
                 self.records
                     .values()
-                    .find(|record| record.phase == RouteKeeperPhase::Absent)
+                    .find(|record| {
+                        record.phase == RouteKeeperPhase::Absent
+                            && self
+                                .connection_catalog
+                                .bindings
+                                .contains_key(&record.slot_id)
+                    })
                     .map(|record| record.slot_id.clone())
             });
         let Some(slot_id) = selected_slot else {
-            return Ok(RouteKeeperReconcileAction::Noop);
+            return Err("route_keeper_connection_catalog_capacity_insufficient".to_string());
         };
         let record = self
             .records
@@ -390,6 +531,7 @@ impl RouteKeeperAuthority {
             "route-keeper:{}:{}:{}",
             record.fence.host_generation, record.slot_id, record.fence.operation_generation
         );
+        record.fence.connection_catalog_digest = self.connection_catalog.digest()?;
         record.phase = RouteKeeperPhase::Starting;
         record.adoption = None;
         record.cleanup_obligation = None;
@@ -636,10 +778,17 @@ impl RouteKeeperAuthority {
     }
 
     fn validate(&self) -> Result<(), String> {
-        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V1 {
+        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V2 {
             return Err("route_keeper_schema_unsupported".to_string());
         }
         validate_policy(&self.policy)?;
+        self.connection_catalog.validate()?;
+        let connection_catalog_digest = self.connection_catalog.digest()?;
+        for slot_id in self.connection_catalog.bindings.keys() {
+            if !self.records.contains_key(slot_id) {
+                return Err("route_keeper_connection_catalog_slot_unknown".to_string());
+            }
+        }
         if self.records.len() != self.policy.maximum_slots as usize {
             return Err("route_keeper_slot_count_invalid".to_string());
         }
@@ -650,7 +799,7 @@ impl RouteKeeperAuthority {
                 .records
                 .get(&slot_id)
                 .ok_or_else(|| "route_keeper_slot_identity_invalid".to_string())?;
-            validate_record(record, &slot_id, &keeper_id)?;
+            validate_record(record, &slot_id, &keeper_id, &connection_catalog_digest)?;
         }
         Ok(())
     }
@@ -672,6 +821,7 @@ fn validate_ready_receipt(receipt: &RouteKeeperProtocolReadyReceipt) -> Result<(
         || receipt.fence.host_generation == 0
         || receipt.fence.operation_id.is_empty()
         || receipt.fence.operation_generation == 0
+        || !is_sha256_hex(&receipt.fence.connection_catalog_digest)
         || receipt.guacamole_connection_uuid.is_empty()
         || receipt.xrdp_session_id.is_empty()
         || receipt.display_name.is_empty()
@@ -686,10 +836,12 @@ fn validate_record(
     record: &RouteKeeperRecord,
     expected_slot_id: &str,
     expected_keeper_id: &str,
+    expected_connection_catalog_digest: &str,
 ) -> Result<(), String> {
     if record.slot_id != expected_slot_id
         || record.keeper_id != expected_keeper_id
         || record.fence.host_generation == 0
+        || record.fence.connection_catalog_digest != expected_connection_catalog_digest
         || (record.fence.operation_generation == 0 && !record.fence.operation_id.is_empty())
         || (record.fence.operation_generation > 0 && record.fence.operation_id.is_empty())
     {
@@ -697,7 +849,10 @@ fn validate_record(
     }
     if let Some(ready) = &record.protocol_ready {
         validate_ready_receipt(ready)?;
-        if ready.slot_id != record.slot_id || ready.keeper_id != record.keeper_id {
+        if ready.slot_id != record.slot_id
+            || ready.keeper_id != record.keeper_id
+            || ready.fence.connection_catalog_digest != record.fence.connection_catalog_digest
+        {
             return Err("route_keeper_record_receipt_identity_mismatch".to_string());
         }
     }
@@ -783,4 +938,24 @@ fn validate_record(
         }
     }
     Ok(())
+}
+
+fn set_record_catalog_digest(record: &mut RouteKeeperRecord, digest: &str) {
+    record.fence.connection_catalog_digest = digest.to_string();
+    if let Some(ready) = record.protocol_ready.as_mut() {
+        ready.fence.connection_catalog_digest = digest.to_string();
+    }
+    if let Some(adoption) = record.adoption.as_mut() {
+        adoption.ready.fence.connection_catalog_digest = digest.to_string();
+    }
+    if let Some(stop) = record.last_stop.as_mut() {
+        stop.fence.connection_catalog_digest = digest.to_string();
+    }
+    if let Some(obligation) = record.cleanup_obligation.as_mut() {
+        obligation.fence.connection_catalog_digest = digest.to_string();
+    }
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }

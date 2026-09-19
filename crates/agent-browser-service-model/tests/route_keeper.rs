@@ -1,9 +1,100 @@
 use agent_browser_service_model::{
-    RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperFence, RouteKeeperPhase,
-    RouteKeeperPolicy, RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState,
-    RouteKeeperReconcileAction, RouteKeeperStartPriority, RouteKeeperStopDisposition,
-    RouteKeeperStopReceipt,
+    RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperConnectionBinding,
+    RouteKeeperConnectionCatalog, RouteKeeperFence, RouteKeeperPhase, RouteKeeperPolicy,
+    RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState, RouteKeeperReconcileAction,
+    RouteKeeperStartPriority, RouteKeeperStopDisposition, RouteKeeperStopReceipt,
 };
+
+fn connection_catalog(maximum_slots: u32) -> RouteKeeperConnectionCatalog {
+    RouteKeeperConnectionCatalog::new((1..=maximum_slots).map(|sequence| {
+        RouteKeeperConnectionBinding {
+            slot_id: format!("route-slot-{sequence:02}"),
+            connection_key: format!("route-{sequence:02}"),
+            connection_name: format!("Agent Browser Route {sequence:02}"),
+            guacamole_connection_id: u64::from(sequence),
+        }
+    }))
+    .unwrap()
+}
+
+fn authority(host_generation: u64) -> RouteKeeperAuthority {
+    let mut authority = RouteKeeperAuthority::new(host_generation).unwrap();
+    authority
+        .replace_connection_catalog(connection_catalog(authority.policy.maximum_slots))
+        .unwrap();
+    authority
+}
+
+#[test]
+fn empty_catalog_blocks_start_and_catalog_digest_fences_every_action() {
+    let mut empty = RouteKeeperAuthority::new(1).unwrap();
+    assert_eq!(
+        empty.next_reconcile_action(),
+        Err("route_keeper_connection_catalog_empty".to_string())
+    );
+
+    let catalog = connection_catalog(6);
+    let digest = catalog.digest().unwrap();
+    empty.replace_connection_catalog(catalog.clone()).unwrap();
+    let (_, _, fence) = expect_start(&mut empty, RouteKeeperStartPriority::Minimum);
+    assert_eq!(fence.connection_catalog_digest, digest);
+    assert_eq!(
+        empty.replace_connection_catalog(RouteKeeperConnectionCatalog::default()),
+        Err("route_keeper_connection_catalog_active".to_string())
+    );
+
+    let reversed = RouteKeeperConnectionCatalog::new(
+        catalog.bindings.values().rev().cloned().collect::<Vec<_>>(),
+    )
+    .unwrap();
+    assert_eq!(catalog.digest().unwrap(), reversed.digest().unwrap());
+}
+
+#[test]
+fn catalog_rejects_duplicate_provider_identities_and_unknown_slots() {
+    let duplicate = RouteKeeperConnectionCatalog::new([
+        RouteKeeperConnectionBinding {
+            slot_id: "route-slot-01".to_string(),
+            connection_key: "route".to_string(),
+            connection_name: "Route 1".to_string(),
+            guacamole_connection_id: 1,
+        },
+        RouteKeeperConnectionBinding {
+            slot_id: "route-slot-02".to_string(),
+            connection_key: "route".to_string(),
+            connection_name: "Route 2".to_string(),
+            guacamole_connection_id: 2,
+        },
+    ]);
+    assert_eq!(
+        duplicate,
+        Err("route_keeper_connection_catalog_identity_duplicate".to_string())
+    );
+
+    let mut authority = RouteKeeperAuthority::new(1).unwrap();
+    let unknown = RouteKeeperConnectionCatalog::new([RouteKeeperConnectionBinding {
+        slot_id: "route-slot-99".to_string(),
+        connection_key: "route-99".to_string(),
+        connection_name: "Route 99".to_string(),
+        guacamole_connection_id: 99,
+    }])
+    .unwrap();
+    assert_eq!(
+        authority.replace_connection_catalog(unknown),
+        Err("route_keeper_connection_catalog_slot_unknown".to_string())
+    );
+}
+
+#[test]
+fn v1_upgrade_refuses_to_manufacture_catalog_provenance_for_active_keeper() {
+    let (mut active, _) = make_one_ready();
+    active.schema_version =
+        agent_browser_service_model::ROUTE_KEEPER_AUTHORITY_SCHEMA_V1.to_string();
+    assert_eq!(
+        active.upgrade_from_v1(),
+        Err("route_keeper_v1_active_migration_unproven".to_string())
+    );
+}
 
 fn expect_start(
     authority: &mut RouteKeeperAuthority,
@@ -40,7 +131,7 @@ fn ready_receipt(
 }
 
 fn make_one_ready() -> (RouteKeeperAuthority, RouteKeeperProtocolReadyReceipt) {
-    let mut authority = RouteKeeperAuthority::new(1).unwrap();
+    let mut authority = authority(1);
     let (slot_id, keeper_id, fence) =
         expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
     let receipt = ready_receipt(&slot_id, &keeper_id, fence);
@@ -50,7 +141,7 @@ fn make_one_ready() -> (RouteKeeperAuthority, RouteKeeperProtocolReadyReceipt) {
 
 #[test]
 fn reconcile_satisfies_minimum_then_warm_target_and_becomes_idempotent() {
-    let mut authority = RouteKeeperAuthority::new(7).unwrap();
+    let mut authority = authority(7);
     assert_eq!(authority.policy.minimum_ready, 1);
     assert_eq!(authority.policy.warm_target, 4);
     assert_eq!(authority.policy.maximum_slots, 6);
@@ -208,7 +299,7 @@ fn disconnect_restarts_and_exact_adoption_fences_stale_generation() {
 
 #[test]
 fn pre_ready_terminal_returns_exact_attempt_to_absent_for_new_fence() {
-    let mut authority = RouteKeeperAuthority::new(3).unwrap();
+    let mut authority = authority(3);
     let (slot_id, keeper_id, first_fence) =
         expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
     authority.record_observing(&slot_id, &first_fence).unwrap();
@@ -335,7 +426,7 @@ fn stop_requires_exact_receipt_and_unproven_ownership_is_quarantined() {
 
 #[test]
 fn invalid_ready_record_cannot_project_or_persist_false_capacity() {
-    let mut authority = RouteKeeperAuthority::new(1).unwrap();
+    let mut authority = authority(1);
     let record = authority.records.get_mut("route-slot-01").unwrap();
     record.phase = RouteKeeperPhase::Ready;
     assert_eq!(

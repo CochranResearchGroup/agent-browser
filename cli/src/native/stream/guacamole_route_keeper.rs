@@ -28,17 +28,24 @@ pub(super) trait RouteKeeperPrimaryFactory: Send {
     ) -> Result<PrimaryTask, String>;
 }
 
-/// Exact immutable slot catalog for browser-independent route keepers.
+/// SQLite-resolved provider factory for browser-independent route keepers.
 ///
-/// This type does not discover provider connections or infer them from legacy
-/// browser routes. Its caller must supply a reviewed slot-to-connection map.
+/// The connection catalog is read from the same durable authority as the
+/// action fence. Provider access begins only after the exact catalog digest,
+/// slot binding, keeper identity, and operation fence all agree.
 pub(super) struct ConfiguredRouteKeeperPrimaryFactory {
-    specs: BTreeMap<String, GuacamolePrimaryConnectSpec>,
+    database_path: PathBuf,
+    provider_base: String,
 }
 
 impl ConfiguredRouteKeeperPrimaryFactory {
-    pub fn new(specs: BTreeMap<String, GuacamolePrimaryConnectSpec>) -> Self {
-        Self { specs }
+    pub fn new(database_path: PathBuf, provider_base: &str) -> Result<Self, String> {
+        GuacamolePrimaryConnectSpec::from_local_embed(provider_base, "catalog-validation")
+            .map_err(str::to_string)?;
+        Ok(Self {
+            database_path,
+            provider_base: provider_base.to_string(),
+        })
     }
 }
 
@@ -49,12 +56,34 @@ impl RouteKeeperPrimaryFactory for ConfiguredRouteKeeperPrimaryFactory {
         guard: PrimaryGuard,
         on_closed: PrimaryTerminalSink,
     ) -> Result<PrimaryTask, String> {
-        let (slot_id, _, _) = start_identity(action)?;
-        let spec = self
-            .specs
+        let (slot_id, keeper_id, fence) = start_identity(action)?;
+        let authority =
+            BrowserRuntimeSqliteStore::open(&self.database_path)?.load_route_keeper_authority()?;
+        authority.projection()?;
+        let digest = authority.connection_catalog.digest()?;
+        if fence.connection_catalog_digest != digest {
+            return Err("route_keeper_primary_catalog_fence_stale".to_string());
+        }
+        let record = authority
+            .records
             .get(slot_id)
-            .cloned()
+            .ok_or_else(|| "route_keeper_primary_fence_stale".to_string())?;
+        if record.keeper_id != keeper_id
+            || record.fence != *fence
+            || record.phase != RouteKeeperPhase::Starting
+        {
+            return Err("route_keeper_primary_fence_stale".to_string());
+        }
+        let binding = authority
+            .connection_catalog
+            .bindings
+            .get(slot_id)
             .ok_or_else(|| "route_keeper_primary_connection_unconfigured".to_string())?;
+        let spec = GuacamolePrimaryConnectSpec::from_local_embed(
+            &self.provider_base,
+            binding.guacamole_connection_id.to_string(),
+        )
+        .map_err(str::to_string)?;
         Ok(PrimaryTask::connect_observed(
             connect_spec(spec, guard.clone()),
             guard,
@@ -218,7 +247,9 @@ where
                     if ready.guacamole_connection_uuid != guacamole_connection_uuid {
                         return Err("route_keeper_primary_connection_identity_changed".to_string());
                     }
-                    return Ok(RouteKeeperConnectorObservation::Ready(ready.clone()));
+                    return Ok(RouteKeeperConnectorObservation::Ready(Box::new(
+                        ready.clone(),
+                    )));
                 }
                 let ready = self
                     .observer
@@ -241,7 +272,7 @@ where
                     return Err("route_keeper_primary_observation_mismatch".to_string());
                 }
                 owned.ready = Some(ready.clone());
-                Ok(RouteKeeperConnectorObservation::Ready(ready))
+                Ok(RouteKeeperConnectorObservation::Ready(Box::new(ready)))
             }
             PrimaryStatus::Closed(_) => Ok(RouteKeeperConnectorObservation::Pending),
         }
@@ -480,6 +511,7 @@ mod tests {
         reconcile_once, run_route_keeper_supervisor, stop_once, RouteKeeperRepository,
         SqliteRouteKeeperRepository,
     };
+    use agent_browser_service_model::{RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog};
     use futures_util::{SinkExt, StreamExt};
     use std::fs;
     use std::path::Path;
@@ -511,6 +543,25 @@ mod tests {
             },
         )
         .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&path).unwrap();
+        let original = store.load_route_keeper_authority().unwrap();
+        let mut configured = original.clone();
+        configured
+            .replace_connection_catalog(
+                RouteKeeperConnectionCatalog::new((1_u32..=6).map(|sequence| {
+                    RouteKeeperConnectionBinding {
+                        slot_id: format!("route-slot-{sequence:02}"),
+                        connection_key: format!("route-{sequence:02}"),
+                        connection_name: format!("Agent Browser Route {sequence:02}"),
+                        guacamole_connection_id: u64::from(sequence),
+                    }
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&original, &configured)
+            .unwrap();
         (directory, path)
     }
 
@@ -618,31 +669,47 @@ mod tests {
         (client, server)
     }
 
-    #[test]
-    fn configured_factory_requires_an_exact_slot_catalog_entry() {
-        let mut factory = ConfiguredRouteKeeperPrimaryFactory::new(BTreeMap::from([(
-            "route-slot-02".to_string(),
-            GuacamolePrimaryConnectSpec::from_local_embed(
-                "http://127.0.0.1:8193/guacamole/",
-                "connection-02",
-            )
-            .unwrap(),
-        )]));
-        let action = RouteKeeperReconcileAction::Start {
-            slot_id: "route-slot-01".to_string(),
-            keeper_id: "keeper-01".to_string(),
-            fence: RouteKeeperFence {
-                host_generation: 1,
-                operation_id: "route-keeper:1:route-slot-01:1".to_string(),
-                operation_generation: 1,
-            },
-            priority: agent_browser_service_model::RouteKeeperStartPriority::Minimum,
+    #[tokio::test]
+    async fn configured_factory_resolves_only_the_exact_sqlite_catalog_fence() {
+        let (_directory, path) = database();
+        let mut store = BrowserRuntimeSqliteStore::open(&path).unwrap();
+        let expected = store.load_route_keeper_authority().unwrap();
+        let mut starting = expected.clone();
+        let action = starting.next_reconcile_action().unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&expected, &starting)
+            .unwrap();
+        let mut factory =
+            ConfiguredRouteKeeperPrimaryFactory::new(path, "http://127.0.0.1:8193/guacamole/")
+                .unwrap();
+        let stale_action = match action.clone() {
+            RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                mut fence,
+                priority,
+            } => {
+                fence.connection_catalog_digest = "0".repeat(64);
+                RouteKeeperReconcileAction::Start {
+                    slot_id,
+                    keeper_id,
+                    fence,
+                    priority,
+                }
+            }
+            other => panic!("expected start action, got {other:?}"),
         };
         let guard: PrimaryGuard = Arc::new(|| Ok(()));
         assert_eq!(
-            factory.start(&action, guard, Box::new(|_, _, _| {})).err(),
-            Some("route_keeper_primary_connection_unconfigured".to_string())
+            factory
+                .start(&stale_action, guard.clone(), Box::new(|_, _, _| {}))
+                .err(),
+            Some("route_keeper_primary_catalog_fence_stale".to_string())
         );
+        let mut task = factory
+            .start(&action, guard, Box::new(|_, _, _| {}))
+            .unwrap();
+        task.close().await;
     }
 
     async fn wait_for_primary_ready<F, O>(

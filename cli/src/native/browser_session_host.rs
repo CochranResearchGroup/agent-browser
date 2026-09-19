@@ -1405,8 +1405,8 @@ mod tests {
     use agent_browser_service_model::{
         BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, ControlInputProvider,
         DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, RemoteViewHandoff,
-        RemoteViewRoute, RouteKeeperReconcileAction, RouteKeeperStartPriority, RoutePoolEntry,
-        ServiceState,
+        RemoteViewRoute, RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog,
+        RouteKeeperReconcileAction, RouteKeeperStartPriority, RoutePoolEntry, ServiceState,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1437,6 +1437,17 @@ mod tests {
     #[test]
     fn desktop_route_projection_uses_only_ready_sqlite_keeper_receipts() {
         let mut authority = RouteKeeperAuthority::new(4).unwrap();
+        authority
+            .replace_connection_catalog(
+                RouteKeeperConnectionCatalog::new([RouteKeeperConnectionBinding {
+                    slot_id: "route-slot-01".to_string(),
+                    connection_key: "route-01".to_string(),
+                    connection_name: "Agent Browser Route 01".to_string(),
+                    guacamole_connection_id: 1,
+                }])
+                .unwrap(),
+            )
+            .unwrap();
         let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
             RouteKeeperReconcileAction::Start {
                 slot_id,
