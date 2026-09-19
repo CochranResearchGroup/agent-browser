@@ -1479,6 +1479,24 @@ provider authentication and task creation, XRDP observation and stop effects,
 terminal-event reconciliation, host-loop scheduling, and live readiness are
 still absent.
 
+Checkpoint `1d17f471` adds the provider-free supervisor and durable terminal
+reconciliation above that connector. Startup reconciles only to
+`minimumReady` before timed ticks grow the warm pool one action at a time.
+Shutdown interrupts a pending connector await, closes every retained primary,
+drains the resulting exact terminal events, persists their SQLite transitions,
+and acknowledges task release only after successful compare-and-swap. A
+pre-ready termination returns the exact attempt to `Absent`; a failed recovery
+enters `RecoveryFailed` while preserving its prior Guacamole, XRDP, and display
+receipt; a ready disconnect becomes degraded; and a terminal exact stop
+quarantines the retained identities and cleanup obligation. Changed occurrence
+or fence evidence is discarded without durable mutation, while publication
+failure restores the event for replay. The full Service Model package, six
+focused model tests, eleven adapter tests, ten connector tests, all 21
+Guacamole-primary tests, formatting, strict workspace Clippy, diff hygiene,
+and closed-world review pass. Concrete provider-authenticated task creation and
+connection catalog authority, XRDP observation and exact stop effects,
+RuntimeHostRouter integration, and live provider readiness remain absent.
+
 ## Worker Assignments
 
 The operator explicitly authorized subagents for Plan 0211 parallelism and
@@ -1558,7 +1576,7 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, and `6390a48a` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, and persist an isolated compare-and-swap route-keeper authority; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb` and `c0ff2768` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, and no old-generation rollback; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, and `a481d7e1` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, and stop replay; concrete provider task creation, XRDP and stop effects, terminal reconciliation, host scheduling, and actual keeper supervision remain pending |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, and `1d17f471` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, and durable terminal-event handling; concrete provider-authenticated task creation and catalog authority, XRDP observation and exact stop effects, RuntimeHostRouter integration, and live readiness remain pending |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |

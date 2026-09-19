@@ -128,6 +128,15 @@ adoption fails explicitly rather than synthesizing task continuity. Concrete
 provider authentication and connection creation, XRDP and stop effects,
 terminal-event reconciliation, host scheduling, and live readiness remain
 open.
+Checkpoint `1d17f471` adds the provider-free supervisor and terminal-event
+reconciliation. Startup reaches minimum readiness before timed warm growth;
+shutdown interrupts pending work, closes retained tasks, persists exact
+terminal transitions before acknowledgement, preserves the prior ready receipt
+when recovery fails, and quarantines a terminal exact stop with its cleanup
+obligation. Stale occurrence or fence events cannot mutate current custody and
+publication conflicts restore events for replay. Concrete provider-authenticated
+task creation and catalog authority, XRDP observation and exact stop effects,
+RuntimeHostRouter wiring, and live readiness remain open.
 
 ## P216 | Service Model Extraction Landing
 

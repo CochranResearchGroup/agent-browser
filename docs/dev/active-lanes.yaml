@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: a481d7e1
+    checkpoint: 1d17f471
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: checkpoint a481d7e1 retains real route-keeper PrimaryTasks under exact occurrence and fence custody, joins Guacamole and injected XRDP readiness, freshly fences destructive stop, and replays completed stop after publication conflict; 7 connector tests, 7 durable adapter tests, all 21 Guacamole-primary tests, formatting, strict workspace Clippy, diff hygiene, and closed-world review pass
-    validation_ref: a481d7e1
+    validation_status: checkpoint 1d17f471 supervises minimum-before-warm reconciliation, interrupts pending work on shutdown, persists exact terminal transitions before task release, preserves prior ready receipts through failed recovery, quarantines terminal exact stops, and restores events after publication conflict; the full Service Model package, 6 focused model tests, 11 adapter tests, 10 connector tests, all 21 Guacamole-primary tests, formatting, strict workspace Clippy, diff hygiene, and closed-world review pass
+    validation_ref: 1d17f471
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 49 still requires cross-platform causal process discovery for automatic ambiguous-launch adoption or cleanup, provider cleanup, the concrete provider-authenticated route-keeper task factory, XRDP observer and exact stop implementation, terminal-event host reconciliation and scheduling, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
+    blocker: version 49 still requires cross-platform causal process discovery for automatic ambiguous-launch adoption or cleanup, provider cleanup, the concrete provider-authenticated route-keeper task factory and connection catalog, XRDP observer and exact stop implementation, RuntimeHostRouter integration, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
     updated_at: 2026-09-19

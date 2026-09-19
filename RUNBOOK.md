@@ -9,6 +9,28 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 411 | 2026-09-19
+
+P211 checkpoint `1d17f471` adds the provider-free route-keeper supervisor and
+durable terminal reconciliation. Startup admits the configured minimum-ready
+route before warming one additional action per timed tick, and shutdown can
+interrupt an in-flight connector await. Every shutdown and error exit closes
+retained primary tasks, drains their exact terminal events, persists the
+resulting transition through SQLite compare-and-swap, and only then releases
+task custody. A terminal before first readiness returns the slot to `Absent`;
+a failed recovery preserves the prior exact Guacamole, XRDP, and display
+receipt in `RecoveryFailed`; a ready disconnect becomes degraded; and a
+terminal during exact stop quarantines the retained protocol identities and
+cleanup obligation. Changed occurrence or fence evidence cannot mutate or
+release the current task, and a compare-and-swap failure restores the event
+for replay. The full Service Model package, six focused model tests, eleven
+adapter tests, ten connector tests, all 21 Guacamole-primary tests, formatting,
+strict workspace Clippy, diff hygiene, and independent closed-world review
+pass. The concrete provider-authenticated task factory and connection catalog,
+XRDP observer and exact stop implementation, RuntimeHostRouter integration,
+and live provider readiness remain open. No provider, browser,
+installed-runtime, production, ingress, or release effect occurred.
+
 ## Turn 410 | 2026-09-19
 
 P211 checkpoint `a481d7e1` adds process-local custody for real route-keeper
