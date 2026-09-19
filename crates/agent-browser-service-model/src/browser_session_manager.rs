@@ -430,7 +430,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         &mut self,
         request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
-        self.open_internal(request, None)
+        self.open_internal(request, None, None)
     }
 
     pub fn open_reserved(
@@ -438,13 +438,40 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         request: OpenBrowserSession,
         reservation: BrowserOpenReservation,
     ) -> Result<OpenBrowserSessionResult, String> {
-        self.open_internal(request, Some(reservation))
+        self.open_internal(request, Some(reservation), None)
+    }
+
+    /// Publishes an exact reserved browser launch that was already observed by
+    /// an operation-recovery path without launching a second browser.
+    ///
+    /// The candidate state is applied only after every reserved identity and
+    /// normal open invariant passes. This keeps a mismatched recovery
+    /// observation from partially publishing manager state.
+    pub fn open_reserved_observed(
+        &mut self,
+        request: OpenBrowserSession,
+        reservation: BrowserOpenReservation,
+        observed_launch: BrowserLaunch,
+    ) -> Result<OpenBrowserSessionResult, String> {
+        let mut candidate_state = self.state.clone();
+        let result = {
+            let mut candidate_manager = BrowserSessionManager::new(
+                &mut candidate_state,
+                self.catalog,
+                self.effects,
+                self.config.clone(),
+            );
+            candidate_manager.open_internal(request, Some(reservation), Some(observed_launch))?
+        };
+        *self.state = candidate_state;
+        Ok(result)
     }
 
     fn open_internal(
         &mut self,
         request: OpenBrowserSession,
         reservation: Option<BrowserOpenReservation>,
+        mut observed_launch: Option<BrowserLaunch>,
     ) -> Result<OpenBrowserSessionResult, String> {
         let profile = self.resolve_profile_for_open(&request)?;
         let expired_matching_sessions = self
@@ -489,6 +516,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                         || browser.desktop.as_ref() != Some(&reservation.desktop)
                 }) {
                     return Err("browser_session_open_reservation_mismatch".to_string());
+                }
+                if observed_launch.is_some() {
+                    return Err("browser_session_observed_launch_unexpected_on_reuse".to_string());
                 }
                 let expires_at_ms = request
                     .activity_at_ms
@@ -545,6 +575,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 }) {
                     return Err("browser_session_open_reservation_mismatch".to_string());
                 }
+                if observed_launch.is_some() {
+                    return Err("browser_session_observed_launch_unexpected_on_reuse".to_string());
+                }
                 (browser.id, SessionBrowserDisposition::Reused, None)
             } else {
                 self.retire_browser(
@@ -552,7 +585,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     SessionEndReason::BrowserUnresponsive,
                     request.activity_at_ms,
                 )?;
-                let launch = self.launch_browser(&profile, reservation.as_ref())?;
+                let launch = self.launch_or_adopt_browser(
+                    &profile,
+                    reservation.as_ref(),
+                    &mut observed_launch,
+                )?;
                 (
                     launch.browser_id.clone(),
                     SessionBrowserDisposition::Launched,
@@ -560,7 +597,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 )
             }
         } else {
-            let launch = self.launch_browser(&profile, reservation.as_ref())?;
+            let launch =
+                self.launch_or_adopt_browser(&profile, reservation.as_ref(), &mut observed_launch)?;
             (
                 launch.browser_id.clone(),
                 SessionBrowserDisposition::Launched,
@@ -677,6 +715,34 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             return Err("browser_session_launch_desktop_mismatch".to_string());
         }
         launch.desktop = desktop;
+        Ok(launch)
+    }
+
+    fn launch_or_adopt_browser(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        reservation: Option<&BrowserOpenReservation>,
+        observed_launch: &mut Option<BrowserLaunch>,
+    ) -> Result<BrowserLaunch, String> {
+        let Some(launch) = observed_launch.take() else {
+            return self.launch_browser(profile, reservation);
+        };
+        let reservation = reservation
+            .ok_or_else(|| "browser_session_observed_launch_requires_reservation".to_string())?;
+        if launch.browser_id != reservation.browser_id {
+            return Err("browser_session_reserved_browser_identity_mismatch".to_string());
+        }
+        let reserved_route_is_healthy = self.config.remote_desktop_routes.iter().any(|route| {
+            route.healthy
+                && route.id == reservation.desktop.route_id
+                && route.display_name == reservation.desktop.display_name
+        });
+        if !reserved_route_is_healthy {
+            return Err("browser_session_reserved_desktop_unavailable".to_string());
+        }
+        if launch.desktop.as_ref() != Some(&reservation.desktop) {
+            return Err("browser_session_reserved_desktop_identity_mismatch".to_string());
+        }
         Ok(launch)
     }
 

@@ -200,6 +200,221 @@ fn invalid_reserved_session_identity_is_rejected_before_launch() {
     assert!(state.browsers.is_empty());
 }
 
+#[test]
+fn observed_reserved_open_adopts_exact_launch_without_launch_effect() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects::default();
+    let desktop = BrowserDesktopAssignment {
+        route_id: "route-a".to_string(),
+        display_name: ":21".to_string(),
+        live_browser_count: 0,
+    };
+    let reservation = BrowserOpenReservation {
+        session_id: "session:alice:profile-a:1".to_string(),
+        browser_id: "browser:profile-a".to_string(),
+        desktop: desktop.clone(),
+    };
+    let observed_launch = BrowserLaunch {
+        browser_id: reservation.browser_id.clone(),
+        pid: 4242,
+        cdp_endpoint: "http://127.0.0.1:9422".to_string(),
+        process_identity: None,
+        desktop: Some(desktop.clone()),
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![
+                agent_browser_service_model::BrowserDesktopRoute {
+                    id: "route-0".to_string(),
+                    display_name: ":20".to_string(),
+                    healthy: true,
+                },
+                agent_browser_service_model::BrowserDesktopRoute {
+                    id: desktop.route_id.clone(),
+                    display_name: desktop.display_name.clone(),
+                    healthy: true,
+                },
+            ],
+        },
+    );
+
+    let opened = manager
+        .open_reserved_observed(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 1_000),
+            reservation,
+            observed_launch.clone(),
+        )
+        .unwrap();
+    drop(manager);
+
+    assert_eq!(opened.session_id, "session:alice:profile-a:1");
+    assert_eq!(opened.browser_id, observed_launch.browser_id);
+    assert_eq!(opened.disposition, SessionBrowserDisposition::Launched);
+    assert_eq!(
+        opened.session_disposition,
+        SessionRecordDisposition::Created
+    );
+    assert!(effects.launches.is_empty());
+    assert_eq!(state.sessions.len(), 1);
+    assert_eq!(
+        state.browsers[&opened.browser_id].desktop,
+        observed_launch.desktop
+    );
+    assert_eq!(state.browsers[&opened.browser_id].pid, observed_launch.pid);
+    assert_eq!(
+        state.browsers[&opened.browser_id].cdp_endpoint,
+        observed_launch.cdp_endpoint
+    );
+}
+
+#[test]
+fn observed_reserved_open_rejects_identity_mismatch_before_state_publication() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let original_state = state.clone();
+    let mut effects = FixtureEffects::default();
+    let desktop = BrowserDesktopAssignment {
+        route_id: "route-a".to_string(),
+        display_name: ":21".to_string(),
+        live_browser_count: 0,
+    };
+    let reservation = BrowserOpenReservation {
+        session_id: "session:alice:profile-a:1".to_string(),
+        browser_id: "browser:profile-a".to_string(),
+        desktop: desktop.clone(),
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 300_000,
+        remote_desktop_routes: vec![agent_browser_service_model::BrowserDesktopRoute {
+            id: desktop.route_id.clone(),
+            display_name: desktop.display_name.clone(),
+            healthy: true,
+        }],
+    };
+    let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config);
+
+    let mut wrong_session_reservation = reservation.clone();
+    wrong_session_reservation.session_id = "session:wrong".to_string();
+    let exact_launch = BrowserLaunch {
+        browser_id: reservation.browser_id.clone(),
+        pid: 4242,
+        cdp_endpoint: "http://127.0.0.1:9422".to_string(),
+        process_identity: None,
+        desktop: Some(desktop.clone()),
+    };
+    assert_eq!(
+        manager.open_reserved_observed(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 1_000),
+            wrong_session_reservation,
+            exact_launch,
+        ),
+        Err("browser_session_reserved_session_identity_mismatch".to_string())
+    );
+    let wrong_browser = BrowserLaunch {
+        browser_id: "browser:wrong".to_string(),
+        pid: 4242,
+        cdp_endpoint: "http://127.0.0.1:9422".to_string(),
+        process_identity: None,
+        desktop: Some(desktop.clone()),
+    };
+    assert_eq!(
+        manager.open_reserved_observed(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 1_000),
+            reservation.clone(),
+            wrong_browser,
+        ),
+        Err("browser_session_reserved_browser_identity_mismatch".to_string())
+    );
+    let wrong_desktop = BrowserLaunch {
+        browser_id: reservation.browser_id.clone(),
+        pid: 4242,
+        cdp_endpoint: "http://127.0.0.1:9422".to_string(),
+        process_identity: None,
+        desktop: Some(BrowserDesktopAssignment {
+            route_id: "route-wrong".to_string(),
+            display_name: ":99".to_string(),
+            live_browser_count: 0,
+        }),
+    };
+    assert_eq!(
+        manager.open_reserved_observed(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 1_000),
+            reservation,
+            wrong_desktop,
+        ),
+        Err("browser_session_reserved_desktop_identity_mismatch".to_string())
+    );
+    drop(manager);
+
+    assert_eq!(state, original_state);
+    assert!(effects.launches.is_empty());
+}
+
+#[test]
+fn observed_reserved_open_is_rejected_when_normal_open_would_reuse() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let desktop = BrowserDesktopAssignment {
+        route_id: "route-a".to_string(),
+        display_name: ":21".to_string(),
+        live_browser_count: 0,
+    };
+    let reservation = BrowserOpenReservation {
+        session_id: "session:alice:profile-a:1".to_string(),
+        browser_id: "browser:profile-a".to_string(),
+        desktop: desktop.clone(),
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 300_000,
+        remote_desktop_routes: vec![agent_browser_service_model::BrowserDesktopRoute {
+            id: desktop.route_id.clone(),
+            display_name: desktop.display_name.clone(),
+            healthy: true,
+        }],
+    };
+    let mut manager =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone());
+    manager
+        .open_reserved(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 1_000),
+            reservation.clone(),
+        )
+        .unwrap();
+    drop(manager);
+    let state_before_recovery = state.clone();
+    let launch_count_before_recovery = effects.launches.len();
+    let observed_launch = BrowserLaunch {
+        browser_id: reservation.browser_id.clone(),
+        pid: 4242,
+        cdp_endpoint: "http://127.0.0.1:9422".to_string(),
+        process_identity: None,
+        desktop: Some(desktop),
+    };
+    let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config);
+
+    assert_eq!(
+        manager.open_reserved_observed(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 2_000),
+            reservation,
+            observed_launch,
+        ),
+        Err("browser_session_observed_launch_unexpected_on_reuse".to_string())
+    );
+    drop(manager);
+
+    assert_eq!(state, state_before_recovery);
+    assert_eq!(effects.launches.len(), launch_count_before_recovery);
+}
+
 impl BrowserSessionEffects for FixtureEffects {
     fn browser_is_live(
         &mut self,

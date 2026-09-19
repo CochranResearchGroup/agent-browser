@@ -22,6 +22,12 @@ use super::cdp::chrome::LaunchOptions;
 
 const RECORDED_BROWSER_REATTACH_TIMEOUT: Duration = Duration::from_secs(5);
 
+fn reserved_browser_launch_args(browser_id: Option<&str>) -> Vec<String> {
+    browser_id
+        .map(|browser_id| vec![format!("--agent-browser-reservation-id={browser_id}")])
+        .unwrap_or_default()
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct BrowserManagerRuntimeConfig {
     pub(crate) headless: bool,
@@ -48,6 +54,16 @@ pub(crate) trait BrowserRuntimeDriver {
             return Err("browser_session_reserved_browser_identity_mismatch".to_string());
         }
         Ok(launch)
+    }
+    fn recover_browser_reserved(
+        &mut self,
+        _profile: &BrowserProfileCatalogEntry,
+        _desktop: &BrowserDesktopAssignment,
+        _browser_id: &str,
+    ) -> Result<ReservedBrowserRecovery, String> {
+        Ok(ReservedBrowserRecovery::Unproven {
+            reason: "causal_process_discovery_unavailable".to_string(),
+        })
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
     fn acquire_initial_tab(
@@ -89,6 +105,12 @@ pub(crate) trait BrowserRuntimeDriver {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ReservedBrowserRecovery {
+    Recovered(BrowserLaunch),
+    Unproven { reason: String },
+}
+
 pub(crate) struct BrowserSessionEffectAdapter<D> {
     runtime: D,
 }
@@ -96,6 +118,27 @@ pub(crate) struct BrowserSessionEffectAdapter<D> {
 impl<D> BrowserSessionEffectAdapter<D> {
     pub(crate) fn new(runtime: D) -> Self {
         Self { runtime }
+    }
+}
+
+pub(crate) trait ReservedBrowserRecoveryEffects {
+    fn recover_browser_reserved(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: &BrowserDesktopAssignment,
+        browser_id: &str,
+    ) -> Result<ReservedBrowserRecovery, String>;
+}
+
+impl<D: BrowserRuntimeDriver> ReservedBrowserRecoveryEffects for BrowserSessionEffectAdapter<D> {
+    fn recover_browser_reserved(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: &BrowserDesktopAssignment,
+        browser_id: &str,
+    ) -> Result<ReservedBrowserRecovery, String> {
+        self.runtime
+            .recover_browser_reserved(profile, desktop, browser_id)
     }
 }
 
@@ -556,6 +599,7 @@ fn run_browser_worker(
                             profile: Some(profile.user_data_dir.clone()),
                             display,
                             remote_headed: config.remote_headed || desktop.is_some(),
+                            args: reserved_browser_launch_args(browser_id.as_deref()),
                             ..LaunchOptions::default()
                         },
                         Some("chrome"),
@@ -1008,6 +1052,15 @@ fn tab_acquisition(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reserved_browser_launch_has_one_exact_causal_process_marker() {
+        assert_eq!(
+            reserved_browser_launch_args(Some("browser:work:operation:abc123")),
+            ["--agent-browser-reservation-id=browser:work:operation:abc123"]
+        );
+        assert!(reserved_browser_launch_args(None).is_empty());
+    }
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::path::PathBuf;
