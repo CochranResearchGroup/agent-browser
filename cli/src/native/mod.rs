@@ -110,6 +110,8 @@ pub(crate) mod presentation_inventory;
 #[allow(dead_code)]
 pub(crate) mod presentation_lifecycle;
 #[allow(dead_code)]
+pub(crate) mod presentation_route_keeper;
+#[allow(dead_code)]
 pub mod providers;
 #[allow(dead_code)]
 pub mod recording;
