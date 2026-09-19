@@ -67,6 +67,39 @@ impl Default for BrowserRuntimeConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BrowserRuntimeOperationState {
+    Prepared,
+    Committed,
+}
+
+impl BrowserRuntimeOperationState {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Prepared => "prepared",
+            Self::Committed => "committed",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "prepared" => Ok(Self::Prepared),
+            "committed" => Ok(Self::Committed),
+            other => Err(format!("browser_runtime_operation_state_invalid:{other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BrowserRuntimeOperation {
+    pub(crate) operation_id: String,
+    pub(crate) owner_key: String,
+    pub(crate) generation: u64,
+    pub(crate) state: BrowserRuntimeOperationState,
+    pub(crate) request: serde_json::Value,
+    pub(crate) result: Option<serde_json::Value>,
+}
+
 pub(crate) struct LegacyBrowserRuntimeSources<'a> {
     pub(crate) session_state_path: &'a Path,
     pub(crate) profile_catalog_path: &'a Path,
@@ -439,6 +472,128 @@ impl BrowserRuntimeSqliteStore {
             .map_err(|error| format!("browser_runtime_config_commit_failed:{error}"))?;
         Ok(next)
     }
+
+    pub(crate) fn reserve_operation(
+        &mut self,
+        operation_id: &str,
+        owner_key: &str,
+        request: serde_json::Value,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        if operation_id.is_empty() || owner_key.is_empty() {
+            return Err("browser_runtime_operation_identity_invalid".to_string());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_operation_begin_failed:{error}"))?;
+        if let Some(existing) = load_optional_operation(&transaction, operation_id)? {
+            if existing.owner_key == owner_key && existing.request == request {
+                return Ok(existing);
+            }
+            return Err(format!(
+                "browser_runtime_operation_replay_mismatch:{operation_id}"
+            ));
+        }
+        let current_generation = load_owner_generation(&transaction, owner_key)?;
+        let generation = current_generation
+            .checked_add(1)
+            .ok_or_else(|| "browser_runtime_operation_generation_exhausted".to_string())?;
+        let generation_sql = i64::try_from(generation)
+            .map_err(|_| "browser_runtime_operation_generation_exhausted".to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO operation_generations(owner_key, generation) VALUES (?1, ?2)
+                 ON CONFLICT(owner_key) DO UPDATE SET generation=excluded.generation",
+                params![owner_key, generation_sql],
+            )
+            .map_err(|error| format!("browser_runtime_operation_generation_save_failed:{error}"))?;
+        let request_json = serde_json::to_string(&request)
+            .map_err(|error| format!("browser_runtime_operation_serialize_failed:{error}"))?;
+        transaction
+            .execute(
+                "INSERT INTO operation_records(operation_id, owner_key, generation, state, request_json, result_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
+                params![
+                    operation_id,
+                    owner_key,
+                    generation_sql,
+                    BrowserRuntimeOperationState::Prepared.as_str(),
+                    request_json
+                ],
+            )
+            .map_err(|error| format!("browser_runtime_operation_save_failed:{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_operation_commit_failed:{error}"))?;
+        Ok(BrowserRuntimeOperation {
+            operation_id: operation_id.to_string(),
+            owner_key: owner_key.to_string(),
+            generation,
+            state: BrowserRuntimeOperationState::Prepared,
+            request,
+            result: None,
+        })
+    }
+
+    pub(crate) fn commit_operation(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        result: serde_json::Value,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_operation_begin_failed:{error}"))?;
+        let mut operation = load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))?;
+        if operation.generation != generation {
+            return Err(format!(
+                "browser_runtime_operation_generation_mismatch:{operation_id}:{generation}:{}",
+                operation.generation
+            ));
+        }
+        if operation.state == BrowserRuntimeOperationState::Committed {
+            if operation.result.as_ref() == Some(&result) {
+                return Ok(operation);
+            }
+            return Err(format!(
+                "browser_runtime_operation_replay_mismatch:{operation_id}"
+            ));
+        }
+        let current_generation = load_owner_generation(&transaction, &operation.owner_key)?;
+        if current_generation != generation {
+            return Err(format!(
+                "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
+            ));
+        }
+        let result_json = serde_json::to_string(&result)
+            .map_err(|error| format!("browser_runtime_operation_serialize_failed:{error}"))?;
+        transaction
+            .execute(
+                "UPDATE operation_records SET state = ?2, result_json = ?3 WHERE operation_id = ?1",
+                params![
+                    operation_id,
+                    BrowserRuntimeOperationState::Committed.as_str(),
+                    result_json
+                ],
+            )
+            .map_err(|error| format!("browser_runtime_operation_save_failed:{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_operation_commit_failed:{error}"))?;
+        operation.state = BrowserRuntimeOperationState::Committed;
+        operation.result = Some(result);
+        Ok(operation)
+    }
+
+    pub(crate) fn load_operation(
+        &self,
+        operation_id: &str,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        load_optional_operation(&self.connection, operation_id)?
+            .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))
+    }
 }
 
 /// Reads manager state while stopping either side of the one-time cold
@@ -622,9 +777,15 @@ fn initialize_runtime_schema(connection: &Connection) -> Result<(), String> {
              );
              CREATE TABLE IF NOT EXISTS operation_records (
                operation_id TEXT PRIMARY KEY,
+               owner_key TEXT NOT NULL,
                generation INTEGER NOT NULL,
                state TEXT NOT NULL,
-               payload_json TEXT NOT NULL
+               request_json TEXT NOT NULL,
+               result_json TEXT
+             );
+             CREATE TABLE IF NOT EXISTS operation_generations (
+               owner_key TEXT PRIMARY KEY,
+               generation INTEGER NOT NULL
              );
              CREATE TABLE IF NOT EXISTS history_events (
                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -790,6 +951,64 @@ fn validate_runtime_config(config: &BrowserRuntimeConfig) -> Result<(), String> 
         return Err("browser_runtime_config_database_bytes_invalid".to_string());
     }
     Ok(())
+}
+
+fn load_owner_generation(connection: &Connection, owner_key: &str) -> Result<u64, String> {
+    let generation = connection
+        .query_row(
+            "SELECT generation FROM operation_generations WHERE owner_key = ?1",
+            params![owner_key],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|error| format!("browser_runtime_operation_generation_read_failed:{error}"))?
+        .unwrap_or(0);
+    u64::try_from(generation)
+        .map_err(|_| "browser_runtime_operation_generation_invalid".to_string())
+}
+
+fn load_optional_operation(
+    connection: &Connection,
+    operation_id: &str,
+) -> Result<Option<BrowserRuntimeOperation>, String> {
+    let row = connection
+        .query_row(
+            "SELECT owner_key, generation, state, request_json, result_json
+             FROM operation_records WHERE operation_id = ?1",
+            params![operation_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| format!("browser_runtime_operation_read_failed:{error}"))?;
+    let Some((owner_key, generation, state, request_json, result_json)) = row else {
+        return Ok(None);
+    };
+    let generation = u64::try_from(generation)
+        .map_err(|_| "browser_runtime_operation_generation_invalid".to_string())?;
+    let request = serde_json::from_str(&request_json)
+        .map_err(|error| format!("browser_runtime_operation_request_invalid:{error}"))?;
+    let result = result_json
+        .map(|json| {
+            serde_json::from_str(&json)
+                .map_err(|error| format!("browser_runtime_operation_result_invalid:{error}"))
+        })
+        .transpose()?;
+    Ok(Some(BrowserRuntimeOperation {
+        operation_id: operation_id.to_string(),
+        owner_key,
+        generation,
+        state: BrowserRuntimeOperationState::parse(&state)?,
+        request,
+        result,
+    }))
 }
 
 fn prepare_private_parent(path: &Path) -> Result<(), String> {
@@ -1372,6 +1591,73 @@ mod tests {
             Err("browser_runtime_config_maximum_displays_invalid".to_string())
         );
         assert_eq!(store.load_runtime_config().unwrap(), defaults);
+    }
+
+    #[test]
+    fn operation_journal_replays_requests_and_fences_stale_effect_commits() {
+        let directory = TempDirectory::new("browser-runtime-operation-journal");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+
+        let first = store
+            .reserve_operation("open-1", "session:alice", serde_json::json!({"url": "a"}))
+            .unwrap();
+        assert_eq!(first.generation, 1);
+        assert_eq!(first.state, BrowserRuntimeOperationState::Prepared);
+        assert_eq!(
+            store
+                .reserve_operation("open-1", "session:alice", serde_json::json!({"url": "a"}))
+                .unwrap(),
+            first
+        );
+        assert_eq!(
+            store.reserve_operation(
+                "open-1",
+                "session:alice",
+                serde_json::json!({"url": "different"})
+            ),
+            Err("browser_runtime_operation_replay_mismatch:open-1".to_string())
+        );
+
+        let second = store
+            .reserve_operation("open-2", "session:alice", serde_json::json!({"url": "b"}))
+            .unwrap();
+        assert_eq!(second.generation, 2);
+        assert_eq!(
+            store.commit_operation("open-1", 1, serde_json::json!({"browserId": "stale"})),
+            Err("browser_runtime_operation_generation_stale:open-1:1:2".to_string())
+        );
+        let committed = store
+            .commit_operation("open-2", 2, serde_json::json!({"browserId": "current"}))
+            .unwrap();
+        assert_eq!(committed.state, BrowserRuntimeOperationState::Committed);
+        assert_eq!(
+            committed.result,
+            Some(serde_json::json!({"browserId": "current"}))
+        );
+        assert_eq!(
+            store
+                .commit_operation("open-2", 2, serde_json::json!({"browserId": "current"}))
+                .unwrap(),
+            committed
+        );
+
+        let unrelated = store
+            .reserve_operation("open-bob", "session:bob", serde_json::json!({}))
+            .unwrap();
+        assert_eq!(unrelated.generation, 1);
+        drop(store);
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(reopened.load_operation("open-2").unwrap(), committed);
     }
 
     #[test]
