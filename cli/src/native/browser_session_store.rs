@@ -8,12 +8,309 @@ use agent_browser_service_model::{
     BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState,
     BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
 };
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::service_store::default_service_state_path;
 
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
+const BROWSER_RUNTIME_DATABASE_SCHEMA: i64 = 1;
+const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
+const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
+const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
+
+pub(crate) struct LegacyBrowserRuntimeSources<'a> {
+    pub(crate) session_state_path: &'a Path,
+    pub(crate) profile_catalog_path: &'a Path,
+    pub(crate) service_state_path: &'a Path,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BrowserRuntimeMigrationReceipt {
+    pub(crate) imported_source_count: usize,
+    pub(crate) archive_directory: PathBuf,
+}
+
+/// Transactional authority for the trusted single-user browser runtime.
+///
+/// Callers load and save typed aggregates. SQLite schema, journaling, source
+/// hashing, and legacy archival stay behind this interface.
+pub(crate) struct BrowserRuntimeSqliteStore {
+    connection: Connection,
+}
+
+impl BrowserRuntimeSqliteStore {
+    pub(crate) fn default_sqlite() -> Result<Self, String> {
+        let legacy_state_path = default_service_state_path()?;
+        let service_directory = legacy_state_path
+            .parent()
+            .ok_or_else(|| "browser_session_service_directory_missing".to_string())?;
+        Self::open(&service_directory.join(BROWSER_RUNTIME_DATABASE_FILENAME))
+    }
+
+    pub(crate) fn open(path: &Path) -> Result<Self, String> {
+        if !path.is_file() {
+            return Err(format!(
+                "browser_runtime_database_missing:{}",
+                path.display()
+            ));
+        }
+        let connection = open_runtime_connection(path)?;
+        validate_runtime_schema(&connection)?;
+        Ok(Self { connection })
+    }
+
+    pub(crate) fn migrate_from_legacy(
+        path: &Path,
+        sources: LegacyBrowserRuntimeSources<'_>,
+    ) -> Result<BrowserRuntimeMigrationReceipt, String> {
+        if path.exists() {
+            let store = Self::open(path)?;
+            let receipt = store.migration_receipt()?;
+            set_archive_read_only(&receipt.archive_directory)?;
+            return Ok(receipt);
+        }
+        prepare_private_parent(path)?;
+
+        let session_raw = read_json_source_or_default::<BrowserSessionState>(
+            sources.session_state_path,
+            &BrowserSessionState::default(),
+        )?;
+        let session_state: BrowserSessionState =
+            serde_json::from_slice(&session_raw).map_err(|error| {
+                format!(
+                    "browser_runtime_migration_session_invalid:{}:{error}",
+                    sources.session_state_path.display()
+                )
+            })?;
+        if session_state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+            return Err(format!(
+                "browser_session_state_schema_unsupported:{}",
+                session_state.schema_version
+            ));
+        }
+
+        let service_raw = read_source_or_default(sources.service_state_path, b"{}")?;
+        let catalog_raw = if sources.profile_catalog_path.is_file() {
+            fs::read(sources.profile_catalog_path).map_err(|error| {
+                format!(
+                    "browser_runtime_migration_source_read_failed:{}:{error}",
+                    sources.profile_catalog_path.display()
+                )
+            })?
+        } else {
+            let legacy = String::from_utf8_lossy(&service_raw);
+            serde_json::to_vec(
+                &BrowserProfileCatalog::import_legacy_service_state_json(&legacy).catalog,
+            )
+            .map_err(|error| {
+                format!("browser_runtime_migration_catalog_serialize_failed:{error}")
+            })?
+        };
+        let catalog: BrowserProfileCatalog =
+            serde_json::from_slice(&catalog_raw).map_err(|error| {
+                format!(
+                    "browser_runtime_migration_catalog_invalid:{}:{error}",
+                    sources.profile_catalog_path.display()
+                )
+            })?;
+        validate_catalog_schema(&catalog)?;
+
+        let source_records = [
+            (sources.session_state_path, session_raw.as_slice()),
+            (sources.profile_catalog_path, catalog_raw.as_slice()),
+            (sources.service_state_path, service_raw.as_slice()),
+        ];
+        let migration_id = migration_digest(&source_records);
+        let archive_directory = path
+            .parent()
+            .ok_or_else(|| "browser_runtime_database_parent_missing".to_string())?
+            .join(format!("migration-archive-{}", &migration_id[..16]));
+        create_migration_archive(&archive_directory, &source_records)?;
+
+        let staged_database =
+            path.with_extension(format!("sqlite3.migrating-{}", uuid::Uuid::new_v4()));
+        let migration_result = (|| -> Result<(), String> {
+            let mut connection = open_runtime_connection(&staged_database)?;
+            initialize_runtime_schema(&connection)?;
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(|error| format!("browser_runtime_migration_begin_failed:{error}"))?;
+            save_document(
+                &transaction,
+                SESSION_STATE_DOCUMENT,
+                BROWSER_SESSION_STATE_SCHEMA_V1,
+                &session_state,
+            )?;
+            save_document(
+                &transaction,
+                PROFILE_CATALOG_DOCUMENT,
+                BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+                &catalog,
+            )?;
+            for (source_path, bytes) in &source_records {
+                transaction
+                    .execute(
+                        "INSERT INTO migration_sources(source_path, sha256, archive_name, imported) VALUES (?1, ?2, ?3, 1)",
+                        params![
+                            source_path.to_string_lossy().as_ref(),
+                            sha256_hex(bytes),
+                            source_path.file_name().and_then(|name| name.to_str()).unwrap_or("source")
+                        ],
+                    )
+                    .map_err(|error| format!("browser_runtime_migration_source_record_failed:{error}"))?;
+            }
+            transaction
+                .execute(
+                    "INSERT INTO runtime_metadata(key, value) VALUES ('migration_id', ?1)",
+                    params![migration_id],
+                )
+                .and_then(|_| {
+                    transaction.execute(
+                        "INSERT INTO runtime_metadata(key, value) VALUES ('migration_archive', ?1)",
+                        params![archive_directory.to_string_lossy().as_ref()],
+                    )
+                })
+                .map_err(|error| format!("browser_runtime_migration_receipt_failed:{error}"))?;
+            transaction
+                .commit()
+                .map_err(|error| format!("browser_runtime_migration_commit_failed:{error}"))?;
+            connection
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+                .map_err(|error| format!("browser_runtime_migration_checkpoint_failed:{error}"))?;
+            drop(connection);
+            set_private_file(&staged_database)?;
+            atomic_replace(&staged_database, path).map_err(|error| {
+                error.replace("browser_session_json", "browser_runtime_database")
+            })?;
+            Ok(())
+        })();
+        if migration_result.is_err() {
+            remove_sqlite_files(&staged_database);
+        }
+        migration_result?;
+        remove_sqlite_sidecars(&staged_database);
+        set_archive_read_only(&archive_directory)?;
+
+        Ok(BrowserRuntimeMigrationReceipt {
+            imported_source_count: source_records.len(),
+            archive_directory,
+        })
+    }
+
+    fn migration_receipt(&self) -> Result<BrowserRuntimeMigrationReceipt, String> {
+        let archive: String = self
+            .connection
+            .query_row(
+                "SELECT value FROM runtime_metadata WHERE key = 'migration_archive'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("browser_runtime_migration_receipt_missing:{error}"))?;
+        let imported_source_count = self
+            .connection
+            .query_row(
+                "SELECT count(*) FROM migration_sources WHERE imported = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|error| format!("browser_runtime_migration_receipt_read_failed:{error}"))?
+            as usize;
+        Ok(BrowserRuntimeMigrationReceipt {
+            imported_source_count,
+            archive_directory: PathBuf::from(archive),
+        })
+    }
+
+    pub(crate) fn load_session_state(&self) -> Result<BrowserSessionState, String> {
+        load_document(
+            &self.connection,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )
+    }
+
+    pub(crate) fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
+        if state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+            return Err(format!(
+                "browser_session_state_schema_unsupported:{}",
+                state.schema_version
+            ));
+        }
+        save_document(
+            &self.connection,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            state,
+        )
+    }
+
+    pub(crate) fn load_profile_catalog(&self) -> Result<BrowserProfileCatalog, String> {
+        load_document(
+            &self.connection,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+        )
+    }
+
+    pub(crate) fn save_profile_catalog(
+        &self,
+        catalog: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        validate_catalog_schema(catalog)?;
+        save_document(
+            &self.connection,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+            catalog,
+        )
+    }
+}
+
+/// Reads manager state while stopping either side of the one-time cold
+/// upgrade boundary. A present SQLite database is authoritative, including
+/// when it is corrupt; legacy JSON is considered only before the database has
+/// ever been created.
+pub(crate) fn load_session_state_for_cold_upgrade(
+    service_directory: &Path,
+) -> Result<BrowserSessionState, String> {
+    let database_path = service_directory.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+    if database_path.exists() {
+        return BrowserRuntimeSqliteStore::open(&database_path)?.load_session_state();
+    }
+    BrowserSessionJsonStore::new(service_directory).load_session_state()
+}
+
+pub(crate) fn load_default_session_state_for_cold_upgrade() -> Result<BrowserSessionState, String> {
+    let legacy_state_path = default_service_state_path()?;
+    let service_directory = legacy_state_path
+        .parent()
+        .ok_or_else(|| "browser_session_service_directory_missing".to_string())?;
+    load_session_state_for_cold_upgrade(service_directory)
+}
+
+pub(crate) fn save_session_state_for_cold_upgrade(
+    service_directory: &Path,
+    state: &BrowserSessionState,
+) -> Result<(), String> {
+    let database_path = service_directory.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+    if database_path.exists() {
+        return BrowserRuntimeSqliteStore::open(&database_path)?.save_session_state(state);
+    }
+    BrowserSessionJsonStore::new(service_directory).save_session_state(state)
+}
+
+pub(crate) fn save_default_session_state_for_cold_upgrade(
+    state: &BrowserSessionState,
+) -> Result<(), String> {
+    let legacy_state_path = default_service_state_path()?;
+    let service_directory = legacy_state_path
+        .parent()
+        .ok_or_else(|| "browser_session_service_directory_missing".to_string())?;
+    save_session_state_for_cold_upgrade(service_directory, state)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BrowserProfileCatalogLoad {
@@ -35,14 +332,6 @@ impl BrowserSessionJsonStore {
             session_state_path: service_directory.join(BROWSER_SESSION_STATE_FILENAME),
             profile_catalog_path: service_directory.join(BROWSER_PROFILE_CATALOG_FILENAME),
         }
-    }
-
-    pub(crate) fn default_json() -> Result<Self, String> {
-        let legacy_state_path = default_service_state_path()?;
-        let service_directory = legacy_state_path
-            .parent()
-            .ok_or_else(|| "browser_session_service_directory_missing".to_string())?;
-        Ok(Self::new(service_directory))
     }
 
     pub(crate) fn load_session_state(&self) -> Result<BrowserSessionState, String> {
@@ -112,6 +401,259 @@ impl BrowserSessionJsonStore {
         validate_catalog_schema(catalog)?;
         write_private_json_atomic(&self.profile_catalog_path, catalog)
     }
+}
+
+fn open_runtime_connection(path: &Path) -> Result<Connection, String> {
+    let connection = Connection::open(path).map_err(|error| {
+        format!(
+            "browser_runtime_database_open_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    connection
+        .busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|error| format!("browser_runtime_database_busy_timeout_failed:{error}"))?;
+    connection
+        .execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=FULL;
+             PRAGMA foreign_keys=ON;",
+        )
+        .map_err(|error| format!("browser_runtime_database_pragma_failed:{error}"))?;
+    Ok(connection)
+}
+
+fn initialize_runtime_schema(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute_batch(
+            "PRAGMA auto_vacuum=INCREMENTAL;
+             CREATE TABLE IF NOT EXISTS runtime_metadata (
+               key TEXT PRIMARY KEY,
+               value TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS state_documents (
+               kind TEXT PRIMARY KEY,
+               schema_version TEXT NOT NULL,
+               json TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS migration_sources (
+               source_path TEXT PRIMARY KEY,
+               sha256 TEXT NOT NULL,
+               archive_name TEXT NOT NULL,
+               imported INTEGER NOT NULL CHECK(imported IN (0, 1))
+             );
+             CREATE TABLE IF NOT EXISTS operation_records (
+               operation_id TEXT PRIMARY KEY,
+               generation INTEGER NOT NULL,
+               state TEXT NOT NULL,
+               payload_json TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS history_events (
+               sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+               recorded_at TEXT NOT NULL,
+               event_type TEXT NOT NULL,
+               payload_json TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS runtime_config (
+               key TEXT PRIMARY KEY,
+               value_json TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS provider_credentials (
+               key TEXT PRIMARY KEY,
+               value BLOB NOT NULL
+             );
+             PRAGMA user_version=1;",
+        )
+        .map_err(|error| format!("browser_runtime_database_schema_failed:{error}"))
+}
+
+fn validate_runtime_schema(connection: &Connection) -> Result<(), String> {
+    let version = connection
+        .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+        .map_err(|error| format!("browser_runtime_database_schema_read_failed:{error}"))?;
+    if version != BROWSER_RUNTIME_DATABASE_SCHEMA {
+        return Err(format!(
+            "browser_runtime_database_schema_unsupported:{version}"
+        ));
+    }
+    let has_documents = connection
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='state_documents'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|error| format!("browser_runtime_database_schema_read_failed:{error}"))?
+        .is_some();
+    if !has_documents {
+        return Err("browser_runtime_database_schema_incomplete".to_string());
+    }
+    Ok(())
+}
+
+fn save_document(
+    connection: &Connection,
+    kind: &str,
+    schema_version: &str,
+    value: &impl Serialize,
+) -> Result<(), String> {
+    let json = serde_json::to_string(value)
+        .map_err(|error| format!("browser_runtime_document_serialize_failed:{kind}:{error}"))?;
+    connection
+        .execute(
+            "INSERT INTO state_documents(kind, schema_version, json) VALUES (?1, ?2, ?3)
+             ON CONFLICT(kind) DO UPDATE SET schema_version=excluded.schema_version, json=excluded.json",
+            params![kind, schema_version, json],
+        )
+        .map_err(|error| format!("browser_runtime_document_save_failed:{kind}:{error}"))?;
+    Ok(())
+}
+
+fn load_document<T: DeserializeOwned>(
+    connection: &Connection,
+    kind: &str,
+    expected_schema: &str,
+) -> Result<T, String> {
+    let (schema, json): (String, String) = connection
+        .query_row(
+            "SELECT schema_version, json FROM state_documents WHERE kind = ?1",
+            params![kind],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|error| format!("browser_runtime_document_missing:{kind}:{error}"))?;
+    if schema != expected_schema {
+        return Err(format!(
+            "browser_runtime_document_schema_unsupported:{kind}:{schema}"
+        ));
+    }
+    serde_json::from_str(&json)
+        .map_err(|error| format!("browser_runtime_document_invalid:{kind}:{error}"))
+}
+
+fn prepare_private_parent(path: &Path) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "browser_runtime_database_parent_missing".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "browser_runtime_database_directory_failed:{}:{error}",
+            parent.display()
+        )
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).map_err(|error| {
+            format!("browser_runtime_database_directory_permissions_failed:{error}")
+        })?;
+    }
+    Ok(())
+}
+
+fn set_private_file(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+            .map_err(|error| format!("browser_runtime_database_permissions_failed:{error}"))?;
+    }
+    Ok(())
+}
+
+fn sqlite_sidecar_path(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = path.as_os_str().to_os_string();
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
+fn remove_sqlite_sidecars(path: &Path) {
+    for suffix in ["-wal", "-shm"] {
+        let _ = fs::remove_file(sqlite_sidecar_path(path, suffix));
+    }
+}
+
+fn remove_sqlite_files(path: &Path) {
+    let _ = fs::remove_file(path);
+    remove_sqlite_sidecars(path);
+}
+
+fn read_source_or_default(path: &Path, default: &[u8]) -> Result<Vec<u8>, String> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(default.to_vec()),
+        Err(error) => Err(format!(
+            "browser_runtime_migration_source_read_failed:{}:{error}",
+            path.display()
+        )),
+    }
+}
+
+fn read_json_source_or_default<T: Serialize>(path: &Path, default: &T) -> Result<Vec<u8>, String> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::to_vec(default)
+            .map_err(|error| format!("browser_runtime_migration_default_serialize_failed:{error}")),
+        Err(error) => Err(format!(
+            "browser_runtime_migration_source_read_failed:{}:{error}",
+            path.display()
+        )),
+    }
+}
+
+fn migration_digest(sources: &[(&Path, &[u8])]) -> String {
+    let mut digest = Sha256::new();
+    for (path, bytes) in sources {
+        digest.update(path.to_string_lossy().as_bytes());
+        digest.update([0]);
+        digest.update(bytes);
+        digest.update([0]);
+    }
+    hex::encode(digest.finalize())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn create_migration_archive(
+    archive_directory: &Path,
+    sources: &[(&Path, &[u8])],
+) -> Result<(), String> {
+    fs::create_dir_all(archive_directory).map_err(|error| {
+        format!(
+            "browser_runtime_migration_archive_directory_failed:{}:{error}",
+            archive_directory.display()
+        )
+    })?;
+    for (source, bytes) in sources {
+        let name = source
+            .file_name()
+            .ok_or_else(|| "browser_runtime_migration_source_name_missing".to_string())?;
+        fs::write(archive_directory.join(name), bytes)
+            .map_err(|error| format!("browser_runtime_migration_archive_write_failed:{error}"))?;
+    }
+    Ok(())
+}
+
+fn set_archive_read_only(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for entry in fs::read_dir(path)
+            .map_err(|error| format!("browser_runtime_migration_archive_read_failed:{error}"))?
+        {
+            let entry = entry.map_err(|error| {
+                format!("browser_runtime_migration_archive_read_failed:{error}")
+            })?;
+            fs::set_permissions(entry.path(), fs::Permissions::from_mode(0o400)).map_err(
+                |error| format!("browser_runtime_migration_archive_permissions_failed:{error}"),
+            )?;
+        }
+        fs::set_permissions(path, fs::Permissions::from_mode(0o500)).map_err(|error| {
+            format!("browser_runtime_migration_archive_permissions_failed:{error}")
+        })?;
+    }
+    Ok(())
 }
 
 fn validate_catalog_schema(catalog: &BrowserProfileCatalog) -> Result<(), String> {
@@ -257,6 +799,159 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn cold_migration_makes_sqlite_authoritative_and_archives_json_sources() {
+        let directory = TempDirectory::new("browser-runtime-sqlite-migration");
+        let service_directory = directory.0.join("service");
+        fs::create_dir_all(&service_directory).unwrap();
+        let session_path = service_directory.join(BROWSER_SESSION_STATE_FILENAME);
+        let catalog_path = service_directory.join(BROWSER_PROFILE_CATALOG_FILENAME);
+        let legacy_service_path = service_directory.join("state.json");
+        let database_path = service_directory.join("runtime.sqlite3");
+
+        let mut session_state = BrowserSessionState::default();
+        session_state.next_session_sequence = 42;
+        write_private_json_atomic(&session_path, &session_state).unwrap();
+        fs::write(
+            &catalog_path,
+            serde_json::json!({
+                "schemaVersion": BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+                "profiles": {},
+                "disposablePolicies": {}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(
+            &legacy_service_path,
+            serde_json::json!({"profiles": {}, "obsoleteRoute": "guacamole:1"}).to_string(),
+        )
+        .unwrap();
+
+        let migration = BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &legacy_service_path,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(migration.imported_source_count, 3);
+        assert!(migration.archive_directory.is_dir());
+        assert!(migration
+            .archive_directory
+            .join(BROWSER_SESSION_STATE_FILENAME)
+            .is_file());
+        assert!(migration
+            .archive_directory
+            .join(BROWSER_PROFILE_CATALOG_FILENAME)
+            .is_file());
+        assert!(migration.archive_directory.join("state.json").is_file());
+        assert!(fs::read_dir(&service_directory).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains(".migrating-")
+        }));
+        let replayed = BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &legacy_service_path,
+            },
+        )
+        .unwrap();
+        assert_eq!(replayed, migration);
+
+        fs::write(&session_path, "not authoritative after migration").unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            store.load_session_state().unwrap().next_session_sequence,
+            42
+        );
+    }
+
+    #[test]
+    fn sqlite_store_round_trips_session_state_and_profile_catalog() {
+        let directory = TempDirectory::new("browser-runtime-sqlite-round-trip");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        let session_path = directory.0.join(BROWSER_SESSION_STATE_FILENAME);
+        let catalog_path = directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME);
+        let service_path = directory.0.join("state.json");
+        write_private_json_atomic(&session_path, &BrowserSessionState::default()).unwrap();
+        write_private_json_atomic(&catalog_path, &BrowserProfileCatalog::default()).unwrap();
+        fs::write(&service_path, "{}").unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &service_path,
+            },
+        )
+        .unwrap();
+
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let mut state = store.load_session_state().unwrap();
+        state.next_session_sequence = 17;
+        store.save_session_state(&state).unwrap();
+        let mut catalog = store.load_profile_catalog().unwrap();
+        catalog.profiles.insert(
+            "work".to_string(),
+            agent_browser_service_model::BrowserProfileCatalogEntry {
+                id: "work".to_string(),
+                name: "Work".to_string(),
+                user_data_dir: "/managed/work".to_string(),
+                kind: BrowserProfileKind::Named,
+            },
+        );
+        store.save_profile_catalog(&catalog).unwrap();
+        drop(store);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(reopened.load_session_state().unwrap(), state);
+        assert_eq!(reopened.load_profile_catalog().unwrap(), catalog);
+    }
+
+    #[test]
+    fn cold_upgrade_state_reader_prefers_existing_sqlite_without_json_fallback() {
+        let directory = TempDirectory::new("browser-runtime-cold-upgrade-reader");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        let session_path = directory.0.join(BROWSER_SESSION_STATE_FILENAME);
+        let catalog_path = directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME);
+        let service_path = directory.0.join("state.json");
+        let mut migrated = BrowserSessionState::default();
+        migrated.next_session_sequence = 7;
+        write_private_json_atomic(&session_path, &migrated).unwrap();
+        write_private_json_atomic(&catalog_path, &BrowserProfileCatalog::default()).unwrap();
+        fs::write(&service_path, "{}").unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &service_path,
+            },
+        )
+        .unwrap();
+        let mut stale_json = BrowserSessionState::default();
+        stale_json.next_session_sequence = 99;
+        write_private_json_atomic(&session_path, &stale_json).unwrap();
+
+        assert_eq!(
+            load_session_state_for_cold_upgrade(&directory.0)
+                .unwrap()
+                .next_session_sequence,
+            7
+        );
+        fs::write(&database_path, "corrupt").unwrap();
+        assert!(load_session_state_for_cold_upgrade(&directory.0).is_err());
     }
 
     #[test]

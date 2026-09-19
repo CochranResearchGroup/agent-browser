@@ -101,7 +101,7 @@ try {
   if (firstApplyPayload.schemaVersion === 'agent-browser.workstation-cold-install.v1') {
     assert.deepEqual(
       firstApplyPayload.steps.map((step) => step.phase),
-      ['stop', 'replace', 'start', 'readiness'],
+      ['stop', 'migrate', 'replace', 'start', 'readiness'],
       'the default workstation apply must use the bounded cold phase sequence',
     );
     assert.equal(

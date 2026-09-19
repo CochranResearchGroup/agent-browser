@@ -3076,7 +3076,6 @@ struct ColdWorkstationInstallEffects<'a> {
     candidate_binding: Option<CandidateArtifactTransactionBinding>,
     isolated_root: bool,
     staged: Option<StagedWorkstationGeneration>,
-    previous_selector: Option<PathBuf>,
     reconcile_receipt: Option<String>,
 }
 
@@ -3107,7 +3106,6 @@ impl ColdWorkstationInstallEffects<'_> {
     }
 
     fn replace(&mut self) -> Result<(bool, bool), String> {
-        self.previous_selector = fs::read_link(&self.paths.current_selector).ok();
         let staged = stage_payload_generation_from_source(
             &self.paths,
             self.args,
@@ -3118,6 +3116,21 @@ impl ColdWorkstationInstallEffects<'_> {
         self.paths = install_paths(self.root);
         self.staged = Some(staged);
         Ok((true, false))
+    }
+
+    fn migrate(&mut self) -> Result<(bool, bool), String> {
+        let service_directory = self.root.join(".agent-browser/service");
+        let database_path = service_directory.join("runtime.sqlite3");
+        let existed = database_path.is_file();
+        crate::native::browser_session_store::BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            crate::native::browser_session_store::LegacyBrowserRuntimeSources {
+                session_state_path: &service_directory.join("browser-session-state.json"),
+                profile_catalog_path: &service_directory.join("browser-profile-catalog.json"),
+                service_state_path: &service_directory.join("state.json"),
+            },
+        )?;
+        Ok((!existed, false))
     }
 
     fn start(&mut self) -> Result<(bool, bool), String> {
@@ -3154,15 +3167,6 @@ impl ColdWorkstationInstallEffects<'_> {
         }
         Ok((false, true))
     }
-
-    fn rollback(&mut self) -> Result<(bool, bool), String> {
-        restore_generation_selector(&self.paths, self.previous_selector.as_deref())?;
-        self.paths = install_paths(self.root);
-        if !self.isolated_root && self.previous_selector.is_some() {
-            reconcile_workstation_locked_for_upgrade(self.root, &self.paths, None, &[])?;
-        }
-        Ok((true, false))
-    }
 }
 
 impl crate::workstation_cold_install::ColdInstallEffects for ColdWorkstationInstallEffects<'_> {
@@ -3183,10 +3187,10 @@ impl crate::workstation_cold_install::ColdInstallEffects for ColdWorkstationInst
                     }
                     Ok((receipt.changed, false))
                 }
+                ColdInstallPhase::Migrate => this.migrate(),
                 ColdInstallPhase::Replace => this.replace(),
                 ColdInstallPhase::Start => this.start(),
                 ColdInstallPhase::Readiness => this.readiness(),
-                ColdInstallPhase::Rollback => this.rollback(),
             },
             self,
         )
@@ -3217,7 +3221,6 @@ fn run_cold_workstation_apply(
         candidate_binding: reviewed_candidate.map(|candidate| candidate.binding.clone()),
         isolated_root,
         staged: None,
-        previous_selector: None,
         reconcile_receipt: None,
     };
     crate::workstation_cold_install::execute_workstation_cold_install(&mut effects)

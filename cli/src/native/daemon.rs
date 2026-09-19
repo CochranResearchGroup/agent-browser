@@ -703,7 +703,8 @@ impl RuntimeHostRouter {
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
             if host.is_none() {
-                let store = super::browser_session_store::BrowserSessionJsonStore::default_json()?;
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
                 let state = store.load_session_state()?;
                 let has_session = state
                     .sessions
@@ -736,7 +737,8 @@ impl RuntimeHostRouter {
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
             if host.is_none() {
-                let store = super::browser_session_store::BrowserSessionJsonStore::default_json()?;
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
                 let state = store.load_session_state()?;
                 if browser_session_focus_command(&command, &state).is_none() {
                     return Ok(None);

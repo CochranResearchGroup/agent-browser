@@ -57,7 +57,7 @@ impl ColdInstallClock for InjectedClock {
 }
 
 #[test]
-fn clean_cold_install_runs_stop_replace_start_and_readiness_in_order() {
+fn clean_cold_install_runs_stop_migrate_replace_start_and_readiness_in_order() {
     let mut effects = ScriptedInstall::default();
 
     let receipt = execute_workstation_cold_install(&mut effects);
@@ -71,19 +71,21 @@ fn clean_cold_install_runs_stop_replace_start_and_readiness_in_order() {
             .collect::<Vec<_>>(),
         vec![
             ColdInstallPhase::Stop,
+            ColdInstallPhase::Migrate,
             ColdInstallPhase::Replace,
             ColdInstallPhase::Start,
             ColdInstallPhase::Readiness
         ]
     );
     assert_eq!(effects.calls[0].1, Duration::from_secs(30));
-    assert_eq!(effects.calls[1].1, Duration::from_secs(60));
-    assert_eq!(effects.calls[2].1, Duration::from_secs(30));
+    assert_eq!(effects.calls[1].1, Duration::from_secs(30));
+    assert_eq!(effects.calls[2].1, Duration::from_secs(60));
     assert_eq!(effects.calls[3].1, Duration::from_secs(30));
+    assert_eq!(effects.calls[4].1, Duration::from_secs(30));
 }
 
 #[test]
-fn stop_failure_prevents_replacement_and_does_not_rollback() {
+fn stop_failure_prevents_migration_and_replacement() {
     let mut effects = ScriptedInstall::new([ColdInstallPhase::Stop]);
 
     let receipt = execute_workstation_cold_install(&mut effects);
@@ -97,12 +99,11 @@ fn stop_failure_prevents_replacement_and_does_not_rollback() {
             .collect::<Vec<_>>(),
         vec![ColdInstallPhase::Stop]
     );
-    assert!(receipt.rollback.is_none());
 }
 
 #[test]
-fn post_stop_failure_attempts_one_rollback_and_preserves_original_error() {
-    let mut effects = ScriptedInstall::new([ColdInstallPhase::Replace, ColdInstallPhase::Rollback]);
+fn post_migration_failure_preserves_original_error_without_rollback() {
+    let mut effects = ScriptedInstall::new([ColdInstallPhase::Replace]);
 
     let receipt = execute_workstation_cold_install(&mut effects);
 
@@ -115,44 +116,29 @@ fn post_stop_failure_attempts_one_rollback_and_preserves_original_error() {
             .collect::<Vec<_>>(),
         vec![
             ColdInstallPhase::Stop,
+            ColdInstallPhase::Migrate,
             ColdInstallPhase::Replace,
-            ColdInstallPhase::Rollback
         ]
     );
     assert_eq!(receipt.original_error.as_deref(), Some("Replace_failed"));
-    assert_eq!(
-        receipt.rollback.as_ref().map(|step| step.phase),
-        Some(ColdInstallPhase::Rollback)
-    );
-    assert_eq!(
-        receipt
-            .rollback
-            .as_ref()
-            .and_then(|step| step.error.as_deref()),
-        Some("Rollback_failed")
-    );
 }
 
 #[test]
-fn readiness_failure_rolls_back_exactly_once() {
+fn readiness_failure_stays_on_the_new_generation() {
     let mut effects = ScriptedInstall::new([ColdInstallPhase::Readiness]);
 
     let receipt = execute_workstation_cold_install(&mut effects);
 
     assert!(!receipt.success);
     assert_eq!(
-        effects
-            .calls
-            .iter()
-            .filter(|(phase, _)| *phase == ColdInstallPhase::Rollback)
-            .count(),
-        1
+        effects.calls.last().map(|(phase, _)| *phase),
+        Some(ColdInstallPhase::Readiness)
     );
     assert_eq!(receipt.original_error.as_deref(), Some("Readiness_failed"));
 }
 
 #[test]
-fn replacement_deadline_overrun_fails_and_attempts_one_bounded_rollback() {
+fn replacement_deadline_overrun_fails_without_restoring_the_old_generation() {
     let now = Rc::new(Cell::new(0));
     let clock = InjectedClock(now.clone());
     let mut effects = ScriptedInstall {
@@ -176,12 +162,8 @@ fn replacement_deadline_overrun_fails_and_attempts_one_bounded_rollback() {
             .collect::<Vec<_>>(),
         vec![
             ColdInstallPhase::Stop,
+            ColdInstallPhase::Migrate,
             ColdInstallPhase::Replace,
-            ColdInstallPhase::Rollback,
         ]
     );
-    assert!(receipt
-        .rollback
-        .as_ref()
-        .is_some_and(|step| step.error.is_none()));
 }

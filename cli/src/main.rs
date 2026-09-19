@@ -3804,7 +3804,7 @@ fn command_targets_managed_session_before_prestart(
     if !targets_manager {
         return Ok(false);
     }
-    let store = native::browser_session_store::BrowserSessionJsonStore::default_json()?;
+    let store = native::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
     let state = store.load_session_state()?;
     Ok(state
         .sessions

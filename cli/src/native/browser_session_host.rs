@@ -14,19 +14,23 @@ use super::browser_session_runtime::{
     BrowserManagerRuntime, BrowserManagerRuntimeConfig, BrowserSessionEffectAdapter,
     ManagedBrowserCommandEffects,
 };
-use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionJsonStore};
+use super::browser_session_store::{
+    BrowserProfileCatalogLoad, BrowserRuntimeSqliteStore, BrowserSessionJsonStore,
+};
 use super::presentation_inventory::StaticRouteInventory;
 
 const DEFAULT_SESSION_IDLE_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_CLEANUP_DELAY_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_POLICY_ID: &str = "default";
 
-pub(crate) type DefaultBrowserSessionHost =
-    BrowserSessionHost<BrowserSessionJsonStore, BrowserSessionEffectAdapter<BrowserManagerRuntime>>;
+pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
+    BrowserRuntimeSqliteStore,
+    BrowserSessionEffectAdapter<BrowserManagerRuntime>,
+>;
 
 pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessionHost, String> {
     let legacy_state_path = super::service_store::default_service_state_path()?;
-    let store = BrowserSessionJsonStore::default_json()?;
+    let store = BrowserRuntimeSqliteStore::default_sqlite()?;
     let session_idle_timeout_ms = configured_u64(
         "AGENT_BROWSER_SESSION_IDLE_TIMEOUT_MS",
         DEFAULT_SESSION_IDLE_TIMEOUT_MS,
@@ -178,6 +182,31 @@ impl BrowserSessionPersistence for BrowserSessionJsonStore {
 
     fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String> {
         BrowserSessionJsonStore::save_profile_catalog(self, catalog)
+    }
+}
+
+impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
+    fn load_session_state(&self) -> Result<BrowserSessionState, String> {
+        BrowserRuntimeSqliteStore::load_session_state(self)
+    }
+
+    fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
+        BrowserRuntimeSqliteStore::save_session_state(self, state)
+    }
+
+    fn load_or_import_profile_catalog(
+        &self,
+        _legacy_service_state_path: &Path,
+    ) -> Result<BrowserProfileCatalogLoad, String> {
+        Ok(BrowserProfileCatalogLoad {
+            catalog: BrowserRuntimeSqliteStore::load_profile_catalog(self)?,
+            diagnostics: Vec::new(),
+            imported_legacy_profiles: false,
+        })
+    }
+
+    fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String> {
+        BrowserRuntimeSqliteStore::save_profile_catalog(self, catalog)
     }
 }
 
@@ -817,6 +846,9 @@ mod tests {
     use crate::native::browser_session_runtime::{
         BrowserRuntimeDriver, BrowserSessionEffectAdapter,
     };
+    use crate::native::browser_session_store::{
+        BrowserRuntimeSqliteStore, LegacyBrowserRuntimeSources,
+    };
     use agent_browser_service_model::{
         BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, ControlInputProvider,
         DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, RemoteViewHandoff,
@@ -1207,6 +1239,68 @@ mod tests {
         assert_eq!(response["data"]["sessionId"], first.session_id);
         assert_eq!(response["data"]["disposition"], "browser_closed");
         assert!(restarted.state().sessions.is_empty());
+    }
+
+    #[test]
+    fn sqlite_authority_loads_and_persists_browser_session_host_state() {
+        let directory = TempDirectory::new();
+        let session_path = directory.0.join("browser-session-state.json");
+        let catalog_path = directory.0.join("browser-profile-catalog.json");
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        drop(host);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            reopened.load_session_state().unwrap().sessions[&opened.session_id].name,
+            "alice"
+        );
+        assert!(reopened
+            .load_profile_catalog()
+            .unwrap()
+            .profiles
+            .contains_key("work"));
     }
 
     #[test]

@@ -372,9 +372,8 @@ impl LiveShutdownPlatform {
 impl ShutdownPlatform for LiveShutdownPlatform {
     fn close_owned_browsers(&mut self, deadline: Duration) -> Result<(bool, bool), String> {
         let state = self.repository.load_snapshot()?;
-        let manager_store =
-            crate::native::browser_session_store::BrowserSessionJsonStore::default_json()?;
-        let mut manager_state = manager_store.load_session_state()?;
+        let mut manager_state =
+            crate::native::browser_session_store::load_default_session_state_for_cold_upgrade()?;
         let mut sessions = BTreeSet::new();
         for browser in state.browsers.values() {
             sessions.extend(browser.active_session_ids.iter().cloned());
@@ -457,7 +456,9 @@ impl ShutdownPlatform for LiveShutdownPlatform {
             manager_state.terminalize_after_cold_shutdown(
                 chrono::Utc::now().timestamp_millis().max(0) as u64,
             );
-            manager_store.save_session_state(&manager_state)?;
+            crate::native::browser_session_store::save_default_session_state_for_cold_upgrade(
+                &manager_state,
+            )?;
             changed = true;
         }
         if !close_failures.is_empty()
@@ -574,8 +575,7 @@ impl ShutdownPlatform for LiveShutdownPlatform {
     fn observe_residue(&mut self, deadline: Duration) -> Result<ShutdownResidue, String> {
         let state = self.repository.load_snapshot()?;
         let manager_state =
-            crate::native::browser_session_store::BrowserSessionJsonStore::default_json()?
-                .load_session_state()?;
+            crate::native::browser_session_store::load_default_session_state_for_cold_upgrade()?;
         let started = Instant::now();
         let legacy_owned_browsers = state
             .browser_process_identities

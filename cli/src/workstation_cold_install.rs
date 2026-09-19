@@ -1,8 +1,8 @@
 //! Provider-neutral cold workstation installation orchestration.
 //!
-//! The controller owns phase ordering, bounded deadlines, and rollback
-//! selection. Platform adapters perform the effects without exposing legacy
-//! hot-upgrade transaction state through this interface.
+//! The controller owns phase ordering and bounded deadlines. Platform adapters
+//! perform the effects without exposing legacy hot-upgrade transaction state
+//! or restoring the replaced architecture through this interface.
 
 use serde::Serialize;
 use std::sync::OnceLock;
@@ -14,10 +14,10 @@ pub(crate) const COLD_INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ColdInstallPhase {
     Stop,
+    Migrate,
     Replace,
     Start,
     Readiness,
-    Rollback,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -40,8 +40,6 @@ pub(crate) struct WorkstationColdInstallReceipt {
     pub(crate) steps: Vec<ColdInstallStepReceipt>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) original_error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) rollback: Option<ColdInstallStepReceipt>,
 }
 
 /// Effects required by the fixed cold-install sequence.
@@ -60,9 +58,9 @@ fn phase_deadline(phase: ColdInstallPhase) -> Duration {
     Duration::from_secs(match phase {
         ColdInstallPhase::Replace => 60,
         ColdInstallPhase::Stop
+        | ColdInstallPhase::Migrate
         | ColdInstallPhase::Start
-        | ColdInstallPhase::Readiness
-        | ColdInstallPhase::Rollback => 30,
+        | ColdInstallPhase::Readiness => 30,
     })
 }
 
@@ -93,21 +91,20 @@ fn execute_step(
         step.ready = false;
         let phase_name = match phase {
             ColdInstallPhase::Stop => "stop",
+            ColdInstallPhase::Migrate => "migrate",
             ColdInstallPhase::Replace => "replace",
             ColdInstallPhase::Start => "start",
             ColdInstallPhase::Readiness => "readiness",
-            ColdInstallPhase::Rollback => "rollback",
         };
         step.error = Some(format!("cold_install_{phase_name}_deadline_exceeded"));
     }
     step
 }
 
-/// Execute stop, payload replacement, startup, and readiness in fixed order.
-///
-/// Stop failure is terminal because replacement never began. Any later
-/// failure attempts exactly one bounded rollback while retaining the original
-/// cause in the aggregate receipt.
+/// Execute stop, migration, payload replacement, startup, and readiness in
+/// fixed order. Every failure is terminal for this attempt and preserves the
+/// new forward-repair architecture. The controller never restores an old
+/// generation.
 pub(crate) fn execute_workstation_cold_install(
     effects: &mut impl ColdInstallEffects,
 ) -> WorkstationColdInstallReceipt {
@@ -121,6 +118,7 @@ pub(crate) fn execute_workstation_cold_install_with_clock(
     let mut steps = Vec::with_capacity(5);
     for phase in [
         ColdInstallPhase::Stop,
+        ColdInstallPhase::Migrate,
         ColdInstallPhase::Replace,
         ColdInstallPhase::Start,
         ColdInstallPhase::Readiness,
@@ -132,20 +130,12 @@ pub(crate) fn execute_workstation_cold_install_with_clock(
         let original_error = step.error.clone();
         steps.push(step);
         if let Some(original_error) = original_error {
-            let rollback = if phase == ColdInstallPhase::Stop {
-                None
-            } else {
-                let rollback = execute_step(effects, ColdInstallPhase::Rollback, clock);
-                steps.push(rollback.clone());
-                Some(rollback)
-            };
             return WorkstationColdInstallReceipt {
                 schema_version: COLD_INSTALL_SCHEMA_VERSION,
                 success: false,
                 changed: steps.iter().any(|step| step.changed),
                 steps,
                 original_error: Some(original_error),
-                rollback,
             };
         }
     }
@@ -156,6 +146,5 @@ pub(crate) fn execute_workstation_cold_install_with_clock(
         changed: steps.iter().any(|step| step.changed),
         steps,
         original_error: None,
-        rollback: None,
     }
 }
