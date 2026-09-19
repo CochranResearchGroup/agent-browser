@@ -144,6 +144,15 @@ and the same fresh SQLite guard across authentication and transport custody;
 unmapped slots fail before provider access. Authoritative catalog population,
 XRDP observation and exact stop, RuntimeHostRouter installation, and live
 readiness remain open.
+Checkpoint `18c790bd` retires the legacy presentation bootstrap. Browser
+Session Host placement now projects only SQLite `Ready` keeper receipts, the
+bootstrap environment variable and hidden Chrome viewer launch are removed,
+and remote-required opens fail before browser effects until keeper-backed
+handoff resolution exists. Development provider preflight and apply fail
+before mutation on the same missing runtime-host integration. Forward-only
+cold-install wording is aligned across help, README, the repository skill, and
+the docs site. Authoritative catalog population, exact XRDP ownership and stop,
+the handoff join, and live readiness remain open.
 
 ## P216 | Service Model Extraction Landing
 

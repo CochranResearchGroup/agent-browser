@@ -9,6 +9,26 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 413 | 2026-09-19
+
+P211 checkpoint `18c790bd` removes the legacy hidden-viewer bootstrap from the
+runtime and development provider. Browser Session Host desktop placement now
+projects only `Ready` route-keeper receipts from the SQLite authority. Legacy
+bootstrap environment input cannot alter navigation, and an explicit legacy
+marker is rejected. Until keeper-backed handoff resolution is joined, every
+remote-required manager open fails before host loading or browser effects with
+a typed unavailable or integration-pending result. Development provider
+preflight and the real system-effects adapter likewise fail before mutation;
+the removed hidden Chrome viewer is not a fallback. The independent review
+caught and verified correction of an initial adapter-seam bypass. The provider
+fixture, six workstation and Guacamole fixtures, thirteen Browser Session Host
+tests, the fail-before-browser-effects daemon test, documentation handoff
+contract, production docs build, formatting, strict workspace Clippy, and diff
+hygiene pass. User-facing cold-install guidance now matches the forward-only
+controller. The authoritative connection catalog, exact XRDP observer and
+stop, keeper-backed handoff join, and live readiness remain open. No provider,
+browser, installed-runtime, production, ingress, or release effect occurred.
+
 ## Turn 412 | 2026-09-19
 
 P211 checkpoint `e9593b5b` adds a browser-independent Guacamole connection
