@@ -9,6 +9,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 400 | 2026-09-19
+
+The operator rejected P211 version 47's direct provider-inventory adapter and
+required a `just works` cold-start design. Version 48 makes one local
+presentation-provider API the sole runtime authority for readiness,
+allocation, release, reconciliation, and opaque-handoff resolution. Durable
+intent, exact ownership, leases, and cleanup obligations belong in one
+transactional service-owned store; XRDP/Xorg displays and Guacamole processes
+are ephemeral observations reconstructed after cold start. Browser Session
+Manager may read neither route JSON from an environment variable nor a
+generated inventory file. Legacy static routes are admitted only through one
+provider-boundary migration adapter and must be deleted after production
+cutover acceptance. This turn changes planning only and authorizes no live
+runtime effect.
+
 ## Turn 399 | 2026-09-18
 
 P211 version 46 installed development generation

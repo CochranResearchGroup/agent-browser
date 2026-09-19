@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 975147a3
+    checkpoint: f0bf824f
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: provider-free qualification, documentation parity, the corrected three-pass development browser smoke, and real-Chrome header transport pass; final development generation 0.28.0-fae441ed9a8f navigated the Guacamole viewer successfully, but the third provider apply quarantined at r97691 on internal-viewer presentation bootstrap recursion with production unchanged
-    validation_ref: 975147a3
+    validation_status: version 45 provider bootstrap is ready on isolated displays :13 through :16 and production remained unchanged; version 46 ordinary allocation failed because Browser Session Manager consumed a separate legacy inventory contract; version 48 rejects another direct adapter and plans one provider authority plus legacy removal
+    validation_ref: f0bf824f
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 45 provider apply remains ready on isolated displays :13 through :16, but version 46 ordinary retry failed because Browser Session Manager reads the legacy static route environment instead of AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH; exact test cleanup completed, production remains excluded, and further build, install, apply, ingress, or retry requires a successor authorization
-    updated_at: 2026-09-18
+    blocker: version 48 requires one provider API and transactional recovery authority before another cold-start acceptance; Browser Session Manager must stop reading both legacy route JSON and generated provider inventory, the legacy input must be removed after production migration, production remains excluded, and no live retry is authorized by this documentation-only amendment
+    updated_at: 2026-09-19
