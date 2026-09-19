@@ -9,6 +9,24 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 409 | 2026-09-19
+
+P211 checkpoint `ab05e2d3` removes the generic `PrimaryGuard` and fresh
+authority-check helper from the legacy browser-bound binding and makes them
+transport-owned. A new route-keeper guard reloads the SQLite authority before
+each Guacamole write and requires the exact slot, keeper, host and operation
+fence in an effect-capable phase. A real in-process `PrimaryTask` over a
+duplex websocket reaches protocol readiness on the current fence, then closes
+without acknowledging the next frame after that fence is superseded. All 21
+existing Guacamole-primary tests, the new exact-fence fixture, two selected
+stream target-switch tests, formatting, strict workspace Clippy, diff hygiene,
+and closed-world review pass. The selector also recommended the live CDP tab
+streaming smoke because a stream module changed; it was not run because this
+provider-free checkpoint authorizes no browser or installed-runtime effect.
+A connector that creates and retains these tasks, XRDP observation, host-loop
+scheduling, and actual provider readiness remain open. No provider, browser,
+installed-runtime, production, ingress, or release effect occurred.
+
 ## Turn 408 | 2026-09-19
 
 P211 checkpoint `89c05d7e` adds the provider-free runtime adapter between the

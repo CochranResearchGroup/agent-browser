@@ -115,6 +115,11 @@ conflicted starts through observation without duplicate start. Exact receipt
 binding, disconnect, adoption, stop quarantine, and per-operation SQLite
 reopen behavior are green. A concrete `PrimaryTask` plus Guacamole/XRDP
 connector, host scheduling, and provider readiness remain open.
+Checkpoint `ab05e2d3` makes fresh authority guarding transport-owned and
+proves a real in-process Guacamole `PrimaryTask` is fenced directly by the
+exact SQLite keeper slot, identity, and generation. Superseding the fence
+closes the task before another frame is acknowledged. Task retention, XRDP
+observation, connector scheduling, and live provider readiness remain open.
 
 ## P216 | Service Model Extraction Landing
 
