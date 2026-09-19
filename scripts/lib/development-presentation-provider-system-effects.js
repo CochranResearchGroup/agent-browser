@@ -48,6 +48,11 @@ export function developmentPresentationProviderSystemPreflight({
     descriptor.externalIngress.configured === true,
     descriptor.externalIngress,
   ));
+  checks.push(check(
+    'route-keeper-runtime',
+    false,
+    'provider mutation is deferred until the runtime-host route keeper is integrated',
+  ));
   const docker = run('docker', ['info', '--format', '{{.ServerVersion}}']);
   checks.push(check('docker', docker.status === 0, docker.status === 0 ? docker.stdout.trim() : commandError(docker)));
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
@@ -176,6 +181,7 @@ export function createDevelopmentPresentationProviderSystemEffects({
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
   const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
   return {
+    routeKeeperRuntimeReady: false,
     snapshotProduction: () => namespaced ? {
       production: productionSnapshot(env),
       defaultDevelopment: defaultDevelopmentSnapshot(env),
@@ -352,51 +358,8 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
         throw new Error('development Guacamole operator route grant count drifted');
       }
     },
-    openWarmRoutes(descriptor) {
-      const observation = probeDevelopmentPresentationProvider(descriptor, { run });
-      const databaseRoutes = new Map(
-        observation.database.routes.map((route) => [route.connectionName, route]),
-      );
-      const baseUrl = `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`;
-      const routes = descriptor.routes.slice(0, descriptor.warmSlots).map((route) => {
-        const connectionId = databaseRoutes.get(route.connectionName)?.connectionId;
-        if (!connectionId) throw new Error(`Development Guacamole connection is missing: ${route.routeId}`);
-        const clientId = Buffer.from(`${connectionId}\0c\0postgresql`, 'utf8').toString('base64');
-        const frameUrl = `${baseUrl}#/client/${clientId}`;
-        return {
-          id: route.routeId,
-          routeId: `guacamole:${connectionId}`,
-          connectionId,
-          connectionName: route.connectionName,
-          frameUrl,
-          externalUrl: frameUrl,
-          viewerSession: route.viewerSession,
-          viewerProfile: route.viewerProfile,
-          target: {
-            routeUser: route.user,
-            displayReservationId: route.displayReservationId,
-          },
-        };
-      });
-      runRequired(run, process.execPath, [
-        join(process.cwd(), 'scripts', 'open-rdp-guac-route-displays.js'),
-        '--wait-ms',
-        '1000',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`),
-          AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(routes),
-          AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
-          AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
-          AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER: '1',
-          AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP: '1',
-          AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT: join(process.cwd(), 'scripts'),
-        },
-        timeout: 600000,
-      }, 'open development warm route sessions');
+    openWarmRoutes() {
+      throw new Error('development hidden-viewer bootstrap removed; route-keeper runtime required');
     },
     observe: (descriptor) => probeDevelopmentPresentationProvider(descriptor, { run }),
     grantDisplayAccess(display) {
@@ -486,47 +449,8 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
     pressureAdmission(descriptor) {
       return evaluateDevelopmentPresentationPressure(descriptor, pressureSnapshot());
     },
-    provisionRoute(route, descriptor) {
-      const observation = base.observe(descriptor);
-      const connectionId = observation.database.routes
-        .find((candidate) => candidate.connectionName === route.connectionName)?.connectionId;
-      if (!connectionId) throw new Error(`Development route connection is missing: ${route.routeId}`);
-      const baseUrl = `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`;
-      const clientId = Buffer.from(`${connectionId}\0c\0postgresql`, 'utf8').toString('base64');
-      const inventory = [{
-        id: route.routeId,
-        routeId: `guacamole:${connectionId}`,
-        connectionId,
-        connectionName: route.connectionName,
-        frameUrl: `${baseUrl}#/client/${clientId}`,
-        externalUrl: `${baseUrl}#/client/${clientId}`,
-        viewerSession: route.viewerSession,
-        viewerProfile: route.viewerProfile,
-        target: {
-          routeUser: route.user,
-          displayReservationId: route.displayReservationId,
-        },
-      }];
-      runRequired(run, process.execPath, [
-        join(process.cwd(), 'scripts', 'open-rdp-guac-route-displays.js'),
-        '--wait-ms',
-        '1000',
-        '--allow-single-route',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`),
-          AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(inventory),
-          AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
-          AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
-          AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER: '1',
-          AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP: '1',
-          AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT: join(process.cwd(), 'scripts'),
-        },
-        timeout: 600000,
-      }, `provision ${route.routeId}`);
+    provisionRoute() {
+      throw new Error('development hidden-viewer scale-out removed; route-keeper runtime required');
     },
     cooldownStatus(_route, descriptor) {
       const requiredMs = Number(env.AGENT_BROWSER_DEV_PRESENTATION_COOLDOWN_MS || 5000);

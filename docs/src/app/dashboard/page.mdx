@@ -101,6 +101,10 @@ Review and stage those effects with
 <code>pnpm development-runtime:provider-stage</code>, then run
 <code>pnpm development-runtime:provider-preflight</code>. The only apply form is
 <code>pnpm development-runtime:provider-apply -- --apply --defer-ingress</code>.
+Provider preflight and apply currently fail closed until the runtime host owns
+route-keeper lifecycle and handoff resolution. The removed hidden-viewer
+bootstrap is not an accepted fallback.
+
 An installed v1 provider authority is upgradeable only when its loopback URL
 equals the new local diagnostic URL and every remaining provider identity is
 unchanged. Staging and preflight admit that exact additive transition, but

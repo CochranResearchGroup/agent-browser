@@ -258,6 +258,9 @@ export function applyDevelopmentPresentationProvider({
     throw new Error('Development presentation provider apply requires explicit effect authority');
   }
   if (!effects) throw new Error('Development presentation provider effect adapter is required');
+  if (effects.routeKeeperRuntimeReady === false) {
+    throw new Error('Development provider apply requires runtime-host route-keeper integration');
+  }
   const descriptor = developmentPresentationProviderDescriptor(env);
   validateDevelopmentPresentationProviderIsolation(descriptor);
   if (descriptor.externalIngress.configured !== true) {

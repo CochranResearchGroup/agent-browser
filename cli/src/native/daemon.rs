@@ -36,6 +36,19 @@ fn should_journal_browser_open(
         || (action_is_open && has_named_profile && !explicit_display && has_remote_desktop_routes)
 }
 
+fn require_keeper_handoff_resolution(
+    required: bool,
+    routes: &[agent_browser_service_model::BrowserDesktopRoute],
+) -> Result<(), &'static str> {
+    if !required {
+        return Ok(());
+    }
+    if routes.is_empty() {
+        return Err("browser_session_presentation_route_unavailable");
+    }
+    Err("browser_session_keeper_handoff_resolution_pending")
+}
+
 /// Build the runtime host on the same bounded stack used for Service State
 /// serialization. Commands may own large parsed snapshots until dispatch
 /// finishes, so both decoding and value destruction need this stack budget.
@@ -666,6 +679,16 @@ impl RuntimeHostRouter {
                 .is_some();
             let explicit_display = std::env::var_os("AGENT_BROWSER_SESSION_DISPLAY").is_some();
             let remote_open_candidate = action_is_open && has_named_profile && !explicit_display;
+            let routes = if publish_manager_handoff || remote_open_candidate {
+                super::browser_session_host::load_current_remote_desktop_routes()?
+            } else {
+                Vec::new()
+            };
+            require_keeper_handoff_resolution(
+                publish_manager_handoff || remote_open_candidate,
+                &routes,
+            )
+            .map_err(str::to_string)?;
             let mut host = browser_sessions
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
@@ -680,11 +703,6 @@ impl RuntimeHostRouter {
                 .map(|operation_id| host.has_operation(operation_id))
                 .transpose()?
                 .unwrap_or(false);
-            let routes = if publish_manager_handoff || remote_open_candidate {
-                super::browser_session_host::load_current_remote_desktop_routes()?
-            } else {
-                Vec::new()
-            };
             let has_remote_desktop_routes = !routes.is_empty();
             let journaled_open = should_journal_browser_open(
                 action_is_open,
@@ -1617,6 +1635,26 @@ mod tests {
             true, true, false, false, false
         ));
         assert!(should_journal_browser_open(true, true, true, false, true));
+    }
+
+    #[test]
+    fn remote_open_fails_before_browser_effects_until_keeper_handoff_join_exists() {
+        assert_eq!(
+            require_keeper_handoff_resolution(true, &[]),
+            Err("browser_session_presentation_route_unavailable")
+        );
+        assert_eq!(
+            require_keeper_handoff_resolution(
+                true,
+                &[agent_browser_service_model::BrowserDesktopRoute {
+                    id: "route-slot-01".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                }],
+            ),
+            Err("browser_session_keeper_handoff_resolution_pending")
+        );
+        assert_eq!(require_keeper_handoff_resolution(false, &[]), Ok(()));
     }
 
     #[tokio::test]

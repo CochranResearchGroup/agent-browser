@@ -35,9 +35,11 @@ agent-browser install workstation --apply --json
 
 The command stops Agent Browser-owned machinery, replaces the selected payload,
 starts the installed services, and verifies readiness. Each phase has a bounded
-deadline. If a phase after replacement fails, the command attempts one bounded
-rollback. You do not supply transaction revisions, census digests, replacement
-plan hashes, route IDs, display IDs, or rollback choices.
+deadline. Failures before migration stop without replacing the installed
+generation. Failures at or after migration preserve the new architecture for
+forward repair and never restore the old generation. You do not supply
+transaction revisions, census digests, replacement plan hashes, route IDs,
+display IDs, or rollback choices.
 
 To stop the workstation while preserving named profile data, run:
 

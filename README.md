@@ -54,9 +54,11 @@ agent-browser install workstation --apply --json
 
 The command stops Agent Browser-owned machinery, replaces the selected payload,
 starts the installed services, and verifies readiness. It uses bounded phase
-deadlines and attempts one rollback if a phase after replacement fails. You do
-not supply a transaction ID, revision, census digest, replacement-plan hash,
-route ID, display ID, or rollback choice.
+deadlines. Failures before migration stop without replacing the installed
+generation. Failures at or after migration preserve the new architecture for
+forward repair and never restore the old generation. You do not supply a
+transaction ID, revision, census digest, replacement-plan hash, route ID,
+display ID, or rollback choice.
 
 Use one command to stop the workstation without removing named profile data:
 
@@ -109,6 +111,10 @@ pnpm development-runtime:skill-status
 pnpm smoke:development-browser-launch
 pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-dev.ecochran.dyndns.org
 ```
+
+Provider preflight and apply currently fail closed until the runtime host owns
+route-keeper lifecycle and handoff resolution. The removed hidden-viewer
+bootstrap is not an accepted fallback.
 
 Development runtime JSON status reports configured listener numbers under
 `ports`. Service process identities remain under `units.*.mainPid`. Doctor

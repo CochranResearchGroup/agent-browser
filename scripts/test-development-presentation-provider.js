@@ -134,6 +134,26 @@ try {
   assert.equal(developmentPresentationProviderDeploymentPlan(namespaced).providerRoot, namespaced.root);
   assert.equal(namespaced.warmSlots, 4);
   assert.equal(namespaced.hardMaxSlots, 6);
+  const systemEffectCalls = [];
+  const routeKeeperBlockedEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    run: (command, args) => {
+      systemEffectCalls.push([command, args]);
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  assert.equal(routeKeeperBlockedEffects.routeKeeperRuntimeReady, false);
+  assert.throws(() => applyDevelopmentPresentationProvider({
+    env: namespaceEnv,
+    authorizeEffects: true,
+    deferIngress: true,
+    effects: routeKeeperBlockedEffects,
+  }), /requires runtime-host route-keeper integration/);
+  assert.deepEqual(systemEffectCalls, []);
   const bootstrapOrder = [];
   assert.throws(() => applyDevelopmentPresentationProvider({
     env: namespaceEnv, authorizeEffects: true,
@@ -194,11 +214,9 @@ try {
     'scripts/lib/development-presentation-provider-system-effects.js',
     'utf8',
   );
-  assert.equal(
-    [...providerEffectsSource.matchAll(/AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP:\s*'1'/g)].length,
-    2,
-    'warm and elastic development viewer bootstrap must use the internal marker',
-  );
+  assert.doesNotMatch(providerEffectsSource, /AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP/);
+  assert.doesNotMatch(providerEffectsSource, /open-rdp-guac-route-displays\.js/);
+  assert.match(providerEffectsSource, /route-keeper runtime required/);
   assert.doesNotMatch(
     providerEffectsSource,
     /'--profile',\s*route\.viewerProfile/,
@@ -521,9 +539,17 @@ try {
       throw new Error(`Unexpected preflight command: ${command} ${args.join(' ')}`);
     },
   });
-  assert.equal(preflight.success, true);
+  assert.equal(preflight.success, false);
   assert.equal(preflight.authorizesEffects, false);
-  assert.ok(preflight.checks.every((check) => check.ok));
+  assert.equal(
+    preflight.checks.find((check) => check.name === 'route-keeper-runtime')?.ok,
+    false,
+  );
+  assert.ok(
+    preflight.checks
+      .filter((check) => check.name !== 'route-keeper-runtime')
+      .every((check) => check.ok),
+  );
   const firstSecrets = prepareDevelopmentPresentationProviderSecrets({ env });
   const secondSecrets = prepareDevelopmentPresentationProviderSecrets({ env });
   assert.equal(firstSecrets.created, true);
@@ -926,8 +952,16 @@ try {
     },
   });
   assert.equal(reconcilePreflight.mode, 'reconcile');
-  assert.equal(reconcilePreflight.success, true);
-  assert.ok(reconcilePreflight.checks.every((check) => check.ok));
+  assert.equal(reconcilePreflight.success, false);
+  assert.equal(
+    reconcilePreflight.checks.find((check) => check.name === 'route-keeper-runtime')?.ok,
+    false,
+  );
+  assert.ok(
+    reconcilePreflight.checks
+      .filter((check) => check.name !== 'route-keeper-runtime')
+      .every((check) => check.ok),
+  );
 
   rmSync(descriptor.manifest, { force: true });
   effectCalls.length = 0;

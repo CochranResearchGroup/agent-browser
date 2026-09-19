@@ -5771,9 +5771,11 @@ Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
 Downloads and installs browser binaries required for automation. The ordinary
 `install workstation --apply` path performs one bounded cold workflow: stop
 Agent Browser-owned machinery, replace the selected payload, start the
-workstation services, and verify readiness. A failure after replacement begins
-attempts one bounded rollback. This path does not require a transaction ID,
-revision, census digest, replacement-plan hash, or rollback choice.
+workstation services, and verify readiness. Failures before migration stop
+without replacing the installed generation. Failures at or after migration
+preserve the new architecture for forward repair and never restore the old
+generation. This path does not require a transaction ID, revision, census
+digest, replacement-plan hash, or rollback choice.
 
 The doctor is
 no-launch and also reports service-status, runtime multiplicity, duplicate

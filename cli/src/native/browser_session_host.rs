@@ -9,7 +9,7 @@ use agent_browser_service_model::{
     BrowserProfileCatalog, BrowserSessionEffects, BrowserSessionManager,
     BrowserSessionManagerConfig, BrowserSessionState, CloseBrowserSessionResult,
     CloseBrowserTabResult, OpenBrowserSession, OpenBrowserSessionResult, ReapBrowserSessionsResult,
-    RemoteViewHandoff, ServiceState, SessionEndReason,
+    RemoteViewHandoff, RouteKeeperAuthority, RouteKeeperPhase, ServiceState, SessionEndReason,
 };
 use sha2::{Digest, Sha256};
 
@@ -42,7 +42,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
     let remote_desktop_routes = if display.is_some() {
         Vec::new()
     } else {
-        load_current_remote_desktop_routes()?
+        route_keeper_desktop_routes(&store.load_route_keeper_authority()?)?
     };
     let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
         headless: display.is_none(),
@@ -67,70 +67,43 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
 }
 
 pub(crate) fn load_current_remote_desktop_routes() -> Result<Vec<BrowserDesktopRoute>, String> {
-    Ok(
-        super::presentation_inventory::StaticRouteInventory::from_environment()?
-            .routes()
-            .iter()
-            .filter_map(|route| {
-                let display_name = route.display_name.as_ref()?;
-                Some(BrowserDesktopRoute {
-                    id: route.id.clone(),
-                    display_name: display_name.clone(),
-                    healthy: super::remote_view::route_display_socket_available(display_name),
-                })
-            })
-            .collect(),
-    )
+    let store = BrowserRuntimeSqliteStore::default_sqlite()?;
+    route_keeper_desktop_routes(&store.load_route_keeper_authority()?)
 }
 
-pub(crate) fn validate_internal_presentation_bootstrap(
-    command: &serde_json::Value,
-    runtime_environment: Option<&str>,
-) -> Result<bool, String> {
-    match command.get("internalPresentationBootstrap") {
-        None | Some(serde_json::Value::Bool(false)) => return Ok(false),
-        Some(serde_json::Value::Bool(true)) => {}
-        Some(_) => return Err("internal_presentation_bootstrap_scope_invalid".to_string()),
-    }
-
-    let session_name = command
-        .get("sessionName")
-        .and_then(serde_json::Value::as_str);
-    let profile_id = command.get("profileId").and_then(serde_json::Value::as_str);
-    if runtime_environment != Some("development")
-        || command.get("action").and_then(serde_json::Value::as_str)
-            != Some("browser_session_navigate")
-        || session_name.is_none()
-        || session_name != profile_id
-        || !session_name.is_some_and(is_development_presentation_viewer_identity)
-    {
-        return Err("internal_presentation_bootstrap_scope_invalid".to_string());
-    }
-
-    Ok(true)
+fn route_keeper_desktop_routes(
+    authority: &RouteKeeperAuthority,
+) -> Result<Vec<BrowserDesktopRoute>, String> {
+    authority.projection()?;
+    Ok(authority
+        .records
+        .values()
+        .filter_map(|record| {
+            if record.phase != RouteKeeperPhase::Ready {
+                return None;
+            }
+            let ready = record.protocol_ready.as_ref()?;
+            Some(BrowserDesktopRoute {
+                id: record.slot_id.clone(),
+                display_name: ready.display_name.clone(),
+                healthy: true,
+            })
+        })
+        .collect())
 }
 
 pub(crate) fn browser_session_navigation_requires_handoff(
     command: &serde_json::Value,
-    runtime_environment: Option<&str>,
+    _runtime_environment: Option<&str>,
 ) -> Result<bool, String> {
+    if command
+        .get("internalPresentationBootstrap")
+        .is_some_and(|value| value != &serde_json::Value::Bool(false))
+    {
+        return Err("internal_presentation_bootstrap_removed".to_string());
+    }
     Ok(command.get("action").and_then(serde_json::Value::as_str)
-        == Some("browser_session_navigate")
-        && !validate_internal_presentation_bootstrap(command, runtime_environment)?)
-}
-
-fn is_development_presentation_viewer_identity(value: &str) -> bool {
-    let Some((scope, ordinal)) = value.rsplit_once("-presentation-provider-v5-") else {
-        return false;
-    };
-    let valid_scope = scope == "development"
-        || scope.strip_prefix("development-").is_some_and(|namespace| {
-            !namespace.is_empty()
-                && namespace
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-        });
-    valid_scope && ordinal.parse::<u32>().is_ok_and(|ordinal| ordinal > 0)
+        == Some("browser_session_navigate"))
 }
 
 pub(crate) trait BrowserSessionPersistence {
@@ -1432,7 +1405,8 @@ mod tests {
     use agent_browser_service_model::{
         BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, ControlInputProvider,
         DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, RemoteViewHandoff,
-        RemoteViewRoute, RoutePoolEntry, ServiceState,
+        RemoteViewRoute, RouteKeeperReconcileAction, RouteKeeperStartPriority, RoutePoolEntry,
+        ServiceState,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1440,32 +1414,16 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     #[test]
-    fn internal_presentation_bootstrap_requires_exact_development_viewer_identity() {
-        let exact = serde_json::json!({
+    fn legacy_internal_presentation_bootstrap_is_removed() {
+        let legacy = serde_json::json!({
             "action": "browser_session_navigate",
             "sessionName": "development-presentation-provider-v5-1",
             "profileId": "development-presentation-provider-v5-1",
             "internalPresentationBootstrap": true
         });
         assert_eq!(
-            validate_internal_presentation_bootstrap(&exact, Some("development")),
-            Ok(true)
-        );
-
-        let namespaced = serde_json::json!({
-            "action": "browser_session_navigate",
-            "sessionName": "development-p211-presentation-provider-v5-4",
-            "profileId": "development-p211-presentation-provider-v5-4",
-            "internalPresentationBootstrap": true
-        });
-        assert_eq!(
-            validate_internal_presentation_bootstrap(&namespaced, Some("development")),
-            Ok(true)
-        );
-
-        assert_eq!(
-            browser_session_navigation_requires_handoff(&exact, Some("development")),
-            Ok(false)
+            browser_session_navigation_requires_handoff(&legacy, Some("development")),
+            Err("internal_presentation_bootstrap_removed".to_string())
         );
         assert_eq!(
             browser_session_navigation_requires_handoff(
@@ -1474,37 +1432,41 @@ mod tests {
             ),
             Ok(true)
         );
+    }
+
+    #[test]
+    fn desktop_route_projection_uses_only_ready_sqlite_keeper_receipts() {
+        let mut authority = RouteKeeperAuthority::new(4).unwrap();
+        let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
+            RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                fence,
+                priority: RouteKeeperStartPriority::Minimum,
+            } => (slot_id, keeper_id, fence),
+            other => panic!("expected minimum start, got {other:?}"),
+        };
+        authority
+            .record_protocol_ready(
+                agent_browser_service_model::RouteKeeperProtocolReadyReceipt {
+                    slot_id: slot_id.clone(),
+                    keeper_id,
+                    fence,
+                    guacamole_connection_uuid: "guacamole-01".to_string(),
+                    xrdp_session_id: "xrdp-01".to_string(),
+                    display_name: ":10".to_string(),
+                    observed_at: "2026-09-19T22:00:00Z".to_string(),
+                },
+            )
+            .unwrap();
 
         assert_eq!(
-            validate_internal_presentation_bootstrap(&exact, Some("production")),
-            Err("internal_presentation_bootstrap_scope_invalid".to_string())
-        );
-        for invalid in [
-            serde_json::json!({
-                "action": "browser_session_navigate",
-                "sessionName": "development-presentation-provider-v5-1",
-                "profileId": "different-profile",
-                "internalPresentationBootstrap": true
-            }),
-            serde_json::json!({
-                "action": "browser_session_navigate",
-                "sessionName": "ordinary-session",
-                "profileId": "ordinary-session",
-                "internalPresentationBootstrap": true
-            }),
-        ] {
-            assert_eq!(
-                validate_internal_presentation_bootstrap(&invalid, Some("development")),
-                Err("internal_presentation_bootstrap_scope_invalid".to_string())
-            );
-        }
-
-        assert_eq!(
-            validate_internal_presentation_bootstrap(
-                &serde_json::json!({"action": "browser_session_navigate"}),
-                Some("development")
-            ),
-            Ok(false)
+            route_keeper_desktop_routes(&authority).unwrap(),
+            vec![BrowserDesktopRoute {
+                id: slot_id,
+                display_name: ":10".to_string(),
+                healthy: true,
+            }]
         );
     }
 

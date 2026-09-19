@@ -12,7 +12,9 @@ installed payload. `agent-browser install workstation --apply --json` runs the
 ordinary bounded cold workflow: stop owned machinery, replace the payload,
 start services, and verify readiness. It requires no transaction revision,
 census digest, replacement-plan hash, route ID, display ID, or rollback choice.
-A failure after replacement begins attempts one bounded rollback.
+Failures before migration stop without replacing the installed generation.
+Failures at or after migration preserve the new architecture for forward
+repair and never restore the old generation.
 
 Use `agent-browser shutdown --json` to close exact owned browsers, stop Agent
 Browser user units and presentation containers, release runtime ownership and
@@ -1335,6 +1337,10 @@ Before provider mutation, run `pnpm development-runtime:provider-plan`,
 Cooper ingress after the provider-ready checkpoint. A green provider doctor is
 not capacity proof. Development Service Status must report non-null
 `presentationCapacity` before capacity acceptance.
+Provider preflight and apply currently fail closed until the runtime host owns
+route-keeper lifecycle and handoff resolution. The removed hidden-viewer
+bootstrap is not an accepted fallback.
+
 An installed v1 provider authority is upgradeable only when its loopback URL
 equals the new local diagnostic URL and every remaining provider identity is
 unchanged. Staging and preflight admit that exact additive transition, but
