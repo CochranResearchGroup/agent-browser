@@ -9,7 +9,7 @@ use agent_browser_service_model::{
     BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::service_store::default_service_state_path;
@@ -20,6 +20,52 @@ const BROWSER_RUNTIME_DATABASE_SCHEMA: i64 = 1;
 const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
 const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
+const RUNTIME_CONFIG_KEY: &str = "runtime";
+const BROWSER_RUNTIME_CONFIG_SCHEMA_V1: &str = "agent-browser.runtime-config.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserRuntimeConfig {
+    pub(crate) schema_version: String,
+    pub(crate) revision: u64,
+    pub(crate) minimum_ready: u32,
+    pub(crate) warm_target: u32,
+    pub(crate) maximum_displays: u32,
+    pub(crate) maximum_browsers_per_display: u32,
+    pub(crate) maximum_queue_depth: u32,
+    pub(crate) request_deadline_ms: u64,
+    pub(crate) scale_in_cooldown_ms: u64,
+    pub(crate) session_idle_timeout_ms: u64,
+    pub(crate) disposable_inactivity_ms: u64,
+    pub(crate) maximum_retained_disposable_profiles: u32,
+    pub(crate) maximum_disposable_profile_bytes: u64,
+    pub(crate) live_database_maximum_bytes: u64,
+    pub(crate) exact_url_history_maximum_bytes: u64,
+    pub(crate) routine_storage_maximum_bytes: u64,
+}
+
+impl Default for BrowserRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            schema_version: BROWSER_RUNTIME_CONFIG_SCHEMA_V1.to_string(),
+            revision: 0,
+            minimum_ready: 1,
+            warm_target: 4,
+            maximum_displays: 6,
+            maximum_browsers_per_display: 4,
+            maximum_queue_depth: 32,
+            request_deadline_ms: 90_000,
+            scale_in_cooldown_ms: 600_000,
+            session_idle_timeout_ms: 300_000,
+            disposable_inactivity_ms: 86_400_000,
+            maximum_retained_disposable_profiles: 20,
+            maximum_disposable_profile_bytes: 10 * 1024 * 1024 * 1024,
+            live_database_maximum_bytes: 96 * 1024 * 1024,
+            exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+            routine_storage_maximum_bytes: 128 * 1024 * 1024,
+        }
+    }
+}
 
 pub(crate) struct LegacyBrowserRuntimeSources<'a> {
     pub(crate) session_state_path: &'a Path,
@@ -30,7 +76,15 @@ pub(crate) struct LegacyBrowserRuntimeSources<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BrowserRuntimeMigrationReceipt {
     pub(crate) imported_source_count: usize,
+    pub(crate) rejected_record_count: usize,
+    pub(crate) rejection_codes: Vec<String>,
     pub(crate) archive_directory: PathBuf,
+}
+
+struct BrowserRuntimeMigrationRejection {
+    source_path: PathBuf,
+    code: &'static str,
+    detail: String,
 }
 
 /// Transactional authority for the trusted single-user browser runtime.
@@ -74,55 +128,107 @@ impl BrowserRuntimeSqliteStore {
         }
         prepare_private_parent(path)?;
 
-        let session_raw = read_json_source_or_default::<BrowserSessionState>(
-            sources.session_state_path,
-            &BrowserSessionState::default(),
-        )?;
+        let session_source = read_optional_source(sources.session_state_path)?;
+        let session_raw = match &session_source {
+            Some(bytes) => bytes.clone(),
+            None => serde_json::to_vec(&BrowserSessionState::default()).map_err(|error| {
+                format!("browser_runtime_migration_default_serialize_failed:{error}")
+            })?,
+        };
+        let mut rejections = Vec::new();
+        let mut session_imported = false;
         let session_state: BrowserSessionState =
-            serde_json::from_slice(&session_raw).map_err(|error| {
-                format!(
-                    "browser_runtime_migration_session_invalid:{}:{error}",
-                    sources.session_state_path.display()
-                )
-            })?;
-        if session_state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
-            return Err(format!(
-                "browser_session_state_schema_unsupported:{}",
-                session_state.schema_version
+            match serde_json::from_slice::<BrowserSessionState>(&session_raw) {
+                Ok(state) if state.schema_version == BROWSER_SESSION_STATE_SCHEMA_V1 => {
+                    session_imported = session_source.is_some();
+                    state
+                }
+                Ok(state) => {
+                    if session_source.is_some() {
+                        rejections.push(BrowserRuntimeMigrationRejection {
+                            source_path: sources.session_state_path.to_path_buf(),
+                            code: "legacy_session_schema_unsupported",
+                            detail: state.schema_version,
+                        });
+                    }
+                    BrowserSessionState::default()
+                }
+                Err(error) => {
+                    if session_source.is_some() {
+                        rejections.push(BrowserRuntimeMigrationRejection {
+                            source_path: sources.session_state_path.to_path_buf(),
+                            code: "legacy_session_invalid",
+                            detail: error.to_string(),
+                        });
+                    }
+                    BrowserSessionState::default()
+                }
+            };
+
+        let service_source = read_optional_source(sources.service_state_path)?;
+        let service_raw = service_source.clone().unwrap_or_else(|| b"{}".to_vec());
+        let catalog_source = read_optional_source(sources.profile_catalog_path)?;
+        let catalog_raw = match &catalog_source {
+            Some(bytes) => bytes.clone(),
+            None => serde_json::to_vec(&BrowserProfileCatalog::default()).map_err(|error| {
+                format!("browser_runtime_migration_catalog_serialize_failed:{error}")
+            })?,
+        };
+        let mut catalog_imported = false;
+        let mut service_imported = false;
+        let catalog = match serde_json::from_slice::<BrowserProfileCatalog>(&catalog_raw) {
+            Ok(catalog)
+                if catalog_source.is_some() && validate_catalog_schema(&catalog).is_ok() =>
+            {
+                catalog_imported = true;
+                catalog
+            }
+            Ok(_catalog) if catalog_source.is_none() => {
+                service_imported = service_source.is_some();
+                import_legacy_profiles(sources.service_state_path, &service_raw, &mut rejections)
+            }
+            Ok(catalog) => {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: sources.profile_catalog_path.to_path_buf(),
+                    code: "legacy_profile_catalog_schema_unsupported",
+                    detail: catalog.schema_version,
+                });
+                service_imported = service_source.is_some();
+                import_legacy_profiles(sources.service_state_path, &service_raw, &mut rejections)
+            }
+            Err(error) => {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: sources.profile_catalog_path.to_path_buf(),
+                    code: "legacy_profile_catalog_invalid",
+                    detail: error.to_string(),
+                });
+                service_imported = service_source.is_some();
+                import_legacy_profiles(sources.service_state_path, &service_raw, &mut rejections)
+            }
+        };
+
+        let mut source_records = Vec::new();
+        if let Some(bytes) = &session_source {
+            source_records.push((
+                sources.session_state_path,
+                bytes.as_slice(),
+                session_imported,
             ));
         }
-
-        let service_raw = read_source_or_default(sources.service_state_path, b"{}")?;
-        let catalog_raw = if sources.profile_catalog_path.is_file() {
-            fs::read(sources.profile_catalog_path).map_err(|error| {
-                format!(
-                    "browser_runtime_migration_source_read_failed:{}:{error}",
-                    sources.profile_catalog_path.display()
-                )
-            })?
-        } else {
-            let legacy = String::from_utf8_lossy(&service_raw);
-            serde_json::to_vec(
-                &BrowserProfileCatalog::import_legacy_service_state_json(&legacy).catalog,
-            )
-            .map_err(|error| {
-                format!("browser_runtime_migration_catalog_serialize_failed:{error}")
-            })?
-        };
-        let catalog: BrowserProfileCatalog =
-            serde_json::from_slice(&catalog_raw).map_err(|error| {
-                format!(
-                    "browser_runtime_migration_catalog_invalid:{}:{error}",
-                    sources.profile_catalog_path.display()
-                )
-            })?;
-        validate_catalog_schema(&catalog)?;
-
-        let source_records = [
-            (sources.session_state_path, session_raw.as_slice()),
-            (sources.profile_catalog_path, catalog_raw.as_slice()),
-            (sources.service_state_path, service_raw.as_slice()),
-        ];
+        if let Some(bytes) = &catalog_source {
+            source_records.push((
+                sources.profile_catalog_path,
+                bytes.as_slice(),
+                catalog_imported,
+            ));
+        }
+        if let Some(bytes) = &service_source {
+            source_records.push((
+                sources.service_state_path,
+                bytes.as_slice(),
+                service_imported,
+            ));
+        }
         let migration_id = migration_digest(&source_records);
         let archive_directory = path
             .parent()
@@ -150,17 +256,31 @@ impl BrowserRuntimeSqliteStore {
                 BROWSER_PROFILE_CATALOG_SCHEMA_V1,
                 &catalog,
             )?;
-            for (source_path, bytes) in &source_records {
+            save_runtime_config_row(&transaction, &BrowserRuntimeConfig::default())?;
+            for (source_path, bytes, imported) in &source_records {
                 transaction
                     .execute(
-                        "INSERT INTO migration_sources(source_path, sha256, archive_name, imported) VALUES (?1, ?2, ?3, 1)",
+                        "INSERT INTO migration_sources(source_path, sha256, archive_name, imported) VALUES (?1, ?2, ?3, ?4)",
                         params![
                             source_path.to_string_lossy().as_ref(),
                             sha256_hex(bytes),
-                            source_path.file_name().and_then(|name| name.to_str()).unwrap_or("source")
+                            source_path.file_name().and_then(|name| name.to_str()).unwrap_or("source"),
+                            i64::from(*imported)
                         ],
                     )
                     .map_err(|error| format!("browser_runtime_migration_source_record_failed:{error}"))?;
+            }
+            for rejection in &rejections {
+                transaction
+                    .execute(
+                        "INSERT INTO migration_rejections(source_path, code, detail) VALUES (?1, ?2, ?3)",
+                        params![
+                            rejection.source_path.to_string_lossy().as_ref(),
+                            rejection.code,
+                            rejection.detail
+                        ],
+                    )
+                    .map_err(|error| format!("browser_runtime_migration_rejection_record_failed:{error}"))?;
             }
             transaction
                 .execute(
@@ -194,10 +314,7 @@ impl BrowserRuntimeSqliteStore {
         remove_sqlite_sidecars(&staged_database);
         set_archive_read_only(&archive_directory)?;
 
-        Ok(BrowserRuntimeMigrationReceipt {
-            imported_source_count: source_records.len(),
-            archive_directory,
-        })
+        Self::open(path)?.migration_receipt()
     }
 
     fn migration_receipt(&self) -> Result<BrowserRuntimeMigrationReceipt, String> {
@@ -218,8 +335,26 @@ impl BrowserRuntimeSqliteStore {
             )
             .map_err(|error| format!("browser_runtime_migration_receipt_read_failed:{error}"))?
             as usize;
+        let rejected_record_count = self
+            .connection
+            .query_row("SELECT count(*) FROM migration_rejections", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map_err(|error| format!("browser_runtime_migration_receipt_read_failed:{error}"))?
+            as usize;
+        let mut statement = self
+            .connection
+            .prepare("SELECT code FROM migration_rejections ORDER BY code, sequence")
+            .map_err(|error| format!("browser_runtime_migration_receipt_read_failed:{error}"))?;
+        let rejection_codes = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| format!("browser_runtime_migration_receipt_read_failed:{error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("browser_runtime_migration_receipt_read_failed:{error}"))?;
         Ok(BrowserRuntimeMigrationReceipt {
             imported_source_count,
+            rejected_record_count,
+            rejection_codes,
             archive_directory: PathBuf::from(archive),
         })
     }
@@ -266,6 +401,43 @@ impl BrowserRuntimeSqliteStore {
             BROWSER_PROFILE_CATALOG_SCHEMA_V1,
             catalog,
         )
+    }
+
+    pub(crate) fn load_runtime_config(&self) -> Result<BrowserRuntimeConfig, String> {
+        load_runtime_config_row(&self.connection)
+    }
+
+    pub(crate) fn compare_and_swap_runtime_config(
+        &mut self,
+        expected_revision: u64,
+        mut next: BrowserRuntimeConfig,
+    ) -> Result<BrowserRuntimeConfig, String> {
+        validate_runtime_config(&next)?;
+        if next.revision != expected_revision {
+            return Err(format!(
+                "browser_runtime_config_proposed_revision_invalid:{}:{expected_revision}",
+                next.revision
+            ));
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_config_begin_failed:{error}"))?;
+        let current = load_runtime_config_row(&transaction)?;
+        if current.revision != expected_revision {
+            return Err(format!(
+                "browser_runtime_config_revision_conflict:{expected_revision}:{}",
+                current.revision
+            ));
+        }
+        next.revision = expected_revision
+            .checked_add(1)
+            .ok_or_else(|| "browser_runtime_config_revision_exhausted".to_string())?;
+        save_runtime_config_row(&transaction, &next)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_config_commit_failed:{error}"))?;
+        Ok(next)
     }
 }
 
@@ -442,6 +614,12 @@ fn initialize_runtime_schema(connection: &Connection) -> Result<(), String> {
                archive_name TEXT NOT NULL,
                imported INTEGER NOT NULL CHECK(imported IN (0, 1))
              );
+             CREATE TABLE IF NOT EXISTS migration_rejections (
+               sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+               source_path TEXT NOT NULL,
+               code TEXT NOT NULL,
+               detail TEXT NOT NULL
+             );
              CREATE TABLE IF NOT EXISTS operation_records (
                operation_id TEXT PRIMARY KEY,
                generation INTEGER NOT NULL,
@@ -530,6 +708,90 @@ fn load_document<T: DeserializeOwned>(
         .map_err(|error| format!("browser_runtime_document_invalid:{kind}:{error}"))
 }
 
+fn load_runtime_config_row(connection: &Connection) -> Result<BrowserRuntimeConfig, String> {
+    let json: String = connection
+        .query_row(
+            "SELECT value_json FROM runtime_config WHERE key = ?1",
+            params![RUNTIME_CONFIG_KEY],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("browser_runtime_config_missing:{error}"))?;
+    let config: BrowserRuntimeConfig = serde_json::from_str(&json)
+        .map_err(|error| format!("browser_runtime_config_invalid:{error}"))?;
+    validate_runtime_config(&config)?;
+    Ok(config)
+}
+
+fn save_runtime_config_row(
+    connection: &Connection,
+    config: &BrowserRuntimeConfig,
+) -> Result<(), String> {
+    validate_runtime_config(config)?;
+    let json = serde_json::to_string(config)
+        .map_err(|error| format!("browser_runtime_config_serialize_failed:{error}"))?;
+    connection
+        .execute(
+            "INSERT INTO runtime_config(key, value_json) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+            params![RUNTIME_CONFIG_KEY, json],
+        )
+        .map_err(|error| format!("browser_runtime_config_save_failed:{error}"))?;
+    Ok(())
+}
+
+fn validate_runtime_config(config: &BrowserRuntimeConfig) -> Result<(), String> {
+    if config.schema_version != BROWSER_RUNTIME_CONFIG_SCHEMA_V1 {
+        return Err(format!(
+            "browser_runtime_config_schema_unsupported:{}",
+            config.schema_version
+        ));
+    }
+    if config.minimum_ready == 0 {
+        return Err("browser_runtime_config_minimum_ready_invalid".to_string());
+    }
+    if config.maximum_displays < config.minimum_ready {
+        return Err("browser_runtime_config_maximum_displays_invalid".to_string());
+    }
+    if config.warm_target < config.minimum_ready || config.warm_target > config.maximum_displays {
+        return Err("browser_runtime_config_warm_target_invalid".to_string());
+    }
+    if config.maximum_browsers_per_display == 0 {
+        return Err("browser_runtime_config_display_density_invalid".to_string());
+    }
+    if config.maximum_queue_depth == 0 {
+        return Err("browser_runtime_config_queue_depth_invalid".to_string());
+    }
+    if config.request_deadline_ms == 0 {
+        return Err("browser_runtime_config_request_deadline_invalid".to_string());
+    }
+    if config.scale_in_cooldown_ms == 0 {
+        return Err("browser_runtime_config_scale_in_cooldown_invalid".to_string());
+    }
+    if config.session_idle_timeout_ms == 0 {
+        return Err("browser_runtime_config_session_idle_timeout_invalid".to_string());
+    }
+    if config.disposable_inactivity_ms == 0 {
+        return Err("browser_runtime_config_disposable_inactivity_invalid".to_string());
+    }
+    if config.maximum_retained_disposable_profiles == 0 {
+        return Err("browser_runtime_config_disposable_count_invalid".to_string());
+    }
+    if config.maximum_disposable_profile_bytes == 0 {
+        return Err("browser_runtime_config_disposable_bytes_invalid".to_string());
+    }
+    if config.exact_url_history_maximum_bytes == 0
+        || config.exact_url_history_maximum_bytes > config.live_database_maximum_bytes
+    {
+        return Err("browser_runtime_config_url_history_bytes_invalid".to_string());
+    }
+    if config.live_database_maximum_bytes == 0
+        || config.live_database_maximum_bytes > config.routine_storage_maximum_bytes
+    {
+        return Err("browser_runtime_config_database_bytes_invalid".to_string());
+    }
+    Ok(())
+}
+
 fn prepare_private_parent(path: &Path) -> Result<(), String> {
     let parent = path
         .parent()
@@ -577,10 +839,10 @@ fn remove_sqlite_files(path: &Path) {
     remove_sqlite_sidecars(path);
 }
 
-fn read_source_or_default(path: &Path, default: &[u8]) -> Result<Vec<u8>, String> {
+fn read_optional_source(path: &Path) -> Result<Option<Vec<u8>>, String> {
     match fs::read(path) {
-        Ok(bytes) => Ok(bytes),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(default.to_vec()),
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(format!(
             "browser_runtime_migration_source_read_failed:{}:{error}",
             path.display()
@@ -588,25 +850,34 @@ fn read_source_or_default(path: &Path, default: &[u8]) -> Result<Vec<u8>, String
     }
 }
 
-fn read_json_source_or_default<T: Serialize>(path: &Path, default: &T) -> Result<Vec<u8>, String> {
-    match fs::read(path) {
-        Ok(bytes) => Ok(bytes),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::to_vec(default)
-            .map_err(|error| format!("browser_runtime_migration_default_serialize_failed:{error}")),
-        Err(error) => Err(format!(
-            "browser_runtime_migration_source_read_failed:{}:{error}",
-            path.display()
-        )),
+fn import_legacy_profiles(
+    service_state_path: &Path,
+    service_raw: &[u8],
+    rejections: &mut Vec<BrowserRuntimeMigrationRejection>,
+) -> BrowserProfileCatalog {
+    let legacy = String::from_utf8_lossy(service_raw);
+    let imported = BrowserProfileCatalog::import_legacy_service_state_json(&legacy);
+    for diagnostic in imported.diagnostics {
+        rejections.push(BrowserRuntimeMigrationRejection {
+            source_path: service_state_path.to_path_buf(),
+            code: "legacy_profile_rejected",
+            detail: match diagnostic.profile_key {
+                Some(profile_key) => format!("{profile_key}:{}", diagnostic.reason),
+                None => diagnostic.reason,
+            },
+        });
     }
+    imported.catalog
 }
 
-fn migration_digest(sources: &[(&Path, &[u8])]) -> String {
+fn migration_digest(sources: &[(&Path, &[u8], bool)]) -> String {
     let mut digest = Sha256::new();
-    for (path, bytes) in sources {
+    for (path, bytes, imported) in sources {
         digest.update(path.to_string_lossy().as_bytes());
         digest.update([0]);
         digest.update(bytes);
         digest.update([0]);
+        digest.update([u8::from(*imported)]);
     }
     hex::encode(digest.finalize())
 }
@@ -617,7 +888,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 fn create_migration_archive(
     archive_directory: &Path,
-    sources: &[(&Path, &[u8])],
+    sources: &[(&Path, &[u8], bool)],
 ) -> Result<(), String> {
     fs::create_dir_all(archive_directory).map_err(|error| {
         format!(
@@ -625,7 +896,7 @@ fn create_migration_archive(
             archive_directory.display()
         )
     })?;
-    for (source, bytes) in sources {
+    for (source, bytes, _) in sources {
         let name = source
             .file_name()
             .ok_or_else(|| "browser_runtime_migration_source_name_missing".to_string())?;
@@ -840,7 +1111,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(migration.imported_source_count, 3);
+        assert_eq!(migration.imported_source_count, 2);
         assert!(migration.archive_directory.is_dir());
         assert!(migration
             .archive_directory
@@ -917,6 +1188,190 @@ mod tests {
         let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(reopened.load_session_state().unwrap(), state);
         assert_eq!(reopened.load_profile_catalog().unwrap(), catalog);
+    }
+
+    #[test]
+    fn cold_migration_rejects_bad_records_without_blocking_valid_legacy_profiles() {
+        let directory = TempDirectory::new("browser-runtime-tolerant-migration");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        let session_path = directory.0.join(BROWSER_SESSION_STATE_FILENAME);
+        let catalog_path = directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME);
+        let service_path = directory.0.join("state.json");
+        fs::write(
+            &session_path,
+            serde_json::json!({"schemaVersion": "future-session-schema"}).to_string(),
+        )
+        .unwrap();
+        fs::write(&catalog_path, "not-json").unwrap();
+        fs::write(
+            &service_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": "/managed/work",
+                        "profileClass": "durable_named"
+                    },
+                    "broken": {
+                        "id": "broken",
+                        "name": "",
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let receipt = BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &service_path,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(receipt.rejected_record_count, 3);
+        assert_eq!(
+            receipt.rejection_codes,
+            vec![
+                "legacy_profile_catalog_invalid",
+                "legacy_profile_rejected",
+                "legacy_session_schema_unsupported",
+            ]
+        );
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert!(store.load_session_state().unwrap().sessions.is_empty());
+        assert!(store
+            .load_profile_catalog()
+            .unwrap()
+            .profiles
+            .contains_key("work"));
+        assert_eq!(
+            fs::read_to_string(
+                receipt
+                    .archive_directory
+                    .join(BROWSER_SESSION_STATE_FILENAME)
+            )
+            .unwrap(),
+            serde_json::json!({"schemaVersion": "future-session-schema"}).to_string()
+        );
+        assert_eq!(
+            fs::read_to_string(
+                receipt
+                    .archive_directory
+                    .join(BROWSER_PROFILE_CATALOG_FILENAME)
+            )
+            .unwrap(),
+            "not-json"
+        );
+    }
+
+    #[test]
+    fn clean_migration_does_not_invent_legacy_source_history() {
+        let directory = TempDirectory::new("browser-runtime-clean-migration");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        let session_path = directory.0.join(BROWSER_SESSION_STATE_FILENAME);
+        let catalog_path = directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME);
+        let service_path = directory.0.join("state.json");
+
+        let receipt = BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &service_path,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(receipt.imported_source_count, 0);
+        assert_eq!(receipt.rejected_record_count, 0);
+        assert_eq!(fs::read_dir(&receipt.archive_directory).unwrap().count(), 0);
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            store.load_session_state().unwrap(),
+            BrowserSessionState::default()
+        );
+        assert_eq!(
+            store.load_profile_catalog().unwrap(),
+            BrowserProfileCatalog::default()
+        );
+    }
+
+    #[test]
+    fn runtime_config_defaults_and_compare_and_swap_are_durable() {
+        let directory = TempDirectory::new("browser-runtime-config");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let defaults = store.load_runtime_config().unwrap();
+        assert_eq!(defaults.revision, 0);
+        assert_eq!(defaults.minimum_ready, 1);
+        assert_eq!(defaults.warm_target, 4);
+        assert_eq!(defaults.maximum_displays, 6);
+        assert_eq!(defaults.maximum_browsers_per_display, 4);
+        assert_eq!(defaults.maximum_queue_depth, 32);
+        assert_eq!(defaults.request_deadline_ms, 90_000);
+        assert_eq!(defaults.scale_in_cooldown_ms, 600_000);
+        assert_eq!(defaults.session_idle_timeout_ms, 300_000);
+        assert_eq!(defaults.disposable_inactivity_ms, 86_400_000);
+        assert_eq!(defaults.maximum_retained_disposable_profiles, 20);
+        assert_eq!(
+            defaults.maximum_disposable_profile_bytes,
+            10 * 1024 * 1024 * 1024
+        );
+
+        let mut changed = defaults.clone();
+        changed.maximum_displays = 5;
+        let committed = store.compare_and_swap_runtime_config(0, changed).unwrap();
+        assert_eq!(committed.revision, 1);
+        assert_eq!(committed.maximum_displays, 5);
+        let stale = store
+            .compare_and_swap_runtime_config(0, defaults.clone())
+            .unwrap_err();
+        assert_eq!(stale, "browser_runtime_config_revision_conflict:0:1");
+        drop(store);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(reopened.load_runtime_config().unwrap(), committed);
+    }
+
+    #[test]
+    fn runtime_config_rejects_invalid_capacity_without_mutation() {
+        let directory = TempDirectory::new("browser-runtime-config-validation");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let defaults = store.load_runtime_config().unwrap();
+        let mut invalid = defaults.clone();
+        invalid.maximum_displays = 0;
+
+        assert_eq!(
+            store.compare_and_swap_runtime_config(0, invalid),
+            Err("browser_runtime_config_maximum_displays_invalid".to_string())
+        );
+        assert_eq!(store.load_runtime_config().unwrap(), defaults);
     }
 
     #[test]

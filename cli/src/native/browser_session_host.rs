@@ -1,6 +1,6 @@
 //! Durable host for the ordinary Browser Session Manager path.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use agent_browser_service_model::{
@@ -19,8 +19,6 @@ use super::browser_session_store::{
 };
 use super::presentation_inventory::StaticRouteInventory;
 
-const DEFAULT_SESSION_IDLE_TIMEOUT_MS: u64 = 300_000;
-const DEFAULT_DISPOSABLE_CLEANUP_DELAY_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_POLICY_ID: &str = "default";
 
 pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
@@ -31,24 +29,11 @@ pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
 pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessionHost, String> {
     let legacy_state_path = super::service_store::default_service_state_path()?;
     let store = BrowserRuntimeSqliteStore::default_sqlite()?;
-    let session_idle_timeout_ms = configured_u64(
-        "AGENT_BROWSER_SESSION_IDLE_TIMEOUT_MS",
-        DEFAULT_SESSION_IDLE_TIMEOUT_MS,
-    )?;
-    let cleanup_delay_ms = configured_u64(
-        "AGENT_BROWSER_DISPOSABLE_CLEANUP_DELAY_MS",
-        DEFAULT_DISPOSABLE_CLEANUP_DELAY_MS,
-    )?;
-    let disposable_root = match std::env::var_os("AGENT_BROWSER_DISPOSABLE_PROFILE_ROOT") {
-        Some(value) => PathBuf::from(value),
-        None => legacy_state_path
-            .parent()
-            .ok_or_else(|| "browser_session_service_directory_missing".to_string())?
-            .join("disposable-profiles"),
-    };
-    if !disposable_root.is_absolute() {
-        return Err("browser_disposable_root_not_absolute".to_string());
-    }
+    let runtime_config = store.load_runtime_config()?;
+    let disposable_root = legacy_state_path
+        .parent()
+        .ok_or_else(|| "browser_session_service_directory_missing".to_string())?
+        .join("disposable-profiles");
     let display = std::env::var("AGENT_BROWSER_SESSION_DISPLAY").ok();
     let remote_desktop_routes = if display.is_some() {
         Vec::new()
@@ -66,12 +51,12 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         BrowserSessionEffectAdapter::new(runtime),
         &legacy_state_path,
         BrowserSessionHostConfig {
-            session_idle_timeout_ms,
+            session_idle_timeout_ms: runtime_config.session_idle_timeout_ms,
             remote_desktop_routes,
             default_disposable_policy: Some(BrowserDisposableProfilePolicy {
                 id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
                 user_data_root: disposable_root.to_string_lossy().into_owned(),
-                cleanup_delay_ms,
+                cleanup_delay_ms: runtime_config.disposable_inactivity_ms,
             }),
         },
     )
@@ -92,16 +77,6 @@ pub(crate) fn load_current_remote_desktop_routes() -> Result<Vec<BrowserDesktopR
             })
             .collect(),
     )
-}
-
-fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
-    match std::env::var(name) {
-        Ok(value) => value
-            .parse::<u64>()
-            .map_err(|error| format!("browser_session_config_invalid:{name}:{error}")),
-        Err(std::env::VarError::NotPresent) => Ok(default),
-        Err(error) => Err(format!("browser_session_config_invalid:{name}:{error}")),
-    }
 }
 
 pub(crate) fn validate_internal_presentation_bootstrap(
