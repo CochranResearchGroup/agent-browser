@@ -1,7 +1,8 @@
 //! Local Guacamole authentication and receive-only tunnel startup.
 //! Provider tokens never leave this module's transient connection setup.
 
-use super::guacamole_primary_binding::{check_primary_authority, PrimaryBinding, PrimaryGuard};
+use super::guacamole_primary_binding::PrimaryBinding;
+use super::guacamole_primary_transport::{check_primary_authority, PrimaryGuard};
 #[cfg(test)]
 use std::sync::Arc;
 use std::time::Duration;

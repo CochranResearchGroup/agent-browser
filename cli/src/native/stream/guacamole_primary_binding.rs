@@ -6,34 +6,8 @@ use crate::native::service_store::ServiceStateRepository;
 use crate::runtime_owner_transfer::OwnerAuthorityClaim;
 use sha2::{Digest, Sha256};
 
-/// A fail-closed authority check carries only a bounded public code, never
-/// repository paths or raw provider/identity evidence.
-pub(super) type PrimaryGuard = std::sync::Arc<dyn Fn() -> Result<(), &'static str> + Send + Sync>;
-
-/// Read fresh authority on the blocking pool. Repository locks, JSON projection,
-/// and process inspection must not occupy an asynchronous dashboard worker.
-/// Cancellation can leave only a read running; the caller must await admission
-/// before issuing any provider effect. No successful result is cached.
-pub(super) async fn check_primary_authority(guard: &PrimaryGuard) -> Result<(), &'static str> {
-    // Contention is absence of a read, not evidence of a changed owner. Keep
-    // provider effects paused while attempting fresh proof at most three times.
-    // Other failures remain terminal on their first observation.
-    for attempt in 0..3 {
-        let guard = guard.clone();
-        let result = tokio::task::spawn_blocking(move || guard())
-            .await
-            .map_err(|_| "guacamole_primary_authority_task_failed")?;
-        match result {
-            Err(
-                "guacamole_primary_state_lock_timeout" | "guacamole_primary_authority_lock_timeout",
-            ) if attempt < 2 => {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            }
-            _ => return result,
-        }
-    }
-    unreachable!("the final authority attempt always returns")
-}
+#[cfg(test)]
+use super::guacamole_primary_transport::{check_primary_authority, PrimaryGuard};
 
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct PrimaryBinding {

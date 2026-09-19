@@ -13,6 +13,7 @@ mod guacamole_primary_protocol;
 mod guacamole_primary_provider;
 mod guacamole_primary_registry;
 mod guacamole_primary_transport;
+mod guacamole_route_keeper;
 mod http;
 mod websocket;
 

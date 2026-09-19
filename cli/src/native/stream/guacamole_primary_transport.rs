@@ -1,6 +1,5 @@
 //! Backend task ownership for a receive-only Guacamole primary connection.
 
-use super::guacamole_primary_binding::{check_primary_authority, PrimaryGuard};
 use super::guacamole_primary_protocol::Protocol;
 use futures_util::{SinkExt, StreamExt};
 use std::future::Future;
@@ -12,6 +11,30 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
+
+/// A fail-closed authority check carries only a bounded public code, never
+/// repository paths or raw provider or identity evidence.
+pub(super) type PrimaryGuard = std::sync::Arc<dyn Fn() -> Result<(), &'static str> + Send + Sync>;
+
+/// Read fresh authority on the blocking pool before each provider effect.
+/// Contention is retried narrowly; every other failure remains terminal.
+pub(super) async fn check_primary_authority(guard: &PrimaryGuard) -> Result<(), &'static str> {
+    for attempt in 0..3 {
+        let guard = guard.clone();
+        let result = tokio::task::spawn_blocking(move || guard())
+            .await
+            .map_err(|_| "guacamole_primary_authority_task_failed")?;
+        match result {
+            Err(
+                "guacamole_primary_state_lock_timeout" | "guacamole_primary_authority_lock_timeout",
+            ) if attempt < 2 => {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            _ => return result,
+        }
+    }
+    unreachable!("the final authority attempt always returns")
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum PrimaryStatus {
