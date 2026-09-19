@@ -1,5 +1,6 @@
 //! Route-keeper ownership for the provider-neutral Guacamole primary task.
 
+use super::guacamole_primary_provider::{connect_spec, GuacamolePrimaryConnectSpec};
 use super::guacamole_primary_transport::{
     check_primary_authority, PrimaryGuard, PrimaryStatus, PrimaryTask,
 };
@@ -25,6 +26,41 @@ pub(super) trait RouteKeeperPrimaryFactory: Send {
         guard: PrimaryGuard,
         on_closed: PrimaryTerminalSink,
     ) -> Result<PrimaryTask, String>;
+}
+
+/// Exact immutable slot catalog for browser-independent route keepers.
+///
+/// This type does not discover provider connections or infer them from legacy
+/// browser routes. Its caller must supply a reviewed slot-to-connection map.
+pub(super) struct ConfiguredRouteKeeperPrimaryFactory {
+    specs: BTreeMap<String, GuacamolePrimaryConnectSpec>,
+}
+
+impl ConfiguredRouteKeeperPrimaryFactory {
+    pub fn new(specs: BTreeMap<String, GuacamolePrimaryConnectSpec>) -> Self {
+        Self { specs }
+    }
+}
+
+impl RouteKeeperPrimaryFactory for ConfiguredRouteKeeperPrimaryFactory {
+    fn start(
+        &mut self,
+        action: &RouteKeeperReconcileAction,
+        guard: PrimaryGuard,
+        on_closed: PrimaryTerminalSink,
+    ) -> Result<PrimaryTask, String> {
+        let (slot_id, _, _) = start_identity(action)?;
+        let spec = self
+            .specs
+            .get(slot_id)
+            .cloned()
+            .ok_or_else(|| "route_keeper_primary_connection_unconfigured".to_string())?;
+        Ok(PrimaryTask::connect_observed(
+            connect_spec(spec, guard.clone()),
+            guard,
+            on_closed,
+        ))
+    }
 }
 
 #[async_trait::async_trait]
@@ -580,6 +616,33 @@ mod tests {
         )
         .await;
         (client, server)
+    }
+
+    #[test]
+    fn configured_factory_requires_an_exact_slot_catalog_entry() {
+        let mut factory = ConfiguredRouteKeeperPrimaryFactory::new(BTreeMap::from([(
+            "route-slot-02".to_string(),
+            GuacamolePrimaryConnectSpec::from_local_embed(
+                "http://127.0.0.1:8193/guacamole/",
+                "connection-02",
+            )
+            .unwrap(),
+        )]));
+        let action = RouteKeeperReconcileAction::Start {
+            slot_id: "route-slot-01".to_string(),
+            keeper_id: "keeper-01".to_string(),
+            fence: RouteKeeperFence {
+                host_generation: 1,
+                operation_id: "route-keeper:1:route-slot-01:1".to_string(),
+                operation_generation: 1,
+            },
+            priority: agent_browser_service_model::RouteKeeperStartPriority::Minimum,
+        };
+        let guard: PrimaryGuard = Arc::new(|| Ok(()));
+        assert_eq!(
+            factory.start(&action, guard, Box::new(|_, _, _| {})).err(),
+            Some("route_keeper_primary_connection_unconfigured".to_string())
+        );
     }
 
     async fn wait_for_primary_ready<F, O>(

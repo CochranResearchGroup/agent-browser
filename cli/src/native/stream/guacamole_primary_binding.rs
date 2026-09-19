@@ -6,6 +6,8 @@ use crate::native::service_store::ServiceStateRepository;
 use crate::runtime_owner_transfer::OwnerAuthorityClaim;
 use sha2::{Digest, Sha256};
 
+use super::guacamole_primary_provider::GuacamolePrimaryConnectSpec;
+
 #[cfg(test)]
 use super::guacamole_primary_transport::{check_primary_authority, PrimaryGuard};
 
@@ -147,7 +149,8 @@ impl PrimaryBinding {
         Ok(Self {
             route_id: route_id.to_owned(),
             connection_id: connection_id.to_owned(),
-            provider_base: local_provider_base(local_url)?,
+            provider_base: GuacamolePrimaryConnectSpec::from_local_embed(local_url, connection_id)?
+                .into_provider_base(),
             owner: expected_claim,
             display_id: display_id.clone(),
             display_name: display_name.clone(),
@@ -247,8 +250,11 @@ impl PrimaryBinding {
                 .route_descriptor
                 .as_ref()
                 .and_then(|value| value["localEmbedUrl"].as_str())
-                .and_then(|value| local_provider_base(value).ok())
-                .is_some_and(|base| base == self.provider_base)
+                .and_then(|value| {
+                    GuacamolePrimaryConnectSpec::from_local_embed(value, self.connection_id.clone())
+                        .ok()
+                })
+                .is_some_and(|spec| spec.provider_base() == &self.provider_base)
             && display.id == self.display_id
             && display.display_name.as_ref() == Some(&self.display_name)
             && display.owner_browser_id.as_ref() == Some(&self.owner.logical_browser_id)
@@ -276,26 +282,6 @@ impl PrimaryBinding {
         }
         Ok(())
     }
-}
-
-fn local_provider_base(value: &str) -> Result<reqwest::Url, &'static str> {
-    let mut url = reqwest::Url::parse(value).map_err(|_| "guacamole_primary_provider_invalid")?;
-    let loopback = url.host_str().is_some_and(|host| {
-        host.trim_matches(['[', ']'])
-            .parse::<std::net::IpAddr>()
-            .is_ok_and(|address| address.is_loopback())
-    });
-    if !loopback
-        || !matches!(url.scheme(), "http" | "https")
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.query().is_some()
-        || url.path() != "/guacamole/"
-    {
-        return Err("guacamole_primary_provider_invalid");
-    }
-    url.set_fragment(None);
-    Ok(url)
 }
 
 #[cfg(test)]
@@ -760,12 +746,19 @@ mod tests {
     #[test]
     fn provider_origin_requires_literal_loopback_without_credentials_or_query() {
         assert_eq!(
-            local_provider_base("http://127.0.0.1:8193/guacamole/#/client/1")
-                .unwrap()
-                .as_str(),
+            GuacamolePrimaryConnectSpec::from_local_embed(
+                "http://127.0.0.1:8193/guacamole/#/client/1",
+                "1",
+            )
+            .unwrap()
+            .provider_base()
+            .as_str(),
             "http://127.0.0.1:8193/guacamole/"
         );
-        assert!(local_provider_base("http://[::1]:8193/guacamole/").is_ok());
+        assert!(
+            GuacamolePrimaryConnectSpec::from_local_embed("http://[::1]:8193/guacamole/", "1")
+                .is_ok()
+        );
         for value in [
             "https://provider.example/guacamole/",
             "http://localhost/guacamole/",
@@ -775,9 +768,17 @@ mod tests {
             "file:///guacamole/",
         ] {
             assert_eq!(
-                local_provider_base(value).err(),
+                GuacamolePrimaryConnectSpec::from_local_embed(value, "1").err(),
                 Some("guacamole_primary_provider_invalid")
             );
         }
+        assert_eq!(
+            GuacamolePrimaryConnectSpec::from_local_embed(
+                "http://127.0.0.1:8193/guacamole/",
+                "  ",
+            )
+            .err(),
+            Some("guacamole_primary_connection_id_invalid")
+        );
     }
 }

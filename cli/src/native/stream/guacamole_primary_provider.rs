@@ -9,8 +9,69 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::client::IntoClientRequest, MaybeTlsStream, WebSocketStream};
 
+/// Browser-independent connection authority for one configured Guacamole
+/// connection. Construction accepts only the reviewed loopback provider path;
+/// authentication remains transient inside `connect_spec`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct GuacamolePrimaryConnectSpec {
+    provider_base: reqwest::Url,
+    connection_id: String,
+}
+
+impl GuacamolePrimaryConnectSpec {
+    pub fn from_local_embed(
+        value: &str,
+        connection_id: impl Into<String>,
+    ) -> Result<Self, &'static str> {
+        let connection_id = connection_id.into();
+        if connection_id.trim().is_empty() {
+            return Err("guacamole_primary_connection_id_invalid");
+        }
+        let mut provider_base =
+            reqwest::Url::parse(value).map_err(|_| "guacamole_primary_provider_invalid")?;
+        let loopback = provider_base.host_str().is_some_and(|host| {
+            host.trim_matches(['[', ']'])
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+        });
+        if !loopback
+            || !matches!(provider_base.scheme(), "http" | "https")
+            || !provider_base.username().is_empty()
+            || provider_base.password().is_some()
+            || provider_base.query().is_some()
+            || provider_base.path() != "/guacamole/"
+        {
+            return Err("guacamole_primary_provider_invalid");
+        }
+        provider_base.set_fragment(None);
+        Ok(Self {
+            provider_base,
+            connection_id,
+        })
+    }
+
+    pub fn provider_base(&self) -> &reqwest::Url {
+        &self.provider_base
+    }
+
+    pub fn into_provider_base(self) -> reqwest::Url {
+        self.provider_base
+    }
+}
+
 pub(super) async fn connect(
     binding: PrimaryBinding,
+    is_current: PrimaryGuard,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
+    let spec = GuacamolePrimaryConnectSpec {
+        provider_base: binding.provider_base,
+        connection_id: binding.connection_id,
+    };
+    connect_spec(spec, is_current).await
+}
+
+pub(super) async fn connect_spec(
+    spec: GuacamolePrimaryConnectSpec,
     is_current: PrimaryGuard,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
     check_primary_authority(&is_current).await?;
@@ -18,11 +79,27 @@ pub(super) async fn connect(
         .ok()
         .filter(|value| !value.trim().is_empty())
         .ok_or("guacamole_primary_provider_principal_missing")?;
-    connect_with_principal(binding, is_current, principal).await
+    connect_spec_with_principal(spec, is_current, principal).await
 }
 
 async fn connect_with_principal(
     binding: PrimaryBinding,
+    is_current: PrimaryGuard,
+    principal: String,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
+    connect_spec_with_principal(
+        GuacamolePrimaryConnectSpec {
+            provider_base: binding.provider_base,
+            connection_id: binding.connection_id,
+        },
+        is_current,
+        principal,
+    )
+    .await
+}
+
+async fn connect_spec_with_principal(
+    spec: GuacamolePrimaryConnectSpec,
     is_current: PrimaryGuard,
     principal: String,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
@@ -35,8 +112,7 @@ async fn connect_with_principal(
         .map_err(|_| "guacamole_primary_provider_client_failed")?;
     let mut response = client
         .post(
-            binding
-                .provider_base
+            spec.provider_base
                 .join("api/tokens")
                 .map_err(|_| "guacamole_primary_provider_invalid")?,
         )
@@ -83,7 +159,7 @@ async fn connect_with_principal(
         .filter(|value| !value.is_empty() && value.len() <= 8192)
         .ok_or("guacamole_primary_provider_auth_invalid")?;
     check_primary_authority(&is_current).await?;
-    let mut url = binding
+    let mut url = spec
         .provider_base
         .join("websocket-tunnel")
         .map_err(|_| "guacamole_primary_provider_invalid")?;
@@ -93,7 +169,7 @@ async fn connect_with_principal(
     url.query_pairs_mut().extend_pairs([
         ("token", token),
         ("GUAC_DATA_SOURCE", "postgresql"),
-        ("GUAC_ID", binding.connection_id.as_str()),
+        ("GUAC_ID", spec.connection_id.as_str()),
         ("GUAC_TYPE", "c"),
         ("GUAC_WIDTH", "1920"),
         ("GUAC_HEIGHT", "1080"),
