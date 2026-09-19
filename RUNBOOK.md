@@ -9,6 +9,20 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 392 | 2026-09-18
+
+The operator assigned P211 primary write custody for the CLI help, README,
+Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211
+catalog entry that previously overlapped P207. Fresh readback proved P211 and
+P207 clean and synchronized at `4843c4e2` and `838b771a`. Pull request #191 is
+open, draft, and clean; pull request #184 is open, draft, and conflicting.
+P207's pending user-facing prose is specific to its unmerged tab-refresh
+implementation. P211 will preserve that intent for later reconciliation, will
+not publish it ahead of its source, and will not mutate or discard P207's
+checkout. This custody transition authorizes documentation work only. It does
+not authorize installed shutdown, installation, provider, credential, or
+shared-runtime effects.
+
 ## Turn 391 | 2026-09-17
 
 P211 checkpoint `83e23eb2` makes the trusted single-user shared-local profile

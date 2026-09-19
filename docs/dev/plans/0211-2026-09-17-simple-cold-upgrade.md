@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 39
+Plan version: 40
 
 State: OPEN
 
@@ -85,11 +85,14 @@ coordination state.
 
 P211 was admitted from `origin/main@fb616aee`. Issues #181, #183, and #195 are
 the primary outcome items. Issues #189 and #190 are required remote-view
-regression subcases under #195, not additional implementation lanes. P207
-remains the primary writer for overlapping CLI help,
-README, agent skill, service docs, and generated service contracts until it
-integrates; P211 will rebase before editing those shared documentation
-surfaces. P205 completed as Plan 0216 and merged its service-model extraction
+regression subcases under #195, not additional implementation lanes. At
+admission, P207 was the primary writer for overlapping CLI help, README, agent
+skill, service docs, and generated service contracts. On 2026-09-18, the
+operator established that P211 is the only active agent and assigned P211
+primary write custody for those shared documentation surfaces. P207 retains
+its tab-refresh source, branch history, and feature-specific documentation
+intent; P211 will not mutate or discard that checkout. P205 completed as Plan
+0216 and merged its service-model extraction
 into `main`; the extracted Service Model and Lease Authority crates now own the
 pure cold-shutdown state transitions, while the CLI retains repository and
 effect adapters.
@@ -780,6 +783,18 @@ selected for the changed doctor surface pass. No installed or shared runtime
 was inspected or mutated. Installed doctor agreement and authenticated
 dashboard rendering and control remain open.
 
+The version 40 continuation records the operator-directed documentation
+custody transition. Fresh readback proved P211 and P207 clean and synchronized
+at `4843c4e2` and `838b771a`, respectively. Pull request #191 remained open,
+draft, and clean. Pull request #184 remained open, draft, and conflicting.
+Direct diff review showed that P207's pending user-facing prose documents its
+tab-handle refresh custody behavior in CLI help, README, the Agent Browser
+skill, and the service-mode page. P211 now owns edits to the shared files for
+the cold install and remote-view journey. It must preserve P207's feature
+intent for later source integration and must not import that prose ahead of
+its unmerged implementation. This transition grants no custody over P207's
+source branch and no installed or shared-runtime effect authority.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -1038,12 +1053,13 @@ at most one repair handback per worker. If interface churn makes either lane
 coordination-heavy, cancel that worker and absorb the work into the critical
 path.
 
-After P207 integrates, all workers pause while the primary refreshes the
-worktree inventory, rebases, and reconciles shared documentation surfaces. One
-freed slot may then run a documentation-parity
-worker on `gpt-5.6-luna` at low reasoning, limited to `cli/src/output.rs`,
-`README.md`, `skills/agent-browser/SKILL.md`, and the relevant installation and
-remote-view MDX pages. It gets 25 active minutes and one correction pass.
+The operator-directed version 40 transition makes P211 the primary writer for
+documentation parity. The primary performs this packet without delegation and
+limits writes to `cli/src/output.rs`, `README.md`,
+`skills/agent-browser/SKILL.md`, the relevant installation and remote-view MDX
+pages, inline documentation, RUNBOOK, this plan, and P211's catalog entry.
+P207's feature-specific prose remains evidence for later reconciliation, not
+content to publish before its corresponding source integrates.
 
 After the candidate is frozen and deterministic validation finishes, one freed
 slot runs a fresh read-only review on `gpt-5.6-sol` at high reasoning for at
@@ -1054,13 +1070,14 @@ scope or claim acceptance. No worker receives an auxiliary worktree,
 independent branch, commit authority, production effect, or nested delegation.
 
 P205 completed the Service Model extraction and its integrated result is the
-starting seam for this packet. P207 remains primary writer for its current CLI
-help, README, skill, service documentation, and generated-client changes. P211
-owns the new Browser Session Manager, Browser Profile Catalog, independent
-state codec, CLI and process adapters, cold-shutdown module,
+starting seam for this packet. P211 owns CLI help, README, the Agent Browser
+skill, installation and remote-view documentation, and inline documentation
+for this packet. P207 retains its unmerged tab-refresh source and generated
+service-contract changes. P211 owns the new Browser Session Manager, Browser
+Profile Catalog, independent state codec, CLI and process adapters, cold-shutdown module,
 workstation-install routing, display selection, dashboard projection,
 remote-view joining logic, and their tests; it will rebase after P207 before
-touching overlapping documentation surfaces.
+integrating any P207 implementation.
 
 ## Evidence And Exit
 
@@ -1116,8 +1133,8 @@ Guacamole state.
 
 Stop before production installation or shutdown, profile-data deletion,
 unscoped process or container termination, live provider or credential use,
-release, or mutation of another lane's checkout. Stop and reconcile if P205 or
-P207 publishes an overlapping interface change before P211's corresponding
-adapter or documentation work begins. Stop the affected worker after its stated
+release, or mutation of another lane's checkout. Stop and reconcile if P207
+publishes an overlapping interface change before P211's documentation packet
+completes. Stop the affected worker after its stated
 bound and return partial evidence; do not silently increase concurrency,
 reasoning tier, retry count, or the cumulative plan budget.
