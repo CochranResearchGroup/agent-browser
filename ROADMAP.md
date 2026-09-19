@@ -101,6 +101,14 @@ profile, route, display, and reason evidence; replay neither relaunches nor
 reprobes. The provider-free adoption seam is proven, but the real runtime's
 cross-platform marker-to-process discovery remains pending and therefore
 continues to select the cleanup obligation path.
+Checkpoint `6390a48a` adds the provider-neutral route-keeper lifecycle kernel
+and isolated SQLite authority. It proves deterministic minimum-before-warm
+reconciliation, honest capacity projection, host and operation generation
+fencing, exact protocol-resource adoption, exact stop, quarantine of ambiguous
+ownership, and atomic compare-and-swap persistence without introducing a
+browser, profile, tab, manager session, or handoff dependency. The actual
+Guacamole tunnel and XRDP process adapter, provider readiness projection, and
+cold-start reconstruction remain open.
 
 ## P216 | Service Model Extraction Landing
 

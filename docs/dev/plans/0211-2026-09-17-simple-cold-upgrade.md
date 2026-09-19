@@ -1415,6 +1415,26 @@ cross-platform discovery adapter can bind the causal marker, canonical profile
 directory, root PID, current process identity, CDP endpoint, and listener
 ownership. Thus automatic real-process adoption and exact cleanup remain open.
 
+Checkpoint `6390a48a` completes the provider-neutral route-keeper lifecycle
+kernel and durable authority packet. The pure model owns a bounded six-slot
+inventory, reconciles `minimumReady=1` before the warm target of four, and has
+no browser, profile, tab, Browser Session Manager, or handoff input. Protocol
+readiness is an exact Guacamole connection, XRDP session, display, keeper,
+slot, host-generation, and operation-generation receipt. A keeper disconnect
+can start a fenced replacement or enter an explicit adoption phase; adoption
+cannot use the ordinary ready transition and must preserve the prior protocol
+resources exactly. Exact stop clears only the recorded route. Foreign or
+ambiguous observations quarantine the record and retain a cleanup obligation
+instead of retrying destructive cleanup. Phase-aware validation prevents
+malformed persisted records from projecting false readiness. The runtime
+SQLite database seeds this authority independently of session and handoff
+documents, loads a default for pre-checkpoint databases, and publishes changes
+through an immediate compare-and-swap transaction that rejects stale or
+generation-regressing writers. This is not the protocol-keeper runtime
+adapter: no Guacamole tunnel, XRDP session, display, browser, or provider was
+started, and provider-owned readiness plus durable cold-start reconstruction
+remain open.
+
 ## Worker Assignments
 
 The operator explicitly authorized subagents for Plan 0211 parallelism and
@@ -1492,9 +1512,9 @@ integrating any P207 implementation.
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, five-second manager-specific reattach timeout, concrete restart reattachment, full daemon-process command routing, and bounded exact-process recovery for a verified external unresponsive-CDP browser are green; unverified processes remain untouched |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state, the manager has no legacy-authority input, and hosted persistence plus multi-display selection remain independent of contradictory legacy session, owner, and display records |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
-| SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb` and `c0ff2768` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only and add the validated configuration aggregate; cross-domain transactions, public config mutation, operations, credentials, history, cleanup, integrity, and backup are pending |
+| SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, and `6390a48a` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, and persist an isolated compare-and-swap route-keeper authority; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb` and `c0ff2768` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, and no old-generation rollback; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | current hidden-browser bootstrap is rejected; implementation pending |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoint `6390a48a` proves the provider-neutral lifecycle, exact protocol receipts, generation fencing, quarantine, capacity projection, and durable compare-and-swap authority; the Guacamole/XRDP runtime adapter and actual keeper supervision remain pending |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |

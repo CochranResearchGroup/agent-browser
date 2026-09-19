@@ -9,6 +9,26 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 407 | 2026-09-19
+
+P211 checkpoint `6390a48a` adds a provider-neutral route-keeper lifecycle
+kernel and persists its authority in the runtime SQLite database. The kernel
+reconciles the default minimum-ready route before the warm target of four,
+bounds inventory at six slots, keeps browser, profile, tab, manager-session,
+and handoff concepts outside the contract, and projects only protocol-ready
+receipts. Host and operation generations fence stale observations. Adoption
+has a distinct phase and must preserve the exact Guacamole connection, XRDP
+session, and display across the generation change. Exact stop evidence removes
+only the recorded route; mismatched or unproven ownership quarantines it with
+a retained cleanup obligation. SQLite publication uses an immediate
+compare-and-swap transaction and rejects stale or generation-regressing
+writers. The full service-model target, all 16 browser-session-store tests,
+formatting, strict workspace Clippy, validation selection, diff hygiene, and
+two closed-world review passes are green. This checkpoint does not connect the
+kernel to the Guacamole transport or XRDP process adapters and does not prove a
+running keeper, provider readiness, or cold-start acceptance. No browser,
+provider, installed-runtime, production, ingress, or release effect occurred.
+
 ## Turn 406 | 2026-09-19
 
 P211 checkpoint `e1a3edcd` hardens the ambiguous interval after browser process
