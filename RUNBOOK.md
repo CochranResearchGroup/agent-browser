@@ -9,6 +9,23 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 403 | 2026-09-19
+
+P211 checkpoint `c0ff2768` extends the SQLite schema packet with tolerant,
+typed migration rejections and revisioned runtime configuration. Missing
+legacy files create defaults without synthetic source history. Present inputs
+are hashed and archived; invalid session/catalog data and rejected profile
+fields become durable typed records while valid sibling profiles import. The
+frozen capacity, deadline, cooldown, inactivity, retention, and storage limits
+now seed a validated SQLite aggregate with compare-and-swap conflict handling.
+The default host reads its timeout and disposable policy from that aggregate
+and no longer reads the three ad hoc session/disposable environment variables.
+All nine store tests, nine host tests, five cold-install tests, the source-free
+workstation fixture, formatting, strict Clippy, and diff hygiene pass. The
+public config mutation surface and live refresh remain open, as do provider
+cleanup, keepers, capacity use, control, handoff recovery, history, backup, and
+development acceptance. No runtime or provider effect occurred.
+
 ## Turn 402 | 2026-09-19
 
 P211 checkpoint `726563fb` completes the first version 49 provider-free

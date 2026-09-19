@@ -74,6 +74,11 @@ the legacy JSON reader is confined to pre-database cold shutdown. The remaining
 SQLite domains, typed rejection archive, provider cleanup, protocol keeper,
 capacity, control, handoff-recovery, retention, backup, and development matrix
 are still open.
+Checkpoint `c0ff2768` adds non-vetoing typed migration rejection records,
+accurate missing-source history, and the revisioned SQLite configuration
+aggregate with the frozen capacity and retention defaults. Host timeouts no
+longer depend on ad hoc environment variables. Public config mutation and live
+refresh remain open with the rest of the provider path.
 
 ## P216 | Service Model Extraction Landing
 

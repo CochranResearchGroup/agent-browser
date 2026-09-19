@@ -1357,6 +1357,21 @@ history tables authoritative, record typed field rejections, remove legacy
 provider assets, or implement backup recovery. Those remain in Slices 2
 through 7.
 
+Checkpoint `c0ff2768` completes the tolerant-import and typed-configuration
+part of the schema packet. Missing legacy files now produce defaults without
+inventing source history. Present sources are hashed and archived whether or
+not they contribute state. Invalid session or catalog records and rejected
+legacy profile fields no longer veto migration; the database records their
+source, stable code, and diagnostic detail, and valid sibling profiles still
+import. The database also seeds one validated runtime-configuration aggregate
+with the frozen capacity, deadline, cooldown, inactivity, retention, and byte
+limits. Revisioned compare-and-swap makes internal updates durable and rejects
+stale or invalid replacements. Default host timeout and disposable policy
+projection now reads this aggregate and no longer reads the three ad hoc
+session/disposable environment variables. The Service API and CLI mutation
+surface plus live in-process refresh remain pending, so this is not yet public
+configuration acceptance.
+
 ## Worker Assignments
 
 Version 49 has one worker: the P211 lane owner. The operator explicitly stated
@@ -1429,10 +1444,10 @@ integrating any P207 implementation.
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, five-second manager-specific reattach timeout, concrete restart reattachment, full daemon-process command routing, and bounded exact-process recovery for a verified external unresponsive-CDP browser are green; unverified processes remain untouched |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state, the manager has no legacy-authority input, and hosted persistence plus multi-display selection remain independent of contradictory legacy session, owner, and display records |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
-| SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoint `726563fb` makes Browser Session State and Browser Profile Catalog reads and writes SQLite-only and reserves the remaining typed tables; cross-domain transactions, configuration, operations, credentials, history, cleanup, integrity, and backup are pending |
-| Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoint `726563fb` adds the explicit migration phase, source hashes and archive, atomic database publication, no JSON fallback after database creation, and no old-generation rollback; typed rejects and exact legacy provider cleanup remain pending |
+| SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb` and `c0ff2768` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only and add the validated configuration aggregate; cross-domain transactions, public config mutation, operations, credentials, history, cleanup, integrity, and backup are pending |
+| Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb` and `c0ff2768` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, and no old-generation rollback; exact legacy provider cleanup remains pending |
 | Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | current hidden-browser bootstrap is rejected; implementation pending |
-| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | version 49 defaults frozen subject to development measurement; implementation pending |
+| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
 | Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | version 49 contract frozen; implementation pending |
