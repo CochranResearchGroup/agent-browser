@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 40
+Plan version: 41
 
 State: OPEN
 
@@ -119,9 +119,9 @@ P211 merged `origin/main@a3848e16` at checkpoint `0e28e44c` after Plan 0216
 landed. The only source conflict was the stale-owner daemon-shutdown regression;
 the resolution retains P211's terminal close behavior while using the extracted
 Service Model types. Focused validation for
-`shutdown_closes_browser_when_owner_authority_is_stale` passes. P207 remains
-open in pull request #184, so P211 still excludes its help and documentation
-surfaces.
+`shutdown_closes_browser_when_owner_authority_is_stale` passes. At that
+checkpoint, P207 remained open in pull request #184, so P211 excluded its help
+and documentation surfaces.
 
 Checkpoint `6b04975b` adds the first post-extraction shutdown adapter seam.
 Lease Authority can now atomically fence and release every active resource
@@ -795,6 +795,20 @@ intent for later source integration and must not import that prose ahead of
 its unmerged implementation. This transition grants no custody over P207's
 source branch and no installed or shared-runtime effect authority.
 
+The version 41 checkpoint `3758f8df` completes repository documentation
+parity under that transferred custody. CLI help, README, the Agent Browser
+skill, installation and remote-view docs, and the workstation install module
+documentation now lead with the fixed cold apply, idempotent shutdown, and
+ordinary session-plus-profile remote-view journey. Existing transaction,
+census, handoff, and explicit route controls are labeled as legacy recovery or
+advanced compatibility surfaces. Compiled help readback, remote-view
+documentation contracts, documentation links, the production docs build,
+workstation fixture suites, the 181-test focused Rust lane, formatting, and
+strict workspace Clippy pass. The goal-scoped planning audit passes. The
+repo-wide active-plan audit remains red on pre-existing historical plan wiring
+and state findings and reports no P211 finding. The shared user-scoped skill
+was not overwritten from this experimental checkout.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -1101,9 +1115,9 @@ integrating any P207 implementation.
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | the compiled-CLI Chrome fixture follows a same-site `/protected` to `/login` redirect and retains the same ready opaque handoff through `/account`; the dashboard same-origin post-auth return contract is green; one authenticated dashboard replay ended without a terminal verdict and its teardown-hang regression is repaired, so authenticated rendering remains pending |
 | Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; doctor, status, capacity, preflight, and checkout agree | compiled ordinary opens now return ready opaque handoffs from exact static route readiness without leasing, host resolution focuses and heartbeats the target, and requested doctor scope joins the exact ready manager handoff without allowing stale legacy pool allocation to veto it; the manager presentation receipt and provider-free doctor agreement are green, but the bounded dashboard replay produced no terminal verdict, so authenticated rendering, control, and installed doctor agreement remain pending |
-| Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | the full compiled CLI and runtime-host journey shares one browser, drives independent commands, returns the ready handoff, and closes cleanly with none of those inputs; documentation remains pending |
+| Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | the full compiled CLI and runtime-host journey shares one browser, drives independent commands, returns the ready handoff, and closes cleanly with none of those inputs; compiled help and repository documentation expose the same ordinary path |
 | Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
-| Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | not implemented |
+| Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | repository surfaces describe fixed cold apply, idempotent shutdown, ordinary session-plus-profile remote view, and explicitly bounded legacy recovery; compiled help, documentation contracts, links, and production docs build are green |
 
 Exit requires all rows green against one frozen source candidate. Provider-free
 tests must include idempotent replay, a shutdown interrupted after each phase,

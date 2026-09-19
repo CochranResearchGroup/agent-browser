@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 4843c4e2
+    checkpoint: 3758f8df
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: provider-free shutdown, cold-install, Browser Session Manager, static-route handoff, and requested-scope doctor contracts pass through checkpoint 4843c4e2; documentation parity is the active packet and no live effect is authorized
-    validation_ref: 4843c4e2
+    validation_status: provider-free shutdown, cold-install, Browser Session Manager, static-route handoff, requested-scope doctor, and repository documentation parity pass through checkpoint 3758f8df; no live effect is authorized
+    validation_ref: 3758f8df
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: documentation parity is active; authenticated dashboard rendering and control remain without a terminal verdict, and production shutdown, installation, installed doctor, and installed remote-view acceptance remain excluded until separately directed
+    blocker: authenticated dashboard rendering and control remain without a terminal verdict; production shutdown, installation, installed doctor, installed remote-view acceptance, and shared user-scoped skill publication remain excluded until separately directed
     updated_at: 2026-09-18
