@@ -10,6 +10,7 @@ use agent_browser_service_model::{
     RouteKeeperStopReceipt,
 };
 use std::path::{Path, PathBuf};
+use tokio::sync::{mpsc, watch};
 
 use super::browser_session_store::BrowserRuntimeSqliteStore;
 
@@ -77,6 +78,17 @@ pub(crate) struct RouteKeeperDisconnectEvent {
     pub(crate) guacamole_connection_uuid: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RouteKeeperTerminalEvent {
+    pub(crate) slot_id: String,
+    pub(crate) keeper_id: String,
+    pub(crate) fence: RouteKeeperFence,
+    pub(crate) occurrence_id: String,
+    pub(crate) guacamole_connection_uuid: Option<String>,
+    pub(crate) code: &'static str,
+    pub(crate) elapsed_ms: u64,
+}
+
 #[async_trait::async_trait]
 pub(crate) trait PresentationRouteConnector: Send {
     async fn start(&mut self, action: &RouteKeeperReconcileAction) -> Result<(), String>;
@@ -95,6 +107,202 @@ pub(crate) trait PresentationRouteConnector: Send {
         &mut self,
         action: &RouteKeeperReconcileAction,
     ) -> Result<RouteKeeperStopObservation, String>;
+}
+
+#[async_trait::async_trait]
+pub(crate) trait SupervisedPresentationRouteConnector: PresentationRouteConnector {
+    fn take_terminal_events(&mut self) -> Vec<RouteKeeperTerminalEvent>;
+
+    fn terminal_event_is_current(&self, event: &RouteKeeperTerminalEvent) -> bool;
+
+    fn restore_terminal_event(&mut self, event: RouteKeeperTerminalEvent);
+
+    fn acknowledge_terminal_event(&mut self, event: &RouteKeeperTerminalEvent);
+
+    async fn shutdown_primaries(&mut self);
+}
+
+pub(crate) async fn run_route_keeper_supervisor(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+    ticks: &mut mpsc::Receiver<()>,
+    shutdown: &mut watch::Receiver<bool>,
+) -> Result<(), String> {
+    if *shutdown.borrow() {
+        return shutdown_and_persist(repository, connector).await;
+    }
+    loop {
+        let startup = tokio::select! {
+            result = reconcile_until_minimum(repository, connector) => Some(result),
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() { None } else { continue }
+            }
+        };
+        match startup {
+            Some(Ok(_)) => break,
+            Some(Err(error)) => {
+                return finish_supervisor_error(repository, connector, error).await;
+            }
+            None => return shutdown_and_persist(repository, connector).await,
+        }
+    }
+    loop {
+        tokio::select! {
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() {
+                    return shutdown_and_persist(repository, connector).await;
+                }
+            }
+            tick = ticks.recv() => {
+                if tick.is_none() {
+                    return finish_supervisor_error(
+                        repository,
+                        connector,
+                        "route_keeper_supervisor_tick_source_closed".to_string(),
+                    ).await;
+                }
+                loop {
+                    let reconciliation = tokio::select! {
+                        result = supervise_once(repository, connector) => Some(result),
+                        changed = shutdown.changed() => {
+                            if changed.is_err() || *shutdown.borrow() { None } else { continue }
+                        }
+                    };
+                    match reconciliation {
+                        Some(Ok(_)) => break,
+                        Some(Err(error)) => {
+                            return finish_supervisor_error(repository, connector, error).await;
+                        }
+                        None => return shutdown_and_persist(repository, connector).await,
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn shutdown_and_persist(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+) -> Result<(), String> {
+    connector.shutdown_primaries().await;
+    process_terminal_events(repository, connector)
+}
+
+async fn finish_supervisor_error(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+    error: String,
+) -> Result<(), String> {
+    match shutdown_and_persist(repository, connector).await {
+        Ok(()) => Err(error),
+        Err(cleanup) => Err(format!(
+            "route_keeper_supervisor_cleanup_failed:{error}:{cleanup}"
+        )),
+    }
+}
+
+pub(crate) async fn reconcile_until_minimum(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+) -> Result<RouteKeeperProjection, String> {
+    process_terminal_events(repository, connector)?;
+    let maximum_steps = repository
+        .load_route_keeper_authority()?
+        .policy
+        .maximum_slots
+        .saturating_mul(2)
+        .saturating_add(1);
+    for _ in 0..maximum_steps {
+        process_terminal_events(repository, connector)?;
+        let before = repository.load_route_keeper_authority()?;
+        let before_projection = before.projection()?;
+        if before_projection.minimum_satisfied {
+            return Ok(before_projection);
+        }
+        let projection = reconcile_once(repository, connector).await?;
+        process_terminal_events(repository, connector)?;
+        let after = repository.load_route_keeper_authority()?;
+        if after == before {
+            return Ok(projection);
+        }
+    }
+    Err("route_keeper_supervisor_minimum_reconcile_exhausted".to_string())
+}
+
+pub(crate) async fn supervise_once(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+) -> Result<RouteKeeperProjection, String> {
+    process_terminal_events(repository, connector)?;
+    reconcile_once(repository, connector).await
+}
+
+fn process_terminal_events(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+) -> Result<(), String> {
+    let events = connector.take_terminal_events();
+    let mut pending = events.into_iter();
+    while let Some(event) = pending.next() {
+        if !connector.terminal_event_is_current(&event) {
+            connector.acknowledge_terminal_event(&event);
+            continue;
+        }
+        if let Err(error) = record_terminal_event(repository, &event) {
+            connector.restore_terminal_event(event);
+            for remaining in pending {
+                connector.restore_terminal_event(remaining);
+            }
+            return Err(error);
+        }
+        connector.acknowledge_terminal_event(&event);
+    }
+    Ok(())
+}
+
+fn record_terminal_event(
+    repository: &impl RouteKeeperRepository,
+    event: &RouteKeeperTerminalEvent,
+) -> Result<RouteKeeperProjection, String> {
+    let expected = repository.load_route_keeper_authority()?;
+    let Some(record) = expected.records.get(&event.slot_id) else {
+        return expected.projection();
+    };
+    if record.keeper_id != event.keeper_id || record.fence != event.fence {
+        return expected.projection();
+    }
+    let mut next = expected.clone();
+    match record.phase {
+        agent_browser_service_model::RouteKeeperPhase::Starting
+        | agent_browser_service_model::RouteKeeperPhase::Observing => {
+            next.record_start_terminated(&event.slot_id, &event.fence)?;
+        }
+        agent_browser_service_model::RouteKeeperPhase::Ready => {
+            let Some(connection_uuid) = event.guacamole_connection_uuid.as_deref() else {
+                return expected.projection();
+            };
+            next.record_disconnect(&event.slot_id, &event.fence, connection_uuid)?;
+        }
+        agent_browser_service_model::RouteKeeperPhase::Stopping => {
+            let ready = record
+                .protocol_ready
+                .as_ref()
+                .ok_or_else(|| "route_keeper_ready_receipt_missing".to_string())?;
+            let preserved_observed_keeper_id = format!(
+                "keeper={};guacamole={};xrdp={}",
+                record.keeper_id, ready.guacamole_connection_uuid, ready.xrdp_session_id
+            );
+            next.quarantine_unproven_stop(
+                &event.slot_id,
+                &event.fence,
+                preserved_observed_keeper_id,
+            )?;
+        }
+        _ => return expected.projection(),
+    }
+    repository.compare_and_swap_route_keeper_authority(&expected, &next)?;
+    next.projection()
 }
 
 pub(crate) async fn reconcile_once(
@@ -364,6 +572,11 @@ mod tests {
         stops: Vec<RouteKeeperReconcileAction>,
         routes: BTreeMap<String, RouteKeeperProtocolReadyReceipt>,
         unproven_stop: Option<String>,
+        terminal_events: Vec<RouteKeeperTerminalEvent>,
+        current_terminal_occurrences: BTreeMap<String, String>,
+        acknowledged_terminal_occurrences: Vec<String>,
+        restored_terminal_occurrences: Vec<String>,
+        shutdowns: usize,
     }
 
     impl FakeConnector {
@@ -455,6 +668,34 @@ mod tests {
                     stopped_at: "2026-09-19T18:02:00Z".to_string(),
                 },
             ))
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SupervisedPresentationRouteConnector for FakeConnector {
+        fn take_terminal_events(&mut self) -> Vec<RouteKeeperTerminalEvent> {
+            std::mem::take(&mut self.terminal_events)
+        }
+
+        fn terminal_event_is_current(&self, event: &RouteKeeperTerminalEvent) -> bool {
+            self.current_terminal_occurrences
+                .get(&event.slot_id)
+                .is_some_and(|occurrence| occurrence == &event.occurrence_id)
+        }
+
+        fn restore_terminal_event(&mut self, event: RouteKeeperTerminalEvent) {
+            self.restored_terminal_occurrences
+                .push(event.occurrence_id.clone());
+            self.terminal_events.push(event);
+        }
+
+        fn acknowledge_terminal_event(&mut self, event: &RouteKeeperTerminalEvent) {
+            self.acknowledged_terminal_occurrences
+                .push(event.occurrence_id.clone());
+        }
+
+        async fn shutdown_primaries(&mut self) {
+            self.shutdowns += 1;
         }
     }
 
@@ -768,6 +1009,281 @@ mod tests {
                 },
             ),
             Err("route_keeper_connector_observation_mismatch".to_string())
+        );
+    }
+
+    fn terminal_event(
+        authority: &RouteKeeperAuthority,
+        slot_id: &str,
+        occurrence_id: &str,
+        guacamole_connection_uuid: Option<String>,
+    ) -> RouteKeeperTerminalEvent {
+        let record = &authority.records[slot_id];
+        RouteKeeperTerminalEvent {
+            slot_id: record.slot_id.clone(),
+            keeper_id: record.keeper_id.clone(),
+            fence: record.fence.clone(),
+            occurrence_id: occurrence_id.to_string(),
+            guacamole_connection_uuid,
+            code: "fixture_primary_closed",
+            elapsed_ms: 7,
+        }
+    }
+
+    #[tokio::test]
+    async fn supervisor_establishes_minimum_before_warming_on_later_ticks() {
+        let directory = TempDirectory::new("route-keeper-supervisor-minimum");
+        let repository = repository(&directory);
+        let mut connector = FakeConnector::default();
+
+        let minimum = reconcile_until_minimum(&repository, &mut connector)
+            .await
+            .unwrap();
+        assert_eq!(minimum.ready_count, 1);
+        assert!(minimum.minimum_satisfied);
+        assert_eq!(connector.starts.len(), 1);
+        assert_eq!(connector.observes.len(), 1);
+
+        let warming = supervise_once(&repository, &mut connector).await.unwrap();
+        assert_eq!(warming.ready_count, 1);
+        assert_eq!(connector.starts.len(), 2);
+        assert_eq!(
+            connector.starts.last(),
+            Some(&RouteKeeperReconcileAction::Start {
+                slot_id: "route-slot-02".to_string(),
+                keeper_id: "route-keeper-02".to_string(),
+                fence: repository.load_route_keeper_authority().unwrap().records["route-slot-02"]
+                    .fence
+                    .clone(),
+                priority: RouteKeeperStartPriority::Warm,
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_persists_terminal_before_recovery_and_discards_stale_fence() {
+        let directory = TempDirectory::new("route-keeper-supervisor-terminal");
+        let repository = repository(&directory);
+        let mut connector = FakeConnector::default();
+        let ready = make_minimum_ready(&repository, &mut connector).await;
+        let receipt = ready.records["route-slot-01"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        connector
+            .current_terminal_occurrences
+            .insert("route-slot-01".to_string(), "occurrence-ready".to_string());
+        connector.terminal_events.push(terminal_event(
+            &ready,
+            "route-slot-01",
+            "occurrence-ready",
+            Some(receipt.guacamole_connection_uuid),
+        ));
+
+        let recovery = supervise_once(&repository, &mut connector).await.unwrap();
+        assert_eq!(recovery.ready_count, 0);
+        assert_eq!(
+            connector.acknowledged_terminal_occurrences,
+            ["occurrence-ready"]
+        );
+        assert!(matches!(
+            connector.starts.last(),
+            Some(RouteKeeperReconcileAction::Start {
+                slot_id,
+                priority: RouteKeeperStartPriority::Recovery,
+                ..
+            }) if slot_id == "route-slot-01"
+        ));
+        let recovered = repository.load_route_keeper_authority().unwrap();
+        assert_eq!(
+            recovered.records["route-slot-01"].phase,
+            RouteKeeperPhase::Observing
+        );
+        assert!(
+            recovered.records["route-slot-01"]
+                .fence
+                .operation_generation
+                > ready.records["route-slot-01"].fence.operation_generation
+        );
+
+        let before_stale = recovered.clone();
+        connector.terminal_events.push(terminal_event(
+            &ready,
+            "route-slot-01",
+            "occurrence-stale",
+            None,
+        ));
+        process_terminal_events(&repository, &mut connector).unwrap();
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap(),
+            before_stale
+        );
+        assert_eq!(
+            connector.acknowledged_terminal_occurrences,
+            ["occurrence-ready", "occurrence-stale"]
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_retries_unpublished_terminal_and_shuts_down_once() {
+        let directory = TempDirectory::new("route-keeper-supervisor-retry");
+        let database_path = directory.0.join("runtime.sqlite3");
+        let base = repository(&directory);
+        let mut connector = FakeConnector::default();
+        reconcile_once(&base, &mut connector).await.unwrap();
+        let observing = base.load_route_keeper_authority().unwrap();
+        connector.current_terminal_occurrences.insert(
+            "route-slot-01".to_string(),
+            "occurrence-before-ready".to_string(),
+        );
+        connector.terminal_events.push(terminal_event(
+            &observing,
+            "route-slot-01",
+            "occurrence-before-ready",
+            None,
+        ));
+        let conflicting = ConflictRepository {
+            inner: SqliteRouteKeeperRepository::new(&database_path),
+            cas_calls: AtomicUsize::new(0),
+            reject_call: 1,
+        };
+        assert_eq!(
+            supervise_once(&conflicting, &mut connector).await,
+            Err("route_keeper_authority_compare_and_swap_conflict".to_string())
+        );
+        assert_eq!(
+            connector.restored_terminal_occurrences,
+            ["occurrence-before-ready"]
+        );
+        assert!(connector.acknowledged_terminal_occurrences.is_empty());
+
+        let projection = supervise_once(&conflicting, &mut connector).await.unwrap();
+        assert_eq!(projection.ready_count, 0);
+        assert_eq!(connector.starts.len(), 2);
+        assert_eq!(
+            connector.acknowledged_terminal_occurrences,
+            ["occurrence-before-ready"]
+        );
+
+        let (_tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+        let signal = tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            shutdown_tx.send(true).unwrap();
+        });
+        run_route_keeper_supervisor(&base, &mut connector, &mut ticks, &mut shutdown)
+            .await
+            .unwrap();
+        signal.await.unwrap();
+        assert_eq!(connector.shutdowns, 1);
+    }
+
+    struct BlockingStartConnector {
+        action: Option<RouteKeeperReconcileAction>,
+        entered: Arc<tokio::sync::Notify>,
+        terminal_events: Vec<RouteKeeperTerminalEvent>,
+        shutdowns: usize,
+    }
+
+    #[async_trait::async_trait]
+    impl PresentationRouteConnector for BlockingStartConnector {
+        async fn start(&mut self, action: &RouteKeeperReconcileAction) -> Result<(), String> {
+            self.action = Some(action.clone());
+            self.entered.notify_one();
+            std::future::pending().await
+        }
+
+        async fn observe(
+            &mut self,
+            _action: &RouteKeeperReconcileAction,
+        ) -> Result<RouteKeeperConnectorObservation, String> {
+            unreachable!()
+        }
+
+        async fn adopt(
+            &mut self,
+            _action: &RouteKeeperReconcileAction,
+        ) -> Result<RouteKeeperAdoptionObservation, String> {
+            unreachable!()
+        }
+
+        async fn stop(
+            &mut self,
+            _action: &RouteKeeperReconcileAction,
+        ) -> Result<RouteKeeperStopObservation, String> {
+            unreachable!()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SupervisedPresentationRouteConnector for BlockingStartConnector {
+        fn take_terminal_events(&mut self) -> Vec<RouteKeeperTerminalEvent> {
+            std::mem::take(&mut self.terminal_events)
+        }
+
+        fn terminal_event_is_current(&self, event: &RouteKeeperTerminalEvent) -> bool {
+            self.action.as_ref().is_some_and(|action| {
+                let (slot_id, keeper_id, fence) = action_identity(action);
+                event.slot_id == slot_id
+                    && event.keeper_id == keeper_id
+                    && event.fence == *fence
+                    && event.occurrence_id == "blocking-start"
+            })
+        }
+
+        fn restore_terminal_event(&mut self, event: RouteKeeperTerminalEvent) {
+            self.terminal_events.push(event);
+        }
+
+        fn acknowledge_terminal_event(&mut self, _event: &RouteKeeperTerminalEvent) {
+            self.action = None;
+        }
+
+        async fn shutdown_primaries(&mut self) {
+            self.shutdowns += 1;
+            let Some(action) = self.action.as_ref() else {
+                return;
+            };
+            let (slot_id, keeper_id, fence) = action_identity(action);
+            self.terminal_events.push(RouteKeeperTerminalEvent {
+                slot_id: slot_id.to_string(),
+                keeper_id: keeper_id.to_string(),
+                fence: fence.clone(),
+                occurrence_id: "blocking-start".to_string(),
+                guacamole_connection_uuid: None,
+                code: "fixture_shutdown",
+                elapsed_ms: 1,
+            });
+        }
+    }
+
+    #[tokio::test]
+    async fn supervisor_shutdown_interrupts_pending_start_and_persists_terminal_state() {
+        let directory = TempDirectory::new("route-keeper-supervisor-interrupt");
+        let repository = repository(&directory);
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let mut connector = BlockingStartConnector {
+            action: None,
+            entered: entered.clone(),
+            terminal_events: Vec::new(),
+            shutdowns: 0,
+        };
+        let (_tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+        let signal = tokio::spawn(async move {
+            entered.notified().await;
+            shutdown_tx.send(true).unwrap();
+        });
+
+        run_route_keeper_supervisor(&repository, &mut connector, &mut ticks, &mut shutdown)
+            .await
+            .unwrap();
+        signal.await.unwrap();
+        assert_eq!(connector.shutdowns, 1);
+        assert!(connector.action.is_none());
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Absent
         );
     }
 

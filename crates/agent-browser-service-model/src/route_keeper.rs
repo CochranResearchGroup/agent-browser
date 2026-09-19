@@ -14,6 +14,7 @@ pub enum RouteKeeperPhase {
     Adopting,
     Ready,
     Degraded,
+    RecoveryFailed,
     Stopping,
     Quarantined,
 }
@@ -241,11 +242,12 @@ impl RouteKeeperAuthority {
             RouteKeeperProviderState::Ready
         } else if ready_count >= self.policy.minimum_ready {
             RouteKeeperProviderState::Starting
-        } else if self
-            .records
-            .values()
-            .any(|record| record.phase == RouteKeeperPhase::Degraded)
-        {
+        } else if self.records.values().any(|record| {
+            matches!(
+                record.phase,
+                RouteKeeperPhase::Degraded | RouteKeeperPhase::RecoveryFailed
+            )
+        }) {
             RouteKeeperProviderState::Degraded
         } else {
             RouteKeeperProviderState::Starting
@@ -355,7 +357,12 @@ impl RouteKeeperAuthority {
         let selected_slot = self
             .records
             .values()
-            .find(|record| record.phase == RouteKeeperPhase::Degraded)
+            .find(|record| {
+                matches!(
+                    record.phase,
+                    RouteKeeperPhase::Degraded | RouteKeeperPhase::RecoveryFailed
+                )
+            })
             .map(|record| record.slot_id.clone())
             .or_else(|| {
                 self.records
@@ -370,7 +377,10 @@ impl RouteKeeperAuthority {
             .records
             .get_mut(&slot_id)
             .ok_or_else(|| "route_keeper_slot_missing".to_string())?;
-        let was_degraded = record.phase == RouteKeeperPhase::Degraded;
+        let was_degraded = matches!(
+            record.phase,
+            RouteKeeperPhase::Degraded | RouteKeeperPhase::RecoveryFailed
+        );
         record.fence.operation_generation = record
             .fence
             .operation_generation
@@ -447,6 +457,31 @@ impl RouteKeeperAuthority {
             return Err("route_keeper_connection_identity_mismatch".to_string());
         }
         record.phase = RouteKeeperPhase::Degraded;
+        Ok(())
+    }
+
+    /// A protocol task that terminates before publishing readiness owns no
+    /// usable keeper. Return the exact slot to `Absent` so reconciliation can
+    /// reserve a newly fenced attempt instead of polling a dead task forever.
+    pub fn record_start_terminated(
+        &mut self,
+        slot_id: &str,
+        fence: &RouteKeeperFence,
+    ) -> Result<(), String> {
+        let record = self.record_for_fence_mut(slot_id, fence)?;
+        if !matches!(
+            record.phase,
+            RouteKeeperPhase::Starting | RouteKeeperPhase::Observing
+        ) {
+            return Err("route_keeper_phase_not_starting".to_string());
+        }
+        if record.protocol_ready.is_some() {
+            record.phase = RouteKeeperPhase::RecoveryFailed;
+        } else {
+            record.phase = RouteKeeperPhase::Absent;
+        }
+        record.adoption = None;
+        record.cleanup_obligation = None;
         Ok(())
     }
 
@@ -693,6 +728,18 @@ fn validate_record(
                 {
                     return Err("route_keeper_recovery_source_invalid".to_string());
                 }
+            }
+        }
+        RouteKeeperPhase::RecoveryFailed => {
+            let ready = record
+                .protocol_ready
+                .as_ref()
+                .ok_or_else(|| "route_keeper_recovery_source_missing".to_string())?;
+            if ready.fence.host_generation != record.fence.host_generation
+                || ready.fence.operation_generation >= record.fence.operation_generation
+                || record.cleanup_obligation.is_some()
+            {
+                return Err("route_keeper_recovery_source_invalid".to_string());
             }
         }
         RouteKeeperPhase::Adopting => {

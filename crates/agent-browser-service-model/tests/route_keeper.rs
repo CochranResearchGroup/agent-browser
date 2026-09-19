@@ -207,6 +207,65 @@ fn disconnect_restarts_and_exact_adoption_fences_stale_generation() {
 }
 
 #[test]
+fn pre_ready_terminal_returns_exact_attempt_to_absent_for_new_fence() {
+    let mut authority = RouteKeeperAuthority::new(3).unwrap();
+    let (slot_id, keeper_id, first_fence) =
+        expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
+    authority.record_observing(&slot_id, &first_fence).unwrap();
+    authority
+        .record_start_terminated(&slot_id, &first_fence)
+        .unwrap();
+    assert_eq!(authority.records[&slot_id].phase, RouteKeeperPhase::Absent);
+    assert!(authority.records[&slot_id].protocol_ready.is_none());
+
+    let (next_slot, next_keeper, next_fence) =
+        expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
+    assert_eq!(next_slot, slot_id);
+    assert_eq!(next_keeper, keeper_id);
+    assert_eq!(next_fence.host_generation, first_fence.host_generation);
+    assert!(next_fence.operation_generation > first_fence.operation_generation);
+    assert_ne!(next_fence.operation_id, first_fence.operation_id);
+    assert_eq!(
+        authority.record_start_terminated(&slot_id, &first_fence),
+        Err("route_keeper_stale_observation".to_string())
+    );
+}
+
+#[test]
+fn failed_recovery_retains_prior_protocol_evidence_for_next_fenced_attempt() {
+    let (mut authority, original_ready) = make_one_ready();
+    authority
+        .record_disconnect(
+            &original_ready.slot_id,
+            &original_ready.fence,
+            &original_ready.guacamole_connection_uuid,
+        )
+        .unwrap();
+    let (_, _, recovery_fence) = expect_start(&mut authority, RouteKeeperStartPriority::Recovery);
+    authority
+        .record_start_terminated(&original_ready.slot_id, &recovery_fence)
+        .unwrap();
+    let failed = &authority.records[&original_ready.slot_id];
+    assert_eq!(failed.phase, RouteKeeperPhase::RecoveryFailed);
+    assert_eq!(failed.protocol_ready, Some(original_ready.clone()));
+    assert_eq!(failed.fence, recovery_fence);
+    assert_eq!(
+        authority.projection().unwrap().state,
+        RouteKeeperProviderState::Degraded
+    );
+
+    let (slot_id, keeper_id, next_fence) =
+        expect_start(&mut authority, RouteKeeperStartPriority::Recovery);
+    assert_eq!(slot_id, original_ready.slot_id);
+    assert_eq!(keeper_id, original_ready.keeper_id);
+    assert!(next_fence.operation_generation > recovery_fence.operation_generation);
+    assert_eq!(
+        authority.records[&slot_id].protocol_ready,
+        Some(original_ready)
+    );
+}
+
+#[test]
 fn stop_requires_exact_receipt_and_unproven_ownership_is_quarantined() {
     let (mut exact_authority, exact_ready) = make_one_ready();
     let stop_action = exact_authority

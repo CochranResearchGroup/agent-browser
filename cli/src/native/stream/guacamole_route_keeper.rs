@@ -6,7 +6,7 @@ use super::guacamole_primary_transport::{
 use crate::native::browser_session_store::BrowserRuntimeSqliteStore;
 use crate::native::presentation_route_keeper::{
     PresentationRouteConnector, RouteKeeperAdoptionObservation, RouteKeeperConnectorObservation,
-    RouteKeeperStopObservation,
+    RouteKeeperStopObservation, RouteKeeperTerminalEvent, SupervisedPresentationRouteConnector,
 };
 use agent_browser_service_model::{
     RouteKeeperFence, RouteKeeperPhase, RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction,
@@ -42,16 +42,6 @@ pub(super) trait RouteKeeperProtocolObserver: Send {
     ) -> Result<RouteKeeperStopObservation, String>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct RouteKeeperPrimaryTerminalEvent {
-    pub slot_id: String,
-    pub keeper_id: String,
-    pub fence: RouteKeeperFence,
-    pub occurrence_id: String,
-    pub code: &'static str,
-    pub elapsed_ms: u64,
-}
-
 struct OwnedPrimary {
     keeper_id: String,
     fence: RouteKeeperFence,
@@ -79,8 +69,9 @@ pub(super) struct GuacamoleRouteKeeperConnector<F, O> {
     observer: O,
     tasks: BTreeMap<String, OwnedPrimary>,
     completed_stops: BTreeMap<String, CompletedStop>,
-    terminal_tx: mpsc::UnboundedSender<RouteKeeperPrimaryTerminalEvent>,
-    terminal_rx: mpsc::UnboundedReceiver<RouteKeeperPrimaryTerminalEvent>,
+    shutting_down: bool,
+    terminal_tx: mpsc::UnboundedSender<RouteKeeperTerminalEvent>,
+    terminal_rx: mpsc::UnboundedReceiver<RouteKeeperTerminalEvent>,
 }
 
 impl<F, O> GuacamoleRouteKeeperConnector<F, O> {
@@ -92,14 +83,25 @@ impl<F, O> GuacamoleRouteKeeperConnector<F, O> {
             observer,
             tasks: BTreeMap::new(),
             completed_stops: BTreeMap::new(),
+            shutting_down: false,
             terminal_tx,
             terminal_rx,
         }
     }
 
-    pub(super) fn take_terminal_events(&mut self) -> Vec<RouteKeeperPrimaryTerminalEvent> {
+    fn drain_terminal_events(&mut self) -> Vec<RouteKeeperTerminalEvent> {
         let mut events = Vec::new();
-        while let Ok(event) = self.terminal_rx.try_recv() {
+        while let Ok(mut event) = self.terminal_rx.try_recv() {
+            if let Some(owned) = self.tasks.get(&event.slot_id).filter(|owned| {
+                owned.keeper_id == event.keeper_id
+                    && owned.fence == event.fence
+                    && owned.occurrence_id == event.occurrence_id
+            }) {
+                event.guacamole_connection_uuid = owned
+                    .ready
+                    .as_ref()
+                    .map(|ready| ready.guacamole_connection_uuid.clone());
+            }
             events.push(event);
         }
         events
@@ -113,6 +115,7 @@ where
     O: RouteKeeperProtocolObserver,
 {
     async fn start(&mut self, action: &RouteKeeperReconcileAction) -> Result<(), String> {
+        self.shutting_down = false;
         let (slot_id, keeper_id, fence) = start_identity(action)?;
         if let Some(existing) = self.tasks.get(slot_id) {
             if existing.keeper_id == keeper_id && existing.fence == *fence {
@@ -136,11 +139,12 @@ where
             action,
             guard,
             Box::new(move |occurrence_id, code, elapsed_ms| {
-                let _ = terminal_tx.send(RouteKeeperPrimaryTerminalEvent {
+                let _ = terminal_tx.send(RouteKeeperTerminalEvent {
                     slot_id: event_slot_id,
                     keeper_id: event_keeper_id,
                     fence: event_fence,
                     occurrence_id: occurrence_id.to_string(),
+                    guacamole_connection_uuid: None,
                     code,
                     elapsed_ms,
                 });
@@ -186,8 +190,8 @@ where
                     .await?;
                 match owned.task.status() {
                     PrimaryStatus::Ready(current) if current == guacamole_connection_uuid => {}
-                    PrimaryStatus::Closed(code) => {
-                        return Err(format!("route_keeper_primary_closed:{code}"));
+                    PrimaryStatus::Closed(_) => {
+                        return Ok(RouteKeeperConnectorObservation::Pending);
                     }
                     _ => {
                         return Err("route_keeper_primary_connection_identity_changed".to_string());
@@ -203,7 +207,7 @@ where
                 owned.ready = Some(ready.clone());
                 Ok(RouteKeeperConnectorObservation::Ready(ready))
             }
-            PrimaryStatus::Closed(code) => Err(format!("route_keeper_primary_closed:{code}")),
+            PrimaryStatus::Closed(_) => Ok(RouteKeeperConnectorObservation::Pending),
         }
     }
 
@@ -274,6 +278,47 @@ where
                 Ok(observation)
             }
             Err(error) => Err(error),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<F, O> SupervisedPresentationRouteConnector for GuacamoleRouteKeeperConnector<F, O>
+where
+    F: RouteKeeperPrimaryFactory,
+    O: RouteKeeperProtocolObserver,
+{
+    fn take_terminal_events(&mut self) -> Vec<RouteKeeperTerminalEvent> {
+        self.drain_terminal_events()
+    }
+
+    fn terminal_event_is_current(&self, event: &RouteKeeperTerminalEvent) -> bool {
+        self.tasks.get(&event.slot_id).is_some_and(|owned| {
+            owned.keeper_id == event.keeper_id
+                && owned.fence == event.fence
+                && owned.occurrence_id == event.occurrence_id
+                && (self.shutting_down || !owned.task_closed)
+                && matches!(owned.task.status(), PrimaryStatus::Closed(_))
+        })
+    }
+
+    fn restore_terminal_event(&mut self, event: RouteKeeperTerminalEvent) {
+        let _ = self.terminal_tx.send(event);
+    }
+
+    fn acknowledge_terminal_event(&mut self, event: &RouteKeeperTerminalEvent) {
+        if self.terminal_event_is_current(event) {
+            self.tasks.remove(&event.slot_id);
+        }
+    }
+
+    async fn shutdown_primaries(&mut self) {
+        self.shutting_down = true;
+        for owned in self.tasks.values_mut() {
+            if !owned.task_closed {
+                owned.task.close().await;
+                owned.task_closed = true;
+            }
         }
     }
 }
@@ -396,7 +441,8 @@ mod tests {
     use super::*;
     use crate::native::browser_session_store::LegacyBrowserRuntimeSources;
     use crate::native::presentation_route_keeper::{
-        reconcile_once, stop_once, RouteKeeperRepository, SqliteRouteKeeperRepository,
+        reconcile_once, run_route_keeper_supervisor, stop_once, RouteKeeperRepository,
+        SqliteRouteKeeperRepository,
     };
     use futures_util::{SinkExt, StreamExt};
     use std::fs;
@@ -462,6 +508,8 @@ mod tests {
         observations: usize,
         stops: usize,
         fail_stop_once: bool,
+        block_stop: bool,
+        stop_entered: Option<Arc<tokio::sync::Notify>>,
     }
 
     #[async_trait::async_trait]
@@ -493,6 +541,12 @@ mod tests {
             if self.fail_stop_once {
                 self.fail_stop_once = false;
                 return Err("fixture_stop_observation_failed".to_string());
+            }
+            if let Some(entered) = &self.stop_entered {
+                entered.notify_one();
+            }
+            if self.block_stop {
+                std::future::pending().await
             }
             let (slot_id, keeper_id, fence) = stop_identity(action)?;
             Ok(RouteKeeperStopObservation::Stopped(
@@ -879,10 +933,152 @@ mod tests {
         };
         assert_eq!(
             connector.observe(&action).await,
-            Err("route_keeper_primary_closed:guacamole_primary_transport_closed".to_string())
+            Ok(RouteKeeperConnectorObservation::Pending)
         );
-        assert_eq!(connector.take_terminal_events().len(), 1);
+        let events = connector.take_terminal_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].guacamole_connection_uuid.as_deref(),
+            Some("00000000-0000-4000-8000-000000000212")
+        );
+        let mut stale = events[0].clone();
+        stale.occurrence_id = "stale-occurrence".to_string();
+        connector.acknowledge_terminal_event(&stale);
+        assert_eq!(connector.tasks.len(), 1);
+        connector.acknowledge_terminal_event(&events[0]);
+        assert!(connector.tasks.is_empty());
         assert!(connector.take_terminal_events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_shutdown_closes_owned_primary_once_without_xrdp_stop() {
+        let (_directory, path) = database();
+        let repository = SqliteRouteKeeperRepository::new(&path);
+        let (client, _server) = duplex_pair().await;
+        let mut connector = GuacamoleRouteKeeperConnector::new(
+            path,
+            DuplexPrimaryFactory {
+                socket: Some(client),
+                starts: Arc::new(AtomicUsize::new(0)),
+            },
+            ExactProtocolObserver::default(),
+        );
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        assert_eq!(connector.tasks.len(), 1);
+
+        connector.shutdown_primaries().await;
+        connector.shutdown_primaries().await;
+        assert_eq!(connector.tasks.len(), 1);
+        assert_eq!(connector.observer.stops, 0);
+        let events = connector.take_terminal_events();
+        assert_eq!(events.len(), 1);
+        assert!(events[0].guacamole_connection_uuid.is_none());
+        connector.acknowledge_terminal_event(&events[0]);
+        assert!(connector.tasks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_shutdown_persists_ready_primary_disconnect_before_release() {
+        let (_directory, path) = database();
+        let repository = SqliteRouteKeeperRepository::new(&path);
+        let (client, mut server) = duplex_pair().await;
+        let mut connector = GuacamoleRouteKeeperConnector::new(
+            path,
+            DuplexPrimaryFactory {
+                socket: Some(client),
+                starts: Arc::new(AtomicUsize::new(0)),
+            },
+            ExactProtocolObserver::default(),
+        );
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        server
+            .send(Message::Text(
+                "0.,36.00000000-0000-4000-8000-000000000216;4.sync,1.1;".into(),
+            ))
+            .await
+            .unwrap();
+        wait_for_primary_ready(&connector, "route-slot-01").await;
+        reconcile_once(&repository, &mut connector).await.unwrap();
+
+        let (_tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = tokio::sync::watch::channel(false);
+        let signal = tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            shutdown_tx.send(true).unwrap();
+        });
+        run_route_keeper_supervisor(&repository, &mut connector, &mut ticks, &mut shutdown)
+            .await
+            .unwrap();
+        signal.await.unwrap();
+
+        assert!(connector.tasks.is_empty());
+        assert_eq!(connector.observer.stops, 0);
+        let authority = repository.load_route_keeper_authority().unwrap();
+        assert_eq!(
+            authority.records["route-slot-01"].phase,
+            RouteKeeperPhase::Degraded
+        );
+        assert_eq!(authority.projection().unwrap().ready_count, 0);
+    }
+
+    #[tokio::test]
+    async fn shutdown_during_exact_stop_quarantines_before_releasing_task() {
+        let (_directory, path) = database();
+        let repository = SqliteRouteKeeperRepository::new(&path);
+        let (client, mut server) = duplex_pair().await;
+        let stop_entered = Arc::new(tokio::sync::Notify::new());
+        let mut connector = GuacamoleRouteKeeperConnector::new(
+            path,
+            DuplexPrimaryFactory {
+                socket: Some(client),
+                starts: Arc::new(AtomicUsize::new(0)),
+            },
+            ExactProtocolObserver {
+                block_stop: true,
+                stop_entered: Some(stop_entered.clone()),
+                ..ExactProtocolObserver::default()
+            },
+        );
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        server
+            .send(Message::Text(
+                "0.,36.00000000-0000-4000-8000-000000000217;4.sync,1.1;".into(),
+            ))
+            .await
+            .unwrap();
+        wait_for_primary_ready(&connector, "route-slot-01").await;
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        let ready = repository.load_route_keeper_authority().unwrap();
+        let mut stopping = ready.clone();
+        let fence = stopping.records["route-slot-01"].fence.clone();
+        stopping.begin_stop("route-slot-01", &fence).unwrap();
+        repository
+            .compare_and_swap_route_keeper_authority(&ready, &stopping)
+            .unwrap();
+
+        let (_tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = tokio::sync::watch::channel(false);
+        let signal = tokio::spawn(async move {
+            stop_entered.notified().await;
+            shutdown_tx.send(true).unwrap();
+        });
+        run_route_keeper_supervisor(&repository, &mut connector, &mut ticks, &mut shutdown)
+            .await
+            .unwrap();
+        signal.await.unwrap();
+
+        assert!(connector.tasks.is_empty());
+        let authority = repository.load_route_keeper_authority().unwrap();
+        let record = &authority.records["route-slot-01"];
+        assert_eq!(record.phase, RouteKeeperPhase::Quarantined);
+        let obligation = record.cleanup_obligation.as_ref().unwrap();
+        assert_eq!(obligation.reason, "route_keeper_stop_ownership_unproven");
+        assert!(obligation
+            .preserved_observed_keeper_id
+            .contains("guacamole=00000000-0000-4000-8000-000000000217"));
+        assert!(obligation
+            .preserved_observed_keeper_id
+            .contains("xrdp=xrdp-route-slot-01"));
     }
 
     #[tokio::test]
