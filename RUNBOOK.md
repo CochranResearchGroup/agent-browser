@@ -9,6 +9,24 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 412 | 2026-09-19
+
+P211 checkpoint `e9593b5b` adds a browser-independent Guacamole connection
+specification and a concrete route-keeper primary factory. The specification
+accepts only a nonempty connection ID and the exact credential-free,
+query-free, literal-loopback `/guacamole/` provider path. Existing
+browser-bound primaries use the same specification and authentication flow.
+The configured factory selects one immutable specification by exact keeper
+slot, fails an unmapped slot before any provider request, passes the same fresh
+SQLite guard through authentication and transport custody, and keeps provider
+tokens transient. The 21-test Guacamole-primary lane, eleven route-keeper
+connector tests, formatting, strict workspace Clippy, diff hygiene, changed-
+surface selection, and independent closed-world review pass. No authoritative
+slot-to-connection catalog is yet populated, and the factory is not installed
+in RuntimeHostRouter; XRDP observation and exact stop also remain injected.
+No provider, browser, installed-runtime, production, ingress, or release effect
+occurred.
+
 ## Turn 411 | 2026-09-19
 
 P211 checkpoint `1d17f471` adds the provider-free route-keeper supervisor and

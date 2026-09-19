@@ -137,6 +137,13 @@ obligation. Stale occurrence or fence events cannot mutate current custody and
 publication conflicts restore events for replay. Concrete provider-authenticated
 task creation and catalog authority, XRDP observation and exact stop effects,
 RuntimeHostRouter wiring, and live readiness remain open.
+Checkpoint `e9593b5b` adds the concrete provider-authenticated primary factory
+behind an exact immutable slot catalog. The browser-independent connection
+spec preserves strict literal-loopback provider validation, transient tokens,
+and the same fresh SQLite guard across authentication and transport custody;
+unmapped slots fail before provider access. Authoritative catalog population,
+XRDP observation and exact stop, RuntimeHostRouter installation, and live
+readiness remain open.
 
 ## P216 | Service Model Extraction Landing
 
