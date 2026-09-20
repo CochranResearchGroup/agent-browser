@@ -481,6 +481,36 @@ impl BrowserRuntimeSqliteStore {
         )
     }
 
+    pub(crate) fn save_manager_handoff(
+        &mut self,
+        handoff: &RemoteViewHandoff,
+    ) -> Result<(), String> {
+        if handoff.id.is_empty() {
+            return Err("browser_runtime_handoff_identity_invalid".to_string());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_handoff_begin_failed:{error}"))?;
+        let mut registry: BrowserManagerHandoffRegistry = load_optional_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )?;
+        registry
+            .handoffs
+            .insert(handoff.id.clone(), handoff.clone());
+        save_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_handoff_commit_failed:{error}"))
+    }
+
     pub(crate) fn load_route_keeper_authority(&self) -> Result<RouteKeeperAuthority, String> {
         load_route_keeper_authority_document(&self.connection)
     }

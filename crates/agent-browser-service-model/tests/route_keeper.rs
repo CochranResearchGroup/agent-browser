@@ -186,6 +186,71 @@ fn make_one_ready() -> (RouteKeeperAuthority, RouteKeeperProtocolReadyReceipt) {
 }
 
 #[test]
+fn ready_handoff_binding_joins_exact_catalog_keeper_and_xrdp_evidence() {
+    let mut authority = RouteKeeperAuthority::new(1).unwrap();
+    authority
+        .replace_connection_catalog(
+            RouteKeeperConnectionCatalog::with_provider_urls(
+                "http://127.0.0.1:8193/guacamole/",
+                "https://dashboard.example/operator",
+                [RouteKeeperConnectionBinding {
+                    slot_id: "route-slot-01".to_string(),
+                    connection_key: "route-01".to_string(),
+                    connection_name: "Agent Browser Route 01".to_string(),
+                    route_user: "agent-browser-rdp-1".to_string(),
+                    guacamole_connection_id: 1,
+                }],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let (slot_id, keeper_id, fence) =
+        expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
+    let receipt = ready_receipt(&slot_id, &keeper_id, fence.clone());
+    authority.record_protocol_ready(receipt.clone()).unwrap();
+
+    let binding = authority
+        .ready_handoff_binding("route-slot-01", ":01")
+        .unwrap();
+    assert_eq!(binding.slot_id, "route-slot-01");
+    assert_eq!(binding.keeper_id, keeper_id);
+    assert_eq!(binding.fence, fence);
+    assert_eq!(binding.route_user, "agent-browser-rdp-1");
+    assert_eq!(binding.display_name, ":01");
+    assert_eq!(binding.guacamole_connection_id, 1);
+    assert_eq!(
+        binding.guacamole_connection_uuid,
+        receipt.guacamole_connection_uuid
+    );
+    assert_eq!(
+        binding.public_operator_url,
+        "https://dashboard.example/operator"
+    );
+}
+
+#[test]
+fn handoff_binding_rejects_non_ready_display_and_missing_public_origin() {
+    let mut unconfigured = authority(1);
+    let (slot_id, keeper_id, fence) =
+        expect_start(&mut unconfigured, RouteKeeperStartPriority::Minimum);
+    assert_eq!(
+        unconfigured.ready_handoff_binding(&slot_id, ":01"),
+        Err("route_keeper_handoff_not_ready".to_string())
+    );
+    unconfigured
+        .record_protocol_ready(ready_receipt(&slot_id, &keeper_id, fence))
+        .unwrap();
+    assert_eq!(
+        unconfigured.ready_handoff_binding(&slot_id, ":99"),
+        Err("route_keeper_handoff_display_mismatch".to_string())
+    );
+    assert_eq!(
+        unconfigured.ready_handoff_binding(&slot_id, ":01"),
+        Err("route_keeper_handoff_public_operator_unconfigured".to_string())
+    );
+}
+
+#[test]
 fn reconcile_satisfies_minimum_then_warm_target_and_becomes_idempotent() {
     let mut authority = authority(7);
     assert_eq!(authority.policy.minimum_ready, 1);

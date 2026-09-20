@@ -1,14 +1,17 @@
 //! Durable remote-view handoffs for ordinary Browser Session Manager browsers.
 
 use agent_browser_service_model::{
-    BrowserSessionState, RemoteViewHandoff, ServiceState, ViewStreamProvider,
+    BrowserSessionState, ControlInputProvider, RemoteViewHandoff, RouteKeeperAuthority,
+    ServiceState, ViewStreamProvider,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 use super::presentation_inventory::StaticRouteInventory;
 use super::remote_view::RemoteViewRouteBinding;
-use super::remote_view_handoff::durable_remote_view_handoff_url;
+use super::remote_view_handoff::{
+    durable_remote_view_handoff_url, durable_remote_view_handoff_url_from_public_operator_url,
+};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 /// A ready Browser Session Manager handoff prepared from immutable state.
@@ -232,6 +235,123 @@ pub(crate) fn prepare_manager_handoff(
     })
 }
 
+pub(crate) fn prepare_keeper_manager_handoff(
+    response: &Value,
+    sessions: &BrowserSessionState,
+    authority: &RouteKeeperAuthority,
+    existing_handoffs: &BTreeMap<String, RemoteViewHandoff>,
+) -> Result<PreparedManagerHandoff, String> {
+    let data = response
+        .get("data")
+        .ok_or_else(|| "browser_session_handoff_navigation_data_missing".to_string())?;
+    let session_id = data
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+    let session = sessions
+        .sessions
+        .get(session_id)
+        .ok_or_else(|| "browser_session_handoff_session_missing".to_string())?;
+    let browser = sessions
+        .browsers
+        .get(&session.browser_id)
+        .ok_or_else(|| "browser_session_handoff_browser_missing".to_string())?;
+    let desktop = browser
+        .desktop
+        .as_ref()
+        .ok_or_else(|| "browser_session_handoff_desktop_missing".to_string())?;
+    let tab_id = data
+        .get("tabId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "browser_session_handoff_tab_id_missing".to_string())?;
+    let tab = sessions
+        .tabs
+        .get(tab_id)
+        .ok_or_else(|| "browser_session_handoff_tab_missing".to_string())?;
+    if tab.session_id != session.id || tab.browser_id != browser.id {
+        return Err("browser_session_handoff_attribution_mismatch".to_string());
+    }
+    let binding = authority.ready_handoff_binding(&desktop.route_id, &desktop.display_name)?;
+    let desired_url = data.get("url").and_then(Value::as_str).map(str::to_string);
+    let candidate_id = data
+        .get("handoffId")
+        .and_then(Value::as_str)
+        .filter(|handoff_id| !handoff_id.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let handoff_id = existing_handoffs
+        .values()
+        .find(|handoff| {
+            is_manager_handoff(handoff)
+                && handoff.browser_id.as_deref() == Some(browser.id.as_str())
+                && handoff.session_name.as_deref() == Some(session.name.as_str())
+                && handoff.tab_id.as_deref() == Some(tab.id.as_str())
+        })
+        .map(|handoff| handoff.id.clone())
+        .unwrap_or(candidate_id);
+    let handoff_url = durable_remote_view_handoff_url_from_public_operator_url(
+        &binding.public_operator_url,
+        &handoff_id,
+    )
+    .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+    let created_at = existing_handoffs
+        .get(&handoff_id)
+        .and_then(|handoff| handoff.created_at.clone())
+        .or_else(|| Some(now.clone()));
+    let handoff = RemoteViewHandoff {
+        id: handoff_id.clone(),
+        state: "ready".to_string(),
+        intent: json!({
+            "browserSessionManager": true,
+            "profileId": session.profile_id,
+            "sessionId": session.id,
+            "sessionName": session.name,
+            "browserId": browser.id,
+            "tabId": tab.id,
+            "targetId": tab.target_id,
+            "presentationSlotId": binding.slot_id,
+            "displayName": binding.display_name,
+        }),
+        handoff_url: Some(handoff_url.clone()),
+        desired_url,
+        profile_id: Some(session.profile_id.clone()),
+        browser_id: Some(browser.id.clone()),
+        session_name: Some(session.name.clone()),
+        tab_id: Some(tab.id.clone()),
+        target_id: Some(tab.target_id.clone()),
+        view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+        control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+        last_route_id: Some(binding.slot_id.clone()),
+        last_route_pool_entry_id: Some(binding.slot_id.clone()),
+        last_display_allocation_id: None,
+        created_at,
+        updated_at: Some(now.clone()),
+        last_resolved_at: Some(now.clone()),
+        last_resolution: Some(json!({
+            "status": "ready",
+            "resolved": true,
+            "browserSessionManager": true,
+            "browserId": browser.id,
+            "sessionName": session.name,
+            "tabId": tab.id,
+            "targetId": tab.target_id,
+            "presentationSlotId": binding.slot_id,
+            "operatorVisible": { "state": "ready" },
+        })),
+        presentation_receipt: None,
+    };
+    Ok(PreparedManagerHandoff {
+        handoff,
+        projection: ManagerHandoffResponseProjection {
+            handoff_id,
+            handoff_url,
+            operator_visible: json!({ "state": "ready" }),
+            view_stream_provider: ViewStreamProvider::RdpGateway,
+        },
+    })
+}
+
 /// Projects an already-prepared handoff into the legacy Service State registry.
 ///
 /// The caller owns preparation and persistence ordering. This compatibility
@@ -349,7 +469,9 @@ mod tests {
     use crate::native::service_store::JsonServiceStateStore;
     use agent_browser_service_model::{
         BrowserDesktopAssignment, ControlInputProvider, DisplayAllocation, ManagedBrowserInstance,
-        ManagedBrowserSession, ManagedBrowserTab, RemoteViewRoute, RoutePoolEntry,
+        ManagedBrowserSession, ManagedBrowserTab, RemoteViewRoute, RouteKeeperConnectionBinding,
+        RouteKeeperConnectionCatalog, RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction,
+        RouteKeeperStartPriority, RouteKeeperXrdpOwnershipWitness, RoutePoolEntry,
     };
     use std::collections::BTreeMap;
 
@@ -451,6 +573,132 @@ mod tests {
     fn static_inventory() -> StaticRouteInventory {
         StaticRouteInventory::from_json(r#"[{"id":"slot-a","target":{"displayName":":10"}}]"#)
             .unwrap()
+    }
+
+    fn ready_keeper_authority() -> RouteKeeperAuthority {
+        let mut authority = RouteKeeperAuthority::new(7).unwrap();
+        authority
+            .replace_connection_catalog(
+                RouteKeeperConnectionCatalog::with_provider_urls(
+                    "http://127.0.0.1:8193/guacamole/",
+                    "https://dashboard.example/operator",
+                    [RouteKeeperConnectionBinding {
+                        slot_id: "route-slot-01".to_string(),
+                        connection_key: "route-01".to_string(),
+                        connection_name: "Agent Browser Route 01".to_string(),
+                        route_user: "agent-browser-rdp-1".to_string(),
+                        guacamole_connection_id: 1,
+                    }],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
+            RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                fence,
+                priority: RouteKeeperStartPriority::Minimum,
+            } => (slot_id, keeper_id, fence),
+            other => panic!("expected minimum start, got {other:?}"),
+        };
+        authority
+            .record_protocol_ready(RouteKeeperProtocolReadyReceipt {
+                slot_id,
+                keeper_id,
+                fence,
+                guacamole_connection_uuid: "guacamole-01".to_string(),
+                xrdp_session_id: "xrdp-01".to_string(),
+                display_name: ":10".to_string(),
+                xrdp_ownership: Some(RouteKeeperXrdpOwnershipWitness {
+                    schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
+                    boot_id: "boot-fixture".to_string(),
+                    route_user: "agent-browser-rdp-1".to_string(),
+                    route_uid: 2001,
+                    session_id: "xrdp-01".to_string(),
+                    session_service: "xrdp-sesman".to_string(),
+                    session_scope: "session-xrdp-01.scope".to_string(),
+                    scope_invocation_id: "invocation-fixture".to_string(),
+                    cgroup_path: "/user.slice/user-2001.slice/session-xrdp-01.scope".to_string(),
+                    cgroup_device: 28,
+                    cgroup_inode: 1001,
+                    leader_pid: 4101,
+                    leader_start_ticks: 5101,
+                    x_server_pid: 4102,
+                    x_server_start_ticks: 5102,
+                    display_name: ":10".to_string(),
+                    x11_socket_inode: 6101,
+                }),
+                observed_at: "2026-09-19T22:00:00Z".to_string(),
+            })
+            .unwrap();
+        authority
+    }
+
+    fn keeper_managed_sessions() -> BrowserSessionState {
+        let mut sessions = managed_sessions();
+        sessions
+            .browsers
+            .get_mut("browser-a")
+            .unwrap()
+            .desktop
+            .as_mut()
+            .unwrap()
+            .route_id = "route-slot-01".to_string();
+        sessions
+    }
+
+    #[test]
+    fn keeper_handoff_is_opaque_and_reuses_logical_identity_without_legacy_state() {
+        let authority = ready_keeper_authority();
+        let sessions = keeper_managed_sessions();
+        let response = manager_navigation_response();
+        let first =
+            prepare_keeper_manager_handoff(&response, &sessions, &authority, &BTreeMap::new())
+                .unwrap();
+
+        assert_eq!(
+            first.projection.handoff_url,
+            format!(
+                "https://dashboard.example/remote-view/{}",
+                first.projection.handoff_id
+            )
+        );
+        assert_eq!(first.handoff.intent["presentationSlotId"], "route-slot-01");
+        assert_eq!(
+            first.handoff.view_stream_provider,
+            Some(ViewStreamProvider::RdpGateway)
+        );
+        assert_eq!(
+            first.handoff.control_input,
+            Some(ControlInputProvider::ManualAttachedDesktop)
+        );
+        let serialized = serde_json::to_string(&first.handoff).unwrap();
+        assert!(!serialized.contains("guacamole"));
+        assert!(!serialized.contains("127.0.0.1:8193"));
+
+        let existing = BTreeMap::from([(first.handoff.id.clone(), first.handoff.clone())]);
+        let replay =
+            prepare_keeper_manager_handoff(&response, &sessions, &authority, &existing).unwrap();
+        assert_eq!(replay.handoff.id, first.handoff.id);
+        assert_eq!(replay.handoff.handoff_url, first.handoff.handoff_url);
+        assert_eq!(replay.handoff.created_at, first.handoff.created_at);
+    }
+
+    #[test]
+    fn keeper_handoff_rejects_non_ready_route_before_publishing() {
+        let mut authority = ready_keeper_authority();
+        authority.records.get_mut("route-slot-01").unwrap().phase =
+            agent_browser_service_model::RouteKeeperPhase::Degraded;
+        assert_eq!(
+            prepare_keeper_manager_handoff(
+                &manager_navigation_response(),
+                &keeper_managed_sessions(),
+                &authority,
+                &BTreeMap::new(),
+            ),
+            Err("route_keeper_handoff_not_ready".to_string())
+        );
     }
 
     #[test]

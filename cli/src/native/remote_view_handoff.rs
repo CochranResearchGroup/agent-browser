@@ -563,6 +563,14 @@ pub fn durable_remote_view_handoff_url(
     route_binding: &RemoteViewRouteBinding,
     handoff_id: &str,
 ) -> Option<String> {
+    let public_url = route_descriptor_url(route_binding, "publicOperatorUrl")?;
+    durable_remote_view_handoff_url_from_public_operator_url(&public_url, handoff_id)
+}
+
+pub(crate) fn durable_remote_view_handoff_url_from_public_operator_url(
+    public_operator_url: &str,
+    handoff_id: &str,
+) -> Option<String> {
     let handoff_id = handoff_id.trim();
     if handoff_id.is_empty() {
         return None;
@@ -571,8 +579,7 @@ pub fn durable_remote_view_handoff_url(
     // A durable handoff is served by the authenticated dashboard ingress. A
     // provider external URL may point directly at Guacamole and must never be
     // rewritten into a dashboard-only `/remote-view/<id>` path.
-    let public_url = route_descriptor_url(route_binding, "publicOperatorUrl")?;
-    let mut url = url::Url::parse(&public_url).ok()?;
+    let mut url = url::Url::parse(public_operator_url).ok()?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
         return None;
     }

@@ -8,8 +8,9 @@ use agent_browser_service_model::{
     BrowserDesktopRoute, BrowserDisposableProfilePolicy, BrowserOpenReservation,
     BrowserProfileCatalog, BrowserSessionEffects, BrowserSessionManager,
     BrowserSessionManagerConfig, BrowserSessionState, CloseBrowserSessionResult,
-    CloseBrowserTabResult, OpenBrowserSession, OpenBrowserSessionResult, ReapBrowserSessionsResult,
-    RemoteViewHandoff, RouteKeeperAuthority, RouteKeeperPhase, ServiceState, SessionEndReason,
+    CloseBrowserTabResult, ControlInputProvider, OpenBrowserSession, OpenBrowserSessionResult,
+    ReapBrowserSessionsResult, RemoteViewHandoff, RouteKeeperAuthority, RouteKeeperPhase,
+    ServiceState, SessionEndReason, ViewStreamProvider,
 };
 use sha2::{Digest, Sha256};
 
@@ -66,30 +67,32 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
     )
 }
 
-pub(crate) fn load_current_remote_desktop_routes() -> Result<Vec<BrowserDesktopRoute>, String> {
-    let store = BrowserRuntimeSqliteStore::default_sqlite()?;
-    route_keeper_desktop_routes(&store.load_route_keeper_authority()?)
-}
-
-fn route_keeper_desktop_routes(
+pub(crate) fn route_keeper_desktop_routes(
     authority: &RouteKeeperAuthority,
 ) -> Result<Vec<BrowserDesktopRoute>, String> {
     authority.projection()?;
-    Ok(authority
+    authority
         .records
         .values()
-        .filter_map(|record| {
-            if record.phase != RouteKeeperPhase::Ready {
-                return None;
-            }
-            let ready = record.protocol_ready.as_ref()?;
-            Some(BrowserDesktopRoute {
-                id: record.slot_id.clone(),
-                display_name: ready.display_name.clone(),
+        .filter(|record| record.phase == RouteKeeperPhase::Ready)
+        .map(|record| {
+            let ready = record
+                .protocol_ready
+                .as_ref()
+                .ok_or_else(|| "route_keeper_handoff_ready_receipt_missing".to_string())?;
+            let binding = authority.ready_handoff_binding(&record.slot_id, &ready.display_name)?;
+            super::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+                &binding.public_operator_url,
+                "preflight",
+            )
+            .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+            Ok(BrowserDesktopRoute {
+                id: binding.slot_id,
+                display_name: binding.display_name,
                 healthy: true,
             })
         })
-        .collect())
+        .collect()
 }
 
 pub(crate) fn browser_session_navigation_requires_handoff(
@@ -117,6 +120,10 @@ pub(crate) trait BrowserSessionPersistence {
 
     fn load_manager_handoffs(&self) -> Result<BTreeMap<String, RemoteViewHandoff>, String> {
         Ok(BTreeMap::new())
+    }
+
+    fn save_manager_handoff(&mut self, _handoff: &RemoteViewHandoff) -> Result<(), String> {
+        Err("browser_session_handoff_persistence_unsupported".to_string())
     }
 
     fn reserve_operation(
@@ -207,6 +214,10 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
             .map(|registry: BrowserManagerHandoffRegistry| registry.handoffs)
     }
 
+    fn save_manager_handoff(&mut self, handoff: &RemoteViewHandoff) -> Result<(), String> {
+        BrowserRuntimeSqliteStore::save_manager_handoff(self, handoff)
+    }
+
     fn reserve_operation(
         &mut self,
         operation_id: &str,
@@ -266,6 +277,15 @@ pub(crate) struct BrowserSessionHostConfig {
     pub(crate) session_idle_timeout_ms: u64,
     pub(crate) remote_desktop_routes: Vec<BrowserDesktopRoute>,
     pub(crate) default_disposable_policy: Option<BrowserDisposableProfilePolicy>,
+}
+
+#[derive(Clone, Copy)]
+enum ManagerHandoffAuthority<'a> {
+    Legacy {
+        service: &'a ServiceState,
+        inventory: &'a StaticRouteInventory,
+    },
+    Keeper(&'a RouteKeeperAuthority),
 }
 
 pub(crate) struct BrowserSessionHost<P, E> {
@@ -503,6 +523,123 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }))
     }
 
+    pub(crate) fn resolve_manager_handoff_with_keeper(
+        &mut self,
+        handoff: &RemoteViewHandoff,
+        authority: &RouteKeeperAuthority,
+        activity_at_ms: u64,
+    ) -> Result<serde_json::Value, String> {
+        if !super::browser_session_handoff::is_manager_handoff(handoff) {
+            return Err("browser_session_handoff_not_manager_owned".to_string());
+        }
+        if handoff.state != "ready" {
+            return Err("browser_session_handoff_not_ready".to_string());
+        }
+        let session_id = handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+        let session = self
+            .state
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
+        if session.expires_at_ms < activity_at_ms {
+            return Err("browser_session_handoff_session_expired".to_string());
+        }
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_browser_missing".to_string())?;
+        let tab_id = handoff
+            .tab_id
+            .as_deref()
+            .ok_or_else(|| "browser_session_handoff_tab_missing".to_string())?;
+        let tab = self
+            .state
+            .tabs
+            .get(tab_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_tab_closed".to_string())?;
+        if handoff.profile_id.as_deref() != Some(session.profile_id.as_str())
+            || handoff.browser_id.as_deref() != Some(browser.id.as_str())
+            || handoff.session_name.as_deref() != Some(session.name.as_str())
+            || handoff.target_id.as_deref() != Some(tab.target_id.as_str())
+            || tab.browser_id != browser.id
+            || tab.session_id != session.id
+        {
+            return Err("browser_session_handoff_identity_changed".to_string());
+        }
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or_else(|| "browser_session_handoff_desktop_missing".to_string())?;
+        let binding = authority.ready_handoff_binding(&desktop.route_id, &desktop.display_name)?;
+        if handoff
+            .intent
+            .get("presentationSlotId")
+            .and_then(serde_json::Value::as_str)
+            != Some(binding.slot_id.as_str())
+            || handoff.last_route_id.as_deref() != Some(binding.slot_id.as_str())
+            || handoff.view_stream_provider != Some(ViewStreamProvider::RdpGateway)
+            || handoff.control_input != Some(ControlInputProvider::ManualAttachedDesktop)
+        {
+            return Err("browser_session_handoff_presentation_identity_changed".to_string());
+        }
+        let handoff_url =
+            super::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+                &binding.public_operator_url,
+                &handoff.id,
+            )
+            .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+        if handoff.handoff_url.as_deref() != Some(handoff_url.as_str()) {
+            return Err("browser_session_handoff_opaque_url_changed".to_string());
+        }
+
+        let focused = self.focus_browser(&browser.id, Some(&tab.target_id), activity_at_ms)?;
+        if focused.tab_id.as_deref() != Some(tab.id.as_str())
+            || focused.target_id.as_deref() != Some(tab.target_id.as_str())
+        {
+            return Err("browser_session_handoff_focus_identity_changed".to_string());
+        }
+        let presentation_generation = binding.fence.operation_generation;
+        let presentation_receipt = serde_json::json!({
+            "generation": presentation_generation,
+            "logicalBrowserId": browser.id,
+            "targetId": tab.target_id,
+            "requiredStreamProvider": ViewStreamProvider::RdpGateway,
+            "observedStreamProvider": ViewStreamProvider::RdpGateway,
+            "state": "ready",
+            "browserSessionManager": true,
+            "presentationSlotId": binding.slot_id,
+            "keeperId": binding.keeper_id,
+            "hostGeneration": binding.fence.host_generation,
+            "operationId": binding.fence.operation_id,
+            "catalogDigest": binding.fence.connection_catalog_digest,
+        });
+        Ok(serde_json::json!({
+            "status": "ready",
+            "resolved": true,
+            "browserSessionManager": true,
+            "handoffId": handoff.id,
+            "handoffUrl": handoff_url,
+            "browserId": browser.id,
+            "sessionName": session.name,
+            "tabId": tab.id,
+            "targetId": tab.target_id,
+            "viewStreamProvider": ViewStreamProvider::RdpGateway,
+            "requiredViewStreamProvider": ViewStreamProvider::RdpGateway,
+            "controlInput": ControlInputProvider::ManualAttachedDesktop,
+            "operatorVisible": { "state": "ready" },
+            "presentationGeneration": presentation_generation,
+            "presentationReceipt": presentation_receipt,
+        }))
+    }
+
     pub(crate) fn new_tab(
         &mut self,
         session_id: &str,
@@ -550,6 +687,36 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
 
     pub(crate) fn manager_handoff(&self, handoff_id: &str) -> Option<&RemoteViewHandoff> {
         self.handoffs.get(handoff_id)
+    }
+
+    pub(crate) fn attach_keeper_manager_handoff(
+        &mut self,
+        response: &mut serde_json::Value,
+        authority: &RouteKeeperAuthority,
+    ) -> Result<(), String> {
+        if response.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
+            return Ok(());
+        }
+        let prepared = super::browser_session_handoff::prepare_keeper_manager_handoff(
+            response,
+            &self.state,
+            authority,
+            &self.handoffs,
+        )?;
+        self.persistence.save_manager_handoff(&prepared.handoff)?;
+        self.handoffs
+            .insert(prepared.handoff.id.clone(), prepared.handoff);
+        if let (Some(data), Some(projection)) = (
+            response
+                .get_mut("data")
+                .and_then(serde_json::Value::as_object_mut),
+            prepared.projection.as_json().as_object(),
+        ) {
+            for (key, value) in projection {
+                data.insert(key.clone(), value.clone());
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn has_operation(&self, operation_id: &str) -> Result<bool, String> {
@@ -602,7 +769,39 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .cloned()
             .unwrap_or(serde_json::Value::Null);
         let baseline_state = self.state.clone();
-        let result = self.journaled_open_with_handoff_result(command, service, inventory);
+        let result = self.journaled_open_with_handoff_result(
+            command,
+            ManagerHandoffAuthority::Legacy { service, inventory },
+        );
+        match result {
+            Ok(response) => response,
+            Err(error) => {
+                self.state = self
+                    .persistence
+                    .load_session_state()
+                    .unwrap_or(baseline_state);
+                serde_json::json!({ "id": id, "success": false, "error": error })
+            }
+        }
+    }
+
+    pub(crate) fn handle_journaled_open_with_keeper_handoff(
+        &mut self,
+        command: &serde_json::Value,
+        authority: &RouteKeeperAuthority,
+    ) -> serde_json::Value
+    where
+        E: ReservedBrowserRecoveryEffects,
+    {
+        let id = command
+            .get("id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let baseline_state = self.state.clone();
+        let result = self.journaled_open_with_handoff_result(
+            command,
+            ManagerHandoffAuthority::Keeper(authority),
+        );
         match result {
             Ok(response) => response,
             Err(error) => {
@@ -618,8 +817,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     fn journaled_open_with_handoff_result(
         &mut self,
         command: &serde_json::Value,
-        service: &ServiceState,
-        inventory: &StaticRouteInventory,
+        handoff_authority: ManagerHandoffAuthority<'_>,
     ) -> Result<serde_json::Value, String>
     where
         E: ReservedBrowserRecoveryEffects,
@@ -735,6 +933,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .persistence
             .reserve_operation(operation_id, owner_key, request)?
             .ok_or_else(|| "browser_runtime_operation_persistence_unsupported".to_string())?;
+        if operation.state != BrowserRuntimeOperationState::Committed {
+            if let ManagerHandoffAuthority::Keeper(authority) = handoff_authority {
+                preflight_keeper_handoff_intent(&operation.request, authority)?;
+            }
+        }
         let mut launch_authorized = existing_operation
             .as_ref()
             .is_none_or(|operation| operation.state == BrowserRuntimeOperationState::Prepared);
@@ -905,13 +1108,25 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             )?;
                         }
                         "tab_acquired" => {
-                            let prepared = super::browser_session_handoff::prepare_manager_handoff(
-                                &response,
-                                &self.state,
-                                service,
-                                inventory,
-                                &self.handoffs,
-                            )?;
+                            let prepared = match handoff_authority {
+                                ManagerHandoffAuthority::Legacy { service, inventory } => {
+                                    super::browser_session_handoff::prepare_manager_handoff(
+                                        &response,
+                                        &self.state,
+                                        service,
+                                        inventory,
+                                        &self.handoffs,
+                                    )?
+                                }
+                                ManagerHandoffAuthority::Keeper(authority) => {
+                                    super::browser_session_handoff::prepare_keeper_manager_handoff(
+                                        &response,
+                                        &self.state,
+                                        authority,
+                                        &self.handoffs,
+                                    )?
+                                }
+                            };
                             let mut response = response;
                             if let (Some(data), Some(projection)) = (
                                 response
@@ -1220,6 +1435,22 @@ where
         &mut self,
         command: &serde_json::Value,
     ) -> serde_json::Value {
+        self.handle_managed_navigation_command_with_authority(command, None)
+    }
+
+    pub(crate) fn handle_managed_navigation_command_with_keeper(
+        &mut self,
+        command: &serde_json::Value,
+        authority: &RouteKeeperAuthority,
+    ) -> serde_json::Value {
+        self.handle_managed_navigation_command_with_authority(command, Some(authority))
+    }
+
+    fn handle_managed_navigation_command_with_authority(
+        &mut self,
+        command: &serde_json::Value,
+        authority: Option<&RouteKeeperAuthority>,
+    ) -> serde_json::Value {
         let id = command
             .get("id")
             .cloned()
@@ -1229,6 +1460,9 @@ where
                 .get("activityAtMs")
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or_else(current_unix_ms);
+            if let Some(authority) = authority {
+                self.preflight_keeper_navigation_command(command, authority)?;
+            }
             let opened = self.open_request_from_command(command, now_ms)?;
             let tab = self.tab_for_navigation(&opened.session_id, now_ms)?;
             let session = self
@@ -1281,6 +1515,81 @@ where
             Ok(data) => serde_json::json!({ "id": id, "success": true, "data": data }),
             Err(error) => serde_json::json!({ "id": id, "success": false, "error": error }),
         }
+    }
+
+    pub(crate) fn preflight_keeper_navigation_command(
+        &self,
+        command: &serde_json::Value,
+        authority: &RouteKeeperAuthority,
+    ) -> Result<(), String> {
+        let activity_at_ms = command
+            .get("activityAtMs")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms);
+        let reusable_browser = if let Some(session_id) = optional_string(command, "sessionId") {
+            let session = self
+                .state
+                .sessions
+                .get(session_id)
+                .filter(|session| activity_at_ms < session.expires_at_ms)
+                .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+            Some(
+                self.state
+                    .browsers
+                    .get(&session.browser_id)
+                    .ok_or_else(|| "browser_session_browser_missing".to_string())?,
+            )
+        } else {
+            let session_name = required_string(command, "sessionName")?;
+            let profile_id = required_string(command, "profileId")?;
+            let matching_session = self.state.sessions.values().find(|session| {
+                session.name == session_name
+                    && session.profile_id == profile_id
+                    && activity_at_ms < session.expires_at_ms
+            });
+            matching_session
+                .and_then(|session| self.state.browsers.get(&session.browser_id))
+                .or_else(|| {
+                    self.state
+                        .browsers
+                        .values()
+                        .find(|browser| browser.profile_id == profile_id)
+                })
+        };
+        let live_display_names = self
+            .state
+            .browsers
+            .values()
+            .filter_map(|browser| {
+                browser
+                    .desktop
+                    .as_ref()
+                    .map(|desktop| desktop.display_name.clone())
+            })
+            .collect::<Vec<_>>();
+        let desktop = if let Some(browser) = reusable_browser {
+            browser
+                .desktop
+                .clone()
+                .ok_or_else(|| "browser_session_open_desktop_missing".to_string())?
+        } else {
+            agent_browser_service_model::select_least_crowded_browser_desktop(
+                &self.manager_config.remote_desktop_routes,
+                &live_display_names,
+            )?
+        };
+        let binding = authority.ready_handoff_binding(&desktop.route_id, &desktop.display_name)?;
+        let preflight_id = command
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.is_empty())
+            .unwrap_or("preflight");
+        super::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+            &binding.public_operator_url,
+            preflight_id,
+        )
+        .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+        Ok(())
     }
 
     /// Route an ordinary browser command through an already active managed
@@ -1379,6 +1688,28 @@ fn deterministic_manager_browser_id(operation_id: &str, profile_id: &str) -> Str
     format!("browser:{profile_id}:operation:{suffix}")
 }
 
+fn preflight_keeper_handoff_intent(
+    request: &serde_json::Value,
+    authority: &RouteKeeperAuthority,
+) -> Result<(), String> {
+    let route_id = request["intent"]["slot"]["routeId"]
+        .as_str()
+        .ok_or_else(|| "browser_runtime_operation_route_id_missing".to_string())?;
+    let display_name = request["intent"]["slot"]["displayName"]
+        .as_str()
+        .ok_or_else(|| "browser_runtime_operation_display_name_missing".to_string())?;
+    let handoff_id = request["intent"]["handoff"]["id"]
+        .as_str()
+        .ok_or_else(|| "browser_runtime_operation_handoff_id_missing".to_string())?;
+    let binding = authority.ready_handoff_binding(route_id, display_name)?;
+    super::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+        &binding.public_operator_url,
+        handoff_id,
+    )
+    .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+    Ok(())
+}
+
 fn observation_response(observation: &serde_json::Value) -> Result<serde_json::Value, String> {
     observation
         .get("response")
@@ -1439,13 +1770,17 @@ mod tests {
         let mut authority = RouteKeeperAuthority::new(4).unwrap();
         authority
             .replace_connection_catalog(
-                RouteKeeperConnectionCatalog::new([RouteKeeperConnectionBinding {
-                    slot_id: "route-slot-01".to_string(),
-                    connection_key: "route-01".to_string(),
-                    connection_name: "Agent Browser Route 01".to_string(),
-                    route_user: "agent-browser-rdp-1".to_string(),
-                    guacamole_connection_id: 1,
-                }])
+                RouteKeeperConnectionCatalog::with_provider_urls(
+                    "http://127.0.0.1:8193/guacamole/",
+                    "https://dashboard.example/operator",
+                    [RouteKeeperConnectionBinding {
+                        slot_id: "route-slot-01".to_string(),
+                        connection_key: "route-01".to_string(),
+                        connection_name: "Agent Browser Route 01".to_string(),
+                        route_user: "agent-browser-rdp-1".to_string(),
+                        guacamole_connection_id: 1,
+                    }],
+                )
                 .unwrap(),
             )
             .unwrap();
@@ -1503,6 +1838,80 @@ mod tests {
                 healthy: true,
             }]
         );
+        assert_eq!(
+            route_keeper_desktop_routes(&keeper_authority_for_handoff("not a public URL")),
+            Err("browser_session_handoff_public_operator_url_invalid".to_string())
+        );
+    }
+
+    fn keeper_authority_for_handoff(public_operator_url: &str) -> RouteKeeperAuthority {
+        let mut authority = RouteKeeperAuthority::new(7).unwrap();
+        authority
+            .replace_connection_catalog(
+                RouteKeeperConnectionCatalog::with_provider_urls(
+                    "http://127.0.0.1:8193/guacamole/",
+                    public_operator_url,
+                    [RouteKeeperConnectionBinding {
+                        slot_id: "route-slot-01".to_string(),
+                        connection_key: "route-01".to_string(),
+                        connection_name: "Agent Browser Route 01".to_string(),
+                        route_user: "agent-browser-rdp-1".to_string(),
+                        guacamole_connection_id: 1,
+                    }],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
+            RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                fence,
+                priority: RouteKeeperStartPriority::Minimum,
+            } => (slot_id, keeper_id, fence),
+            other => panic!("expected minimum start, got {other:?}"),
+        };
+        authority
+            .record_protocol_ready(
+                agent_browser_service_model::RouteKeeperProtocolReadyReceipt {
+                    slot_id,
+                    keeper_id,
+                    fence,
+                    guacamole_connection_uuid: "guacamole-01".to_string(),
+                    xrdp_session_id: "xrdp-01".to_string(),
+                    display_name: ":10".to_string(),
+                    xrdp_ownership: Some(
+                        agent_browser_service_model::RouteKeeperXrdpOwnershipWitness {
+                            schema_version: "agent-browser.route-keeper-xrdp-ownership.v1"
+                                .to_string(),
+                            boot_id: "boot-fixture".to_string(),
+                            route_user: "agent-browser-rdp-1".to_string(),
+                            route_uid: 2001,
+                            session_id: "xrdp-01".to_string(),
+                            session_service: "xrdp-sesman".to_string(),
+                            session_scope: "session-xrdp-01.scope".to_string(),
+                            scope_invocation_id: "invocation-fixture".to_string(),
+                            cgroup_path: "/user.slice/user-2001.slice/session-xrdp-01.scope"
+                                .to_string(),
+                            cgroup_device: 28,
+                            cgroup_inode: 1001,
+                            leader_pid: 4101,
+                            leader_start_ticks: 5101,
+                            x_server_pid: 4102,
+                            x_server_start_ticks: 5102,
+                            display_name: ":10".to_string(),
+                            x11_socket_inode: 6101,
+                        },
+                    ),
+                    observed_at: "2026-09-19T22:00:00Z".to_string(),
+                },
+            )
+            .unwrap();
+        authority
+    }
+
+    fn ready_keeper_authority_for_handoff() -> RouteKeeperAuthority {
+        keeper_authority_for_handoff("https://dashboard.example/operator")
     }
 
     #[derive(Default)]
@@ -1653,8 +2062,16 @@ mod tests {
                 operation.request["intent"]["browser"]["id"],
                 deterministic_manager_browser_id("journal-open-1", "work")
             );
-            assert_eq!(operation.request["intent"]["slot"]["routeId"], "slot-a");
-            assert_eq!(operation.request["intent"]["slot"]["displayName"], ":10");
+            let reserved_desktop =
+                desktop.expect("journaled opens reserve a desktop before launch");
+            assert_eq!(
+                operation.request["intent"]["slot"]["routeId"],
+                reserved_desktop.route_id
+            );
+            assert_eq!(
+                operation.request["intent"]["slot"]["displayName"],
+                reserved_desktop.display_name
+            );
             assert_eq!(operation.request["intent"]["handoff"]["state"], "pending");
             assert!(store.load_session_state()?.sessions.is_empty());
             self.launches.fetch_add(1, Ordering::SeqCst);
@@ -1850,6 +2267,68 @@ mod tests {
         assert_eq!(host.state().sessions.len(), 1);
         assert_eq!(host.state().tabs.len(), 1);
         assert_eq!(host.state().navigation_history.len(), 1);
+    }
+
+    #[test]
+    fn keeper_navigation_rejects_invalid_public_origin_before_open_or_navigation() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let authority = keeper_authority_for_handoff("not a public URL");
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: vec![BrowserDesktopRoute {
+                    id: "route-slot-01".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                }],
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+
+        let response = host.handle_managed_navigation_command_with_keeper(
+            &serde_json::json!({
+                "id": "navigate-with-invalid-origin",
+                "action": "browser_session_navigate",
+                "sessionName": "alice",
+                "profileId": "work",
+                "url": "https://example.test/",
+                "headers": {"Remote-User": "operator"},
+                "activityAtMs": 1_000
+            }),
+            &authority,
+        );
+
+        assert_eq!(response["success"], false);
+        assert_eq!(
+            response["error"],
+            "browser_session_handoff_public_operator_url_invalid"
+        );
+        assert!(host.state().sessions.is_empty());
+        assert!(host.state().browsers.is_empty());
+        assert!(host.state().tabs.is_empty());
+        assert!(host.state().navigation_history.is_empty());
     }
 
     struct TempDirectory(PathBuf);
@@ -2103,7 +2582,7 @@ mod tests {
             session_idle_timeout_ms: 300_000,
             remote_desktop_routes: vec![
                 BrowserDesktopRoute {
-                    id: "slot-a".to_string(),
+                    id: "route-slot-01".to_string(),
                     display_name: ":10".to_string(),
                     healthy: true,
                 },
@@ -2144,7 +2623,7 @@ mod tests {
                             "profileId": "work",
                             "disposition": "reuse_or_launch"
                         },
-                        "slot": {"routeId": "slot-a", "displayName": ":10", "liveBrowserCount": 0},
+                        "slot": {"routeId": "route-slot-01", "displayName": ":10", "liveBrowserCount": 0},
                         "handoff": {
                             "id": deterministic_manager_handoff_id("journal-open-1"),
                             "state": "pending"
@@ -2155,6 +2634,41 @@ mod tests {
             .unwrap();
         assert_eq!(prepared.state, BrowserRuntimeOperationState::Prepared);
         drop(prepared_store);
+
+        let malformed_public_origin = keeper_authority_for_handoff("not a public URL");
+        let rejected_before_launch = {
+            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+                database_path: database_path.clone(),
+                launches: launches.clone(),
+                reserved_launches: reserved_launches.clone(),
+                recovery_probes: recovery_probes.clone(),
+                recover_reserved_browser: false,
+                inner: FixtureRuntime {
+                    live: true,
+                    ..FixtureRuntime::default()
+                },
+                fail_reserved_launch_once: false,
+                fail_initial_tab_once: false,
+            });
+            let mut host =
+                BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap();
+            host.handle_journaled_open_with_keeper_handoff(&command, &malformed_public_origin)
+        };
+        assert_eq!(rejected_before_launch["success"], false);
+        assert_eq!(
+            rejected_before_launch["error"],
+            "browser_session_handoff_public_operator_url_invalid"
+        );
+        assert_eq!(launches.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            BrowserRuntimeSqliteStore::open(&database_path)
+                .unwrap()
+                .load_operation("journal-open-1")
+                .unwrap()
+                .state,
+            BrowserRuntimeOperationState::Prepared
+        );
 
         let first = {
             let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
@@ -2241,7 +2755,9 @@ mod tests {
             fail_initial_tab_once: false,
         });
         let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
-        let ready = restarted.handle_journaled_open_with_handoff(&command, &service, &inventory);
+        let keeper_authority = ready_keeper_authority_for_handoff();
+        let ready =
+            restarted.handle_journaled_open_with_keeper_handoff(&command, &keeper_authority);
 
         assert_eq!(ready["success"], true);
         assert_eq!(ready["data"]["operatorVisible"]["state"], "ready");
@@ -2254,7 +2770,8 @@ mod tests {
         let handoff_id = ready["data"]["handoffId"].as_str().unwrap();
         assert!(restarted.manager_handoff(handoff_id).is_some());
 
-        let replay = restarted.handle_journaled_open_with_handoff(&command, &service, &inventory);
+        let replay =
+            restarted.handle_journaled_open_with_keeper_handoff(&command, &keeper_authority);
         assert_eq!(replay, ready);
         assert_eq!(launches.load(Ordering::SeqCst), 1);
         drop(restarted);
@@ -2894,6 +3411,122 @@ mod tests {
         assert_eq!(
             persisted_session.current_tab_id.as_deref(),
             Some(tab.tab_id.as_str())
+        );
+    }
+
+    #[test]
+    fn keeper_handoff_persists_in_sqlite_and_fails_before_focus_when_keeper_is_not_ready() {
+        let directory = TempDirectory::new();
+        let session_path = directory.0.join("browser-session-state.json");
+        let catalog_path = directory.0.join("browser-profile-catalog.json");
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let authority = ready_keeper_authority_for_handoff();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let tab = host.new_tab(&opened.session_id, 1_100).unwrap();
+        let mut response = serde_json::json!({"success": true, "data": {
+            "sessionId": opened.session_id,
+            "browserId": opened.browser_id,
+            "tabId": tab.tab_id,
+            "targetId": tab.target_id,
+            "url": "https://example.test/login"
+        }});
+        host.attach_keeper_manager_handoff(&mut response, &authority)
+            .unwrap();
+        let handoff_id = response["data"]["handoffId"].as_str().unwrap().to_string();
+        let handoff = host.manager_handoff(&handoff_id).unwrap().clone();
+        assert_eq!(
+            response["data"]["handoffUrl"],
+            format!("https://dashboard.example/remote-view/{handoff_id}")
+        );
+        assert!(BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .contains_key(&handoff_id));
+
+        let activity_before = host.state().sessions[&opened.session_id].last_activity_at_ms;
+        let mut pending_handoff = handoff.clone();
+        pending_handoff.state = "pending".to_string();
+        assert_eq!(
+            host.resolve_manager_handoff_with_keeper(&pending_handoff, &authority, 2_000),
+            Err("browser_session_handoff_not_ready".to_string())
+        );
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            activity_before
+        );
+        let mut failed_authority = authority.clone();
+        failed_authority
+            .records
+            .get_mut("route-slot-01")
+            .unwrap()
+            .phase = RouteKeeperPhase::Degraded;
+        assert_eq!(
+            host.resolve_manager_handoff_with_keeper(&handoff, &failed_authority, 2_000),
+            Err("route_keeper_handoff_not_ready".to_string())
+        );
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            activity_before
+        );
+
+        let resolved = host
+            .resolve_manager_handoff_with_keeper(&handoff, &authority, 2_000)
+            .unwrap();
+        assert_eq!(resolved["status"], "ready");
+        assert_eq!(resolved["presentationGeneration"], 1);
+        assert_eq!(
+            resolved["presentationReceipt"]["presentationSlotId"],
+            "route-slot-01"
+        );
+        assert!(resolved.get("providerExternalUrl").is_none());
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            2_000
         );
     }
 

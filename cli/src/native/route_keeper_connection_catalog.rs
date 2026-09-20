@@ -17,6 +17,7 @@ const MAX_DOCUMENT_BYTES: u64 = 64 * 1024;
 struct PublicationDocument {
     schema_version: String,
     provider_base: String,
+    public_operator_url: String,
     bindings: Vec<RouteKeeperConnectionBinding>,
 }
 
@@ -38,8 +39,9 @@ fn publish_document(
     if document.schema_version != PUBLICATION_SCHEMA {
         return Err("route_keeper_connection_catalog_publication_schema_invalid".to_string());
     }
-    let catalog = RouteKeeperConnectionCatalog::with_provider_base(
+    let catalog = RouteKeeperConnectionCatalog::with_provider_urls(
         document.provider_base,
+        document.public_operator_url,
         document.bindings,
     )?;
     let catalog_digest = catalog.digest()?;
@@ -132,6 +134,7 @@ mod tests {
         let document = serde_json::json!({
             "schemaVersion": "agent-browser.route-keeper-connection-catalog-publication.v1",
             "providerBase": "http://127.0.0.1:8193/guacamole/",
+            "publicOperatorUrl": "https://dashboard.example/operator",
             "bindings": (1_u32..=6).map(|sequence| serde_json::json!({
                 "slotId": format!("route-slot-{sequence:02}"),
                 "connectionKey": format!("route-{sequence:02}"),
@@ -153,6 +156,15 @@ mod tests {
                 .provider_base
                 .as_deref(),
             Some("http://127.0.0.1:8193/guacamole/")
+        );
+        assert_eq!(
+            store
+                .load_route_keeper_authority()
+                .unwrap()
+                .connection_catalog
+                .public_operator_url
+                .as_deref(),
+            Some("https://dashboard.example/operator")
         );
         let encoded = serde_json::to_string(&receipt).unwrap();
         assert!(!encoded.contains("Agent Browser Route"));
@@ -177,6 +189,7 @@ mod tests {
         let document = serde_json::json!({
             "schemaVersion": "agent-browser.route-keeper-connection-catalog-publication.v0",
             "providerBase": "http://127.0.0.1:8193/guacamole/",
+            "publicOperatorUrl": "https://dashboard.example/operator",
             "bindings": []
         });
 

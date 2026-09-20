@@ -22,6 +22,8 @@ pub struct RouteKeeperConnectionBinding {
 pub struct RouteKeeperConnectionCatalog {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_base: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_operator_url: Option<String>,
     pub bindings: BTreeMap<String, RouteKeeperConnectionBinding>,
 }
 
@@ -57,6 +59,21 @@ impl RouteKeeperConnectionCatalog {
         Ok(catalog)
     }
 
+    pub fn with_provider_urls(
+        provider_base: impl Into<String>,
+        public_operator_url: impl Into<String>,
+        bindings: impl IntoIterator<Item = RouteKeeperConnectionBinding>,
+    ) -> Result<Self, String> {
+        let mut catalog = Self::with_provider_base(provider_base, bindings)?;
+        let public_operator_url = public_operator_url.into();
+        if public_operator_url.trim().is_empty() {
+            return Err("route_keeper_connection_catalog_public_operator_invalid".to_string());
+        }
+        catalog.public_operator_url = Some(public_operator_url);
+        catalog.validate()?;
+        Ok(catalog)
+    }
+
     pub fn digest(&self) -> Result<String, String> {
         self.validate()?;
         let canonical = serde_json::to_vec(self)
@@ -71,6 +88,13 @@ impl RouteKeeperConnectionCatalog {
             .is_some_and(|provider_base| provider_base.trim().is_empty())
         {
             return Err("route_keeper_connection_catalog_provider_invalid".to_string());
+        }
+        if self
+            .public_operator_url
+            .as_ref()
+            .is_some_and(|public_operator_url| public_operator_url.trim().is_empty())
+        {
+            return Err("route_keeper_connection_catalog_public_operator_invalid".to_string());
         }
         let mut connection_keys = BTreeMap::new();
         let mut connection_names = BTreeMap::new();
@@ -182,6 +206,18 @@ pub struct RouteKeeperProtocolReadyReceipt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xrdp_ownership: Option<RouteKeeperXrdpOwnershipWitness>,
     pub observed_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteKeeperHandoffBinding {
+    pub slot_id: String,
+    pub keeper_id: String,
+    pub fence: RouteKeeperFence,
+    pub route_user: String,
+    pub display_name: String,
+    pub guacamole_connection_id: u64,
+    pub guacamole_connection_uuid: String,
+    pub public_operator_url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -442,6 +478,56 @@ impl RouteKeeperAuthority {
             desired_warm: self.policy.warm_target,
             minimum_satisfied: ready_count >= self.policy.minimum_ready,
             warm_target_satisfied: ready_count >= self.policy.warm_target,
+        })
+    }
+
+    pub fn ready_handoff_binding(
+        &self,
+        slot_id: &str,
+        display_name: &str,
+    ) -> Result<RouteKeeperHandoffBinding, String> {
+        self.validate()?;
+        let record = self
+            .records
+            .get(slot_id)
+            .ok_or_else(|| "route_keeper_handoff_slot_missing".to_string())?;
+        if record.phase != RouteKeeperPhase::Ready {
+            return Err("route_keeper_handoff_not_ready".to_string());
+        }
+        let ready = record
+            .protocol_ready
+            .as_ref()
+            .ok_or_else(|| "route_keeper_handoff_ready_receipt_missing".to_string())?;
+        if ready.display_name != display_name {
+            return Err("route_keeper_handoff_display_mismatch".to_string());
+        }
+        let binding = self
+            .connection_catalog
+            .bindings
+            .get(slot_id)
+            .ok_or_else(|| "route_keeper_handoff_connection_unconfigured".to_string())?;
+        let ownership = ready
+            .xrdp_ownership
+            .as_ref()
+            .ok_or_else(|| "route_keeper_ready_xrdp_ownership_missing".to_string())?;
+        if ownership.route_user != binding.route_user {
+            return Err("route_keeper_handoff_route_user_mismatch".to_string());
+        }
+        let public_operator_url = self
+            .connection_catalog
+            .public_operator_url
+            .as_ref()
+            .filter(|url| !url.trim().is_empty())
+            .ok_or_else(|| "route_keeper_handoff_public_operator_unconfigured".to_string())?;
+        Ok(RouteKeeperHandoffBinding {
+            slot_id: record.slot_id.clone(),
+            keeper_id: record.keeper_id.clone(),
+            fence: record.fence.clone(),
+            route_user: binding.route_user.clone(),
+            display_name: ready.display_name.clone(),
+            guacamole_connection_id: binding.guacamole_connection_id,
+            guacamole_connection_uuid: ready.guacamole_connection_uuid.clone(),
+            public_operator_url: public_operator_url.clone(),
         })
     }
 

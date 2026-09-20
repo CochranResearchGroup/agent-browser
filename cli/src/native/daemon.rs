@@ -14,7 +14,6 @@ use tokio::sync::{mpsc, watch, Mutex, Notify, RwLock};
 
 use super::action_runtime::DaemonState;
 use super::control_plane::{ControlPlaneHandle, ControlPlaneWorker};
-use super::service_store::ServiceStateRepository;
 use super::state;
 use super::stream::StreamServer;
 use crate::connection::write_daemon_process_identity;
@@ -46,7 +45,7 @@ fn require_keeper_handoff_resolution(
     if routes.is_empty() {
         return Err("browser_session_presentation_route_unavailable");
     }
-    Err("browser_session_keeper_handoff_resolution_pending")
+    Ok(())
 }
 
 /// Build the runtime host on the same bounded stack used for Service State
@@ -730,11 +729,18 @@ impl RuntimeHostRouter {
                 .is_some();
             let explicit_display = std::env::var_os("AGENT_BROWSER_SESSION_DISPLAY").is_some();
             let remote_open_candidate = action_is_open && has_named_profile && !explicit_display;
-            let routes = if publish_manager_handoff || remote_open_candidate {
-                super::browser_session_host::load_current_remote_desktop_routes()?
+            let keeper_authority = if publish_manager_handoff || remote_open_candidate {
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                Some(store.load_route_keeper_authority()?)
             } else {
-                Vec::new()
+                None
             };
+            let routes = keeper_authority
+                .as_ref()
+                .map(super::browser_session_host::route_keeper_desktop_routes)
+                .transpose()?
+                .unwrap_or_default();
             require_keeper_handoff_resolution(
                 publish_manager_handoff || remote_open_candidate,
                 &routes,
@@ -765,14 +771,19 @@ impl RuntimeHostRouter {
             if action == Some("browser_session_navigate") || journaled_open {
                 host.replace_remote_desktop_routes(routes);
             }
+            if publish_manager_handoff {
+                let authority = keeper_authority.as_ref().ok_or_else(|| {
+                    "browser_session_keeper_handoff_authority_missing".to_string()
+                })?;
+                host.preflight_keeper_navigation_command(&command, authority)?;
+            }
             let mut response = if journaled_open {
                 let repository =
                     super::service_store::LockedServiceStateRepository::default_json()?;
-                let service = repository.load_snapshot()?;
-                let inventory =
-                    super::presentation_inventory::StaticRouteInventory::from_environment()?;
-                let response =
-                    host.handle_journaled_open_with_handoff(&command, &service, &inventory);
+                let authority = keeper_authority.as_ref().ok_or_else(|| {
+                    "browser_session_keeper_handoff_authority_missing".to_string()
+                })?;
+                let response = host.handle_journaled_open_with_keeper_handoff(&command, authority);
                 if response.get("success").and_then(Value::as_bool) == Some(true) {
                     if let Some(handoff) = response
                         .get("data")
@@ -796,10 +807,12 @@ impl RuntimeHostRouter {
                 host.handle_command(&command)
             };
             if publish_manager_handoff {
-                let state = host.state();
-                if let Err(error) =
-                    super::browser_session_handoff::attach_manager_handoff(&mut response, state)
-                {
+                let authority = keeper_authority.as_ref().ok_or_else(|| {
+                    "browser_session_keeper_handoff_authority_missing".to_string()
+                })?;
+                if let Err(error) = host.attach_keeper_manager_handoff(&mut response, authority) {
+                    response["success"] = Value::Bool(false);
+                    response["error"] = Value::String(error.clone());
                     response["data"]["operatorVisible"] = serde_json::json!({
                         "state": "unavailable",
                         "reason": error,
@@ -913,30 +926,30 @@ impl RuntimeHostRouter {
                 .ok_or_else(|| {
                     "service_remote_view_handoff_resolve requires handoffId".to_string()
                 })?;
-            let repository = super::service_store::LockedServiceStateRepository::default_json()?;
-            let service = repository.load_snapshot()?;
-            let Some(handoff) = service.remote_view_handoffs.get(handoff_id).cloned() else {
+            let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+            let registry = store.load_handoff_registry()?;
+            let Some(handoff) = registry.handoffs.get(handoff_id).cloned() else {
                 return Ok(None);
             };
             if !super::browser_session_handoff::is_manager_handoff(&handoff) {
                 return Ok(None);
             }
-            let inventory =
-                super::presentation_inventory::StaticRouteInventory::from_environment()?;
+            let authority = store.load_route_keeper_authority()?;
             let mut host = browser_sessions
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
             if host.is_none() {
                 *host = Some(super::browser_session_host::load_default_browser_session_host()?);
             }
+            let host = host
+                .as_mut()
+                .ok_or_else(|| "browser_session_host_missing".to_string())?;
             let activity_at_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
                 .unwrap_or_default();
-            let resolved = host
-                .as_mut()
-                .ok_or_else(|| "browser_session_host_missing".to_string())?
-                .resolve_manager_handoff(&handoff, &service, &inventory, activity_at_ms)?;
+            let resolved =
+                host.resolve_manager_handoff_with_keeper(&handoff, &authority, activity_at_ms)?;
             let id = command.get("id").cloned().unwrap_or(Value::Null);
             Ok(Some(serde_json::json!({
                 "id": id,
@@ -1687,7 +1700,7 @@ mod tests {
     }
 
     #[test]
-    fn remote_open_fails_before_browser_effects_until_keeper_handoff_join_exists() {
+    fn remote_open_requires_at_least_one_ready_keeper_route() {
         assert_eq!(
             require_keeper_handoff_resolution(true, &[]),
             Err("browser_session_presentation_route_unavailable")
@@ -1701,7 +1714,7 @@ mod tests {
                     healthy: true,
                 }],
             ),
-            Err("browser_session_keeper_handoff_resolution_pending")
+            Ok(())
         );
         assert_eq!(require_keeper_handoff_resolution(false, &[]), Ok(()));
     }
