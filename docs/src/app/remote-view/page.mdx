@@ -89,9 +89,10 @@ requested-subject result.
 
 For an ordinary Browser Session Manager session, requested-scope readiness
 joins the exact ready handoff. The profile, browser, route, display, opaque URL,
-configured static viewer, and latest <code>operatorVisible.state=ready</code>
-resolution must agree. Stale legacy route-pool allocation metadata cannot veto
-that proof, and it cannot make a missing or non-ready manager handoff ready.
+current SQLite <code>Ready</code> route-keeper binding, and latest
+<code>operatorVisible.state=ready</code> resolution must agree. Stale legacy
+route-pool allocation metadata cannot veto that proof, and it cannot make a
+missing or non-ready manager handoff ready.
 
 ## Handle a checked-out route pool
 

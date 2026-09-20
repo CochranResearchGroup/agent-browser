@@ -538,8 +538,9 @@ agent-browser --json --session alice --runtime-profile <profile> open <url>
 Sessions that select the same exact profile share one healthy browser while
 retaining separate current tabs, command state, and heartbeats. Omitting the
 profile creates a session-scoped disposable profile. The ordinary path selects
-a healthy configured virtual desktop and static viewer without route, display,
-lease, hash, capability, or recovery-token input.
+a current SQLite `Ready` route-keeper binding, including its exact desktop and
+provider route, without route, display, lease, hash, capability, or
+recovery-token input.
 
 Use the route-bound `remote-view open` command only when a service client needs
 its advanced compatibility surface. It can select a concrete route-pool entry
@@ -797,7 +798,7 @@ blocking.
 
 For an ordinary Browser Session Manager session, requested-scope doctor
 readiness joins only the exact ready handoff. Its profile, browser, route,
-display, opaque URL, configured static viewer, and latest
+display, opaque URL, current SQLite `Ready` route-keeper binding, and latest
 `operatorVisible.state=ready` resolution must agree. Stale legacy route-pool
 allocation metadata cannot veto that proof and cannot make a missing or
 non-ready manager handoff ready.
@@ -1337,9 +1338,11 @@ Before provider mutation, run `pnpm development-runtime:provider-plan`,
 Cooper ingress after the provider-ready checkpoint. A green provider doctor is
 not capacity proof. Development Service Status must report non-null
 `presentationCapacity` before capacity acceptance.
-Provider preflight and apply currently fail closed until the runtime host owns
-route-keeper lifecycle and handoff resolution. The removed hidden-viewer
-bootstrap is not an accepted fallback.
+Provider apply publishes the reviewed public operator origin with the exact
+route-keeper connection catalog. Ordinary remote-required opens resolve only
+through a current SQLite `Ready` keeper and fail before browser effects when
+that exact binding is unavailable. The removed hidden-viewer bootstrap is not
+an accepted fallback.
 
 An installed v1 provider authority is upgradeable only when its loopback URL
 equals the new local diagnostic URL and every remaining provider identity is

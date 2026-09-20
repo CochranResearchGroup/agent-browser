@@ -112,9 +112,11 @@ pnpm smoke:development-browser-launch
 pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-dev.ecochran.dyndns.org
 ```
 
-Provider preflight and apply currently fail closed until the runtime host owns
-route-keeper lifecycle and handoff resolution. The removed hidden-viewer
-bootstrap is not an accepted fallback.
+Provider apply publishes the reviewed public operator origin with the exact
+route-keeper connection catalog. Ordinary remote-required opens resolve only
+through a current SQLite `Ready` keeper and fail before browser effects when
+that exact binding is unavailable. The removed hidden-viewer bootstrap is not
+an accepted fallback.
 
 Development runtime JSON status reports configured listener numbers under
 `ports`. Service process identities remain under `units.*.mainPid`. Doctor
@@ -759,8 +761,8 @@ Two named sessions that select `operator-review` share one healthy browser and
 retain separate current tabs and command state. If you omit
 `--runtime-profile`, the session receives a disposable profile that Agent
 Browser can reap after the session ends. The ordinary path selects a healthy
-configured virtual desktop and static viewer without route, display, lease,
-hash, or recovery-token input.
+current SQLite `Ready` route-keeper binding, including its exact desktop and
+provider route, without route, display, lease, hash, or recovery-token input.
 
 Require `operatorVisible.state` to be `ready`. Give the operator only the
 returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same

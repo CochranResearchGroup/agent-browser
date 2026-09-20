@@ -194,6 +194,16 @@ strict Clippy, focused keeper and host regressions, provider fixture, and two
 closed-world reviews pass. Cold-process adoption of non-`Absent` keeper state,
 keeper-backed handoff resolution, live supervisor health projection, and live
 readiness remain open; no live or installed-runtime effect occurred.
+Checkpoint `da9438a7`, qualified by `3922f138`, joins manager handoff creation
+and resolution to the current SQLite `Ready` route-keeper binding. Journaled
+opens validate the persisted route vector and opaque operator URL before
+browser effects, navigation revalidates the same binding, and daemon resolution
+reloads both the handoff registry and current keeper authority before focus.
+The daemon-boundary regression, focused gates, formatting, strict Clippy, and
+the complete provider-free Rust suite pass. Cold-process adoption or recovery
+for durable non-`Absent` keeper state, live supervisor health and readiness,
+public capacity use, remaining SQLite domains, and Desktop Services control
+remain open; no live or installed-runtime effect occurred.
 
 ## P216 | Service Model Extraction Landing
 

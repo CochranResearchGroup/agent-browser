@@ -1620,6 +1620,30 @@ keeper tasks, live supervisor health projection, keeper-backed handoff
 resolution, and live Guacamole/XRDP readiness remain absent. No provider,
 browser, installed-runtime, production, ingress, or release effect occurred.
 
+Implementation checkpoint `da9438a7` joins manager handoff preparation and
+resolution to the current SQLite route-keeper authority. The connection catalog
+digest now binds the reviewed public operator origin with the provider base and
+exact connection bindings. Every projected route is fully keeper-bound and its
+opaque URL is validated before a journaled browser launch or ordinary
+navigation. Journaled open preflights the reserved slot, display, and handoff,
+then atomically commits manager state and the SQLite handoff. Resolution loads
+the handoff registry and current keeper authority before the host, validates the
+session, browser, tab, display, route, fence, and opaque URL, and only then
+focuses the browser. Public responses contain the durable
+`/remote-view/<handoff-id>` URL and provider-neutral presentation semantics,
+never raw Guacamole, provider, route-binding, or loopback URLs.
+
+Qualification checkpoint `3922f138` adds a daemon-boundary regression proving
+SQLite registry lookup, current keeper reload, and failure before focus. That
+focused test, formatting, strict workspace Clippy, the prior focused keeper,
+host, store, model, and provider-fixture gates, and the complete two-lane
+provider-free Rust suite pass; the comprehensive run completed in 818 seconds
+with both lanes at zero. This is source qualification only. Cold-process
+adoption or recovery of retained keeper tasks, live supervisor health and
+readiness, shared Desktop Services control, and the isolated cold-start matrix
+remain open. No provider, browser, Service State, installed-runtime,
+production, ingress, or release effect occurred.
+
 ## Worker Assignments
 
 For the exact XRDP source packet, the operator authorized bounded parallel
@@ -1661,6 +1685,22 @@ disjoint pure handoff preparation surface, and `gpt-6-astra` at high effort
 performed the closed-world transaction review. The primary integrated and
 reworked the packet, and the original reviewer verified the four exact
 findings once. No worker received Git or runtime-effect authority.
+
+For the keeper-handoff qualification closeout, `/root/p211_quality_gates` used
+requested `gpt-5.6-luna` low effort to run formatting and strict Clippy;
+`/root/p211_doc_reconcile` used requested `gpt-5.6-sol` medium effort for a
+read-only fact-owner audit; and `/root/p211_test_coverage` used requested
+`gpt-5.6-terra` medium effort for closed-world changed-surface coverage mapping.
+The runtime did not report effective model identities. All three completed
+without repository edits, Git transitions, or runtime effects. The primary
+accepted the qualification receipts, adjudicated the daemon-boundary coverage
+gap as blocking, added and ran its focused regression, ran the comprehensive
+suite, and retained integration and acceptance custody. During documentation
+closeout, the same workers ran the production docs build, handoff and link
+contracts, six selector-recommended workstation and Guacamole fixtures, and a
+closed-world parity review. The review found and the primary corrected a
+staging-versus-apply attribution error plus stale static-viewer guidance before
+the primary reran the affected documentation gates.
 
 The assignments below are completed historical packets and grant no current
 worker or write custody.
@@ -1727,20 +1767,20 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, `d402f55b`, `f494f273`, `d0aa34de`, `9b96e44f`, and `d79a387d` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider selection with a digest-bound provider base, SQLite-only ready-route projection, mandatory provider-side stable-name-to-numeric-ID catalog publication, source-qualified exact XRDP ownership observation and cgroup-v2 stop, one host-owned configured supervisor, exact-stop shutdown ordering, and partial-initialization rollback; cold-process adoption, keeper-backed handoff resolution, live health projection, and live readiness remain pending |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, `d402f55b`, `f494f273`, `d0aa34de`, `9b96e44f`, `d79a387d`, and `da9438a7` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider selection with a digest-bound provider base and public operator origin, SQLite-only ready-route projection, mandatory provider-side stable-name-to-numeric-ID catalog publication, source-qualified exact XRDP ownership observation and cgroup-v2 stop, one host-owned configured supervisor, exact-stop shutdown ordering, partial-initialization rollback, and keeper-backed manager handoffs; cold-process adoption, live health projection, and live readiness remain pending |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
-| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, and `e1a3edcd` prove durable exact intent, per-owner fencing, browser and tab observations, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; cross-platform causal process discovery and provider-owned route readiness remain pending |
+| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, `e1a3edcd`, and `da9438a7` prove durable exact intent, per-owner fencing, browser and tab observations, keeper-bound slot and opaque-URL preflight, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; cross-platform causal process discovery remains pending |
 | Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |
 | Bounded persistence and history | live SQLite stays within 96 MiB, exact URL history within 64 MiB, routine database/WAL/backup within 128 MiB, summaries retain long-term lifecycle evidence, and verified backup recovery is automatic | version 49 contract frozen; development size and corruption tests pending |
 | Disposable retention | default 24-hour inactivity, 20 profiles, and 10 GiB are live settings; oldest inactive sessions expire first and active or named profiles are never evicted | version 49 contract frozen; implementation and quota tests pending |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | the compiled-CLI Chrome fixture follows a same-site `/protected` to `/login` redirect and retains the same ready opaque handoff through `/account`; the dashboard same-origin post-auth return contract is green; one authenticated dashboard replay ended without a terminal verdict and its teardown-hang regression is repaired, so authenticated rendering remains pending |
-| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; repeated open is idempotent; doctor, status, capacity, preflight, and checkout agree | checkpoint `18c790bd` removes static-route and hidden-viewer fallback and fails remote-required opens before browser effects until keeper-backed handoff resolution exists; checkpoints `f494f273`, `d0aa34de`, and `9b96e44f` qualify the catalog and exact XRDP source seams, but RuntimeHostRouter installation, keeper-backed handoff resolution, the shared control lease, and true cold-start acceptance remain required before this row can become green |
+| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; repeated open is idempotent; doctor, status, capacity, preflight, and checkout agree | checkpoint `18c790bd` removes static-route and hidden-viewer fallback; checkpoints `f494f273`, `d0aa34de`, `9b96e44f`, `d79a387d`, and `da9438a7` qualify the catalog, exact XRDP source seams, runtime-host supervisor, and keeper-backed opaque manager handoff join, but the shared control lease and true cold-start and live acceptance remain required before this row can become green |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | the full compiled CLI and runtime-host journey shares one browser, drives independent commands, returns the ready handoff, and closes cleanly with none of those inputs; compiled help and repository documentation expose the same ordinary path |
 | Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
-| Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | checkpoint `18c790bd` aligns the repository surfaces with forward-only failure after migration and the temporary route-keeper integration gate; documentation handoff contracts and the production docs build are green |
+| Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | the post-`3922f138` closeout reconciles every required repository surface with SQLite `Ready` route-keeper handoff semantics and failure before browser effects; the remote-view documentation contract, link checker, and production docs build pass |
 
 Exit requires all rows green against one frozen source candidate. Provider-free
 tests include the existing shutdown, session, browser, tab, profile, redirect,

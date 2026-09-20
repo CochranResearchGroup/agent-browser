@@ -911,6 +911,9 @@ impl RuntimeHostRouter {
         }
     }
 
+    /// Resolves a manager handoff only after loading its SQLite registry row and
+    /// the current Ready route-keeper binding, before host join or browser focus.
+    /// Returns `None` only when the identifier is absent or is not manager-owned.
     async fn try_resolve_manager_handoff(&self, command: Value) -> Option<Value> {
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
