@@ -172,6 +172,17 @@ exact complete replay is idempotent, changed catalogs remain absent-only, and
 the provider binds the returned digest to its submitted canonical document.
 Exact XRDP ownership and stop, RuntimeHostRouter installation, the handoff
 join, and live readiness remain open.
+Checkpoint `d0aa34de` binds a complete XRDP ownership witness into the durable
+keeper ready receipt. Checkpoint `9b96e44f` then qualifies the concrete
+provider-free observer and exact-stop helper: it selects only `0x10000` X11
+listener rows owned by the chosen Xorg, reobserves every witness field, retains
+and rechecks the exact cgroup directory identity, and writes only its
+descriptor-relative `cgroup.kill`. Broad route-user termination is removed.
+Adversarial listener classification, helper, provider, installer, doctor,
+workstation, Guacamole, formatting, strict Clippy, and the complete
+provider-free Rust suite pass. RuntimeHostRouter installation, keeper-backed
+handoff resolution, and live XRDP/Guacamole readiness remain open; no live or
+installed-runtime effect occurred.
 
 ## P216 | Service Model Extraction Landing
 

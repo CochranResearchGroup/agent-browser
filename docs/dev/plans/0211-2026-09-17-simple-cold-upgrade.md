@@ -1568,7 +1568,46 @@ RuntimeHostRouter installation, keeper-backed handoff resolution, and live
 readiness remain absent. No provider, browser, installed-runtime, production,
 ingress, or release effect occurred.
 
+Checkpoint `d0aa34de` extends the keeper protocol receipt with a typed XRDP
+ownership witness. The Service Model validates and persists the exact boot,
+route user and UID, logind session and scope, scope invocation, cgroup
+device/inode/path, leader and Xorg process identities, display, and X11 socket
+inode. The route-keeper connector carries that evidence from observation into
+the durable ready receipt and requires it again for exact stop. This checkpoint
+does not observe or terminate a real XRDP session by itself.
+
+Checkpoint `9b96e44f` qualifies the concrete provider-free XRDP observer and
+exact-stop source packet. The privileged helper now selects only X11 listener
+rows whose `/proc/net/unix` flags include `0x10000`, proves every selected
+listener inode belongs to the chosen Xorg, and rejects a bound non-listening
+socket. Observation commands are bounded and status-checked. Exact stop
+reobserves the complete durable witness, opens the exact cgroup directory,
+rechecks the retained device and inode, writes only descriptor-relative
+`cgroup.kill`, and treats unreadable post-kill process identity as incomplete.
+The public helper no longer exposes broad route-user termination, and the
+legacy development lifecycle fails closed until the keeper owns stop
+integration. Closed-world verification passed after adversarial listener plus
+connected-row and non-listener-only regressions. The helper, provider,
+installer, route-confusion, observer, witness-wire, helper-contract, doctor,
+workstation, Guacamole, validation-selection, formatting, strict workspace
+Clippy, diff-hygiene, and complete two-lane provider-free Rust suite pass; the
+comprehensive Rust run completed in 829 seconds. RuntimeHostRouter does not yet
+install the configured observer or supervisor, keeper-backed handoff resolution
+is absent, and no live logind, XRDP, Xorg, Guacamole, browser, installed-runtime,
+production, ingress, or release effect occurred.
+
 ## Worker Assignments
+
+For the exact XRDP source packet, the operator authorized bounded parallel
+support. `/root/p211_listener_fixture` used requested `gpt-5.6-luna` low effort
+for read-only adversarial fixture design; `/root/p211_validation_selection`
+used requested `gpt-5.6-luna` medium effort for read-only validation selection;
+and `/root/p211_xrdp_contract` used requested `gpt-5.6-sol` medium effort for
+one closed-world preparation pass and the single post-repair verification.
+The runtime did not report effective model identities. All three returned
+successfully without edits or effects. The primary wrote the tests and source,
+ran every validation gate, adjudicated the finding, and owned both Git
+transitions. The final closed-world verdict for `P211-XRDP-LISTENER` is `PASS`.
 
 For the catalog-population packet, one bounded read-only worker specified the
 provider readback and publication seam, one bounded read-only worker audited
@@ -1654,7 +1693,7 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, `d402f55b`, and `f494f273` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider factory selection, digest-bound actions and receipts, SQLite-only ready-route projection, and mandatory provider-side stable-name-to-numeric-ID catalog publication; XRDP observation and exact stop effects, RuntimeHostRouter integration, keeper-backed handoff resolution, and live readiness remain pending |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, `d402f55b`, `f494f273`, `d0aa34de`, and `9b96e44f` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider factory selection, digest-bound actions and receipts, SQLite-only ready-route projection, mandatory provider-side stable-name-to-numeric-ID catalog publication, and source-qualified exact XRDP ownership observation and cgroup-v2 stop; RuntimeHostRouter installation, keeper-backed handoff resolution, and live readiness remain pending |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
@@ -1664,7 +1703,7 @@ integrating any P207 implementation.
 | Disposable retention | default 24-hour inactivity, 20 profiles, and 10 GiB are live settings; oldest inactive sessions expire first and active or named profiles are never evicted | version 49 contract frozen; implementation and quota tests pending |
 | Dashboard browser identity | each active tile represents one concrete browser and selects its desktop viewer while raising its primary window | independent status projection, browser-parent tile identity, static desktop-viewer join, and manager-owned focus and maximize routing green |
 | Login handoff | #190 regression proves a normal same-site authentication redirect leaves a usable durable handoff or typed authentication-required state | the compiled-CLI Chrome fixture follows a same-site `/protected` to `/login` redirect and retains the same ready opaque handoff through `/account`; the dashboard same-origin post-auth return contract is green; one authenticated dashboard replay ended without a terminal verdict and its teardown-hang regression is repaired, so authenticated rendering remains pending |
-| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; repeated open is idempotent; doctor, status, capacity, preflight, and checkout agree | checkpoint `18c790bd` removes static-route and hidden-viewer fallback and fails remote-required opens before browser effects until keeper-backed handoff resolution exists; version 49 still requires the authoritative catalog, exact XRDP observation and stop, shared control lease, and true cold-start acceptance before this row can become green |
+| Ready remote view | an ordinary route-free open returns `operatorVisible.state=ready` and an opaque `/remote-view/<handoff-id>`; repeated open is idempotent; doctor, status, capacity, preflight, and checkout agree | checkpoint `18c790bd` removes static-route and hidden-viewer fallback and fails remote-required opens before browser effects until keeper-backed handoff resolution exists; checkpoints `f494f273`, `d0aa34de`, and `9b96e44f` qualify the catalog and exact XRDP source seams, but RuntimeHostRouter installation, keeper-backed handoff resolution, the shared control lease, and true cold-start acceptance remain required before this row can become green |
 | Simple interface | default operator path requires no preflight digest, transaction ID, revision, census code, rollback choice, or manual recovery command | the full compiled CLI and runtime-host journey shares one browser, drives independent commands, returns the ready handoff, and closes cleanly with none of those inputs; compiled help and repository documentation expose the same ordinary path |
 | Legacy hot-upgrade containment | hot transaction mutation is not reachable from the default install or upgrade path | default apply bypasses prior transaction convergence and creates no transaction; explicit legacy inspection and recovery commands remain |
 | Documentation parity | CLI help, README, Agent Browser skill, docs site, and inline comments describe the same workflow | checkpoint `18c790bd` aligns the repository surfaces with forward-only failure after migration and the temporary route-keeper integration gate; documentation handoff contracts and the production docs build are green |

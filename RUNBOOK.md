@@ -9,25 +9,29 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
-## Turn 415 | 2026-09-19
+## Turn 416 | 2026-09-19
 
-P211 checkpoint `f494f273` closes provider-side population of the fenced
-route-keeper connection catalog. The development provider now reads the exact
-stable connection names, users, and numeric IDs back from PostgreSQL after
-sync, rejects foreign, duplicate, incomplete, noncanonical, or unsafe
-identities, and publishes the complete catalog through a bounded stdin-only
-development CLI bridge before Guacamole starts. Publication is mandatory for
-every provider adapter, exact replay is a no-op only after completeness is
-proved, changed catalogs require all keeper slots to be absent, and the
-provider verifies the receipt digest against the exact canonical catalog it
-submitted. The bridge writes only the user-private SQLite authority and does
-not echo route bindings. The provider fixture, ten focused catalog tests,
-three hidden-bridge tests, 118 Lease Authority tests, the architecture guard,
-all six selected workstation and Guacamole fixtures, formatting, strict
-workspace Clippy, diff hygiene, and independent re-review pass. Exact XRDP
-ownership observation and stop, RuntimeHostRouter installation, keeper-backed
-handoff resolution, and live readiness remain open. No provider, browser,
-installed-runtime, production, ingress, or release effect occurred.
+P211 source checkpoint `9b96e44f` qualifies exact XRDP route-session
+observation and stop after `d0aa34de` added the durable ownership witness. The
+privileged helper now selects only `0x10000` X11 listener rows owned by the
+chosen Xorg, reobserves the exact boot, user, logind session, scope invocation,
+cgroup, process, display, and socket evidence, retains and rechecks the opened
+cgroup directory identity, and writes only descriptor-relative `cgroup.kill`.
+Broad `loginctl terminate-user` dispatch is removed. The legacy development
+reclaimer fails closed until the keeper owns this stop path. The two listener
+regressions, helper/provider/installer/doctor contracts, all selected
+workstation and Guacamole fixtures, witness and observer Rust tests, formatting,
+strict workspace Clippy, validation tooling, diff hygiene, and the complete
+provider-free Rust runner pass; the comprehensive run completed in 829 seconds.
+The same closed-world reviewer that identified listener-flag ambiguity passed
+the repaired source, and source checkpoint `9b96e44f` is published. This is source
+qualification only: RuntimeHostRouter installation of the configured observer
+and existing supervisor, keeper-backed handoff resolution, live
+Guacamole-to-XRDP association, and the isolated cold-start matrix remain open.
+No provider, browser, installed-runtime, production, ingress, or release effect
+occurred. Next: install the configured observer and supervisor in
+RuntimeHostRouter through one provider-free packet, without starting a live
+provider.
 
 ## Turn 414 | 2026-09-19
 
