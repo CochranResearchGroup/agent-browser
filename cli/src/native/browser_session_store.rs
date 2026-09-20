@@ -150,12 +150,16 @@ pub(crate) struct BrowserRuntimeSqliteStore {
 }
 
 impl BrowserRuntimeSqliteStore {
-    pub(crate) fn default_sqlite() -> Result<Self, String> {
+    pub(crate) fn default_sqlite_path() -> Result<PathBuf, String> {
         let legacy_state_path = default_service_state_path()?;
         let service_directory = legacy_state_path
             .parent()
             .ok_or_else(|| "browser_session_service_directory_missing".to_string())?;
-        Self::open(&service_directory.join(BROWSER_RUNTIME_DATABASE_FILENAME))
+        Ok(service_directory.join(BROWSER_RUNTIME_DATABASE_FILENAME))
+    }
+
+    pub(crate) fn default_sqlite() -> Result<Self, String> {
+        Self::open(&Self::default_sqlite_path()?)
     }
 
     pub(crate) fn open(path: &Path) -> Result<Self, String> {

@@ -20,6 +20,8 @@ pub struct RouteKeeperConnectionBinding {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RouteKeeperConnectionCatalog {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_base: Option<String>,
     pub bindings: BTreeMap<String, RouteKeeperConnectionBinding>,
 }
 
@@ -41,6 +43,20 @@ impl RouteKeeperConnectionCatalog {
         Ok(catalog)
     }
 
+    pub fn with_provider_base(
+        provider_base: impl Into<String>,
+        bindings: impl IntoIterator<Item = RouteKeeperConnectionBinding>,
+    ) -> Result<Self, String> {
+        let mut catalog = Self::new(bindings)?;
+        let provider_base = provider_base.into();
+        if provider_base.trim().is_empty() {
+            return Err("route_keeper_connection_catalog_provider_invalid".to_string());
+        }
+        catalog.provider_base = Some(provider_base);
+        catalog.validate()?;
+        Ok(catalog)
+    }
+
     pub fn digest(&self) -> Result<String, String> {
         self.validate()?;
         let canonical = serde_json::to_vec(self)
@@ -49,6 +65,13 @@ impl RouteKeeperConnectionCatalog {
     }
 
     fn validate(&self) -> Result<(), String> {
+        if self
+            .provider_base
+            .as_ref()
+            .is_some_and(|provider_base| provider_base.trim().is_empty())
+        {
+            return Err("route_keeper_connection_catalog_provider_invalid".to_string());
+        }
         let mut connection_keys = BTreeMap::new();
         let mut connection_names = BTreeMap::new();
         let mut route_users = BTreeMap::new();

@@ -6,8 +6,9 @@ use super::guacamole_primary_transport::{
 };
 use crate::native::browser_session_store::BrowserRuntimeSqliteStore;
 use crate::native::presentation_route_keeper::{
-    PresentationRouteConnector, RouteKeeperAdoptionObservation, RouteKeeperConnectorObservation,
-    RouteKeeperStopObservation, RouteKeeperTerminalEvent, SupervisedPresentationRouteConnector,
+    run_configured_route_keeper_supervisor, PresentationRouteConnector,
+    RouteKeeperAdoptionObservation, RouteKeeperConnectorObservation, RouteKeeperStopObservation,
+    RouteKeeperTerminalEvent, SqliteRouteKeeperRepository, SupervisedPresentationRouteConnector,
 };
 use agent_browser_service_model::{
     RouteKeeperFence, RouteKeeperPhase, RouteKeeperProtocolReadyReceipt,
@@ -20,8 +21,121 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::sync::watch;
 
 type PrimaryTerminalSink = Box<dyn FnOnce(&str, &'static str, u64) + Send>;
+
+pub(crate) struct ConfiguredRouteKeeperSupervisorHandle {
+    shutdown_tx: watch::Sender<bool>,
+    join: Option<tokio::task::JoinHandle<Result<(), String>>>,
+}
+
+impl ConfiguredRouteKeeperSupervisorHandle {
+    pub(crate) fn start_default() -> Result<Self, String> {
+        const HELPER_PATH: &str =
+            "/usr/local/libexec/agent-browser/agent-browser-privileged-helper";
+        let database_path = BrowserRuntimeSqliteStore::default_sqlite_path()?;
+        let authority =
+            BrowserRuntimeSqliteStore::open(&database_path)?.load_route_keeper_authority()?;
+        authority.projection()?;
+        let provider_base = authority
+            .connection_catalog
+            .provider_base
+            .as_deref()
+            .ok_or_else(|| "route_keeper_primary_provider_unconfigured".to_string())?;
+        GuacamolePrimaryConnectSpec::from_local_embed(provider_base, "catalog-validation")
+            .map_err(str::to_string)?;
+        if let Some(record) = authority
+            .records
+            .values()
+            .find(|record| record.phase != RouteKeeperPhase::Absent)
+        {
+            return Err(format!(
+                "route_keeper_runtime_recovery_required:{}:{:?}",
+                record.slot_id, record.phase
+            ));
+        }
+
+        let repository = SqliteRouteKeeperRepository::new(&database_path);
+        let factory = ConfiguredRouteKeeperPrimaryFactory::new(database_path.clone());
+        let observer = ConfiguredXrdpRouteKeeperObserver::new(
+            database_path.clone(),
+            InstalledXrdpHelperTransport::new(PathBuf::from(HELPER_PATH)),
+        );
+        let mut connector = GuacamoleRouteKeeperConnector::new(database_path, factory, observer);
+        let (tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+        let mut ticker_shutdown = shutdown.clone();
+        let ticker = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            interval.tick().await;
+            loop {
+                tokio::select! {
+                    changed = ticker_shutdown.changed() => {
+                        if changed.is_err() || *ticker_shutdown.borrow() {
+                            break;
+                        }
+                    }
+                    _ = interval.tick() => {
+                        let _ = tick_tx.try_send(());
+                    }
+                }
+            }
+        });
+        let join = tokio::spawn(async move {
+            let result = run_configured_route_keeper_supervisor(
+                &repository,
+                &mut connector,
+                &mut ticks,
+                &mut shutdown,
+            )
+            .await;
+            ticker.abort();
+            let _ = ticker.await;
+            result
+        });
+        Ok(Self {
+            shutdown_tx,
+            join: Some(join),
+        })
+    }
+
+    pub(crate) async fn shutdown(&mut self) -> Result<(), String> {
+        let _ = self.shutdown_tx.send(true);
+        let Some(join) = self.join.take() else {
+            return Ok(());
+        };
+        join.await
+            .map_err(|error| format!("route_keeper_supervisor_join_failed:{error}"))?
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn configured_route_keeper_supervisor_fixture() -> (
+    ConfiguredRouteKeeperSupervisorHandle,
+    Arc<std::sync::atomic::AtomicUsize>,
+) {
+    let shutdowns = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let observed = shutdowns.clone();
+    let (shutdown_tx, mut shutdown) = watch::channel(false);
+    let join = tokio::spawn(async move {
+        while shutdown.changed().await.is_ok() {
+            if *shutdown.borrow() {
+                observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                return Ok(());
+            }
+        }
+        Err("route_keeper_supervisor_fixture_shutdown_closed".to_string())
+    });
+    (
+        ConfiguredRouteKeeperSupervisorHandle {
+            shutdown_tx,
+            join: Some(join),
+        },
+        shutdowns,
+    )
+}
 
 pub(super) trait RouteKeeperPrimaryFactory: Send {
     fn start(
@@ -39,17 +153,11 @@ pub(super) trait RouteKeeperPrimaryFactory: Send {
 /// slot binding, keeper identity, and operation fence all agree.
 pub(super) struct ConfiguredRouteKeeperPrimaryFactory {
     database_path: PathBuf,
-    provider_base: String,
 }
 
 impl ConfiguredRouteKeeperPrimaryFactory {
-    pub fn new(database_path: PathBuf, provider_base: &str) -> Result<Self, String> {
-        GuacamolePrimaryConnectSpec::from_local_embed(provider_base, "catalog-validation")
-            .map_err(str::to_string)?;
-        Ok(Self {
-            database_path,
-            provider_base: provider_base.to_string(),
-        })
+    pub fn new(database_path: PathBuf) -> Self {
+        Self { database_path }
     }
 }
 
@@ -83,8 +191,13 @@ impl RouteKeeperPrimaryFactory for ConfiguredRouteKeeperPrimaryFactory {
             .bindings
             .get(slot_id)
             .ok_or_else(|| "route_keeper_primary_connection_unconfigured".to_string())?;
+        let provider_base = authority
+            .connection_catalog
+            .provider_base
+            .as_deref()
+            .ok_or_else(|| "route_keeper_primary_provider_unconfigured".to_string())?;
         let spec = GuacamolePrimaryConnectSpec::from_local_embed(
-            &self.provider_base,
+            provider_base,
             binding.guacamole_connection_id.to_string(),
         )
         .map_err(str::to_string)?;
@@ -663,10 +776,6 @@ where
             });
         };
 
-        if !owned.task_closed {
-            owned.task.close().await;
-            owned.task_closed = true;
-        }
         let stop_guard = sqlite_route_keeper_stop_guard(
             self.database_path.clone(),
             slot_id.to_string(),
@@ -676,21 +785,23 @@ where
         check_primary_authority(&stop_guard)
             .await
             .map_err(str::to_string)?;
-        match self.observer.stop_exact(action, &ready).await {
-            Ok(observation) => {
-                self.completed_stops.insert(
-                    slot_id.to_string(),
-                    CompletedStop {
-                        keeper_id: keeper_id.to_string(),
-                        fence: fence.clone(),
-                        observation: observation.clone(),
-                    },
-                );
-                self.tasks.remove(slot_id);
-                Ok(observation)
+        let observation = self.observer.stop_exact(action, &ready).await?;
+        if let Some(owned) = self.tasks.get_mut(slot_id) {
+            if !owned.task_closed {
+                owned.task.close().await;
+                owned.task_closed = true;
             }
-            Err(error) => Err(error),
         }
+        self.completed_stops.insert(
+            slot_id.to_string(),
+            CompletedStop {
+                keeper_id: keeper_id.to_string(),
+                fence: fence.clone(),
+                observation: observation.clone(),
+            },
+        );
+        self.tasks.remove(slot_id);
+        Ok(observation)
     }
 }
 
@@ -895,15 +1006,16 @@ mod tests {
         let mut configured = original.clone();
         configured
             .replace_connection_catalog(
-                RouteKeeperConnectionCatalog::new((1_u32..=6).map(|sequence| {
-                    RouteKeeperConnectionBinding {
+                RouteKeeperConnectionCatalog::with_provider_base(
+                    "http://127.0.0.1:8193/guacamole/",
+                    (1_u32..=6).map(|sequence| RouteKeeperConnectionBinding {
                         slot_id: format!("route-slot-{sequence:02}"),
                         connection_key: format!("route-{sequence:02}"),
                         connection_name: format!("Agent Browser Route {sequence:02}"),
                         route_user: format!("agent-browser-rdp-{sequence}"),
                         guacamole_connection_id: u64::from(sequence),
-                    }
-                }))
+                    }),
+                )
                 .unwrap(),
             )
             .unwrap();
@@ -1328,9 +1440,7 @@ mod tests {
         store
             .compare_and_swap_route_keeper_authority(&expected, &starting)
             .unwrap();
-        let mut factory =
-            ConfiguredRouteKeeperPrimaryFactory::new(path, "http://127.0.0.1:8193/guacamole/")
-                .unwrap();
+        let mut factory = ConfiguredRouteKeeperPrimaryFactory::new(path);
         let stale_action = match action.clone() {
             RouteKeeperReconcileAction::Start {
                 slot_id,
@@ -1540,7 +1650,10 @@ mod tests {
             stop_once(&repository, &mut connector, "route-slot-01").await,
             Err("fixture_stop_observation_failed".to_string())
         );
-        assert!(connector.tasks["route-slot-01"].task_closed);
+        assert!(
+            !connector.tasks["route-slot-01"].task_closed,
+            "the primary must remain owned until exact XRDP stop succeeds"
+        );
         assert_eq!(connector.observer.stops, 1);
         assert_eq!(
             repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,

@@ -435,6 +435,7 @@ struct RuntimeHostRouter {
     lanes: Arc<crate::runtime_host::RuntimeLaneRegistry<RuntimeLane>>,
     browser_sessions:
         Arc<std::sync::Mutex<Option<super::browser_session_host::DefaultBrowserSessionHost>>>,
+    route_keeper: Arc<Mutex<Option<super::stream::ConfiguredRouteKeeperSupervisorHandle>>>,
     creation_lock: Arc<Mutex<()>>,
     socket_dir: PathBuf,
     service_reconcile_interval_ms: Option<u64>,
@@ -503,6 +504,7 @@ impl RuntimeHostRouter {
         Ok(Self {
             lanes,
             browser_sessions: Arc::new(std::sync::Mutex::new(None)),
+            route_keeper: Arc::new(Mutex::new(None)),
             creation_lock: Arc::new(Mutex::new(())),
             socket_dir,
             service_reconcile_interval_ms: options.service_reconcile_interval_ms,
@@ -524,6 +526,50 @@ impl RuntimeHostRouter {
                 self.lane(&session, Some(config)).await?;
             }
         }
+        Ok(())
+    }
+
+    async fn install_configured_route_keeper(&self) -> Result<(), String> {
+        if !crate::runtime_host::admission_enabled() {
+            return Ok(());
+        }
+        #[cfg(not(unix))]
+        return Ok(());
+        #[cfg(unix)]
+        {
+            let keeper = super::stream::ConfiguredRouteKeeperSupervisorHandle::start_default()?;
+            self.install_route_keeper_owner(keeper).await
+        }
+    }
+
+    async fn initialize_runtime_host(&self, session: &str) -> Result<(), String> {
+        let result = async {
+            self.preload_supervised_lanes(session).await?;
+            self.install_configured_route_keeper().await
+        }
+        .await;
+        let Err(error) = result else {
+            return Ok(());
+        };
+        match self.shutdown().await {
+            Ok(()) => Err(error),
+            Err(cleanup) => Err(format!(
+                "runtime_host_initialization_cleanup_failed:{error}:{cleanup}"
+            )),
+        }
+    }
+
+    async fn install_route_keeper_owner(
+        &self,
+        mut keeper: super::stream::ConfiguredRouteKeeperSupervisorHandle,
+    ) -> Result<(), String> {
+        let mut installed = self.route_keeper.lock().await;
+        if installed.is_some() {
+            drop(installed);
+            keeper.shutdown().await?;
+            return Err("runtime_host_route_keeper_already_installed".to_string());
+        }
+        *installed = Some(keeper);
         Ok(())
     }
 
@@ -638,7 +684,11 @@ impl RuntimeHostRouter {
         }
     }
 
-    async fn shutdown(&self) {
+    async fn shutdown(&self) -> Result<(), String> {
+        let keeper_result = match self.route_keeper.lock().await.take() {
+            Some(mut keeper) => keeper.shutdown().await,
+            None => Ok(()),
+        };
         for lane in self.lanes.take_all() {
             lane.control_plane.shutdown().await;
             if let Some(server) = lane.stream_server {
@@ -655,6 +705,7 @@ impl RuntimeHostRouter {
             }
         })
         .await;
+        keeper_result
     }
 
     async fn handle_browser_session_command(&self, command: Value) -> Value {
@@ -1036,7 +1087,7 @@ async fn run_socket_server(
             service_monitor_interval_ms,
         },
     )?;
-    router.preload_supervised_lanes(session).await?;
+    router.initialize_runtime_host(session).await?;
     let browser_session_reaper = spawn_browser_session_reaper(router.clone());
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
@@ -1076,7 +1127,6 @@ async fn run_socket_server(
                     None => std::future::pending::<()>().await,
                 }
             }, if idle_timeout_ms.is_some() => {
-                router.shutdown().await;
                 break;
             }
             _ = reset_rx.recv(), if idle_timeout_ms.is_some() => {
@@ -1088,18 +1138,18 @@ async fn run_socket_server(
                 // "close" command was handled; browser already closed by
                 // handle_close(). Break to run cleanup and exit gracefully
                 // so destructors fire.
-                router.shutdown().await;
                 break;
             }
             _ = shutdown_signal() => {
-                router.shutdown().await;
                 break;
             }
         }
     }
 
+    let shutdown_result = router.shutdown().await;
     browser_session_reaper.abort();
     let _ = browser_session_reaper.await;
+    shutdown_result?;
 
     Ok(())
 }
@@ -1156,7 +1206,7 @@ async fn run_socket_server(
             service_monitor_interval_ms,
         },
     )?;
-    router.preload_supervised_lanes(session).await?;
+    router.initialize_runtime_host(session).await?;
     let browser_session_reaper = spawn_browser_session_reaper(router.clone());
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
@@ -1193,7 +1243,6 @@ async fn run_socket_server(
                     None => std::future::pending::<()>().await,
                 }
             }, if idle_timeout_ms.is_some() => {
-                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
@@ -1203,20 +1252,20 @@ async fn run_socket_server(
                 continue;
             }
             _ = close_notify.notified() => {
-                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
             _ = shutdown_signal() => {
-                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
         }
     }
 
+    let shutdown_result = router.shutdown().await;
     browser_session_reaper.abort();
     let _ = browser_session_reaper.await;
+    shutdown_result?;
 
     Ok(())
 }
@@ -1720,7 +1769,76 @@ mod tests {
                 .is_err(),
             "closing the last lane must not stop the shared host"
         );
-        router.shutdown().await;
+        let (keeper, keeper_shutdowns) =
+            crate::native::stream::configured_route_keeper_supervisor_fixture();
+        router.install_route_keeper_owner(keeper).await.unwrap();
+        let (duplicate, duplicate_shutdowns) =
+            crate::native::stream::configured_route_keeper_supervisor_fixture();
+        assert_eq!(
+            router.install_route_keeper_owner(duplicate).await,
+            Err("runtime_host_route_keeper_already_installed".to_string())
+        );
+        assert_eq!(
+            duplicate_shutdowns.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        router.shutdown().await.unwrap();
+        assert_eq!(
+            keeper_shutdowns.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        router.shutdown().await.unwrap();
+        assert_eq!(
+            keeper_shutdowns.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn route_keeper_initialization_failure_shuts_down_preloaded_lanes() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_RUNTIME_HOST",
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+        ]);
+        let home = std::env::temp_dir().join(format!(
+            "ab-route-keeper-initialization-failure-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            home.join("agent-home").to_str().unwrap(),
+        );
+        guard.set("AGENT_BROWSER_RUNTIME_HOST", "1");
+        guard.set(
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+            home.join("supervisor").to_str().unwrap(),
+        );
+        let router = RuntimeHostRouter::new(
+            home.clone(),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+
+        let error = router.initialize_runtime_host("cold").await.unwrap_err();
+        assert!(
+            error.starts_with("browser_runtime_database_missing:"),
+            "unexpected initialization error: {error}"
+        );
+        assert!(router.lanes.is_empty());
+        assert!(router.route_keeper.lock().await.is_none());
         fs::remove_dir_all(home).unwrap();
     }
 
@@ -1791,7 +1909,7 @@ mod tests {
             .expect("client EOF must release its connection before the command finishes")
             .unwrap();
 
-        router.shutdown().await;
+        router.shutdown().await.unwrap();
         let snapshot = LockedServiceStateRepository::default_json()
             .unwrap()
             .load_snapshot()

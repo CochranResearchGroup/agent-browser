@@ -83,6 +83,7 @@ export function resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, datab
   }
   return {
     schemaVersion: ROUTE_KEEPER_CONNECTION_CATALOG_PUBLICATION_SCHEMA,
+    providerBase: `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`,
     bindings,
   };
 }

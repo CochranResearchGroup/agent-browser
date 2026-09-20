@@ -346,6 +346,10 @@ try {
     resolvedKeeperCatalog.schemaVersion,
     'agent-browser.route-keeper-connection-catalog-publication.v1',
   );
+  assert.equal(
+    resolvedKeeperCatalog.providerBase,
+    `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`,
+  );
   assert.deepEqual(
     resolvedKeeperCatalog.bindings.map((binding) => binding.slotId),
     descriptor.routes.map((_, index) => `route-slot-${String(index + 1).padStart(2, '0')}`),

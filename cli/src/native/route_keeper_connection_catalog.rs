@@ -16,6 +16,7 @@ const MAX_DOCUMENT_BYTES: u64 = 64 * 1024;
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct PublicationDocument {
     schema_version: String,
+    provider_base: String,
     bindings: Vec<RouteKeeperConnectionBinding>,
 }
 
@@ -37,7 +38,10 @@ fn publish_document(
     if document.schema_version != PUBLICATION_SCHEMA {
         return Err("route_keeper_connection_catalog_publication_schema_invalid".to_string());
     }
-    let catalog = RouteKeeperConnectionCatalog::new(document.bindings)?;
+    let catalog = RouteKeeperConnectionCatalog::with_provider_base(
+        document.provider_base,
+        document.bindings,
+    )?;
     let catalog_digest = catalog.digest()?;
     let binding_count = catalog.bindings.len();
     let outcome = match store.publish_route_keeper_connection_catalog(catalog)? {
@@ -127,6 +131,7 @@ mod tests {
         let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         let document = serde_json::json!({
             "schemaVersion": "agent-browser.route-keeper-connection-catalog-publication.v1",
+            "providerBase": "http://127.0.0.1:8193/guacamole/",
             "bindings": (1_u32..=6).map(|sequence| serde_json::json!({
                 "slotId": format!("route-slot-{sequence:02}"),
                 "connectionKey": format!("route-{sequence:02}"),
@@ -140,6 +145,15 @@ mod tests {
         assert_eq!(receipt.outcome, "published");
         assert_eq!(receipt.binding_count, 6);
         assert_eq!(receipt.catalog_digest.len(), 64);
+        assert_eq!(
+            store
+                .load_route_keeper_authority()
+                .unwrap()
+                .connection_catalog
+                .provider_base
+                .as_deref(),
+            Some("http://127.0.0.1:8193/guacamole/")
+        );
         let encoded = serde_json::to_string(&receipt).unwrap();
         assert!(!encoded.contains("Agent Browser Route"));
         assert!(!encoded.contains("route-slot"));
@@ -162,6 +176,7 @@ mod tests {
         let before = store.load_route_keeper_authority().unwrap();
         let document = serde_json::json!({
             "schemaVersion": "agent-browser.route-keeper-connection-catalog-publication.v0",
+            "providerBase": "http://127.0.0.1:8193/guacamole/",
             "bindings": []
         });
 

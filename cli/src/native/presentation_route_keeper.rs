@@ -5,9 +5,9 @@
 //! reuse the Guacamole protocol transport behind this interface.
 
 use agent_browser_service_model::{
-    RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperFence, RouteKeeperProjection,
-    RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction, RouteKeeperStopDisposition,
-    RouteKeeperStopReceipt,
+    RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperFence, RouteKeeperPhase,
+    RouteKeeperProjection, RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction,
+    RouteKeeperStopDisposition, RouteKeeperStopReceipt,
 };
 use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, watch};
@@ -128,8 +128,29 @@ pub(crate) async fn run_route_keeper_supervisor(
     ticks: &mut mpsc::Receiver<()>,
     shutdown: &mut watch::Receiver<bool>,
 ) -> Result<(), String> {
+    run_route_keeper_supervisor_with_shutdown_policy(repository, connector, ticks, shutdown, false)
+        .await
+}
+
+pub(crate) async fn run_configured_route_keeper_supervisor(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+    ticks: &mut mpsc::Receiver<()>,
+    shutdown: &mut watch::Receiver<bool>,
+) -> Result<(), String> {
+    run_route_keeper_supervisor_with_shutdown_policy(repository, connector, ticks, shutdown, true)
+        .await
+}
+
+async fn run_route_keeper_supervisor_with_shutdown_policy(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+    ticks: &mut mpsc::Receiver<()>,
+    shutdown: &mut watch::Receiver<bool>,
+    stop_ready_on_shutdown: bool,
+) -> Result<(), String> {
     if *shutdown.borrow() {
-        return shutdown_and_persist(repository, connector).await;
+        return shutdown_and_persist(repository, connector, stop_ready_on_shutdown).await;
     }
     loop {
         let startup = tokio::select! {
@@ -141,16 +162,24 @@ pub(crate) async fn run_route_keeper_supervisor(
         match startup {
             Some(Ok(_)) => break,
             Some(Err(error)) => {
-                return finish_supervisor_error(repository, connector, error).await;
+                return finish_supervisor_error(
+                    repository,
+                    connector,
+                    error,
+                    stop_ready_on_shutdown,
+                )
+                .await;
             }
-            None => return shutdown_and_persist(repository, connector).await,
+            None => {
+                return shutdown_and_persist(repository, connector, stop_ready_on_shutdown).await
+            }
         }
     }
     loop {
         tokio::select! {
             changed = shutdown.changed() => {
                 if changed.is_err() || *shutdown.borrow() {
-                    return shutdown_and_persist(repository, connector).await;
+                    return shutdown_and_persist(repository, connector, stop_ready_on_shutdown).await;
                 }
             }
             tick = ticks.recv() => {
@@ -159,6 +188,7 @@ pub(crate) async fn run_route_keeper_supervisor(
                         repository,
                         connector,
                         "route_keeper_supervisor_tick_source_closed".to_string(),
+                        stop_ready_on_shutdown,
                     ).await;
                 }
                 loop {
@@ -171,9 +201,17 @@ pub(crate) async fn run_route_keeper_supervisor(
                     match reconciliation {
                         Some(Ok(_)) => break,
                         Some(Err(error)) => {
-                            return finish_supervisor_error(repository, connector, error).await;
+                            return finish_supervisor_error(
+                                repository,
+                                connector,
+                                error,
+                                stop_ready_on_shutdown,
+                            )
+                            .await;
                         }
-                        None => return shutdown_and_persist(repository, connector).await,
+                        None => {
+                            return shutdown_and_persist(repository, connector, stop_ready_on_shutdown).await
+                        }
                     }
                 }
             }
@@ -184,17 +222,57 @@ pub(crate) async fn run_route_keeper_supervisor(
 async fn shutdown_and_persist(
     repository: &impl RouteKeeperRepository,
     connector: &mut impl SupervisedPresentationRouteConnector,
+    stop_ready: bool,
 ) -> Result<(), String> {
+    let stop_result = if stop_ready {
+        stop_ready_routes(repository, connector).await
+    } else {
+        Ok(())
+    };
     connector.shutdown_primaries().await;
-    process_terminal_events(repository, connector)
+    let terminal_result = process_terminal_events(repository, connector);
+    match (stop_result, terminal_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(stop), Ok(())) => Err(stop),
+        (Ok(()), Err(terminal)) => Err(terminal),
+        (Err(stop), Err(terminal)) => Err(format!(
+            "route_keeper_supervisor_cleanup_failed:{stop}:{terminal}"
+        )),
+    }
+}
+
+async fn stop_ready_routes(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+) -> Result<(), String> {
+    loop {
+        let authority = repository.load_route_keeper_authority()?;
+        let Some(slot_id) = authority
+            .records
+            .values()
+            .find(|record| record.phase == RouteKeeperPhase::Ready)
+            .map(|record| record.slot_id.clone())
+        else {
+            return Ok(());
+        };
+        stop_once(repository, connector, &slot_id).await?;
+        if repository.load_route_keeper_authority()?.records[&slot_id].phase
+            == RouteKeeperPhase::Quarantined
+        {
+            return Err(format!(
+                "route_keeper_supervisor_shutdown_stop_unproven:{slot_id}"
+            ));
+        }
+    }
 }
 
 async fn finish_supervisor_error(
     repository: &impl RouteKeeperRepository,
     connector: &mut impl SupervisedPresentationRouteConnector,
     error: String,
+    stop_ready: bool,
 ) -> Result<(), String> {
-    match shutdown_and_persist(repository, connector).await {
+    match shutdown_and_persist(repository, connector, stop_ready).await {
         Ok(()) => Err(error),
         Err(cleanup) => Err(format!(
             "route_keeper_supervisor_cleanup_failed:{error}:{cleanup}"
@@ -1347,6 +1425,67 @@ mod tests {
         signal.await.unwrap();
         assert_eq!(connector.shutdowns, 1);
         assert!(connector.action.is_none());
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Absent
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_supervisor_exactly_stops_ready_routes_before_shutdown() {
+        let directory = TempDirectory::new("route-keeper-configured-shutdown");
+        let repository = repository(&directory);
+        let mut connector = FakeConnector::default();
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Ready
+        );
+        let (_tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+        shutdown_tx.send(true).unwrap();
+
+        run_configured_route_keeper_supervisor(
+            &repository,
+            &mut connector,
+            &mut ticks,
+            &mut shutdown,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(connector.stops.len(), 1);
+        assert_eq!(connector.shutdowns, 1);
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Absent
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_supervisor_error_keeps_exact_stop_policy() {
+        let directory = TempDirectory::new("route-keeper-configured-error-shutdown");
+        let repository = repository(&directory);
+        let mut connector = FakeConnector::default();
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        let (tick_tx, mut ticks) = mpsc::channel(1);
+        drop(tick_tx);
+        let (_shutdown_tx, mut shutdown) = watch::channel(false);
+
+        assert_eq!(
+            run_configured_route_keeper_supervisor(
+                &repository,
+                &mut connector,
+                &mut ticks,
+                &mut shutdown,
+            )
+            .await,
+            Err("route_keeper_supervisor_tick_source_closed".to_string())
+        );
+        assert_eq!(connector.stops.len(), 1);
+        assert_eq!(connector.shutdowns, 1);
         assert_eq!(
             repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
             RouteKeeperPhase::Absent
