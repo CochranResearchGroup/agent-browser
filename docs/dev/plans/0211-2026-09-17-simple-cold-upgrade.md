@@ -1596,6 +1596,30 @@ install the configured observer or supervisor, keeper-backed handoff resolution
 is absent, and no live logind, XRDP, Xorg, Guacamole, browser, installed-runtime,
 production, ingress, or release effect occurred.
 
+Checkpoint `d79a387d` installs the configured route-keeper supervisor as one
+host-level owner in `RuntimeHostRouter`. The development provider publishes its
+validated loopback Guacamole base inside the same SQLite connection catalog as
+the stable connection bindings, so the canonical digest fences both selection
+inputs. Startup reloads and validates that exact catalog, refuses every durable
+non-`Absent` route until cold-process task recovery exists, and starts one
+background minimum-before-warm reconciliation loop. Configured shutdown and
+every supervisor error path exactly stop each `Ready` XRDP route through its
+durable witness before closing the owned Guacamole primary. Observation error
+retains primary custody for retry. The host awaits the supervisor once, rejects
+and closes a duplicate owner, and tears down already preloaded lanes if keeper
+installation fails. Independent closed-world review first found reversed stop
+ordering and lost exact-stop policy on error exits; both passed the bounded
+re-review. A second focused review found partial startup cleanup and passed the
+rollback repair. The development provider fixture, 221-test Service Model
+suite plus integrations, 28 focused supervisor and connector tests, host
+ownership and initialization rollback regressions, formatting, strict
+workspace Clippy, validation tooling, diff hygiene, and complete two-lane
+provider-free Rust suite pass; the final comprehensive run completed in 725
+seconds. This remains source qualification. Cold-process adoption of retained
+keeper tasks, live supervisor health projection, keeper-backed handoff
+resolution, and live Guacamole/XRDP readiness remain absent. No provider,
+browser, installed-runtime, production, ingress, or release effect occurred.
+
 ## Worker Assignments
 
 For the exact XRDP source packet, the operator authorized bounded parallel
@@ -1608,6 +1632,16 @@ The runtime did not report effective model identities. All three returned
 successfully without edits or effects. The primary wrote the tests and source,
 ran every validation gate, adjudicated the finding, and owned both Git
 transitions. The final closed-world verdict for `P211-XRDP-LISTENER` is `PASS`.
+
+For the RuntimeHostRouter packet, the same three authorized workers remained
+read-only. `/root/p211_xrdp_contract` found the stop-order and configured-error
+policy defects, then returned `PASS` after the primary repaired and tested both.
+`/root/p211_listener_fixture` found the partial-initialization cleanup defect,
+then returned `PASS` after the primary added rollback and its regression.
+`/root/p211_validation_selection` supplied changed-surface guidance. The
+primary independently ran every reported gate, the strict workspace checks,
+and the complete provider-free Rust suite. No worker performed edits, Git
+transitions, or runtime effects.
 
 For the catalog-population packet, one bounded read-only worker specified the
 provider readback and publication seam, one bounded read-only worker audited
@@ -1693,7 +1727,7 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, `d402f55b`, `f494f273`, `d0aa34de`, and `9b96e44f` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider factory selection, digest-bound actions and receipts, SQLite-only ready-route projection, mandatory provider-side stable-name-to-numeric-ID catalog publication, and source-qualified exact XRDP ownership observation and cgroup-v2 stop; RuntimeHostRouter installation, keeper-backed handoff resolution, and live readiness remain pending |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, `d402f55b`, `f494f273`, `d0aa34de`, `9b96e44f`, and `d79a387d` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider selection with a digest-bound provider base, SQLite-only ready-route projection, mandatory provider-side stable-name-to-numeric-ID catalog publication, source-qualified exact XRDP ownership observation and cgroup-v2 stop, one host-owned configured supervisor, exact-stop shutdown ordering, and partial-initialization rollback; cold-process adoption, keeper-backed handoff resolution, live health projection, and live readiness remain pending |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |

@@ -183,6 +183,17 @@ workstation, Guacamole, formatting, strict Clippy, and the complete
 provider-free Rust suite pass. RuntimeHostRouter installation, keeper-backed
 handoff resolution, and live XRDP/Guacamole readiness remain open; no live or
 installed-runtime effect occurred.
+Checkpoint `d79a387d` installs one configured keeper supervisor in the shared
+runtime host. The SQLite catalog now digest-binds the validated Guacamole base
+with every exact connection binding. Configured shutdown stops each `Ready`
+XRDP route through its durable witness before closing the owned Guacamole
+primary; observation failure retains custody for retry, and every supervisor
+error path keeps the same exact-stop policy. Host initialization failure tears
+down preloaded lanes before returning. The complete provider-free Rust suite,
+strict Clippy, focused keeper and host regressions, provider fixture, and two
+closed-world reviews pass. Cold-process adoption of non-`Absent` keeper state,
+keeper-backed handoff resolution, live supervisor health projection, and live
+readiness remain open; no live or installed-runtime effect occurred.
 
 ## P216 | Service Model Extraction Landing
 

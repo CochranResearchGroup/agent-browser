@@ -9,6 +9,30 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 417 | 2026-09-19
+
+P211 source checkpoint `d79a387d` installs one configured route-keeper
+supervisor in `RuntimeHostRouter`. The development provider now publishes its
+validated loopback Guacamole base inside the SQLite connection catalog, so the
+same digest fences provider selection and slot bindings. The host owns one
+supervisor handle, ticks reconciliation in the background, exactly stops every
+`Ready` XRDP route before closing its Guacamole primary, and awaits shutdown
+once. Failed exact observation retains primary custody for retry. Every
+configured error exit preserves exact-stop cleanup, and any preload or keeper
+installation error shuts down already acquired host resources before returning.
+The provider fixture, 221-test Service Model suite plus integrations, 28 focused
+keeper tests, host ownership and rollback regressions, formatting, strict
+workspace Clippy, validation tooling, diff hygiene, two closed-world reviews,
+and the complete provider-free Rust runner pass; the final comprehensive run
+completed in 725 seconds with both lanes at zero. Source and remote match at
+`d79a387d`. This is source qualification only. A crash that leaves any durable
+route non-`Absent` fails closed because cold-process task adoption is not yet
+implemented. Keeper-backed handoff resolution, live supervisor health
+projection, live Guacamole/XRDP readiness, and the isolated cold-start matrix
+remain open. No provider, browser, installed-runtime, production, ingress, or
+release effect occurred. Next: join manager handoff resolution to current
+keeper authority without weakening the fail-before-browser-effects boundary.
+
 ## Turn 416 | 2026-09-19
 
 P211 source checkpoint `9b96e44f` qualifies exact XRDP route-session
