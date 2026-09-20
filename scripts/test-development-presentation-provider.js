@@ -1498,7 +1498,6 @@ try {
   assert.match(reclaimFailed.error, /fixture termination failure/);
 
   const referencedRoute = descriptor.routes[4];
-  let convergingProcessChecks = 0;
   const convergingReclaimEffects = createDevelopmentPresentationLifecycleSystemEffects({
     env,
     reclaimTimeoutMs: 20,
@@ -1513,30 +1512,28 @@ try {
             helperVersion: 'fixture-v5',
             routeSessionTermination: {
               supported: true,
-              exactRouteUser: true,
-              idempotentWhenAbsent: true,
+              exactCgroupV2Identity: true,
+              retainedDirectoryIdentity: true,
+              usesCgroupKill: true,
+              broadUserTermination: false,
             },
           }),
           stderr: '',
         };
       }
-      if (command.endsWith('/agent-browser-dev') && args.at(-1) === 'close') {
-        return { status: 0, stdout: '{"success":true}', stderr: '' };
-      }
-      if (command === 'sudo') {
-        return { status: 1, stdout: '', stderr: 'route user processes remain after termination' };
-      }
-      if (command === 'ps') {
-        convergingProcessChecks += 1;
-        return convergingProcessChecks === 1
-          ? { status: 0, stdout: '4242 Xorg :16\n', stderr: '' }
-          : { status: 1, stdout: '', stderr: '' };
-      }
       throw new Error(`Unexpected converging reclaim command: ${command} ${args.join(' ')}`);
     },
   });
-  assert.doesNotThrow(() => convergingReclaimEffects.reclaimRoute(referencedRoute, descriptor));
-  assert.equal(convergingProcessChecks, 2);
+  assert.deepEqual(convergingReclaimEffects.reclaimCapability(), {
+    ready: false,
+    reason: 'route_keeper_stop_integration_required',
+    helper: '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+    helperVersion: 'fixture-v5',
+  });
+  assert.throws(
+    () => convergingReclaimEffects.reclaimRoute(referencedRoute, descriptor),
+    /route_keeper_stop_integration_required/,
+  );
   const serviceState = {
     remoteViewRoutes: {
       [referencedRoute.routeId]: {

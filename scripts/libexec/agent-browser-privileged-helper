@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HELPER_VERSION="2026-06-23.p44-route-desktop-v5"
+HELPER_VERSION="2026-09-19.p211-route-desktop-v6"
 
 usage() {
   cat <<'EOF'
@@ -12,7 +12,8 @@ Commands:
   verify-install --group <group> --sudoers <path> --sha256 <digest> [--apparmor-profile-name <name>]
   status-json
   ensure-rdp-route-user --user <user>
-  terminate-rdp-route-session --user <user>
+  observe-rdp-route-session --user <user>
+  terminate-rdp-route-session-exact [exact observed identity]
   restart-xrdp
   grant-display-access --operator-user <user> --route-user <user> --display <display>
 
@@ -149,7 +150,7 @@ status_json() {
     apparmor_profile_loaded="true"
   fi
   cat <<EOF
-{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionTermination":{"supported":true,"exactRouteUser":true,"idempotentWhenAbsent":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
+{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
 EOF
 }
 
@@ -217,7 +218,222 @@ ensure_rdp_route_user() {
   echo "ensured RDP route user $user_name"
 }
 
-terminate_rdp_route_session() {
+helper_observation_roots() {
+  PROC_ROOT="${AGENT_BROWSER_HELPER_TEST_PROC_ROOT:-/proc}"
+  CGROUP_ROOT="${AGENT_BROWSER_HELPER_TEST_CGROUP_ROOT:-/sys/fs/cgroup}"
+  BOOT_ID_PATH="${AGENT_BROWSER_HELPER_TEST_BOOT_ID_PATH:-/proc/sys/kernel/random/boot_id}"
+  PROC_NET_UNIX_PATH="${AGENT_BROWSER_HELPER_TEST_PROC_NET_UNIX_PATH:-/proc/net/unix}"
+  if [[ "$EUID" == "0" && ( "$PROC_ROOT" != "/proc" \
+    || "$CGROUP_ROOT" != "/sys/fs/cgroup" \
+    || "$BOOT_ID_PATH" != "/proc/sys/kernel/random/boot_id" \
+    || "$PROC_NET_UNIX_PATH" != "/proc/net/unix" ) ]]; then
+    echo "test observation roots are forbidden for a root helper" >&2
+    exit 2
+  fi
+}
+
+managed_route_uid() {
+  local user_name="$1"
+  local passwd_entry
+  passwd_entry="$(timeout --signal=KILL 2s getent passwd "$user_name" || true)"
+  if [[ -z "$passwd_entry" ]]; then
+    echo "route user does not exist: $user_name" >&2
+    exit 2
+  fi
+  local account_name _password uid _gid comment home_dir shell
+  IFS=: read -r account_name _password uid _gid comment home_dir shell <<<"$passwd_entry"
+  if [[ "$account_name" != "$user_name" \
+    || ! "$uid" =~ ^[1-9][0-9]*$ \
+    || "$comment" != "agent-browser route-pool RDP session" \
+    || "$home_dir" != "/home/$user_name" \
+    || "$shell" != "/bin/bash" ]]; then
+    echo "route user identity drifted: $user_name" >&2
+    exit 2
+  fi
+  printf '%s' "$uid"
+}
+
+process_start_ticks() {
+  local pid="$1"
+  local stat_line remainder
+  stat_line="$(<"$PROC_ROOT/$pid/stat")" || return 1
+  remainder="${stat_line##*) }"
+  local fields=()
+  read -r -a fields <<<"$remainder"
+  [[ "${#fields[@]}" -ge 20 && "${fields[19]}" =~ ^[1-9][0-9]*$ ]] || return 1
+  printf '%s' "${fields[19]}"
+}
+
+process_uid() {
+  awk '$1 == "Uid:" { print $2; exit }' "$PROC_ROOT/$1/status"
+}
+
+process_cgroup_path() {
+  local lines
+  lines="$(<"$PROC_ROOT/$1/cgroup")" || return 1
+  [[ "$lines" != *$'\n'* && "$lines" == 0::* ]] || return 1
+  printf '%s' "${lines#0::}"
+}
+
+emit_route_session_state() {
+  local state="$1"
+  local code="$2"
+  printf '{"schemaVersion":1,"state":"%s","code":"%s"}\n' "$state" "$code"
+}
+
+route_session_witness_digest() {
+  printf 'agent-browser.route-keeper-xrdp-ownership.v1\n%s\n%s\n%s\n%s\nxrdp-sesman\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "$W_BOOT_ID" "$W_ROUTE_USER" "$W_ROUTE_UID" "$W_SESSION_ID" "$W_SESSION_SCOPE" \
+    "$W_SCOPE_INVOCATION_ID" "$W_CGROUP_PATH" "$W_CGROUP_DEVICE" "$W_CGROUP_INODE" \
+    "$W_LEADER_PID" "$W_LEADER_START_TICKS" "$W_X_SERVER_PID" "$W_X_SERVER_START_TICKS" \
+    "$W_DISPLAY_NAME" "$W_X11_SOCKET_INODE" \
+    | sha256sum | awk '{ print $1 }'
+}
+
+collect_rdp_route_session() {
+  local user_name="$1"
+  helper_observation_roots
+  require_route_user "$user_name"
+  W_ROUTE_USER="$user_name"
+  W_ROUTE_UID="$(managed_route_uid "$user_name")"
+  W_BOOT_ID="$(<"$BOOT_ID_PATH")" || return 1
+  [[ "$W_BOOT_ID" =~ ^[a-fA-F0-9-]{16,64}$ ]] || return 1
+
+  local session_output
+  session_output="$(timeout --signal=KILL 2s loginctl list-sessions --no-legend --no-pager)" \
+    || return 1
+  local candidates=()
+  local session_id session_uid session_user _rest
+  while read -r session_id session_uid session_user _rest; do
+    [[ -n "${session_id:-}" ]] || continue
+    if [[ "$session_uid" == "$W_ROUTE_UID" && "$session_user" == "$user_name" ]]; then
+      candidates+=("$session_id")
+    fi
+  done <<<"$session_output"
+  if [[ "${#candidates[@]}" == "0" ]]; then
+    W_STATE="pending"
+    W_CODE="rdp_route_session_absent"
+    return 0
+  fi
+  if [[ "${#candidates[@]}" != "1" ]]; then
+    W_STATE="ownership_unproven"
+    W_CODE="rdp_route_session_ambiguous"
+    return 0
+  fi
+  W_SESSION_ID="${candidates[0]}"
+  [[ "$W_SESSION_ID" =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || return 1
+
+  local properties_output
+  properties_output="$(timeout --signal=KILL 2s loginctl show-session "$W_SESSION_ID" \
+    --property=Name --property=User --property=Service --property=Type \
+    --property=State --property=Leader --property=Scope)" || return 1
+  declare -A properties=()
+  local line key value
+  while IFS='=' read -r key value; do
+    [[ -n "$key" && -z "${properties[$key]+set}" ]] || return 1
+    case "$key" in
+      Name|User|Service|Type|State|Leader|Scope) properties[$key]="$value" ;;
+      *) return 1 ;;
+    esac
+  done <<<"$properties_output"
+  for key in Name User Service Type State Leader Scope; do
+    [[ -n "${properties[$key]:-}" ]] || return 1
+  done
+  if [[ "${properties[Name]}" != "$user_name" \
+    || "${properties[User]}" != "$W_ROUTE_UID" \
+    || "${properties[Service]}" != "xrdp-sesman" \
+    || "${properties[Type]}" != "x11" \
+    || "${properties[State]}" != "active" ]]; then
+    W_STATE="ownership_unproven"
+    W_CODE="rdp_route_session_properties_mismatch"
+    return 0
+  fi
+  W_LEADER_PID="${properties[Leader]}"
+  W_SESSION_SCOPE="${properties[Scope]}"
+  [[ "$W_LEADER_PID" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ "$W_SESSION_SCOPE" == "session-$W_SESSION_ID.scope" ]] || return 1
+  W_CGROUP_PATH="/user.slice/user-$W_ROUTE_UID.slice/$W_SESSION_SCOPE"
+  [[ "$(process_uid "$W_LEADER_PID")" == "$W_ROUTE_UID" ]] || return 1
+  [[ "$(process_cgroup_path "$W_LEADER_PID")" == "$W_CGROUP_PATH" ]] || return 1
+  W_LEADER_START_TICKS="$(process_start_ticks "$W_LEADER_PID")" || return 1
+
+  W_SCOPE_INVOCATION_ID="$(timeout --signal=KILL 2s systemctl show "$W_SESSION_SCOPE" --property=InvocationID --value)" \
+    || return 1
+  [[ "$W_SCOPE_INVOCATION_ID" =~ ^[a-fA-F0-9]{32}$ ]] || return 1
+  local cgroup_target="$CGROUP_ROOT$W_CGROUP_PATH"
+  [[ -d "$cgroup_target" && -f "$CGROUP_ROOT/cgroup.controllers" ]] || return 1
+  IFS=: read -r W_CGROUP_DEVICE W_CGROUP_INODE < <(stat -Lc '%d:%i' "$cgroup_target")
+  [[ "$W_CGROUP_DEVICE" =~ ^[1-9][0-9]*$ && "$W_CGROUP_INODE" =~ ^[1-9][0-9]*$ ]] || return 1
+
+  local xserver_candidates=()
+  local process_path pid cmdline display
+  for process_path in "$PROC_ROOT"/[0-9]*; do
+    [[ -d "$process_path" ]] || continue
+    pid="${process_path##*/}"
+    [[ "$(process_uid "$pid" 2>/dev/null || true)" == "$W_ROUTE_UID" ]] || continue
+    [[ "$(process_cgroup_path "$pid" 2>/dev/null || true)" == "$W_CGROUP_PATH" ]] || continue
+    cmdline="$(tr '\0' ' ' <"$process_path/cmdline" 2>/dev/null || true)"
+    if [[ " $cmdline " =~ [[:space:]]([^[:space:]]*/)?Xorg[[:space:]]+(:[0-9]+)([[:space:]]|$) ]]; then
+      display="${BASH_REMATCH[2]}"
+      xserver_candidates+=("$pid:$display")
+    fi
+  done
+  if [[ "${#xserver_candidates[@]}" != "1" ]]; then
+    W_STATE="ownership_unproven"
+    W_CODE="rdp_route_xserver_ambiguous"
+    return 0
+  fi
+  W_X_SERVER_PID="${xserver_candidates[0]%%:*}"
+  W_DISPLAY_NAME="${xserver_candidates[0]#*:}"
+  W_X_SERVER_START_TICKS="$(process_start_ticks "$W_X_SERVER_PID")" || return 1
+
+  local display_number="${W_DISPLAY_NAME#:}"
+  W_X11_SOCKET_INODE=""
+  local matching_socket_count=0
+  local inode socket_path fd target socket_owned
+  while read -r _num _ref _protocol _flags _type _state inode socket_path; do
+    [[ "${socket_path:-}" == "/tmp/.X11-unix/X$display_number" \
+      || "${socket_path:-}" == "@/tmp/.X11-unix/X$display_number" ]] || continue
+    if [[ ! "$_flags" =~ ^[0-9a-fA-F]+$ ]]; then
+      W_STATE="ownership_unproven"
+      W_CODE="rdp_route_x11_socket_invalid"
+      return 0
+    fi
+    (( (16#$_flags & 16#10000) != 0 )) || continue
+    if [[ ! "$inode" =~ ^[1-9][0-9]*$ || ! "$_type" =~ ^0*1$ || "$_state" != "01" ]]; then
+      W_STATE="ownership_unproven"
+      W_CODE="rdp_route_x11_socket_invalid"
+      return 0
+    fi
+    matching_socket_count=$((matching_socket_count + 1))
+    socket_owned="false"
+    for fd in "$PROC_ROOT/$W_X_SERVER_PID/fd/"*; do
+      target="$(readlink "$fd" 2>/dev/null || true)"
+      if [[ "$target" == "socket:[$inode]" ]]; then
+        socket_owned="true"
+        break
+      fi
+    done
+    if [[ "$socket_owned" != "true" ]]; then
+      W_STATE="ownership_unproven"
+      W_CODE="rdp_route_x11_socket_owner_mismatch"
+      return 0
+    fi
+    if [[ -z "$W_X11_SOCKET_INODE" || "$inode" -lt "$W_X11_SOCKET_INODE" ]]; then
+      W_X11_SOCKET_INODE="$inode"
+    fi
+  done <"$PROC_NET_UNIX_PATH"
+  [[ "$matching_socket_count" -gt 0 && "$W_X11_SOCKET_INODE" =~ ^[1-9][0-9]*$ ]] || return 1
+
+  [[ "$(process_start_ticks "$W_LEADER_PID")" == "$W_LEADER_START_TICKS" ]] || return 1
+  [[ "$(process_cgroup_path "$W_LEADER_PID")" == "$W_CGROUP_PATH" ]] || return 1
+  [[ "$(process_start_ticks "$W_X_SERVER_PID")" == "$W_X_SERVER_START_TICKS" ]] || return 1
+  [[ "$(process_cgroup_path "$W_X_SERVER_PID")" == "$W_CGROUP_PATH" ]] || return 1
+  W_STATE="ready"
+  W_CODE=""
+}
+
+observe_rdp_route_session() {
   require_root
   local user_name=""
 
@@ -228,42 +444,115 @@ terminate_rdp_route_session() {
         shift 2
         ;;
       *)
-        echo "Unknown terminate-rdp-route-session argument: $1" >&2
+        echo "Unknown observe-rdp-route-session argument: $1" >&2
         exit 2
         ;;
     esac
   done
 
   if [[ -z "$user_name" ]]; then
-    echo "terminate-rdp-route-session requires --user" >&2
+    echo "observe-rdp-route-session requires --user" >&2
     exit 2
   fi
-  require_route_user "$user_name"
+  if ! collect_rdp_route_session "$user_name"; then
+    emit_route_session_state "ownership_unproven" "rdp_route_session_evidence_invalid"
+    return 0
+  fi
+  if [[ "$W_STATE" != "ready" ]]; then
+    emit_route_session_state "$W_STATE" "$W_CODE"
+    return 0
+  fi
+  printf '{"schemaVersion":1,"state":"ready","witness":{"schemaVersion":"agent-browser.route-keeper-xrdp-ownership.v1","bootId":"%s","routeUser":"%s","routeUid":%s,"sessionId":"%s","sessionService":"xrdp-sesman","sessionScope":"%s","scopeInvocationId":"%s","cgroupPath":"%s","cgroupDevice":%s,"cgroupInode":%s,"leaderPid":%s,"leaderStartTicks":%s,"xServerPid":%s,"xServerStartTicks":%s,"displayName":"%s","x11SocketInode":%s}}\n' \
+    "$W_BOOT_ID" "$W_ROUTE_USER" "$W_ROUTE_UID" "$W_SESSION_ID" "$W_SESSION_SCOPE" \
+    "$W_SCOPE_INVOCATION_ID" "$W_CGROUP_PATH" "$W_CGROUP_DEVICE" "$W_CGROUP_INODE" \
+    "$W_LEADER_PID" "$W_LEADER_START_TICKS" "$W_X_SERVER_PID" "$W_X_SERVER_START_TICKS" \
+    "$W_DISPLAY_NAME" "$W_X11_SOCKET_INODE"
+}
 
-  local passwd_entry
-  passwd_entry="$(getent passwd "$user_name" || true)"
-  if [[ -z "$passwd_entry" ]]; then
-    echo "route user does not exist: $user_name" >&2
+terminate_rdp_route_session_exact() {
+  require_root
+  local user_name="" session_id="" boot_id="" scope_invocation_id=""
+  local cgroup_device="" cgroup_inode="" leader_pid="" leader_start_ticks=""
+  local x_server_pid="" x_server_start_ticks="" display_name="" x11_socket_inode=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --user) user_name="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --session-id) session_id="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --boot-id) boot_id="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --scope-invocation-id) scope_invocation_id="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --cgroup-device) cgroup_device="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --cgroup-inode) cgroup_inode="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --leader-pid) leader_pid="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --leader-start-ticks) leader_start_ticks="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --x-server-pid) x_server_pid="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --x-server-start-ticks) x_server_start_ticks="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --display) display_name="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --x11-socket-inode) x11_socket_inode="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      *) echo "Unknown terminate-rdp-route-session-exact argument: $1" >&2; exit 2 ;;
+    esac
+  done
+  if [[ -z "$user_name" || -z "$session_id" || -z "$boot_id" \
+    || -z "$scope_invocation_id" || -z "$cgroup_device" || -z "$cgroup_inode" \
+    || -z "$leader_pid" || -z "$leader_start_ticks" || -z "$x_server_pid" \
+    || -z "$x_server_start_ticks" || -z "$display_name" || -z "$x11_socket_inode" ]]; then
+    echo "terminate-rdp-route-session-exact requires the complete observed identity" >&2
     exit 2
   fi
-  local account_name _password _uid _gid comment home_dir shell
-  IFS=: read -r account_name _password _uid _gid comment home_dir shell <<<"$passwd_entry"
-  if [[ "$account_name" != "$user_name" \
-    || "$comment" != "agent-browser route-pool RDP session" \
-    || "$home_dir" != "/home/$user_name" \
-    || "$shell" != "/bin/bash" ]]; then
-    echo "route user identity drifted: $user_name" >&2
-    exit 2
+  if ! collect_rdp_route_session "$user_name" || [[ "$W_STATE" != "ready" ]]; then
+    emit_route_session_state "ownership_unproven" "rdp_route_session_reobservation_failed"
+    return 0
+  fi
+  if [[ "$W_SESSION_ID" != "$session_id" || "$W_BOOT_ID" != "$boot_id" \
+    || "$W_SCOPE_INVOCATION_ID" != "$scope_invocation_id" \
+    || "$W_CGROUP_DEVICE" != "$cgroup_device" || "$W_CGROUP_INODE" != "$cgroup_inode" \
+    || "$W_LEADER_PID" != "$leader_pid" || "$W_LEADER_START_TICKS" != "$leader_start_ticks" \
+    || "$W_X_SERVER_PID" != "$x_server_pid" \
+    || "$W_X_SERVER_START_TICKS" != "$x_server_start_ticks" \
+    || "$W_DISPLAY_NAME" != "$display_name" || "$W_X11_SOCKET_INODE" != "$x11_socket_inode" ]]; then
+    emit_route_session_state "ownership_unproven" "rdp_route_session_identity_changed"
+    return 0
   fi
 
-  if loginctl show-user "$user_name" --property=State --value >/dev/null 2>&1; then
-    loginctl terminate-user "$user_name"
+  local scope_fd
+  exec {scope_fd}<"$CGROUP_ROOT$W_CGROUP_PATH"
+  local retained_device retained_inode
+  IFS=: read -r retained_device retained_inode < <(stat -Lc '%d:%i' "/proc/self/fd/$scope_fd")
+  if [[ "$retained_device" != "$cgroup_device" || "$retained_inode" != "$cgroup_inode" ]]; then
+    exec {scope_fd}<&-
+    emit_route_session_state "ownership_unproven" "rdp_route_session_cgroup_identity_changed"
+    return 0
   fi
-  if pgrep -u "$user_name" >/dev/null 2>&1; then
-    echo "route user processes remain after termination: $user_name" >&2
-    exit 1
+  printf '1\n' >"/proc/self/fd/$scope_fd/cgroup.kill"
+  sleep 0.05
+  local attempts=0 populated="1"
+  while [[ "$attempts" -lt 30 ]]; do
+    populated="$(awk '$1 == "populated" { print $2; exit }' "/proc/self/fd/$scope_fd/cgroup.events" 2>/dev/null || true)"
+    [[ "$populated" == "0" ]] && break
+    attempts=$((attempts + 1))
+    sleep 0.1
+  done
+  if [[ "$populated" != "0" ]] \
+    || ! process_instance_gone_or_replaced "$leader_pid" "$leader_start_ticks" \
+    || ! process_instance_gone_or_replaced "$x_server_pid" "$x_server_start_ticks"; then
+    exec {scope_fd}<&-
+    emit_route_session_state "incomplete" "rdp_route_session_scope_not_empty"
+    return 0
   fi
-  echo "terminated RDP route session $user_name"
+  exec {scope_fd}<&-
+  local witness_digest
+  witness_digest="$(route_session_witness_digest)"
+  printf '{"schemaVersion":1,"state":"stopped","witnessDigest":"%s","verification":{"sessionInstanceAbsent":true,"xServerInstanceAbsent":true,"ownedScopeEmptyOrAbsent":true}}\n' "$witness_digest"
+}
+
+process_instance_gone_or_replaced() {
+  local pid="$1"
+  local expected_start_ticks="$2"
+  if [[ ! -d "$PROC_ROOT/$pid" ]]; then
+    return 0
+  fi
+  local current_start_ticks
+  current_start_ticks="$(process_start_ticks "$pid")" || return 1
+  [[ "$current_start_ticks" != "$expected_start_ticks" ]]
 }
 
 restart_xrdp() {
@@ -347,9 +636,13 @@ case "${1:-}" in
     shift
     ensure_rdp_route_user "$@"
     ;;
-  terminate-rdp-route-session)
+  observe-rdp-route-session)
     shift
-    terminate_rdp_route_session "$@"
+    observe_rdp_route_session "$@"
+    ;;
+  terminate-rdp-route-session-exact)
+    shift
+    terminate_rdp_route_session_exact "$@"
     ;;
   restart-xrdp)
     shift

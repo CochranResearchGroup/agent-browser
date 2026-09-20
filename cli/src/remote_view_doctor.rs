@@ -4010,15 +4010,23 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v4",
+                "helperVersion": "2026-09-19.p211-route-desktop-v6",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
                 },
+                "routeSessionObservation": {
+                    "supported": true,
+                    "exactCgroupV2Identity": true,
+                    "xServerProcessIdentity": true,
+                    "x11SocketOwnership": true
+                },
                 "routeSessionTermination": {
                     "supported": true,
-                    "exactRouteUser": true,
-                    "idempotentWhenAbsent": true
+                    "exactCgroupV2Identity": true,
+                    "retainedDirectoryIdentity": true,
+                    "usesCgroupKill": true,
+                    "broadUserTermination": false
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,
@@ -4042,15 +4050,23 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v4",
+                "helperVersion": "2026-09-19.p211-route-desktop-v6",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
                 },
+                "routeSessionObservation": {
+                    "supported": true,
+                    "exactCgroupV2Identity": true,
+                    "xServerProcessIdentity": true,
+                    "x11SocketOwnership": true
+                },
                 "routeSessionTermination": {
                     "supported": true,
-                    "exactRouteUser": true,
-                    "idempotentWhenAbsent": true
+                    "exactCgroupV2Identity": true,
+                    "retainedDirectoryIdentity": true,
+                    "usesCgroupKill": true,
+                    "broadUserTermination": false
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,

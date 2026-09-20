@@ -520,11 +520,11 @@ if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authorit
 fi
 mv "$AUTHORITY_SERVICE_UNIT.fixture-backup" "$AUTHORITY_SERVICE_UNIT"
 
-# An installed helper without exact, idempotent route-session termination is
-# not compatible with elastic presentation lifecycle. It must be replaced
-# before scale-out can create resources that the runtime cannot reclaim.
-sed -i \
-  's/,"routeSessionTermination":{"supported":true,"exactRouteUser":true,"idempotentWhenAbsent":true}//' \
+# An installed helper without exact cgroup-v2 observation and retained-scope
+# termination is not compatible with route-keeper lifecycle. It must be
+# replaced before the runtime can claim exact XRDP ownership.
+sed -Ei \
+  's/,"routeSessionObservation":\{[^}]*\},"routeSessionTermination":\{[^}]*\}//' \
   "$HELPER_PATH"
 if "$HELPER_PATH" status-json | grep -q 'routeSessionTermination'; then
   echo "Stale-helper fixture still advertises route-session termination." >&2

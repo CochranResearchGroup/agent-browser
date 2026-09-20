@@ -156,9 +156,12 @@ fn test_remote_view_display_access_grant_timeout_is_typed() {
 fn test_remote_view_helper_status_contract_accepts_current_capabilities() {
     let report = json!(
         { "success" : true, "parsed" : { "schemaVersion" : 1, "helperVersion" :
-        "2026-06-23.p44-route-desktop-v4", "routeDesktopSession" : { "ready" : true,
-        "terminalStartupDetected" : false }, "routeSessionTermination" : { "supported" :
-        true, "exactRouteUser" : true, "idempotentWhenAbsent" : true }, "displayAccess" : {
+        "2026-09-19.p211-route-desktop-v6", "routeDesktopSession" : { "ready" : true,
+        "terminalStartupDetected" : false }, "routeSessionObservation" : { "supported" : true,
+        "exactCgroupV2Identity" : true, "xServerProcessIdentity" : true,
+        "x11SocketOwnership" : true }, "routeSessionTermination" : { "supported" : true,
+        "exactCgroupV2Identity" : true, "retainedDirectoryIdentity" : true,
+        "usesCgroupKill" : true, "broadUserTermination" : false }, "displayAccess" : {
         "supportsFilesystemX11Socket" : true, "supportsAbstractX11Socket" : true,
         "boundedXhostTimeoutSeconds" : 2 }, "routeUserCredentialUpdate" : {
         "pamBypassed" : true, "cryptMethod" : "SHA512", "shaRounds" : 100000 } } }
@@ -169,9 +172,12 @@ fn test_remote_view_helper_status_contract_accepts_current_capabilities() {
 fn test_remote_view_helper_status_contract_rejects_missing_abstract_socket_support() {
     let report = json!(
         { "success" : true, "parsed" : { "schemaVersion" : 1, "helperVersion" :
-        "2026-06-23.p44-route-desktop-v4", "routeDesktopSession" : { "ready" : true,
-        "terminalStartupDetected" : false }, "routeSessionTermination" : { "supported" :
-        true, "exactRouteUser" : true, "idempotentWhenAbsent" : true }, "displayAccess" : {
+        "2026-09-19.p211-route-desktop-v6", "routeDesktopSession" : { "ready" : true,
+        "terminalStartupDetected" : false }, "routeSessionObservation" : { "supported" : true,
+        "exactCgroupV2Identity" : true, "xServerProcessIdentity" : true,
+        "x11SocketOwnership" : true }, "routeSessionTermination" : { "supported" : true,
+        "exactCgroupV2Identity" : true, "retainedDirectoryIdentity" : true,
+        "usesCgroupKill" : true, "broadUserTermination" : false }, "displayAccess" : {
         "supportsFilesystemX11Socket" : true, "supportsAbstractX11Socket" : false,
         "boundedXhostTimeoutSeconds" : 2 }, "routeUserCredentialUpdate" : {
         "pamBypassed" : true, "cryptMethod" : "SHA512", "shaRounds" : 100000 } } }

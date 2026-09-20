@@ -10,11 +10,15 @@ use crate::native::presentation_route_keeper::{
     RouteKeeperStopObservation, RouteKeeperTerminalEvent, SupervisedPresentationRouteConnector,
 };
 use agent_browser_service_model::{
-    RouteKeeperFence, RouteKeeperPhase, RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction,
+    RouteKeeperFence, RouteKeeperPhase, RouteKeeperProtocolReadyReceipt,
+    RouteKeeperReconcileAction, RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
 };
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 type PrimaryTerminalSink = Box<dyn FnOnce(&str, &'static str, u64) + Send>;
@@ -98,13 +102,351 @@ pub(super) trait RouteKeeperProtocolObserver: Send {
         &mut self,
         action: &RouteKeeperReconcileAction,
         guacamole_connection_uuid: &str,
-    ) -> Result<RouteKeeperProtocolReadyReceipt, String>;
+    ) -> Result<Option<RouteKeeperProtocolReadyReceipt>, String>;
 
     async fn stop_exact(
         &mut self,
         action: &RouteKeeperReconcileAction,
         ready: &RouteKeeperProtocolReadyReceipt,
     ) -> Result<RouteKeeperStopObservation, String>;
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct XrdpHelperResponse {
+    schema_version: u32,
+    state: String,
+    #[serde(default)]
+    code: Option<String>,
+    #[serde(default)]
+    witness: Option<RouteKeeperXrdpOwnershipWitness>,
+    #[serde(default)]
+    witness_digest: Option<String>,
+    #[serde(default)]
+    verification: Option<XrdpStopVerification>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct XrdpStopVerification {
+    session_instance_absent: bool,
+    x_server_instance_absent: bool,
+    owned_scope_empty_or_absent: bool,
+}
+
+#[derive(Debug, Clone)]
+enum XrdpHelperObservation {
+    Pending,
+    Ready(Box<RouteKeeperXrdpOwnershipWitness>),
+    OwnershipUnproven(String),
+}
+
+#[derive(Debug, Clone)]
+enum XrdpHelperStop {
+    Stopped,
+    OwnershipUnproven(String),
+}
+
+#[async_trait::async_trait]
+trait XrdpHelperTransport: Send {
+    async fn observe(&mut self, route_user: &str) -> Result<XrdpHelperObservation, String>;
+
+    async fn stop_exact(
+        &mut self,
+        witness: &RouteKeeperXrdpOwnershipWitness,
+    ) -> Result<XrdpHelperStop, String>;
+}
+
+pub(super) struct InstalledXrdpHelperTransport {
+    helper_path: PathBuf,
+    timeout: Duration,
+}
+
+impl InstalledXrdpHelperTransport {
+    pub(super) fn new(helper_path: PathBuf) -> Self {
+        Self {
+            helper_path,
+            timeout: Duration::from_secs(15),
+        }
+    }
+
+    async fn run(&self, args: &[String]) -> Result<XrdpHelperResponse, String> {
+        let mut command = tokio::process::Command::new("sudo");
+        command
+            .arg("-n")
+            .arg(&self.helper_path)
+            .args(args)
+            .kill_on_drop(true);
+        let output = tokio::time::timeout(self.timeout, command.output())
+            .await
+            .map_err(|_| "route_keeper_xrdp_helper_timeout".to_string())?
+            .map_err(|_| "route_keeper_xrdp_helper_spawn_failed".to_string())?;
+        if !output.status.success() {
+            return Err("route_keeper_xrdp_helper_failed".to_string());
+        }
+        if output.stdout.is_empty() || output.stdout.len() > 64 * 1024 {
+            return Err("route_keeper_xrdp_helper_response_size_invalid".to_string());
+        }
+        parse_xrdp_helper_response(&output.stdout)
+    }
+}
+
+fn parse_xrdp_helper_response(stdout: &[u8]) -> Result<XrdpHelperResponse, String> {
+    serde_json::from_slice(stdout)
+        .map_err(|_| "route_keeper_xrdp_helper_response_invalid".to_string())
+}
+
+#[async_trait::async_trait]
+impl XrdpHelperTransport for InstalledXrdpHelperTransport {
+    async fn observe(&mut self, route_user: &str) -> Result<XrdpHelperObservation, String> {
+        let response = self
+            .run(&[
+                "observe-rdp-route-session".to_string(),
+                "--user".to_string(),
+                route_user.to_string(),
+            ])
+            .await?;
+        if response.schema_version != 1 {
+            return Err("route_keeper_xrdp_helper_schema_invalid".to_string());
+        }
+        match response.state.as_str() {
+            "pending" => Ok(XrdpHelperObservation::Pending),
+            "ready" => response
+                .witness
+                .map(Box::new)
+                .map(XrdpHelperObservation::Ready)
+                .ok_or_else(|| "route_keeper_xrdp_helper_witness_missing".to_string()),
+            "ownership_unproven" | "unsupported" => Ok(XrdpHelperObservation::OwnershipUnproven(
+                response
+                    .code
+                    .unwrap_or_else(|| "route_keeper_xrdp_ownership_unproven".to_string()),
+            )),
+            _ => Err("route_keeper_xrdp_helper_state_invalid".to_string()),
+        }
+    }
+
+    async fn stop_exact(
+        &mut self,
+        witness: &RouteKeeperXrdpOwnershipWitness,
+    ) -> Result<XrdpHelperStop, String> {
+        let args = vec![
+            "terminate-rdp-route-session-exact".to_string(),
+            "--user".to_string(),
+            witness.route_user.clone(),
+            "--session-id".to_string(),
+            witness.session_id.clone(),
+            "--boot-id".to_string(),
+            witness.boot_id.clone(),
+            "--scope-invocation-id".to_string(),
+            witness.scope_invocation_id.clone(),
+            "--cgroup-device".to_string(),
+            witness.cgroup_device.to_string(),
+            "--cgroup-inode".to_string(),
+            witness.cgroup_inode.to_string(),
+            "--leader-pid".to_string(),
+            witness.leader_pid.to_string(),
+            "--leader-start-ticks".to_string(),
+            witness.leader_start_ticks.to_string(),
+            "--x-server-pid".to_string(),
+            witness.x_server_pid.to_string(),
+            "--x-server-start-ticks".to_string(),
+            witness.x_server_start_ticks.to_string(),
+            "--display".to_string(),
+            witness.display_name.clone(),
+            "--x11-socket-inode".to_string(),
+            witness.x11_socket_inode.to_string(),
+        ];
+        let response = self.run(&args).await?;
+        if response.schema_version != 1 {
+            return Err("route_keeper_xrdp_helper_schema_invalid".to_string());
+        }
+        match response.state.as_str() {
+            "stopped" => {
+                let verification = response
+                    .verification
+                    .ok_or_else(|| "route_keeper_xrdp_stop_verification_missing".to_string())?;
+                let expected_witness_digest = xrdp_witness_digest(witness);
+                if !verification.session_instance_absent
+                    || !verification.x_server_instance_absent
+                    || !verification.owned_scope_empty_or_absent
+                    || response.witness_digest.as_deref() != Some(expected_witness_digest.as_str())
+                {
+                    return Err("route_keeper_xrdp_stop_verification_invalid".to_string());
+                }
+                Ok(XrdpHelperStop::Stopped)
+            }
+            "ownership_unproven" | "incomplete" | "unsupported" => {
+                Ok(XrdpHelperStop::OwnershipUnproven(
+                    response
+                        .code
+                        .unwrap_or_else(|| "route_keeper_xrdp_stop_unproven".to_string()),
+                ))
+            }
+            _ => Err("route_keeper_xrdp_helper_state_invalid".to_string()),
+        }
+    }
+}
+
+fn xrdp_witness_digest(witness: &RouteKeeperXrdpOwnershipWitness) -> String {
+    let canonical = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+        witness.schema_version,
+        witness.boot_id,
+        witness.route_user,
+        witness.route_uid,
+        witness.session_id,
+        witness.session_service,
+        witness.session_scope,
+        witness.scope_invocation_id,
+        witness.cgroup_path,
+        witness.cgroup_device,
+        witness.cgroup_inode,
+        witness.leader_pid,
+        witness.leader_start_ticks,
+        witness.x_server_pid,
+        witness.x_server_start_ticks,
+        witness.display_name,
+    );
+    let canonical = format!("{canonical}{}\n", witness.x11_socket_inode);
+    format!("{:x}", Sha256::digest(canonical.as_bytes()))
+}
+
+pub(super) struct ConfiguredXrdpRouteKeeperObserver<T> {
+    database_path: PathBuf,
+    helper: T,
+}
+
+impl<T> ConfiguredXrdpRouteKeeperObserver<T> {
+    pub(super) fn new(database_path: PathBuf, helper: T) -> Self {
+        Self {
+            database_path,
+            helper,
+        }
+    }
+
+    fn binding_for_action(
+        &self,
+        action: &RouteKeeperReconcileAction,
+        expected_phase: RouteKeeperPhase,
+    ) -> Result<
+        (
+            agent_browser_service_model::RouteKeeperConnectionBinding,
+            Option<RouteKeeperProtocolReadyReceipt>,
+        ),
+        String,
+    > {
+        let (slot_id, keeper_id, fence) = match action {
+            RouteKeeperReconcileAction::Observe {
+                slot_id,
+                keeper_id,
+                fence,
+            }
+            | RouteKeeperReconcileAction::Stop {
+                slot_id,
+                keeper_id,
+                fence,
+            } => (slot_id, keeper_id, fence),
+            _ => return Err("route_keeper_xrdp_action_invalid".to_string()),
+        };
+        let authority =
+            BrowserRuntimeSqliteStore::open(&self.database_path)?.load_route_keeper_authority()?;
+        authority.projection()?;
+        let record = authority
+            .records
+            .get(slot_id)
+            .ok_or_else(|| "route_keeper_xrdp_slot_missing".to_string())?;
+        if record.keeper_id != *keeper_id
+            || record.fence != *fence
+            || record.phase != expected_phase
+            || authority.connection_catalog.digest()? != fence.connection_catalog_digest
+        {
+            return Err("route_keeper_xrdp_fence_stale".to_string());
+        }
+        let binding = authority
+            .connection_catalog
+            .bindings
+            .get(slot_id)
+            .cloned()
+            .ok_or_else(|| "route_keeper_xrdp_route_user_missing".to_string())?;
+        Ok((binding, record.protocol_ready.clone()))
+    }
+}
+
+#[async_trait::async_trait]
+impl<T> RouteKeeperProtocolObserver for ConfiguredXrdpRouteKeeperObserver<T>
+where
+    T: XrdpHelperTransport,
+{
+    async fn observe_xrdp(
+        &mut self,
+        action: &RouteKeeperReconcileAction,
+        guacamole_connection_uuid: &str,
+    ) -> Result<Option<RouteKeeperProtocolReadyReceipt>, String> {
+        let (binding, _) = self.binding_for_action(action, RouteKeeperPhase::Observing)?;
+        let (slot_id, keeper_id, fence) = observe_identity(action)?;
+        match self.helper.observe(&binding.route_user).await? {
+            XrdpHelperObservation::Pending => Ok(None),
+            XrdpHelperObservation::OwnershipUnproven(code) => {
+                Err(format!("route_keeper_xrdp_ownership_unproven:{code}"))
+            }
+            XrdpHelperObservation::Ready(witness) => {
+                if witness.route_user != binding.route_user {
+                    return Err("route_keeper_xrdp_route_user_mismatch".to_string());
+                }
+                Ok(Some(RouteKeeperProtocolReadyReceipt {
+                    slot_id: slot_id.to_string(),
+                    keeper_id: keeper_id.to_string(),
+                    fence: fence.clone(),
+                    guacamole_connection_uuid: guacamole_connection_uuid.to_string(),
+                    xrdp_session_id: witness.session_id.clone(),
+                    display_name: witness.display_name.clone(),
+                    xrdp_ownership: Some(*witness),
+                    observed_at: chrono::Utc::now().to_rfc3339(),
+                }))
+            }
+        }
+    }
+
+    async fn stop_exact(
+        &mut self,
+        action: &RouteKeeperReconcileAction,
+        ready: &RouteKeeperProtocolReadyReceipt,
+    ) -> Result<RouteKeeperStopObservation, String> {
+        let (binding, durable_ready) =
+            self.binding_for_action(action, RouteKeeperPhase::Stopping)?;
+        if durable_ready.as_ref() != Some(ready) {
+            return Ok(RouteKeeperStopObservation::OwnershipUnproven {
+                preserved_observed_keeper_id: "route_keeper_xrdp_ready_receipt_mismatch"
+                    .to_string(),
+            });
+        }
+        let witness = ready
+            .xrdp_ownership
+            .as_ref()
+            .ok_or_else(|| "route_keeper_xrdp_stop_ownership_missing".to_string())?;
+        if witness.route_user != binding.route_user {
+            return Ok(RouteKeeperStopObservation::OwnershipUnproven {
+                preserved_observed_keeper_id: "route_keeper_xrdp_route_user_mismatch".to_string(),
+            });
+        }
+        match self.helper.stop_exact(witness).await? {
+            XrdpHelperStop::Stopped => Ok(RouteKeeperStopObservation::Stopped(
+                RouteKeeperStopReceipt {
+                    slot_id: ready.slot_id.clone(),
+                    keeper_id: ready.keeper_id.clone(),
+                    fence: ready.fence.clone(),
+                    guacamole_connection_uuid: Some(ready.guacamole_connection_uuid.clone()),
+                    xrdp_session_id: Some(ready.xrdp_session_id.clone()),
+                    stopped_at: chrono::Utc::now().to_rfc3339(),
+                },
+            )),
+            XrdpHelperStop::OwnershipUnproven(code) => {
+                Ok(RouteKeeperStopObservation::OwnershipUnproven {
+                    preserved_observed_keeper_id: code,
+                })
+            }
+        }
+    }
 }
 
 struct OwnedPrimary {
@@ -251,10 +593,13 @@ where
                         ready.clone(),
                     )));
                 }
-                let ready = self
+                let Some(ready) = self
                     .observer
                     .observe_xrdp(action, &guacamole_connection_uuid)
-                    .await?;
+                    .await?
+                else {
+                    return Ok(RouteKeeperConnectorObservation::Pending);
+                };
                 match owned.task.status() {
                     PrimaryStatus::Ready(current) if current == guacamole_connection_uuid => {}
                     PrimaryStatus::Closed(_) => {
@@ -608,11 +953,11 @@ mod tests {
             &mut self,
             action: &RouteKeeperReconcileAction,
             guacamole_connection_uuid: &str,
-        ) -> Result<RouteKeeperProtocolReadyReceipt, String> {
+        ) -> Result<Option<RouteKeeperProtocolReadyReceipt>, String> {
             self.observations += 1;
             let (slot_id, keeper_id, fence) = observe_identity(action)?;
             let xrdp_session_id = format!("xrdp-{slot_id}");
-            Ok(RouteKeeperProtocolReadyReceipt {
+            Ok(Some(RouteKeeperProtocolReadyReceipt {
                 slot_id: slot_id.to_string(),
                 keeper_id: keeper_id.to_string(),
                 fence: fence.clone(),
@@ -641,7 +986,7 @@ mod tests {
                     x11_socket_inode: 6101,
                 }),
                 observed_at: "2026-09-19T20:00:00Z".to_string(),
-            })
+            }))
         }
 
         async fn stop_exact(
@@ -672,6 +1017,285 @@ mod tests {
                 },
             ))
         }
+    }
+
+    #[derive(Clone)]
+    struct FakeXrdpHelperTransport {
+        calls: Arc<std::sync::Mutex<Vec<String>>>,
+        observation: XrdpHelperObservation,
+        stop: XrdpHelperStop,
+    }
+
+    #[async_trait::async_trait]
+    impl XrdpHelperTransport for FakeXrdpHelperTransport {
+        async fn observe(&mut self, route_user: &str) -> Result<XrdpHelperObservation, String> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("observe:{route_user}"));
+            Ok(self.observation.clone())
+        }
+
+        async fn stop_exact(
+            &mut self,
+            witness: &RouteKeeperXrdpOwnershipWitness,
+        ) -> Result<XrdpHelperStop, String> {
+            self.calls.lock().unwrap().push(format!(
+                "stop:{}:{}:{}",
+                witness.route_user, witness.session_id, witness.x_server_start_ticks
+            ));
+            Ok(self.stop.clone())
+        }
+    }
+
+    fn exact_xrdp_witness() -> RouteKeeperXrdpOwnershipWitness {
+        RouteKeeperXrdpOwnershipWitness {
+            schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
+            boot_id: "11111111-2222-3333-4444-555555555555".to_string(),
+            route_user: "agent-browser-rdp-1".to_string(),
+            route_uid: 2001,
+            session_id: "c42".to_string(),
+            session_service: "xrdp-sesman".to_string(),
+            session_scope: "session-c42.scope".to_string(),
+            scope_invocation_id: "0123456789abcdef0123456789abcdef".to_string(),
+            cgroup_path: "/user.slice/user-2001.slice/session-c42.scope".to_string(),
+            cgroup_device: 28,
+            cgroup_inode: 1001,
+            leader_pid: 4101,
+            leader_start_ticks: 5101,
+            x_server_pid: 4102,
+            x_server_start_ticks: 5102,
+            display_name: ":21".to_string(),
+            x11_socket_inode: 6101,
+        }
+    }
+
+    #[test]
+    fn installed_xrdp_helper_ready_wire_requires_typed_witness_schema() {
+        let ready = serde_json::json!({
+            "schemaVersion": 1,
+            "state": "ready",
+            "witness": exact_xrdp_witness(),
+        });
+        let parsed = parse_xrdp_helper_response(ready.to_string().as_bytes()).unwrap();
+        assert_eq!(
+            parsed.witness.unwrap().schema_version,
+            "agent-browser.route-keeper-xrdp-ownership.v1"
+        );
+
+        let mut missing_schema = ready;
+        missing_schema["witness"]
+            .as_object_mut()
+            .unwrap()
+            .remove("schemaVersion");
+        assert_eq!(
+            parse_xrdp_helper_response(missing_schema.to_string().as_bytes()).unwrap_err(),
+            "route_keeper_xrdp_helper_response_invalid"
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_xrdp_observer_uses_catalog_user_and_exact_witness_for_stop() {
+        let (_directory, database_path) = database();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let original = store.load_route_keeper_authority().unwrap();
+        let mut starting = original.clone();
+        let start_action = starting.next_reconcile_action().unwrap();
+        let (slot_id, _, fence) = start_identity(&start_action).unwrap();
+        let slot_id = slot_id.to_string();
+        let fence = fence.clone();
+        store
+            .compare_and_swap_route_keeper_authority(&original, &starting)
+            .unwrap();
+        let mut observing = starting.clone();
+        observing.record_observing(&slot_id, &fence).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&starting, &observing)
+            .unwrap();
+        let observe_action = observing.next_reconcile_action().unwrap();
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let helper = FakeXrdpHelperTransport {
+            calls: calls.clone(),
+            observation: XrdpHelperObservation::Ready(Box::new(exact_xrdp_witness())),
+            stop: XrdpHelperStop::Stopped,
+        };
+        let mut observer = ConfiguredXrdpRouteKeeperObserver::new(database_path.clone(), helper);
+
+        let ready = observer
+            .observe_xrdp(&observe_action, "guacamole-connection-42")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(ready.xrdp_session_id, "c42");
+        assert_eq!(ready.display_name, ":21");
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            ["observe:agent-browser-rdp-1"]
+        );
+
+        let mut ready_authority = observing.clone();
+        ready_authority
+            .record_protocol_ready(ready.clone())
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&observing, &ready_authority)
+            .unwrap();
+        let mut stopping = ready_authority.clone();
+        let stop_action = stopping.begin_stop(&slot_id, &fence).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&ready_authority, &stopping)
+            .unwrap();
+        let stopped = observer.stop_exact(&stop_action, &ready).await.unwrap();
+        assert!(matches!(stopped, RouteKeeperStopObservation::Stopped(_)));
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            [
+                "observe:agent-browser-rdp-1",
+                "stop:agent-browser-rdp-1:c42:5102"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_xrdp_observer_preserves_pending_and_unproven_stop() {
+        let (_directory, database_path) = database();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let original = store.load_route_keeper_authority().unwrap();
+        let mut starting = original.clone();
+        let start_action = starting.next_reconcile_action().unwrap();
+        let (slot_id, _, fence) = start_identity(&start_action).unwrap();
+        let slot_id = slot_id.to_string();
+        let fence = fence.clone();
+        store
+            .compare_and_swap_route_keeper_authority(&original, &starting)
+            .unwrap();
+        let mut observing = starting.clone();
+        observing.record_observing(&slot_id, &fence).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&starting, &observing)
+            .unwrap();
+        let observe_action = observing.next_reconcile_action().unwrap();
+        let pending_calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let helper = FakeXrdpHelperTransport {
+            calls: pending_calls.clone(),
+            observation: XrdpHelperObservation::Pending,
+            stop: XrdpHelperStop::OwnershipUnproven("scope_not_empty".to_string()),
+        };
+        let mut observer = ConfiguredXrdpRouteKeeperObserver::new(database_path.clone(), helper);
+        assert!(observer
+            .observe_xrdp(&observe_action, "guacamole-connection-42")
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            pending_calls.lock().unwrap().as_slice(),
+            ["observe:agent-browser-rdp-1"]
+        );
+
+        let witness = exact_xrdp_witness();
+        let ready = RouteKeeperProtocolReadyReceipt {
+            slot_id: slot_id.clone(),
+            keeper_id: observing.records[&slot_id].keeper_id.clone(),
+            fence: fence.clone(),
+            guacamole_connection_uuid: "guacamole-connection-42".to_string(),
+            xrdp_session_id: witness.session_id.clone(),
+            display_name: witness.display_name.clone(),
+            xrdp_ownership: Some(witness),
+            observed_at: "2026-09-19T20:00:00Z".to_string(),
+        };
+        let mut ready_authority = observing.clone();
+        ready_authority
+            .record_protocol_ready(ready.clone())
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&observing, &ready_authority)
+            .unwrap();
+        let mut stopping = ready_authority.clone();
+        let stop_action = stopping.begin_stop(&slot_id, &fence).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&ready_authority, &stopping)
+            .unwrap();
+
+        let stop_calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let helper = FakeXrdpHelperTransport {
+            calls: stop_calls.clone(),
+            observation: XrdpHelperObservation::Pending,
+            stop: XrdpHelperStop::OwnershipUnproven("scope_not_empty".to_string()),
+        };
+        let mut observer = ConfiguredXrdpRouteKeeperObserver::new(database_path.clone(), helper);
+        let result = observer.stop_exact(&stop_action, &ready).await.unwrap();
+        assert!(matches!(
+            result,
+            RouteKeeperStopObservation::OwnershipUnproven {
+                preserved_observed_keeper_id
+            } if preserved_observed_keeper_id == "scope_not_empty"
+        ));
+        assert_eq!(
+            stop_calls.lock().unwrap().as_slice(),
+            ["stop:agent-browser-rdp-1:c42:5102"]
+        );
+
+        let mut mismatched_ready = ready;
+        mismatched_ready.guacamole_connection_uuid = "guacamole-replacement".to_string();
+        let mismatch_calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let helper = FakeXrdpHelperTransport {
+            calls: mismatch_calls.clone(),
+            observation: XrdpHelperObservation::Pending,
+            stop: XrdpHelperStop::Stopped,
+        };
+        let mut observer = ConfiguredXrdpRouteKeeperObserver::new(database_path, helper);
+        let result = observer
+            .stop_exact(&stop_action, &mismatched_ready)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            RouteKeeperStopObservation::OwnershipUnproven {
+                preserved_observed_keeper_id
+            } if preserved_observed_keeper_id == "route_keeper_xrdp_ready_receipt_mismatch"
+        ));
+        assert!(mismatch_calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn configured_xrdp_observer_rejects_stale_catalog_fence_before_helper_call() {
+        let (_directory, database_path) = database();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let original = store.load_route_keeper_authority().unwrap();
+        let mut starting = original.clone();
+        let start_action = starting.next_reconcile_action().unwrap();
+        let (slot_id, _, fence) = start_identity(&start_action).unwrap();
+        let slot_id = slot_id.to_string();
+        let fence = fence.clone();
+        store
+            .compare_and_swap_route_keeper_authority(&original, &starting)
+            .unwrap();
+        let mut observing = starting.clone();
+        observing.record_observing(&slot_id, &fence).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&starting, &observing)
+            .unwrap();
+        let mut stale_action = observing.next_reconcile_action().unwrap();
+        if let RouteKeeperReconcileAction::Observe { fence, .. } = &mut stale_action {
+            fence.connection_catalog_digest = "0".repeat(64);
+        } else {
+            panic!("expected observe action");
+        }
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let helper = FakeXrdpHelperTransport {
+            calls: calls.clone(),
+            observation: XrdpHelperObservation::Ready(Box::new(exact_xrdp_witness())),
+            stop: XrdpHelperStop::Stopped,
+        };
+        let mut observer = ConfiguredXrdpRouteKeeperObserver::new(database_path, helper);
+        assert_eq!(
+            observer
+                .observe_xrdp(&stale_action, "guacamole-connection-42")
+                .await
+                .unwrap_err(),
+            "route_keeper_xrdp_fence_stale"
+        );
+        assert!(calls.lock().unwrap().is_empty());
     }
 
     async fn duplex_pair() -> (

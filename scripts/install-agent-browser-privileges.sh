@@ -536,8 +536,13 @@ helper_contract_ready() {
     '"keepsSessionAlive":true' \
     '"routeSessionTermination":{' \
     '"supported":true' \
-    '"exactRouteUser":true' \
-    '"idempotentWhenAbsent":true' \
+    '"routeSessionObservation":{' \
+    '"exactCgroupV2Identity":true' \
+    '"xServerProcessIdentity":true' \
+    '"x11SocketOwnership":true' \
+    '"retainedDirectoryIdentity":true' \
+    '"usesCgroupKill":true' \
+    '"broadUserTermination":false' \
     '"supportsFilesystemX11Socket":true' \
     '"supportsAbstractX11Socket":true' \
     '"boundedXhostTimeoutSeconds":2' \

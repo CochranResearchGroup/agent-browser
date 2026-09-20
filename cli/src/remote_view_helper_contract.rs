@@ -10,11 +10,12 @@ use std::path::Path;
 
 pub(crate) const FIXED_HELPER_PATH: &str =
     "/usr/local/libexec/agent-browser/agent-browser-privileged-helper";
-const REQUIRED_COMMANDS: [&str; 6] = [
+const REQUIRED_COMMANDS: [&str; 7] = [
     "check",
     "status-json",
     "ensure-rdp-route-user",
-    "terminate-rdp-route-session",
+    "observe-rdp-route-session",
+    "terminate-rdp-route-session-exact",
     "restart-xrdp",
     "grant-display-access",
 ];
@@ -27,13 +28,33 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
             .and_then(Value::as_bool)
             == Some(true)
         && report
-            .pointer("/parsed/routeSessionTermination/exactRouteUser")
+            .pointer("/parsed/routeSessionObservation/exactCgroupV2Identity")
             .and_then(Value::as_bool)
             == Some(true)
         && report
-            .pointer("/parsed/routeSessionTermination/idempotentWhenAbsent")
+            .pointer("/parsed/routeSessionObservation/xServerProcessIdentity")
             .and_then(Value::as_bool)
             == Some(true)
+        && report
+            .pointer("/parsed/routeSessionObservation/x11SocketOwnership")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionTermination/exactCgroupV2Identity")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionTermination/retainedDirectoryIdentity")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionTermination/usesCgroupKill")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionTermination/broadUserTermination")
+            .and_then(Value::as_bool)
+            == Some(false)
         && report
             .pointer("/parsed/schemaVersion")
             .and_then(Value::as_i64)
@@ -41,7 +62,7 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
         && report
             .pointer("/parsed/helperVersion")
             .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("2026-06-23.p44-route-desktop-v"))
+            .is_some_and(|value| value.starts_with("2026-09-19.p211-route-desktop-v"))
         && report
             .pointer("/parsed/routeDesktopSession/ready")
             .and_then(Value::as_bool)
@@ -138,6 +159,7 @@ fn evaluate_helper_contract(
         "capabilities": {
             "ready": capability_ready,
             "routeDesktopSession": helper_status.pointer("/parsed/routeDesktopSession"),
+            "routeSessionObservation": helper_status.pointer("/parsed/routeSessionObservation"),
             "routeSessionTermination": helper_status.pointer("/parsed/routeSessionTermination"),
             "displayAccess": helper_status.pointer("/parsed/displayAccess"),
             "routeUserCredentialUpdate": helper_status.pointer("/parsed/routeUserCredentialUpdate"),
@@ -211,15 +233,25 @@ mod tests {
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v4",
+                "helperVersion": "2026-09-19.p211-route-desktop-v6",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
                 },
+                "routeSessionObservation": {
+                    "supported": true,
+                    "exactCgroupV2Identity": true,
+                    "xServerProcessIdentity": true,
+                    "x11SocketOwnership": true
+                },
                 "routeSessionTermination": {
                     "supported": true,
-                    "exactRouteUser": true,
-                    "idempotentWhenAbsent": true
+                    "exactRouteUser": false,
+                    "idempotentWhenAbsent": false,
+                    "exactCgroupV2Identity": true,
+                    "retainedDirectoryIdentity": true,
+                    "usesCgroupKill": true,
+                    "broadUserTermination": false
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,
@@ -237,7 +269,7 @@ mod tests {
 
     #[test]
     fn compatible_helper_without_optional_verify_install_remains_ready() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  terminate-rdp-route-session)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let report = evaluate_helper_contract(source, &compatible_status(), true, true, true);
 
         assert_eq!(report["ready"], true);
@@ -249,7 +281,7 @@ mod tests {
 
     #[test]
     fn missing_required_helper_capability_is_blocking() {
-        let source = "\n  check)\n  status-json)\n  terminate-rdp-route-session)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let report = evaluate_helper_contract(source, &compatible_status(), true, true, true);
 
         assert_eq!(report["ready"], false);
@@ -261,7 +293,7 @@ mod tests {
 
     #[test]
     fn legacy_pam_password_update_contract_is_blocking() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  terminate-rdp-route-session)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let mut status = compatible_status();
         status["parsed"]
             .as_object_mut()

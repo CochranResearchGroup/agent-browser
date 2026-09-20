@@ -464,10 +464,6 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
   const base = createDevelopmentPresentationProviderSystemEffects({ ...options, env, run });
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
-  const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
-  const reclaimTimeoutMs = Number(options.reclaimTimeoutMs ??
-    env.AGENT_BROWSER_DEV_PRESENTATION_RECLAIM_TIMEOUT_MS ?? 5000);
-  const reclaimPollMs = Number(options.reclaimPollMs ?? 100);
   const pressureSnapshot = options.pressureSnapshot || sampleDevelopmentPresentationPressure;
   const reclaimCapability = () => {
     const result = run(helper, ['status-json']);
@@ -485,12 +481,14 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       return { ready: false, reason: 'helper_status_json_invalid', helper };
     }
     const termination = status.routeSessionTermination;
-    const ready = termination?.supported === true &&
-      termination?.exactRouteUser === true &&
-      termination?.idempotentWhenAbsent === true;
+    const exactHelper = termination?.supported === true &&
+      termination?.exactCgroupV2Identity === true &&
+      termination?.retainedDirectoryIdentity === true &&
+      termination?.usesCgroupKill === true &&
+      termination?.broadUserTermination === false;
     return {
-      ready,
-      reason: ready ? null : 'helper_contract_missing',
+      ready: false,
+      reason: exactHelper ? 'route_keeper_stop_integration_required' : 'helper_contract_missing',
       helper,
       helperVersion: status.helperVersion || null,
     };
@@ -535,42 +533,9 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       }
       return exactRouteReferences(status?.data?.service_state || status?.data?.serviceState || {}, route);
     },
-    reclaimRoute(route, descriptor) {
+    reclaimRoute() {
       const capability = reclaimCapability();
-      if (capability.ready !== true) {
-        throw new Error(`Development reclaim capability is unavailable: ${capability.reason}`);
-      }
-      const command = join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`);
-      const close = run(command, [
-        '--json',
-        '--session', route.viewerSession,
-        '--runtime-profile', route.viewerProfile,
-        'close',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-        },
-        timeout: 30000,
-      });
-      if (close.error || (close.status !== 0 && !/not found|no browser|not running/i.test(`${close.stdout}${close.stderr}`))) {
-        throw new Error(`close ${route.viewerSession} failed: ${commandError(close) || close.status}`);
-      }
-      const termination = run('sudo', [
-        '-n', helper, 'terminate-rdp-route-session', '--user', route.user,
-      ]);
-      try {
-        waitFor(run, () => {
-          const processes = run('ps', ['-u', route.user, '-o', 'pid=,args=']);
-          return processes.status !== 0 || !processes.stdout.trim();
-        }, reclaimTimeoutMs, `reclaim ${route.routeId}`, reclaimPollMs);
-      } catch {
-        if (termination.error || termination.status !== 0) {
-          throw new Error(`terminate ${route.routeId} failed: ${commandError(termination) || termination.status}`);
-        }
-        throw new Error(`Development route processes remain after reclaim: ${route.routeId}`);
-      }
+      throw new Error(`Development reclaim capability is unavailable: ${capability.reason}`);
     },
   };
 }
